@@ -30,7 +30,10 @@ concurrency:
 
 jobs:
   gate:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.pull_request.head.ref, 'expansion/')
+    # Backend upgrades (expansion/upgrade-*) and platform features (expansion/feature-*)
+    # are reviewed and merged by a person,
+    # never gated or auto-merged here.
+    if: github.event_name == 'workflow_dispatch' || (startsWith(github.event.pull_request.head.ref, 'expansion/') && !startsWith(github.event.pull_request.head.ref, 'expansion/upgrade-') && !startsWith(github.event.pull_request.head.ref, 'expansion/feature-'))
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -131,14 +134,22 @@ jobs:
             python3 -c "
           import sys; sys.path.insert(0, 'wasm')
           from vendor_to_portal import in_bundle
-          print('\n'.join('wasm/' + l.strip()[5:] for l in open('/tmp/changed.txt') if l.strip()[5:] and in_bundle(l.strip()[5:])))" > /tmp/files.txt
+          print('\n'.join('wasm/' + l.strip()[5:] for l in open('/tmp/changed.txt') if l.strip()[5:] and in_bundle(l.strip()[5:])))" | sed '/^$/d' > /tmp/files.txt
             [ -s /tmp/files.txt ] || { : > "$3"; return; }
             git diff --binary "$1" "$2" -- $(cat /tmp/files.txt) \
               | sed -e 's#^\(diff --git a/\)wasm/#\1app/nano/#' -e 's# b/wasm/# b/app/nano/#' \
                     -e 's#^--- a/wasm/#--- a/app/nano/#' -e 's#^+++ b/wasm/#+++ b/app/nano/#' \
                     -e 's#^\(rename\|copy\) \(from\|to\) wasm/#\1 \2 app/nano/#' > "$3"
           }
-          mk "$(git merge-base origin/main HEAD)" HEAD /tmp/service.patch
+          # Judge what the service changes on top of CURRENT main (what merging
+          # ships), not against its old base: main may have moved the same files.
+          git config user.name "vyomi-conformance-bot"
+          git config user.email "conformance-bot@users.noreply.github.com"
+          if ! git merge -q --no-edit origin/main; then
+            git merge --abort || true
+            echo "::error::This PR conflicts with main; rebase it onto main."; exit 1
+          fi
+          mk origin/main HEAD /tmp/service.patch
           if [ ! -s /tmp/service.patch ]; then
             echo "::error::No Nano bundle changes: a new service must ship in Nano too."; exit 1
           fi

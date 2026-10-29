@@ -28,30 +28,23 @@ from core.gcp_firestore_core import FirestoreStore
 from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
-from core.azure_arm_core import AzureArm
 from core.nano_events import EventStore
 from core.kinesis_core import KinesisStore
+from core.apigatewayv2_core import ApiGwV2Store
+from core.logs_core import LogsStore
+from core.elbv2_core import Elbv2Store
+from core.ssm_core import SsmStore
+from core.stepfunctions_core import StepFunctionsStore
+from core.gcp_cloudscheduler_core import CloudSchedulerStore
+from core.gcp_iamcredentials_core import IamCredentialsStore
+from core.gcp_redis_core import RedisStore
+from core.gcp_container_core import ContainerStore
+from core.azure_arm_core import AzureArm
+
+import types
+from core.cloudwatch_core import CloudWatchStore
 
 _REG: dict | None = None
-
-
-def _new_resource_store():
-    """The generic catalog-CRUD store (backends.store.ResourceStore). It lives in
-    the `wasm` package, not in `core`, so import it LAZILY + GUARDED: the console
-    context (nano-boot) has `wasm` on sys.path and binds this as the ONE store its
-    catalog CRUD + nano_persist both use; the native-wire RELAY context doesn't
-    load the `wasm` package and doesn't need the catalog store, so a failed import
-    simply omits the key (capture/restore tolerate a missing store). Falls back to
-    a plain dict-backed shim if the class can't be imported, keeping the registry
-    well-formed and still persistable (public `collections` dict)."""
-    for mod in ("wasm.backends.store", "backends.store"):
-        try:
-            __import__(mod)
-            import sys
-            return sys.modules[mod].ResourceStore()
-        except Exception:
-            continue
-    return None
 
 
 def get() -> dict:
@@ -70,11 +63,26 @@ def get() -> dict:
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
             "kinesis": KinesisStore(),         # Kinesis Data Streams
+            "apigwv2": ApiGwV2Store(),
+            # Console compute/network models: Lambda + API Gateway share ONE namespace
+            # (AWS_PROXY reaches the registered functions); VPC has its own. They
+            # live here (not as module singletons) so nano_persist snapshots them.
+            "compute": types.SimpleNamespace(),
+            "vpc_net": types.SimpleNamespace(),
+            "extras": types.SimpleNamespace(items={}, cfg={}),   # console EC2/VPC/EventBridge sub-resource CRUD
+            "logs": LogsStore(),               # CloudWatch Logs (core/logs_core.py)
+            "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
+            "ssm": SsmStore(),
+            "sfn": StepFunctionsStore(),
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),
             "gcp_kms": InMemoryKeyStore(),
             "gcp_sec": InMemoryKvStore(),
+            "gcp_gke": ContainerStore(),   # Kubernetes Engine clusters
+            "gcp_redis": RedisStore(),   # Memorystore for Redis instances
+            "gcp_iamc": IamCredentialsStore(),   # IAM Credentials issue log
+            "gcp_sched": CloudSchedulerStore(),   # Cloud Scheduler jobs
             "gcp_msg": InMemoryMessagingStore(),
             "gcp_iam": InMemoryIamStore(),
             "gcp_sql": InMemorySqlStore(),
@@ -85,27 +93,11 @@ def get() -> dict:
             "az_kvkeys": InMemoryKeyStore(),
             "az_queue":  AzureQueueStore(),
             "az_sb":     InMemoryMessagingStore(),   # Service Bus (router-only today)
+            "az_arm":    AzureArm(),                 # ARM control plane (VMs, apps, …): public `state` map → persisted + synced
             # ── cross-cloud ── per-resource cloudsim event / activity log. DURABLE
             # + bounded: recorded on every mutating dispatch; persisted + cross-tab
             # synced via nano_persist (public dict attr `by_resource`, union-merge).
             "events": EventStore(),
-            # ── generic catalog CRUD + Azure ARM control plane ──
-            # Both were previously built per-page inside Backends() with their state
-            # in underscore attrs (ResourceStore._c, AzureArm._state) → NOT captured,
-            # so second-level sub-resources + editable settings were LOST on reload.
-            # Now they're registry-backed with PUBLIC dict attrs (ResourceStore
-            # .collections, AzureArm.state) and listed in nano_persist.STORE_ATTRS,
-            # so EVERYTHING created through the generic path (AWS /api/aws/sub/*
-            # children + settings, GCP compute/vpc/functions/apigateway/eventarc
-            # parents AND their record-kind children) and every Azure ARM resource +
-            # ARM-core child (servicebus topics/subs, vnet peerings, slots) survives
-            # a full page reload and cross-tab syncs. Backends() binds these SAME
-            # instances (see backends/store.py).
-            "resources": _new_resource_store(),   # generic catalog store (may be None in the relay)
-            "az_arm":    AzureArm(),               # Azure ARM control plane (resources + ARM children)
+            "cw": CloudWatchStore(),   # CloudWatch (metrics / alarms / dashboards)
         }
-        # Drop a None `resources` so the registry stays {str: store} (the relay
-        # context, which never loads the catalog store, simply has no such key).
-        if _REG.get("resources") is None:
-            _REG.pop("resources", None)
     return _REG

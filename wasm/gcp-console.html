@@ -33,6 +33,11 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined">
 <style>
+/* Clickable things always show the hand cursor. Many console links are <a> without an href
+   (JS-handled), which browsers render with the text I-beam. First in the sheet and low
+   specificity, so later rules (cursor:not-allowed on disabled controls) still win. */
+a,[onclick],[role="link"],[role="button"],[role="tab"],[role="menuitem"],summary,label[for],select,
+button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:not(:disabled){cursor:pointer}
   :root{
     /* GCP-faithful tokens — verified in the audit (matches real console) */
     --blue:#1a73e8; --blue-d:#1765cc; --blue-l:#e8f0fe; --blue-tint:#cfe2ff;
@@ -353,6 +358,8 @@
 <style>#avatarBtn{display:none!important;}</style>
 </head>
 <body>
+<script src="./nano-kernel.js"></script>
+<script>window.__nk = window.NanoKernel && NanoKernel.start("GCP console");</script>
 
 <!-- ==================== TOP BAR ==================== -->
 <header class="gc-top">
@@ -662,13 +669,13 @@ function renderRail(){
   const rail = document.getElementById("rail"); rail.innerHTML = "";
   rail.append(el("div",{class:"rail-h"}, "All products"));
   const groups = [
-    ["COMPUTE",       ["compute", "functions"]],
+    ["COMPUTE",       ["compute", "functions", "container"]],
     ["STORAGE",       ["storage"]],
-    ["DATABASES",     ["cloudsql", "firestore"]],
+    ["DATABASES",     ["cloudsql", "firestore", "redis"]],
     ["NETWORKING",    ["vpc"]],
-    ["INTEGRATION",   ["pubsub", "apigateway", "eventarc"]],
+    ["INTEGRATION",   ["pubsub", "apigateway", "eventarc", "cloudscheduler"]],
     ["SECURITY",      ["secretmanager", "kms"]],
-    ["IAM & ADMIN",   ["iam"]],
+    ["IAM & ADMIN",   ["iam", "iamcredentials"]],
   ];
   groups.forEach(([label, keys]) => {
     rail.append(el("div",{class:"group"}, label));
@@ -689,7 +696,7 @@ function renderRail(){
 // that mirror core/cost_model. Nano resources are ephemeral, so this reflects
 // what this console currently holds; simulator cost = $0 → all of it is saved.
 var _NANO_RATE = {
-  s3:0.50, dynamodb:1.25, kms:1.00, secretsmanager:0.40, sqs:0.40, iam:0, rds:25.55, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0,
+  s3:0.50, dynamodb:1.25, kms:1.00,cloudwatch:0.10,secretsmanager:0.40, sqs:0.40, iam:0, rds:25.55, elbv2:16.43, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0,
   compute:24.53, storage:0.50, cloudsql:25.00, pubsub:0.40, firestore:0.18, functions:0.20, secretmanager:0.18,
   'microsoft.compute/virtualmachines':30.37, 'microsoft.sql/servers':4.99, 'microsoft.storage/storageaccounts':0.50,
   'microsoft.documentdb/databaseaccounts':24.48, 'microsoft.web/sites':0.20, 'microsoft.servicebus/namespaces':9.81, 'microsoft.keyvault/vaults':0.03
@@ -818,6 +825,10 @@ async function renderList(main){
                      : svc.key === "functions" ? "Create function"
                      : svc.key === "vpc" ? "Create VPC network"
                      : svc.key === "iam" ? "Create service account"
+                     : svc.key === "cloudscheduler" ? "Create job"
+                     : svc.key === "container" ? "Create cluster"
+                     : svc.key === "redis" ? "Create instance"
+                     : svc.key === "iamcredentials" ? "Create credential"
                      : "Create";
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
     icon("add"), primaryLabel));
@@ -897,7 +908,7 @@ async function renderList(main){
       const path = svc.columns[state.sortBy][0];
       filtered.sort((a,b) => String(getPath(a,path)||"").localeCompare(String(getPath(b,path)||"")) * state.sortDir);
     }
-    document.getElementById("countChip").textContent = filtered.length ? `(${filtered.length})` : "";
+    const chip = document.getElementById("countChip"); if (chip) chip.textContent = filtered.length ? `(${filtered.length})` : "";
     stats.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;
@@ -984,6 +995,27 @@ async function renderDetail(main){
       el("div",{class:"meta"}, svc.namespace + "  ·  " + PROJECT + "  ·  " + REGION)),
     el("div",{class:"detail-actions"},
       el("button",{class:"btn",onclick:()=>navigate({view:"list", item:null})}, icon("arrow_back"), "Back"),
+      ...(svc.key === "cloudscheduler" ? ["pause","resume","run"].map(act => el("button",{class:"btn",onclick:async()=>{
+        const ap = (svc.api_paths||{})[act];
+        const r = await api(ap.method, fillCommon(ap.path, {name}));
+        if (r.ok) { toast("Job "+name+": "+act+" ok"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
+        else toast(act+" failed ("+r.status+")", "err");
+      }}, icon(act === "pause" ? "pause" : act === "resume" ? "play_arrow" : "bolt"),
+         act === "pause" ? "Pause" : act === "resume" ? "Resume" : "Force run")) : []),
+      ...(svc.key === "redis" ? [el("button",{class:"btn",onclick:async()=>{
+        const n = prompt("Capacity in GB", String(parseInt(STATE.item.capacity, 10) || 1));
+        if (n === null) return;
+        const r = await api("POST", fillCommon((svc.api_paths||{}).resize.path, {name}), {memorySizeGb: parseInt(n, 10)});
+        if (r.ok) { toast("Instance "+name+": resized to "+n+" GB"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
+        else toast("resize failed ("+r.status+")", "err");
+      }}, icon("open_in_full"), "Resize")] : []),
+      ...(svc.key === "container" ? [el("button",{class:"btn",onclick:async()=>{
+        const n = prompt("Number of nodes for the first node pool", String(STATE.item.nodes || 3));
+        if (n === null) return;
+        const r = await api("POST", fillCommon((svc.api_paths||{}).resize.path, {name}), {nodeCount: parseInt(n, 10)});
+        if (r.ok) { toast("Cluster "+name+": resized to "+n+" nodes"); navigate({view:"detail", item:r.json || STATE.item, detailTab:0}); }
+        else toast("resize failed ("+r.status+")", "err");
+      }}, icon("open_in_full"), "Resize")] : []),
       el("button",{class:"btn danger",onclick:async()=>{
         if (!confirm("Delete "+name+"?")) return;
         const dp = (svc.api_paths||{}).delete;
@@ -1027,6 +1059,7 @@ async function renderDetail(main){
     if (t === "overview") return renderOverviewTab(content, svc, STATE.item);
     if (t === "secretvalue") return renderSecretValueTab(content, svc, STATE.item);
   if (t === "kmsconfig") return renderKmsConfigTab(content, svc, STATE.item);
+    if (t === "schedkv")  return renderSchedKvTab(content, STATE.item, item.fields || []);
     if (t === "objects")  return renderObjectsTab(content, svc, STATE.item);
     if (t === "tags")     return renderLabelsTab(content, svc, STATE.item);
     if (t === "json")     return content.append(el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto"}, JSON.stringify(STATE.item, null, 2)));
@@ -1506,6 +1539,16 @@ function renderOverviewTab(host, svc, item){
   rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, v))));
   card.append(g); host.append(card);
 }
+// Cloud Scheduler — key/value detail panes; `fields` = [[field,label],…] off the job view.
+function renderSchedKvTab(host, item, fields){
+  const card = el("div",{class:"kv-card"});
+  const g = el("div",{class:"kv-grid"});
+  fields.forEach(([f, label]) => {
+    const v = getPath(item, f);
+    g.append(el("div",{}, el("div",{class:"k"}, label), el("div",{class:"v"}, (v == null || v === "") ? "None" : String(v))));
+  });
+  card.append(g); host.append(card);
+}
 function renderLabelsTab(host, svc, item){
   const labels = (item.labels && typeof item.labels === "object") ? item.labels : {};
   if (!Object.keys(labels).length) {
@@ -1647,7 +1690,8 @@ function _recordFieldCount(field){
     try {
       const r = await api("GET", fillCommon(svc.resource_path, {name}));
       if (r.ok && r.json) { const v = getPath(r.json, field); if (Array.isArray(v)) return v.length;
-        if (v && typeof v === "object") return Object.keys(v).length; }
+        if (v && typeof v === "object") return Object.keys(v).length;
+        return 0; }   // the resource loaded and has no such children yet: a count of 0, not "-"
     } catch(_){}
     return null;
   };

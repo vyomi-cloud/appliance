@@ -291,6 +291,134 @@
   },
   {
    "cloud": "aws",
+   "key": "logs",
+   "name": "CloudWatch Logs",
+   "upstream": "logs",
+   "status": "released",
+   "released_in": "3.0.11"
+  },
+  {
+   "cloud": "aws",
+   "key": "elbv2",
+   "name": "Elastic Load Balancing",
+   "upstream": "elbv2",
+   "status": "released",
+   "released_in": "3.0.10"
+  },
+  {
+   "cloud": "aws",
+   "key": "ssm",
+   "name": "Systems Manager",
+   "upstream": "ssm",
+   "status": "released",
+   "released_in": "3.0.12"
+  },
+  {
+   "cloud": "aws",
+   "key": "stepfunctions",
+   "name": "Step Functions",
+   "upstream": "stepfunctions",
+   "status": "released",
+   "released_in": "3.0.13"
+  },
+  {
+   "cloud": "gcp",
+   "key": "cloudscheduler",
+   "name": "Cloud Scheduler",
+   "upstream": "cloudscheduler/v1",
+   "status": "released",
+   "released_in": "3.0.14"
+  },
+  {
+   "cloud": "gcp",
+   "key": "container",
+   "name": "Kubernetes Engine",
+   "upstream": "container/v1",
+   "status": "released",
+   "released_in": "3.0.15"
+  },
+  {
+   "cloud": "gcp",
+   "key": "iamcredentials",
+   "name": "IAM Service Account Credentials",
+   "upstream": "iamcredentials/v1",
+   "status": "released",
+   "released_in": "3.0.16"
+  },
+  {
+   "cloud": "gcp",
+   "key": "redis",
+   "name": "Memorystore for Redis",
+   "upstream": "redis/v1",
+   "status": "released",
+   "released_in": "3.0.17"
+  },
+  {
+   "cloud": "azure",
+   "key": "app",
+   "name": "Container Apps",
+   "upstream": "app",
+   "status": "released",
+   "released_in": "3.0.18"
+  },
+  {
+   "cloud": "azure",
+   "key": "appconfiguration",
+   "name": "App Configuration",
+   "upstream": "appconfiguration",
+   "status": "released",
+   "released_in": "3.0.19"
+  },
+  {
+   "cloud": "azure",
+   "key": "cognitiveservices",
+   "name": "Azure AI services",
+   "upstream": "cognitiveservices",
+   "status": "released",
+   "released_in": "3.0.20"
+  },
+  {
+   "cloud": "azure",
+   "key": "dns",
+   "name": "DNS zones",
+   "upstream": "dns",
+   "status": "released",
+   "released_in": "3.0.21"
+  },
+  {
+   "cloud": "azure",
+   "key": "monitor",
+   "name": "Monitor alerts",
+   "upstream": "monitor",
+   "status": "released",
+   "released_in": "3.0.22"
+  },
+  {
+   "cloud": "azure",
+   "key": "operationalinsights",
+   "name": "Log Analytics",
+   "upstream": "operationalinsights",
+   "status": "released",
+   "released_in": "3.0.23"
+  },
+  {
+   "cloud": "aws",
+   "key": "apigatewayv2",
+   "name": "API Gateway V2",
+   "upstream": "apigatewayv2",
+   "status": "released",
+   "released_in": "3.0.25"
+  },
+  {
+   "cloud": "aws",
+   "key": "cloudwatch",
+   "name": "Amazon CloudWatch",
+   "upstream": "cloudwatch",
+   "status": "released",
+   "released_in": "3.0.26"
+  },
+  {
+   "cloud": "aws",
    "key": "kinesis",
    "name": "Kinesis Data Streams",
    "upstream": "kinesis",

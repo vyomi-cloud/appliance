@@ -47,6 +47,11 @@ class Aws(CloudProvider):
             ("kms", "GetKey"):      lambda b, a, p: A.kms_get_key(p),
             ("kms", "DeleteKey"):   lambda b, a, p: A.kms_delete_key(p),
             ("kms", "ListAliases"): lambda b, a, p: A.kms_list_aliases(p),
+            # CloudWatch — alarms, via core/cloudwatch_core.py
+            ("cloudwatch", "ListAlarms"):  lambda b, a, p: A.cw_list(p),
+            ("cloudwatch", "CreateAlarm"): lambda b, a, p: A.cw_create(p),
+            ("cloudwatch", "GetAlarm"):    lambda b, a, p: A.cw_get(p),
+            ("cloudwatch", "DeleteAlarm"): lambda b, a, p: A.cw_delete(p),
             # Secrets Manager — via core/secrets_core.py
             ("secrets", "ListSecrets"):  lambda b, a, p: A.secrets_list(p),
             ("secrets", "CreateSecret"): lambda b, a, p: A.secrets_create(p),
@@ -67,6 +72,9 @@ class Aws(CloudProvider):
             ("iam", "ListGroups"):      lambda b, a, p: A.iam_list_groups(p),
             ("iam", "ListAttachments"): lambda b, a, p: A.iam_list_attachments(p),
             ("iam", "CreateUser"):      lambda b, a, p: A.iam_create_user(p),
+            ("iam", "GetUser"):         lambda b, a, p: A.iam_get_user(p),
+            ("iam", "GetRole"):         lambda b, a, p: A.iam_get_role(p),
+            ("iam", "GetGroup"):        lambda b, a, p: A.iam_get_group(p),
             ("iam", "DeleteUser"):      lambda b, a, p: A.iam_delete_user(p),
             ("iam", "DeleteRole"):      lambda b, a, p: A.iam_delete_role(p),
             ("iam", "DeletePolicy"):    lambda b, a, p: A.iam_delete_policy(p),
@@ -90,14 +98,44 @@ class Aws(CloudProvider):
             # API Gateway — APIs + MOCK/Lambda-proxy + invoke, via core/apigateway_core.py
             ("apigateway", "ListApis"):   lambda b, a, p: D.apigw_list(p),
             ("apigateway", "CreateApi"):  lambda b, a, p: D.apigw_create(p),
+            ("apigateway", "GetApi"):     lambda b, a, p: D.apigw_get(p),
             ("apigateway", "DeleteApi"):  lambda b, a, p: D.apigw_delete(p),
+            ("apigateway", "ListResources"): lambda b, a, p: D.apigw_resources(p),
+            ("apigateway", "ListStages"): lambda b, a, p: D.apigw_stages(p),
             ("apigateway", "Invoke"):     lambda b, a, p: D.apigw_invoke(p),
+            # API Gateway V2 — HTTP/WebSocket APIs, via core/apigatewayv2_core.py
+            ("apigatewayv2", "ListApis"):    lambda b, a, p: D.apigwv2_list(p),
+            ("apigatewayv2", "CreateApi"):   lambda b, a, p: D.apigwv2_create(p),
+            ("apigatewayv2", "GetApi"):      lambda b, a, p: D.apigwv2_get(p),
+            ("apigatewayv2", "UpdateApi"):   lambda b, a, p: D.apigwv2_patch(p),
+            ("apigatewayv2", "DeleteApi"):   lambda b, a, p: D.apigwv2_delete(p),
+            ("apigatewayv2", "ListChildren"): lambda b, a, p: D.apigwv2_children(p),
+            # Systems Manager Parameter Store, via core/ssm_core.py (shared registry store)
+            ("ssm", "ListParameters"):    lambda b, a, p: D.ssm_list(p),
+            ("ssm", "PutParameter"):      lambda b, a, p: D.ssm_put(p, False),
+            ("ssm", "GetParameter"):      lambda b, a, p: D.ssm_get(p),
+            ("ssm", "UpdateParameter"):   lambda b, a, p: D.ssm_put(p, True),
+            ("ssm", "TagParameter"):      lambda b, a, p: D.ssm_tag(p),
+            ("ssm", "DeleteParameter"):   lambda b, a, p: D.ssm_delete(p),
+            ("ssm", "ParameterHistory"):  lambda b, a, p: D.ssm_history(p),
+            # Step Functions — state machines + executions, via core/stepfunctions_core.py
+            ("stepfunctions", "ListMachines"):   lambda b, a, p: D.sfn_list(p),
+            ("stepfunctions", "CreateMachine"):  lambda b, a, p: D.sfn_create(p),
+            ("stepfunctions", "GetMachine"):     lambda b, a, p: D.sfn_get(p),
+            ("stepfunctions", "UpdateMachine"):  lambda b, a, p: D.sfn_patch(p),
+            ("stepfunctions", "DeleteMachine"):  lambda b, a, p: D.sfn_delete(p),
+            ("stepfunctions", "StartExecution"): lambda b, a, p: D.sfn_start(p),
+            ("stepfunctions", "ListChildren"):   lambda b, a, p: D.sfn_children(p),
             # VPC — topology + reachability analyzer, via core/vpc_core.py
             ("vpc", "List"):              lambda b, a, p: D.vpc_list(p),
+            ("vpc", "GetVpc"):            lambda b, a, p: D.vpc_get(p),
             ("vpc", "CreateVpc"):         lambda b, a, p: D.vpc_create(p),
             ("vpc", "CreateSubnet"):      lambda b, a, p: D.vpc_create_subnet(p),
             ("vpc", "CreateSecurityGroup"): lambda b, a, p: D.vpc_create_sg(p),
             ("vpc", "ListSecurityGroups"): lambda b, a, p: D.vpc_list_sgs(p),
+            ("vpc", "ListSubnets"):       lambda b, a, p: D.vpc_list_subnets(p),
+            ("vpc", "ListRouteTables"):   lambda b, a, p: D.vpc_list_route_tables(p),
+            ("vpc", "ListInternetGateways"): lambda b, a, p: D.vpc_list_igws(p),
             ("vpc", "Authorize"):         lambda b, a, p: D.vpc_authorize(p),
             ("vpc", "Analyze"):           lambda b, a, p: D.vpc_analyze(p),
             # Console "extras" — EC2/VPC sub-resources (volumes, snapshots, launch
@@ -114,11 +152,22 @@ class Aws(CloudProvider):
             ("kinesis", "UpdateStream"): lambda b, a, p: D.kinesis_update(p),
             ("kinesis", "DeleteStream"): lambda b, a, p: D.kinesis_delete(p),
             ("kinesis", "PutRecord"):    lambda b, a, p: D.kinesis_put(p),
+            # Elastic Load Balancing — LBs, target groups, listeners (core/elbv2_core.py)
+            ("elbv2", "ListLoadBalancers"):  lambda b, a, p: D.elb_list(p),
+            ("elbv2", "CreateLoadBalancer"): lambda b, a, p: D.elb_create(p),
+            ("elbv2", "GetLoadBalancer"):    lambda b, a, p: D.elb_get(p),
+            ("elbv2", "DeleteLoadBalancer"): lambda b, a, p: D.elb_delete(p),
+            ("elbv2", "SetTags"):            lambda b, a, p: D.elb_tags(p),
+            ("elbv2", "ListChildren"):       lambda b, a, p: D.elb_children(p),
+            ("elbv2", "CreateChild"):        lambda b, a, p: D.elb_child_create(p),
+            ("elbv2", "DeleteChild"):        lambda b, a, p: D.elb_child_delete(p),
             # EventBridge — rules → SQS delivery, via core/eventbridge_core.py
             ("eventbridge", "ListRules"): lambda b, a, p: D.eb_list(p),
             ("eventbridge", "CreateRule"): lambda b, a, p: D.eb_create(p),
             ("eventbridge", "DeleteRule"): lambda b, a, p: D.eb_delete(p),
             ("eventbridge", "PutEvent"):  lambda b, a, p: D.eb_put_event(p),
+            # CloudWatch Logs — console REST, via core/logs_core.py
+            ("logs", "Console"):          lambda b, a, p: D.logs_console(p),
         }
 
 

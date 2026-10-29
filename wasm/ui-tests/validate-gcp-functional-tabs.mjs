@@ -60,13 +60,24 @@ const out = (k, v) => console.log("RESULT " + k + " = " + JSON.stringify(v));
       return r;
     });
     for (const [k, v] of Object.entries(res)) out(k, v);
-    out("PASS", true);
+    const checks = [
+      ["Cloud SQL instance created", res.createInstance === 200],
+      ["user created and listed", res.createUser === 200 && res.listUsers.includes("appuser")],
+      ["user deleted", res.deleteUser === 200 && res.listUsersAfterDelete === 0],
+      ["database created and listed", res.createDb === 200 && res.listDatabases.includes("appdb")],
+      ["backup created and listed", res.createBackup === 200 && res.listBackups >= 1],
+      ["activity log records the create", res.eventsOk && res.eventActions.includes("Create")],
+    ];
+    for (const [name, ok] of checks) console.log(`[${ok ? "PASS" : "FAIL"}] ${name}`);
+    if (!checks.every(([, ok]) => ok)) process.exitCode = 1;
   } catch (e) {
     out("ERROR", String(e && e.message || e));
+    console.log("[FAIL] run " + String(e && e.message || e));
+    process.exitCode = 1;
   } finally {
     await browser.close().catch(() => {});
     server.close();
     clearTimeout(_k);
-    process.exit(0);
+    process.exit(process.exitCode || 0);
   }
 })();

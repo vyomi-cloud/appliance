@@ -42,8 +42,12 @@
   "UpdateStreamMode"
  ],
  "backend": {
-  "kind": "in-process",
-  "reason": "Kinesis semantics (shards, hash-key routing, sequence numbers, iterators, resharding lineage) live in the engine and persist in the space state; no SDK or CLI needs a real NATS JetStream data plane, and in-process keeps Free/Lite at zero extra containers and identical to Nano"
+  "kind": "container",
+  "name": "nats",
+  "image": "nats:2-alpine",
+  "license": "Apache-2.0",
+  "tier": "lite",
+  "compose_service": "vyomi-nats"
  },
  "suites": [
   "offline-sdk-java-aws-kinesis",

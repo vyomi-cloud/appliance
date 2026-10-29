@@ -649,7 +649,7 @@ ls -t "$_LOG_DIR"/up-*.log 2>/dev/null | tail -n +11 | xargs -r rm -f 2>/dev/nul
 # ESC bytes at variable-definition time. Plain single quotes preserve
 # the literal text "\033[32m" which then prints as "\033[32m" instead
 # of a real green colour.
-if [ -t 2 ]; then
+if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
   _C_RESET=$'\033[0m'  _C_BOLD=$'\033[1m'  _C_DIM=$'\033[2m'
   _C_GREEN=$'\033[32m' _C_YELLOW=$'\033[33m' _C_RED=$'\033[31m' _C_CYAN=$'\033[36m'
 else
@@ -687,7 +687,8 @@ progress() {
 _VYOMI_BANNER_PRINTED="${_VYOMI_BANNER_PRINTED:-0}"
 print_brand_banner() {
   if [ "${_VYOMI_BANNER_PRINTED}" = "1" ]; then return 0; fi
-  if [ "${VYOMI_NO_BANNER:-0}" = "1" ] || [ "${CLOUDLEARN_NO_BANNER:-0}" = "1" ]; then
+  # Same rule as the other launchers: only on an interactive terminal, never in CI.
+  if [ "${VYOMI_NO_BANNER:-0}" = "1" ] || [ "${CLOUDLEARN_NO_BANNER:-0}" = "1" ] || [ ! -t 2 ] || [ -n "${CI:-}" ]; then
     _VYOMI_BANNER_PRINTED=1
     return 0
   fi
@@ -702,13 +703,33 @@ print_brand_banner() {
   else
     _v="dev"
   fi
-  _emit "${C_CYAN}██╗   ██╗██╗   ██╗ ██████╗ ███╗   ███╗██╗${C_RESET}"
-  _emit "${C_CYAN}██║   ██║╚██╗ ██╔╝██╔═══██╗████╗ ████║██║${C_RESET}"
-  _emit "${C_CYAN}██║   ██║ ╚████╔╝ ██║   ██║██╔████╔██║██║${C_RESET}"
-  _emit "${C_CYAN}╚██╗ ██╔╝  ╚██╔╝  ██║   ██║██║╚██╔╝██║██║${C_RESET}"
-  _emit "${C_CYAN} ╚████╔╝    ██║   ╚██████╔╝██║ ╚═╝ ██║██║${C_RESET}"
-  _emit "${C_CYAN}  ╚═══╝     ╚═╝    ╚═════╝ ╚═╝     ╚═╝╚═╝${C_RESET}"
-  _emit "${C_DIM}       Local multi-cloud simulator · v${_v} · vyomi.cloud${C_RESET}"
+  # Launch view: the dot-matrix VYOMI shared with packaging/docker/vyomi and
+  # cmd/vyomi (tests/launcher/test_launch_view_consistency.py keeps them identical).
+  # LAUNCH-VIEW-MATRIX (keep identical across launchers)
+  local rows=(
+    "10001 10001 01110 10001 111"
+    "10001 10001 10001 11011 010"
+    "10001 01010 10001 10101 010"
+    "10001 00100 10001 10101 010"
+    "01010 00100 10001 10001 010"
+    "01010 00100 10001 10001 010"
+    "00100 00100 01110 10001 111"
+  )
+  local on="●" off="·" dimdot=""
+  case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in *UTF-8*|*utf8*|*UTF8*) ;; *) on="#"; off="." ;; esac
+  [ -n "$C_CYAN" ] && dimdot=$'\033[38;5;236m'
+  local row ch i line
+  _emit ""
+  for row in "${rows[@]}"; do
+    line="  "
+    for ((i = 0; i < ${#row}; i++)); do
+      ch="${row:i:1}"
+      case "$ch" in 1) line+="${C_CYAN}${on}${C_RESET} " ;; 0) line+="${dimdot}${off}${C_RESET} " ;; " ") line+="  " ;; esac
+    done
+    _emit "$line"
+  done
+  _emit ""
+  _emit "  ${_C_BOLD:-}local AWS · GCP · Azure — no cloud bill${C_RESET}   ${C_DIM}v${_v} · Max tier · Multipass${C_RESET}"
   _emit ""
   _VYOMI_BANNER_PRINTED=1
 }
@@ -780,6 +801,34 @@ Check the VM directly:
 }
 trap 'on_err' ERR
 
+
+# Backends coming up after the console answers (same view as the Docker and
+# Windows launchers): live N/N from the readiness API, then a ✓ line. Heavy
+# backends keep starting in the background; the console's readiness strip shows the rest.
+_lv_wait_backends() {
+  local url="${1%/}" i body ready total pct
+  for ((i = 0; i < 90; i++)); do
+    body="$(curl -fsk --max-time 2 "$url/api/runtime/readiness" 2>/dev/null || true)"
+    ready="$(printf '%s' "$body" | sed -n 's/.*"ready_count":\([0-9]*\).*/\1/p')"
+    total="$(printf '%s' "$body" | sed -n 's/.*"total_count":\([0-9]*\).*/\1/p')"
+    pct="$(printf '%s' "$body" | sed -n 's/.*"overall_pct":\([0-9]*\).*/\1/p')"
+    [ -n "$total" ] || return 0
+    if [ "$ready" = "$total" ]; then
+      [ -t 2 ] && printf '\r\033[K' >&2
+      _emit "  ${_C_GREEN}✓${_C_RESET} backends   ${total}/${total} ready (S3 · KMS · SQL · NoSQL · queues · Pub/Sub · Blob)"
+      return 0
+    fi
+    if [ -t 2 ] && [ -n "$_C_CYAN" ]; then
+      printf '\r\033[K  %s▸%s backends   %s/%s ready (%s%%) — pulling and starting in the background' "$_C_YELLOW" "$_C_RESET" "$ready" "$total" "$pct" >&2
+      sleep 2
+    else
+      break
+    fi
+  done
+  [ -t 2 ] && printf '\r\033[K' >&2
+  _emit "  ${_C_GREEN}✓${_C_RESET} backends   ${ready:-0}/${total} ready; the rest keep starting in the background"
+}
+
 # Success banner — printed by cmd_up at the very end after health check.
 launch_success_banner() {
   local url="$1"
@@ -800,8 +849,11 @@ launch_success_banner() {
   # package-manager phone-home never wrote the file). Fail-soft.
   _backfill_install_id "$url" || true
 
+  _lv_wait_backends "$url"
+  # LAUNCH-VIEW-READY (keep identical across launchers)
   _emit ""
-  _emit "  Open in browser:  ${_C_BOLD}${_C_CYAN}${url}${_C_RESET}"
+  _emit "  ${_C_BOLD}Ready.${_C_RESET} Open ${_C_CYAN}${url}${_C_RESET}   ·   SDK/CLI: point --endpoint-url at ${url}"
+  _emit "  ${_C_DIM}Pro tier: launch an EC2 instance in the console, then ssh ubuntu@<ip>.${_C_RESET}"
   if [ -n "$fallback_url" ]; then
     _emit "  Alternate URL:    ${_C_CYAN}${fallback_url}${_C_RESET}"
   fi

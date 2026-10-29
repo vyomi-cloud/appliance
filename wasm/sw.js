@@ -147,6 +147,7 @@ const NANO_SERVICES = [
   { name: "kms",            label: "KMS engine",          category: "aws" },
   { name: "secretsmanager", label: "Secrets (KV)",        category: "aws" },
   { name: "sqs",            label: "Messaging (SQS/SNS)", category: "aws" },
+  { name: "cloudwatch",     label: "CloudWatch",          category: "aws" },
   { name: "iam",            label: "IAM",                 category: "aws" },
   { name: "rds",            label: "SqlStore (RDS)",      category: "aws" },
   { name: "gcp",            label: "ResourceStore (GCP)", category: "gcp" },
@@ -208,7 +209,7 @@ async function handleUpload(request, bucket, provider = "aws") {
 
 // Real-cloud list price ($/month per resource) by census service key — mirrors the
 // table clouds.html uses for the Spaces cards, so both agree.
-const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,ec2:30.37,lambda:0.20,apigateway:3.50,vpc:0,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18,"microsoft.compute/virtualmachines":30.37,"microsoft.sql/servers":4.99,"microsoft.storage/storageaccounts":0.50,"microsoft.documentdb/databaseaccounts":24.48,"microsoft.web/sites":0.20,"microsoft.servicebus/namespaces":9.81,"microsoft.keyvault/vaults":0.03};
+const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.03,kvkeys:0.03,servicebus:9.81,azuresql:4.99,azurerbac:0,s3:0.50,dynamodb:1.25,kms:1.00,secretsmanager:0.40,sqs:0.40,iam:0,rds:25.55,elbv2:16.43,logs:2.53,cloudwatch:0.10,ec2:30.37,lambda:0.20,apigateway:3.50,apigatewayv2:1.00,vpc:0,ssm:0.05,stepfunctions:2.50,cloudscheduler:0.10,container:73,redis:35.77,iamcredentials:0.03,compute:24.53,storage:0.50,cloudsql:25.00,pubsub:0.40,firestore:0.18,functions:0.20,secretmanager:0.18};
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
@@ -417,6 +418,11 @@ async function route(method, path, body, query) {
 
   // ── v2.9.0 Azure net-new data planes → real cores (dataplane_adapter) ──
   let am;
+  // Key Vault data plane for the console (secrets + keys CRUD). Offline serves this
+  // at /azure-data/keyvault/{vault}/…; the SW only owns /api/*, so Nano mirrors it
+  // here and runs the same native Key Vault cores the SDK wire uses.
+  am = path.match(/^\/api\/azure\/keyvault\/([^/]+)\/(secrets|keys)(\/.*)?$/);
+  if (am) return { tuple: ["azure", "_kv", method, { kind: am[2], rest: am[3] || "", body: body || null }] };
   // Storage-account console routes (/api/azure/storage/{acct}/containers|queues…)
   // → the same Azurite-equivalent blob/queue cores the native SDKs use.
   am = path.match(/^\/api\/azure\/storage\/([^/]+)\/(containers|queues)(?:\/([^/]+))?(?:\/blobs(?:\/(.+))?)?$/);
@@ -516,9 +522,13 @@ async function route(method, path, body, query) {
   if (path === "/api/iam/groups" && method === "GET")   return { tuple: ["aws", "iam", "ListGroups", {}] };
   if (path === "/api/iam/attachments" && method === "GET") return { tuple: ["aws", "iam", "ListAttachments", {}] };
   m = path.match(/^\/api\/iam\/users\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "iam", "GetUser", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "iam", "DeleteUser", { name: dec(m[1]) }] };
   m = path.match(/^\/api\/iam\/roles\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "iam", "GetRole", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "iam", "DeleteRole", { name: dec(m[1]) }] };
+  m = path.match(/^\/api\/iam\/groups\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "iam", "GetGroup", { name: dec(m[1]) }] };
   m = path.match(/^\/api\/iam\/policies\/([^/]+)$/);
   if (m && method === "DELETE") return { tuple: ["aws", "iam", "DeletePolicy", { name: dec(m[1]) }] };
   // ── RDS (core/rds_core.py) ──────────────────────────────────────────
@@ -550,6 +560,14 @@ async function route(method, path, body, query) {
   m = path.match(/^\/api\/aws\/secrets\/(.+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "secrets", "GetSecret", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "secrets", "DeleteSecret", { name: dec(m[1]) }] };
+  // ── CloudWatch alarms (core/cloudwatch_core.py) ─────────────────────
+  if (path === "/api/aws/cloudwatch/alarms") {
+    if (method === "GET")  return { tuple: ["aws", "cloudwatch", "ListAlarms", {}] };
+    if (method === "POST") return { tuple: ["aws", "cloudwatch", "CreateAlarm", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/cloudwatch\/alarms\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "cloudwatch", "GetAlarm", { name: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "cloudwatch", "DeleteAlarm", { name: dec(m[1]) }] };
   // ── KMS (core/kms_core.py) ──────────────────────────────────────────
   if (path === "/api/aws/kms/keys") {
     if (method === "GET")  return { tuple: ["aws", "kms", "ListKeys", {}] };
@@ -577,11 +595,57 @@ async function route(method, path, body, query) {
   }
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/invoke$/);
   if (m && method === "POST") return { tuple: ["aws", "apigateway", "Invoke", { id: dec(m[1]), ...(body || {}) }] };
+  m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/resources$/);
+  if (m && method === "GET") return { tuple: ["aws", "apigateway", "ListResources", { id: dec(m[1]) }] };
+  m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/stages$/);
+  if (m && method === "GET") return { tuple: ["aws", "apigateway", "ListStages", { id: dec(m[1]) }] };
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "apigateway", "GetApi", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "apigateway", "DeleteApi", { name: dec(m[1]) }] };
+  // API Gateway V2 (core/apigatewayv2_core.py) — HTTP/WebSocket APIs
+  if (path === "/api/apigatewayv2/apis") {
+    if (method === "GET")  return { tuple: ["aws", "apigatewayv2", "ListApis", {}] };
+    if (method === "POST") return { tuple: ["aws", "apigatewayv2", "CreateApi", body || {}] };
+  }
+  m = path.match(/^\/api\/apigatewayv2\/apis\/([^/]+)\/(routes|integrations|stages|deployments|authorizers|models)$/);
+  if (m && method === "GET") return { tuple: ["aws", "apigatewayv2", "ListChildren", { id: dec(m[1]), kind: m[2] }] };
+  m = path.match(/^\/api\/apigatewayv2\/apis\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "apigatewayv2", "GetApi", { id: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "apigatewayv2", "UpdateApi", { id: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "apigatewayv2", "DeleteApi", { id: dec(m[1]) }] };
+  // Systems Manager Parameter Store (core/ssm_core.py) — names carry slashes, so match greedily
+  if (path === "/api/ssm/parameters") {
+    if (method === "GET")  return { tuple: ["aws", "ssm", "ListParameters", {}] };
+    if (method === "POST") return { tuple: ["aws", "ssm", "PutParameter", body || {}] };
+  }
+  m = path.match(/^\/api\/ssm\/parameters\/(.+)\/history$/);
+  if (m && method === "GET") return { tuple: ["aws", "ssm", "ParameterHistory", { name: dec(m[1]) }] };
+  m = path.match(/^\/api\/ssm\/parameters\/(.+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "ssm", "GetParameter", { name: dec(m[1]) }] };
+  if (m && method === "PUT")    return { tuple: ["aws", "ssm", "UpdateParameter", { ...(body || {}), name: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "ssm", "TagParameter", { ...(body || {}), name: dec(m[1]) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "ssm", "DeleteParameter", { name: dec(m[1]) }] };
+  // Step Functions (core/stepfunctions_core.py) — state machines + executions
+  if (path === "/api/stepfunctions/machines") {
+    if (method === "GET")  return { tuple: ["aws", "stepfunctions", "ListMachines", {}] };
+    if (method === "POST") return { tuple: ["aws", "stepfunctions", "CreateMachine", body || {}] };
+  }
+  m = path.match(/^\/api\/stepfunctions\/machines\/([^/]+)\/(executions|versions|aliases)$/);
+  if (m && method === "GET")  return { tuple: ["aws", "stepfunctions", "ListChildren", { id: dec(m[1]), kind: m[2] }] };
+  if (m && m[2] === "executions" && method === "POST") return { tuple: ["aws", "stepfunctions", "StartExecution", { id: dec(m[1]), ...(body || {}) }] };
+  m = path.match(/^\/api\/stepfunctions\/machines\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "stepfunctions", "GetMachine", { id: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "stepfunctions", "UpdateMachine", { id: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "stepfunctions", "DeleteMachine", { id: dec(m[1]) }] };
   // VPC (core/vpc_core.py) — topology + reachability analyzer
   if (path === "/api/vpc" && method === "GET") return { tuple: ["aws", "vpc", "List", {}] };
+  if (path === "/api/vpc/vpcs" && method === "GET") return { tuple: ["aws", "vpc", "List", {}] };
+  m = path.match(/^\/api\/vpc\/vpcs\/([^/]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "vpc", "GetVpc", { name: dec(m[1]) }] };
   if (path === "/api/vpc/vpcs" && method === "POST") return { tuple: ["aws", "vpc", "CreateVpc", body || {}] };
+  if (path === "/api/vpc/subnets" && method === "GET") return { tuple: ["aws", "vpc", "ListSubnets", {}] };
+  if (path === "/api/vpc/route-tables" && method === "GET") return { tuple: ["aws", "vpc", "ListRouteTables", {}] };
+  if (path === "/api/vpc/internet-gateways" && method === "GET") return { tuple: ["aws", "vpc", "ListInternetGateways", {}] };
   if (path === "/api/vpc/subnets" && method === "POST") return { tuple: ["aws", "vpc", "CreateSubnet", body || {}] };
   if (path === "/api/vpc/security-groups" && method === "POST") return { tuple: ["aws", "vpc", "CreateSecurityGroup", body || {}] };
   if (path === "/api/vpc/security-groups" && method === "GET")  return { tuple: ["aws", "vpc", "ListSecurityGroups", {}] };
@@ -589,6 +653,11 @@ async function route(method, path, body, query) {
   if (path === "/api/vpc/analyze" && method === "POST") return { tuple: ["aws", "vpc", "Analyze", body || {}] };
   // EC2 AMIs — a fresh account owns no custom images (CreateImage not modeled in
   // Nano yet); return an empty owned-AMIs list so the page renders instead of 501.
+  // Connect tab: Nano runs in the browser and has no instance runtime to SSH into, so
+  // answer with the same {detail:{error,hint}} shape the appliance uses for a
+  // not-connectable instance (the Connect pane renders it) instead of a 501.
+  if (/^\/api\/aws\/ec2\/instances\/[^/]+\/connect-info$/.test(path) && method === "GET")
+    return { response: json({ detail: { error: "NoRuntime", hint: "Nano has no instance runtime to SSH into; use the Vyomi appliance for SSH/console access." } }, 409) };
   if (path === "/api/ec2/amis" && method === "GET") return { response: json({ ok: true, amis: [] }) };
   // Console "extras" — generic EC2/VPC sub-resource CRUD (volumes, snapshots,
   // launch templates, spot requests, endpoint services). Specific extras + fixtures
@@ -617,6 +686,23 @@ async function route(method, path, body, query) {
   if (m && method === "GET")    return { tuple: ["aws", "kinesis", "GetStream", { name: dec(m[1]) }] };
   if (m && (method === "PUT" || method === "PATCH")) return { tuple: ["aws", "kinesis", "UpdateStream", { name: dec(m[1]), body: body || {} }] };
   if (m && method === "DELETE") return { tuple: ["aws", "kinesis", "DeleteStream", { name: dec(m[1]) }] };
+  // CloudWatch Logs (core/logs_core.py) — the console REST under /api/logs/*
+  m = path.match(/^\/api\/logs\/(.+)$/);
+  if (m) return { tuple: ["aws", "logs", "Console", { method, path: m[1], query: query || {}, body: body || {} }] };
+  // Elastic Load Balancing (core/elbv2_core.py) — LBs + target groups + listeners
+  if (path === "/api/aws/elbv2/load-balancers") {
+    if (method === "GET")  return { tuple: ["aws", "elbv2", "ListLoadBalancers", {}] };
+    if (method === "POST") return { tuple: ["aws", "elbv2", "CreateLoadBalancer", body || {}] };
+  }
+  m = path.match(/^\/api\/aws\/elbv2\/load-balancers\/([^/]+)$/);
+  if (m && method === "GET")    return { tuple: ["aws", "elbv2", "GetLoadBalancer", { name: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "elbv2", "SetTags", { name: dec(m[1]), ...(body || {}) }] };
+  if (m && method === "DELETE") return { tuple: ["aws", "elbv2", "DeleteLoadBalancer", { name: dec(m[1]) }] };
+  m = path.match(/^\/api\/aws\/elbv2\/(target-groups|listeners)$/);
+  if (m && method === "GET")  return { tuple: ["aws", "elbv2", "ListChildren", { kind: m[1] }] };
+  if (m && method === "POST") return { tuple: ["aws", "elbv2", "CreateChild", { ...(body || {}), kind: m[1] }] };
+  m = path.match(/^\/api\/aws\/elbv2\/(target-groups|listeners)\/([^/]+)$/);
+  if (m && method === "DELETE") return { tuple: ["aws", "elbv2", "DeleteChild", { kind: m[1], name: dec(m[2]) }] };
   // EventBridge (core/eventbridge_core.py) — rules → SQS delivery
   if (path === "/api/eventbridge/rules") {
     if (method === "GET")  return { tuple: ["aws", "eventbridge", "ListRules", {}] };
@@ -666,6 +752,14 @@ async function route(method, path, body, query) {
   let gs = path.match(/^\/api\/gcp\/subresource\/pubsub\/([^/]+)\/subscriptions\/?$/);
   if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListSubscriptions", { service: "pubsub", name: dec(gs[1]) }] };
   if (gs && method === "POST") return { tuple: ["gcp", "_resource", "CreateSubscription", { service: "pubsub", name: dec(gs[1]), body: body || {} }] };
+  // Project-level Pub/Sub subscriptions collection (the topics grid counts them; the
+  // catalog lists it as the topic's `subscriptions` api path).
+  gs = path.match(/^\/api\/gcp\/pubsub\/v1\/projects\/[^/]+\/subscriptions\/?$/);
+  if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListAllSubscriptions", { service: "pubsub" }] };
+  if (gs && method === "POST") return { tuple: ["gcp", "_resource", "CreateSubscription", { service: "pubsub", name: String(((body || {}).topic) || "").split("/").pop(), body: { ...(body || {}), name: (body || {}).name || (body || {}).subscriptionId } }] };
+  // Real Pub/Sub create: PUT .../subscriptions/{id} with {topic} (client libraries, gcloud).
+  gs = path.match(/^\/api\/gcp\/pubsub\/v1\/projects\/[^/]+\/subscriptions\/([^/]+)$/);
+  if (gs && method === "PUT") return { tuple: ["gcp", "_resource", "CreateSubscription", { service: "pubsub", name: String(((body || {}).topic) || "").split("/").pop(), body: { ...(body || {}), name: dec(gs[1]) } }] };
   gs = path.match(/^\/api\/gcp\/subresource\/cloudsql\/([^/]+)\/databases\/?$/);
   if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListDatabases", { service: "cloudsql", name: dec(gs[1]) }] };
   if (gs && method === "POST") return { tuple: ["gcp", "_resource", "CreateDatabase", { service: "cloudsql", name: dec(gs[1]), body: body || {} }] };
@@ -796,7 +890,7 @@ self.addEventListener("fetch", (event) => {
           match = created.find((s) => s.space_id === activeId && s.provider === prov)
                || created.filter((s) => s.provider === prov).pop();
         } catch (_) {}
-        return json({ space: match || nanoSpace(prov) });
+        return json({ space: { ...(match || nanoSpace(prov)), cost_savings: await nanoCostSavings() } });
       }
       // Spaces list = fixture defaults + persisted user-created (deduped).
       if (apiPath === "/api/spaces" && method === "GET") {

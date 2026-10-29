@@ -31,20 +31,20 @@ _B64 = "__b64__"
 # router attrs AND the shared-registry keys (nano_registry), so one snapshot maps
 # cleanly onto either the router or the console adapter's registry.
 STORE_ATTRS = [
-    "s3", "ddb", "kms", "sec", "rds", "iam", "msg", "kinesis",
+    "s3", "ddb", "kms", "sec", "rds", "iam", "msg", "logs", "elbv2", "kinesis",
     "gcs", "gcp_fs", "gcp_kms", "gcp_sec", "gcp_msg", "gcp_iam", "gcp_sql",
     "az_blob", "az_cosmos", "az_kvsec", "az_kvkeys", "az_queue", "az_sb",
+    "apigwv2",  # API Gateway V2 (core/apigatewayv2_core.ApiGwV2Store)
+    "compute", "vpc_net", "extras",   # Lambda/API Gateway + VPC models (private _lambda_functions etc., see _DURABLE_PRIVATE)
+    "az_arm",   # Azure ARM control plane (core/azure_arm_core.AzureArm.state — Container Apps, VMs, …)
+    "ssm",      # Systems Manager (core/ssm_core.SsmStore)
+    "gcp_gke",    # Kubernetes Engine (core/gcp_container_core.ContainerStore)
+    "gcp_redis",  # Memorystore for Redis (core/gcp_redis_core.RedisStore)
+    "gcp_iamc",   # IAM Credentials issue log (core/gcp_iamcredentials_core.IamCredentialsStore)
+    "gcp_sched",  # Cloud Scheduler (core/gcp_cloudscheduler_core.CloudSchedulerStore)
+    "sfn",      # Step Functions (core/stepfunctions_core.StepFunctionsStore)
+    "cw",       # CloudWatch metrics / alarms / dashboards
     "events",   # per-resource cloudsim event/activity log (core/nano_events.EventStore)
-    # Generic catalog CRUD store (backends.store.ResourceStore, public dict
-    # `collections`) — backs AWS /api/aws/sub/* children + editable settings AND
-    # GCP compute/vpc/functions/apigateway/eventarc parents + their record-kind
-    # children. Present only in the console context (relay has no catalog store).
-    "resources",
-    # Azure ARM control plane (core/azure_arm_core.AzureArm, public dict `state`)
-    # — top-level ARM resources + ARM-core children (servicebus topics/subs, vnet
-    # peerings, deployment slots). `_operations` (ephemeral LRO polls) is NOT
-    # captured (underscore attr) — only durable resource state round-trips.
-    "az_arm",
 ]
 
 
@@ -69,13 +69,20 @@ def _dec(v):
     return v
 
 
+# Private (`_`-prefixed) attrs that hold durable resource state — cores that keep
+# their model lazily on the store (getattr/setattr) rather than as a public dict.
+# Without these, a Lambda function / API / VPC created in the console vanishes on
+# the next reload. Add a core's attr here when it keeps state this way.
+_DURABLE_PRIVATE = ("_lambda_functions", "_apigateway_apis", "_vpc_model")
+
+
 def _public_state(store) -> dict:
     # Capture public DATA attrs (the state dicts). Skip helper OBJECTS a store may
     # hold in public attrs (e.g. a stateless crypto engine) by proving each attr is
     # JSON-safe before including it — guarantees the whole snapshot serializes.
     out = {}
     for k, v in vars(store).items():
-        if k.startswith("_") or callable(v):
+        if (k.startswith("_") and k not in _DURABLE_PRIVATE) or callable(v):
             continue
         try:
             enc = _enc(copy.deepcopy(v))

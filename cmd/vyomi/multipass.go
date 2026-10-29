@@ -32,6 +32,7 @@ func multipassBin() string { return "multipass" }
 // multipassUp is the full Max-tier boot sequence (the PS1 outer `up` case).
 func (c *Config) multipassUp() error {
 	c.initializeLog()
+	newLaunchView().banner("Max tier · Multipass")
 	if !have("multipass") {
 		if !installMultipass() {
 			return fmt.Errorf("Multipass is required for the Max tier")

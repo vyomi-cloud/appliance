@@ -961,6 +961,44 @@ _RBAC_WIZARD = {
 
 
 # ---------------------------------------------------------------------------
+# Monitor — metric alert rule (Create alert rule: Scope + Condition + Details,
+# then Review + create). Alert rules are global resources.
+# ---------------------------------------------------------------------------
+_MONITOR_WIZARD = {
+    "tabs": [
+        {"key": "basics", "label": "Basics", "sections": [
+            _project_section(),
+            {"label": "Alert rule details", "fields": [
+                {"name": "name", "label": "Alert rule name", "default": "cloudlearn-cpu-high", "required": True},
+                {"name": "__loc__", "label": "Region", "type": "select", "default": "global", "options": [
+                    {"value": "global", "label": "Global"}]},
+                {"name": "properties.scopes.0", "label": "Scope (resource id)", "required": True,
+                 "default": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/cloudlearn-rg/providers/Microsoft.Compute/virtualMachines/cloudlearn-vm"},
+                {"name": "properties.severity", "label": "Severity (0-4)", "default": "3"},
+                {"name": "properties.enabled", "label": "Enabled", "default": "true"},
+            ]},
+        ]},
+        {"key": "condition", "label": "Condition", "sections": [
+            {"label": "Signal and threshold", "fields": [
+                {"name": "properties.criteria.allOf.0.name", "label": "Condition name", "default": "HighCpu"},
+                {"name": "properties.criteria.allOf.0.metricName", "label": "Metric", "default": "Percentage CPU"},
+                {"name": "properties.criteria.allOf.0.operator", "label": "Operator", "default": "GreaterThan"},
+                {"name": "properties.criteria.allOf.0.timeAggregation", "label": "Aggregation", "default": "Average"},
+                {"name": "properties.criteria.allOf.0.threshold", "label": "Threshold", "default": "80"},
+            ]},
+            {"label": "Evaluation", "fields": [
+                {"name": "properties.evaluationFrequency", "label": "Evaluate every", "default": "PT1M"},
+                {"name": "properties.windowSize", "label": "Window size", "default": "PT5M"},
+            ]},
+        ]},
+        _tags_tab(),
+        _review_tab(),
+    ],
+    "synthetic_map": {},
+}
+
+
+# ---------------------------------------------------------------------------
 # Export — keyed by catalog ``key`` (so azure_services.py can merge in place).
 # ---------------------------------------------------------------------------
 WIZARDS: dict[str, dict] = {
@@ -975,4 +1013,5 @@ WIZARDS: dict[str, dict] = {
     "keyvault": _KEYVAULT_WIZARD,
     "eventgrid": _EVENTGRID_WIZARD,
     "rbac": _RBAC_WIZARD,
+    "monitor": _MONITOR_WIZARD,
 }
