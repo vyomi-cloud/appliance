@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -112,7 +113,18 @@ def main() -> int:
     only = {x for x in a.only.split(",") if x}
     suites = [s for s in suites if (a.target == "all" or s["target"] == a.target) and (not only or s["id"] in only)]
 
-    results = [run_suite(s, subs) for s in suites]
+    # Two lanes, one per target, each sequential: offline suites share the
+    # appliance's active space (the offline crawl creates resources and checks
+    # cost-savings deltas), so they must not overlap each other; Nano suites run
+    # in their own headless browser stores and never touch the appliance. Run as
+    # one queue, 105 suites (two ~20-min crawls) overran the detect job.
+    lanes = [[s for s in suites if s["target"] == t] for t in ("offline", "nano")]
+    lanes.append([s for s in suites if s["target"] not in ("offline", "nano")])
+    done: dict = {}
+    with ThreadPoolExecutor(max_workers=len(lanes)) as pool:
+        for part in pool.map(lambda lane: {s["id"]: run_suite(s, subs) for s in lane}, lanes):
+            done |= part
+    results = [done[s["id"]] for s in suites]
     commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     out = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "commit": commit, "suites": results}
     os.makedirs(OUT, exist_ok=True)

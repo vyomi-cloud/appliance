@@ -37,7 +37,7 @@ env:
 jobs:
   detect:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: write     # pushes today's daily branch (merged with main) for the fixers
       issues: read        # the upstream-drift backlog
