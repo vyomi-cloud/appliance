@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -524,6 +525,12 @@ def _subscribe(store, params):
                       message=f"You have chosen to subscribe to the topic {arn}. "
                               f"To confirm the subscription, use token {sub['token']}",
                       token=sub["token"])
+        if protocol in ("http", "https"):
+            _enqueue_delivery(
+                store, topic, sub, kind="SubscriptionConfirmation", token=sub["token"], subject="",
+                message=f"You have chosen to subscribe to the topic {arn}.\nTo confirm the subscription, "
+                        f"visit the SubscribeURL included in this message.",
+                message_id=str(uuid.uuid4()), raw=False, group="", attributes={})
     store.persist()
     return _subscribe_result(sub, params)
 
@@ -729,6 +736,52 @@ def _deliver_sqs(store, endpoint: str, body: str, attrs: dict | None, group, ded
     return True
 
 
+DEDUP_WINDOW_SECONDS = 300      # FIFO topics drop a repeat MessageDeduplicationId for 5 minutes
+_PUSH_PROTOCOLS = ("http", "https", "lambda", "email", "email-json")
+
+
+def _retry_policy(topic: dict, sub: dict) -> dict:
+    """Effective retry policy for a subscription: the subscription's DeliveryPolicy
+    (healthyRetryPolicy) wins, then the topic's (http.defaultHealthyRetryPolicy), then
+    SNS's defaults (3 retries, 20 s)."""
+    out = dict(_DEFAULT_DELIVERY_POLICY["http"]["defaultHealthyRetryPolicy"])
+    for raw, path in ((topic.get("attributes", {}).get("DeliveryPolicy"), ("http", "defaultHealthyRetryPolicy")),
+                      (sub.get("attributes", {}).get("DeliveryPolicy"), ("healthyRetryPolicy",))):
+        try:
+            doc = json.loads(raw) if raw else {}
+            for k in path:
+                doc = doc.get(k, {})
+            if isinstance(doc, dict):
+                out.update({k: v for k, v in doc.items() if v is not None})
+        except Exception:
+            pass
+    return out
+
+
+def _redrive_target(sub: dict) -> str:
+    try:
+        return str(json.loads(sub.get("attributes", {}).get("RedrivePolicy") or "{}").get("deadLetterTargetArn", ""))
+    except Exception:
+        return ""
+
+
+def _enqueue_delivery(store, topic: dict, sub: dict, **job) -> bool:
+    """Hand a push delivery (HTTP/S, Lambda, email) to the store's delivery workers, when it
+    has them (the offline appliance: durable NATS JetStream consumers). Without workers
+    (Nano) the delivery is only recorded in the delivery log, as before."""
+    hook = getattr(store, "enqueue_delivery", None)
+    if hook is None:
+        return False
+    job.update(id=str(uuid.uuid4()), topic_arn=topic["topic_arn"], subscription_arn=sub["subscription_arn"],
+               protocol=sub["protocol"], endpoint=sub["endpoint"], retry_policy=_retry_policy(topic, sub),
+               signature_version=str(topic.get("attributes", {}).get("SignatureVersion") or "1"),
+               redrive_arn=_redrive_target(sub), enqueued=_now_iso())
+    try:
+        return bool(hook(job))
+    except Exception:
+        return False
+
+
 def _publish_to_topic(store, topic: dict, msg: dict) -> tuple[str, str]:
     fifo = _is_fifo(topic)
     _check_message(msg, fifo)
@@ -741,7 +794,11 @@ def _publish_to_topic(store, topic: dict, msg: dict) -> tuple[str, str]:
                 dedup = hashlib.sha256(msg["Message"].encode()).hexdigest()
             else:
                 raise _invalid("Invalid parameter: The topic should either have ContentBasedDeduplication enabled or MessageDeduplicationId provided explicitly")
-        seen = _state(store)["dedup"].get(f"{arn}|{dedup}")
+        now = time.time()
+        window = _state(store)["dedup"]
+        for k in [k for k, v in window.items() if now - v.get("ts", 0) > DEDUP_WINDOW_SECONDS]:
+            del window[k]
+        seen = window.get(f"{arn}|{dedup}")
         if seen:
             return seen["id"], seen["seq"]
         s = _state(store)
@@ -749,7 +806,7 @@ def _publish_to_topic(store, topic: dict, msg: dict) -> tuple[str, str]:
         seq = str(s["sequence"]).zfill(20)
     message_id = str(uuid.uuid4())
     if fifo:
-        _state(store)["dedup"][f"{arn}|{dedup}"] = {"id": message_id, "seq": seq}
+        _state(store)["dedup"][f"{arn}|{dedup}"] = {"id": message_id, "seq": seq, "ts": time.time()}
     attrs = msg["attrs"]
     envelope = {"Type": "Notification", "MessageId": message_id, "TopicArn": arn,
                 "Message": msg["Message"], "Timestamp": _now_iso(), "SignatureVersion": "1",
@@ -791,9 +848,18 @@ def _publish_to_topic(store, topic: dict, msg: dict) -> tuple[str, str]:
                           subject=msg.get("Subject") or "", message=text, message_id=message_id,
                           error="queue does not exist")
         else:
-            _log_delivery(store, kind="Notification", topic_arn=arn, protocol=sub["protocol"],
-                          endpoint=sub["endpoint"], subscription_arn=sub["subscription_arn"],
-                          subject=msg.get("Subject") or "", message=text, message_id=message_id)
+            queued = False
+            if sub["protocol"] in _PUSH_PROTOCOLS:
+                env = dict(envelope, Message=text,
+                           UnsubscribeURL=envelope["UnsubscribeURL"] % sub["subscription_arn"])
+                queued = _enqueue_delivery(
+                    store, topic, sub, kind="Notification", subject=msg.get("Subject") or "", message=text,
+                    message_id=message_id, raw=raw, envelope=env, group=msg.get("group") or "",
+                    attributes=attrs or {})
+            if not queued:
+                _log_delivery(store, kind="Notification", topic_arn=arn, protocol=sub["protocol"],
+                              endpoint=sub["endpoint"], subscription_arn=sub["subscription_arn"],
+                              subject=msg.get("Subject") or "", message=text, message_id=message_id)
     return message_id, seq
 
 

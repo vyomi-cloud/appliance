@@ -213,6 +213,7 @@ const NANO_RATE = {blobcontainers:0.02,queues:0.05,cosmosdbs:23.36,kvsecrets:0.0
 async function nanoCostSavings() {
   const now = Date.now();
   const by_provider = { aws: 0, gcp: 0, azure: 0 };
+  const by_service = {};     // "<cloud>.<service>" -> USD/month, same keys as the appliance's cost_savings
   let resource_count = 0;
   for (const p of ["aws", "gcp", "azure"]) {
     let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
@@ -220,11 +221,15 @@ async function nanoCostSavings() {
     resource_count += c.resources || 0;
     const bs = c.by_service || {};
     let usd = 0;
-    for (const k in bs) usd += (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+    for (const k in bs) {
+      const svcUsd = (Number(bs[k]) || 0) * (Object.prototype.hasOwnProperty.call(NANO_RATE, k) ? NANO_RATE[k] : 1.0);
+      usd += svcUsd;
+      by_service[p + "." + k] = Math.round(svcUsd * 100) / 100;
+    }
     by_provider[p] = Math.round(usd * 100) / 100;
   }
   const savings_usd = Math.round((by_provider.aws + by_provider.gcp + by_provider.azure) * 100) / 100;
-  return { resource_count, savings_usd, by_provider, period: "monthly" };
+  return { resource_count, savings_usd, by_provider, by_service, period: "monthly" };
 }
 
 // Each console gates on an active space whose provider matches it. We derive

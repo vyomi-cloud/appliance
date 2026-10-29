@@ -118,6 +118,91 @@ q "MessageId" "publish an SMS to the verified number" publish --phone-number "$P
 q "" "delete-sms-sandbox-phone-number" delete-sms-sandbox-phone-number --phone-number "$PHONE"
 q "false" "check-if-phone-number-is-opted-out" check-if-phone-number-is-opted-out --phone-number "$PHONE"
 
+
+# ── push delivery through NATS JetStream: HTTP confirm/notify/retry/DLQ, FIFO dedup ──────────
+RDIR=$(mktemp -d)
+cat > "$RDIR/recv.py" <<'PY'
+import json, sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+port, out = int(sys.argv[1]), sys.argv[2]
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0))).decode()
+        with open(out + "/log.jsonl", "a") as f:
+            f.write(json.dumps({"path": self.path, "type": self.headers.get("x-amz-sns-message-type"), "body": body}) + "\n")
+        self.send_response(500 if self.path.startswith("/fail") else 200); self.end_headers()
+HTTPServer(("0.0.0.0", port), H).serve_forever()
+PY
+cat > "$RDIR/verify.py" <<'PY'
+import base64, json, sys, urllib.request
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+env = json.loads(sys.argv[1])
+fields = {"Notification": ["Message", "MessageId", "Subject", "Timestamp", "TopicArn", "Type"],
+          "SubscriptionConfirmation": ["Message", "MessageId", "SubscribeURL", "Timestamp", "Token", "TopicArn", "Type"]}[env["Type"]]
+text = "".join(f"{k}\n{env[k]}\n" for k in fields if k in env)
+cert = x509.load_pem_x509_certificate(urllib.request.urlopen(env["SigningCertURL"], timeout=10).read())
+cert.public_key().verify(base64.b64decode(env["Signature"]), text.encode(), padding.PKCS1v15(),
+                         hashes.SHA256() if env["SignatureVersion"] == "2" else hashes.SHA1())
+print("verified")
+PY
+RPORT=$((20000 + SFX % 20000))
+RHOST="${SNS_RECEIVER_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}')}"; RHOST="${RHOST:-172.17.0.1}"
+python3 "$RDIR/recv.py" "$RPORT" "$RDIR" & RPID=$!
+sleep 1
+rlog() { python3 -c "
+import json, os
+rows=[json.loads(l) for l in open('$RDIR/log.jsonl')] if os.path.exists('$RDIR/log.jsonl') else []
+print($1)"; }
+waitfor() { local i; for i in $(seq 1 "${2:-30}"); do [ "$(rlog "$1")" = "True" ] && return 0; sleep 1; done; return 1; }
+
+HT="cli-http-$SFX"
+v "create-topic (HTTP delivery)" create-topic --name "$HT" --query TopicArn --output text; HTARN="$OUT"
+v "subscribe an HTTP endpoint" subscribe --topic-arn "$HTARN" --protocol http --notification-endpoint "http://$RHOST:$RPORT/ok" --return-subscription-arn --query SubscriptionArn --output text
+if waitfor "any(r['type']=='SubscriptionConfirmation' for r in rows)"; then chk 0 "endpoint receives a SubscriptionConfirmation POST"; else chk 1 "endpoint receives a SubscriptionConfirmation POST" "none within 30s (receiver http://$RHOST:$RPORT)"; fi
+CONF=$(rlog "[r['body'] for r in rows if r['type']=='SubscriptionConfirmation'][0] if rows else '{}'")
+TOKEN=$(printf '%s' "$CONF" | python3 -c "import json,sys; print(json.load(sys.stdin).get('Token',''))")
+VOUT=$(python3 "$RDIR/verify.py" "$CONF" 2>&1 | tail -1); [ "$VOUT" = "verified" ] && chk 0 "the confirmation message is signed (certificate served by the appliance)" || chk 1 "the confirmation message is signed" "$VOUT"
+q "$HTARN" "confirm-subscription with the delivered token" confirm-subscription --topic-arn "$HTARN" --token "$TOKEN"
+q "MessageId" "publish to the HTTP topic" publish --topic-arn "$HTARN" --message "hello-http-$SFX" --subject "subj"
+if waitfor "any(r['type']=='Notification' and 'hello-http-$SFX' in r['body'] for r in rows)"; then chk 0 "confirmed endpoint receives the Notification POST"; else chk 1 "confirmed endpoint receives the Notification POST" "none within 30s"; fi
+NOTE=$(rlog "[r['body'] for r in rows if r['type']=='Notification' and 'hello-http-$SFX' in r['body']][0]")
+VOUT=$(python3 "$RDIR/verify.py" "$NOTE" 2>&1 | tail -1); [ "$VOUT" = "verified" ] && chk 0 "the notification signature verifies against SigningCertURL" || chk 1 "the notification signature verifies" "$VOUT"
+
+DLQ="cli-dlq-$SFX"
+DLQURL=$(sqs create-queue --queue-name "$DLQ" --query QueueUrl --output text)
+DLQARN=$(sqs get-queue-attributes --queue-url "$DLQURL" --attribute-names QueueArn --query Attributes.QueueArn --output text)
+FT="cli-fail-$SFX"
+v "create-topic (failing endpoint)" create-topic --name "$FT" --query TopicArn --output text; FTARN="$OUT"
+POLICY='{"healthyRetryPolicy":{"numRetries":2,"minDelayTarget":1,"maxDelayTarget":1,"numNoDelayRetries":0,"numMinDelayRetries":0,"numMaxDelayRetries":0,"backoffFunction":"linear"}}'
+FATTRS=$(python3 -c "import json,sys; print(json.dumps({'DeliveryPolicy': sys.argv[1], 'RedrivePolicy': json.dumps({'deadLetterTargetArn': sys.argv[2]})}))" "$POLICY" "$DLQARN")
+v "subscribe a 500-returning endpoint with a DeliveryPolicy + RedrivePolicy" subscribe --topic-arn "$FTARN" --protocol http --notification-endpoint "http://$RHOST:$RPORT/fail-$SFX" --return-subscription-arn --query SubscriptionArn --output text \
+  --attributes "$FATTRS"
+FSARN="$OUT"
+sleep 1
+FTOKEN=$(logq "[i['token'] for i in items if i['kind']=='SubscriptionConfirmation' and i['endpoint'].endswith('/fail-$SFX')][0]")
+q "$FTARN" "confirm the failing subscription" confirm-subscription --topic-arn "$FTARN" --token "$FTOKEN"
+sleep 4
+q "MessageId" "publish to the failing topic" publish --topic-arn "$FTARN" --message "will-fail-$SFX"
+if waitfor "sum(1 for r in rows if r['type']=='Notification' and 'will-fail-$SFX' in r['body'])==3" 40; then chk 0 "a 500-returning endpoint is retried per the delivery policy (1 attempt + 2 retries)"; else chk 1 "a 500-returning endpoint is retried per the delivery policy" "attempts: $(rlog "sum(1 for r in rows if r['type']=='Notification' and 'will-fail-$SFX' in r['body'])")"; fi
+DL=""
+for i in $(seq 1 20); do DL=$(sqs receive-message --queue-url "$DLQURL" --max-number-of-messages 10 --wait-time-seconds 1 --query 'Messages[].Body' --output text); printf '%s' "$DL" | grep -q "will-fail-$SFX" && break; done
+printf '%s' "$DL" | grep -q "will-fail-$SFX" && chk 0 "after the retries the message lands in the RedrivePolicy dead-letter queue" || chk 1 "after the retries the message lands in the dead-letter queue" "$(printf '%s' "$DL" | head -c 200)"
+q "" "unsubscribe the HTTP subscription" unsubscribe --subscription-arn "$FSARN"
+q "" "delete the HTTP topic" delete-topic --topic-arn "$HTARN"
+sns delete-topic --topic-arn "$FTARN" >/dev/null 2>&1
+sqs delete-queue --queue-url "$DLQURL" >/dev/null 2>&1
+
+DT="cli-dedup-$SFX.fifo"
+v "create-topic (FIFO, dedup)" create-topic --name "$DT" --attributes FifoTopic=true --query TopicArn --output text; DTARN="$OUT"
+M1=$(sns publish --topic-arn "$DTARN" --message dup --message-group-id g --message-deduplication-id d1 --query MessageId --output text)
+M2=$(sns publish --topic-arn "$DTARN" --message dup --message-group-id g --message-deduplication-id d1 --query MessageId --output text)
+[ -n "$M1" ] && [ "$M1" = "$M2" ] && chk 0 "a FIFO duplicate within the 5-minute window is dropped (same MessageId, delivered once)" || chk 1 "a FIFO duplicate within the 5-minute window is dropped" "$M1 vs $M2"
+sns delete-topic --topic-arn "$DTARN" >/dev/null 2>&1
+kill "$RPID" 2>/dev/null; rm -rf "$RDIR"
+
 # clean up
 q "" "unsubscribe" unsubscribe --subscription-arn "$SARN"
 q "" "delete-topic" delete-topic --topic-arn "$TARN"

@@ -7,11 +7,14 @@ survive restarts with it. SQS subscriptions fan out into the appliance's own SQS
 """
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
 from core import app_context as ctx
 from core import sns_core as sns
+from core import sns_delivery
 from core.messaging_store import MessagingStore
 
 
@@ -57,12 +60,25 @@ class SpaceSnsStore(MessagingStore):
         s._sqs_enqueue_message(queue, body, None, {}, group or "", dedup or "", source="sns")
         return True
 
+    def enqueue_delivery(self, job: dict) -> bool:
+        """Push deliveries (HTTP/S, Lambda, email) go to the JetStream-backed workers."""
+        return DELIVERY.enqueue(job)
+
     def persist(self) -> None:
         ctx.persist_state()
         ctx.record_usage("sns.change", {"resource_id": "sns", "name": "sns"})
 
 
 STORE = SpaceSnsStore()
+
+
+def _invoke_lambda(function_name: str, event: dict):
+    return _srv()._lambda_invoke_function(function_name, event, invocation_type="Event", source="sns")
+
+
+DELIVERY = sns_delivery.Delivery(
+    STORE, base_url=lambda: os.environ.get("VYOMI_PUBLIC_URL", "http://localhost:9000"),
+    invoke_lambda=_invoke_lambda, deliver_sqs=STORE.deliver_sqs)
 
 
 async def sns_query(request: Request) -> Response:
@@ -73,6 +89,14 @@ async def sns_query(request: Request) -> Response:
 
 
 def register(app: FastAPI) -> None:
+    @app.on_event("startup")
+    async def _sns_delivery_start() -> None:
+        DELIVERY.start()      # resumes the durable per-subscription consumers after a restart
+
+    @app.get("/SimpleNotificationService-vyomi.pem", include_in_schema=False)
+    async def sns_signing_cert() -> Response:
+        return Response(content=sns_delivery.signing_cert_pem(), media_type="application/x-pem-file")
+
     @app.api_route("/api/aws/sns/{rest:path}", methods=["GET", "POST", "DELETE", "PATCH"], include_in_schema=False)
     async def sns_console(rest: str, request: Request) -> JSONResponse:
         body: dict = {}
