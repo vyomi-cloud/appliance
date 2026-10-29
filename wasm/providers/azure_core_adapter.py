@@ -281,6 +281,27 @@ def resource_op(service, operation, name="", body=None):
     # ---- Key Vault data plane, native wire shape (/azure-data/keyvault/{vault}/…) ----
     # The vault blade's Secrets / Keys tabs speak the SDK's own JSON (value[] with id/kid,
     # {value}, attributes.enabled), so hand the core's body through untouched.
+    if operation == "KvData" and service == "kvcerts":
+        # Key Vault certificates: the shared certificates core (real self-signed X.509),
+        # its state hung on the registered KV secrets store (public attr → persisted).
+        try:
+            from core import azure_keyvault_certificates_core as _kvc
+        except ImportError:  # pragma: no cover - flat Pyodide layout
+            import azure_keyvault_certificates_core as _kvc  # type: ignore
+        cs = _kvc.CertStore()
+        cs.vaults = _STORES["kvsecrets"].__dict__.setdefault("kv_certs", {})
+        vault = str(body.get("vault") or "")
+        m = str(body.get("method") or "GET").upper()
+        sub = str(body.get("sub") or "").strip("/")
+        status, out = _kvc.dispatch(cs, vault, m, "/certificates/" + sub, body.get("body") or {})
+        name = sub.split("/")[0] if sub else ""
+        if status < 300 and m == "POST" and sub.endswith("/create"):
+            _call(_kvsec, _STORES["kvsecrets"], "PUT", f"/secrets/{name}", APIV, {},
+                  {"value": _kvc.secret_value(cs, vault, name), "contentType": "application/x-pem-file"})
+        elif status < 300 and m == "DELETE" and name:
+            _call(_kvsec, _STORES["kvsecrets"], "DELETE", f"/secrets/{name}", APIV, {}, b"")
+        return {"ok": status < 400, "__http": {"status": status, "headers": {}, "body": out}}
+
     if operation == "KvData" and service in ("kvsecrets", "kvkeys"):
         coll = "secrets" if service == "kvsecrets" else "keys"
         core = _kvsec if service == "kvsecrets" else _kvkeys
@@ -352,4 +373,4 @@ def resource_op(service, operation, name="", body=None):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": service}
 
 
-AZURE_DP_SERVICES = frozenset(_STORES.keys()) | frozenset(_SUB_SERVICES.keys())
+AZURE_DP_SERVICES = frozenset(_STORES.keys()) | frozenset(_SUB_SERVICES.keys()) | {"kvcerts"}  # kvcerts: Key Vault certificates (KvData only)

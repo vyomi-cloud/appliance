@@ -296,7 +296,8 @@ class AzureArm:
             lk = ext_engine.lock_conflict(self.state, ext_engine.target_id(sub, rg, after), method)
             if lk:
                 return {"status": lk["status"], "headers": {}, "body": lk["body"]}
-        x = ext_engine.route(self.state, method, sub, rg, after, payload, query, executor=None)
+        x = ext_engine.route(self.state, method, sub, rg, after, payload, query, executor=None,
+                             blob=getattr(self, "blob_hook", None))
         if x is not None:
             if method != "GET" and x["status"] < 300 and x.get("scope"):
                 self._event(method, x["scope"], x["type"], x["name"])

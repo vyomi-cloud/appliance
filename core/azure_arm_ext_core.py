@@ -994,6 +994,8 @@ def after_upsert(state, rec, payload=None) -> None:
     """Type-specific fields ARM computes on write (called by both dispatchers)."""
     t = str(rec.get("_type") or "").lower()
     p = rec.setdefault("properties", {})
+    if t == VM_T:
+        _vm_fill(rec)
     if t == STORAGE_T:
         _storage_fill(rec)
     elif t == SQL_SERVER_T:
@@ -1004,6 +1006,20 @@ def after_upsert(state, rec, payload=None) -> None:
         _sql_failover_group_fill(state, rec)
     elif t == VNET_T:
         _vnet_fill(state, rec)
+    elif t == SB_T:
+        _sb_fill(state, rec)
+    elif t == SB_T + "/authorizationrules":
+        _sb_rule_fill(state, rec)
+    elif t == SB_T + "/disasterrecoveryconfigs":
+        _sb_dr_fill(state, rec)
+    elif t == APIM_T:
+        _apim_fill(rec)
+    elif t == APIM_T + "/namedvalues":
+        p.setdefault("displayName", rec.get("name"))
+        p.setdefault("secret", False)
+        p.setdefault("tags", [])
+    elif t == "microsoft.authorization/roleassignments" and p.get("condition"):
+        p.setdefault("conditionVersion", "2.0")
     elif t == "microsoft.keyvault/vaults":
         p.setdefault("publicNetworkAccess", "Enabled")
         acl = p.setdefault("networkAcls", {})
@@ -1229,12 +1245,28 @@ def validate_write(state, rid, full_type, payload):
     t = full_type.lower()
     pp = _payload_props(payload)
     if t == VM_T:
-        return validate_vm(state, rid, payload)
+        return validate_vm(state, rid, payload) or _vm_disks_validate(payload)
     bad = validate_identity(payload)
     if bad:
         return bad
     if t == VNET_T:
         bad = _vnet_validate(state, rid, payload, "PUT")
+        if bad:
+            return bad
+    if t == SB_T + "/authorizationrules":
+        bad = _sb_rule_validate(payload)
+        if bad:
+            return bad
+    if t == SB_T + "/disasterrecoveryconfigs":
+        bad = _sb_dr_validate(state, rid, payload)
+        if bad:
+            return bad
+    if t == APIM_T:
+        bad = _apim_validate(payload)
+        if bad:
+            return bad
+    if t == "microsoft.authorization/roleassignments":
+        bad = _ra_validate(payload)
         if bad:
             return bad
     if t == WEB_T + "/config" and rid.lower().endswith("/config/web"):
@@ -1807,8 +1839,326 @@ def _ddos_plans(state, method, sub, rg, after, payload):
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
 
+# ── Service Bus: SAS authorization rules + keys, geo-recovery (disaster recovery configs) ──
+SB_T = "microsoft.servicebus/namespaces"
+SB_RIGHTS = ("Listen", "Send", "Manage")
+
+
+def _sas_key():
+    return base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes).decode()
+
+
+def _sb_rule_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    rights = p.get("rights") or []
+    p["rights"] = [r for r in SB_RIGHTS if r in rights]
+    if not isinstance(rec.get("_keys"), list):
+        rec["_keys"] = [_sas_key(), _sas_key()]
+    p.pop("provisioningState", None)
+
+
+def _sb_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    p.setdefault("publicNetworkAccess", "Enabled")
+    p.setdefault("minimumTlsVersion", "1.2")
+    p.setdefault("zoneRedundant", False)
+    p.setdefault("disableLocalAuth", False)
+    rule = _ensure_child(state, rec, "authorizationRules", "RootManageSharedAccessKey",
+                         "Microsoft.ServiceBus/namespaces/authorizationRules", {"rights": ["Listen", "Manage", "Send"]})
+    _sb_rule_fill(state, rule)
+
+
+def _sb_rule_validate(payload):
+    rights = _payload_props(payload).get("rights")
+    if not isinstance(rights, list) or not rights or any(r not in SB_RIGHTS for r in rights):
+        return _err(400, "BadRequest", "rights must be a non-empty subset of Listen, Send, Manage.")
+    if "Manage" in rights and not {"Listen", "Send"} <= set(rights):
+        return _err(400, "BadRequest", "Manage rights require Listen and Send.")
+    return None
+
+
+def _sb_keys(ns, rule):
+    host = f"{ns.get('name')}.servicebus.windows.net"
+    k1, k2 = rule["_keys"]
+    cs = lambda k: f"Endpoint=sb://{host}/;SharedAccessKeyName={rule['name']};SharedAccessKey={k}"
+    return {"keyName": rule["name"], "primaryKey": k1, "secondaryKey": k2,
+            "primaryConnectionString": cs(k1), "secondaryConnectionString": cs(k2)}
+
+
+def _sb_dr_validate(state, rid, payload):
+    partner = str(_payload_props(payload).get("partnerNamespace") or "")
+    ns_id = rid.lower().split("/disasterrecoveryconfigs/")[0]
+    ns = state.get(ns_id)
+    prt = state.get(partner.lower())
+    if not prt or partner.lower() == ns_id:
+        return _err(400, "BadRequest", "partnerNamespace must be the resource id of another existing Service Bus namespace.")
+    for x in (ns, prt):
+        if str((x.get("sku") or {}).get("name", "")).lower() != "premium":
+            return _err(400, "BadRequest", f"Geo-disaster recovery requires Premium namespaces; '{x.get('name')}' is {(x.get('sku') or {}).get('name')}.")
+    for d in _of_type(state, "Microsoft.ServiceBus/namespaces/disasterRecoveryConfigs"):
+        if d["id"].lower() != rid.lower() and str(d["properties"].get("partnerNamespace", "")).lower() == partner.lower():
+            return _err(409, "Conflict", f"Namespace {prt.get('name')} is already paired.")
+    return None
+
+
+def _sb_dr_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    p.setdefault("role", "Primary")
+    p.setdefault("pendingReplicationOperationsCount", 0)
+    p.setdefault("alternateName", "")
+    p["provisioningState"] = "Succeeded"
+
+
+def _sb_route(state, method, sub, rg, after, payload):
+    low = [a.lower() for a in after]
+    ns_id = scope_id(sub, rg, after[:3])
+    ns = state.get(ns_id.lower())
+    if ns is None:
+        return _err(404, "ResourceNotFound", f"Namespace '{after[2]}' not found.")
+    _sb_fill(state, ns)
+    # namespaces/{n}/authorizationRules/{r}/listKeys | regenerateKeys
+    if len(low) == 6 and low[3] == "authorizationrules" and method == "POST" and low[5] in ("listkeys", "regeneratekeys"):
+        rule = state.get(f"{ns_id}/authorizationRules/{after[4]}".lower())
+        if not rule:
+            return _err(404, "NotFound", f"Authorization rule '{after[4]}' not found.")
+        _sb_rule_fill(state, rule)
+        if low[5] == "regeneratekeys":
+            kt = str((payload or {}).get("keyType") or "")
+            if kt not in ("PrimaryKey", "SecondaryKey"):
+                return _err(400, "BadRequest", "keyType must be PrimaryKey or SecondaryKey.")
+            rule["_keys"][0 if kt == "PrimaryKey" else 1] = (payload or {}).get("key") or _sas_key()
+            return _ok(_sb_keys(ns, rule), 200, ns_id, "Microsoft.ServiceBus/namespaces/authorizationRules/regenerateKeys", rule["name"])
+        return _ok(_sb_keys(ns, rule))
+    # namespaces/{n}/disasterRecoveryConfigs/{alias}/breakPairing | failover
+    if len(low) == 6 and low[3] == "disasterrecoveryconfigs" and method == "POST" and low[5] in ("breakpairing", "failover"):
+        dr = state.get(f"{ns_id}/disasterRecoveryConfigs/{after[4]}".lower())
+        if not dr:
+            return _err(404, "NotFound", f"Alias '{after[4]}' not found.")
+        partner = state.get(str(dr["properties"].get("partnerNamespace", "")).lower())
+        if low[5] == "failover" and partner:
+            # The alias moves to the (former) secondary, which becomes a standalone primary.
+            moved = _new_rec(f"{partner['id']}/disasterRecoveryConfigs/{dr['name']}", dr["name"],
+                             "Microsoft.ServiceBus/namespaces/disasterRecoveryConfigs")
+            moved["properties"] = {"role": "PrimaryNotReplicating", "partnerNamespace": "", "alternateName": "",
+                                   "pendingReplicationOperationsCount": 0, "provisioningState": "Succeeded"}
+            state[moved["id"].lower()] = moved
+            state.pop(dr["id"].lower(), None)
+            return _ok(None, 200, ns_id, "Microsoft.ServiceBus/namespaces/disasterRecoveryConfigs/failover", dr["name"])
+        dr["properties"]["role"] = "PrimaryNotReplicating"
+        dr["properties"]["partnerNamespace"] = ""
+        return _ok(None, 200, ns_id, "Microsoft.ServiceBus/namespaces/disasterRecoveryConfigs/" + low[5], dr["name"])
+    return None
+
+
+# ── Event Grid topics: access keys ──
+EG_T = "microsoft.eventgrid/topics"
+
+
+def _eg_route(state, method, sub, rg, after, payload):
+    low = [a.lower() for a in after]
+    rid = scope_id(sub, rg, after[:3])
+    rec = state.get(rid.lower())
+    if rec is None:
+        return _err(404, "ResourceNotFound", f"Topic '{after[2]}' not found.")
+    if not isinstance(rec.get("_keys"), list):
+        rec["_keys"] = [_sas_key(), _sas_key()]
+    if (rec.get("properties") or {}).get("disableLocalAuth"):
+        return _err(400, "BadRequest", "Local (key) authentication is disabled on this topic.")
+    if low[3] == "regeneratekey":
+        kn = str((payload or {}).get("keyName") or "")
+        if kn not in ("key1", "key2"):
+            return _err(400, "BadRequest", "keyName must be key1 or key2.")
+        rec["_keys"][int(kn[-1]) - 1] = _sas_key()
+        return _ok({"key1": rec["_keys"][0], "key2": rec["_keys"][1]}, 200, rid, "Microsoft.EventGrid/topics/regenerateKey", rec.get("name", ""))
+    return _ok({"key1": rec["_keys"][0], "key2": rec["_keys"][1]})
+
+
+# ── API Management: named values (secret values hidden), custom domains ──
+APIM_T = "microsoft.apimanagement/service"
+_HOST_RE_OK = set("abcdefghijklmnopqrstuvwxyz0123456789-.")
+
+
+def _apim_fill(rec):
+    p = rec.setdefault("properties", {})
+    name = rec.get("name", "")
+    p.setdefault("virtualNetworkType", "None")
+    p.setdefault("publicNetworkAccess", "Enabled")
+    hc = p.get("hostnameConfigurations")
+    if not isinstance(hc, list) or not any(h.get("hostName") == f"{name}.azure-api.net" for h in hc):
+        hc = [{"type": "Proxy", "hostName": f"{name}.azure-api.net", "defaultSslBinding": True,
+               "negotiateClientCertificate": False, "certificateSource": "BuiltIn"}] + (hc if isinstance(hc, list) else [])
+    p["hostnameConfigurations"] = hc
+
+
+def _apim_validate(payload):
+    for h in _payload_props(payload).get("hostnameConfigurations") or []:
+        hn = str(h.get("hostName") or "").lower()
+        if h.get("type") not in ("Proxy", "Portal", "Management", "Scm", "DeveloperPortal"):
+            return _err(400, "ValidationError", f"Hostname type '{h.get('type')}' is invalid.")
+        if not hn or "." not in hn or set(hn) - _HOST_RE_OK or hn.startswith(("-", ".")):
+            return _err(400, "ValidationError", f"'{h.get('hostName')}' is not a valid host name.")
+        if h.get("certificateSource") == "KeyVault" and not h.get("keyVaultId"):
+            return _err(400, "ValidationError", "keyVaultId is required for a Key Vault certificate.")
+    return None
+
+
+def _apim_nv_view(rec):
+    v = _view(rec)
+    if (v.get("properties") or {}).get("secret"):
+        v["properties"] = {k: x for k, x in v["properties"].items() if k != "value"}
+    return v
+
+
+def _apim_route(state, method, sub, rg, after, payload):
+    low = [a.lower() for a in after]
+    svc_id = scope_id(sub, rg, after[:3])
+    if state.get(svc_id.lower()) is None:
+        return _err(404, "ResourceNotFound", f"API Management service '{after[2]}' not found.")
+    if len(low) == 4 and method == "GET":
+        items = [_apim_nv_view(r) for r in _of_type(state, "Microsoft.ApiManagement/service/namedValues")
+                 if r["id"].lower().startswith(svc_id.lower() + "/")]
+        return _ok({"value": items, "count": len(items)})
+    if len(low) == 5 and method == "GET":
+        rec = state.get(f"{svc_id}/namedValues/{after[4]}".lower())
+        return _ok(_apim_nv_view(rec)) if rec else _err(404, "ResourceNotFound", f"Named value '{after[4]}' not found.")
+    if len(low) == 6 and low[5] == "listvalue" and method == "POST":
+        rec = state.get(f"{svc_id}/namedValues/{after[4]}".lower())
+        return _ok({"value": rec["properties"].get("value", "")}) if rec else _err(404, "ResourceNotFound", "Named value not found.")
+    return None
+
+
+# ── RBAC: role assignment conditions (ABAC) ──
+def _ra_validate(payload):
+    pp = _payload_props(payload)
+    cond = pp.get("condition")
+    if cond:
+        c = str(cond)
+        if c.count("(") != c.count(")") or not any(op in c for op in ("@Resource", "@Request", "@Principal", "@Environment")):
+            return _err(400, "InvalidCondition", "The condition must reference @Resource, @Request, @Principal or @Environment attributes with balanced parentheses.")
+        if str(pp.get("conditionVersion") or "2.0") != "2.0":
+            return _err(400, "InvalidConditionVersion", "conditionVersion must be 2.0.")
+    return None
+
+
+# ── API Management backup / restore to a storage account blob ──
+# ``blob`` is a host hook with exists(account, container) / put(account, container, name,
+# data, content_type) / get(account, container, name) -> bytes|None over the SAME blob
+# data plane the Storage console and SDKs use.
+def _apim_backup(state, svc_id, svc, payload, blob, restore):
+    b = payload or {}
+    acct, cont, name = (str(b.get(k) or "") for k in ("storageAccount", "containerName", "backupName"))
+    if not (acct and cont and name):
+        return _err(400, "InvalidParameters", "storageAccount, containerName and backupName are required.")
+    sub = svc_id.split("/")[2]
+    sa = next((r for r in _of_type(state, "Microsoft.Storage/storageAccounts")
+               if r.get("name", "").lower() == acct.lower() and r.get("_sub") == sub), None)
+    if sa is None:
+        return _err(400, "InvalidParameters", f"Storage account '{acct}' was not found in the subscription.")
+    at = b.get("accessType") or "AccessKey"
+    if at == "AccessKey":
+        _storage_fill(sa)
+        if b.get("accessKey") not in sa["_keys"]:
+            return _err(400, "InvalidParameters", "accessKey is not a valid key of the storage account.")
+    elif at == "SystemAssignedManagedIdentity":
+        if "SystemAssigned" not in str((svc.get("identity") or {}).get("type", "")):
+            return _err(400, "InvalidParameters", "The service has no system-assigned managed identity to access the storage account.")
+    else:
+        return _err(400, "InvalidParameters", "accessType must be AccessKey or SystemAssignedManagedIdentity.")
+    if blob is None:
+        return _err(503, "ServiceUnavailable", "The blob data plane is not available.")
+    if not blob.exists(acct, cont):
+        return _err(400, "InvalidParameters", f"Container '{cont}' does not exist in storage account '{acct}'.")
+    pre = svc_id.lower() + "/"
+    if not restore:
+        snap = {"format": "vyomi-apim-backup/1", "service": svc.get("name"), "createdAt": _now(),
+                "properties": {k: v for k, v in (svc.get("properties") or {}).items() if k not in ("provisioningState",)},
+                "sku": svc.get("sku"),
+                "children": [{"rel": r["id"][len(svc_id):], "rec": {k: v for k, v in r.items() if not k.startswith("_")}}
+                             for k2, r in list(state.items()) if str(k2).startswith(pre)]}
+        blob.put(acct, cont, name, json_dumps(snap), "application/json")
+        return _ok(_view(svc), 200, svc_id, "Microsoft.ApiManagement/service/backup", svc.get("name", ""))
+    raw = blob.get(acct, cont, name)
+    if raw is None:
+        return _err(400, "InvalidParameters", f"Backup blob '{name}' was not found in {acct}/{cont}.")
+    try:
+        snap = json_loads(raw)
+        assert snap.get("format") == "vyomi-apim-backup/1"
+    except Exception:
+        return _err(400, "InvalidParameters", f"Blob '{name}' is not an API Management backup.")
+    for k2 in [k for k in list(state.keys()) if str(k).startswith(pre)]:
+        state.pop(k2, None)
+    for ch in snap.get("children") or []:
+        rec = dict(ch["rec"])
+        rec["id"] = svc_id + ch["rel"]
+        parts = rec["id"].split("/providers/", 1)[1].split("/")
+        rec["_type"] = "/".join([parts[0]] + [parts[i] for i in range(1, len(parts), 2)])
+        rec["_sub"], rec["_rg"], rec["_created"] = sub, _rg_of(rec["id"]), _now()
+        state[rec["id"].lower()] = rec
+    keep = {k: v for k, v in (svc.get("properties") or {}).items() if k in ("gatewayUrl", "hostnameConfigurations")}
+    svc["properties"] = dict(snap.get("properties") or {}, **keep, provisioningState="Succeeded")
+    if snap.get("sku"):
+        svc["sku"] = snap["sku"]
+    return _ok(_view(svc), 200, svc_id, "Microsoft.ApiManagement/service/restore", svc.get("name", ""))
+
+
+def json_dumps(o):
+    import json
+    return json.dumps(o, sort_keys=True).encode("utf-8")
+
+
+def json_loads(b):
+    import json
+    return json.loads(b.decode("utf-8") if isinstance(b, (bytes, bytearray)) else b)
+
+
+# ── VM storage profile: OS / data disks as ARM reports them ──
+def _vm_fill(rec):
+    p = rec.setdefault("properties", {})
+    name = rec.get("name", "")
+    sp = p.setdefault("storageProfile", {})
+    img = sp.get("imageReference") or {}
+    win = "windows" in str(img.get("publisher", "")).lower() or "windows" in str(img.get("offer", "")).lower()
+    rg_id = rec["id"].split("/providers/")[0]
+    tag = hashlib.sha256(rec["id"].lower().encode()).hexdigest()[:32]
+    od = sp.setdefault("osDisk", {})
+    od.setdefault("osType", "Windows" if win else "Linux")
+    od.setdefault("name", f"{name}_OsDisk_1_{tag}")
+    od.setdefault("createOption", "FromImage")
+    od.setdefault("caching", "ReadWrite")
+    od.setdefault("diskSizeGB", 127 if win else 30)
+    od.setdefault("deleteOption", "Delete")
+    md = od.setdefault("managedDisk", {})
+    md.setdefault("storageAccountType", "Premium_LRS")
+    md["id"] = f"{rg_id}/providers/Microsoft.Compute/disks/{od['name']}"
+    for d in sp.get("dataDisks") or []:
+        d.setdefault("name", f"{name}_DataDisk_{d.get('lun', 0)}")
+        d.setdefault("createOption", "Empty")
+        d.setdefault("caching", "None")
+        d.setdefault("deleteOption", "Detach")
+        dm = d.setdefault("managedDisk", {})
+        dm.setdefault("storageAccountType", md["storageAccountType"])
+        dm["id"] = f"{rg_id}/providers/Microsoft.Compute/disks/{d['name']}"
+
+
+def _vm_disks_validate(payload):
+    dd = ((_payload_props(payload).get("storageProfile") or {}).get("dataDisks"))
+    if dd is None:
+        return None
+    luns = []
+    for d in dd:
+        lun, size = d.get("lun"), d.get("diskSizeGB")
+        if not isinstance(lun, int) or not 0 <= lun <= 63:
+            return _err(400, "InvalidParameter", "Each data disk needs a LUN between 0 and 63.")
+        if lun in luns:
+            return _err(400, "InvalidParameter", f"LUN {lun} is used by more than one data disk.")
+        luns.append(lun)
+        if d.get("createOption", "Empty") == "Empty" and not (isinstance(size, int) and 1 <= size <= 32767):
+            return _err(400, "InvalidParameter", "An empty data disk needs diskSizeGB between 1 and 32767.")
+    return None
+
+
 # ── entry ────────────────────────────────────────────────────────────────────
-def route(state, method, sub, rg, after, payload=None, query=None, executor=None):
+def route(state, method, sub, rg, after, payload=None, query=None, executor=None, blob=None):
     """Serve the request if it is one this module models, else None.
     ``after`` = the path segments after the first ``/providers/``."""
     method = (method or "GET").upper()
@@ -1857,6 +2207,26 @@ def route(state, method, sub, rg, after, payload=None, query=None, executor=None
             return _err(404, "ResourceNotFound", f"Storage account '{after[2]}' not found.")
         _storage_fill(rec)
         r = _storage_action(state, rid, rec, after[3], payload)
+        if r is not None:
+            return r
+    if low[0] == "microsoft.servicebus" and low[1] == "namespaces" and len(after) == 6 and method == "POST" \
+            and low[3] in ("authorizationrules", "disasterrecoveryconfigs"):
+        r = _sb_route(state, method, sub, rg, after, payload)
+        if r is not None:
+            return r
+    if low[0] == "microsoft.eventgrid" and low[1] == "topics" and len(after) == 4 and method == "POST" \
+            and low[3] in ("listkeys", "regeneratekey"):
+        return _eg_route(state, method, sub, rg, after, payload)
+    if low[0] == "microsoft.apimanagement" and low[1] == "service" and len(after) == 4 and method == "POST" \
+            and low[3] in ("backup", "restore"):
+        svc_id = scope_id(sub, rg, after[:3])
+        svc = state.get(svc_id.lower())
+        if svc is None:
+            return _err(404, "ResourceNotFound", f"API Management service '{after[2]}' not found.")
+        return _apim_backup(state, svc_id, svc, payload, blob, low[3] == "restore")
+    if low[0] == "microsoft.apimanagement" and low[1] == "service" and len(after) >= 4 and low[3] == "namedvalues" \
+            and (method == "GET" or (len(after) == 6 and low[5] == "listvalue")):
+        r = _apim_route(state, method, sub, rg, after, payload)
         if r is not None:
             return r
     if low[0] == "microsoft.web" and low[1] == "serverfarms" and len(after) <= 3:

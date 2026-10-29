@@ -439,7 +439,112 @@ def test_vnet_blades():
     _check("diagnostic setting to a workspace stored", [x["name"] for x in ds["value"]] == ["d1"])
 
 
-TESTS = [test_vm_blades, test_storage_blades, test_sql_blades, test_cosmos_blades, test_function_app_blades, test_key_vault_blades, test_vnet_blades]
+def test_messaging_apim_rbac_blades():
+    arm = AzureArm()
+    av = "2022-10-01-preview"
+    ns = f"{P}/Microsoft.ServiceBus/namespaces/sbb"
+    call(arm, "PUT", ns, {"location": "eastus", "sku": {"name": "Standard"}}, av)
+    s, rules = call(arm, "GET", ns + "/authorizationRules", av=av)
+    _check("namespace has RootManageSharedAccessKey", [r["name"] for r in rules["value"]] == ["RootManageSharedAccessKey"])
+    s, k = call(arm, "POST", ns + "/authorizationRules/RootManageSharedAccessKey/listKeys", {}, av)
+    _check("SAS keys + connection string", k["primaryConnectionString"].startswith("Endpoint=sb://sbb.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=" + k["primaryKey"]))
+    s, k2 = call(arm, "POST", ns + "/authorizationRules/RootManageSharedAccessKey/regenerateKeys", {"keyType": "SecondaryKey"}, av)
+    _check("regenerate secondary only", k2["primaryKey"] == k["primaryKey"] and k2["secondaryKey"] != k["secondaryKey"])
+    s, b = call(arm, "PUT", ns + "/authorizationRules/send", {"properties": {"rights": ["Manage"]}}, av)
+    _check("Manage without Listen+Send rejected", s == 400)
+    call(arm, "PUT", f"{P}/Microsoft.ServiceBus/namespaces/sbb2", {"location": "westus", "sku": {"name": "Standard"}}, av)
+    s, b = call(arm, "PUT", ns + "/disasterRecoveryConfigs/alias1", {"properties": {"partnerNamespace": f"{P}/Microsoft.ServiceBus/namespaces/sbb2"}}, av)
+    _check("geo-recovery needs Premium namespaces", s == 400 and "Premium" in b["error"]["message"])
+    call(arm, "PATCH", ns, {"sku": {"name": "Premium"}}, av)
+    call(arm, "PATCH", f"{P}/Microsoft.ServiceBus/namespaces/sbb2", {"sku": {"name": "Premium"}}, av)
+    s, dr = call(arm, "PUT", ns + "/disasterRecoveryConfigs/alias1", {"properties": {"partnerNamespace": f"{P}/Microsoft.ServiceBus/namespaces/sbb2"}}, av)
+    _check("alias paired as Primary", dr["properties"]["role"] == "Primary")
+    call(arm, "POST", ns + "/disasterRecoveryConfigs/alias1/failover", {}, av)
+    s, moved = call(arm, "GET", f"{P}/Microsoft.ServiceBus/namespaces/sbb2/disasterRecoveryConfigs", av=av)
+    _check("failover moves the alias to the secondary", [x["name"] for x in moved["value"]] == ["alias1"])
+
+    tp = f"{P}/Microsoft.EventGrid/topics/egb"
+    call(arm, "PUT", tp, {"location": "eastus"}, "2024-06-01-preview")
+    s, k = call(arm, "POST", tp + "/listKeys", {}, "2024-06-01-preview")
+    s, k2 = call(arm, "POST", tp + "/regenerateKey", {"keyName": "key1"}, "2024-06-01-preview")
+    _check("Event Grid keys rotate key1 only", k2["key1"] != k["key1"] and k2["key2"] == k["key2"])
+
+    av2 = "2023-05-01-preview"
+    svc = f"{P}/Microsoft.ApiManagement/service/apimb"
+    s, a = call(arm, "PUT", svc, {"location": "eastus", "sku": {"name": "Developer", "capacity": 1}}, av2)
+    _check("gateway host name configured", a["properties"]["hostnameConfigurations"][0]["hostName"] == "apimb.azure-api.net")
+    s, b = call(arm, "PATCH", svc, {"properties": {"hostnameConfigurations": a["properties"]["hostnameConfigurations"] + [{"type": "Proxy", "hostName": "bad host"}]}}, av2)
+    _check("invalid custom domain rejected", s == 400)
+    s, b = call(arm, "PATCH", svc, {"properties": {"hostnameConfigurations": a["properties"]["hostnameConfigurations"] + [{"type": "Proxy", "hostName": "api.contoso.com", "certificateSource": "Managed"}]}}, av2)
+    _check("custom domain added", [h["hostName"] for h in b["properties"]["hostnameConfigurations"]] == ["apimb.azure-api.net", "api.contoso.com"])
+    call(arm, "PUT", svc + "/namedValues/dbpass", {"properties": {"displayName": "dbpass", "value": "s3cret", "secret": True}}, av2)
+    s, nv = call(arm, "GET", svc + "/namedValues", av=av2)
+    _check("secret named value hides its value", "value" not in nv["value"][0]["properties"])
+    s, v = call(arm, "POST", svc + "/namedValues/dbpass/listValue", {}, av2)
+    _check("listValue returns the secret", v["value"] == "s3cret")
+
+    class Blob:
+        def __init__(self): self.d = {}
+        def exists(self, a, c): return c == "backups"
+        def put(self, a, c, n, data, ct): self.d[(a, c, n)] = data
+        def get(self, a, c, n): return self.d.get((a, c, n))
+    from core import azure_arm_ext_core as ext
+    blob = Blob()
+    acct = f"{P}/Microsoft.Storage/storageAccounts/stbk"
+    call(arm, "PUT", acct, {"location": "eastus", "sku": {"name": "Standard_LRS"}}, "2023-01-01")
+    s, keys = call(arm, "POST", acct + "/listKeys", {}, "2023-01-01")
+    body = {"storageAccount": "stbk", "containerName": "backups", "backupName": "b1.apimbackup", "accessType": "AccessKey", "accessKey": "wrong"}
+    r = ext.route(arm.state, "POST", SUB, RG, ["Microsoft.ApiManagement", "service", "apimb", "backup"], body, {}, blob=blob)
+    _check("backup with a wrong storage key rejected", r["status"] == 400)
+    body["accessKey"] = keys["keys"][0]["value"]
+    r = ext.route(arm.state, "POST", SUB, RG, ["Microsoft.ApiManagement", "service", "apimb", "backup"], body, {}, blob=blob)
+    _check("backup written to the storage blob", r["status"] == 200 and ("stbk", "backups", "b1.apimbackup") in blob.d)
+    call(arm, "DELETE", svc + "/namedValues/dbpass", av=av2)
+    r = ext.route(arm.state, "POST", SUB, RG, ["Microsoft.ApiManagement", "service", "apimb", "restore"], body, {}, blob=blob)
+    s, v = call(arm, "POST", svc + "/namedValues/dbpass/listValue", {}, av2)
+    _check("restore brings the named value back", r["status"] == 200 and v["value"] == "s3cret")
+
+    ra = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Authorization/roleAssignments/abc"
+    s, b = call(arm, "PUT", ra, {"properties": {"roleDefinitionId": "r", "principalId": "p", "condition": "((x)"}}, "2022-04-01")
+    _check("malformed condition rejected", s == 400)
+    cond = "(@Resource[Microsoft.Storage/storageAccounts/blobServices/containers:name] StringEquals 'public')"
+    s, b = call(arm, "PUT", ra, {"properties": {"roleDefinitionId": "r", "principalId": "p", "condition": cond}}, "2022-04-01")
+    _check("condition stored with version 2.0", b["properties"]["condition"] == cond and b["properties"]["conditionVersion"] == "2.0")
+
+
+def test_key_vault_certificates():
+    import base64
+    from core import azure_keyvault_certificates_core as kvc
+    st = kvc.CertStore()
+    s, op = kvc.dispatch(st, "kv1", "POST", "/certificates/web/create", {"policy": {"issuer": {"name": "Self"},
+        "x509_props": {"subject": "CN=web.contoso.com", "sans": {"dns_names": ["web.contoso.com"]}, "validity_months": 6}}})
+    _check("self-signed certificate created", s == 202 and op["status"] == "completed")
+    s, b = kvc.dispatch(st, "kv1", "GET", "/certificates/web")
+    der = base64.b64decode(b["cer"])
+    _check("cer is a DER X.509 certificate with the subject", der[:1] == b"\x30" and b"web.contoso.com" in der)
+    _check("secret holds the PEM private key + certificate", "BEGIN PRIVATE KEY" in kvc.secret_value(st, "kv1", "web"))
+    _check("other issuers are not faked", kvc.dispatch(st, "kv1", "POST", "/certificates/x/create", {"policy": {"issuer": {"name": "DigiCert"}}})[0] == 400)
+    s, lst = kvc.dispatch(st, "kv1", "GET", "/certificates")
+    _check("certificate listed", [x["id"].rsplit("/", 1)[1] for x in lst["value"]] == ["web"])
+    kvc.dispatch(st, "kv1", "PATCH", "/certificates/web", {"attributes": {"enabled": False}})
+    _check("disable persists", kvc.dispatch(st, "kv1", "GET", "/certificates/web")[1]["attributes"]["enabled"] is False)
+    _check("delete", kvc.dispatch(st, "kv1", "DELETE", "/certificates/web")[0] == 200 and kvc.dispatch(st, "kv1", "GET", "/certificates/web")[0] == 404)
+
+
+def test_vm_disks():
+    arm = AzureArm()
+    vm = f"{P}/Microsoft.Compute/virtualMachines/vmd"
+    s, b = call(arm, "PUT", vm, {"location": "eastus", "properties": {"hardwareProfile": {"vmSize": "Standard_B1s"}}}, "2023-09-01")
+    od = b["properties"]["storageProfile"]["osDisk"]
+    _check("OS disk named, sized and typed by ARM", od["name"].startswith("vmd_OsDisk_1_") and od["diskSizeGB"] == 30 and od["osType"] == "Linux")
+    s, b = call(arm, "PATCH", vm, {"properties": {"storageProfile": {"dataDisks": [{"lun": 0, "createOption": "Empty"}]}}}, "2023-09-01")
+    _check("empty data disk without a size rejected", s == 400)
+    s, b = call(arm, "PATCH", vm, {"properties": {"storageProfile": {"dataDisks": [{"lun": 0, "diskSizeGB": 64, "createOption": "Empty"}]}}}, "2023-09-01")
+    _check("data disk attached", b["properties"]["storageProfile"]["dataDisks"][0]["name"] == "vmd_DataDisk_0")
+
+
+TESTS = [test_vm_disks, test_vm_blades, test_storage_blades, test_sql_blades, test_cosmos_blades, test_function_app_blades, test_key_vault_blades, test_vnet_blades,
+         test_messaging_apim_rbac_blades, test_key_vault_certificates]
 
 if __name__ == "__main__":
     for t in TESTS:

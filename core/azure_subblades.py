@@ -187,7 +187,7 @@ _SERVICEBUS_SUB = [
     ]},
     {"group": "Settings", "items": [
         {"key": "sharedAccess", "label": "Shared access policies", "icon": "vpn_key", "type": "sharedAccess"},
-        {"key": "georecovery",  "label": "Geo-recovery",      "icon": "public",       "type": "stub"},
+        {"key": "georecovery",  "label": "Geo-recovery",      "icon": "public",       "type": "sbGeoRecovery"},
         {"key": "networking",   "label": "Networking",        "icon": "lan",          "type": "networking"},
         {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "identity"},
         *_settings_props_locks(),
@@ -204,12 +204,12 @@ _APIM_SUB = [
         {"key": "products",     "label": "Products",          "icon": "inventory_2",  "type": "productsList"},
         {"key": "subscriptions","label": "Subscriptions",     "icon": "card_membership", "type": "subscriptionsList"},
         {"key": "policies",     "label": "Policies",          "icon": "policy",       "type": "apimPolicies"},
-        {"key": "namedValues",  "label": "Named values",      "icon": "label",        "type": "stub"},
+        {"key": "namedValues",  "label": "Named values",      "icon": "label",        "type": "apimNamedValues"},
     ]},
     {"group": "Deployment + infrastructure", "items": [
         {"key": "networking",   "label": "Virtual network",   "icon": "lan",          "type": "networking"},
-        {"key": "customDomains","label": "Custom domains",    "icon": "language",     "type": "stub"},
-        {"key": "backups",      "label": "Backup",            "icon": "backup",       "type": "stub"},
+        {"key": "customDomains","label": "Custom domains",    "icon": "language",     "type": "apimDomains"},
+        {"key": "backups",      "label": "Backup",            "icon": "backup",       "type": "apimBackup"},
     ]},
     {"group": "Settings", "items": [
         *_settings_props_locks(),
@@ -255,7 +255,7 @@ _KEYVAULT_SUB = [
     {"group": "Objects", "items": [
         {"key": "secrets",      "label": "Secrets",           "icon": "key",          "type": "kvsecrets"},
         {"key": "keys",         "label": "Keys",              "icon": "lock",         "type": "kvkeys"},
-        {"key": "certificates", "label": "Certificates",      "icon": "verified",     "type": "stub"},
+        {"key": "certificates", "label": "Certificates",      "icon": "verified",     "type": "kvCertificates"},
     ]},
     {"group": "Settings", "items": [
         {"key": "accessPolicies","label": "Access policies",  "icon": "policy",       "type": "accessPolicies"},
@@ -272,7 +272,7 @@ _EVENTGRID_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Events", "items": [
         {"key": "eventSubs",   "label": "Event subscriptions", "icon": "subscriptions", "type": "eventSubs"},
-        {"key": "topicTypes",  "label": "Topic types",         "icon": "list",          "type": "stub"},
+        {"key": "topicTypes",  "label": "Topic types",         "icon": "list",          "type": "egTopicTypes"},
         {"key": "accessKeys",  "label": "Access keys",         "icon": "key",           "type": "egAccessKeys"},
     ]},
     {"group": "Settings", "items": [
@@ -388,7 +388,7 @@ _OI_SUB = [
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
-    {"key": "conditions", "label": "Conditions", "icon": "rule",      "type": "stub"},
+    {"key": "conditions", "label": "Conditions", "icon": "rule",      "type": "raConditions"},
 ]
 
 

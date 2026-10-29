@@ -274,6 +274,28 @@ def _arm_event(method: str, scope: str, typ: str, name: str) -> None:
         pass
 
 
+class _NanoBlobHook:
+    """The in-browser blob core (shared registry store) for ARM operations that read or
+    write blobs (API Management backup/restore). Nano's blob store is one account."""
+
+    def _store(self):
+        from core import nano_registry
+        return nano_registry.get()["az_blob"]
+
+    def exists(self, account, container):
+        return self._store().container_exists(container)
+
+    def put(self, account, container, name, data, content_type):
+        from core import azure_blob_core as bc
+        bc.dispatch(self._store(), "PUT", f"/{container}/{name}", {}, {"x-ms-blob-type": "BlockBlob",
+                    "content-type": content_type, "x-ms-blob-content-type": content_type}, data)
+
+    def get(self, account, container, name):
+        from core import azure_blob_core as bc
+        r = bc.dispatch(self._store(), "GET", f"/{container}/{name}", {}, {}, b"")
+        return r.body if getattr(r, "status", 404) == 200 else None
+
+
 def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
     """Native Azure Resource Manager control plane. Unlike the generic
     catalog CRUD (which rides /api/{cloud}/{service} paths), the Azure console
@@ -299,6 +321,8 @@ def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
         backends._azure_arm = arm
     if getattr(arm, "on_event", None) is None:
         arm.on_event = _arm_event
+    if getattr(arm, "blob_hook", None) is None:
+        arm.blob_hook = _NanoBlobHook()
     resp = arm.handle(method, params.get("path", ""),
                       params.get("query") or {}, params.get("body"))
     return {"ok": resp["status"] < 400, "__http": resp}

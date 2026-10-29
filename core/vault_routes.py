@@ -764,6 +764,39 @@ def _register_azure(app: FastAPI) -> None:
         host = request.headers.get("host", "localhost")
         return {"kid": f"https://{host}/keys/{key}", "value": pt}
 
+    # ── Key Vault CERTIFICATES — the shared certificates core (real self-signed
+    # X.509 + RSA key), persisted per vault in Vault KV; a certificate's PEM bundle
+    # is also its secret (sid), so GET secrets/{name} returns it like Key Vault.
+    from core import azure_keyvault_certificates_core as _kvc
+
+    @app.api_route("/azure-data/keyvault/{vault}/certificates", methods=["GET"])
+    @app.api_route("/azure-data/keyvault/{vault}/certificates/{rest:path}", methods=["GET", "POST", "PATCH", "DELETE"])
+    async def az_kv_certificates(vault: str, request: Request, rest: str = ""):
+        space = _active_space_id(request)
+        got = vc.kv_get("azure", space, f"__kvcerts__{vault}")
+        store = _kvc.CertStore()
+        data = (got or {}).get("data") if isinstance(got, dict) else None
+        if isinstance(data, dict) and isinstance(data.get("certs"), str):
+            store.vaults[vault] = json.loads(data["certs"])
+        body = None
+        if request.method in ("POST", "PATCH"):
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+        status, out = _kvc.dispatch(store, vault, request.method, "/certificates/" + rest, body)
+        if request.method != "GET" and status < 300:
+            if vc.kv_put("azure", space, f"__kvcerts__{vault}", {"certs": json.dumps(store.vaults.get(vault, {}))}) is None:
+                return _vault_unavailable_response("azure.kv")
+            name = rest.split("/")[0]
+            if request.method == "POST" and rest.endswith("/create"):
+                vc.kv_put("azure", space, f"{vault}__{name}", _kvc.secret_value(store, vault, name))
+                _azkv_index_add(space, vault, "secrets", name)
+            elif request.method == "DELETE":
+                vc.kv_delete("azure", space, f"{vault}__{name}")
+                _azkv_index_remove(space, vault, "secrets", name)
+        return JSONResponse(status_code=status, content=out)
+
     # ── Key Vault SECRETS (Vault KV-backed) — get/put + list/delete + index ───
     @app.get("/azure-data/keyvault/{vault}/secrets/{secret}")
     @app.get("/azure-data/keyvault/{vault}/secrets/{secret}/{version:path}")

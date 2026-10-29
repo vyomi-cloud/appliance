@@ -5775,6 +5775,312 @@ SUB_RENDERERS.diagsettings = async function(svc, full, host){
   }, "", "add")));
   await fill();
 };
+// ---- Service Bus: shared access policies + geo-recovery ----
+SUB_RENDERERS.sharedaccess = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Shared access policies (SAS) of ", el("strong",{}, full.name), ". Each policy has two keys and connection strings."));
+  const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"}); host.append(bar);
+  const list = el("div",{}); host.append(list);
+  async function fill(){
+    list.innerHTML = "";
+    const r = await rbGet(full.id + "/authorizationRules", svc.apiVersion);
+    const rules = (r.ok && r.json.value) || [];
+    if (!rules.length) { list.append(emptyState("No shared access policies on " + full.name + ".")); return; }
+    for (const rule of rules) {
+      const k = await arm("POST", rule.id + "/listKeys", {}, svc.apiVersion);
+      const w = el("div",{class:"keyblock"});
+      w.append(el("div",{class:"k"}, rule.name + " — " + (getPath(rule,"properties.rights") || []).join(", ")));
+      if (k.ok) { w.append(el("div",{class:"hint"}, "Primary connection string"), el("pre",{class:"keyval"}, k.json.primaryConnectionString),
+                           el("div",{class:"hint"}, "Secondary connection string"), el("pre",{class:"keyval"}, k.json.secondaryConnectionString)); }
+      else w.append(el("div",{class:"hint"}, "Keys unavailable: " + rbErr(k)));
+      w.append(el("div",{class:"row"},
+        rbBtn("Regenerate primary key", async () => { const g = await arm("POST", rule.id + "/regenerateKeys", {keyType:"PrimaryKey"}, svc.apiVersion); if (g.ok) { toast("Primary key regenerated"); fill(); } else toast("Failed: " + rbErr(g), "err"); }, "sec"),
+        rbBtn("Regenerate secondary key", async () => { const g = await arm("POST", rule.id + "/regenerateKeys", {keyType:"SecondaryKey"}, svc.apiVersion); if (g.ok) { toast("Secondary key regenerated"); fill(); } else toast("Failed: " + rbErr(g), "err"); }, "sec"),
+        rule.name === "RootManageSharedAccessKey" ? "" : rbBtn("Delete", async () => { const d = await arm("DELETE", rule.id, undefined, svc.apiVersion); if (d.ok || d.status === 204) { toast("Deleted " + rule.name); fill(); } }, "del", "delete")));
+      list.append(w);
+    }
+  }
+  bar.append(rbBtn("Add", () => {
+    const nm = rbInput("", {placeholder:"Policy name"}), rights = rbSelect([["Listen","Listen"],["Send","Send"],["Listen,Send","Listen + Send"],["Listen,Send,Manage","Manage (Listen + Send + Manage)"]], "Listen,Send");
+    host.append(rbForm("Add SAS policy", [["Policy name", nm], ["Claims", rights]], async (form) => {
+      const r = await arm("PUT", full.id + "/authorizationRules/" + encodeURIComponent(nm.value.trim()), {properties:{rights: rights.value.split(",")}}, svc.apiVersion);
+      if (r.ok) { toast("Policy created: " + nm.value); form.remove(); fill(); } else toast("Create failed: " + rbErr(r), "err");
+    }, "Create"));
+  }, "", "add"), rbBtn("Refresh", fill, "sec", "refresh"));
+  await fill();
+};
+SUB_RENDERERS.sbgeorecovery = async function(svc, full, host){
+  const sr = await rbGet(rbRgPath(full, "Microsoft.ServiceBus", "namespaces"), svc.apiVersion);
+  const partners = ((sr.ok && sr.json.value) || []).filter(n => n.id.toLowerCase() !== full.id.toLowerCase());
+  host.append(el("div",{class:"sub-info"}, "Geo-disaster recovery pairs ", el("strong",{}, full.name), " (" + (getPath(full,"sku.name") || "") + ") with a secondary Premium namespace behind an alias."));
+  await rbChildCrud(full, host, {
+    coll: "disasterRecoveryConfigs", apiv: svc.apiVersion, child: "Geo-recovery alias",
+    empty: "Geo-recovery isn't configured for " + full.name + ".",
+    columns: [["properties.role","Role"],["properties.partnerNamespace","Partner namespace"],["properties.pendingReplicationOperationsCount","Pending replication ops"]],
+    fields: [{key:"partner", label:"Secondary namespace", type:"select", options: partners.length ? partners.map(n => [n.id, n.name + " (" + (getPath(n,"sku.name") || "") + ")"]) : [["","No other namespace in this resource group"]], default: partners[0] && partners[0].id}],
+    body: v => ({properties:{partnerNamespace: v.partner}}),
+    rowActions: (it, refresh) => getPath(it,"properties.partnerNamespace") ? [
+      rbBtn("Break pairing", async () => { const r = await arm("POST", it.id + "/breakPairing", {}, svc.apiVersion); if (r.ok) { toast("Pairing broken"); refresh(); } else toast("Failed: " + rbErr(r), "err"); }, "sec"),
+      rbBtn("Failover", async () => { if (!confirm("Fail over alias '" + it.name + "' to the secondary namespace?")) return; const r = await arm("POST", it.id + "/failover", {}, svc.apiVersion); if (r.ok) { toast("Failed over " + it.name); refresh(); } else toast("Failed: " + rbErr(r), "err"); }, "sec")] : [],
+  });
+};
+
+// ---- Event Grid topic: access keys + event types ----
+SUB_RENDERERS.egaccesskeys = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Access keys authenticate event publishers to ", el("strong",{}, full.name), " (aeg-sas-key header)."));
+  const slot = el("div",{}); host.append(slot);
+  async function fill(){
+    slot.innerHTML = "";
+    const r = await arm("POST", full.id + "/listKeys", {}, svc.apiVersion);
+    if (!r.ok) { slot.append(emptyState("Keys unavailable: " + rbErr(r))); return; }
+    ["key1","key2"].forEach(k => {
+      const w = el("div",{class:"keyblock"});
+      w.append(el("div",{class:"k"}, k), el("pre",{class:"keyval"}, r.json[k]));
+      w.append(el("div",{class:"row"}, rbBtn("Copy", () => { navigator.clipboard.writeText(r.json[k]); toast("Copied"); }, "sec"),
+        rbBtn("Regenerate", async () => { const g = await arm("POST", full.id + "/regenerateKey", {keyName: k}, svc.apiVersion); if (g.ok) { toast(k + " regenerated"); recordNotif("info","Event Grid key rotated", full.name + " " + k); fill(); } else toast("Failed: " + rbErr(g), "err"); })));
+      slot.append(w);
+    });
+    slot.append(rbKv([["Topic endpoint", getPath(full,"properties.endpoint") || ""]], "Endpoint"));
+  }
+  await fill();
+};
+SUB_RENDERERS.egtopictypes = async function(svc, full, host){
+  const p = full.properties || {};
+  host.append(rbKv([["Event schema", p.inputSchema || "EventGridSchema"], ["Input schema mapping", p.inputSchemaMapping ? JSON.stringify(p.inputSchemaMapping) : "None"]], "Event schema — " + full.name));
+  const r = await rbGet(full.id + "/eventSubscriptions", svc.apiVersion);
+  const subs = (r.ok && r.json.value) || [];
+  const types = {};
+  subs.forEach(s => (getPath(s,"properties.filter.includedEventTypes") || ["All event types"]).forEach(t => { (types[t] = types[t] || []).push(s.name); }));
+  host.append(el("div",{class:"sub-info",style:"margin-top:12px"}, "Event types routed by this topic's subscriptions"));
+  if (!Object.keys(types).length) host.append(emptyState("No event subscriptions on " + full.name + " — every published event type is dropped."));
+  else host.append(rbTable(["Event type","Subscriptions"], Object.entries(types).map(([t, s]) => [t, s.join(", ")])));
+};
+
+// ---- API Management: named values + custom domains ----
+SUB_RENDERERS.apimnamedvalues = function(svc, full, host){
+  return rbChildCrud(full, host, {
+    coll: "namedValues", apiv: svc.apiVersion, child: "Named value",
+    intro: "Named values are name/value pairs that policies of " + full.name + " reference as {{name}}. Secret values are never returned by GET.",
+    empty: "No named values in " + full.name + ".",
+    columns: [["properties.displayName","Display name"],["properties.secret","Secret"],["properties.value","Value"]],
+    fields: [{key:"display", label:"Display name", default:""}, {key:"value", label:"Value", default:""},
+             {key:"secret", label:"Type", type:"select", options:[["false","Plain"],["true","Secret"]], default:"false"}],
+    body: v => ({properties:{displayName: v.display || undefined, value: v.value, secret: v.secret === "true"}}),
+    rowActions: (it) => getPath(it,"properties.secret") ? [rbBtn("Show value", async () => {
+      const r = await arm("POST", it.id + "/listValue", {}, svc.apiVersion); if (r.ok) alert(it.name + " = " + r.json.value); else toast("Failed: " + rbErr(r), "err"); }, "sec")] : [],
+  });
+};
+SUB_RENDERERS.apimdomains = async function(svc, full, host){
+  const r = await arm("GET", full.id, undefined, svc.apiVersion);
+  const hc = (r.ok && getPath(r.json,"properties.hostnameConfigurations")) || [];
+  host.append(el("div",{class:"sub-info"}, "Host names that reach ", el("strong",{}, full.name), "."));
+  const save = async (next) => {
+    const w = await arm("PATCH", full.id, {properties:{hostnameConfigurations: next}}, svc.apiVersion);
+    if (w.ok) { toast("Custom domains saved"); recordNotif("ok","APIM custom domains", full.name); host.innerHTML = ""; SUB_RENDERERS.apimdomains(svc, full, host); } else toast("Save failed: " + rbErr(w), "err");
+  };
+  host.append(rbTable(["Type","Host name","Certificate","Default SSL binding",""], hc.map(h => [h.type, h.hostName, h.certificateSource || "", h.defaultSslBinding ? "Yes" : "No",
+    h.hostName.endsWith(".azure-api.net") ? "" : rbBtn("Delete", () => save(hc.filter(x => x !== h)), "del", "delete")])));
+  const ty = rbSelect(["Proxy","Portal","Management","DeveloperPortal","Scm"], "Proxy"), hn = rbInput("", {placeholder:"api.contoso.com"}), cs = rbSelect([["Managed","Managed certificate"],["KeyVault","Key Vault"],["Custom","Custom"]], "Managed");
+  host.append(rbForm("Add custom domain", [["Type", ty], ["Hostname", hn], ["Certificate", cs]], () =>
+    save(hc.concat([{type: ty.value, hostName: hn.value.trim(), certificateSource: cs.value, defaultSslBinding: false, negotiateClientCertificate: false}])), "Add"));
+};
+
+// ---- Container Apps: containers + scale from the app's live template ----
+SUB_RENDERERS.appcontainers = async function(svc, full, host){
+  const r = await arm("GET", full.id, undefined, svc.apiVersion);
+  const app = r.ok ? r.json : full;
+  const cs = getPath(app,"properties.template.containers") || [];
+  host.append(el("div",{class:"sub-info"}, "Containers in the template of ", el("strong",{}, full.name), " (latest revision " + (getPath(app,"properties.latestRevisionName") || "") + ")."));
+  if (!cs.length) host.append(emptyState("No containers in the template."));
+  else host.append(rbTable(["Name","Image","CPU (cores)","Memory","Environment variables"], cs.map(c => [c.name, c.image, String(getPath(c,"resources.cpu") || ""), getPath(c,"resources.memory") || "", String((c.env || []).length)])));
+  if (cs.length) {
+    const img = rbInput(cs[0].image, {style:"min-width:320px"});
+    host.append(rbForm("Edit container " + cs[0].name + " (creates a new revision)", [["Image", img]], async () => {
+      const next = cs.map((c, i) => i === 0 ? Object.assign({}, c, {image: img.value.trim()}) : c);
+      const w = await arm("PATCH", full.id, {properties:{template:{containers: next}}}, svc.apiVersion);
+      if (w.ok) { toast("New revision for " + full.name); host.innerHTML = ""; SUB_RENDERERS.appcontainers(svc, full, host); } else toast("Update failed: " + rbErr(w), "err");
+    }, "Save as new revision"));
+  }
+};
+SUB_RENDERERS.appscale = async function(svc, full, host){
+  const sc = getPath(full,"properties.template.scale") || {};
+  const rev = getPath(full,"properties.latestRevisionName");
+  const rr = rev ? await rbGet(full.id + "/revisions/" + encodeURIComponent(rev) + "/replicas", svc.apiVersion) : null;
+  const reps = (rr && rr.ok && rr.json.value) || [];
+  host.append(rbKv([["Min replicas", String(sc.minReplicas ?? "")], ["Max replicas", String(sc.maxReplicas ?? "")],
+                    ["Scale rules", (sc.rules || []).length ? sc.rules.map(x => x.name + (x.http ? " (HTTP " + getPath(x,"http.metadata.concurrentRequests") + " concurrent)" : "")).join(", ") : "None (default HTTP scaling)"],
+                    ["Running replicas of " + (rev || "latest revision"), String(reps.length)]], "Scale — " + full.name));
+  if (reps.length) host.append(rbTable(["Replica","Created","State"], reps.map(x => [x.name, getPath(x,"properties.createdTime") || "", getPath(x,"properties.runningState") || ""])));
+  const mn = rbInput(sc.minReplicas ?? 0, {type:"number", style:"min-width:100px"}), mx = rbInput(sc.maxReplicas ?? 10, {type:"number", style:"min-width:100px"});
+  host.append(rbForm("Edit scale (creates a new revision)", [["Min replicas", mn], ["Max replicas", mx]], async () => {
+    const w = await arm("PATCH", full.id, {properties:{template:{scale: Object.assign({}, sc, {minReplicas: Number(mn.value), maxReplicas: Number(mx.value)})}}}, svc.apiVersion);
+    if (w.ok) { full.properties = w.json.properties; toast("Scale updated"); host.innerHTML = ""; SUB_RENDERERS.appscale(svc, full, host); } else toast("Update failed: " + rbErr(w), "err");
+  }, "Save"));
+};
+
+// ---- DNS zone: name servers from the zone ----
+SUB_RENDERERS.dnsnameservers = async function(svc, full, host){
+  const r = await arm("GET", full.id, undefined, svc.apiVersion);
+  const z = r.ok ? r.json : full;
+  const ns = getPath(z,"properties.nameServers") || [];
+  host.append(el("div",{class:"sub-info"}, "Delegate ", el("strong",{}, full.name), " to these name servers at your registrar."));
+  if (!ns.length) host.append(emptyState(getPath(z,"properties.zoneType") === "Private" ? "Private zones are resolved inside linked virtual networks and have no public name servers." : "This zone has no name servers."));
+  else host.append(rbTable(["#","Name server"], ns.map((n, i) => [String(i + 1), n])));
+  host.append(rbKv([["Record sets", String(getPath(z,"properties.numberOfRecordSets") ?? "")], ["Max record sets", String(getPath(z,"properties.maxNumberOfRecordSets") ?? "")], ["Zone type", getPath(z,"properties.zoneType") || ""]], "Zone"));
+};
+
+// ---- Role assignment conditions (ABAC) ----
+SUB_RENDERERS.raconditions = async function(svc, full, host){
+  const r = await arm("GET", full.id, undefined, svc.apiVersion);
+  const p = (r.ok && r.json.properties) || {};
+  host.append(el("div",{class:"sub-info"}, "A condition narrows this role assignment to requests whose attributes match (Azure ABAC, conditionVersion 2.0)."));
+  host.append(rbKv([["Condition", p.condition || "None"], ["Condition version", p.condition ? (p.conditionVersion || "2.0") : "Not set"]], "Condition"));
+  const ta = el("textarea",{class:"sub-select",style:"min-width:460px;height:80px;padding:6px;font-family:Consolas,Menlo,monospace"}, p.condition || "((!(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read'})) OR (@Resource[Microsoft.Storage/storageAccounts/blobServices/containers:name] StringEquals 'public'))");
+  host.append(rbForm(p.condition ? "Edit condition" : "Add condition", [["Condition", ta]], async () => {
+    const body = {properties: Object.assign({}, p, {condition: ta.value.trim() || null, conditionVersion: ta.value.trim() ? "2.0" : null})};
+    const w = await arm("PUT", full.id, body, svc.apiVersion);
+    if (w.ok) { toast("Condition saved"); host.innerHTML = ""; SUB_RENDERERS.raconditions(svc, full, host); } else toast("Save failed: " + rbErr(w), "err");
+  }, "Save"));
+};
+SUB_RENDERERS.appsecrets = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Secrets of ", el("strong",{}, full.name), " — values come from POST listSecrets (GET never returns them)."));
+  const r = await arm("POST", full.id + "/listSecrets", {}, svc.apiVersion);
+  const items = (r.ok && r.json.value) || [];
+  if (!r.ok) host.append(emptyState("Could not list secrets: " + rbErr(r)));
+  else if (!items.length) host.append(emptyState(full.name + " has no secrets."));
+  else host.append(rbTable(["Name","Value","Source"], items.map(x => {
+    const v = el("span",{class:"mono"}, "••••••••");
+    return [x.name, el("span",{}, v, " ", rbBtn("Show", () => { v.textContent = x.value != null ? x.value : (x.keyVaultUrl || ""); }, "sec")), x.keyVaultUrl ? "Key Vault reference" : "Container Apps secret"];
+  })));
+  const nm = rbInput("", {placeholder:"secret-name"}), val = rbInput("", {placeholder:"value", type:"password"});
+  host.append(rbForm("Add secret", [["Key", nm], ["Value", val]], async () => {
+    const cur = items.map(x => x.keyVaultUrl ? {name: x.name, keyVaultUrl: x.keyVaultUrl, identity: x.identity} : {name: x.name, value: x.value});
+    const w = await arm("PATCH", full.id, {properties:{configuration:{secrets: cur.filter(x => x.name !== nm.value.trim()).concat([{name: nm.value.trim(), value: val.value}])}}}, svc.apiVersion);
+    if (w.ok) { toast("Secret saved: " + nm.value); host.innerHTML = ""; SUB_RENDERERS.appsecrets(svc, full, host); } else toast("Save failed: " + rbErr(w), "err");
+  }, "Add"));
+};
+// ---- Key vault: Certificates (Key Vault certificates data plane; self-signed X.509) ----
+SUB_RENDERERS.kvcertificates = async function(svc, full, host){
+  const base = ORIGIN + "/azure-data/keyvault/" + encodeURIComponent(full.name) + "/certificates";
+  const kv = async (method, path, body) => {
+    const r = await fetch(base + path + "?api-version=7.4", {method, headers: body ? {"Content-Type":"application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
+    let j = null; try { j = await r.json(); } catch(_){}
+    return {ok: r.ok, status: r.status, json: j};
+  };
+  host.append(el("div",{class:"sub-info"}, "Certificates in ", el("strong",{}, full.name), ". Self-signed certificates are issued by the vault; each also stores its key and a PEM secret."));
+  const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"}); host.append(bar);
+  const list = el("div",{}); host.append(list);
+  const fmt = t => t ? new Date(t * 1000).toISOString().slice(0, 10) : "";
+  async function fill(){
+    list.innerHTML = "";
+    const r = await kv("GET", "");
+    if (!r.ok) { list.append(emptyState("Could not list certificates: " + rbErr(r))); return; }
+    const items = (r.json && r.json.value) || [];
+    if (!items.length) { list.append(emptyState("No certificates in " + full.name + ".")); return; }
+    const rows = [];
+    for (const it of items) {
+      const nm = rbLeaf(it.id);
+      const g = await kv("GET", "/" + encodeURIComponent(nm));
+      const b = g.json || {};
+      rows.push([nm, getPath(b,"policy.x509_props.subject") || "", b.x5t || "", fmt(getPath(b,"attributes.nbf")), fmt(getPath(b,"attributes.exp")),
+        getPath(b,"attributes.enabled") ? "Enabled" : "Disabled",
+        el("span",{style:"display:flex;gap:6px"},
+          rbBtn("Download CER", () => { const a = el("a",{href:"data:application/pkix-cert;base64," + b.cer, download: nm + ".cer"}); document.body.append(a); a.click(); a.remove(); }, "sec"),
+          rbBtn(getPath(b,"attributes.enabled") ? "Disable" : "Enable", async () => { const u = await kv("PATCH", "/" + encodeURIComponent(nm), {attributes:{enabled: !getPath(b,"attributes.enabled")}}); if (u.ok) fill(); else toast("Update failed: " + rbErr(u), "err"); }, "sec"),
+          rbBtn("Delete", async () => { if (!confirm("Delete certificate '" + nm + "'?")) return; const d = await kv("DELETE", "/" + encodeURIComponent(nm)); if (d.ok) { toast("Deleted " + nm); fill(); } else toast("Delete failed: " + rbErr(d), "err"); }, "del", "delete"))]);
+    }
+    list.append(rbTable(["Name","Subject","Thumbprint (x5t)","Valid from","Expires","Status",""], rows));
+  }
+  bar.append(rbBtn("Generate/Import", () => {
+    const nm = rbInput("", {placeholder:"Certificate name"}), subj = rbInput("CN=" + full.name + ".contoso.com"), dns = rbInput("", {placeholder:"DNS names, comma separated"});
+    const months = rbInput("12", {type:"number", style:"min-width:100px"}), size = rbSelect(["2048","3072","4096"], "2048");
+    host.append(rbForm("Create a certificate (issuer: Self-signed)", [["Certificate name", nm], ["Subject", subj], ["DNS names", dns], ["Validity (months)", months], ["Key size", size], ["Content type", "PEM (application/x-pem-file)"]], async (form) => {
+      if (!nm.value.trim()) { toast("Certificate name is required","err"); return; }
+      const r = await kv("POST", "/" + encodeURIComponent(nm.value.trim()) + "/create", {policy:{issuer:{name:"Self"}, key_props:{kty:"RSA", key_size: Number(size.value), exportable: true},
+        secret_props:{contentType: "application/x-pem-file"}, x509_props:{subject: subj.value.trim(), validity_months: Number(months.value), sans:{dns_names: dns.value.split(",").map(x => x.trim()).filter(Boolean)}}}});
+      if (r.ok) { toast("Certificate " + nm.value + ": " + getPath(r.json,"status")); recordNotif("ok","Certificate created", full.name + "/" + nm.value); form.remove(); fill(); }
+      else toast("Create failed: " + rbErr(r), "err");
+    }, "Create"));
+  }, "", "add"), rbBtn("Refresh", fill, "sec", "refresh"));
+  await fill();
+};
+// ---- API Management: Backup / restore to a storage account container ----
+SUB_RENDERERS.apimbackup = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Back up ", el("strong",{}, full.name), "'s configuration (APIs, products, subscriptions, named values, policies) to a blob, and restore from one."));
+  const sr = await rbGet(rbRgPath(full, "Microsoft.Storage", "storageAccounts"), "2023-01-01");
+  const accts = (sr.ok && sr.json.value) || [];
+  if (!accts.length) { host.append(emptyState("No storage account in resource group " + rbRg(full) + " to hold backups — create one first.")); return; }
+  const acct = rbSelect(accts.map(a => [a.name, a.name]), accts[0].name), cont = rbSelect([], ""), nm = rbInput(full.name + "-" + rbStamp() + ".apimbackup");
+  const auth = rbSelect([["AccessKey","Access key"],["SystemAssignedManagedIdentity","System-assigned managed identity"]], "AccessKey");
+  const list = el("div",{});
+  async function loadContainers(){
+    cont.innerHTML = "";
+    const r = await fetch(ORIGIN + "/api/azure/storage/" + encodeURIComponent(acct.value) + "/containers").then(x => x.json()).catch(() => ({}));
+    (r.value || []).forEach(c => cont.append(el("option",{value:c.name}, c.name)));
+    await loadBackups();
+  }
+  async function loadBackups(){
+    list.innerHTML = "";
+    if (!cont.value) { list.append(emptyState("Storage account " + acct.value + " has no containers — create one in its Containers blade.")); return; }
+    const r = await fetch(ORIGIN + "/api/azure/storage/" + encodeURIComponent(acct.value) + "/containers/" + encodeURIComponent(cont.value) + "/blobs").then(x => x.json()).catch(() => ({}));
+    const bl = (r.value || []).filter(b => /\.apimbackup$/.test(b.name));
+    if (!bl.length) { list.append(emptyState("No API Management backups in " + acct.value + "/" + cont.value + ".")); return; }
+    list.append(rbTable(["Backup blob","Size","Last modified",""], bl.map(b => [b.name, (b.size || 0) + " B", b.lastModified || "",
+      rbBtn("Restore", async () => {
+        if (!confirm("Restore " + full.name + " from " + b.name + "? Its current APIs, products and settings are replaced.")) return;
+        const body = await authBody(); if (!body) return;
+        const w = await arm("POST", full.id + "/restore", Object.assign(body, {backupName: b.name}), svc.apiVersion);
+        if (w.ok) { toast("Restored " + full.name + " from " + b.name); recordNotif("ok","APIM restored", b.name); } else toast("Restore failed: " + rbErr(w), "err");
+      }, "sec")])));
+  }
+  async function authBody(){
+    const body = {storageAccount: acct.value, containerName: cont.value, accessType: auth.value};
+    if (auth.value === "AccessKey") {
+      const sa = accts.find(a => a.name === acct.value);
+      const k = await arm("POST", sa.id + "/listKeys", {}, "2023-01-01");
+      if (!k.ok) { toast("Could not read the storage account key: " + rbErr(k), "err"); return null; }
+      body.accessKey = k.json.keys[0].value;
+    }
+    return body;
+  }
+  acct.addEventListener("change", loadContainers); cont.addEventListener("change", loadBackups);
+  host.append(rbKv([["Storage account", acct], ["Container", cont], ["Authentication", auth], ["Backup name", nm]], "Backup"));
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Backup", async () => {
+    const body = await authBody(); if (!body) return;
+    const w = await arm("POST", full.id + "/backup", Object.assign(body, {backupName: nm.value.trim()}), svc.apiVersion);
+    if (w.ok) { toast("Backed up to " + acct.value + "/" + cont.value + "/" + nm.value); recordNotif("ok","APIM backup", nm.value); loadBackups(); } else toast("Backup failed: " + rbErr(w), "err");
+  }, "", "backup")));
+  host.append(el("div",{class:"sub-info",style:"margin-top:12px"}, "Backups in the selected container"));
+  host.append(list);
+  await loadContainers();
+};
+// ---- VM disks: the VM's storage profile (OS + data disks) ----
+SUB_RENDERERS.disks = async function(svc, full, host){
+  const slot = el("div",{}); host.append(slot);
+  function fill(){                      // renders the VM as loaded for this blade (refreshed from each PATCH reply)
+    slot.innerHTML = "";
+    const sp = getPath(full,"properties.storageProfile") || {}, os = sp.osDisk || {};
+    const enc = d => getPath(d,"managedDisk.diskEncryptionSet.id") ? "SSE with CMK" : "SSE with PMK";
+    slot.append(el("div",{class:"sub-info"}, "OS disk"));
+    slot.append(rbTable(["Disk name","Size (GiB)","Storage type","Encryption","Host caching","OS"], [[os.name || "", String(os.diskSizeGB || ""),
+      getPath(os,"managedDisk.storageAccountType") || "", enc(os), os.caching || "", os.osType || ""]]));
+    const data = sp.dataDisks || [];
+    slot.append(el("div",{class:"sub-info",style:"margin-top:12px"}, "Data disks"));
+    if (!data.length) slot.append(emptyState("No data disks are attached to " + full.name + "."));
+    else slot.append(rbTable(["LUN","Disk name","Size (GiB)","Storage type","Encryption","Host caching",""], data.map(d => [String(d.lun), d.name, String(d.diskSizeGB || ""),
+      getPath(d,"managedDisk.storageAccountType") || "", enc(d), d.caching || "",
+      rbBtn("Detach", () => save(data.filter(x => x !== d)), "del", "link_off")])));
+    const size = rbInput("128", {type:"number", style:"min-width:100px"}), typ = rbSelect(["Premium_LRS","StandardSSD_LRS","Standard_LRS","PremiumV2_LRS","UltraSSD_LRS"], "Premium_LRS"), cache = rbSelect(["None","ReadOnly","ReadWrite"], "None");
+    slot.append(rbForm("Attach a new data disk", [["Size (GiB)", size], ["Storage type", typ], ["Host caching", cache]], () => {
+      const used = data.map(d => d.lun); let lun = 0; while (used.includes(lun)) lun++;
+      return save(data.concat([{lun, diskSizeGB: Number(size.value), createOption: "Empty", caching: cache.value, managedDisk: {storageAccountType: typ.value}}]));
+    }, "Attach"));
+  }
+  async function save(next){
+    const w = await arm("PATCH", full.id, {properties:{storageProfile:{dataDisks: next}}}, svc.apiVersion);
+    if (w.ok) { full.properties = w.json.properties; toast("Disks updated on " + full.name); recordNotif("ok","VM disks updated", full.name); fill(); } else toast("Update failed: " + rbErr(w), "err");
+  }
+  await fill();
+};
 // ===== REAL-BLADES:END =====
 
 function emptyState(msg){

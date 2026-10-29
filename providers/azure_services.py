@@ -781,7 +781,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             return JSONResponse(status_code=_lk["status"], content=_lk["body"])
     _x = _ext.route(_state, method, sub, rg, after,
                     await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {},
-                    dict(request.query_params), executor=_vm_run_executor)
+                    dict(request.query_params), executor=_vm_run_executor, blob=_ArmBlobHook())
     if _x is not None:
         if method != "GET" and _x["status"] < 300 and _x.get("scope"):
             _record_usage(f"azure.{method.lower()}", {"type": _x["type"], "name": _x["name"],
@@ -1150,6 +1150,31 @@ def _arm_action(action: str, type_chain: list[str], resource_name: str,
     if action == "listsecrets":
         return JSONResponse({})
     return JSONResponse({})
+
+
+class _ArmBlobHook:
+    """Blob data plane (Azurite, space-scoped) for ARM operations that read/write blobs
+    (API Management backup/restore) — the same store the Storage console + SDKs use."""
+
+    def _sid(self):
+        from core.azure_dataplane import _sid
+        return _sid()
+
+    def exists(self, account, container):
+        from core import azure_blob_store as bs
+        try:
+            return container in bs.list_containers(self._sid(), account)
+        except Exception:
+            return False
+
+    def put(self, account, container, name, data, content_type):
+        from core import azure_blob_store as bs
+        bs.put_blob(self._sid(), account, container, name, data, content_type)
+
+    def get(self, account, container, name):
+        from core import azure_blob_store as bs
+        got = bs.get_blob(self._sid(), account, container, name)
+        return got["data"] if got else None
 
 
 def _vm_run_executor(vm: dict, script: str):
