@@ -3414,15 +3414,36 @@ SUB_RENDERERS.dynamoquery = function(svc, full, host){
 };
 
 // RDS
-SUB_RENDERERS.rdsendpoints = function(svc, full, host){
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Endpoint & port"));
-  card.append(el("div",{class:"kv-grid"},
-    el("div",{}, el("div",{class:"k"}, "Endpoint"), el("div",{class:"v mono"}, full.endpoint_address || full.endpoint || (full.db_instance_identifier ? full.db_instance_identifier+"."+REGION+".rds.amazonaws.com" : "—"))),
-    el("div",{}, el("div",{class:"k"}, "Port"),     el("div",{class:"v"}, String(full.endpoint_port || full.port || 5432))),
-    el("div",{}, el("div",{class:"k"}, "Status"),   el("div",{class:"v"}, full.status || "available")),
-    el("div",{}, el("div",{class:"k"}, "Master username"), el("div",{class:"v"}, full.master_username || "postgres"))));
-  host.append(card);
+// RDS Endpoints / Networking re-read the instance from the API when the tab opens.
+async function rdsFresh(full){
+  const id = full.db_instance_identifier || full.name;
+  const r = await api("GET", "/api/rds/databases/"+encodeURIComponent(id));
+  return r.ok && r.json ? r.json : full;
+}
+function rdsKv(host, icn, title, rows){
+  const card = el("div",{class:"kv-card"}); card.append(el("div",{class:"h"}, title));
+  const g = el("div",{class:"kv-grid"});
+  rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k),
+    el("div",{class:"v"+(/id|address|endpoint|arn|group/i.test(k)?" mono":"")}, v == null || v === "" ? "Not set" : String(v)))));
+  card.append(g); host.append(card); return card;
+}
+SUB_RENDERERS.rdsendpoints = async function(svc, full0, host){
+  const full = await rdsFresh(full0);
+  rdsKv(host, "lan", "Endpoint & port", [
+    ["DB identifier", full.db_instance_identifier], ["Endpoint", full.endpoint_address], ["Port", full.endpoint_port],
+    ["Status", full.status], ["Engine", full.engine+" "+(full.engine_version||"")], ["Master username", full.master_username]]);
+  if (full.connect_help) {
+    const ch = full.connect_help;
+    rdsKv(host, "terminal", "Connect from your laptop (Codespaces)", [["1 · Tunnel (keep open)", ch.tunnel_command], ["2 · Connect", ch.client_command]]);
+  }
+};
+SUB_RENDERERS.rdsnetworking = async function(svc, full0, host){
+  const full = await rdsFresh(full0);
+  rdsKv(host, "vpn_lock", "Connectivity & security", [
+    ["DB identifier", full.db_instance_identifier], ["VPC ID", full.vpc_id], ["Subnet group", full.db_subnet_group_name],
+    ["Subnets", (full.subnet_ids||[]).join(", ")], ["Availability Zone", full.availability_zone],
+    ["VPC security groups", (full.security_group_ids||[]).join(", ")], ["Publicly accessible", full.publicly_accessible ? "Yes" : "No"],
+    ["Endpoint", full.endpoint_address], ["Port", full.endpoint_port]]);
 };
 SUB_RENDERERS.rdssnapshots = function(svc, full, host){
   fetch(ORIGIN+svc.api_paths.snapshots.path).then(r=>r.json()).then(j=>{

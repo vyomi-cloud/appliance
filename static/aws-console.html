@@ -3475,28 +3475,119 @@ SUB_RENDERERS.dynamoquery = function(svc, full, host){
 };
 
 // RDS
-SUB_RENDERERS.rdsendpoints = function(svc, full, host){
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Endpoint & port"));
-  card.append(el("div",{class:"kv-grid"},
-    el("div",{}, el("div",{class:"k"}, "Endpoint"), el("div",{class:"v mono"}, full.endpoint_address || full.endpoint || (full.db_instance_identifier ? full.db_instance_identifier+"."+REGION+".rds.amazonaws.com" : "—"))),
-    el("div",{}, el("div",{class:"k"}, "Port"),     el("div",{class:"v"}, String(full.endpoint_port || full.port || 5432))),
-    el("div",{}, el("div",{class:"k"}, "Status"),   el("div",{class:"v"}, full.status || "available")),
-    el("div",{}, el("div",{class:"k"}, "Master username"), el("div",{class:"v"}, full.master_username || "postgres"))));
-  host.append(card);
-  // Codespaces sandbox: reach this DB from a remote laptop through the jump host.
-  // Present only when the appliance runs in a Codespace AND the DB has a real
-  // backend connection (guarded — a no-op everywhere else).
+// ── RDS instance tabs ────────────────────────────────────────────────
+// Every tab re-reads the instance from the API (like the real console does when a
+// tab opens) and writes edits through ModifyDBInstance, so what you save is what
+// the SDK/CLI sees and what is shown when the tab is reopened.
+async function rdsFresh(full){
+  const id = full.db_instance_identifier || full.name;
+  const r = await api("GET", "/api/rds/databases/"+encodeURIComponent(id));
+  return r.ok && r.json ? r.json : full;
+}
+function rdsKv(host, icn, title, rows){
+  const card = el("div",{class:"kv-card"}); card.append(el("div",{class:"h"}, title));
+  const g = el("div",{class:"kv-grid"});
+  rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k),
+    el("div",{class:"v"+(/id|address|endpoint|arn|group/i.test(k)?" mono":"")}, v == null || v === "" ? "Not set" : String(v)))));
+  card.append(g); host.append(card); return card;
+}
+SUB_RENDERERS.rdsendpoints = async function(svc, full0, host){
+  const full = await rdsFresh(full0);
+  rdsKv(host, "lan", "Endpoint & port", [
+    ["DB identifier", full.db_instance_identifier], ["Endpoint", full.endpoint_address], ["Port", full.endpoint_port],
+    ["Status", full.status], ["Engine", full.engine+" "+(full.engine_version||"")], ["Master username", full.master_username]]);
   if (full.connect_help) {
     const ch = full.connect_help;
-    const c2 = el("div",{class:"kv-card"});
-    c2.append(el("div",{class:"h"}, "Connect from your laptop (Codespaces)"));
-    c2.append(el("div",{class:"kv-grid"},
-      el("div",{}, el("div",{class:"k"}, "1 · Tunnel (keep open)"), el("div",{class:"v mono"}, ch.tunnel_command)),
-      el("div",{}, el("div",{class:"k"}, "2 · Connect"),            el("div",{class:"v mono"}, ch.client_command))));
-    c2.append(el("div",{class:"small"}, ch.note));
-    host.append(c2);
+    rdsKv(host, "terminal", "Connect from your laptop (Codespaces)", [["1 · Tunnel (keep open)", ch.tunnel_command], ["2 · Connect", ch.client_command]]);
   }
+};
+SUB_RENDERERS.rdsnetworking = async function(svc, full0, host){
+  const full = await rdsFresh(full0);
+  rdsKv(host, "vpn_lock", "Connectivity & security", [
+    ["DB identifier", full.db_instance_identifier], ["VPC ID", full.vpc_id], ["Subnet group", full.db_subnet_group_name],
+    ["Subnets", (full.subnet_ids||[]).join(", ")], ["Availability Zone", full.availability_zone],
+    ["VPC security groups", (full.security_group_ids||[]).join(", ")], ["Publicly accessible", full.publicly_accessible ? "Yes" : "No"],
+    ["Endpoint", full.endpoint_address], ["Port", full.endpoint_port]]);
+};
+SUB_RENDERERS.rdsmodify = async function(svc, full0, host){
+  const full = await rdsFresh(full0), id = full.db_instance_identifier;
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  panel.append(el("div",{class:"panel-h"}, icon("edit"), "Modify DB instance: "+id));
+  const body = el("div",{style:"padding:16px"}); panel.append(body);
+  const ins = {};
+  const add = (k, label, type, val, opts) => {
+    let inp;
+    if (type === "check") { inp = el("input",{type:"checkbox","data-testid":"rds-"+k}); inp.checked = !!val; }
+    else if (type === "select") { inp = el("select",{style:S3_INPUT,"data-testid":"rds-"+k}, ...opts.map(o => { const op = el("option",{value:o}, o); if (o === val) op.selected = true; return op; })); }
+    else inp = el("input",{type:type==="number"?"number":"text",style:S3_INPUT,value:val==null?"":String(val),"data-testid":"rds-"+k});
+    ins[k] = [inp, type]; body.append(s3Field(label, inp));
+  };
+  const classes = ["db.t3.micro","db.t3.small","db.t3.medium","db.t3.large","db.m5.large","db.m5.xlarge","db.r5.large","db.r5.xlarge"];
+  add("db_instance_class","DB instance class","select",full.db_instance_class, classes.includes(full.db_instance_class) ? classes : [full.db_instance_class, ...classes]);
+  add("allocated_storage","Allocated storage (GiB)","number",full.allocated_storage);
+  add("engine_version","Engine version","text",full.engine_version);
+  add("backup_retention_period","Backup retention period (days)","number",full.backup_retention_period);
+  add("preferred_maintenance_window","Maintenance window","text",full.preferred_maintenance_window);
+  add("multi_az","Multi-AZ deployment","check",full.multi_az);
+  add("publicly_accessible","Publicly accessible","check",full.publicly_accessible);
+  body.append(el("button",{class:"btn primary",onclick:async()=>{
+    const patch = {apply_immediately:true};
+    Object.entries(ins).forEach(([k,[inp,t]]) => { patch[k] = t==="check" ? inp.checked : t==="number" ? Number(inp.value) : inp.value; });
+    const r = await api("POST", "/api/rds/databases/"+encodeURIComponent(id)+"/modify", patch);
+    if (r.ok) { toast("Modified "+id); host.innerHTML=""; SUB_RENDERERS.rdsmodify(svc, full, host); }
+    else toast("Modify failed: "+s3Err(r),"err");
+  }}, icon("save"), "Apply changes"));
+};
+SUB_RENDERERS.rdsbackups = async function(svc, full0, host){
+  const full = await rdsFresh(full0), id = full.db_instance_identifier;
+  const body = s3Panel(host, "backup", "Automated backups", "Backups of "+id+" and the point-in-time recovery window.");
+  body.append(el("div",{class:"kv-grid"},
+    el("div",{}, el("div",{class:"k"}, "Backup retention period"), el("div",{class:"v","data-testid":"rds-retention"}, full.backup_retention_period+" days")),
+    el("div",{}, el("div",{class:"k"}, "Latest restorable time"), el("div",{class:"v"}, full.latest_restorable_time||"Not available")),
+    el("div",{}, el("div",{class:"k"}, "Status"), el("div",{class:"v"}, full.backup_retention_period > 0 ? "Automated backups enabled" : "Automated backups disabled"))));
+  const inp = el("input",{type:"number",min:0,max:35,value:String(full.backup_retention_period),style:S3_INPUT+";max-width:120px","data-testid":"rds-retention-input"});
+  body.append(s3Field("Retention period (days)", inp), el("button",{class:"btn primary",onclick:async()=>{
+    const r = await api("POST", "/api/rds/databases/"+encodeURIComponent(id)+"/modify", {backup_retention_period:Number(inp.value), apply_immediately:true});
+    if (r.ok) { toast("Backup retention updated"); host.innerHTML=""; SUB_RENDERERS.rdsbackups(svc, full, host); } else toast("Update failed: "+s3Err(r),"err");
+  }}, icon("save"), "Save retention"));
+  const sr = await api("GET", "/api/rds/snapshots");
+  const snaps = ((sr.json && sr.json.db_snapshots) || []).filter(s => s.db_instance_identifier === id);
+  body.append(el("div",{style:"font-weight:600;margin:18px 0 6px"}, "Snapshots of this instance ("+snaps.length+")"));
+  if (!snaps.length) body.append(el("div",{class:"empty"}, "No snapshots have been taken of this instance."));
+  else { const tbl = el("table",{class:"aws",style:"width:100%"});
+    tbl.append(el("tr",{}, ...["Snapshot","Type","Status","Size (GiB)","Created"].map(h=>el("th",{},h))));
+    snaps.forEach(s => tbl.append(el("tr",{}, el("td",{class:"mono small"}, s.db_snapshot_identifier), el("td",{}, s.snapshot_type), el("td",{}, stateBadge(s.status)), el("td",{}, String(s.allocated_storage)), el("td",{class:"small"}, s.created))));
+    body.append(tbl); }
+};
+SUB_RENDERERS.rdsmaintenance = async function(svc, full0, host){
+  const full = await rdsFresh(full0), id = full.db_instance_identifier;
+  const body = s3Panel(host, "build", "Maintenance", "Maintenance window and engine version of "+id+".");
+  body.append(el("div",{class:"kv-grid"},
+    el("div",{}, el("div",{class:"k"}, "Engine"), el("div",{class:"v"}, full.engine+" "+full.engine_version)),
+    el("div",{}, el("div",{class:"k"}, "Maintenance window"), el("div",{class:"v","data-testid":"rds-window"}, full.preferred_maintenance_window)),
+    el("div",{}, el("div",{class:"k"}, "Parameter group"), el("div",{class:"v mono"}, full.db_parameter_group_name)),
+    el("div",{}, el("div",{class:"k"}, "Last modified"), el("div",{class:"v"}, full.updated||full.created))));
+  const inp = el("input",{style:S3_INPUT,value:full.preferred_maintenance_window||"","data-testid":"rds-window-input",placeholder:"sun:03:00-sun:03:30"});
+  body.append(s3Field("Maintenance window", inp), el("button",{class:"btn primary",onclick:async()=>{
+    const r = await api("POST", "/api/rds/databases/"+encodeURIComponent(id)+"/modify", {preferred_maintenance_window:inp.value.trim(), apply_immediately:true});
+    if (r.ok) { toast("Maintenance window updated"); host.innerHTML=""; SUB_RENDERERS.rdsmaintenance(svc, full, host); } else toast("Update failed: "+s3Err(r),"err");
+  }}, icon("save"), "Save window"));
+};
+SUB_RENDERERS.rdslogs = async function(svc, full0, host){
+  const id = full0.db_instance_identifier || full0.name;
+  const body = s3Panel(host, "list_alt", "Recent events", "Events recorded for "+id+".");
+  const r = await api("GET", "/api/rds/databases");
+  const evs = ((r.json && r.json.events) || []).filter(e => (e.detail||{}).db_instance_identifier === id).reverse();
+  if (!evs.length) { body.append(el("div",{class:"empty"}, "No events recorded for "+id+" yet.")); return; }
+  const tbl = el("table",{class:"aws",style:"width:100%"});
+  tbl.append(el("tr",{}, ...["Time","Event","Source"].map(h=>el("th",{},h))));
+  evs.forEach(e => tbl.append(el("tr",{"data-testid":"rds-event"}, el("td",{class:"small"}, e.timestamp), el("td",{}, e.action), el("td",{class:"mono small"}, id))));
+  body.append(tbl);
+};
+SUB_RENDERERS.rdsinsights = async function(svc, full0, host){
+  const full = await rdsFresh(full0), id = full.db_instance_identifier;
+  const body = s3Panel(host, "insights", "Performance Insights", "Database load for "+id+" ("+full.engine+" "+full.engine_version+", "+full.db_instance_class+").");
+  renderMeasuredMetrics(body, "rds", id);
 };
 SUB_RENDERERS.rdssnapshots = function(svc, full, host){
   fetch(ORIGIN+svc.api_paths.snapshots.path).then(r=>r.json()).then(j=>{

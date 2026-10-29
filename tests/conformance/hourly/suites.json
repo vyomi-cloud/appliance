@@ -82,6 +82,14 @@
       "timeout": 300
     },
     {
+      "id": "offline-ui-aws-rds-tabs",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-rds-tabs.mjs",
+      "timeout": 600
+    },
+    {
       "id": "offline-ui-aws-s3-config",
       "target": "offline",
       "cloud": "aws",

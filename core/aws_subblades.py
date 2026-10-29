@@ -131,23 +131,23 @@ _RDS_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Connectivity & security", "items": [
         {"key": "endpoints",   "label": "Endpoints",          "icon": "lan",         "type": "rdsEndpoints"},
-        {"key": "networking",  "label": "Networking",         "icon": "vpn_lock",    "type": "ec2Networking"},
+        {"key": "networking",  "label": "Networking",         "icon": "vpn_lock",    "type": "rdsNetworking"},
         {"key": "iam",         "label": "Permissions",        "icon": "admin_panel_settings", "type": "iam"},
     ]},
     {"group": "Configuration", "items": [
         {"key": "configuration","label":"Configuration",      "icon": "tune",        "type": "properties"},
-        {"key": "modify",       "label":"Modify",             "icon": "edit",        "type": "stub"},
+        {"key": "modify",       "label":"Modify",             "icon": "edit",        "type": "rdsModify"},
         {"key": "parameterGroups","label":"Parameter groups", "icon": "settings",    "type": "rdsParameterGroups"},
     ]},
     {"group": "Maintenance & backups", "items": [
         {"key": "snapshots",   "label": "Snapshots",          "icon": "photo_camera","type": "rdsSnapshots"},
-        {"key": "backups",     "label": "Automated backups",  "icon": "backup",      "type": "stub"},
-        {"key": "maintenance", "label": "Maintenance",        "icon": "build",       "type": "stub"},
+        {"key": "backups",     "label": "Automated backups",  "icon": "backup",      "type": "rdsBackups"},
+        {"key": "maintenance", "label": "Maintenance",        "icon": "build",       "type": "rdsMaintenance"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "monitoring",  "label": "Monitoring",         "icon": "show_chart",  "type": "metrics"},
-        {"key": "logs",        "label": "Logs & events",      "icon": "list_alt",    "type": "stub"},
-        {"key": "queryInsights","label":"Performance Insights","icon": "insights",   "type": "stub"},
+        {"key": "logs",        "label": "Logs & events",      "icon": "list_alt",    "type": "rdsLogs"},
+        {"key": "queryInsights","label":"Performance Insights","icon": "insights",   "type": "rdsInsights"},
     ]},
 ]
 
