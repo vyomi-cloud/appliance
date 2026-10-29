@@ -121,12 +121,41 @@ VIEWS = {
         "scheduling": ["name", "status", "scheduling"],
         "labels": ["name", "labels", "labelFingerprint"],
     },
+    "storage": {
+        "configuration": ["name", "location", "locationType", "storageClass", "iamConfiguration", "versioning",
+                          "timeCreated", "updated", "metageneration", "projectNumber", "labels"],
+        "lifecycle": ["name", "lifecycle"],
+        "encryption": ["name", "encryption"],
+        "retention": ["name", "retentionPolicy", "softDeletePolicy", "versioning"],
+    },
 }
 
 
+def storage_patch(op: str, body: dict):
+    """Bucket tab write → the buckets.patch body it amounts to (validated by the GCS engine)."""
+    op = op[0].lower() + op[1:]
+    if op == "setLifecycle":
+        return {"lifecycle": {"rule": list(body.get("rule") or [])}}
+    if op == "setEncryption":
+        return {"encryption": {"defaultKmsKeyName": str(body.get("defaultKmsKeyName") or "")}}
+    if op == "setRetention":
+        p = body.get("retentionPeriod")
+        return {"retentionPolicy": {"retentionPeriod": p} if p not in (None, "", 0, "0") else None}
+    if op == "setVersioning":
+        return {"versioning": {"enabled": bool(body.get("enabled"))}}
+    if op == "setSoftDelete":
+        return {"softDeletePolicy": {"retentionDurationSeconds": body.get("retentionDurationSeconds", 0)}}
+    if op == "setStorageClass":
+        return {"storageClass": body.get("storageClass")}
+    if op == "setLabels":
+        return {"labels": validate_labels(body.get("labels", {}))}
+    return None
+
+
 def view_op(service: str, op: str):
-    """'getNetworking' → 'networking' when it is a registered view of `service`."""
-    if not op.startswith("get"):
+    """'getNetworking' (offline) / 'GetNetworking' (Nano) → 'networking' when it is a
+    registered view of `service`."""
+    if not op[:3].lower() == "get":
         return None
     v = op[3:].lower()
     return v if v in VIEWS.get(service, {}) or v == "labels" else None

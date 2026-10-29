@@ -210,3 +210,89 @@ def test_compute_labels_tab(c, vm):
     assert out["item"]["labels"] == {"team": "core"}
     st, bad = c.sub("compute", "setLabels", vm, {"labels": {"Team": "x"}})
     assert st == 400
+
+
+# ── Cloud Storage ─────────────────────────────────────────────────────────────
+@pytest.fixture(scope="module")
+def bucket(c):
+    name = uid("tabbkt")
+    st, _ = c.create("storage", {"name": name})
+    assert st == 200
+    return name
+
+
+def test_storage_lifecycle_tab_round_trips_rules(c, bucket):
+    rules = [{"action": {"type": "Delete"}, "condition": {"age": 30}},
+             {"action": {"type": "SetStorageClass", "storageClass": "COLDLINE"}, "condition": {"age": 90, "matchesPrefix": ["logs/"]}}]
+    st, _ = c.sub("storage", "setLifecycle", bucket, {"rule": rules})
+    assert st == 200
+    st, out = c.sub("storage", "getLifecycle", bucket)
+    got = out["item"]["lifecycle"]["rule"]
+    assert [r["action"]["type"] for r in got] == ["Delete", "SetStorageClass"] and got[1]["condition"]["matchesPrefix"] == ["logs/"]
+    # the bucket's own GET (SDK view) carries the same lifecycle config
+    st, b = c.get("storage", bucket)
+    assert len(b["lifecycle"]["rule"]) == 2
+    st, bad = c.sub("storage", "setLifecycle", bucket, {"rule": [{"action": {"type": "Explode"}, "condition": {"age": 1}}]})
+    assert st == 400
+
+
+def test_storage_encryption_tab(c, bucket):
+    key = "projects/%s/locations/global/keyRings/ring/cryptoKeys/k1" % c.project
+    st, _ = c.sub("storage", "setEncryption", bucket, {"defaultKmsKeyName": key})
+    assert st == 200
+    st, out = c.sub("storage", "getEncryption", bucket)
+    assert out["item"]["encryption"]["defaultKmsKeyName"] == key
+    st, bad = c.sub("storage", "setEncryption", bucket, {"defaultKmsKeyName": "not-a-key"})
+    assert st == 400
+    st, _ = c.sub("storage", "setEncryption", bucket, {"defaultKmsKeyName": ""})
+    st, out = c.sub("storage", "getEncryption", bucket)
+    assert "encryption" not in out["item"]
+
+
+def test_storage_retention_versioning_soft_delete(c, bucket):
+    st, _ = c.sub("storage", "setRetention", bucket, {"retentionPeriod": "86400"})
+    assert st == 200
+    st, _ = c.sub("storage", "setVersioning", bucket, {"enabled": True})
+    st, _ = c.sub("storage", "setSoftDelete", bucket, {"retentionDurationSeconds": 604800})
+    assert st == 200
+    st, out = c.sub("storage", "getRetention", bucket)
+    it = out["item"]
+    assert it["retentionPolicy"]["retentionPeriod"] == "86400" and it["retentionPolicy"]["isLocked"] is False
+    assert it["versioning"]["enabled"] is True and it["softDeletePolicy"]["retentionDurationSeconds"] == "604800"
+    st, bad = c.sub("storage", "setSoftDelete", bucket, {"retentionDurationSeconds": 3600})
+    assert st == 400
+    st, _ = c.sub("storage", "lockRetention", bucket, {})
+    assert st == 200
+    st, bad = c.sub("storage", "setRetention", bucket, {"retentionPeriod": None})
+    assert st == 403
+    st, bad = c.sub("storage", "setRetention", bucket, {"retentionPeriod": "60"})
+    assert st == 403
+    st, _ = c.sub("storage", "setRetention", bucket, {"retentionPeriod": "172800"})
+    assert st == 200
+    st, out = c.sub("storage", "getRetention", bucket)
+    assert out["item"]["retentionPolicy"] == {**out["item"]["retentionPolicy"], "retentionPeriod": "172800", "isLocked": True}
+
+
+def test_storage_config_and_labels(c, bucket):
+    st, _ = c.sub("storage", "setStorageClass", bucket, {"storageClass": "NEARLINE"})
+    assert st == 200
+    st, out = c.sub("storage", "getConfiguration", bucket)
+    assert out["item"]["storageClass"] == "NEARLINE" and out["item"]["name"] == bucket
+    st, _ = c.sub("storage", "setLabels", bucket, {"labels": {"env": "dev"}})
+    st, out = c.sub("storage", "getLabels", bucket)
+    assert out["item"]["labels"] == {"env": "dev"}
+
+
+def test_storage_retention_blocks_object_delete_in_the_engine():
+    from core import gcp_storage_core as gcs
+    from core.object_store import InMemoryObjectStore
+    st = InMemoryObjectStore()
+    call = lambda m, p, q=None, b=b"", h=None: gcs.dispatch(st, m, p, q or {}, h or {}, b)
+    assert call("POST", "/storage/v1/b", b=json.dumps({"name": "b1"}).encode()).status == 200
+    assert call("POST", "/upload/storage/v1/b/b1/o", {"uploadType": "media", "name": "o1"}, b"hi").status == 200
+    assert call("PATCH", "/storage/v1/b/b1", b=json.dumps({"retentionPolicy": {"retentionPeriod": "3600"}}).encode()).status == 200
+    r = call("DELETE", "/storage/v1/b/b1/o/o1")
+    assert r.status == 403 and b"retention policy" in r.body
+    assert call("POST", "/upload/storage/v1/b/b1/o", {"uploadType": "media", "name": "o1"}, b"again").status == 403
+    assert call("PATCH", "/storage/v1/b/b1", b=json.dumps({"retentionPolicy": None}).encode()).status == 200
+    assert call("DELETE", "/storage/v1/b/b1/o/o1").status == 204

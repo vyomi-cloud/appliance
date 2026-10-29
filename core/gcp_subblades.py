@@ -71,12 +71,12 @@ _STORAGE_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Data", "items": [
         {"key": "objects",     "label": "Objects",          "icon": "folder",     "type": "objects"},
-        {"key": "lifecycle",   "label": "Lifecycle",        "icon": "history_toggle_off","type":"stub"},
+        {"key": "lifecycle",   "label": "Lifecycle",        "icon": "history_toggle_off","type":"gcsLifecycle"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "configuration","label":"Configuration",     "icon": "tune",       "type": "properties"},
-        {"key": "encryption",  "label": "Encryption",       "icon": "enhanced_encryption","type":"stub"},
-        {"key": "retention",   "label": "Retention",        "icon": "lock",       "type": "stub"},
+        {"key": "configuration","label":"Configuration",     "icon": "tune",       "type": "gcsConfig"},
+        {"key": "encryption",  "label": "Encryption",       "icon": "enhanced_encryption","type":"gcsEncryption"},
+        {"key": "retention",   "label": "Retention",        "icon": "lock",       "type": "gcsRetention"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [

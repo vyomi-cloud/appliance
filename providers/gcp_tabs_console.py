@@ -171,6 +171,37 @@ def _compute(op: str, name: str, body: dict):
 
 
 # ---------------------------------------------------------------------------
+# Cloud Storage — bucket settings (lifecycle, encryption, retention, …)
+# ---------------------------------------------------------------------------
+def _storage(op: str, name: str, body: dict):
+    from core import gcp_storage_core as gcs
+    s = _server()
+    rec = s.gcp_storage_state.get("buckets", {}).get(name)
+    if not isinstance(rec, dict):
+        raise T.TabError(404, "NOT_FOUND", "The specified bucket does not exist.")
+    project = str(rec.get("project") or "cloudlearn")
+    v = T.view_op("storage", op)
+    if v:
+        return {"ok": True, "item": T.view("storage", v, s._gcp_storage_bucket_view(project, rec))}
+    if op == "lockRetention":
+        try:
+            gcs.lock_retention(rec)
+        except gcs.BucketPatchError as e:
+            raise T.TabError(e.status, e.reason.upper(), e.message)
+        _usage("storage", op, name)
+        return {"ok": True, "item": s._gcp_storage_bucket_view(project, rec)}
+    patch = T.storage_patch(op, body)
+    if patch is None:
+        return None
+    try:
+        gcs.apply_bucket_patch(rec, gcs.validate_bucket_patch(rec, patch))
+    except gcs.BucketPatchError as e:
+        raise T.TabError(e.status, "INVALID_ARGUMENT" if e.status == 400 else "FAILED_PRECONDITION", e.message)
+    _usage("storage", op, name, {"bucket": name, "fields": ",".join(patch)})
+    return {"ok": True, "item": s._gcp_storage_bucket_view(project, rec)}
+
+
+# ---------------------------------------------------------------------------
 # Project IAM policy (every resource's Permissions tab)
 # ---------------------------------------------------------------------------
 def _iam_project(op: str, project: str, body: dict):
@@ -191,6 +222,7 @@ def _iam_project(op: str, project: str, body: dict):
 
 _HANDLERS = {
     "compute": _compute,
+    "storage": _storage,
 }
 
 

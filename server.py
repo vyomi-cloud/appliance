@@ -16971,7 +16971,17 @@ def _gcp_storage_bucket_view(project: str, bucket: dict) -> dict:
         "labels": bucket.get("labels", {}),
         "iamConfiguration": _gcp_storage_sanitize_iam_config(bucket.get("iamConfiguration")),
         "etag": bucket.get("etag", ""),
+        # lifecycle / retentionPolicy / encryption / versioning / softDeletePolicy (buckets.patch)
+        **_gcp_storage_settings_view(bucket),
     }
+
+
+def _gcp_storage_settings_view(bucket: dict) -> dict:
+    try:
+        from core import gcp_storage_core as _gcs_core
+        return _gcs_core.bucket_settings_view(bucket)
+    except Exception:
+        return {}
 
 
 def _gcp_storage_sanitize_iam_config(conf: Any) -> dict:

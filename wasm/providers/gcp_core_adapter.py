@@ -863,6 +863,26 @@ def _compute_tab(g, op, body):
     return None
 
 
+def _storage_tab(name, op, body):
+    st, b = _call("storage", "GET", "/storage/v1/b/%s" % name)
+    if st >= 300:
+        raise _T.TabError(404, "NOT_FOUND", "The specified bucket does not exist.")
+    v = _T.view_op("storage", op)
+    if v:
+        return {"ok": True, "item": _T.view("storage", v, b)}
+    if op == "LockRetention":
+        st, out = _call("storage", "POST", "/storage/v1/b/%s/lockRetentionPolicy" % name, {}, {})
+    else:
+        patch = _T.storage_patch(op, body)
+        if patch is None:
+            return None
+        st, out = _call("storage", "PATCH", "/storage/v1/b/%s" % name, {}, patch)
+    if st >= 300:
+        err = (out or {}).get("error") or {}
+        raise _T.TabError(st, "INVALID_ARGUMENT" if st == 400 else "FAILED_PRECONDITION", err.get("message") or "Update failed")
+    return {"ok": True, "item": out}
+
+
 def _project_policy(op, project, body):
     res = "projects/%s" % (project or PROJ)
     st, pol = _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})
@@ -874,7 +894,7 @@ def _project_policy(op, project, body):
     return {"ok": st < 300, "project": project, "bindings": out.get("bindings", [])}
 
 
-_TAB_HANDLERS = {"compute": _compute_tab}
+_TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab}
 
 
 def tab_dispatch(svc, operation, name, body, resources=None, account="default"):

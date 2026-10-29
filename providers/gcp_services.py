@@ -190,10 +190,18 @@ async def api_gcp_storage_patch_bucket(bucket: str, request: Request):
         raise HTTPException(404, detail="Bucket not found")
     payload = await request.json() if request is not None else {}
     payload = payload if isinstance(payload, dict) else {}
-    for key in ("storageClass", "location", "locationType"):
+    # Lifecycle / retention / encryption / versioning / soft delete / storage class / labels
+    # go through the GCS engine's buckets.patch validation (core/gcp_storage_core) — the
+    # same rules Nano's bucket PATCH applies.
+    from core import gcp_storage_core as _gcs_core
+    try:
+        _gcs_core.apply_bucket_patch(rec, _gcs_core.validate_bucket_patch(rec, payload))
+    except _gcs_core.BucketPatchError as e:
+        raise HTTPException(e.status, detail=e.message)
+    for key in ("location", "locationType"):
         if payload.get(key):
             rec[key] = str(payload[key])
-    for key in ("labels", "versioning", "iamConfiguration", "lifecycle", "encryption", "website", "cors"):
+    for key in ("iamConfiguration", "website", "cors"):
         if isinstance(payload.get(key), (dict, list)):
             rec[key] = payload[key]
     if "defaultEventBasedHold" in payload:
@@ -320,6 +328,11 @@ def api_gcp_storage_delete_object(bucket: str, object_name: str):
     s = _server()
     if bucket not in gcp_storage_state.get("objects", {}) or object_name not in gcp_storage_state["objects"][bucket]:
         raise HTTPException(404, detail="Object not found")
+    from core import gcp_storage_core as _gcs_core
+    held = _gcs_core.retention_blocks(gcp_storage_state.get("buckets", {}).get(bucket) or {}, bucket, object_name,
+                                      gcp_storage_state["objects"][bucket][object_name])
+    if held:
+        raise HTTPException(403, detail=held)
     try:
         from core import gcp_gcs_store as gcs
         gcs.delete(s._tenant_scoped_bucket(bucket), object_name)

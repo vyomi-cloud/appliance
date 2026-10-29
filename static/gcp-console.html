@@ -1736,6 +1736,127 @@ GT.gcesnapshots = async function(host, svc, item){
       run: x => subPost(svc, "deleteSnapshot", name, {name: x.name})}],
   });
 };
+
+// ---- Cloud Storage ----------------------------------------------------------
+function secsHuman(s){
+  s = Number(s || 0); if (!s) return "0 seconds";
+  for (const [u, n] of [["year", 31557600], ["day", 86400], ["hour", 3600], ["minute", 60]])
+    if (s % n === 0 && s >= n) return (s / n) + " " + u + (s / n === 1 ? "" : "s");
+  return s + " seconds";
+}
+GT.gcsconfig = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const b = await tabView(svc, item, "Configuration");
+    const iamc = b.iamConfiguration || {};
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("", [["Location", b.location], ["Location type", b.locationType || "multi-region"],
+      ["Default storage class", b.storageClass], ["Public access prevention", iamc.publicAccessPrevention || "inherited"],
+      ["Access control", (iamc.uniformBucketLevelAccess || {}).enabled === false ? "Fine-grained" : "Uniform"],
+      ["Object versioning", (b.versioning || {}).enabled ? "Enabled" : "Disabled"], ["Created", b.timeCreated], ["Updated", b.updated],
+      ["Metageneration", b.metageneration], ["Project number", b.projectNumber], ["gsutil URI", "gs://" + name]]));
+    if (!editing) { wrap.append(el("button",{class:"btn", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit default storage class")); return; }
+    wrap.append(inlineForm([{name: "storageClass", label: "Default storage class", type: "select", value: b.storageClass,
+      options: ["STANDARD", "NEARLINE", "COLDLINE", "ARCHIVE"]}], "Save", async v => {
+        const r = await subPost(svc, "setStorageClass", name, v);
+        if (r.ok) { toast("Default storage class set to " + v.storageClass); editing = false; paint(); } else toast("Update failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paint(); }));
+  }
+  await paint();
+};
+function lifecycleCond(c){
+  const p = [];
+  if (c.age != null) p.push("Age: " + c.age + " day" + (c.age == 1 ? "" : "s"));
+  if (c.numNewerVersions != null) p.push("Newer versions: " + c.numNewerVersions);
+  if (c.isLive != null) p.push(c.isLive ? "Live objects" : "Noncurrent objects");
+  if (c.daysSinceNoncurrentTime != null) p.push("Days since noncurrent: " + c.daysSinceNoncurrentTime);
+  if (c.createdBefore) p.push("Created before " + c.createdBefore);
+  if (c.matchesPrefix) p.push("Prefix: " + c.matchesPrefix.join(", "));
+  if (c.matchesSuffix) p.push("Suffix: " + c.matchesSuffix.join(", "));
+  if (c.matchesStorageClass) p.push("Storage class: " + c.matchesStorageClass.join(", "));
+  return p.join(" · ") || "Any object";
+}
+GT.gcslifecycle = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let rules = [];
+  await childList(host, {
+    load: async () => { const b = await tabView(svc, item, "Lifecycle"); rules = ((b.lifecycle || {}).rule) || [];
+      return {ok: true, json: {items: rules.map((r, i) => ({i, ...r}))}}; },
+    noun: "rule", nouns: "rules", emptyIcon: "history_toggle_off",
+    empty: "No lifecycle rules on " + name + ". Rules delete objects or change their storage class as they age.",
+    columns: [["action", "Action", r => r.action.type === "SetStorageClass" ? "Set to " + r.action.storageClass : r.action.type === "Delete" ? "Delete object" : "Abort incomplete multipart upload"],
+              ["condition", "Object condition", r => lifecycleCond(r.condition || {})]],
+    create: {label: "Add a rule", submit: "Create", done: "Rule added",
+      fields: [{name: "action", label: "Action", type: "select", value: "Delete",
+                options: [{value: "Delete", label: "Delete object"}, {value: "SetStorageClass", label: "Set storage class"},
+                          {value: "AbortIncompleteMultipartUpload", label: "Abort incomplete multipart upload"}]},
+               {name: "storageClass", label: "Storage class (for Set storage class)", type: "select", value: "NEARLINE", options: ["NEARLINE", "COLDLINE", "ARCHIVE", "STANDARD"]},
+               {name: "age", label: "Age (days)", type: "number", value: 30, width: 90},
+               {name: "matchesPrefix", label: "Name prefix (optional)", placeholder: "logs/"}],
+      run: v => {
+        const action = {type: v.action}; if (v.action === "SetStorageClass") action.storageClass = v.storageClass;
+        const condition = {age: Number(v.age)}; if (v.matchesPrefix.trim()) condition.matchesPrefix = [v.matchesPrefix.trim()];
+        return subPost(svc, "setLifecycle", name, {rule: [...rules, {action, condition}]});
+      }},
+    rowActions: [{label: "Delete", icon: "delete", danger: true, confirm: () => "Delete this lifecycle rule?",
+      run: r => subPost(svc, "setLifecycle", name, {rule: rules.filter((_, j) => j !== r.i)})}],
+  });
+};
+GT.gcsencryption = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const b = await tabView(svc, item, "Encryption");
+    const key = (b.encryption || {}).defaultKmsKeyName || "";
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("", [["Encryption type", key ? "Customer-managed encryption key (CMEK)" : "Google-managed encryption key"],
+      ["Default Cloud KMS key", key || "Google-managed (no key to manage)"]]));
+    if (!editing) { wrap.append(el("button",{class:"btn", onclick:()=>{ editing = true; paint(); }}, icon("edit"), "Edit encryption")); return; }
+    const kms = svcByKey("kms");
+    let keys = [];
+    try { const kr = await api("GET", fillCommon(kms.collection_path)); keys = ((kr.json || {}).items || (kr.json || {}).keys || []); } catch(_) {}
+    const keyNames = keys.map(k => k.resourceName || ("projects/" + PROJECT + "/locations/" + (k.location || "global") + "/keyRings/" + (k.keyring || "default") + "/cryptoKeys/" + lastSeg(k.name)));
+    wrap.append(inlineForm([{name: "defaultKmsKeyName", label: "Encryption key", type: "select", value: key,
+      options: [{value: "", label: "Google-managed encryption key"}, ...keyNames.map(k => ({value: k, label: k}))]}], "Save", async v => {
+        const r = await subPost(svc, "setEncryption", name, v);
+        if (r.ok) { toast("Encryption updated"); editing = false; paint(); } else toast("Update failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paint(); }));
+  }
+  await paint();
+};
+GT.gcsretention = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let form = "";
+  const wrap = el("div",{}); host.append(wrap);
+  const act = async (op, body, msg) => { const r = await subPost(svc, op, name, body); if (r.ok) { toast(msg); form = ""; paint(); } else toast("Failed: " + errMsg(r), "err"); };
+  async function paint(){
+    const b = await tabView(svc, item, "Retention");
+    const rp = b.retentionPolicy, sd = b.softDeletePolicy || {}, ver = (b.versioning || {}).enabled;
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("Retention policy", rp ? [["Retention period", secsHuman(rp.retentionPeriod)], ["Effective since", rp.effectiveTime],
+      ["Policy status", rp.isLocked ? "Locked (permanent)" : "Unlocked"]] : [["Retention period", "No retention policy"]]));
+    const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap"});
+    if (!rp || !rp.isLocked) bar.append(el("button",{class:"btn", onclick:()=>{ form = "ret"; paint(); }}, icon("lock_clock"), rp ? "Edit retention period" : "Set retention policy"));
+    if (rp && !rp.isLocked) bar.append(el("button",{class:"btn", onclick:()=>act("setRetention", {retentionPeriod: null}, "Retention policy removed")}, icon("delete"), "Remove policy"),
+      el("button",{class:"btn danger", onclick:()=>{ if (confirm("Locking is permanent: the policy can never be removed or shortened. Lock it?")) act("lockRetention", {}, "Retention policy locked"); }}, icon("lock"), "Lock policy"));
+    if (rp && rp.isLocked) bar.append(el("button",{class:"btn", onclick:()=>{ form = "ret"; paint(); }}, icon("schedule"), "Extend retention period"));
+    wrap.append(bar);
+    if (form === "ret") wrap.append(inlineForm([{name: "days", label: "Retention period (days)", type: "number", value: rp ? Math.round(rp.retentionPeriod / 86400) || 1 : 7, width: 120}],
+      "Save", v => act("setRetention", {retentionPeriod: String(Math.round(Number(v.days) * 86400))}, "Retention policy saved"), ()=>{ form = ""; paint(); }));
+    wrap.append(kvCardOf("Data protection", [["Object versioning", ver ? "Enabled" : "Disabled"],
+      ["Soft delete retention", Number(sd.retentionDurationSeconds || 0) ? secsHuman(sd.retentionDurationSeconds) : "Off"]]));
+    const bar2 = el("div",{style:"display:flex;gap:8px;flex-wrap:wrap"});
+    bar2.append(el("button",{class:"btn", onclick:()=>act("setVersioning", {enabled: !ver}, "Object versioning " + (ver ? "disabled" : "enabled"))}, icon("history"), ver ? "Disable object versioning" : "Enable object versioning"));
+    bar2.append(el("button",{class:"btn", onclick:()=>{ form = "sd"; paint(); }}, icon("delete_history"), "Edit soft delete"));
+    wrap.append(bar2);
+    if (form === "sd") wrap.append(inlineForm([{name: "days", label: "Soft delete retention (days, 0 = off, 7-90)", type: "number", value: Math.round(Number(sd.retentionDurationSeconds || 0) / 86400), width: 120}],
+      "Save", v => act("setSoftDelete", {retentionDurationSeconds: Math.round(Number(v.days) * 86400)}, "Soft delete policy saved"), ()=>{ form = ""; paint(); }));
+  }
+  await paint();
+};
 // ========== END DETAIL TABS =================================================
 
 // ========== CREATE — collapsible-sections form + right summary card =========
