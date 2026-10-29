@@ -253,12 +253,12 @@ _SECRETMANAGER_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Secret", "items": [
         {"key": "value",       "label": "Secret value",     "icon": "key",        "type": "secretvalue"},
-        {"key": "versions",    "label": "Versions",         "icon": "history",    "type": "stub"},
-        {"key": "rotation",    "label": "Rotation",         "icon": "autorenew",  "type": "stub"},
-        {"key": "replication", "label": "Replication",      "icon": "public",     "type": "stub"},
+        {"key": "versions",    "label": "Versions",         "icon": "history",    "type": "smVersions"},
+        {"key": "rotation",    "label": "Rotation",         "icon": "autorenew",  "type": "smRotation"},
+        {"key": "replication", "label": "Replication",      "icon": "public",     "type": "smReplication"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "encryption",  "label": "Encryption",       "icon": "enhanced_encryption", "type": "stub"},
+        {"key": "encryption",  "label": "Encryption",       "icon": "enhanced_encryption", "type": "smEncryption"},
         *_settings_props(),
     ]},
 ]

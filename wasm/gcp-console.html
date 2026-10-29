@@ -2511,6 +2511,117 @@ GT.fsimportexport = async function(host, svc, item){
   }
   await paintOps();
 };
+
+// ---- Secret Manager -----------------------------------------------------------
+GT.secretvalue = async function(host, svc, item){
+  const name = tabName(svc, item);
+  const it = ((await subGet(svc, "getLatestVersion", name)).json || {}).item || {};
+  const lv = it.latest;
+  host.append(kvCardOf("", [["Latest version", lv ? lv.version : "No versions"], ["Version state", lv ? lv.state : "Add a version to store a value"],
+    ["Created", lv ? lv.createTime : "Not created"], ["Versions", String(it.versionCount || 0)]]));
+  if (lv && lv.state !== "ENABLED") { host.append(el("div",{style:"font-size:12.5px;color:var(--sub)"}, "Version " + lv.version + " is " + lv.state.toLowerCase() + " — enable it on the Versions tab to read its value.")); return; }
+  // Hidden until "Retrieve secret value" (versions/latest:access); Edit saves a NEW version.
+  let value = "", revealed = false, editing = false, plaintext = false;
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  const asPairs = s => { try { const o = JSON.parse(s); if (o && typeof o === "object" && !Array.isArray(o)) return Object.keys(o).map(k => [k, String(o[k])]); } catch(_) {} return null; };
+  async function save(v){
+    const r = await subPost(svc, "addVersion", name, {value: v});
+    if (r.ok) { value = v; editing = false; toast("Saved as version " + r.json.version); render(); } else toast("Save failed: " + errMsg(r), "err");
+  }
+  function render(){
+    panel.innerHTML = "";
+    const body = el("div",{style:"padding:14px"}); panel.append(body);
+    if (!revealed) {
+      if (!lv) { body.append(el("div",{style:"color:#5f6b7a;margin-bottom:12px;font-size:13px"}, name + " has no value yet.")); }
+      else body.append(el("div",{style:"color:#5f6b7a;margin-bottom:12px;font-size:13px"}, "The secret value is hidden. Retrieve it to view or edit."));
+      body.append(el("button",{class:"btn", onclick: async ()=>{
+        if (lv) { const r = await subPost(svc, "accessVersion", name, {version: "latest"}); if (!r.ok) { toast("Access failed: " + errMsg(r), "err"); return; } value = String(r.json.value ?? ""); }
+        revealed = true; editing = !lv; render();
+      }}, icon(lv ? "visibility" : "add"), lv ? "Retrieve secret value" : "Add a value"));
+      return;
+    }
+    const pairs = asPairs(value);
+    const bar = el("div",{style:"display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap"});
+    if (pairs) { bar.append(el("button",{class:"btn" + (plaintext ? "" : " primary"), onclick:()=>{ plaintext = false; render(); }}, "Key/value"),
+                           el("button",{class:"btn" + (plaintext ? " primary" : ""), onclick:()=>{ plaintext = true; render(); }}, "Plaintext")); }
+    bar.append(el("div",{style:"flex:1"}));
+    if (!editing) bar.append(el("button",{class:"btn", onclick:()=>{ editing = true; render(); }}, icon("edit"), "Edit"));
+    body.append(bar);
+    if (plaintext || !pairs || editing) {
+      const ta = el("textarea",{rows: 7, style:"width:100%;box-sizing:border-box;font-family:monospace;font-size:13px;padding:8px;border:1px solid #aab7b8;border-radius:4px"});
+      ta.value = value; ta.readOnly = !editing; body.append(ta);
+      if (editing) body.append(el("div",{style:"display:flex;gap:8px;margin-top:14px"},
+        el("button",{class:"btn primary", onclick:()=>save(ta.value)}, icon("save"), "Save as new version"),
+        el("button",{class:"btn", onclick:()=>{ editing = false; render(); }}, "Cancel")));
+    } else body.append(tableOf([["k", "Key"], ["v", "Value"]], pairs.map(([k, v]) => ({k, v}))));
+  }
+  render();
+};
+GT.smversions = async function(host, svc, item){
+  const name = tabName(svc, item);
+  await childList(host, {
+    load: () => subGet(svc, "listVersions", name), noun: "version", nouns: "versions", emptyIcon: "history",
+    empty: name + " has no versions — add one to store a secret value.",
+    columns: [["version", "Version"], ["state", "Status", v => stateBadge(v.state === "ENABLED" ? "Enabled" : v.state === "DISABLED" ? "Disabled" : "Destroyed")],
+              ["createTime", "Created"], ["destroyTime", "Destroyed", v => v.destroyTime || "Not destroyed"]],
+    create: {label: "New version", submit: "Add new version", done: "Version added",
+      fields: [{name: "value", label: "Secret value", type: "textarea", rows: 3, value: ""}],
+      run: v => subPost(svc, "addVersion", name, {value: v.value})},
+    rowActions: [
+      {label: "Disable", icon: "block", when: v => v.state === "ENABLED", run: v => subPost(svc, "disableVersion", name, {version: v.version})},
+      {label: "Enable", icon: "check_circle", when: v => v.state === "DISABLED", run: v => subPost(svc, "enableVersion", name, {version: v.version})},
+      {label: "Destroy", icon: "delete_forever", danger: true, when: v => v.state !== "DESTROYED",
+       confirm: v => "Destroy version " + v.version + "? Its value is permanently deleted.", run: v => subPost(svc, "destroyVersion", name, {version: v.version})}],
+  });
+};
+GT.smrotation = async function(host, svc, item){
+  const name = tabName(svc, item);
+  let editing = false;
+  const wrap = el("div",{}); host.append(wrap);
+  async function paint(){
+    const it = ((await subGet(svc, "getRotation", name)).json || {}).item || {};
+    const rot = it.rotation;
+    wrap.innerHTML = "";
+    wrap.append(kvCardOf("", [["Rotation", rot ? "Enabled" : "Not scheduled"], ["Rotation period", rot && rot.rotationPeriod ? secsHuman(String(rot.rotationPeriod).replace(/s$/, "")) : "Not set"],
+      ["Next rotation", rot ? rot.nextRotationTime : "Not scheduled"],
+      ["Notification topics", (it.topics || []).map(t => lastSeg(t.name)).join(", ") || "No Pub/Sub topics"]]));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0"});
+    bar.append(el("button",{class:"btn", onclick:()=>{ editing = true; paint(); }}, icon("edit"), rot ? "Edit rotation" : "Set rotation period"));
+    if (rot) bar.append(el("button",{class:"btn", onclick: async ()=>{ const r = await subPost(svc, "setRotation", name, {enabled: false}); if (r.ok) { toast("Rotation removed"); paint(); } else toast("Failed: " + errMsg(r), "err"); }}, icon("event_busy"), "Remove rotation"));
+    wrap.append(bar);
+    if (!editing) return;
+    let topics = [];
+    try { const r = await api("GET", fillCommon(svcByKey("pubsub").collection_path)); topics = ((r.json || {}).items || (r.json || {}).topics || []).map(t => "projects/" + PROJECT + "/topics/" + lastSeg(t.name)); } catch(_) {}
+    wrap.append(inlineForm([{name: "rotationPeriodDays", label: "Rotation period (days)", type: "number", value: rot && rot.rotationPeriod ? Math.round(parseInt(rot.rotationPeriod, 10) / 86400) : 90, width: 110},
+      {name: "topic", label: "Pub/Sub topic for rotation notifications", type: "select", value: ((it.topics || [])[0] || {}).name || topics[0], options: topics}], "Save", async v => {
+        const r = await subPost(svc, "setRotation", name, {rotationPeriodDays: Number(v.rotationPeriodDays), topics: v.topic ? [v.topic] : []});
+        if (r.ok) { toast("Rotation scheduled"); editing = false; paint(); } else toast("Failed: " + errMsg(r), "err");
+      }, ()=>{ editing = false; paint(); }));
+    if (!topics.length) wrap.append(el("div",{style:"font-size:12px;color:var(--sub)"}, "Rotation notifications need a Pub/Sub topic — create one first."));
+  }
+  await paint();
+};
+GT.smreplication = async function(host, svc, item){
+  const name = tabName(svc, item);
+  const it = ((await subGet(svc, "getReplication", name)).json || {}).item || {};
+  const rep = it.replication || {};
+  const um = rep.userManaged || rep.user_managed;
+  host.append(kvCardOf("", [["Replication policy", um ? "User-managed" : "Automatic"], ["Created", it.createTime || "Not recorded"],
+    ["Locations", um ? (um.replicas || []).map(r => r.location).join(", ") : "Chosen by Google (multi-region)"]]));
+  if (um) host.append(tableOf([["location", "Location"], ["cmek", "Encryption", r => (r.customerManagedEncryption || {}).kmsKeyName || "Google-managed"]], um.replicas || []));
+  host.append(el("div",{style:"font-size:12px;color:var(--sub);margin-top:8px"}, "A secret's replication policy is set when it is created and can't be changed."));
+};
+GT.smencryption = async function(host, svc, item){
+  const name = tabName(svc, item);
+  const it = ((await subGet(svc, "getEncryption", name)).json || {}).item || {};
+  const rep = it.replication || {};
+  const auto = rep.automatic, um = rep.userManaged;
+  const keys = auto ? [((auto.customerManagedEncryption || {}).kmsKeyName)] : (um ? (um.replicas || []).map(r => (r.customerManagedEncryption || {}).kmsKeyName) : []);
+  const cmek = keys.filter(Boolean);
+  host.append(kvCardOf("", [["Encryption", cmek.length ? "Customer-managed encryption key (CMEK)" : "Google-managed encryption key"],
+    ["Cloud KMS key", cmek.join(", ") || "Google-managed (no key to manage)"]]));
+  host.append(el("div",{style:"font-size:12px;color:var(--sub);margin-top:8px"}, "Secret encryption comes from the replication policy chosen at creation."));
+};
 // ========== END DETAIL TABS =================================================
 
 // ========== CREATE — collapsible-sections form + right summary card =========

@@ -684,3 +684,86 @@ def test_firestore_export_then_import_round_trips_through_gcs(c, fsdb):
     assert [o["operationType"] for o in out["items"]][:2] == ["IMPORT_DOCUMENTS", "EXPORT_DOCUMENTS"]
     st, bad = c.sub("firestore", "importDocuments", fsdb, {"uri": "gs://%s/missing" % bucket})
     assert st == 404
+
+
+# ── Secret Manager ────────────────────────────────────────────────────────────
+@pytest.fixture(scope="module")
+def secret(c):
+    name = uid("tabsec")
+    st, _ = c.create("secretmanager", {"name": name, "secret_value": "first", "replication": "user-managed",
+                                       "regions": "us-central1,europe-west1"})
+    assert st == 200
+    yield name
+    c.delete("secretmanager", name)
+
+
+def test_secret_versions_lifecycle(c, secret):
+    st, out = c.sub("secretmanager", "listVersions", secret)
+    assert [v["state"] for v in out["items"]] == ["ENABLED"]
+    st, out = c.sub("secretmanager", "addVersion", secret, {"value": "second"})
+    assert st == 200
+    v2 = out["version"]
+    st, out = c.sub("secretmanager", "accessVersion", secret, {"version": "latest"})
+    assert out["value"] == "second" and out["version"] == v2
+    st, _ = c.sub("secretmanager", "disableVersion", secret, {"version": v2})
+    st, bad = c.sub("secretmanager", "accessVersion", secret, {"version": v2})
+    assert st == 400
+    st, _ = c.sub("secretmanager", "destroyVersion", secret, {"version": v2})
+    assert st == 200
+    st, out = c.sub("secretmanager", "listVersions", secret)
+    d = next(v for v in out["items"] if v["version"] == v2)
+    assert d["state"] == "DESTROYED" and d.get("destroyTime")
+    st, bad = c.sub("secretmanager", "enableVersion", secret, {"version": v2})
+    assert st == 400
+    st, out = c.sub("secretmanager", "accessVersion", secret, {"version": "latest"})
+    assert out["value"] == "first"                              # latest = newest not-destroyed version
+    st, out = c.sub("secretmanager", "getLatestVersion", secret)
+    assert out["item"]["latest"]["version"] != v2 and out["item"]["versionCount"] == 2
+
+
+def test_secret_rotation_needs_a_topic(c, secret):
+    st, bad = c.sub("secretmanager", "setRotation", secret, {"rotationPeriodDays": 30, "topics": []})
+    assert st == 400 and "topic" in bad["message"].lower()
+    topic = uid("rottopic")
+    assert c.create("pubsub", {"name": topic})[0] == 200
+    full = "projects/%s/topics/%s" % (c.project, topic)
+    st, bad = c.sub("secretmanager", "setRotation", secret, {"rotationPeriodDays": 0.01, "topics": [full]})
+    assert st == 400                                            # under the 1-hour minimum
+    st, _ = c.sub("secretmanager", "setRotation", secret, {"rotationPeriodDays": 30, "topics": [full]})
+    assert st == 200
+    st, out = c.sub("secretmanager", "getRotation", secret)
+    assert out["item"]["rotation"]["rotationPeriod"] == "2592000s" and out["item"]["rotation"]["nextRotationTime"]
+    assert [t["name"] for t in out["item"]["topics"]] == [full]
+    st, _ = c.sub("secretmanager", "setRotation", secret, {"enabled": False})
+    st, out = c.sub("secretmanager", "getRotation", secret)
+    assert "rotation" not in out["item"]
+    c.delete("pubsub", topic)
+
+
+def test_secret_versions_survive_a_json_round_trip_in_the_engine():
+    """Nano persists stores as JSON (int version keys come back as strings)."""
+    from core import gcp_secretmanager_core as smc
+    from core.kv_store import InMemoryKvStore
+    import base64 as b64
+    st = InMemoryKvStore()
+    call = lambda m, p, q=None, b=None: smc.dispatch(st, m, p, q or {}, {}, json.dumps(b).encode() if b is not None else b"")
+    call("POST", "/v1/projects/p/secrets", {"secretId": "s"}, {"replication": {"automatic": {}}})
+    call("POST", "/v1/projects/p/secrets/s:addVersion", None, {"payload": {"data": b64.b64encode(b"one").decode()}})
+    for k, sec in list(st.secrets.items()):
+        st.secrets[k] = json.loads(json.dumps(sec))
+    r = call("GET", "/v1/projects/p/secrets/s/versions/1:access")
+    assert r.status == 200 and b64.b64decode(json.loads(r.body)["payload"]["data"]) == b"one"
+    call("POST", "/v1/projects/p/secrets/s:addVersion", None, {"payload": {"data": b64.b64encode(b"two").decode()}})
+    names = [v["name"].rsplit("/", 1)[-1] for v in json.loads(call("GET", "/v1/projects/p/secrets/s/versions").body)["versions"]]
+    assert names == ["2", "1"]
+
+
+def test_secret_replication_encryption_labels(c, secret):
+    st, out = c.sub("secretmanager", "getReplication", secret)
+    assert [r["location"] for r in out["item"]["replication"]["userManaged"]["replicas"]] == ["us-central1", "europe-west1"]
+    st, out = c.sub("secretmanager", "getEncryption", secret)
+    assert "replication" in out["item"]
+    st, _ = c.sub("secretmanager", "setLabels", secret, {"labels": {"owner": "payments"}})
+    assert st == 200
+    st, out = c.sub("secretmanager", "getLabels", secret)
+    assert out["item"]["labels"] == {"owner": "payments"}

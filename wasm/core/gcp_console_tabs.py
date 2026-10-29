@@ -1281,6 +1281,75 @@ def firestore_op(be, project: str, db: str, op: str, body: dict):
     return None
 
 
+# ---------------------------------------------------------------------------
+# Secret Manager — versions, rotation, replication, encryption
+# ---------------------------------------------------------------------------
+def secret_op(be, op: str, body: dict):
+    """One secret's detail-tab op over `be`: meta() (labels/rotation/topics/replication/
+    createTime), patch(fields), versions() newest first, add_version(value) -> version,
+    set_state(version, state), topic_exists(topic_id)."""
+    from core import gcp_secretmanager_core as smc
+    op = op[0].lower() + op[1:]
+    meta = be.meta()
+    if op in ("getRotation", "getReplication", "getEncryption", "getLabels"):
+        keep = {"getRotation": ("rotation", "topics", "createTime"), "getReplication": ("replication", "createTime"),
+                "getEncryption": ("replication",), "getLabels": ("labels",)}[op]
+        return {"ok": True, "item": {"name": be.name, **{k: meta[k] for k in keep if k in meta}}}
+    vs = be.versions()
+    if op == "getLatestVersion":
+        live = [v for v in vs if v["state"] != "DESTROYED"]
+        return {"ok": True, "item": {"name": be.name, "versionCount": len(vs), **({"latest": live[0]} if live else {})}}
+    if op == "listVersions":
+        return {"ok": True, "items": vs}
+    if op == "accessVersion":   # versions/{v}:access — "latest" = newest version that isn't destroyed
+        ref = str(body.get("version") or "latest")
+        live = [v for v in vs if v["state"] != "DESTROYED"]
+        cur = (live[0] if live else None) if ref == "latest" else next((v for v in vs if v["version"] == ref), None)
+        if cur is None:
+            raise TabError(404, "NOT_FOUND", "Secret Version [%s/versions/%s] not found." % (be.name, ref))
+        if cur["state"] != "ENABLED":
+            raise TabError(400, "FAILED_PRECONDITION", "Secret Version [%s/versions/%s] is in %s state." % (be.name, cur["version"], cur["state"]))
+        return {"ok": True, "version": cur["version"], "value": be.access(cur["version"])}
+    if op == "addVersion":
+        value = str(body.get("value") if body.get("value") is not None else "")
+        if not value:
+            raise TabError(400, "INVALID_ARGUMENT", "A secret version needs a value (payload.data).")
+        if len(value.encode()) > 65536:
+            raise TabError(400, "INVALID_ARGUMENT", "Secret payload must be at most 64 KiB.")
+        return {"ok": True, "version": be.add_version(value)}
+    if op in ("enableVersion", "disableVersion", "destroyVersion"):
+        ver = str(body.get("version") or "")
+        cur = next((v for v in vs if v["version"] == ver), None)
+        if cur is None:
+            raise TabError(404, "NOT_FOUND", "Secret Version [%s/versions/%s] not found." % (be.name, ver))
+        if cur["state"] == "DESTROYED":
+            raise TabError(400, "FAILED_PRECONDITION", "Secret Version [%s/versions/%s] is destroyed." % (be.name, ver))
+        be.set_state(ver, {"enableVersion": "ENABLED", "disableVersion": "DISABLED", "destroyVersion": "DESTROYED"}[op])
+        return {"ok": True, "version": ver}
+    patch = mask = None
+    if op == "setRotation":
+        topics = [{"name": t} for t in (body.get("topics") or []) if t]
+        if body.get("enabled") is False:
+            patch, mask = {"rotation": None}, "rotation"
+        else:
+            days = body.get("rotationPeriodDays")
+            rot = {**({"rotationPeriod": "%ds" % int(float(days) * 86400)} if days not in (None, "") else {}),
+                   **({"nextRotationTime": body["nextRotationTime"]} if body.get("nextRotationTime") else {})}
+            patch, mask = {"topics": topics, "rotation": rot}, "topics,rotation"
+    elif op == "setTopics":
+        patch, mask = {"topics": [{"name": t} for t in (body.get("topics") or []) if t]}, "topics"
+    elif op == "setLabels":
+        patch, mask = {"labels": validate_labels(body.get("labels", {}))}, "labels"
+    if patch is None:
+        return None
+    try:
+        fields = smc.validate_secret_patch(meta, patch, mask, be.topic_exists)
+    except smc.SecretPatchError as e:
+        raise TabError(e.status, e.token, e.message)
+    be.patch(fields)
+    return {"ok": True}
+
+
 def auto_subnet_second_octet(region: str) -> int:
     for r, cidr in AUTO_SUBNETS:
         if r == region:

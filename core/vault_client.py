@@ -307,3 +307,16 @@ def kv_list_versions(provider: str, space_id: str, name: str) -> list[dict]:
         ]
     except Exception:
         return []
+
+
+def kv_destroy_versions(provider: str, space_id: str, name: str, versions: list[int]) -> bool:
+    """Permanently destroy specific versions of a secret (their data is gone). True on success."""
+    c = _client()
+    if c is None:
+        return False
+    path = _kv_path(provider, space_id, name)
+    try:
+        c.secrets.kv.v2.destroy_secret_versions(path=path, versions=[int(v) for v in versions], mount_point=_KV_MOUNT)
+        return True
+    except Exception:
+        return False

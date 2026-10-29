@@ -740,6 +740,69 @@ def _firestore(op: str, name: str, body: dict):
 
 
 # ---------------------------------------------------------------------------
+# Secret Manager — Vault KV v2 holds the versions; core/vault_routes the secret's
+# settings + version states (shared with the native /v1 Secret Manager API)
+# ---------------------------------------------------------------------------
+class _OfflineSecret:
+    def __init__(self, name):
+        from core import vault_client as vc
+        from core import vault_routes as vr
+        self.vc, self.vr = vc, vr
+        self.space = vr._active_space_id(None)
+        self.id = T.short(name)
+        if self.id not in vr._gcp_idx_get(self.space, "secrets"):
+            raise T.TabError(404, "NOT_FOUND", "Secret [projects/%s/secrets/%s] not found." % (_project(), self.id))
+        self.name = "projects/%s/secrets/%s" % (_project(), self.id)
+
+    def meta(self):
+        m = self.vr.gcp_secret_meta(self.space, self.id)
+        m.pop("_", None)
+        m.setdefault("replication", {"automatic": {}})
+        m.setdefault("createTime", self.vr._gcp_idx_created(self.space, "secrets").get(self.id, ""))
+        return m
+
+    def patch(self, fields):
+        m = self.vr.gcp_secret_meta(self.space, self.id)
+        m.pop("_", None)
+        from core import gcp_secretmanager_core as smc
+        smc.apply_secret_patch(m, fields)
+        self.vr.gcp_secret_meta_put(self.space, self.id, m)
+
+    def versions(self):
+        return self.vr.gcp_secret_versions(self.space, self.id)
+
+    def add_version(self, value):
+        md = self.vc.kv_put("gcp", self.space, self.id, value)
+        if md is None:
+            raise T.TabError(503, "UNAVAILABLE", "The secret store (Vault) is unavailable.")
+        return str(md.get("version", ""))
+
+    def set_state(self, ver, state):
+        self.vr.gcp_secret_set_state(self.space, self.id, ver, state)
+
+    def access(self, ver):
+        import json as _json
+        got = self.vc.kv_get("gcp", self.space, self.id, version=int(ver))
+        if got is None:
+            raise T.TabError(503, "UNAVAILABLE", "The secret store (Vault) is unavailable.")
+        data = got.get("data") or {}
+        return data.get("value") if "value" in data else _json.dumps(data)
+
+    def topic_exists(self, topic):
+        from core import gcp_pubsub_emulator as emu
+        if emu.available():
+            return bool(emu.get_topic(_project(), topic))
+        return topic in _server().gcp_pubsub_state.get("topics", {})
+
+
+def _secretmanager(op: str, name: str, body: dict):
+    out = T.secret_op(_OfflineSecret(name), op, body)
+    if out is not None and not op.startswith(("get", "list")):
+        _usage("secretmanager", op, T.short(name), {k: body.get(k) for k in ("version",) if body.get(k)})
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Project IAM policy (every resource's Permissions tab)
 # ---------------------------------------------------------------------------
 def _iam_project(op: str, project: str, body: dict):
@@ -766,6 +829,7 @@ _HANDLERS = {
     "vpc": _vpc,
     "functions": _functions,
     "firestore": _firestore,
+    "secretmanager": _secretmanager,
 }
 
 

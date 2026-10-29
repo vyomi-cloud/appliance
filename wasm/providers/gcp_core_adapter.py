@@ -573,7 +573,12 @@ def _resource_op(service, operation, name="", body=None):
         if operation == "List":
             return _ok_list(svc)
         if operation == "Create":
-            st, p = _call(svc, "POST", base, {"secretId": rid}, {"replication": {"automatic": {}}})
+            try:   # the form's replication choice (automatic / user-managed regions)
+                repl = _sec.replication_from_form(body)
+            except _sec.SecretPatchError as e:
+                return {"ok": False, "code": "INVALID_ARGUMENT", "message": e.message, "name": rid}
+            st, p = _call(svc, "POST", base, {"secretId": rid},
+                          {"replication": repl, **({"labels": body["labels"]} if isinstance(body.get("labels"), dict) and body["labels"] else {})})
             if st < 300:
                 val = body.get("secret_value") or body.get("value")
                 if val:   # a secret may be created empty; a version exists only once a value is added
@@ -1220,6 +1225,54 @@ def _firestore_tab(name, op, body):
     return _T.firestore_op(_NanoFirestore(db), "nano-project", db, op, body)
 
 
+class _NanoSecret:
+    """Secret Manager storage for core/gcp_console_tabs.secret_op over core/gcp_secretmanager_core."""
+
+    def __init__(self, name):
+        self.id = _short(name)
+        self.base = "%s/secrets/%s" % (_P, self.id)
+        self.name = "projects/%s/secrets/%s" % (PROJ, self.id)
+        st, self.s = _call("secretmanager", "GET", self.base)
+        if st >= 300:
+            raise _T.TabError(404, "NOT_FOUND", "Secret [%s] not found." % self.name)
+
+    def meta(self):
+        return dict(self.s)
+
+    def patch(self, fields):
+        st, out = _call("secretmanager", "PATCH", self.base, {"updateMask": ",".join(fields)},
+                        {k: (v if v is not None else {}) for k, v in fields.items()})
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "INVALID_ARGUMENT", err.get("message") or "Update failed")
+
+    def versions(self):
+        st, out = _call("secretmanager", "GET", self.base + "/versions")
+        return [{"version": v["name"].rsplit("/", 1)[-1], "state": v["state"], "createTime": v.get("createTime", ""),
+                 **({"destroyTime": v["destroyTime"]} if v.get("destroyTime") else {})} for v in (out or {}).get("versions", [])]
+
+    def add_version(self, value):
+        st, out = _call("secretmanager", "POST", self.base + ":addVersion", {},
+                        {"payload": {"data": base64.b64encode(value.encode()).decode()}})
+        return out.get("name", "").rsplit("/", 1)[-1]
+
+    def set_state(self, ver, state):
+        verb = {"ENABLED": "enable", "DISABLED": "disable", "DESTROYED": "destroy"}[state]
+        _call("secretmanager", "POST", "%s/versions/%s:%s" % (self.base, ver, verb), {}, {})
+
+    def access(self, ver):
+        st, out = _call("secretmanager", "GET", "%s/versions/%s:access" % (self.base, ver))
+        return base64.b64decode(((out or {}).get("payload") or {}).get("data") or "").decode("utf-8", "replace")
+
+    def topic_exists(self, topic):
+        st, _ = _call("pubsub", "GET", "/v1/projects/%s/topics/%s" % (PROJ, topic))
+        return st < 300
+
+
+def _secret_tab(name, op, body):
+    return _T.secret_op(_NanoSecret(name), op, body)
+
+
 def _project_policy(op, project, body):
     res = "projects/%s" % (project or PROJ)
     st, pol = _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})
@@ -1232,7 +1285,8 @@ def _project_policy(op, project, body):
 
 
 _TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _sql_tab, "pubsub": _pubsub_tab,
-                 "vpc": _vpc_tab, "functions": _functions_tab, "firestore": _firestore_tab}
+                 "vpc": _vpc_tab, "functions": _functions_tab, "firestore": _firestore_tab,
+                 "secretmanager": _secret_tab}
 
 
 def tab_dispatch(svc, operation, name, body, resources=None, account="default"):
