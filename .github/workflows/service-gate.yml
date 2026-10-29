@@ -30,7 +30,9 @@ concurrency:
 
 jobs:
   gate:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.pull_request.head.ref, 'expansion/')
+    # Backend upgrades (expansion/upgrade-*) are reviewed and merged by a person,
+    # never gated or auto-merged here.
+    if: github.event_name == 'workflow_dispatch' || (startsWith(github.event.pull_request.head.ref, 'expansion/') && !startsWith(github.event.pull_request.head.ref, 'expansion/upgrade-'))
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
