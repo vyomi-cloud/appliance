@@ -49,7 +49,7 @@ copy_item "docs"
 copy_item "static"
 copy_item "tools"
 copy_item "packaging"
-# Aligned with packaging/debian/build-deb.sh + packaging/rpm/cloud-learn.spec
+# Aligned with packaging/debian/build-deb.sh + the RPM step in .github/workflows/release.yml
 # (which already bundle these). The tarball previously omitted routes/providers/
 # packs/setup_cython.py/docker-compose.yml/.env.example — fine when the simulator
 # image is pulled, but the build-from-source fallback (Dockerfile COPY routes …)

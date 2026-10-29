@@ -27,7 +27,7 @@ trap 'rm -rf "$STAGE"' EXIT
 #   /usr/share/man/man1/cloud-learn.1 — manpage (optional)
 mkdir -p "$STAGE/usr/lib/cloud-learn"
 mkdir -p "$STAGE/usr/bin"
-mkdir -p "$STAGE/usr/share/doc/cloud-learn"
+mkdir -p "$STAGE/usr/share/doc/vyomi"
 # /usr/share/vyomi/packaging/common/ houses the install-funnel phone-home
 # script invoked from postinst.sh. Kept under /usr/share (not /usr/lib)
 # because it's a tiny standalone shell script with no dependency on the
@@ -73,7 +73,7 @@ EOF
 chmod 0755 "$STAGE/usr/bin/cloud-learn"
 
 # Docs
-cp README.md LICENSE CHANGELOG.md "$STAGE/usr/share/doc/cloud-learn/" 2>/dev/null || true
+cp README.md LICENSE CHANGELOG.md "$STAGE/usr/share/doc/vyomi/" 2>/dev/null || true
 
 mkdir -p "$DIST"
 
@@ -81,7 +81,8 @@ mkdir -p "$DIST"
 fpm \
   --input-type dir \
   --output-type deb \
-  --name cloud-learn \
+  --name vyomi \
+  --replaces cloud-learn --conflicts cloud-learn --provides cloud-learn \
   --version "$VERSION" \
   --architecture all \
   --license MIT \
@@ -99,9 +100,9 @@ fpm \
   --after-install "$ROOT/packaging/debian/postinst.sh" \
   --before-remove "$ROOT/packaging/debian/prerm.sh" \
   --chdir "$STAGE" \
-  --package "$DIST/cloud-learn_${VERSION}_all.deb" \
+  --package "$DIST/vyomi_${VERSION}_all.deb" \
   .
 
 echo
-echo "==> Built: $DIST/cloud-learn_${VERSION}_all.deb"
-ls -la "$DIST/cloud-learn_${VERSION}_all.deb"
+echo "==> Built: $DIST/vyomi_${VERSION}_all.deb"
+ls -la "$DIST/vyomi_${VERSION}_all.deb"

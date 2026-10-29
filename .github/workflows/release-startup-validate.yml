@@ -55,8 +55,8 @@ jobs:
       - name: Fetch the release bundle (its own compose file)
         run: |
           VER="${{ steps.rel.outputs.ver }}"
-          gh release download "${{ steps.rel.outputs.tag }}" -p "cloud-learn-$VER.tar.gz" -D /tmp/rel
-          mkdir -p /tmp/bundle && tar -xzf "/tmp/rel/cloud-learn-$VER.tar.gz" -C /tmp/bundle --strip-components=1
+          gh release download "${{ steps.rel.outputs.tag }}" -p "vyomi-$VER.tar.gz" -D /tmp/rel
+          mkdir -p /tmp/bundle && tar -xzf "/tmp/rel/vyomi-$VER.tar.gz" -C /tmp/bundle --strip-components=1
           test -f /tmp/bundle/docker-compose.cloudlite.yml
 
       - name: Install Playwright
