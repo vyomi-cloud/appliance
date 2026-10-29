@@ -123,6 +123,10 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
         if svc in _aca.AZURE_DP_SERVICES:
             return _aca.resource_op(svc, operation, name, body)
     r = backends.resources
+    if name and provider == "aws" and svc == "ec2" and r.get(provider, account, svc, name) is None:
+        # The grid links an instance by its i-… id, the store keys it by Name tag.
+        name = next((k for k, v in r.collections.get(provider + "/" + account + "/" + svc, {}).items()
+                     if v.get("instance_id") == name), name)
     if operation == "List":
         return {"ok": True, "items": r.list(provider, account, svc)}
     if operation == "Create":
@@ -295,6 +299,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 aws_counts["lambda"] = len(DP.lambda_list().get("functions", []))
                 aws_counts["apigateway"] = len(DP.apigw_list().get("apis", []))
                 aws_counts["vpc"] = len(DP.vpc_list().get("vpcs", []))
+                aws_counts["eventbridge"] = len(DP.extras_list({"key": "eventbridge/rules"}).get("value", []))
             except Exception:
                 pass
             for svc, n in aws_counts.items():

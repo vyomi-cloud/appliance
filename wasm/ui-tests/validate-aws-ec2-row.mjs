@@ -22,6 +22,9 @@ try {
   check("launched instance is listed with an i-… id", !!row, JSON.stringify((await rows()).slice(-2)));
   check("no placeholder cells in the row", !!row && row.slice(1).every((c) => c && !/^[-—]$/.test(c)), JSON.stringify(row));
   check("state is running", !!row && row.includes("running"), JSON.stringify(row));
+  const id = row && row.find((c) => /^i-/.test(c));
+  const det = await page.evaluate(async (id) => { const r = await fetch("/api/ec2/instances/" + id); return { status: r.status, body: await r.json().catch(() => null) }; }, id);
+  check("instance detail by its i-… id answers 200 with the same id", det.status === 200 && det.body && det.body.instance_id === id, `status ${det.status}`);
   await sleep(1500);
   await page.goto(base + "/aws-console.html");
   await sleep(6000);
