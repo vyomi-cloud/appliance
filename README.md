@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-29 03:23 UTC · refreshes after every pipeline run_
+_Updated 2026-10-29 03:40 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -194,7 +194,7 @@ Built by the agent ahead of everything else, then **reviewed and merged by a per
 
 | Feature | Stage | Review PR |
 |---|---|---|
-| Automatic issue reporting from Nano, offline and sandboxes (user's GitHub account, bot fallback) [#187](https://github.com/vyomi-cloud/appliance/issues/187) | 📋 Queued | — |
+| Automatic issue reporting from Nano, offline and sandboxes (user's GitHub account, bot fallback) [#187](https://github.com/vyomi-cloud/appliance/issues/187) | 👀 In review | [PR #189](https://github.com/vyomi-cloud/appliance/pull/189) |
 
 ## Backend upgrades
 
@@ -203,7 +203,7 @@ Existing work rebuilt onto main by the agent, then **reviewed and merged by a pe
 | Upgrade | Source PRs | Stage | Review PR |
 |---|---|---|---|
 | Azure Service Bus over AMQP 1.0 (Rohith's stack #34→#45) [#181](https://github.com/vyomi-cloud/appliance/issues/181) | [#34](https://github.com/vyomi-cloud/appliance/pull/34) → [#35](https://github.com/vyomi-cloud/appliance/pull/35) → [#37](https://github.com/vyomi-cloud/appliance/pull/37) → [#38](https://github.com/vyomi-cloud/appliance/pull/38) → [#39](https://github.com/vyomi-cloud/appliance/pull/39) → [#40](https://github.com/vyomi-cloud/appliance/pull/40) → [#45](https://github.com/vyomi-cloud/appliance/pull/45) | 👀 In review | [PR #188](https://github.com/vyomi-cloud/appliance/pull/188) |
-| Siftly: app profiles, Azure Blob fidelity, Postgres 16 + pgvector (Rohith's stack #43→#46) [#182](https://github.com/vyomi-cloud/appliance/issues/182) | [#43](https://github.com/vyomi-cloud/appliance/pull/43) → [#44](https://github.com/vyomi-cloud/appliance/pull/44) → [#46](https://github.com/vyomi-cloud/appliance/pull/46) | 📋 Queued | — |
+| Siftly: app profiles, Azure Blob fidelity, Postgres 16 + pgvector (Rohith's stack #43→#46) [#182](https://github.com/vyomi-cloud/appliance/issues/182) | [#43](https://github.com/vyomi-cloud/appliance/pull/43) → [#44](https://github.com/vyomi-cloud/appliance/pull/44) → [#46](https://github.com/vyomi-cloud/appliance/pull/46) | 🛠 Rebuilding | — |
 
 ## Real backends and vyomi-libs
 
