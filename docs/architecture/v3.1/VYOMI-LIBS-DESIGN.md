@@ -28,6 +28,34 @@ One Python package, three ways to run it:
 
 The same code runs in all three. A conformance test that passes against one passes against the others.
 
+### 2.1 Python distributions (required for Nano)
+
+Nano runs in the browser and **cannot pull Docker images**. Every lib therefore also ships as a Python distribution, and
+that wheel is what Nano runs.
+
+- **Packages:** `vyomi-<lib>` on the index, `vyomi_<lib>` on import.
+  - The **core** installs with no server dependencies, so it's Nano-safe.
+  - The extra `vyomi-<lib>[server]` adds the ASGI server and backend controller used by the image.
+- **Wheel format:** pure Python, `py3-none-any`, so the same wheel installs on CPython (appliance, image, CI) and in
+  Pyodide (Nano). An sdist is published beside it.
+- **Dependency allowlist:** the core may depend only on the standard library, other `vyomi-*` cores, and packages
+  Pyodide ships or `micropip` can install as pure wheels. The allowlist lives in `libs/ALLOWED_CORE_DEPS.txt`, and CI
+  refuses anything else. A lib needing a native package (for example DuckDB for `vyomi-logs`) checks that Pyodide
+  provides a build of it, or keeps an in-process fallback for Nano.
+- **CI proves it in the browser runtime:** each lib's CI installs the built wheel into Pyodide (headless, Node) and
+  runs its contract tests in **Nano mode**, alongside the CPython runs.
+- **Published to three places per lib tag:**
+  1. **GitHub Release assets** (`vyomi-logs/v1.4.0`): wheel + sdist + `SHA256SUMS`. This is the source of truth.
+  2. **PyPI** as `vyomi-<lib>`, so users, CI pipelines and enterprise installs can `pip install` a lib directly
+     (optional; see §10).
+  3. **The Nano wheel set:** the wheels pinned in `libs.lock.json` are vendored into the Nano bundle under
+     `wasm/wheels/`. The portal Nano sync carries them to `app/nano/wheels/`, served **same-origin** and cached by the
+     Nano service worker. `nano-boot.js` installs them with `micropip` from those relative URLs and checks each
+     wheel's sha256 against the lock file. Nano never fetches from PyPI at runtime, so it works behind the portal and
+     offline once cached.
+- **Embedded mode** in the appliance installs the same pinned wheels into the appliance image (`pip install` from the
+  Release assets, hash-checked).
+
 ## 3. Lib catalog
 
 | Lib | Cloud services | Real backend it drives | Nano |
@@ -101,16 +129,17 @@ libs/
 ```
 
 **Each lib releases independently:**
-- Tag `vyomi-logs/v1.4.0` → its own workflow runs its tests and publishes:
+- Tag `vyomi-logs/v1.4.0` → its own workflow runs its tests (CPython, Pyodide, image) and publishes:
   - `vyomi/logs:1.4.0` + GHCR (multi-arch),
-  - the core wheel as a GitHub Release asset.
+  - the wheel + sdist as GitHub Release assets, and to PyPI if enabled (§2.1).
 - Semver: patch = fixes; minor = new operations or services; major = contract change.
 - Each lib's own CI runs only its tests on changes under `libs/<lib>/`.
 
 **The appliance pins lib versions** in `libs.lock.json` (lib → image version + wheel version + sha256):
 - `release.yml` pins the images in the compose files, as it does today for `vyomi/appliance`.
-- The Nano build vendors the pinned wheels.
-- The portal Nano sync carries them.
+- The Nano build vendors the pinned wheels into `wasm/wheels/` and writes the hashes into the Nano manifest.
+- The portal Nano sync carries them to `app/nano/wheels/`, in the same PR and deploy as the rest of the Nano bundle,
+  so the appliance and Nano always run the same lib versions.
 - Bumping a lib is a one-line PR to `libs.lock.json`, which runs the full appliance conformance before merge.
 - The release notes list lib versions.
 
@@ -153,7 +182,7 @@ The OSS backends a lib drives (k3s, VictoriaMetrics, Temporal…) keep their own
 
 | Phase | Work | Exit criterion |
 |---|---|---|
-| 0 | Contract v1, `libs/` scaffold, shared base image, lib release workflow, `libs.lock.json`, router + provisioner support, dashboard lists libs | A "hello" lib released, pinned and started on demand |
+| 0 | Contract v1, `libs/` scaffold, shared base image, lib release workflow (image + wheel + sdist), `libs.lock.json`, Pyodide test harness, Nano wheel loader in `nano-boot.js`, router + provisioner support, dashboard lists libs | A "hello" lib released, pinned, started on demand in the appliance **and** installed from `wasm/wheels/` in Nano |
 | 1 | **vyomi-workflow** first: move `core/stepfunctions_core.py` (already real) into the lib unchanged, then add GCP Workflows | Step Functions suites pass in image and embedded mode; Nano unchanged |
 | 2 | **vyomi-logs** (from `core/logs_core.py`) and **vyomi-messaging** (NATS delivery for SNS, EventBridge, Cloud Tasks, Scheduler; fixes #147–#149, #171) | Real delivery tests pass |
 | 3 | **vyomi-iam** (#172–#175), then **vyomi-identity** | Fake key rejected; least-privilege tests pass |
@@ -171,3 +200,5 @@ fallback, so no release regresses.
 3. **Azure AI services backend:** Ollama with a small model, a mock, or bring-your-own key.
 4. **Monorepo first then split** (proposed), or separate repos from day one.
 5. **Lib names:** `vyomi/<lib>` image names (`vyomi/logs`) vs. `vyomi/vyomi-logs`.
+6. **Public PyPI:** publish `vyomi-<lib>` wheels on PyPI (anyone can `pip install`; the source is already public in this
+   repo), or keep them to GitHub Release assets and the Nano bundle only.
