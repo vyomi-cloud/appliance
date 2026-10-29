@@ -185,6 +185,46 @@ def vpc_list_sgs(p=None):
         for g in m.get("sgs", {}).values()]}
 
 
+def vpc_list_subnets(p=None):
+    """GET /api/vpc/subnets — snake_case rows the VPC Subnets tab renders."""
+    import ipaddress
+    m = getattr(_VPC, "_vpc_model", {"subnets": {}})
+    rows = []
+    for i, s in enumerate(m.get("subnets", {}).values()):
+        try:
+            n = ipaddress.ip_network(s["cidr"], strict=False)
+            free = max(n.num_addresses - 5, 0)
+        except ValueError:
+            free = 0
+        rows.append({"id": s["id"], "subnet_id": s["id"], "vpc_id": s["vpc_id"],
+                     "name": s.get("name") or s["id"], "cidr_block": s["cidr"], "state": "available",
+                     "availability_zone": s.get("availability_zone") or "us-east-1" + "abc"[i % 3],
+                     "available_ip_count": free, "route_table_id": s.get("route_table") or "",
+                     "map_public_ip_on_launch": False})
+    return {"ok": True, "subnets": rows}
+
+
+def vpc_list_route_tables(p=None):
+    m = getattr(_VPC, "_vpc_model", {"route_tables": {}})
+    rows = []
+    for r in m.get("route_tables", {}).values():
+        rows.append({"id": r["id"], "route_table_id": r["id"], "vpc_id": r["vpc_id"],
+                     "name": r.get("name") or r["id"], "is_main": bool(r.get("main")),
+                     "routes": [{"destination": x.get("dest"), "target_id": x.get("target")} for x in r.get("routes", [])],
+                     "associations": [{"subnet_id": sid} for sid in r.get("subnets", [])]})
+    return {"ok": True, "route_tables": rows}
+
+
+def vpc_list_igws(p=None):
+    m = getattr(_VPC, "_vpc_model", {"igws": {}})
+    rows = []
+    for g in m.get("igws", {}).values():
+        att = [{"vpc_id": g["vpc_id"], "state": "available"}] if g.get("vpc_id") else []
+        rows.append({"id": g["id"], "internet_gateway_id": g["id"], "name": g.get("name") or g["id"],
+                     "state": "attached" if att else "detached", "attachments": att})
+    return {"ok": True, "internet_gateways": rows}
+
+
 def _now_z():
     import datetime
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")

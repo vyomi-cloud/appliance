@@ -27,6 +27,15 @@ try {
   await sleep(6000);
   const names = await page.evaluate(async () => (await (await fetch("/api/vpc/vpcs")).json()).items.map((f) => f.name));
   check("VPC survives a console reload", names.includes("my-vpc"), JSON.stringify(names));
+  const lists = await page.evaluate(async () => {
+    const o = {};
+    for (const k of ["subnets", "route-tables", "internet-gateways"]) { const r = await fetch("/api/vpc/" + k); o[k] = [r.status, r.ok ? await r.json() : null]; }
+    return o;
+  });
+  check("GET /api/vpc/subnets answers 200", lists["subnets"][0] === 200, String(lists["subnets"][0]));
+  check("GET /api/vpc/internet-gateways answers 200", lists["internet-gateways"][0] === 200, String(lists["internet-gateways"][0]));
+  const rts = (lists["route-tables"][1] || {}).route_tables || [];
+  check("GET /api/vpc/route-tables lists the new VPC's main route table", lists["route-tables"][0] === 200 && rts.some((r) => r.is_main && r.name && r.routes.length), JSON.stringify(rts).slice(0, 200));
   check("no page error while opening the create wizard", errors.length === 0, errors.join(";"));
 } catch (e) { check("boot", false, String(e).split("\n")[0]); }
 await browser.close(); server.close();
