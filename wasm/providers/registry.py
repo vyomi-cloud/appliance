@@ -57,9 +57,10 @@ def _emit_event(provider: str, service: str, resource: str, action: str,
         if isinstance(result, dict) and result.get("ok") is False:
             ok = False
         status = "ok" if ok else (str(result.get("code")) if isinstance(result, dict) and result.get("code") else "error")
+        detail = f"{action} {service}" + (f"/{resource}" if resource else "") + " " + (
+            "completed" if ok else "failed: " + str((result or {}).get("message") or status))
         nano_events.record(provider=provider, service=service, resource=resource or "",
-                           action=action, status=status,
-                           detail=f"{provider}/{service}: {action} {resource or ''}".rstrip() + ("" if ok else f" failed ({status})"))
+                           action=action, status=status, detail=detail)
     except Exception:
         pass
 
@@ -100,12 +101,90 @@ def _resource_dispatch(backends: Backends, provider: str, operation: str,
     name = params.get("name", "")
     body = params.get("body") or {}
     out = _resource_dispatch_inner(backends, provider, operation, account, svc, name, body)
+    if provider == "gcp":
+        out = _gcp_fill_out(svc, operation, out)
     # cloudsim event: record mutating ops (best-effort). For a sub-resource op the
     # "resource" is the CHILD's name (body.name) when present, else the parent name.
     if operation in _MUTATING_OPS:
         res_name = str(body.get("name") or name or "") if operation in (
             "CreateSubscription", "CreateDatabase") else str(name or body.get("name") or "")
         _emit_event(provider, svc, res_name, operation, out)
+    return out
+
+
+def _ec2_launch_defaults(body: dict) -> dict:
+    """An EC2 launch comes back fully described, like RunInstances: instance id,
+    running state, addresses in the default VPC, AMI, AZ and launch time."""
+    import time as _t
+    import uuid as _u
+    h = _u.uuid4().hex
+    o = [int(h[i:i + 2], 16) for i in range(0, 8, 2)]
+    out = dict(body or {})
+    priv = f"10.0.{o[0] % 16 * 16 + o[1] % 16}.{o[2] % 250 + 4}"
+    pub = f"54.{160 + o[0] % 80}.{o[1]}.{o[3] % 250 + 2}"
+    out.setdefault("instance_id", "i-" + h[8:25])
+    out.setdefault("instance_type", "t3.micro")
+    out.setdefault("state", "running")
+    out.setdefault("status", out["state"])
+    out.setdefault("private_ip", priv)
+    out.setdefault("public_ip", pub)
+    out.setdefault("public_dns", "ec2-" + out["public_ip"].replace(".", "-") + ".compute-1.amazonaws.com")
+    out.setdefault("image_id", "ami-0" + h[25:32] + h[:9])
+    out.setdefault("availability_zone", "us-east-1a")
+    out.setdefault("vpc_id", "vpc-0" + h[:16])
+    out.setdefault("subnet_id", "subnet-0" + h[16:32])
+    out.setdefault("launch_time", _t.strftime("%Y-%m-%dT%H:%M:%S.000Z", _t.gmtime()))
+    return out
+
+
+def _gcp_fill(svc: str, rec):
+    """A GCP resource comes back described the way the real API describes it: the
+    fields every grid column reads (state, location, created/updated time, …) are
+    filled with provider-shaped defaults when the create form left them out."""
+    if not isinstance(rec, dict) or not rec.get("name"):
+        return rec
+    import time as _t
+    now = _t.strftime("%Y-%m-%dT%H:%M:%S.000000Z", _t.gmtime())
+    name = str(rec["name"]).rsplit("/", 1)[-1]
+    d = {
+        "firestore": {"type": "FIRESTORE_NATIVE", "locationId": "us-central1", "state": "READY"},
+        "functions": {"state": "ACTIVE", "runtime": "python312", "entryPoint": "handler",
+                      "createTime": now, "updateTime": now},
+        "apigateway": {"displayName": name, "state": "ACTIVE", "createTime": now},
+        "vpc": {"autoCreateSubnetworks": True, "mtu": 1460, "routingConfig": {"routingMode": "REGIONAL"},
+                "creationTimestamp": now},
+        "eventarc": {"event_provider": "google.cloud.pubsub.topic.v1.messagePublished",
+                     "destination": "cloud-run", "region": "us-central1", "state": "ACTIVE"},
+        "secretmanager": {"created": rec.get("createTime") or now, "latest_version": "1",
+                          "replication": "automatic"},
+        "kms": {"keyring": "demo", "algorithm": "GOOGLE_SYMMETRIC_ENCRYPTION",
+                "protection": "SOFTWARE", "state": "ENABLED"},
+        "compute": {"zone": "us-central1-a", "machineType": "e2-medium"},
+    }.get(svc)
+    if not d:
+        return rec
+    out = dict(rec)
+    if svc == "kms":
+        prim = out.get("primary") if isinstance(out.get("primary"), dict) else {}
+        d = {**d, "algorithm": prim.get("algorithm") or d["algorithm"],
+             "protection": prim.get("protectionLevel") or d["protection"],
+             "state": prim.get("state") or d["state"]}
+    if svc == "secretmanager" and isinstance(out.get("replication"), dict):
+        d = {k: v for k, v in d.items() if k != "replication"}
+        out["replication"] = "automatic" if "automatic" in out["replication"] else "user-managed"
+    for k, v in d.items():
+        if out.get(k) in (None, "", [], {}):
+            out[k] = v
+    return out
+
+
+def _gcp_fill_out(svc: str, operation: str, out):
+    if not isinstance(out, dict) or not out.get("ok", True):
+        return out
+    if operation == "List" and isinstance(out.get("items"), list):
+        return {**out, "items": [_gcp_fill(svc, r) for r in out["items"]]}
+    if operation in ("Create", "Get", "Update"):
+        return _gcp_fill(svc, out)
     return out
 
 
@@ -126,9 +205,17 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
     if operation == "List":
         return {"ok": True, "items": r.list(provider, account, svc)}
     if operation == "Create":
+        if provider == "aws" and svc == "ec2":
+            body = _ec2_launch_defaults(body)
+        if provider == "gcp":   # stored described, so created/updated times stay fixed
+            body = _gcp_fill(svc, body)
         return {"ok": True, **r.create(provider, account, svc, body)}
     if operation == "Get":
         rec = r.get(provider, account, svc, name)
+        if not rec and name == "_settings":
+            # Detail-tab settings that were never saved: an empty record, so the
+            # tab renders each field's default (not a 404 for a normal state).
+            return {"ok": True, "name": name}
         return {"ok": True, **rec} if rec else {"ok": False, "code": "NotFound", "name": name}
     if operation == "Update":
         rec = r.update(provider, account, svc, name, body)
@@ -265,6 +352,21 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                     by_service[svc] = by_service.get(svc, 0) + n
             vms += aws_counts["rds"]  # DB instances are VM-like
 
+            # Console compute/network models (dataplane_adapter, persisted registry):
+            # Lambda functions, API Gateway APIs, VPCs, and the generic "extras" CRUD
+            # (EventBridge rules, EBS volumes, snapshots, …) keyed "service/kind".
+            from . import dataplane_adapter as DP
+            dp_counts = {
+                "lambda":     len(DP.lambda_list().get("functions", [])),
+                "apigateway": len(DP.apigw_list().get("apis", [])),
+                "vpc":        len(DP.vpc_list().get("vpcs", [])),
+            }
+            for key, coll in DP._EXTRAS.items():
+                dp_counts[key.split("/")[0]] = dp_counts.get(key.split("/")[0], 0) + len(coll)
+            for svc, n in dp_counts.items():
+                if n:
+                    by_service[svc] = by_service.get(svc, 0) + n
+
         # Generic catalog CRUD collections (EC2, Lambda, and every GCP service)
         # live in the shared ResourceStore, namespaced "provider/account/service".
         vm_svcs = _VM_SERVICES.get(provider, set())
@@ -309,12 +411,15 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
         # Azure resources live in the ARM core's flat state, keyed by resource id.
         if provider == "azure":
             arm = getattr(backends, "_azure_arm", None)
-            for rid in getattr(arm, "state", {}) or {}:
+            # AzureArm keeps its flat map in `_state` (lower-cased resource ids). Count
+            # top-level resources only (<ns>/<type>/<name>); children (subnets, APIs, …)
+            # have longer ids and are not separately billed resources.
+            for rid in getattr(arm, "_state", {}) or {}:
                 i = rid.find("/providers/")
                 if i < 0:
                     continue  # resource groups etc. have no /providers/ segment
                 tail = rid[i + len("/providers/"):].split("/")
-                if len(tail) < 2:
+                if len(tail) != 3:
                     continue
                 rtype = (tail[0] + "/" + tail[1]).lower()
                 by_service[rtype] = by_service.get(rtype, 0) + 1
@@ -365,6 +470,10 @@ def dispatch(backends: Backends, provider: str, service: str, operation: str,
     # Native Azure ARM control plane (real /subscriptions/* wire).
     if service == "_arm":
         return _arm_dispatch(backends, operation, params or {})
+    # Key Vault secrets/keys data plane for the Azure console (native cores).
+    if service == "_kv":
+        from . import azure_core_adapter
+        return azure_core_adapter.kv_raw(operation, params or {})
     # Live resource census for the dashboard's per-cloud footprint pies.
     if service == "_census":
         return _census_dispatch(backends, provider)

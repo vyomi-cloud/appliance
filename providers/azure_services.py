@@ -607,6 +607,23 @@ def _expand_tokens(obj: Any, name: str, base: str) -> Any:
     return obj
 
 
+_APIM_DEFAULT_POLICY = ("<policies>\r\n  <inbound />\r\n  <backend>\r\n    <forward-request />\r\n"
+                        "  </backend>\r\n  <outbound />\r\n  <on-error />\r\n</policies>")
+
+
+def _apim_default_policy(type_chain, names, state, rid=""):
+    """A new API Management service ships with the default global policy, so
+    GET .../service/{n}/policies/policy returns it instead of 404 until PUT."""
+    if (len(type_chain) == 3 and len(names) == 2 and names[1].lower() == "policy"
+            and type_chain[1].lower() == "service" and type_chain[2].lower() == "policies"
+            and type_chain[0].lower() == "microsoft.apimanagement"):
+        parent = rid.rsplit("/policies/", 1)[0].lower()
+        if parent in state:
+            return {"id": rid, "name": "policy", "type": "Microsoft.ApiManagement/service/policies",
+                    "properties": {"format": "xml", "value": _APIM_DEFAULT_POLICY}}
+    return None
+
+
 def _canonical_id(sub: str, rg: str | None, type_chain: list[str], names: list[str]) -> str:
     seg = [f"/subscriptions/{sub}"]
     if rg:
@@ -818,6 +835,8 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
 
     if method == "GET":
         rec = _state.get(key)
+        if not rec:
+            rec = _apim_default_policy(type_chain, names, _state, rid)
         if not rec:
             return _error(404, "ResourceNotFound", f"Resource '{rid}' not found.")
         return JSONResponse(_view(rec))

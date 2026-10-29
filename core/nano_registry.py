@@ -37,6 +37,8 @@ from core.gcp_redis_core import RedisStore
 from core.gcp_container_core import ContainerStore
 from core.azure_arm_core import AzureArm
 
+import types
+
 _REG: dict | None = None
 
 
@@ -55,6 +57,12 @@ def get() -> dict:
             "rds": InMemorySqlStore(),
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
+            # Console compute/network models: Lambda + API Gateway share ONE namespace
+            # (AWS_PROXY reaches the registered functions); VPC has its own. They
+            # live here (not as module singletons) so nano_persist snapshots them.
+            "compute": types.SimpleNamespace(),
+            "vpc_net": types.SimpleNamespace(),
+            "extras": types.SimpleNamespace(items={}, cfg={}),   # console EC2/VPC/EventBridge sub-resource CRUD
             "logs": LogsStore(),               # CloudWatch Logs (core/logs_core.py)
             "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
             "ssm": SsmStore(),

@@ -1106,7 +1106,7 @@ async function renderList(main){
         return av.localeCompare(bv) * state.sortDir;
       });
     }
-    document.getElementById("countChip").textContent = `(${filtered.length})`;
+    { const chip = document.getElementById("countChip"); if (chip) chip.textContent = `(${filtered.length})`; }
     statsSpan.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;
@@ -1400,7 +1400,7 @@ async function renderChildList(main){
     if (q) filtered = filtered.filter(it => spec.columns.some(c => {
       const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
     }));
-    document.getElementById("childCountChip").textContent = `(${filtered.length})`;
+    { const chip = document.getElementById("childCountChip"); if (chip) chip.textContent = `(${filtered.length})`; }
     statsSpan.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;
@@ -1499,7 +1499,7 @@ async function renderCrudStub(main, svc, fullKey, schema){
     if (q) f = f.filter(it => schema.columns.some(c => {
       const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
     }));
-    document.getElementById("stubCountChip").textContent = `(${f.length})`;
+    { const chip = document.getElementById("stubCountChip"); if (chip) chip.textContent = `(${f.length})`; }
     statsSpan.textContent = f.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${f.length} of ${items.length} match`;
@@ -2617,7 +2617,23 @@ SUB_RENDERERS.kmsconfig = function(svc, full, host){
   render();
 };
 
-SUB_RENDERERS.overview = function(svc, full, host){
+SUB_RENDERERS.overview = function(svc, full, host, tab){
+  if (svc.key === "vpc" && tab && tab.key === "details"){
+    // VPC console "Details" card: the VPC's own attributes (not the generic summary)
+    const card = el("div",{class:"kv-card"});
+    card.append(el("div",{class:"h"}, "Details"));
+    const grid = el("div",{class:"kv-grid"});
+    [["VPC ID", full.vpc_id], ["State", full.state], ["IPv4 CIDR", full.cidr_block],
+     ["Tenancy", full.tenancy], ["DHCP option set", full.dhcp_options_id],
+     ["Main route table", full.main_route_table_id], ["Default security group", full.default_security_group_id],
+     ["Internet gateway", full.internet_gateway_id || "No internet gateway attached"],
+     ["IPv6 mode", full.ipv6_mode], ["Encryption control", full.encryption_controls],
+     ["Created", full.created], ["Owner ID", ACCOUNT]
+    ].forEach(([k,v])=>{ if (v == null || v === "") return;
+      grid.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"+(/id|table|group|set/i.test(k)?" mono":"")}, String(v)))); });
+    card.append(grid); host.append(card);
+    return;
+  }
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Resource details"));
   const grid = el("div",{class:"kv-grid"});
@@ -2767,7 +2783,20 @@ SUB_RENDERERS.properties = function(svc, full, host){
   }
   walk(full, ""); card.append(grid); host.append(card);
 };
-SUB_RENDERERS.metrics = function(svc, full, host){
+SUB_RENDERERS.metrics = function(svc, full, host, tab){
+  if (svc.key === "ec2" && tab && tab.key === "statusChecks") {
+    // Status checks reflect the instance's own state (EC2 DescribeInstanceStatus).
+    const running = String(full.state || "").toLowerCase() === "running";
+    const res = running ? "Passed" : "Not applicable";
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Check"), el("th",{}, "Status"), el("th",{}, "Instance")));
+    ["System reachability","Instance reachability","Attached EBS status"].forEach(c => tbl.append(el("tr",{},
+      el("td",{}, c), el("td",{}, res), el("td",{}, el("span",{class:"mono"}, full.instance_id || full.name || "")))));
+    host.append(el("div",{class:"alert info"}, icon("monitor_heart"),
+      el("div",{}, "Instance state: " + (full.state || "unknown") + ". Status checks run while the instance is running.")));
+    host.append(tbl);
+    return;
+  }
   host.append(el("div",{class:"alert info"}, icon("show_chart"),
     el("div",{}, "Synthesized CloudWatch metrics. Real telemetry ingestion is future work.")));
   const series = svc.key === "ec2"
@@ -2881,16 +2910,25 @@ SUB_RENDERERS.connect = function(svc, full, host){
 };
 SUB_RENDERERS.ec2networking = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Networking details"));
+  card.append(el("div",{class:"h"}, svc.key === "rds" ? "Connectivity & security" : "Networking details"));
   const g = el("div",{class:"kv-grid"});
-  const rows = [
+  // RDS instances have an endpoint / subnet group, not EC2 IPv4 addresses.
+  const rows = svc.key === "rds" ? [
+    ["Endpoint",             full.endpoint_address || full.endpoint || (full.db_instance_identifier ? full.db_instance_identifier+"."+REGION+".rds.amazonaws.com" : "")],
+    ["Port",                 full.endpoint_port || full.port || 5432],
+    ["VPC ID",               full.vpc_id || "default"],
+    ["Subnet group",         full.db_subnet_group_name || "default"],
+    ["Availability Zone",    full.availability_zone || REGION+"a"],
+    ["Security groups",      (full.security_group_ids||[]).join(", ") || "default (sg-default)"],
+    ["Publicly accessible",  full.publicly_accessible ? "Yes" : "No"],
+  ] : [
     ["Private IPv4 address", full.private_ip || "—"],
     ["Public IPv4 address",  full.public_ip || "—"],
     ["Public IPv4 DNS",      full.public_dns || "—"],
     ["VPC ID",               full.vpc_id || "default"],
-    ["Subnet ID",            full.subnet_id || "—"],
+    ["Subnet ID",            full.subnet_id || "subnet-default"],
     ["Availability Zone",    full.availability_zone || REGION+"a"],
-    ["Security groups",      (full.security_groups || []).join(", ") || "—"],
+    ["Security groups",      ((full.security_groups && full.security_groups.length ? full.security_groups : (full.security_group_ids || [])).map(g => (g && (g.groupName || g.name || g.id)) || g).join(", ")) || "default (sg-default)"],
     ["Network interfaces",   String((full.network_interfaces||[]).length || 1)],
   ];
   rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k),
@@ -2904,7 +2942,7 @@ SUB_RENDERERS.ec2security = function(svc, full, host){
   [
     ["IAM role",       full.iam_instance_profile || "—"],
     ["Owner",          ACCOUNT],
-    ["Launch time",    full.launch_time || "—"],
+    ["Launch time",    full.launch_time || full.created || "—"],
     ["Key pair name",  full.key_name || "(no key pair)"],
     ["State transition reason", full.state_reason || "—"],
   ].forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, String(v)))));
@@ -2933,8 +2971,8 @@ SUB_RENDERERS.sgrules = function(svc, full, host){
     tbl.append(el("tr",{}, el("th",{}, "Security group ID"), el("th",{}, "Name"),
       el("th",{}, "Description"), el("th",{}, "Inbound rules")));
     sgs.forEach(sg => tbl.append(el("tr",{},
-      el("td",{}, el("a",{class:"id"}, sg.id||sg.group_id||"—")),
-      el("td",{}, sg.name||"—"),
+      el("td",{}, el("a",{class:"id"}, sg.security_group_id||sg.id||sg.group_id||"—")),
+      el("td",{}, sg.group_name||sg.name||"—"),
       el("td",{}, sg.description||"—"),
       el("td",{}, String((sg.ingress||sg.ip_permissions||[]).length)))));
     host.append(tbl);
@@ -3215,9 +3253,13 @@ SUB_RENDERERS.sqsmessages = function(svc, full, host){
 SUB_RENDERERS.sqsdlq = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Dead-letter queue"));
+  // Like the real console: with no redrive policy the tab only says "Disabled"
+  // (no queue / maximum-receives fields to fill).
   card.append(el("div",{class:"kv-grid"},
-    el("div",{}, el("div",{class:"k"}, "Queue"), el("div",{class:"v"}, full.dlq_arn || "Not configured")),
-    el("div",{}, el("div",{class:"k"}, "Maximum receives"), el("div",{class:"v"}, String(full.max_receive_count||"—")))));
+    ...(full.dlq_arn ? [
+      el("div",{}, el("div",{class:"k"}, "Queue"), el("div",{class:"v"}, full.dlq_arn)),
+      el("div",{}, el("div",{class:"k"}, "Maximum receives"), el("div",{class:"v"}, String(full.max_receive_count||5)))]
+    : [el("div",{}, el("div",{class:"k"}, "Dead-letter queue"), el("div",{class:"v"}, "Disabled"))])));
   host.append(card);
 };
 
@@ -3264,8 +3306,8 @@ SUB_RENDERERS.rdsendpoints = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Endpoint & port"));
   card.append(el("div",{class:"kv-grid"},
-    el("div",{}, el("div",{class:"k"}, "Endpoint"), el("div",{class:"v mono"}, full.endpoint || "—")),
-    el("div",{}, el("div",{class:"k"}, "Port"),     el("div",{class:"v"}, String(full.port || 5432))),
+    el("div",{}, el("div",{class:"k"}, "Endpoint"), el("div",{class:"v mono"}, full.endpoint_address || full.endpoint || (full.db_instance_identifier ? full.db_instance_identifier+"."+REGION+".rds.amazonaws.com" : "—"))),
+    el("div",{}, el("div",{class:"k"}, "Port"),     el("div",{class:"v"}, String(full.endpoint_port || full.port || 5432))),
     el("div",{}, el("div",{class:"k"}, "Status"),   el("div",{class:"v"}, full.status || "available")),
     el("div",{}, el("div",{class:"k"}, "Master username"), el("div",{class:"v"}, full.master_username || "postgres"))));
   host.append(card);

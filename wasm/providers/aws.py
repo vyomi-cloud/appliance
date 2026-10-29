@@ -67,6 +67,9 @@ class Aws(CloudProvider):
             ("iam", "ListGroups"):      lambda b, a, p: A.iam_list_groups(p),
             ("iam", "ListAttachments"): lambda b, a, p: A.iam_list_attachments(p),
             ("iam", "CreateUser"):      lambda b, a, p: A.iam_create_user(p),
+            ("iam", "GetUser"):         lambda b, a, p: A.iam_get_user(p),
+            ("iam", "GetRole"):         lambda b, a, p: A.iam_get_role(p),
+            ("iam", "GetGroup"):        lambda b, a, p: A.iam_get_group(p),
             ("iam", "DeleteUser"):      lambda b, a, p: A.iam_delete_user(p),
             ("iam", "DeleteRole"):      lambda b, a, p: A.iam_delete_role(p),
             ("iam", "DeletePolicy"):    lambda b, a, p: A.iam_delete_policy(p),
@@ -90,7 +93,10 @@ class Aws(CloudProvider):
             # API Gateway — APIs + MOCK/Lambda-proxy + invoke, via core/apigateway_core.py
             ("apigateway", "ListApis"):   lambda b, a, p: D.apigw_list(p),
             ("apigateway", "CreateApi"):  lambda b, a, p: D.apigw_create(p),
+            ("apigateway", "GetApi"):     lambda b, a, p: D.apigw_get(p),
             ("apigateway", "DeleteApi"):  lambda b, a, p: D.apigw_delete(p),
+            ("apigateway", "ListResources"): lambda b, a, p: D.apigw_resources(p),
+            ("apigateway", "ListStages"): lambda b, a, p: D.apigw_stages(p),
             ("apigateway", "Invoke"):     lambda b, a, p: D.apigw_invoke(p),
             # Systems Manager Parameter Store, via core/ssm_core.py (shared registry store)
             ("ssm", "ListParameters"):    lambda b, a, p: D.ssm_list(p),
@@ -110,10 +116,14 @@ class Aws(CloudProvider):
             ("stepfunctions", "ListChildren"):   lambda b, a, p: D.sfn_children(p),
             # VPC — topology + reachability analyzer, via core/vpc_core.py
             ("vpc", "List"):              lambda b, a, p: D.vpc_list(p),
+            ("vpc", "GetVpc"):            lambda b, a, p: D.vpc_get(p),
             ("vpc", "CreateVpc"):         lambda b, a, p: D.vpc_create(p),
             ("vpc", "CreateSubnet"):      lambda b, a, p: D.vpc_create_subnet(p),
             ("vpc", "CreateSecurityGroup"): lambda b, a, p: D.vpc_create_sg(p),
             ("vpc", "ListSecurityGroups"): lambda b, a, p: D.vpc_list_sgs(p),
+            ("vpc", "ListSubnets"):       lambda b, a, p: D.vpc_list_subnets(p),
+            ("vpc", "ListRouteTables"):   lambda b, a, p: D.vpc_list_route_tables(p),
+            ("vpc", "ListInternetGateways"): lambda b, a, p: D.vpc_list_igws(p),
             ("vpc", "Authorize"):         lambda b, a, p: D.vpc_authorize(p),
             ("vpc", "Analyze"):           lambda b, a, p: D.vpc_analyze(p),
             # Console "extras" — EC2/VPC sub-resources (volumes, snapshots, launch

@@ -953,9 +953,12 @@ async function selectHome(){
 }
 async function selectRG(){
   markActive("__rg__");
-  const res=await arm("GET", `/subscriptions/${SUB}/resourcegroups`, undefined, "2021-04-01");
   const main=document.getElementById("main"); main.innerHTML="";
   main.append(crumb(["Home","Resource groups"]), pageHead("folder","Resource groups",""));
+  main.append(el("div",{class:"empty",id:"rgLoading"},"Loading…"));
+  const res=await arm("GET", `/subscriptions/${SUB}/resourcegroups`, undefined, "2021-04-01");
+  if(CURRENT!=="__rg__") return;
+  document.getElementById("rgLoading")?.remove();
   const wrap=el("div",{class:"wrap"});
   const t=el("table"); t.append(el("tr",{},el("th",{},"Name"),el("th",{},"Location"),el("th",{},"Status")));
   (res.json.value||[]).forEach(g=>{
@@ -4262,7 +4265,7 @@ function openFlatCreate(svc, body){
       inp = el("input",{value:dv});
     }
     inputs[f.name]=inp;
-    form.append(el("div",{class:"field"}, el("label",{},f.label), inp));
+    form.append(el("div",{class:"field"}, el("label",{},f.label, f.required ? el("span",{class:"req"},"*") : null), inp));
   });
   if(!svc.dataPlane)
     form.append(el("div",{class:"field"}, el("label",{},"Location"), (inputs.__loc__=el("input",{value:LOCATION}))));
@@ -4278,8 +4281,12 @@ function openFlatCreate(svc, body){
 }
 
 async function submitCreate(svc, inputs){
-  const name=(inputs["name"]?.value||"").trim();
+  // Role definitions have no user-chosen name: ARM keys them by a GUID and the
+  // form only asks for the role name (properties.roleName).
+  const name=inputs["name"] ? inputs["name"].value.trim() : (svc.type==="roleDefinitions" ? uuid() : "");
   if(!name){ toast("Name is required","err"); return; }
+  const missing=svc.createFields.find(f=>f.required && f.name!=="name" && inputs[f.name] && !String(inputs[f.name].value||"").trim());
+  if(missing){ toast(missing.label+" is required","err"); return; }
   if(svc.dataPlane){
     // Data-plane create → the in-WASM core via /api/azure/{key} (not ARM).
     const r=await fetch(ORIGIN+"/api/azure/"+svc.key,{method:"POST",
