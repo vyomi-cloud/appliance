@@ -977,9 +977,11 @@ self.addEventListener("fetch", (event) => {
       if (apiPath === "/api/runtime/host-distribution" && method === "GET") {
         // ── Live per-cloud footprint ──────────────────────────────────
         // Console pages census their in-browser backend and persist it to the
-        // "meta" store (see nano-boot.writeCensus). A census is "fresh" only
-        // while its console is open (rewritten every 5s); after TTL we drop it
-        // so the pies reflect LIVE sessions, not stale ghosts.
+        // "meta" store (see nano-boot.writeCensus: every 5 s and on leaving).
+        // Resources persist across sessions (nano_persist -> IndexedDB, restored
+        // on the next boot), so each cloud's LATEST census is its footprint even
+        // when no console is open; only the open-console count (sessions) and the
+        // live WASM heap need a fresh census.
         const CENSUS_TTL = 60000;
         const now = Date.now();
         const live = { aws: { vcpus: 0, ram_mb: 0, disk_mb: 0, resources: 0, vms: 0 },
@@ -988,17 +990,14 @@ self.addEventListener("fetch", (event) => {
         let sessions = 0, liveResources = 0, heap = 0, freshest = 0;
         for (const p of ["aws", "gcp", "azure"]) {
           let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
-          if (!c || typeof c.ts !== "number" || (now - c.ts) >= CENSUS_TTL) continue;
+          if (!c || typeof c.ts !== "number") continue;
           live[p].vcpus = c.vcpus || 0; live[p].ram_mb = c.ram_mb || 0;
           live[p].disk_mb = c.disk_mb || 0; live[p].resources = c.resources || 0;
           live[p].vms = c.vms || 0; live[p].by_service = c.by_service || {};
-          sessions++; liveResources += c.resources || 0;
-          heap += c.wasm_heap_bytes || 0; freshest = Math.max(freshest, c.ts);
+          live[p].as_of = new Date(c.ts).toISOString();
+          liveResources += c.resources || 0; freshest = Math.max(freshest, c.ts);
+          if ((now - c.ts) < CENSUS_TTL) { sessions++; heap += c.wasm_heap_bytes || 0; }
         }
-        // Always report the live footprint so the three CPU/RAM/Disk pies stay
-        // visible. Only FRESH censuses count (a closed console's resources are
-        // ephemeral) — so with no live console the pies honestly show an empty
-        // state ("open a console…") rather than ghosts or a misleading estimate.
         return json({ providers: live, grand_total_resources: liveResources,
                       basis: "resources",
                       runtime: { wasm_heap_bytes: heap, sessions, ts: freshest } });

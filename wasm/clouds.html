@@ -3159,7 +3159,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         desc.textContent = n > 0
           ? ('Live per-cloud footprint across your resources (weighted vCPU / RAM / Disk) · '
              + n + ' active console' + (n === 1 ? '' : 's') + '.')
-          : 'Live per-cloud footprint — open a console and create resources to see utilization here.';
+          : (d.grand_total_resources > 0
+              ? 'Per-cloud footprint of your saved resources (weighted vCPU / RAM / Disk) · no console open.'
+              : 'Live per-cloud footprint — open a console and create resources to see utilization here.');
       } else {
         desc.textContent = 'Per-cloud workload distribution across your clouds (CPU / RAM / Disk).';
       }
