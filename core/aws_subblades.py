@@ -233,20 +233,20 @@ _APIGW_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Development", "items": [
         {"key": "resources",   "label": "Resources",           "icon": "account_tree","type": "apiResources"},
-        {"key": "authorizers", "label": "Authorizers",         "icon": "lock_person", "type": "stub"},
-        {"key": "models",      "label": "Models",              "icon": "schema",      "type": "stub"},
+        {"key": "authorizers", "label": "Authorizers",         "icon": "lock_person", "type": "apigwAuthorizers"},
+        {"key": "models",      "label": "Models",              "icon": "schema",      "type": "apigwModels"},
     ]},
     {"group": "Publishing", "items": [
         {"key": "stages",      "label": "Stages",              "icon": "rocket_launch","type": "apiStages"},
-        {"key": "deployments", "label": "Deployments",         "icon": "history",     "type": "stub"},
+        {"key": "deployments", "label": "Deployments",         "icon": "history",     "type": "apigwDeployments"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "settings",    "label": "Settings",            "icon": "settings",    "type": "properties"},
-        {"key": "iam",         "label": "Resource policy",     "icon": "policy",      "type": "iam"},
+        {"key": "settings",    "label": "Settings",            "icon": "settings",    "type": "apigwSettings"},
+        {"key": "resourcePolicy", "label": "Resource policy",  "icon": "policy",      "type": "apigwPolicy"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "monitoring",  "label": "Dashboard",           "icon": "show_chart",  "type": "metrics"},
-        {"key": "logs",        "label": "Logs/Tracing",        "icon": "list_alt",    "type": "stub"},
+        {"key": "logs",        "label": "Logs/Tracing",        "icon": "list_alt",    "type": "apigwLogs"},
     ]},
 ]
 

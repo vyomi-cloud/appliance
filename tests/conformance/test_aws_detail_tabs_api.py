@@ -554,7 +554,44 @@ def eventbridge():
     requests.delete(f"{BASE}/api/aws/extras/eventbridge/rules/{name}", timeout=30)
     requests.delete(f"{BASE}/api/sqs/queues/{q}", timeout=30)
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets, "kms": kms, "eventbridge": eventbridge}
+
+
+def apigateway():
+    print("── API Gateway REST API")
+    r = requests.post(f"{BASE}/api/apigateway/apis", json={"name": f"tabs-api-{int(time.time()) % 100000}"}, timeout=30)
+    check("create REST API", r.status_code < 300, r.text)
+    aid = r.json().get("rest_api_id") or r.json().get("api", {}).get("rest_api_id")
+    p = f"/api/apigateway/apis/{aid}/detail/"
+    sec = lambda s: get(p + s).json()
+    put = lambda s, b: requests.put(BASE + p + s, json=b, timeout=30)
+    check("Models: the Empty and Error models every REST API gets", [m["name"] for m in sec("models")["models"]] == ["Empty", "Error"])
+    check("Models: create Pet", put("models", {"name": "Pet", "schema": '{"type":"object"}'}).status_code == 200 and len(sec("models")["models"]) == 3)
+    check("Models: non-alphanumeric name rejected", put("models", {"name": "bad-name"}).status_code == 400)
+    fn = f"tabs-authz-{int(time.time()) % 100000}"
+    requests.post(f"{BASE}/api/lambda/functions", json={"function_name": fn}, timeout=60)
+    r = put("authorizers", {"name": "token-auth", "type": "TOKEN", "lambda_function": fn})
+    check("Authorizers: Lambda TOKEN authorizer with its invocation URI", r.status_code == 200
+          and f":function:{fn}/invocations" in sec("authorizers")["authorizers"][0]["authorizer_uri"], r.text)
+    check("Authorizers: missing Lambda rejected", put("authorizers", {"name": "x", "type": "TOKEN", "lambda_function": "nope-x"}).status_code == 400)
+    r = put("deployments", {"stage_name": "prod", "description": "first"})
+    dep = sec("deployments")
+    check("Deployments: deployment to prod listed", r.status_code == 200 and dep["deployments"][0]["description"] == "first" and "prod" in dep["stages"], dep)
+    r = put("logging", {"stage_name": "prod", "logging_level": "INFO", "tracing_enabled": True})
+    lg = next(s for s in sec("logging")["stages"] if s["stage_name"] == "prod")
+    check("Logs/Tracing: INFO logs + X-Ray on the prod stage", r.status_code == 200 and lg["logging_level"] == "INFO" and lg["tracing_enabled"], lg)
+    check("Logs/Tracing: unknown stage rejected", put("logging", {"stage_name": "nope", "logging_level": "INFO"}).status_code == 404)
+    check("Resource policy: non execute-api resource rejected",
+          put("policy", {"policy": {"Statement": [{"Effect": "Allow", "Principal": "*", "Action": "execute-api:Invoke", "Resource": "arn:aws:s3:::x"}]}}).status_code == 400)
+    r = put("policy", {"policy": {"Statement": [{"Effect": "Deny", "Principal": "*", "Action": "execute-api:Invoke", "Resource": "execute-api:/*",
+                                                  "Condition": {"NotIpAddress": {"aws:SourceIp": "10.0.0.0/8"}}}]}})
+    check("Resource policy: IP-restricting policy saved", r.status_code == 200 and "NotIpAddress" in sec("policy")["policy"], r.text)
+    r = put("settings", {"description": "tabs api", "binary_media_types": ["image/png"], "minimum_compression_size": 1024})
+    s = sec("settings")
+    check("Settings: UpdateRestApi persists", r.status_code == 200 and s["description"] == "tabs api" and s["binary_media_types"] == ["image/png"], s)
+    requests.delete(f"{BASE}/api/apigateway/apis/{aid}", timeout=30)
+    requests.delete(f"{BASE}/api/lambda/functions/{fn}", timeout=30)
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets, "kms": kms, "eventbridge": eventbridge, "apigateway": apigateway}
 
 if __name__ == "__main__":
     only = sys.argv[1:] or list(SECTIONS)

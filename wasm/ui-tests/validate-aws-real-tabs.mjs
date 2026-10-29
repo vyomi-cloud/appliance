@@ -350,6 +350,27 @@ const SECTIONS = {
     const det = await tab("Rule details");
     check("eventbridge Rule details: this rule's ARN", det.includes(":rule/" + name), det);
   },
+  async apigateway() {
+    const name = "rt-api-" + Date.now().toString(36);
+    const c = await call("POST", "/api/apigateway/apis", { name, mockBody: "ok" });
+    const aid = c.json.rest_api_id || c.json.id || (c.json.api || {}).rest_api_id;
+    await openService("^api gateway$");
+    await openRow(name);
+    const m = await tab("Models");
+    check("apigateway Models: the API's Empty/Error models", /Empty/.test(m) && /Error/.test(m), m);
+    await tab("Deployments");
+    await page.locator("#main [data-testid=apigw-dep-stage]").fill("rtstage");
+    await page.locator("#main [data-testid=apigw-deploy]").click();
+    await sleep(1500);
+    await tab("Models");
+    const dep = await tab("Deployments");
+    check("apigateway Deployments: deployment made in the tab is listed", /rtstage/.test(dep), dep);
+    await tab("Settings");
+    await page.locator("#main [data-testid=apigw-settings-save]").click();
+    await sleep(1200);
+    const st = (await call("GET", `/api/apigateway/apis/${aid}/detail/settings`)).json;
+    check("apigateway Settings: API ID from the backend", st.rest_api_id === aid, JSON.stringify(st).slice(0, 200));
+  },
 };
 
 let server;

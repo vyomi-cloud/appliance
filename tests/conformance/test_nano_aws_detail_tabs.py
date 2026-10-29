@@ -311,7 +311,22 @@ def eventbridge():
     check("Event pattern: test match", put("pattern", {"action": "test", "event": {"source": "my.app"}})["result"] is True)
     check("DLQ: existing SQS DLQ accepted", put("dlq", {"id": "q", "dead_letter_arn": "arn:aws:sqs:us-east-1:123456789012:eb-q"})["targets"][0]["dead_letter_arn"].endswith(":eb-q"))
 
-SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets, "kms": kms, "eventbridge": eventbridge}
+
+
+def apigateway():
+    print("── API Gateway REST API")
+    aid = d("apigateway", "CreateApi", {"name": "tabs-rest", "mockBody": "hi"})["id"]
+    sec = lambda s: d("apigateway", "GetRestApiSection", {"name": aid, "section": s})
+    put = lambda s, b: d("apigateway", "UpdateRestApiSection", {"name": aid, "section": s, "method": "PUT", "body": b})
+    check("Models: Empty + Error defaults", [m["name"] for m in sec("models")["models"]] == ["Empty", "Error"])
+    check("Deployments: the create-time prod deployment", sec("deployments")["deployments"][0]["stage_name"] == "prod")
+    put("deployments", {"stage_name": "beta", "description": "beta stage"})
+    r = d("apigateway", "Invoke", {"id": aid, "stage": "beta", "method": "GET", "path": "/hello"})
+    check("Deployments: a stage deployed from the tab serves the API", r.get("statusCode") == 200 and r.get("body") == "hi", r)
+    check("Logs/Tracing: stage settings", put("logging", {"stage_name": "beta", "logging_level": "ERROR"})["stages"][0]["stage_name"] in ("beta", "prod"))
+    check("Settings: description saved", put("settings", {"description": "nano rest"})["description"] == "nano rest")
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets, "kms": kms, "eventbridge": eventbridge, "apigateway": apigateway}
 
 if __name__ == "__main__":
     for k in sys.argv[1:] or list(SECTIONS):

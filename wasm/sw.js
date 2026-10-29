@@ -641,6 +641,10 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "apigateway", "ListApis", {}] };
     if (method === "POST") return { tuple: ["aws", "apigateway", "CreateApi", body || {}] };
   }
+  // REST API detail tabs (core/aws_console_detail.py): authorizers, models, deployments, logging, policy, settings.
+  m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "apigateway", "GetRestApiSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "apigateway", "UpdateRestApiSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/invoke$/);
   if (m && method === "POST") return { tuple: ["aws", "apigateway", "Invoke", { id: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/resources$/);

@@ -693,6 +693,43 @@ def register(app: FastAPI) -> None:
         ctx.record_usage(f"eventbridge.update_{section}", {"name": name, "resource_id": name})
         return {"section": section, **out}
 
+    # ── API Gateway (REST) tabs ─────────────────────────────────────────────
+    def _rest_api(api_id: str) -> dict:
+        from routes import aws_apigw as G
+        a = G._apigw_api(api_id)
+        if not isinstance(a, dict):
+            raise HTTPException(404, detail={"code": "NotFoundException", "message": "Invalid API identifier specified"})
+        return a
+
+    @app.get("/api/apigateway/apis/{api_id}/detail/{section}")
+    def apigw_section(api_id: str, section: str):
+        try:
+            return {"section": section, **D.apigw_section(_rest_api(api_id), section, api_id, ctx.AWS_ACCOUNT_ID)}
+        except D.DetailError as e:
+            _fail(e)
+
+    @app.put("/api/apigateway/apis/{api_id}/detail/{section}")
+    async def apigw_update(api_id: str, section: str, request: Request):
+        from routes import aws_lambda as L
+        from routes import aws_apigw as G
+        from core.models import APIGatewayDeploymentRequest
+        api = _rest_api(api_id)
+        body = await _body(request)
+        try:
+            if section == "deployments":   # CreateDeployment (optionally to a stage)
+                G.api_apigateway_create_deployment(api_id, APIGatewayDeploymentRequest(
+                    rest_api_id=api_id, stage_name=str(body.get("stage_name") or ""), description=str(body.get("description") or "")))
+                out = D.apigw_section(api, section, api_id, ctx.AWS_ACCOUNT_ID)
+            else:
+                out = D.apigw_update(api, section, body, api_id, ctx.AWS_ACCOUNT_ID, lambda f: bool(L._lambda_find_function(f)))
+        except D.DetailError as e:
+            _fail(e)
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, detail={"code": "BadRequestException", "message": str(e)})
+        ctx.persist_state()
+        ctx.record_usage(f"apigateway.update_{section}", {"rest_api_id": api_id, "resource_id": api_id})
+        return {"section": section, **out}
+
     # ── Permissions tab (every service): identity policies covering a resource ──
     @app.get("/api/aws/resource-access")
     def resource_access(arn: str, service: str):

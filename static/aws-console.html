@@ -4487,6 +4487,82 @@ SUB_RENDERERS.ebdlq = async function(svc, full, host){
   host.append(card);
 };
 
+// ── API Gateway (REST) tabs (GET/PUT /api/apigateway/apis/{id}/detail/{section}). ──
+function _apip(full, section){ return "/api/apigateway/apis/" + encodeURIComponent(full.rest_api_id || full.id || full.name || "") + "/detail/" + section; }
+async function _apiput(full, section, body, okMsg){
+  const r = await api("PUT", _apip(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Failed: " + _derr(r), "err"); return false;
+}
+SUB_RENDERERS.apigwauthorizers = async function(svc, full, host){
+  const j = await _dget(host, _apip(full, "authorizers")); if (!j) return;
+  const n = el("input",{placeholder:"my-authorizer","data-testid":"apigw-auth-name"}), t = el("select",{}, ...["TOKEN","REQUEST","COGNITO_USER_POOLS"].map(x => el("option",{value:x}, x)));
+  const fn = el("input",{placeholder:"Lambda function name","data-testid":"apigw-auth-fn"}), src = el("input",{value:"method.request.header.Authorization"}), ttl = el("input",{type:"number",value:"300",min:"0",max:"3600"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Authorizers (" + j.authorizers.length + ")"),
+    _dtbl([["name","Name"],["id","ID",1],["type","Type"],["identity_source","Identity source"],["ttl","Caching TTL (s)"],[a => a.authorizer_uri || (a.provider_arns || []).join(", "),"Lambda / user pool",1],
+      [a => el("button",{class:"btn",onclick:()=>_apiput(full, "authorizers", {action:"delete", id:a.id}, "Authorizer deleted")}, "Delete"),"Actions"]],
+      j.authorizers, "No authorizers: methods use IAM or no authorization."),
+    _field("Name", n), _field("Type", t), _field("Lambda function (TOKEN/REQUEST)", fn), _field("Identity source", src), _field("Caching TTL (0-3600 s)", ttl),
+    el("button",{class:"btn primary","data-testid":"apigw-auth-add",onclick:()=>_apiput(full, "authorizers", {name:n.value, type:t.value, lambda_function:fn.value, identity_source:src.value, ttl:ttl.value}, "Authorizer created")}, icon("add"), "Create authorizer")));
+};
+SUB_RENDERERS.apigwmodels = async function(svc, full, host){
+  const j = await _dget(host, _apip(full, "models")); if (!j) return;
+  const n = el("input",{placeholder:"Pet","data-testid":"apigw-model-name"}), ct = el("input",{value:"application/json"});
+  const sch = el("textarea",{style:"width:100%;min-height:90px;font-family:Consolas,Menlo,monospace"}); sch.value = '{\n  "$schema": "http://json-schema.org/draft-04/schema#",\n  "type": "object"\n}';
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Models (" + j.models.length + ")"),
+    _dtbl([["name","Name"],["content_type","Content type"],["description","Description"],["id","ID",1],
+      [m => el("button",{class:"btn",onclick:()=>_apiput(full, "models", {action:"delete", name:m.name}, "Model deleted")}, "Delete"),"Actions"]], j.models, "No models."),
+    _field("Model name", n), _field("Content type", ct), _field("Model schema (JSON Schema)", sch),
+    el("button",{class:"btn primary","data-testid":"apigw-model-add",onclick:()=>_apiput(full, "models", {name:n.value, content_type:ct.value, schema:sch.value}, "Model created")}, icon("add"), "Create model")));
+};
+SUB_RENDERERS.apigwdeployments = async function(svc, full, host){
+  const j = await _dget(host, _apip(full, "deployments")); if (!j) return;
+  const st = el("input",{placeholder:"prod",value:(j.stages || [])[0] || "","data-testid":"apigw-dep-stage"}), ds = el("input",{placeholder:"Deployment description"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Deployments (" + j.deployments.length + ")"),
+    _dtbl([["deployment_id","Deployment ID",1],["stage_name","Stage"],["description","Description"],["created","Created"]], j.deployments, "This API has not been deployed."),
+    _field("Stage (new or existing)", st), _field("Description", ds),
+    el("button",{class:"btn primary","data-testid":"apigw-deploy",onclick:()=>_apiput(full, "deployments", {stage_name:st.value, description:ds.value}, "API deployed")}, icon("rocket_launch"), "Deploy API")));
+};
+SUB_RENDERERS.apigwlogs = async function(svc, full, host){
+  const j = await _dget(host, _apip(full, "logging")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Logs and tracing per stage (" + j.stages.length + ")"),
+    _dtbl([["stage_name","Stage"],["logging_level","CloudWatch logs"],[s => s.data_trace ? "On" : "Off","Full request/response logging"],
+      [s => s.access_log_destination || "Off","Access logging",1],[s => s.tracing_enabled ? "On" : "Off","X-Ray tracing"],[s => s.metrics_enabled ? "On" : "Off","Detailed metrics"]],
+      j.stages, "Deploy the API to a stage to configure its logging and tracing."));
+  if (j.stages.length) {
+    const sel = el("select",{}, ...j.stages.map(s => el("option",{value:s.stage_name}, s.stage_name))), lvl = el("select",{"data-testid":"apigw-log-level"}, ...["OFF","ERROR","INFO"].map(x => el("option",{value:x}, x)));
+    const xr = el("input",{type:"checkbox","data-testid":"apigw-xray"}), dest = el("input",{placeholder:"arn:aws:logs:" + REGION + ":" + ACCOUNT + ":log-group:API-Gateway-Access-Logs"});
+    const cur = j.stages[0]; lvl.value = cur.logging_level; if (cur.tracing_enabled) xr.checked = true; dest.value = cur.access_log_destination || "";
+    card.append(_field("Stage", sel), _field("CloudWatch logs", lvl), _field("Access log destination ARN", dest),
+      el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, xr, el("span",{}, "X-Ray tracing")),
+      el("button",{class:"btn primary","data-testid":"apigw-log-save",onclick:()=>_apiput(full, "logging", {stage_name:sel.value, logging_level:lvl.value, tracing_enabled:xr.checked, access_log_destination:dest.value}, "Stage logging saved")}, icon("save"), "Save"));
+  }
+  host.append(card);
+  if (j.execution_logs.length) host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Recent executions (" + j.execution_logs.length + ")"),
+    _dtbl([["at","Time"],["method","Method"],["path","Path"],["status","Status"],["stage","Stage"]], j.execution_logs, "")));
+};
+SUB_RENDERERS.apigwpolicy = async function(svc, full, host){
+  const j = await _dget(host, _apip(full, "policy")); if (!j) return;
+  const ta = el("textarea",{"data-testid":"apigw-policy",style:"width:100%;min-height:160px;font-family:Consolas,Menlo,monospace"}); ta.value = j.policy || "";
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Resource policy"), el("div",{class:"small",style:"color:var(--sub);margin-bottom:6px"}, "API ARN: " + j.api_arn),
+    ...(j.policy ? [] : [el("div",{class:"empty"}, "No resource policy: any caller allowed by the methods' authorization can invoke this API.")]), ta,
+    el("div",{style:"display:flex;gap:8px;margin-top:10px"}, el("button",{class:"btn primary",onclick:()=>_apiput(full, "policy", {policy:ta.value}, "Resource policy saved")}, icon("save"), "Save"),
+      j.policy ? el("button",{class:"btn",onclick:()=>_apiput(full, "policy", {policy:""}, "Resource policy removed")}, "Remove") : null)));
+};
+SUB_RENDERERS.apigwsettings = async function(svc, full, host){
+  const s = await _dget(host, _apip(full, "settings")); if (!s) return;
+  host.append(_dkv("API details", [["API name", s.name], ["API ID", s.rest_api_id, 1], ["Description", s.description], ["API endpoint type", s.endpoint_type],
+    ["API key source", s.api_key_source], ["Binary media types", (s.binary_media_types || []).join(", ") || "None set"],
+    ["Content encoding", s.minimum_compression_size == null ? "Inactive" : "Active (minimum " + s.minimum_compression_size + " bytes)"],
+    ["Default execute-api endpoint", s.disable_execute_api_endpoint ? "Inactive" : "Active"], ["Created", s.created]]));
+  const d = el("input",{value:s.description || ""}), k = el("select",{}, el("option",{value:"HEADER"}, "HEADER"), el("option",{value:"AUTHORIZER"}, "AUTHORIZER")); k.value = s.api_key_source;
+  const bm = el("input",{value:(s.binary_media_types || []).join(","),placeholder:"image/png,application/octet-stream"}), mc = el("input",{type:"number",min:"0",value:s.minimum_compression_size ?? ""});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit API settings"), _field("Description", d), _field("API key source", k), _field("Binary media types", bm),
+    _field("Minimum compression size (bytes, empty = off)", mc),
+    el("button",{class:"btn primary","data-testid":"apigw-settings-save",onclick:()=>_apiput(full, "settings", {description:d.value, api_key_source:k.value, binary_media_types:_csv(bm.value), minimum_compression_size:mc.value}, "API settings saved")}, icon("save"), "Save")));
+};
+
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──
 // Renders into #disk-widget-slot above the breadcrumb. Auto-refreshes
 // every 30s. Color matches the tier-aware status:

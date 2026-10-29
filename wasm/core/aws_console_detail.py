@@ -2497,3 +2497,189 @@ def eb_update(rule: dict, section: str, body: dict, account: str, queue_exists=N
     else:
         raise DetailError("ValidationException", f"Unknown rule section '{section}'.")
     return eb_section(rule, section, account)
+
+
+# ── API Gateway (REST) detail: authorizers, models, deployments, logging /
+#    tracing, resource policy, settings — over the API record ─────────────────
+_APIGW_DEFAULT_MODELS = {
+    "Empty": {"content_type": "application/json", "description": "This is a default empty schema model",
+              "schema": {"$schema": "http://json-schema.org/draft-04/schema#", "title": "Empty Schema", "type": "object"}},
+    "Error": {"content_type": "application/json", "description": "This is a default error schema model",
+              "schema": {"$schema": "http://json-schema.org/draft-04/schema#", "title": "Error Schema", "type": "object",
+                         "properties": {"message": {"type": "string"}}}},
+}
+
+
+def apigw_ensure(api: dict) -> dict:
+    api.setdefault("authorizers", [])
+    if not isinstance(api.get("models"), dict):
+        api["models"] = {k: {**v, "id": _hex(6)} for k, v in _APIGW_DEFAULT_MODELS.items()}
+    api.setdefault("stage_settings", {})
+    api.setdefault("policy", "")
+    api.setdefault("api_key_source", "HEADER")
+    api.setdefault("binary_media_types", [])
+    api.setdefault("minimum_compression_size", None)
+    api.setdefault("disable_execute_api_endpoint", False)
+    return api
+
+
+def apigw_stage_names(api: dict) -> list:
+    st = api.get("stages")
+    if isinstance(st, dict) and st:
+        return sorted(st.keys())
+    dep = api.get("deployments") or {}
+    return sorted(k for k, v in dep.items() if isinstance(v, dict) and v.get("stageName") == k)
+
+
+def apigw_deployments(api: dict) -> list:
+    by_dep = {}
+    for sname, s in (api.get("stages") or {}).items():
+        if isinstance(s, dict) and s.get("deployment_id"):
+            by_dep.setdefault(s["deployment_id"], []).append(sname)
+    out = []
+    for k, d in (api.get("deployments") or {}).items():
+        if not isinstance(d, dict):
+            continue
+        out.append({"deployment_id": d.get("deployment_id") or d.get("id") or d.get("deploymentId") or k,
+                    "stage_name": d.get("stage_name") or d.get("stageName") or ", ".join(by_dep.get(d.get("deployment_id") or "", [])) or "(not deployed to a stage)",
+                    "description": d.get("description", ""),
+                    "created": d.get("created", "")})
+    return sorted(out, key=lambda x: x["created"], reverse=True)
+
+
+def apigw_section(api: dict, section: str, api_id: str, account: str) -> dict:
+    apigw_ensure(api)
+    if section == "authorizers":
+        return {"authorizers": list(api["authorizers"])}
+    if section == "models":
+        return {"models": [{"name": n, **m} for n, m in sorted(api["models"].items())]}
+    if section == "deployments":
+        return {"deployments": apigw_deployments(api), "stages": apigw_stage_names(api)}
+    if section == "logging":
+        return {"stages": [{"stage_name": s, **{"access_log_destination": "", "access_log_format": "", "logging_level": "OFF",
+                                                 "data_trace": False, "tracing_enabled": False, "metrics_enabled": False},
+                            **api["stage_settings"].get(s, {})} for s in apigw_stage_names(api)],
+                "execution_logs": list(reversed((api.get("logs") or [])[-20:]))}
+    if section == "policy":
+        return {"policy": api["policy"], "api_arn": f"arn:aws:execute-api:{REGION}:{account}:{api_id}"}
+    if section == "settings":
+        return {"name": api.get("name", ""), "description": api.get("description", ""), "endpoint_type": api.get("endpoint_type", "REGIONAL"),
+                "api_key_source": api["api_key_source"], "binary_media_types": api["binary_media_types"],
+                "minimum_compression_size": api["minimum_compression_size"], "disable_execute_api_endpoint": api["disable_execute_api_endpoint"],
+                "rest_api_id": api_id, "created": api.get("created", "")}
+    raise DetailError("BadRequestException", f"Unknown API section '{section}'.")
+
+
+def apigw_update(api: dict, section: str, body: dict, api_id: str, account: str, lambda_exists=None) -> dict:
+    """CreateAuthorizer / DeleteAuthorizer / CreateModel / DeleteModel / UpdateStage
+    (logging, tracing) / PutRestApi policy / UpdateRestApi settings."""
+    import json
+    import re
+    apigw_ensure(api)
+    b = dict(body or {})
+    act = b.get("action") or "create"
+    if section == "authorizers":
+        if act == "delete":
+            if not any(a["id"] == b.get("id") for a in api["authorizers"]):
+                raise DetailError("NotFoundException", "Invalid Authorizer identifier specified", 404)
+            api["authorizers"] = [a for a in api["authorizers"] if a["id"] != b.get("id")]
+        else:
+            name = str(b.get("name") or "").strip()
+            typ = str(b.get("type") or "TOKEN")
+            if not name:
+                raise DetailError("BadRequestException", "Authorizer name is required.")
+            if typ not in ("TOKEN", "REQUEST", "COGNITO_USER_POOLS"):
+                raise DetailError("BadRequestException", "Authorizer type must be TOKEN, REQUEST or COGNITO_USER_POOLS.")
+            if any(a["name"] == name for a in api["authorizers"]):
+                raise DetailError("ConflictException", f"An authorizer named {name} already exists.", 409)
+            rec = {"id": _hex(6), "name": name, "type": typ, "identity_source": str(b.get("identity_source") or "method.request.header.Authorization"),
+                   "ttl": int(b.get("ttl") if b.get("ttl") not in (None, "") else 300), "created": _now()}
+            if not 0 <= rec["ttl"] <= 3600:
+                raise DetailError("BadRequestException", "Authorization caching TTL must be between 0 and 3600 seconds.")
+            if typ == "COGNITO_USER_POOLS":
+                pools = [str(x) for x in (b.get("provider_arns") or []) if str(x).startswith("arn:aws:cognito-idp:")]
+                if not pools:
+                    raise DetailError("BadRequestException", "A Cognito user pool ARN is required.")
+                rec["provider_arns"] = pools
+            else:
+                fn = str(b.get("lambda_function") or "").strip()
+                if not fn or (lambda_exists and not lambda_exists(fn.rsplit(":function:", 1)[-1].split(":")[0])):
+                    raise DetailError("BadRequestException", "Invalid Authorizer URI: the Lambda function does not exist.")
+                rec["authorizer_uri"] = f"arn:aws:apigateway:{REGION}:lambda:path/2015-03-31/functions/arn:aws:lambda:{REGION}:{account}:function:{fn.rsplit(':function:', 1)[-1]}/invocations"
+            api["authorizers"].append(rec)
+    elif section == "models":
+        if act == "delete":
+            if api["models"].pop(str(b.get("name") or ""), None) is None:
+                raise DetailError("NotFoundException", "Invalid model name specified", 404)
+        else:
+            name = str(b.get("name") or "").strip()
+            if not re.fullmatch(r"[A-Za-z0-9]+", name):
+                raise DetailError("BadRequestException", "Model name must be alphanumeric.")
+            if name in api["models"]:
+                raise DetailError("ConflictException", "Model name already exists for this REST API", 409)
+            raw = b.get("schema") or "{}"
+            try:
+                schema = json.loads(raw) if isinstance(raw, str) else dict(raw)
+            except ValueError:
+                raise DetailError("BadRequestException", "Invalid model schema specified: it must be valid JSON.")
+            api["models"][name] = {"id": _hex(6), "content_type": str(b.get("content_type") or "application/json"),
+                                   "description": str(b.get("description") or ""), "schema": schema}
+    elif section == "logging":
+        stage = str(b.get("stage_name") or "")
+        if stage not in apigw_stage_names(api):
+            raise DetailError("NotFoundException", f"Invalid stage identifier specified: {stage}", 404)
+        cur = api["stage_settings"].setdefault(stage, {})
+        if "logging_level" in b:
+            if b["logging_level"] not in ("OFF", "ERROR", "INFO"):
+                raise DetailError("BadRequestException", "Logging level must be OFF, ERROR or INFO.")
+            cur["logging_level"] = b["logging_level"]
+        for k in ("data_trace", "tracing_enabled", "metrics_enabled"):
+            if k in b:
+                cur[k] = b[k] in _TRUE
+        if "access_log_destination" in b:
+            dest = str(b["access_log_destination"] or "")
+            if dest and not dest.startswith(("arn:aws:logs:", "arn:aws:firehose:")):
+                raise DetailError("BadRequestException", "Access log destination must be a CloudWatch Logs log group or Firehose ARN.")
+            cur["access_log_destination"] = dest
+            cur["access_log_format"] = str(b.get("access_log_format") or '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","status":"$context.status"}') if dest else ""
+    elif section == "policy":
+        raw = b.get("policy") or ""
+        if raw:
+            try:
+                doc = json.loads(raw) if isinstance(raw, str) else dict(raw)
+            except (TypeError, ValueError):
+                raise DetailError("BadRequestException", "Invalid policy document. Please check the policy syntax and try again.")
+            for st in _as_list(doc.get("Statement")) or [None]:
+                if not isinstance(st, dict) or st.get("Effect") not in ("Allow", "Deny") or "Principal" not in st:
+                    raise DetailError("BadRequestException", "Invalid policy document: each statement needs Effect and Principal.")
+                for r in _as_list(st.get("Resource")):
+                    if not str(r).startswith(("execute-api:/", "arn:aws:execute-api:")):
+                        raise DetailError("BadRequestException", "Invalid policy document: Resource must be an execute-api ARN.")
+            api["policy"] = json.dumps(doc, indent=2)
+        else:
+            api["policy"] = ""
+    elif section == "settings":
+        if "name" in b and str(b["name"]).strip():
+            api["name"] = str(b["name"]).strip()
+        if "description" in b:
+            api["description"] = str(b["description"])
+        if "api_key_source" in b:
+            if b["api_key_source"] not in ("HEADER", "AUTHORIZER"):
+                raise DetailError("BadRequestException", "API key source must be HEADER or AUTHORIZER.")
+            api["api_key_source"] = b["api_key_source"]
+        if "binary_media_types" in b:
+            api["binary_media_types"] = [x.strip() for x in (b["binary_media_types"] or []) if str(x).strip()]
+        if "minimum_compression_size" in b:
+            v = b["minimum_compression_size"]
+            if v in (None, ""):
+                api["minimum_compression_size"] = None
+            else:
+                n = int(v)
+                if not 0 <= n <= 10485760:
+                    raise DetailError("BadRequestException", "Minimum compression size must be between 0 and 10485760 bytes.")
+                api["minimum_compression_size"] = n
+        if "disable_execute_api_endpoint" in b:
+            api["disable_execute_api_endpoint"] = b["disable_execute_api_endpoint"] in _TRUE
+    else:
+        raise DetailError("BadRequestException", f"Unknown API section '{section}'.")
+    return apigw_section(api, section, api_id, account)

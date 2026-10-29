@@ -1197,3 +1197,47 @@ def eb_get_rule(p):
     if not isinstance(rule, dict):
         return {"ok": False, "code": "ResourceNotFoundException", "name": name}
     return {"ok": True, **DET.eb_ensure(rule)}
+
+
+# ── API Gateway (REST) tabs (core/aws_console_detail.py over apigateway_core's API) ──
+def apigw_section(p):
+    from core import apigateway_core
+    import json as _json
+    apis = getattr(_R["compute"], "_apigateway_apis", None) or {}
+    key = str(p.get("name") or "")
+    api = apis.get(key) or next((a for a in apis.values() if a.get("name") == key), None)
+    if api is None:
+        return {"ok": False, "code": "NotFoundException",
+                "__http": {"status": 404, "body": {"detail": {"code": "NotFoundException", "message": "Invalid API identifier specified"}}}}
+    section = str(p.get("section") or "")
+    fns = getattr(_R["compute"], "_lambda_functions", None) or {}
+    try:
+        if p.get("method") == "PUT":
+            b = p.get("body") or {}
+            if section == "deployments":
+                stage = str(b.get("stage_name") or "")
+                r = apigateway_core.dispatch(_R["compute"], "POST", f"/restapis/{api['id']}/deployments", {}, {},
+                                             _json.dumps({"stageName": stage}).encode())
+                dep = _json.loads(r.body.decode() or "{}")
+                hist = api.setdefault("deployment_history", {})
+                hist[dep.get("id")] = {"deployment_id": dep.get("id"), "stage_name": stage, "description": str(b.get("description") or ""), "created": _iso(__import__("time").time())}
+                if stage and stage in api.get("deployments", {}):
+                    api["deployments"][stage]["created"] = hist[dep.get("id")]["created"]
+                    api["deployments"][stage]["description"] = hist[dep.get("id")]["description"]
+                out = DET.apigw_section(api, section, api["id"], IAM.account_id)
+            else:
+                out = DET.apigw_update(api, section, b, api["id"], IAM.account_id, lambda f: f in fns)
+        else:
+            out = DET.apigw_section(api, section, api["id"], IAM.account_id)
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (TypeError, ValueError) as e:
+        return _det_err(DET.DetailError("BadRequestException", str(e)))
+    if section == "deployments":
+        for d in out["deployments"]:
+            # the console create deploys the API to its first stage in the same call
+            d["created"] = d.get("created") or api.get("created", "")
+        seen = {d["deployment_id"] for d in out["deployments"]}
+        out["deployments"] = sorted(out["deployments"] + [d for d in (api.get("deployment_history") or {}).values() if d["deployment_id"] not in seen],
+                                    key=lambda d: d.get("created", ""), reverse=True)
+    return {"ok": True, "section": section, **out}
