@@ -159,7 +159,7 @@ RESOURCE_CATALOG_GCP = [
             ["name",      "Database ID"],
             ["type",      "Type"],
             ["locationId","Location"],
-            ["state",     "State"],
+            ["deleteProtectionState", "Delete protection"],
         ],
         "createFields": [
             {"name": "name", "label": "Database ID", "default": "(default)"},
@@ -235,9 +235,9 @@ RESOURCE_CATALOG_GCP = [
         # it's flat. Caught by real-SPA conformance.
         "columns": [
             ["name",                 "Name"],
-            ["autoCreateSubnetworks","Mode"],
+            ["mode",                 "Mode"],
             ["routingConfig.routingMode", "Routing mode"],
-            ["IPv4Range",            "IPv4 range"],
+            ["ipv4Range",            "IPv4 range"],
         ],
         "createFields": [
             {"name": "name", "label": "Network name", "default": "my-vpc"},

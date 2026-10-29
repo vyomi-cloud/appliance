@@ -421,7 +421,7 @@ def _register_gcp(app: FastAPI) -> None:
         for n in _gcp_idx_get(space, "secrets"):
             meta = (vc.kv_get("gcp", space, n) or {}).get("metadata") or {}
             items.append({"name": n, "replication": "automatic",
-                          "latest_version": str(meta.get("version") or 1),
+                          "latest_version": str(meta["version"]) if meta.get("version") else "No versions",
                           "created": meta.get("created_time") or _gcp_idx_created(space, n)})
         return {"items": items}
 

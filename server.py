@@ -16784,6 +16784,7 @@ def _gcp_functions_view(project: str, location: str, function: dict) -> dict:
         "name": f"{_gcp_functions_root()}/projects/{project}/locations/{location}/functions/{name}",
         "description": function.get("description", ""),
         "status": function.get("status", "ACTIVE"),
+        "state": function.get("state") or function.get("status", "ACTIVE"),
         "entryPoint": function.get("entryPoint", "handler"),
         "runtime": function.get("runtime", "python311"),
         "code": function.get("code", ""),

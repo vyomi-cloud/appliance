@@ -365,7 +365,48 @@ def _redis_op(operation, name, body):
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "redis"}
 
 
+def _console_view(svc, rec):
+    """Fill the grid columns the real console shows for a core-backed resource from the
+    resource's own fields / the API's creation defaults."""
+    if not isinstance(rec, dict):
+        return rec
+    if svc == "kms":
+        prim = rec.get("primary") or {}
+        tmpl = rec.get("versionTemplate") or {}
+        parts = str(rec.get("resourceName") or "").split("/")
+        rec.setdefault("keyring", parts[parts.index("keyRings") + 1] if "keyRings" in parts else RING)
+        rec.setdefault("algorithm", prim.get("algorithm") or tmpl.get("algorithm") or "GOOGLE_SYMMETRIC_ENCRYPTION")
+        rec.setdefault("protection", prim.get("protectionLevel") or tmpl.get("protectionLevel") or "SOFTWARE")
+        rec.setdefault("state", prim.get("state") or "ENABLED")
+    elif svc == "secretmanager":
+        repl = rec.get("replication")
+        if isinstance(repl, dict):
+            rec["replication"] = "automatic" if "automatic" in repl else "user-managed"
+        rec.setdefault("replication", "automatic")
+        rec.setdefault("created", rec.get("createTime", ""))
+        if "latest_version" not in rec:
+            _st, _vp = _call("secretmanager", "GET", f"{_P}/secrets/{rec.get('name', '')}/versions")
+            _vs = [str(v.get("name", "")).rsplit("/", 1)[-1] for v in (_vp.get("versions", []) if isinstance(_vp, dict) else [])]
+            rec["latest_version"] = max(_vs, key=lambda x: int(x) if x.isdigit() else 0) if _vs else "No versions"
+    elif svc == "firestore":
+        rec.setdefault("type", "FIRESTORE_NATIVE")
+        rec.setdefault("locationId", "us-central1")
+        rec.setdefault("concurrencyMode", "OPTIMISTIC")
+        rec.setdefault("deleteProtectionState", "DELETE_PROTECTION_DISABLED")
+    return rec
+
+
 def resource_op(service, operation, name="", body=None):
+    out = _resource_op(service, operation, name, body)
+    if isinstance(out, dict) and service in ("kms", "firestore", "secretmanager"):
+        if isinstance(out.get("items"), list) and operation == "List":
+            out["items"] = [_console_view(service, x) for x in out["items"]]
+        elif out.get("ok") and operation in ("Get", "Create"):
+            _console_view(service, out)
+    return out
+
+
+def _resource_op(service, operation, name="", body=None):
     """Console CRUD → GCP core. Returns the registry _resource_dispatch envelope."""
     body = body or {}
     svc = service
@@ -474,8 +515,10 @@ def resource_op(service, operation, name="", body=None):
         if operation == "Create":
             st, p = _call(svc, "POST", base, {"secretId": rid}, {"replication": {"automatic": {}}})
             if st < 300:
-                _call(svc, "POST", f"{base}/{rid}:addVersion", {},
-                      {"payload": {"data": base64.b64encode(b"changeme").decode()}})
+                val = body.get("secret_value") or body.get("value")
+                if val:   # a secret may be created empty; a version exists only once a value is added
+                    _call(svc, "POST", f"{base}/{rid}:addVersion", {},
+                          {"payload": {"data": base64.b64encode(str(val).encode()).decode()}})
                 return {"ok": True, **_rec(p)}
             return {"ok": False, "code": "AlreadyExists", "name": rid}
         if operation == "Get":
@@ -516,6 +559,9 @@ def resource_op(service, operation, name="", body=None):
         if operation == "Delete":
             st, _ = _call(svc, "DELETE", f"{base}/{name}")
             return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+        if operation == "ListAllSubscriptions":   # every subscription in the project
+            st, p = _call(svc, "GET", f"{_P}/subscriptions")
+            return {"ok": st < 300, "subscriptions": p.get("subscriptions", []) if isinstance(p, dict) else []}
         if operation == "ListSubscriptions":   # subscriptions attached to THIS topic
             topic_full = f"projects/{PROJ}/topics/{name}"
             st, p = _call(svc, "GET", f"{_P}/subscriptions")

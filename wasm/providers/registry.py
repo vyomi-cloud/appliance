@@ -132,6 +132,8 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
     if operation == "Create":
         if provider == "aws" and svc == "ec2":
             body = _ec2_launch_defaults(body)
+        if provider == "gcp":
+            body = _gcp_create_defaults(svc, body)
         return {"ok": True, **r.create(provider, account, svc, body)}
     if operation == "Get":
         rec = r.get(provider, account, svc, name)
@@ -166,6 +168,37 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
         ok = r.delete(provider, account, svc, name)
         return {"ok": ok, "code": None if ok else "NotFound", "name": name}
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation}
+
+
+def _gcp_create_defaults(svc: str, body: dict) -> dict:
+    """What the GCP APIs return for a fresh resource, so no grid cell is left unfilled:
+    zone/region, lifecycle state and deploy/creation time."""
+    import datetime
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    rec = dict(body)
+    if svc == "compute":
+        rec.setdefault("zone", "us-central1-a")
+        rec.setdefault("machineType", "e2-medium")
+        rec.setdefault("creationTimestamp", now)
+    elif svc == "functions":
+        rec.setdefault("state", "ACTIVE")
+        rec["status"] = "ACTIVE" if str(rec.get("status", "")).lower() in ("", "available") else rec["status"]
+        rec.setdefault("updateTime", now)
+        rec.setdefault("createTime", now)
+        rec.setdefault("region", "us-central1")
+    elif svc == "vpc":
+        rec.setdefault("autoCreateSubnetworks", True)
+        rec.setdefault("routingConfig", {"routingMode": "REGIONAL"})
+        rec.setdefault("creationTimestamp", now)
+    elif svc == "apigateway":
+        rec.setdefault("displayName", rec.get("name") or "")
+        rec.setdefault("state", "ACTIVE")
+        rec.setdefault("createTime", now)
+    elif svc == "eventarc":
+        rec.setdefault("region", "us-central1")
+        rec.setdefault("state", "ACTIVE")
+        rec.setdefault("createTime", now)
+    return rec
 
 
 def _ec2_launch_defaults(body: dict) -> dict:

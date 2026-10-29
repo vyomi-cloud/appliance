@@ -707,6 +707,9 @@ async function route(method, path, body, query) {
   // GCP-only sub-resource routes (additive; AWS/Azure untouched). These serve the
   // detail-view sub-resource tabs (Pub/Sub subscriptions, Cloud SQL databases,
   // Secret Manager / KMS versions) off the proven GCP cores via the shared dispatch.
+  // Project-wide subscription list (the Topics grid's Subscriptions column reads it).
+  if (method === "GET" && /^\/api\/gcp\/pubsub\/v1\/projects\/[^/]+\/subscriptions\/?$/.test(path))
+    return { tuple: ["gcp", "_resource", "ListAllSubscriptions", { service: "pubsub" }] };
   let gs = path.match(/^\/api\/gcp\/subresource\/pubsub\/([^/]+)\/subscriptions\/?$/);
   if (gs && method === "GET") return { tuple: ["gcp", "_resource", "ListSubscriptions", { service: "pubsub", name: dec(gs[1]) }] };
   if (gs && method === "POST") return { tuple: ["gcp", "_resource", "CreateSubscription", { service: "pubsub", name: dec(gs[1]), body: body || {} }] };
