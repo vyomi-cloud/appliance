@@ -1,17 +1,17 @@
 {
- "at": "2026-10-29T21:51:19+00:00",
+ "at": "2026-10-29T22:51:21+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:fd389969f2ca",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStartRequest",
-     "now": "WorkloadCapturesStartRequest"
+     "was": "WorkloadCapturesStartRequest",
+     "now": "SqlWorkloadCapturesStartRequest"
     }
    },
    "actionable": true
@@ -20,12 +20,12 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:f421c3d61dc0",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStartReplayRequest",
-     "now": "WorkloadCapturesStartReplayRequest"
+     "was": "WorkloadCapturesStartReplayRequest",
+     "now": "SqlWorkloadCapturesStartReplayRequest"
     }
    },
    "actionable": true
@@ -34,12 +34,12 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:c8c00d855f73",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStopRequest",
-     "now": "WorkloadCapturesStopRequest"
+     "was": "WorkloadCapturesStopRequest",
+     "now": "SqlWorkloadCapturesStopRequest"
     }
    },
    "actionable": true
@@ -48,15 +48,35 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-changed",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:acd5b7e919b1",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
    "detail": {
     "request": {
-     "was": "SqlWorkloadCapturesStopReplayRequest",
-     "now": "WorkloadCapturesStopReplayRequest"
+     "was": "WorkloadCapturesStopReplayRequest",
+     "now": "SqlWorkloadCapturesStopReplayRequest"
     }
    },
    "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "Aurora",
+   "kind": "announcement",
+   "key": "feed:aws:fa12cab7949d",
+   "title": "Amazon Aurora now supports post-quantum TLS key exchange",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/aurora-postgresql-post-quantum-tls-key-exchange/",
+   "detail": "Starting today, Amazon Aurora PostgreSQL-Compatible Edition introduces support for post-quantum TLS (PQ-TLS) key exchange, providing you with post-quantum cryptography options for encrypting your data in transit. Amazon Aurora PostgreSQL versions 18 and higher support modification of the ssl_groups parameter. You can select cryptographic groups from the Amazon Aurora PostgreSQL allow list to align with your organization's security standards. Amazon Aurora is designed for high performance and availability at global scale with full PostgreSQL compatibility. It provides scale-to-zero serverless c",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon EC2",
+   "kind": "announcement",
+   "key": "feed:aws:b4b7161dcdb0",
+   "title": "AWS DataSync Enhanced mode now supports Amazon FSx for Windows File Server, FSx for NetApp ONTAP, and Red Hat OpenShift Virtualization",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/datasync-enhanced-fsx-openshift/",
+   "detail": "AWS DataSync Enhanced mode now supports Amazon FSx for Windows File Server and Amazon FSx for NetApp ONTAP as source or destination locations. You can now run Windows to Windows transfers, such as from an on-premises file server to FSx for Windows File Server. Additionally, Enhanced mode agents can now run on Red Hat OpenShift Virtualization version 4.20 or later. With this launch, you can use the same location options in Enhanced mode as in Basic mode. Enhanced mode processes data in parallel for higher performance, removes file count limitations, and provides detailed data transfer metrics. ",
+   "actionable": false
   }
  ],
  "errors": []
