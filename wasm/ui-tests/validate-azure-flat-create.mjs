@@ -33,6 +33,7 @@ try {
   check(await open("Network Security Group"), "Network Security Group service opens");
   await openCreate();
   const nameInp = page.locator("#blade .field input").first();
+  await nameInp.fill("");   // the form pre-fills a realistic default name; clear it to test the required check
   await submit();
   check(await page.locator("#blade.open").count() > 0, "NSG create with empty name is refused (blade stays open)");
   await nameInp.fill(`nsg-${sfx}`);
@@ -42,6 +43,7 @@ try {
   check(await open("Role Definition"), "Role Definition service opens");
   await openCreate();
   check(await page.locator("#blade .field:has(.req)").count() > 0, "Role Name is marked required");
+  await page.locator("#blade .field:has(.req) input").first().fill("");   // default role name is pre-filled
   await submit();
   check(await page.locator("#blade.open").count() > 0, "Role Definition create without Role Name is refused");
   await page.locator("#blade .field:has(.req) input").first().fill(`crawl-role-${sfx}`);
