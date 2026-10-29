@@ -32,6 +32,7 @@ CORES = [
     "kv_store.py", "secrets_core.py",               # Secrets Manager
     "sql_store.py", "rds_core.py",                  # RDS
     "iam_store.py", "iam_core.py",                  # IAM
+    "lease.py",                                     # universal lease engine (SQS visibility timeout + Service Bus peek-lock) — vendored VERBATIM; MUST precede sqs_core / azure_servicebus_core
     "messaging_store.py", "sqs_core.py", "sns_core.py",  # SQS + SNS (eventing)
     "rds_data_core.py",                             # RDS Data API (HTTP SQL over the relay)
     "gcp_storage_core.py",                          # GCP: GCS JSON API (native google-cloud-storage wire)
@@ -78,7 +79,7 @@ CORES = [
 
 # Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
 # Nano copy of a new service's engine to be identical to core/.
-VERBATIM = {"logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py"}
+VERBATIM = {"lease.py", "logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")
