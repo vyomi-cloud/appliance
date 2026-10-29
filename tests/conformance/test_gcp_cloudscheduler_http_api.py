@@ -47,9 +47,12 @@ def wait(pred, secs=20):
 
 
 def main():
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    srv = http.server.ThreadingHTTPServer(("0.0.0.0", 0), H)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    url = f"http://127.0.0.1:{srv.server_address[1]}/hook"
+    # The appliance runs in Docker: reach the host's listener as host.docker.internal (the product
+    # maps it to loopback when it isn't resolvable, i.e. a non-Docker run).
+    host = os.environ.get("HTTP_TARGET_HOST", "host.docker.internal")
+    url = f"http://{host}:{srv.server_address[1]}/hook"
     jobs = f"{BASE}/v1/projects/cloudlearn/locations/us-central1/jobs"
     jid = f"http-{uuid.uuid4().hex[:6]}"
     r = requests.post(jobs, json={
