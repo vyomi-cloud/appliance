@@ -3126,27 +3126,193 @@ SUB_RENDERERS.bucketobjects = function(svc, full, host){
     host.append(tbl);
   });
 };
-SUB_RENDERERS.bucketversioning = function(svc, full, host){
-  const enabled = !!full.versioning_enabled || full.versioning === "Enabled";
-  host.append(el("div",{class:"alert info"}, icon("history_edu"),
-    el("div",{}, "Versioning preserves an object's full history (including delete markers).")));
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Bucket Versioning"));
-  card.append(el("div",{class:"kv-grid"},
-    el("div",{}, el("div",{class:"k"}, "Status"), el("div",{class:"v"}, enabled ? "Enabled" : "Suspended"))));
-  card.append(el("div",{style:"margin-top:14px"},
-    el("button",{class:"btn primary",onclick:async()=>{
-      const r = await api(svc.api_paths.versioning.method,
-        fillPath(svc.api_paths.versioning.path, {name: full.name}),
-        {status: enabled ? "Suspended" : "Enabled"});
-      if (r.ok) toast("Versioning "+(enabled?"suspended":"enabled")); else toast("Update failed","err");
-    }}, enabled ? "Suspend versioning" : "Enable versioning")));
-  host.append(card);
+// ── S3 bucket configuration tabs ─────────────────────────────────────
+// Each tab loads the bucket's real setting from /api/s3/buckets/{name}/config/{kind}
+// (the same record the S3 wire API reads) and saves edits back through it.
+function s3Cfg(full){ const n = encodeURIComponent(full.name); return {
+  get: kind => api("GET", "/api/s3/buckets/"+n+"/config/"+kind),
+  put: (kind, body) => api("PUT", "/api/s3/buckets/"+n+"/config/"+kind, body),
+  del: kind => api("DELETE", "/api/s3/buckets/"+n+"/config/"+kind) }; }
+function s3Panel(host, icn, title, sub){
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  panel.append(el("div",{class:"panel-h"}, icon(icn), title));
+  const body = el("div",{style:"padding:16px"}); panel.append(body);
+  if (sub) body.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin-bottom:12px"}, sub));
+  return body;
+}
+function s3Field(label, input){
+  return el("div",{style:"margin:10px 0;display:grid;grid-template-columns:230px 1fr;gap:12px;align-items:center;max-width:680px"},
+    el("label",{style:"font-size:13px"}, label), input);
+}
+const S3_INPUT = "padding:7px;border:1px solid #aab7b8;border-radius:4px;width:100%;box-sizing:border-box";
+function s3Err(r){ return (r.json && r.json.detail) ? String(r.json.detail) : "HTTP "+r.status; }
+
+SUB_RENDERERS.bucketversions = async function(svc, full, host){
+  const body = s3Panel(host, "history", "Object versions", "Versions of objects in "+full.name+" (bucket versioning: "+(full.versioning||"Disabled")+").");
+  const r = await api("GET", "/api/s3/buckets/"+encodeURIComponent(full.name)+"/versions");
+  const vs = (r.json && r.json.versions) || [];
+  if (!r.ok) { body.append(el("div",{class:"alert err"}, "Failed to load versions: "+s3Err(r))); return; }
+  if (!vs.length) { body.append(el("div",{class:"empty"}, "No object versions in this bucket.")); return; }
+  const tbl = el("table",{class:"aws",style:"width:100%"});
+  tbl.append(el("tr",{}, ...["Name","Version ID","Type","Latest","Last modified","Size","Storage class"].map(h=>el("th",{},h))));
+  vs.forEach(v => tbl.append(el("tr",{},
+    el("td",{}, v.key), el("td",{class:"mono small"}, v.version_id),
+    el("td",{}, v.is_delete_marker ? "Delete marker" : "Version"),
+    el("td",{}, v.is_latest ? "Yes" : "No"), el("td",{class:"small"}, v.last_modified||""),
+    el("td",{}, v.is_delete_marker ? "" : (v.size_human||String(v.size))), el("td",{}, v.storage_class))));
+  body.append(tbl);
 };
-SUB_RENDERERS.bucketnotifications = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("notifications"),
-    el("div",{}, "Notify EventBridge, SNS, SQS, or Lambda on object events.")));
-  host.append(el("div",{class:"empty"}, "No notifications configured."));
+SUB_RENDERERS.bucketversioning = async function(svc, full, host){
+  const body = s3Panel(host, "history_edu", "Bucket Versioning",
+    "Versioning keeps every version of every object in "+full.name+", including delete markers.");
+  const r = await api("GET", "/api/s3/buckets/"+encodeURIComponent(full.name)+"/versioning");
+  const cur = (r.json && r.json.versioning) || "Disabled";
+  const enabled = cur === "Enabled";
+  body.append(el("div",{class:"kv-grid"},
+    el("div",{}, el("div",{class:"k"}, "Bucket"), el("div",{class:"v"}, full.name)),
+    el("div",{}, el("div",{class:"k"}, "Bucket versioning"), el("div",{class:"v","data-testid":"versioning-status"}, cur)),
+    el("div",{}, el("div",{class:"k"}, "Region"), el("div",{class:"v"}, full.region||REGION))));
+  body.append(el("div",{style:"margin-top:14px"}, el("button",{class:"btn primary",onclick:async()=>{
+    const pr = await api("PUT", "/api/s3/buckets/"+encodeURIComponent(full.name)+"/versioning", {status: enabled ? "Suspended" : "Enabled"});
+    if (pr.ok) { toast("Versioning "+(enabled?"suspended":"enabled")); full.versioning = enabled ? "Suspended" : "Enabled"; host.innerHTML=""; SUB_RENDERERS.bucketversioning(svc, full, host); }
+    else toast("Update failed: "+s3Err(pr),"err");
+  }}, enabled ? "Suspend versioning" : "Enable versioning")));
+};
+SUB_RENDERERS.bucketencryption = async function(svc, full, host){
+  const body = s3Panel(host, "enhanced_encryption", "Default encryption",
+    "Server-side encryption applied to new objects in "+full.name+" when the upload doesn't specify one.");
+  const cfg = s3Cfg(full), r = await cfg.get("encryption"), cur = r.json || {};
+  const alg = el("select",{style:S3_INPUT}, ...[["AES256","SSE-S3 (Amazon S3 managed keys)"],["aws:kms","SSE-KMS (AWS KMS key)"],["aws:kms:dsse","DSSE-KMS (dual-layer)"]]
+    .map(([v,l]) => { const o = el("option",{value:v}, l); if (cur.algorithm===v) o.selected = true; return o; }));
+  const key = el("input",{style:S3_INPUT, placeholder:"arn:aws:kms:… or alias/my-key", value: cur.kms_key_id||""});
+  const bk = el("input",{type:"checkbox"}); bk.checked = !!cur.bucket_key_enabled;
+  body.append(s3Field("Encryption type", alg), s3Field("AWS KMS key", key), s3Field("Bucket Key", bk));
+  body.append(el("button",{class:"btn primary",onclick:async()=>{
+    const pr = await cfg.put("encryption", {algorithm: alg.value, kms_key_id: key.value.trim(), bucket_key_enabled: bk.checked});
+    if (pr.ok) toast("Default encryption saved"); else toast("Save failed: "+s3Err(pr),"err");
+  }}, icon("save"), "Save changes"));
+};
+SUB_RENDERERS.bucketblockpublic = async function(svc, full, host){
+  const body = s3Panel(host, "shield", "Block Public Access settings",
+    "Block public access to "+full.name+" and the objects in it.");
+  const cfg = s3Cfg(full), r = await cfg.get("public-access"), cur = r.json || {};
+  const rows = [["BlockPublicAcls","Block public access to buckets and objects granted through new ACLs"],
+    ["IgnorePublicAcls","Block public access to buckets and objects granted through any ACLs"],
+    ["BlockPublicPolicy","Block public access to buckets and objects granted through new public bucket policies"],
+    ["RestrictPublicBuckets","Block public and cross-account access to buckets and objects through any public bucket policies"]];
+  const boxes = {};
+  rows.forEach(([k,l]) => { const cb = el("input",{type:"checkbox","data-testid":"bpa-"+k}); cb.checked = !!cur[k]; boxes[k] = cb;
+    body.append(el("label",{class:"check",style:"display:flex;gap:8px;margin:8px 0;font-size:13px"}, cb, el("span",{}, l))); });
+  body.append(el("button",{class:"btn primary",style:"margin-top:10px",onclick:async()=>{
+    const pr = await cfg.put("public-access", Object.fromEntries(rows.map(([k]) => [k, boxes[k].checked])));
+    if (pr.ok) toast("Block Public Access saved"); else toast("Save failed: "+s3Err(pr),"err");
+  }}, icon("save"), "Save changes"));
+};
+SUB_RENDERERS.bucketpolicy = async function(svc, full, host){
+  const body = s3Panel(host, "policy", "Bucket policy",
+    "A JSON policy that grants or denies access to "+full.name+" (ARN arn:aws:s3:::"+full.name+").");
+  const cfg = s3Cfg(full), r = await cfg.get("policy"), cur = r.json || {};
+  const ta = el("textarea",{rows:14,style:"width:100%;box-sizing:border-box;font-family:monospace;font-size:12.5px;padding:8px;border:1px solid #aab7b8;border-radius:4px","data-testid":"bucket-policy"});
+  ta.value = cur.policy || "";
+  ta.placeholder = '{\n  "Version": "2012-10-17",\n  "Statement": [ … ]\n}';
+  if (!cur.configured) body.append(el("div",{class:"small",style:"color:var(--sub);margin-bottom:8px"}, "No policy is attached to this bucket."));
+  body.append(ta, el("div",{style:"margin-top:12px;display:flex;gap:8px"},
+    el("button",{class:"btn primary",onclick:async()=>{
+      const pr = await cfg.put("policy", {policy: ta.value});
+      if (pr.ok) { toast("Bucket policy saved"); host.innerHTML=""; SUB_RENDERERS.bucketpolicy(svc, full, host); } else toast("Save failed: "+s3Err(pr),"err");
+    }}, icon("save"), "Save changes"),
+    el("button",{class:"btn del",onclick:async()=>{
+      const pr = await cfg.del("policy");
+      if (pr.ok) { toast("Bucket policy deleted"); host.innerHTML=""; SUB_RENDERERS.bucketpolicy(svc, full, host); } else toast("Delete failed","err");
+    }}, icon("delete"), "Delete")));
+};
+// Shared by CORS + lifecycle: list of rules with add / delete, persisted whole.
+async function s3RuleList(svc, full, host, o){
+  const body = s3Panel(host, o.icon, o.title, o.sub);
+  const cfg = s3Cfg(full), r = await cfg.get(o.kind);
+  let rules = (r.json && r.json.rules) || [];
+  const reload = () => { host.innerHTML=""; s3RuleList(svc, full, host, o); };
+  const save = async next => { const pr = await cfg.put(o.kind, {rules: next}); if (pr.ok) { toast(o.title+" saved"); reload(); } else toast("Save failed: "+s3Err(pr),"err"); };
+  if (!rules.length) body.append(el("div",{class:"empty"}, o.empty));
+  else {
+    const tbl = el("table",{class:"aws",style:"width:100%"});
+    tbl.append(el("tr",{}, ...o.cols.map(c=>el("th",{},c[1])), el("th",{style:"width:70px"},"")));
+    rules.forEach((rule, i) => tbl.append(el("tr",{"data-testid":o.kind+"-rule"}, ...o.cols.map(c => { const v = rule[c[0]];
+      return el("td",{class:"small"}, Array.isArray(v) ? v.join(", ") : (v === "" || v == null || v === 0 ? "—" : String(v))); }),
+      el("td",{}, el("button",{class:"btn del",title:"Delete",onclick:()=>save(rules.filter((_,j)=>j!==i))}, icon("delete"))))));
+    body.append(tbl);
+  }
+  const form = el("div",{style:"margin-top:18px;border-top:1px solid var(--line);padding-top:10px"});
+  form.append(el("div",{style:"font-weight:600;margin-bottom:4px"}, o.addTitle));
+  const ins = {};
+  o.fields.forEach(f => { const inp = el("input",{style:S3_INPUT, placeholder:f.ph||"", value:f.def||"", "data-testid":o.kind+"-"+f.k}); ins[f.k] = inp; form.append(s3Field(f.label, inp)); });
+  form.append(el("button",{class:"btn primary",onclick:()=>{
+    const rule = o.build(Object.fromEntries(Object.entries(ins).map(([k,i])=>[k,i.value.trim()])));
+    if (typeof rule === "string") { toast(rule,"err"); return; }
+    save([...rules, rule]);
+  }}, icon("add"), o.addLabel));
+  body.append(form);
+}
+const _csv = s => s ? s.split(",").map(x=>x.trim()).filter(Boolean) : [];
+SUB_RENDERERS.bucketcors = (svc, full, host) => s3RuleList(svc, full, host, {
+  kind:"cors", icon:"open_in_new", title:"Cross-origin resource sharing (CORS)", empty:"No CORS rules are configured for this bucket.",
+  sub:"Rules that let browsers from other origins call "+full.name+".",
+  cols:[["id","ID"],["allowed_origins","Allowed origins"],["allowed_methods","Allowed methods"],["allowed_headers","Allowed headers"],["max_age_seconds","Max age (s)"]],
+  addTitle:"Add CORS rule", addLabel:"Add rule",
+  fields:[{k:"id",label:"Rule ID (optional)"},{k:"origins",label:"Allowed origins",ph:"https://example.com",def:"*"},
+          {k:"methods",label:"Allowed methods",ph:"GET, PUT",def:"GET"},{k:"headers",label:"Allowed headers",ph:"*"},{k:"age",label:"Max age (seconds)",ph:"3000"}],
+  build: v => !_csv(v.origins).length || !_csv(v.methods).length ? "Origins and methods are required" :
+    ({id:v.id, allowed_origins:_csv(v.origins), allowed_methods:_csv(v.methods).map(m=>m.toUpperCase()), allowed_headers:_csv(v.headers), expose_headers:[], max_age_seconds:parseInt(v.age||"0",10)||0}),
+});
+SUB_RENDERERS.bucketlifecycle = (svc, full, host) => s3RuleList(svc, full, host, {
+  kind:"lifecycle", icon:"history_toggle_off", title:"Lifecycle rules", empty:"This bucket has no lifecycle rules.",
+  sub:"Transition or expire objects in "+full.name+" automatically.",
+  cols:[["id","Rule name"],["status","Status"],["prefix","Prefix"],["transition_days","Transition (days)"],["transition_storage_class","Storage class"],["expiration_days","Expire (days)"],["noncurrent_expiration_days","Noncurrent expire (days)"]],
+  addTitle:"Create lifecycle rule", addLabel:"Create rule",
+  fields:[{k:"id",label:"Lifecycle rule name",ph:"expire-logs"},{k:"prefix",label:"Prefix filter",ph:"logs/"},
+          {k:"tdays",label:"Transition after (days)",ph:"30"},{k:"tclass",label:"Transition storage class",def:"GLACIER"},
+          {k:"edays",label:"Expire after (days)",ph:"365"},{k:"ndays",label:"Expire noncurrent versions after (days)",ph:"90"}],
+  build: v => !v.id ? "Rule name is required" :
+    ({id:v.id, status:"Enabled", prefix:v.prefix, transition_days:parseInt(v.tdays||"0",10)||0, transition_storage_class:v.tclass,
+      expiration_days:parseInt(v.edays||"0",10)||0, noncurrent_expiration_days:parseInt(v.ndays||"0",10)||0}),
+});
+SUB_RENDERERS.bucketnotifications = async function(svc, full, host){
+  const body = s3Panel(host, "notifications", "Event notifications",
+    "Send a message to SNS, SQS or Lambda (or EventBridge) when objects in "+full.name+" change.");
+  const n = encodeURIComponent(full.name);
+  const r = await api("GET", "/api/s3/buckets/"+n+"/notifications"), j = r.json || {};
+  const rules = [
+    ...(j.topicConfigurations||[]).map(x=>({...x, type:"TopicConfiguration", dest:x.topic})),
+    ...(j.queueConfigurations||[]).map(x=>({...x, type:"QueueConfiguration", dest:x.queue})),
+    ...(j.cloudFunctionConfigurations||[]).map(x=>({...x, type:"CloudFunctionConfiguration", dest:x.cloudFunction}))];
+  const reload = () => { host.innerHTML=""; SUB_RENDERERS.bucketnotifications(svc, full, host); };
+  const save = async (next, eb) => {
+    const pr = await api("PUT", "/api/s3/buckets/"+n+"/notification", {event_bridge_enabled: eb, rules: next.map(x=>({id:x.id, events:x.events, prefix:x.prefix||"", suffix:x.suffix||"", destination_type:x.type, destination:x.dest}))});
+    if (pr.ok) { toast("Event notifications saved"); reload(); } else toast("Save failed: "+s3Err(pr),"err");
+  };
+  const eb = el("input",{type:"checkbox",onchange:e=>save(rules, e.target.checked)}); eb.checked = !!j.eventBridgeEnabled;
+  body.append(el("label",{class:"check",style:"display:flex;gap:8px;margin-bottom:12px;font-size:13px"}, eb, el("span",{}, "Send notifications to Amazon EventBridge for all events in this bucket")));
+  if (!rules.length) body.append(el("div",{class:"empty"}, "No event notifications configured for this bucket."));
+  else {
+    const tbl = el("table",{class:"aws",style:"width:100%"});
+    tbl.append(el("tr",{}, ...["Name","Event types","Prefix","Suffix","Destination type","Destination",""].map(h=>el("th",{},h))));
+    rules.forEach(x => tbl.append(el("tr",{"data-testid":"notification-rule"}, el("td",{}, x.id), el("td",{class:"small"}, (x.events||[]).join(", ")),
+      el("td",{}, x.prefix||"—"), el("td",{}, x.suffix||"—"), el("td",{}, x.type.replace("Configuration","")), el("td",{class:"mono small"}, x.dest||""),
+      el("td",{}, el("button",{class:"btn del",title:"Delete",onclick:()=>save(rules.filter(y=>y!==x), eb.checked)}, icon("delete"))))));
+    body.append(tbl);
+  }
+  const form = el("div",{style:"margin-top:18px;border-top:1px solid var(--line);padding-top:10px"});
+  form.append(el("div",{style:"font-weight:600;margin-bottom:4px"}, "Create event notification"));
+  const ins = {};
+  [["id","Event notification name","on-upload"],["events","Event types","s3:ObjectCreated:*"],["prefix","Prefix","images/"],["suffix","Suffix",".jpg"],["dest","Destination ARN","arn:aws:sqs:us-east-1:123456789012:my-queue"]]
+    .forEach(([k,l,ph]) => { const i = el("input",{style:S3_INPUT,placeholder:ph,"data-testid":"notification-"+k}); ins[k]=i; form.append(s3Field(l,i)); });
+  form.append(el("button",{class:"btn primary",onclick:()=>{
+    const v = k => ins[k].value.trim();
+    if (!v("id") || !v("dest")) { toast("Name and destination ARN are required","err"); return; }
+    const type = /:sqs:/.test(v("dest")) ? "QueueConfiguration" : /:lambda:/.test(v("dest")) ? "CloudFunctionConfiguration" : "TopicConfiguration";
+    save([...rules, {id:v("id"), events:_csv(v("events")||"s3:ObjectCreated:*"), prefix:v("prefix"), suffix:v("suffix"), type, dest:v("dest")}], eb.checked);
+  }}, icon("add"), "Create event notification"));
+  body.append(form);
 };
 
 // Lambda specific

@@ -15,6 +15,7 @@ AWS-specific renderer types:
     bucketObjects   — Drill into S3 bucket objects
     bucketVersioning — Versioning editor (S3)
     bucketNotifications — Event notifications editor (S3)
+    bucketVersions, bucketEncryption, bucketLifecycle, bucketBlockPublic, bucketPolicy, bucketCors — S3 bucket settings editors
     lambdaCode      — Inline code editor (Lambda)
     lambdaInvoke    — Test invocation form (Lambda)
     lambdaPerms     — Resource-based policy editor (Lambda)
@@ -84,18 +85,18 @@ _S3_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Objects", "items": [
         {"key": "objects",        "label": "Objects",                "icon": "folder",        "type": "bucketObjects"},
-        {"key": "versions",       "label": "Versions",               "icon": "history",       "type": "stub"},
+        {"key": "versions",       "label": "Versions",               "icon": "history",       "type": "bucketVersions"},
     ]},
     {"group": "Properties", "items": [
         {"key": "versioning",     "label": "Bucket Versioning",      "icon": "history_edu",   "type": "bucketVersioning"},
         {"key": "notifications",  "label": "Event notifications",    "icon": "notifications", "type": "bucketNotifications"},
-        {"key": "lifecycle",      "label": "Lifecycle rules",        "icon": "history_toggle_off", "type": "stub"},
-        {"key": "encryption",     "label": "Default encryption",     "icon": "enhanced_encryption", "type": "stub"},
+        {"key": "lifecycle",      "label": "Lifecycle rules",        "icon": "history_toggle_off", "type": "bucketLifecycle"},
+        {"key": "encryption",     "label": "Default encryption",     "icon": "enhanced_encryption", "type": "bucketEncryption"},
     ]},
     {"group": "Permissions", "items": [
-        {"key": "blockPublic",    "label": "Block Public Access",    "icon": "shield",        "type": "stub"},
-        {"key": "iam",            "label": "Bucket Policy",          "icon": "policy",        "type": "iam"},
-        {"key": "cors",           "label": "Cross-origin resource sharing (CORS)", "icon": "open_in_new", "type": "stub"},
+        {"key": "blockPublic",    "label": "Block Public Access",    "icon": "shield",        "type": "bucketBlockPublic"},
+        {"key": "bucketPolicy",   "label": "Bucket Policy",          "icon": "policy",        "type": "bucketPolicy"},
+        {"key": "cors",           "label": "Cross-origin resource sharing (CORS)", "icon": "open_in_new", "type": "bucketCors"},
     ]},
     {"group": "Management", "items": [
         {"key": "metrics",        "label": "Metrics",                "icon": "show_chart",    "type": "metrics"},

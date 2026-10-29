@@ -27,6 +27,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 
 from core import app_context as ctx
+from core import s3_bucket_config as s3cfg
 
 # ---------------------------------------------------------------------------
 # Lazy back-reference to server.py
@@ -1109,6 +1110,72 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
 
     _aws_xamz_dispatchers = aws_xamz_dispatchers or {}
 
+    # ── Console JSON API for bucket configuration tabs ───────────────────
+    # One JSON shape per setting (core/s3_bucket_config.py), stored on the
+    # same bucket record the S3 wire handlers read, so a console edit is
+    # visible to the SDK/CLI and the other way round.
+    _CFG_KINDS = ("encryption", "public-access", "policy", "cors", "lifecycle")
+
+    def _cfg_get(b: dict, kind: str) -> dict:
+        if kind == "encryption":
+            return s3cfg.get_sse(b)
+        if kind == "public-access":
+            pab = s3cfg.get_pab(b)
+            return {"configured": pab is not None, **(pab or {k: False for k in s3cfg.PAB_KEYS})}
+        if kind == "policy":
+            return {"policy": b.get("policy") or "", "configured": bool(b.get("policy"))}
+        if kind == "cors":
+            return {"rules": s3cfg.cors_from_xml(b.get("cors"))}
+        return {"rules": s3cfg.lifecycle_from_xml(b.get("lifecycle"))}
+
+    @app.get("/api/s3/buckets/{name}/config/{kind}")
+    def api_s3_cfg_get(name: str, kind: str):
+        if name not in buckets or kind not in _CFG_KINDS:
+            raise HTTPException(404, detail="NoSuchBucket" if name not in buckets else "UnknownConfig")
+        return {"bucket": name, "kind": kind, **_cfg_get(buckets[name], kind)}
+
+    @app.put("/api/s3/buckets/{name}/config/{kind}")
+    async def api_s3_cfg_put(name: str, kind: str, request: Request):
+        if name not in buckets or kind not in _CFG_KINDS:
+            raise HTTPException(404, detail="NoSuchBucket" if name not in buckets else "UnknownConfig")
+        try:
+            payload = await request.json()
+        except ValueError:
+            payload = {}
+        if not isinstance(payload, dict):
+            raise HTTPException(400, detail="Body must be a JSON object")
+        b = buckets[name]
+        try:
+            if kind == "encryption":
+                b["sse"] = s3cfg.normalize_sse(payload)
+            elif kind == "public-access":
+                b["public_access_block"] = s3cfg.normalize_pab(payload)
+            elif kind == "policy":
+                b["policy"] = s3cfg.validate_policy(payload.get("policy", ""), name)
+            elif kind == "cors":
+                xml = s3cfg.cors_to_xml(payload.get("rules") or [])
+                b["cors"] = xml
+            else:
+                b["lifecycle"] = s3cfg.lifecycle_to_xml(payload.get("rules") or [])
+        except s3cfg.ConfigError as e:
+            raise HTTPException(400, detail=f"{e.code}: {e.message}")
+        b["access"] = s3cfg.access_label(b)
+        return {"bucket": name, "kind": kind, **_cfg_get(b, kind)}
+
+    @app.delete("/api/s3/buckets/{name}/config/{kind}")
+    def api_s3_cfg_delete(name: str, kind: str):
+        if name not in buckets or kind not in _CFG_KINDS:
+            raise HTTPException(404, detail="NoSuchBucket" if name not in buckets else "UnknownConfig")
+        b = buckets[name]
+        if kind == "encryption":
+            b.pop("sse", None)
+        elif kind == "public-access":
+            b["public_access_block"] = None
+        else:
+            b.pop({"policy": "policy", "cors": "cors", "lifecycle": "lifecycle"}[kind], None)
+        b["access"] = s3cfg.access_label(b)
+        return {"bucket": name, "kind": kind, **_cfg_get(b, kind)}
+
     # Static dir reference for SPA serving
     import os
     STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
@@ -1351,10 +1418,23 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
                 buckets[bucket]["lifecycle"] = body.decode("utf-8", errors="replace")
             return _empty_response(200)
 
-        # Encryption
-        if "encryption" in params:
+        # Encryption / bucket policy / public access block
+        if "encryption" in params or "policy" in params or "publicAccessBlock" in params:
             if not _bucket_exists(bucket):
                 return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+            body = await request.body()
+            try:
+                if "encryption" in params:
+                    buckets[bucket]["sse"] = s3cfg.sse_from_xml(body)
+                elif "policy" in params:
+                    buckets[bucket]["policy"] = s3cfg.validate_policy(body.decode("utf-8", errors="replace"), bucket)
+                    buckets[bucket]["access"] = s3cfg.access_label(buckets[bucket])
+                    return _empty_response(204)
+                else:
+                    buckets[bucket]["public_access_block"] = s3cfg.pab_from_xml(body)
+                    buckets[bucket]["access"] = s3cfg.access_label(buckets[bucket])
+            except s3cfg.ConfigError as e:
+                return _error_xml(e.code, e.message, f"/{bucket}", 400)
             return _empty_response(200)
 
         # CreateBucket
@@ -1503,8 +1583,21 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return _xml_response(xml)
 
         if "encryption" in params:
-            return _error_xml("ServerSideEncryptionConfigurationNotFoundError",
-                              "The server side encryption configuration was not found.", f"/{bucket}", 404)
+            return _xml_response(s3cfg.sse_to_xml(s3cfg.get_sse(buckets[bucket])))
+
+        if "policy" in params:
+            stored_policy = buckets[bucket].get("policy")
+            if not stored_policy:
+                return _error_xml("NoSuchBucketPolicy", "The bucket policy does not exist", f"/{bucket}", 404)
+            return Response(content=stored_policy, media_type="application/json",
+                            headers={"x-amz-request-id": _req_id()})
+
+        if "publicAccessBlock" in params:
+            pab = s3cfg.get_pab(buckets[bucket])
+            if pab is None:
+                return _error_xml("NoSuchPublicAccessBlockConfiguration",
+                                  "The public access block configuration was not found", f"/{bucket}", 404)
+            return _xml_response(s3cfg.pab_to_xml(pab))
 
         if "lifecycle" in params:
             stored_lifecycle = buckets[bucket].get("lifecycle")
@@ -1567,6 +1660,17 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return _empty_response(204)
         if "cors" in params:
             buckets[bucket].pop("cors", None)
+            return _empty_response(204)
+        if "encryption" in params:
+            buckets[bucket].pop("sse", None)
+            return _empty_response(204)
+        if "policy" in params:
+            buckets[bucket].pop("policy", None)
+            buckets[bucket]["access"] = s3cfg.access_label(buckets[bucket])
+            return _empty_response(204)
+        if "publicAccessBlock" in params:
+            buckets[bucket]["public_access_block"] = None
+            buckets[bucket]["access"] = s3cfg.access_label(buckets[bucket])
             return _empty_response(204)
         if "lifecycle" in params:
             buckets[bucket].pop("lifecycle", None)

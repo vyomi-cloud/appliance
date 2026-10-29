@@ -74,6 +74,22 @@
       "timeout": 300
     },
     {
+      "id": "offline-sdk-python-aws-s3-config",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "sdk-python",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 -m pytest tests/conformance/test_aws_s3_bucket_config.py -q",
+      "timeout": 300
+    },
+    {
+      "id": "offline-ui-aws-s3-config",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-s3-config.mjs",
+      "timeout": 600
+    },
+    {
       "id": "offline-sdk-python-aws-ops",
       "target": "offline",
       "cloud": "aws",

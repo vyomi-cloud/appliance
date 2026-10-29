@@ -3756,6 +3756,8 @@ const SUBRES_CATALOG = {
             {k:"ignore_public_acls",label:"Ignore public ACLs",type:"toggle",default:true},
             {k:"block_public_policy",label:"Block public bucket policies",type:"toggle",default:true},
             {k:"restrict_public_buckets",label:"Restrict public buckets",type:"toggle",default:true}]},
+  "s3:bucketPolicy": {kind:"settings", title:"Bucket policy",
+    fields:[{k:"policy",label:"Policy (JSON)",ph:'{"Version":"2012-10-17","Statement":[…]}'}]},
   "s3:cors": {kind:"list", title:"Cross-origin resource sharing (CORS)", singular:"rule",
     fields:[{k:"name",label:"Rule ID",ph:"allow-get"},{k:"allowed_origins",label:"Allowed origins",ph:"*"},
             {k:"allowed_methods",label:"Allowed methods",ph:"GET,PUT"}],
