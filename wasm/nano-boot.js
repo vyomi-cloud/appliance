@@ -266,6 +266,14 @@ import builtins; builtins._disp = _disp
       scheduleCensus();       // any op may have mutated state — refresh the footprint
       scheduleStoresSave();   // …and persist + notify the other context (Fix #1/#2)
     } catch (e) {
+      // Unhandled engine exception in the in-browser backend: report it (scrubbed) —
+      // the same failure class the appliance middleware reports as a 5xx.
+      try {
+        const t = (ev.data.tuple || []);
+        window.VyomiIssueReporter && window.VyomiIssueReporter.send({
+          kind: "exception", cloud: t[0], service: t[1], action: String(t[2] || "dispatch"),
+          status: 500, message: String(e && e.message || e), stack: String(e && e.stack || e) });
+      } catch (_) {}
       port.postMessage({ ok: false, error: String(e) });
     }
   });

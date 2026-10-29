@@ -25,6 +25,18 @@
 const BASE = self.location.pathname.replace(/\/[^/]*$/, "");
 const FIX = BASE + "/fixtures";
 
+// Automatic issue reporting (scrub + send only; the consent dialog lives on the page).
+try { importScripts("./issue-reporter.js"); } catch (_) {}
+function reportFailure(kind, path, method, status, message, code) {
+  try {
+    const parts = path.split("/").filter(Boolean);              // /api/<cloud>/<service>/...
+    const cloud = /^(aws|gcp|azure)$/.test(parts[1] || "") ? parts[1] : "unknown";
+    const service = cloud === "unknown" ? (parts[1] || "platform") : (parts[2] || "platform");
+    self.VyomiIssueReporter && self.VyomiIssueReporter.send({
+      kind, cloud, service, action: method + " " + service, status, code, message });
+  } catch (_) {}
+}
+
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
@@ -807,6 +819,13 @@ self.addEventListener("fetch", (event) => {
   event.respondWith((async () => {
     try {
       const method = event.request.method;
+      // Issue reporting talks to the PORTAL (session cookie), not the in-browser backend.
+      if (apiPath.startsWith("/api/issues/")) {
+        const init = { method, credentials: "include", headers: { "Content-Type": "application/json" } };
+        if (method !== "GET" && method !== "HEAD") init.body = await event.request.text();
+        try { return await fetch(url.origin + apiPath, init); }
+        catch (_) { return json({ ok: false, detail: "portal unreachable" }, 502); }
+      }
       // ── console-next SPA (slice 1) ──────────────────────────────────
       // The new SPA (served at BASE/console-next/) talks ONLY to /api/console/*.
       // capabilities → the in-browser manifest (dispatched to console_next_adapter
@@ -1136,8 +1155,13 @@ self.addEventListener("fetch", (event) => {
       }
       // The cores return console-shaped JSON ({buckets|tables|objects|items:[...]}),
       // so the adapter result is the response body verbatim.
+      if (res && res.__http && res.__http.status >= 500) {
+        const hb = res.__http.body || {};
+        reportFailure("http", apiPath, method, res.__http.status, hb.message || hb.detail || "", hb.code);
+      }
       return json(res, res && res.ok === false ? 404 : 200);
     } catch (e) {
+      reportFailure("exception", apiPath, event.request.method, 500, String(e), "");
       return json({ ok: false, error: String(e) }, 500);
     }
   })());
