@@ -145,6 +145,13 @@ class Aws(CloudProvider):
             ("extras", "Delete"):    lambda b, a, p: D.extras_delete(p),
             ("extras", "ConfigGet"): lambda b, a, p: D.extras_config_get(p),
             ("extras", "ConfigPut"): lambda b, a, p: D.extras_config_put(p),
+            # Kinesis Data Streams — via core/kinesis_core.py
+            ("kinesis", "ListStreams"):  lambda b, a, p: D.kinesis_list(p),
+            ("kinesis", "CreateStream"): lambda b, a, p: D.kinesis_create(p),
+            ("kinesis", "GetStream"):    lambda b, a, p: D.kinesis_get(p),
+            ("kinesis", "UpdateStream"): lambda b, a, p: D.kinesis_update(p),
+            ("kinesis", "DeleteStream"): lambda b, a, p: D.kinesis_delete(p),
+            ("kinesis", "PutRecord"):    lambda b, a, p: D.kinesis_put(p),
             # Elastic Load Balancing — LBs, target groups, listeners (core/elbv2_core.py)
             ("elbv2", "ListLoadBalancers"):  lambda b, a, p: D.elb_list(p),
             ("elbv2", "CreateLoadBalancer"): lambda b, a, p: D.elb_create(p),

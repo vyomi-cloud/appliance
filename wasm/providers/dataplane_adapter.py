@@ -21,6 +21,7 @@ from core import lambda_core, apigateway_core, vpc_core, eventbridge_core
 from core import elbv2_core
 from core import ssm_core
 from core import azure_servicebus_core, azure_sql_core, azure_iam_core
+from core import kinesis_core
 from core import apigatewayv2_core
 from core import stepfunctions_core
 from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
@@ -362,6 +363,37 @@ def eb_put_event(p):
                                        "DetailType": str(p.get("detailType") or ""),
                                        "Detail": detail or "{}"}]})
     return {"ok": True, "eventId": (r.body.get("Entries") or [{}])[0].get("EventId")}
+
+
+# ── Kinesis Data Streams (core/kinesis_core.py; store shared with the relay) ─
+KIN = A._R["kinesis"]
+
+
+def kinesis_list(p=None):
+    return kinesis_core.console_list(KIN)
+
+
+def kinesis_create(p):
+    return kinesis_core.console_create(KIN, p or {})
+
+
+def kinesis_get(p):
+    return kinesis_core.console_get(KIN, str(p.get("name") or ""))
+
+
+def kinesis_update(p):
+    return kinesis_core.console_update(KIN, str(p.get("name") or ""), p.get("body") or {})
+
+
+def kinesis_delete(p):
+    return kinesis_core.console_delete(KIN, str(p.get("name") or ""))
+
+
+def kinesis_put(p):
+    body = {"StreamName": str(p.get("name") or ""), "PartitionKey": str(p.get("partition_key") or "pk"),
+            "Data": __import__("base64").b64encode(str(p.get("data") or "").encode()).decode()}
+    r = kinesis_core.dispatch(KIN, "Kinesis_20131202.PutRecord", body)
+    return {"ok": r.status < 400, **r.body}
 
 
 # ── Azure Service Bus (topics + subscriptions + send/receive) ──────────────

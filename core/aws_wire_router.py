@@ -113,6 +113,7 @@ from core import apigatewayv2_core as apigw2
 from core import ssm_core as ssm
 from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
+from core import kinesis_core as kinesis
 from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
@@ -164,7 +165,7 @@ _SIGNING = {
     "dynamodb": "dynamodb", "kms": "kms", "secretsmanager": "secretsmanager",
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
-    "events": "events", "lambda": "lambda", "ec2": "vpc", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
+    "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
     "ssm": "ssm",
 }
@@ -173,6 +174,7 @@ _SIGNING = {
 _TARGET_PREFIX = {
     "DynamoDB_": "dynamodb", "TrentService": "kms",
     "secretsmanager": "secretsmanager", "AmazonSQS": "sqs", "AWSEvents": "events",
+    "Kinesis_20131202": "kinesis",
     "Logs_20140328": "logs",
     "AmazonSSM": "ssm",
     "AWSStepFunctions": "stepfunctions",
@@ -272,6 +274,7 @@ class AwsWireRouter:
         # API Gateway shares the Lambda store so an AWS_PROXY integration can reach
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
+        self.kinesis = s.get("kinesis") or kinesis.KinesisStore()   # Kinesis Data Streams
         self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
@@ -516,6 +519,11 @@ class AwsWireRouter:
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
+        if svc == "kinesis":   # JSON 1.1 (boto3/Go/CLI) or CBOR (Java SDK) by Content-Type
+            status, hdrs, out = kinesis.handle_wire(self.kinesis, lheaders.get("x-amz-target", "") or "",
+                                                    bytes(body), lheaders.get("content-type", ""))
+            return {"status": status, "headers": hdrs, "body": out}
+
         if svc in _JSON_CT:
             target = lheaders.get("x-amz-target", "") or ""
             payload = self._json_body(body)
@@ -527,6 +535,8 @@ class AwsWireRouter:
                 r = secrets.dispatch(self.sec, target, payload)
             elif svc == "events":
                 r = events.dispatch(self.events, target, payload)
+            elif svc == "kinesis":
+                r = kinesis.dispatch(self.kinesis, target, payload)
             elif svc == "logs":
                 r = logs.dispatch(self.logs, target, payload)
             elif svc == "ssm":

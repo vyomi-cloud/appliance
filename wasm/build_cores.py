@@ -52,6 +52,8 @@ CORES = [
     "eventbridge_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
+    "cost_model.py",                                # list prices -> the space cost-savings metrics (pure data)
+    "kinesis_core.py",                             # AWS: Kinesis Data Streams (shards, records, iterators, consumers)
     "apigatewayv2_core.py",                        # AWS: API Gateway V2 control plane
     "apigatewayv2_gateway.py",                     # AWS: API Gateway V2 data plane (authorizers, throttling, CORS, Lambda proxy)
     "elbv2_core.py",                                # AWS: Elastic Load Balancing v2 control plane — native Query wire + console REST
@@ -161,8 +163,25 @@ def check_relay_cores():
     print("relay CORES lists are import-closed ✓")
 
 
+def _expansion_cores():
+    """Cores of services built by the expansion agent (services/manifests/*.json).
+    The service gate requires their Nano copy to be BYTE-IDENTICAL to core/, so they are
+    vendored without the GENERATED header (the file is the canonical source verbatim)."""
+    import glob
+    import json
+    out = set()
+    for f in glob.glob(os.path.join(ROOT, "services", "manifests", "*.json")):
+        try:
+            out.add(os.path.basename(json.load(open(f)).get("core", "")))
+        except Exception:
+            pass
+    out.discard("")
+    return out
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    verbatim = _expansion_cores()
     # Make wasm/core an importable package mirror of the repo `core` package, so
     # the vendored modules' `from core.object_store import ...` resolve in Pyodide.
     with open(os.path.join(OUT, "__init__.py"), "w") as f:
@@ -171,9 +190,7 @@ def main():
         with open(os.path.join(SRC, name)) as f:
             src = f.read()
         with open(os.path.join(OUT, name), "w") as f:
-            # New services are vendored byte-identical (the service gate compares
-            # core/ and wasm/core/ verbatim); legacy cores keep the generated header.
-            f.write(src if name in VERBATIM else HEADER + src)
+            f.write(src if name in verbatim else HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
     check_relay_cores()   # fail loudly if a relay loader lags the cores
 

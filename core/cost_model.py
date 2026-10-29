@@ -80,6 +80,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.lambda": 0.20,       # minimal invocations
     "aws.s3": 0.50,           # ~20GB storage
     "aws.sqs": 0.40,          # ~1M requests
+    "aws.kinesis": 10.95,     # 1 provisioned shard x 730h @ $0.015/shard-hour
     "aws.dynamodb": 1.25,     # on-demand, light usage
     "aws.apigateway": 3.50,   # ~1M calls
     "aws.apigatewayv2": 1.00, # HTTP API $1.00/M requests (~1M calls)

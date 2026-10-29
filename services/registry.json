@@ -416,6 +416,13 @@
    "upstream": "cloudwatch",
    "status": "released",
    "released_in": "3.0.26"
+  },
+  {
+   "cloud": "aws",
+   "key": "kinesis",
+   "name": "Kinesis Data Streams",
+   "upstream": "kinesis",
+   "status": "pending-release"
   }
  ]
 }

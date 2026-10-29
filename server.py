@@ -192,12 +192,12 @@ register_azure_routes(app, None)
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2
-from routes import lazy_backends, shared, console_next, aws_logs, aws_cloudwatch
+from routes import lazy_backends, shared, console_next, aws_logs, aws_cloudwatch, aws_kinesis
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2,
-            lazy_backends, shared, console_next, aws_logs, aws_cloudwatch]:
+            lazy_backends, shared, console_next, aws_logs, aws_cloudwatch, aws_kinesis]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -2622,6 +2622,10 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(table, dict):
             add("aws", "dynamodb", "table", table_name, table)
 
+    aws_kinesis = _cloudsim_service_state(space, "kinesis")
+    for stream_name, stream in aws_kinesis.get("streams", {}).items():
+        if isinstance(stream, dict):
+            add("aws", "kinesis", "stream", stream_name, stream)
     aws_logs = _cloudsim_service_state(space, "logs")
     for group_name, group in aws_logs.get("log_groups", {}).items():
         if isinstance(group, dict):

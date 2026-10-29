@@ -29,6 +29,7 @@ from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
 from core.nano_events import EventStore
+from core.kinesis_core import KinesisStore
 from core.apigatewayv2_core import ApiGwV2Store
 from core.logs_core import LogsStore
 from core.elbv2_core import Elbv2Store
@@ -61,6 +62,7 @@ def get() -> dict:
             "rds": InMemorySqlStore(),
             "iam": InMemoryIamStore(),
             "msg": InMemoryMessagingStore(),   # SHARED by sqs + sns (fan-out)
+            "kinesis": KinesisStore(),         # Kinesis Data Streams
             "apigwv2": ApiGwV2Store(),
             # Console compute/network models: Lambda + API Gateway share ONE namespace
             # (AWS_PROXY reaches the registered functions); VPC has its own. They

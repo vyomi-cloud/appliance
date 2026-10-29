@@ -386,6 +386,18 @@ _KMS_SUB = [
 
 
 # ===========================================================================
+# Kinesis Data Streams — stream detail
+# ===========================================================================
+_KINESIS_SUB = [
+    *_UNIVERSAL_TOP,
+    {"group": "Data stream", "items": [
+        {"key": "configuration", "label": "Configuration",       "icon": "tune",          "type": "properties"},
+        {"key": "shards",        "label": "Shards and consumers", "icon": "account_tree", "type": "json"},
+    ]},
+]
+
+
+# ===========================================================================
 # ELBv2 — load balancer detail
 # ===========================================================================
 _ELBV2_SUB = [
@@ -487,6 +499,7 @@ SUB_BLADES: dict[str, list] = {
     "eventbridge":    _EVENTBRIDGE_SUB,
     "secretsmanager": _SECRETSMANAGER_SUB,
     "kms":            _KMS_SUB,
+    "kinesis":        _KINESIS_SUB,
     "elbv2":          _ELBV2_SUB,
     "logs":           _LOGS_SUB,
     "cloudwatch":     _CLOUDWATCH_SUB,

@@ -79,6 +79,12 @@ services:
       - "8222:8222"
     volumes:
       - vyomi-nats:/data
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8222/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
   vyomi-victoriametrics:

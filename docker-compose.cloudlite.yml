@@ -159,7 +159,14 @@ services:
   vyomi-nats:
     profiles: ["full"]
     image: nats:2-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
     networks: [vyomi-net]
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8222/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
   vyomi-victoriametrics:
