@@ -159,7 +159,7 @@ RESOURCE_CATALOG_GCP = [
             ["name",      "Database ID"],
             ["type",      "Type"],
             ["locationId","Location"],
-            ["state",     "State"],
+            ["createTime","Created"],
         ],
         "createFields": [
             {"name": "name", "label": "Database ID", "default": "(default)"},
@@ -231,13 +231,13 @@ RESOURCE_CATALOG_GCP = [
             {"type": "firewalls",   "label": "Firewall rules", "icon": "shield"},
         ],
         # v2.0.4: subnetworkCount doesn't exist; response uses
-        # `subnetworks` (array of URIs). Surface IPv4Range instead since
-        # it's flat. Caught by real-SPA conformance.
+        # `subnetworks` (array of URIs). Surface MTU (a real console column) —
+        # IPv4Range is legacy-network-only and empty for every modern VPC. Caught by real-SPA conformance.
         "columns": [
             ["name",                 "Name"],
             ["autoCreateSubnetworks","Mode"],
             ["routingConfig.routingMode", "Routing mode"],
-            ["IPv4Range",            "IPv4 range"],
+            ["mtu",                  "MTU"],
         ],
         "createFields": [
             {"name": "name", "label": "Network name", "default": "my-vpc"},
@@ -318,6 +318,42 @@ RESOURCE_CATALOG_GCP = [
         ],
         "createFields": [
             {"name": "name", "label": "Name", "default": "my-secret"},
+        ],
+    },
+    # ========================================================================
+    # Artifact Registry — repositories for container images and language
+    # packages (core/gcp_artifactregistry_core.py, the engine the native
+    # artifactregistry/v1 wire serves).
+    # ========================================================================
+    {
+        "key": "artifactregistry", "label": "Artifact Registry", "icon": "inventory_2",
+        "namespace": "GCP/ArtifactRegistry", "service": "artifactregistry",
+        "collection_path": "/api/gcp/artifactregistry/repositories",
+        "resource_path":   "/api/gcp/artifactregistry/repositories/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "repositories": {"method": "GET",    "path": "/api/gcp/artifactregistry/repositories"},
+            "packages":     {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listPackages/{name}"},
+            "versions":     {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listVersions/{name}"},
+            "tags":         {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listTags/{name}"},
+            "images":       {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listImages/{name}"},
+            "pushSample":   {"method": "POST",   "path": "/api/gcp/sub/artifactregistry/pushSample/{name}"},
+            "delete":       {"method": "DELETE", "path": "/api/gcp/artifactregistry/repositories/{name}"},
+        },
+        "columns": [
+            ["name",       "Name"],
+            ["format",     "Format"],
+            ["mode",       "Mode"],
+            ["location",   "Location"],
+            ["encryption", "Encryption"],
+            ["size",       "Size"],
+            ["created",    "Created"],
+        ],
+        "createFields": [
+            {"name": "name",     "label": "Name",     "default": "my-repo"},
+            {"name": "format",   "label": "Format",   "default": "DOCKER"},
+            {"name": "location", "label": "Location", "default": "us-central1"},
         ],
     },
     # ========================================================================
@@ -513,6 +549,47 @@ RESOURCE_CATALOG_GCP = [
             {"name": "email",            "label": "Notification e-mail address",         "default": "ops@example.com"},
             {"name": "severity",         "label": "Severity (CRITICAL, ERROR or WARNING)", "default": "WARNING"},
             {"name": "documentation",    "label": "Documentation",                       "default": "CPU utilization above 80% for 5 minutes. Check the instance for runaway processes."},
+        ],
+    },
+    # ========================================================================
+    # Memorystore for Redis — instances (core/gcp_redis_core.py). Console REST at
+    # /api/gcp/redis/*; the native /v1/projects/*/locations/*/instances wire serves the SDKs /
+    # gcloud. Data plane: the shared Valkey container offline (control plane only in Nano).
+    # ========================================================================
+    {
+        "key": "redis", "label": "Memorystore for Redis", "icon": "memory",
+        "namespace": "GCP/Redis", "service": "redis",
+        "collection_path": "/api/gcp/redis/instances",
+        "resource_path":   "/api/gcp/redis/instances/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "instances": {"method": "GET",    "path": "/api/gcp/redis/instances"},
+            "resize":    {"method": "POST",   "path": "/api/gcp/sub/redis/resize/{name}"},
+            "failover":  {"method": "POST",   "path": "/api/gcp/sub/redis/failover/{name}"},
+            "delete":    {"method": "DELETE", "path": "/api/gcp/redis/instances/{name}"},
+        },
+        "columns": [
+            ["id",          "Instance ID"],
+            ["region",      "Location"],
+            ["status",      "Status"],
+            ["tier_label",  "Tier"],
+            ["version",     "Redis version"],
+            ["capacity",    "Capacity"],
+            ["endpoint",    "Primary endpoint"],
+            ["replicas",    "Replicas"],
+            ["network",     "Network"],
+            ["auth",        "AUTH"],
+        ],
+        "createFields": [
+            {"name": "name",        "label": "Instance ID",                      "default": "my-redis"},
+            {"name": "region",      "label": "Region",                           "default": "us-central1"},
+            {"name": "tier",        "label": "Tier (BASIC or STANDARD_HA)",      "default": "BASIC"},
+            {"name": "memorySizeGb", "label": "Capacity (GB)",                   "default": "1"},
+            {"name": "redisVersion", "label": "Redis version",                   "default": "REDIS_7_0"},
+            {"name": "network",     "label": "Authorized network",               "default": "default"},
+            {"name": "authEnabled", "label": "Enable AUTH (true or false)",      "default": "false"},
+            {"name": "displayName", "label": "Display name",                     "default": "Demo Redis cache"},
         ],
     },
 ]

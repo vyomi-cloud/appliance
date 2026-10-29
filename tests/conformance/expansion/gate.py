@@ -128,7 +128,11 @@ def backend_static(m: dict) -> None:
     rec = next((n for n, x in pol["shared"].items() if upid in x.get("for", [])), None)
     rec_inproc = m.get("upstream") in pol["in_process"].get(m.get("cloud"), [])
     matches = (rec and b.get("name") == rec) or (rec_inproc and kind == "in-process") or (not rec and not rec_inproc)
-    check("backend is the recommended one, or the manifest says why not", matches or bool(b.get("reason")),
+    # A `reason` may pick a different REAL backend, never drop one: where a data-plane
+    # backend is recommended, in-process means the resource doesn't really work
+    # (no traffic, no kubectl, no DNS answer, no mail) — v3.0.10-v3.0.23 shipped that way.
+    swap_ok = bool(b.get("reason")) and not (rec and kind == "in-process")
+    check("backend is the recommended one, or a different real backend the manifest justifies", matches or swap_ok,
           f"recommended: {rec or ('in-process' if rec_inproc else 'none')}; chose {b.get('name') or kind}")
     tier = b.get("tier", "lite")
     if kind == "substrate":

@@ -43,12 +43,38 @@ def available() -> bool:
         return False
 
 
+# DynamoDB Local rejects TagResource/UntagResource/ListTagsOfResource ("Tagging is
+# not currently supported"), real DynamoDB supports them: keep tags per table ARN here.
+_TAGS: dict[str, dict[str, str]] = {}
+
+
+def _tagging(op: str, body: bytes) -> bytes | None:
+    if op not in ("TagResource", "UntagResource", "ListTagsOfResource"):
+        return None
+    try:
+        payload = json.loads(body or b"{}")
+    except ValueError:
+        payload = {}
+    tags = _TAGS.setdefault(str(payload.get("ResourceArn", "")), {})
+    if op == "TagResource":
+        tags.update({str(t.get("Key", "")): str(t.get("Value", "")) for t in payload.get("Tags") or []})
+        return b"{}"
+    if op == "UntagResource":
+        for k in payload.get("TagKeys") or []:
+            tags.pop(str(k), None)
+        return b"{}"
+    return json.dumps({"Tags": [{"Key": k, "Value": v} for k, v in tags.items()]}).encode()
+
+
 async def proxy(request: Any) -> tuple[int, bytes, str]:
     """Forward the request body + X-Amz-Target to DDB Local. Returns (status,
     body, content_type)."""
     body = await request.body()
     target = request.headers.get("x-amz-target", "DynamoDB_20120810.ListTables")
     content_type = request.headers.get("content-type", "application/x-amz-json-1.0")
+    tagged = _tagging(target.rsplit(".", 1)[-1], body)
+    if tagged is not None:
+        return 200, tagged, content_type
     try:
         req = urllib.request.Request(
             _DDB_URL,

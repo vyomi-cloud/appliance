@@ -67,7 +67,7 @@ DB="orders"
 # via az rest, which is the documented escape hatch for unmodified ARM clients.
 out=$(az rest --method put \
     --url "$BASE/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.Compute/virtualMachines/$VMNAME?api-version=2024-03-01" \
-    --body "{\"location\":\"$LOCATION\",\"properties\":{\"hardwareProfile\":{\"vmSize\":\"Standard_D2s_v5\"},\"storageProfile\":{\"imageReference\":{\"offer\":\"UbuntuServer\",\"sku\":\"22.04-LTS\"}},\"osProfile\":{\"computerName\":\"$VMNAME\",\"adminUsername\":\"azureadmin\",\"adminPassword\":\"Password123!\"}}}" \
+    --body "{\"location\":\"$LOCATION\",\"properties\":{\"hardwareProfile\":{\"vmSize\":\"Standard_B1s\"},\"storageProfile\":{\"imageReference\":{\"offer\":\"UbuntuServer\",\"sku\":\"22.04-LTS\"}},\"osProfile\":{\"computerName\":\"$VMNAME\",\"adminUsername\":\"azureadmin\",\"adminPassword\":\"Password123!\"}}}" \
     --skip-authorization-header 2>&1)
 chk $? "az rest PUT Microsoft.Compute/virtualMachines" "$out"
 

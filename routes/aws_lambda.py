@@ -5,8 +5,12 @@ the underlying helper / business-logic functions.
 """
 from __future__ import annotations
 
+import base64
 import copy
+import io
 import json
+import uuid
+import zipfile
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -132,7 +136,19 @@ def api_lambda_update_function_code(function_name: str, payload: dict[str, Any])
     function = _lambda_find_function(function_name)
     if not function:
         raise HTTPException(404, detail="ResourceNotFoundException")
-    updated = _lambda_update_function_code(function, str(payload.get("code", "")))
+    code = str(payload.get("code", "") or "")
+    zip_b64 = payload.get("ZipFile")
+    if not code and zip_b64:
+        # Official SDK wire: ZipFile is base64 of a zip archive holding the handler module.
+        try:
+            with zipfile.ZipFile(io.BytesIO(base64.b64decode(zip_b64))) as zf:
+                module = str(function.get("handler", "lambda_function.lambda_handler")).rsplit(".", 1)[0].replace(".", "/") + ".py"
+                names = zf.namelist()
+                pick = module if module in names else next((n for n in names if n.endswith(".py")), "")
+                code = zf.read(pick).decode("utf-8") if pick else ""
+        except Exception:
+            raise HTTPException(400, detail="InvalidParameterValueException: Could not unzip uploaded file.")
+    updated = _lambda_update_function_code(function, code)
     ctx.record_usage("lambda.update_function_code", {"function_name": function_name})
     return _lambda_function_view(updated)
 
@@ -235,7 +251,16 @@ def api_lambda_remove_permission_aws(function_name: str, statement_id: str):
 
 
 def api_lambda_update_function_code_aws(function_name: str, payload: dict[str, Any]):
-    return api_lambda_update_function_code(function_name, payload)
+    view = api_lambda_update_function_code(function_name, payload)
+    # UpdateFunctionCode output (FunctionConfiguration) for the official SDKs.
+    return {**view,
+            "FunctionName": view.get("function_name"), "FunctionArn": view.get("function_arn"),
+            "Runtime": view.get("runtime"), "Role": view.get("role"), "Handler": view.get("handler"),
+            "CodeSha256": view.get("code_sha256"), "CodeSize": len((view.get("code") or "").encode("utf-8")),
+            "Description": view.get("description", ""), "Timeout": view.get("timeout"),
+            "MemorySize": view.get("memory_size"), "LastModified": view.get("last_modified"),
+            "Version": "$LATEST", "State": view.get("state", "Active"),
+            "PackageType": view.get("package_type", "Zip"), "RevisionId": str(uuid.uuid4())}
 
 
 def api_lambda_update_function_configuration_aws(function_name: str, req: LambdaFunctionUpdateRequest):

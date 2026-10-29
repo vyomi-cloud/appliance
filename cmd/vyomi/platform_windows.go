@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"unsafe"
 )
 
 // addMultipassToPath prepends the default Multipass install dir to PATH for this
@@ -32,4 +34,22 @@ func startMultipassHost() {
 	for _, svc := range []string{"Multipass", "multipass", "MultipassService"} {
 		_ = exec.Command("net", "start", svc).Run()
 	}
+}
+
+// enableVT turns on ANSI escape handling for stderr (Windows 10+ consoles), so the
+// launch view can colour its output; false → the launcher prints plain lines.
+func enableVT() bool {
+	k32 := syscall.NewLazyDLL("kernel32.dll")
+	getMode, setMode := k32.NewProc("GetConsoleMode"), k32.NewProc("SetConsoleMode")
+	h, err := syscall.GetStdHandle(syscall.STD_ERROR_HANDLE)
+	if err != nil {
+		return false
+	}
+	var mode uint32
+	if r, _, _ := getMode.Call(uintptr(h), uintptr(unsafe.Pointer(&mode))); r == 0 {
+		return false
+	}
+	const enableVirtualTerminalProcessing = 0x0004
+	r, _, _ := setMode.Call(uintptr(h), uintptr(mode|enableVirtualTerminalProcessing))
+	return r != 0
 }

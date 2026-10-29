@@ -7,7 +7,7 @@
 # toolchain — this .spec is the canonical reference.
 
 Name:          cloud-learn
-Version:       3.0.16
+Version:       3.0.29
 Release:       1%{?dist}
 Summary:       Local multi-cloud simulator (AWS/GCP/Azure) with real backends
 License:       MIT

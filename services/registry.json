@@ -347,6 +347,94 @@
   },
   {
    "cloud": "gcp",
+   "key": "redis",
+   "name": "Memorystore for Redis",
+   "upstream": "redis/v1",
+   "status": "released",
+   "released_in": "3.0.17"
+  },
+  {
+   "cloud": "azure",
+   "key": "app",
+   "name": "Container Apps",
+   "upstream": "app",
+   "status": "released",
+   "released_in": "3.0.18"
+  },
+  {
+   "cloud": "azure",
+   "key": "appconfiguration",
+   "name": "App Configuration",
+   "upstream": "appconfiguration",
+   "status": "released",
+   "released_in": "3.0.19"
+  },
+  {
+   "cloud": "azure",
+   "key": "cognitiveservices",
+   "name": "Azure AI services",
+   "upstream": "cognitiveservices",
+   "status": "released",
+   "released_in": "3.0.20"
+  },
+  {
+   "cloud": "azure",
+   "key": "dns",
+   "name": "DNS zones",
+   "upstream": "dns",
+   "status": "released",
+   "released_in": "3.0.21"
+  },
+  {
+   "cloud": "azure",
+   "key": "monitor",
+   "name": "Monitor alerts",
+   "upstream": "monitor",
+   "status": "released",
+   "released_in": "3.0.22"
+  },
+  {
+   "cloud": "azure",
+   "key": "operationalinsights",
+   "name": "Log Analytics",
+   "upstream": "operationalinsights",
+   "status": "released",
+   "released_in": "3.0.23"
+  },
+  {
+   "cloud": "aws",
+   "key": "apigatewayv2",
+   "name": "API Gateway V2",
+   "upstream": "apigatewayv2",
+   "status": "released",
+   "released_in": "3.0.25"
+  },
+  {
+   "cloud": "aws",
+   "key": "cloudwatch",
+   "name": "Amazon CloudWatch",
+   "upstream": "cloudwatch",
+   "status": "released",
+   "released_in": "3.0.26"
+  },
+  {
+   "cloud": "aws",
+   "key": "sns",
+   "name": "Amazon SNS",
+   "upstream": "sns",
+   "status": "released",
+   "released_in": "3.0.28"
+  },
+  {
+   "cloud": "gcp",
+   "key": "artifactregistry",
+   "name": "Artifact Registry",
+   "upstream": "artifactregistry/v1",
+   "status": "released",
+   "released_in": "3.0.29"
+  },
+  {
+   "cloud": "gcp",
    "key": "monitoring",
    "name": "Cloud Monitoring",
    "upstream": "monitoring/v3",

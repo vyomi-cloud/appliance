@@ -54,6 +54,11 @@ class MonitoringStore:
 
 _SHARED: MonitoringStore | None = None
 
+# Optional hook the appliance sets to mirror accepted samples into the shared metrics store
+# (VictoriaMetrics, see providers/gcp_monitoring_console.py). Called as sink(project, meta, point);
+# best effort — the engine stays the API. Unset in Nano.
+metric_sink = None
+
 
 def shared_store() -> MonitoringStore:
     """The appliance-wide store: the native wire and the console REST share it."""
@@ -1054,6 +1059,11 @@ def write_time_series(store, project, payload):
         rec["points"].append(point)
         if len(rec["points"]) > MAX_POINTS_PER_SERIES:
             del rec["points"][: len(rec["points"]) - MAX_POINTS_PER_SERIES]
+        if metric_sink is not None:
+            try:
+                metric_sink(project, meta, point)
+            except Exception:
+                pass
     return {}
 
 

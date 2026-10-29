@@ -43,7 +43,12 @@
     "monitoring.uptimeCheckIps.list"
   ],
   "backend": {
-    "kind": "in-process"
+    "kind": "container",
+    "name": "victoriametrics",
+    "image": "victoriametrics/victoria-metrics:v1.104.0",
+    "license": "Apache-2.0",
+    "tier": "lite",
+    "compose_service": "vyomi-victoriametrics"
   },
   "suites": [
     "offline-sdk-java-gcp-monitoring",

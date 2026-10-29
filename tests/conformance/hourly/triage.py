@@ -61,7 +61,8 @@ def main() -> int:
     ap.add_argument("--out", default=OUT)
     OUT = os.path.abspath(ap.parse_args().out)
     slices = {c: {"cloud": c, "ui_root_causes": [], "failing_suites": [], "parity": [],
-                  "new": [], "untested_ops": [], "uncovered": [], "upstream_issues": []}
+                  "new": [], "untested_ops": [], "uncovered": [], "upstream_issues": [],
+                  "user_reported": []}
               for c in CLOUDS}
     shared: dict[str, list] = {"failing_suites": [], "uncovered": []}
 
@@ -109,7 +110,23 @@ def main() -> int:
     for i in _load("upstream_issues.json", []) or []:
         labels = " ".join(l.get("name", "") for l in i.get("labels", []))
         c = _cloud_of(f"{i.get('title', '')} {labels}") or "aws"
-        slices[c]["upstream_issues"].append({k: i.get(k) for k in ("number", "title", "createdAt")})
+        item = {k: i.get(k) for k in ("number", "title", "createdAt")}
+        item["body"] = (i.get("body") or "")[:4000]   # the spec / acceptance criteria
+        slices[c]["upstream_issues"].append(item)
+
+    # Issues filed automatically from users' simulators (label user-reported): first in
+    # each cloud's work list; the cloud comes from the cloud:<x> label, else the title.
+    for i in _load("user_reported.json", []) or []:
+        labels = " ".join(l.get("name", "") for l in i.get("labels", []))
+        m = re.search(r"cloud:(aws|gcp|azure)", labels)
+        t = i.get("title", "").lower()
+        by_name = ("gcp" if re.search(r"\bgcp\b|pub/?sub|\bgcs\b|firestore|cloud (run|sql|storage|functions|kms|scheduler)|gke|bigquery|eventarc", t)
+                   else "azure" if re.search(r"\bazure\b|cosmos|key ?vault|\bblob\b|service bus|entra|\baks\b", t) else "")
+        c = m.group(1) if m else (by_name or _cloud_of(i.get("title", "")) or "aws")
+        item = {k: i.get(k) for k in ("number", "title", "createdAt")}
+        item["reporter"] = (i.get("author") or {}).get("login", "")
+        item["body"] = (i.get("body") or "")[:4000]
+        slices[c]["user_reported"].append(item)
 
     # Cross-cloud work to the lightest slice, one item at a time.
     def load(c):
@@ -130,7 +147,10 @@ def main() -> int:
                  f"- Failing suites: {', '.join(x['id'] for x in s['failing_suites']) or 'none'}",
                  f"- Parity gaps: {len(s['parity'])}, new features: {len(s['new'])}, "
                  f"untested ops: {len(s['untested_ops'])}, uncovered routes: {len(s['uncovered'])}, "
-                 f"upstream issues: {len(s['upstream_issues'])}", "", "## Top root causes", ""]
+                 f"upstream issues: {len(s['upstream_issues'])}",
+                 f"- **User-reported issues (do first): {len(s['user_reported'])}**"
+                 + "".join(f"\n  - #{x['number']} {x['title']}" for x in s["user_reported"][:10]),
+                 "", "## Top root causes", ""]
         for g in s["ui_root_causes"][:15]:
             lines.append(f"- **{g['count']}×** {g['target']} {g['type']} — {g['signature']} "
                          f"({', '.join(map(str, g['services'][:5]))})")

@@ -7,6 +7,9 @@ custom metrics, time series, uptime checks and groups are served by the native w
 from __future__ import annotations
 
 import json
+import os
+import re
+import urllib.request
 
 from fastapi import HTTPException, Request, Response
 
@@ -24,8 +27,32 @@ def _http_error(r_or_e):
     return HTTPException(r_or_e.status, detail=r_or_e.message)
 
 
+VM_URL = os.environ.get("CLOUDLEARN_VICTORIAMETRICS_URL", "").strip().rstrip("/")   # shared VictoriaMetrics (compose profile `full`)
+
+
+def _vm_sink(project, meta, point):
+    """Mirror each written sample into VictoriaMetrics (Prometheus text import), so PromQL /
+    MetricsQL / Grafana see the same series. Best effort: the engine stays the API."""
+    kind, val = next(iter(point["value"].items()))
+    if kind not in ("boolValue", "int64Value", "doubleValue"):
+        return
+    val = float(1 if val is True else 0 if val is False else val)
+    lab = lambda k: re.sub(r"[^a-zA-Z0-9_]", "_", k)   # noqa: E731
+    esc = lambda v: str(v).replace("\\", "\\\\").replace('"', '\\"')   # noqa: E731
+    labels = {"project": project, "resource_type": meta["resource"]["type"],
+              **{"metric_" + lab(k): v for k, v in meta["metric"]["labels"].items()},
+              **{"resource_" + lab(k): v for k, v in meta["resource"]["labels"].items()}}
+    ts = int(core.parse_ts(point["interval"]["endTime"]).timestamp() * 1000)
+    line = "gcp_monitoring_%s{%s} %s %d" % (lab(meta["metric"]["type"]),
+                                            ",".join('%s="%s"' % (k, esc(v)) for k, v in labels.items()), val, ts)
+    urllib.request.urlopen(urllib.request.Request(VM_URL + "/api/v1/import/prometheus",
+                                                  data=line.encode(), method="POST"), timeout=2).close()
+
+
 def register(app, on_change=None):
     """`on_change(action, console_view_or_name)` lets the host sync CloudSim events/usage."""
+    if VM_URL:
+        core.metric_sink = _vm_sink
     store = core.shared_store
 
     def changed(action, payload):

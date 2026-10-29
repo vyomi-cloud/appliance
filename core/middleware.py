@@ -16,6 +16,7 @@ import threading as _threading
 
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from core.app_context import (
@@ -376,8 +377,10 @@ async def azure_blob_dispatch_middleware(request, call_next):
         # blob rule below, since queue requests also carry x-ms-version.
         _m_kv = re.match(r"^([a-z0-9][a-z0-9-]*)\.vault\.", host)
         _m_q = re.match(r"^([a-z0-9][a-z0-9-]*)\.queue\.", host)
-        if (_m_kv or _m_q) and not path.startswith("/azure-data"):
-            kind, name = ("keyvault", _m_kv.group(1)) if _m_kv else ("queue", _m_q.group(1))
+        _m_ac = re.match(r"^([a-z0-9][a-z0-9-]*)\.azconfig\.", host)   # App Configuration: {store}.azconfig.*
+        if (_m_kv or _m_q or _m_ac) and not path.startswith("/azure-data"):
+            kind, name = (("keyvault", _m_kv.group(1)) if _m_kv else
+                          ("appconfig", _m_ac.group(1)) if _m_ac else ("queue", _m_q.group(1)))
             tail = "" if path == "/" else path
             new_path = f"/azure-data/{kind}/{name}{tail}"
             request.scope["path"] = new_path
@@ -489,6 +492,43 @@ async def tenant_context_middleware(request, call_next):
     return response
 
 
+def _capability_denied_response(_srv, path: str, exc):
+    """The structured 403 the consoles show for a tier-locked service (same body as
+    the tier middleware: {"error": {code, reason, upgrade_to, active_tier, ...}})."""
+    if exc.status_code != 403:
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+    pack = ""
+    try:
+        pack = _srv.PLATFORM.kernel.capability_for_path(path) or ""
+    except Exception:
+        pass
+    parts = pack.split(".")   # cloudlearn.<service>.<plan> (AWS) | cloudlearn.<gcp|azure>.<service>.<plan>
+    if len(parts) >= 4:
+        cloud, service = parts[1], parts[2]
+    elif len(parts) == 3:
+        cloud, service = "aws", parts[1]
+    else:
+        cloud, service = "", ""
+    try:
+        tenant = _tenant_dict(_active_tenant_id()) or {}
+    except Exception:
+        tenant = {}
+    tier = str(tenant.get("license_tier") or (STATE.get("license") or {}).get("tier") or "free")
+    result: dict = {}
+    try:
+        from core import tier_policy as _tp
+        result = _tp.check_service(tier, service, request_cloud=cloud or None) if service else {}
+    except Exception:
+        result = {}
+    if not result or result.get("ok"):
+        result = {"code": "tier_service_locked", "upgrade_to": "max",
+                  "reason": f"{service or 'This service'} is not included in the {tier} tier"}
+    result.update({"ok": False, "active_tier": tier, "service": service, "provider": cloud,
+                   "detail": exc.detail, "pack": pack})
+    return JSONResponse({"error": result}, status_code=403,
+                        headers={"X-CloudLearn-Tier-Denied": result.get("code", "tier_locked")})
+
+
 async def _capability_middleware(request: Request, call_next):
     # Lazy imports for functions still in server.py
     import server as _srv
@@ -517,7 +557,14 @@ async def _capability_middleware(request: Request, call_next):
         if not allowed:
             return _iam_deny_response(request, action, resource, reason)
     capability_path = getattr(request.state, "cloudlearn_original_path", request.url.path)
-    _ensure_capability(capability_path)
+    try:
+        _ensure_capability(capability_path)
+    except HTTPException as exc:
+        # Raised in a middleware, an HTTPException is outside FastAPI's
+        # exception handlers: a tier-locked console list (/api/dynamodb/tables on
+        # Free) became "500 Exception in ASGI application" instead of the 403
+        # the console can explain. Answer it here, in the tier middleware's shape.
+        return _capability_denied_response(_srv, capability_path, exc)
     response = await call_next(request)
     if request.method in {"POST", "PUT", "DELETE", "PATCH"}:
         try:

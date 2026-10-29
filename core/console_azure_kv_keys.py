@@ -32,6 +32,13 @@ from core.kms_keystore import InMemoryKeyStore
 #    independent from the AWS/GCP KMS console facades' stores ──
 _STORE = InMemoryKeyStore()
 
+VAULT = "vyomi-kv"
+
+
+def _key_uri(key_id: str) -> str:
+    """Key Vault key identifier (the real cloud's `kid`), not the KMS ARN."""
+    return f"https://{VAULT}.vault.azure.net/keys/{key_id}" if key_id else ""
+
 
 def store() -> InMemoryKeyStore:
     return _STORE
@@ -76,7 +83,7 @@ def list_keys() -> dict:
             md = {}
         out.append({
             "key_id": kid,
-            "arn": k.get("KeyArn", md.get("Arn", "")),
+            "arn": _key_uri(kid),
             "description": md.get("Description", ""),
             "state": md.get("KeyState", ""),
             "enabled": bool(md.get("Enabled", False)),
@@ -91,7 +98,7 @@ def describe_key(key_id: str) -> dict:
     md = _call("DescribeKey", {"KeyId": key_id}).get("KeyMetadata", {})
     return {
         "key_id": md.get("KeyId", ""),
-        "arn": md.get("Arn", ""),
+        "arn": _key_uri(md.get("KeyId", "")),
         "description": md.get("Description", ""),
         "state": md.get("KeyState", ""),
         "enabled": bool(md.get("Enabled", False)),
@@ -106,7 +113,7 @@ def create_key(description: str = "") -> dict:
     if description:
         payload["Description"] = description
     md = _call("CreateKey", payload).get("KeyMetadata", {})
-    return {"key_id": md.get("KeyId", ""), "arn": md.get("Arn", ""),
+    return {"key_id": md.get("KeyId", ""), "arn": _key_uri(md.get("KeyId", "")),
             "description": md.get("Description", ""), "state": md.get("KeyState", "")}
 
 

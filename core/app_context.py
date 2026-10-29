@@ -288,6 +288,8 @@ def is_gcp_native_path(path: str) -> bool:
         "/api/gcp/extras-config/",
         "/api/gcp/secrets",   # v2.0.9 console CRUD — Vault-backed Secret Manager
         "/api/gcp/kms/",      # v2.0.9 console CRUD — Vault-backed Cloud KMS
+        "/api/gcp/artifactregistry/",   # Artifact Registry console CRUD
+        "/api/gcp/sub/",      # generic detail-tab sub-resources (same shape as Nano)
     ))
 
 
@@ -990,7 +992,9 @@ rds_state = _SpaceScopedDictProxy("rds", lambda: {"db_instances": {}, "db_subnet
 apigw_state = _SpaceScopedDictProxy("apigateway", lambda: {"apis": {}, "logs": []})
 lambda_state = _SpaceScopedDictProxy("lambda", lambda: {"functions": {}, "events": [], "invocations": []})
 sqs_state = _SpaceScopedDictProxy("sqs", lambda: {"queues": {}, "events": []})
+sns_state = _SpaceScopedDictProxy("sns", lambda: {"topics": {}, "extra": {}})
 ddb_state = _SpaceScopedDictProxy("dynamodb", lambda: {"tables": {}, "events": []})
+kinesis_state = _SpaceScopedDictProxy("kinesis", lambda: {"streams": {}, "policies": {}, "seq": {"n": 0}})
 logs_state = _SpaceScopedDictProxy("logs", lambda: {"log_groups": {}, "resource_policies": {}, "query_definitions": {}, "queries": {}})
 elbv2_state = _SpaceScopedDictProxy("elbv2", lambda: {"load_balancers": {}, "target_groups": {}, "listeners": {}, "rules": {}, "tags": {}})
 
@@ -1345,6 +1349,8 @@ def resolve_provider_service(request) -> tuple[str, str]:
             return "gcp", "pubsub"
         if "/secrets/" in path:
             return "gcp", "secretmanager"
+        if "/repositories" in path and "/locations/" in path:
+            return "gcp", "artifactregistry"
         if "/cryptoKeys/" in path or "/keyRings/" in path:
             return "gcp", "kms"
         if "/triggers/" in path or "/channels/" in path:

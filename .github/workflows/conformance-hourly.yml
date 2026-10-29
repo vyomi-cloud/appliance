@@ -1,19 +1,18 @@
 name: Hourly conformance agent
 
-# Every hour: boot the offline appliance + serve Nano, crawl every console for
-# broken/unimplemented UI (incl. blank grid cells, default-create gaps and
-# cost-savings updates), run the Java/Go/Python SDK, CLI and API test beds and
-# detect features without coverage (detect job); triage the findings into one
-# slice per cloud and let three conformance agents fix them IN PARALLEL, each on
-# its own cloud, pushing to today's conformance/daily-* branch (fix jobs); then
-# publish the coverage page to GitHub Pages (publish job).
+# One conformance cycle (the name is historical: cycles are no longer hourly).
+# prepare (daily branch, last run's baselines, upstream backlog) -> detect, sharded
+# into six parallel jobs (offline|nano x aws|gcp|azure), each on its own stack
+# running its suites and its slice of the console crawl -> collect (merge the
+# shards, triage into one slice per cloud) -> fix (three conformance agents in
+# parallel, one cloud each, pushing to today's conformance/daily-* branch) ->
+# publish (coverage page, report branch, hand over to the watchdog).
+# A cycle takes as long as it needs; conformance-watchdog.yml starts the next one
+# CONFORMANCE_COOLDOWN_MIN (default 60) minutes after this one finishes.
 # Agent instructions: tests/conformance/hourly/AGENT.md
 
 on:
-  schedule:
-    # Hourly, non-negotiable. Also triggered by the always-on laptop's
-    # heartbeat (vyomi-cloud/release-e2e) if GitHub's scheduler misses a slot.
-    - cron: '5 * * * *'
+  # No schedule: conformance-watchdog.yml starts each cycle.
   workflow_dispatch:
     inputs:
       skip_agent:
@@ -21,8 +20,7 @@ on:
         type: boolean
         default: false
 
-# One run at a time; a run that overlaps the next hour queues instead of racing
-# the agents' pushes.
+# One cycle at a time; a second one queues instead of racing the agents' pushes.
 concurrency:
   group: conformance-hourly
   cancel-in-progress: false
@@ -35,11 +33,11 @@ env:
   TAB_SHARDS: '3'   # each run walks the detail tabs of 1/3 of the services
 
 jobs:
-  detect:
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 15
     permissions:
-      contents: write     # pushes today's daily branch (merged with main) for the fixers
+      contents: write     # pushes today's daily branch (merged with main) for the shards and fixers
       issues: read        # the upstream-drift backlog
     outputs:
       daily_branch: ${{ steps.branch.outputs.name }}
@@ -66,26 +64,10 @@ jobs:
           else
             git checkout -q -B "$B"
           fi
-          # Publish it so all three fixers start from the same commit.
+          # Publish it so every shard and fixer starts from the same commit.
           git push -q origin "HEAD:refs/heads/$B"
           echo "name=$B" >> "$GITHUB_OUTPUT"
           echo "Working on $B"
-
-      # Tooling comes from THIS workflow's commit, not the daily branch (which
-      # may predate it); kept out of git so agents never commit it.
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          path: .ci-tools
-          sparse-checkout: |
-            .github/actions
-            tests/conformance/hourly/triage.py
-            tests/conformance/hourly/AGENT.md
-      - run: echo ".ci-tools/" >> .git/info/exclude
-
-      - uses: ./.ci-tools/.github/actions/conformance-stack
-        with:
-          test-license-jwt: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
 
       - name: Fetch previous history + feature inventory
         run: |
@@ -95,15 +77,10 @@ jobs:
           # Last run's feature inventory: the baseline new features are diffed against.
           curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/conformance-report/inventory.json" \
             -o prev/inventory.json || rm -f prev/inventory.json
-          echo "PREV_INVENTORY=$PWD/prev/inventory.json" >> "$GITHUB_ENV"
           # Last run's console surfaces: tab results carried forward for the
-          # services whose tabs aren't walked this hour (TAB_SHARDS).
+          # services whose tabs aren't walked this run (TAB_SHARDS).
           curl -fsL "https://raw.githubusercontent.com/${{ github.repository }}/conformance-report/ui-findings.json" \
             -o prev/ui-findings.json || rm -f prev/ui-findings.json
-          echo "PREV_UI=$PWD/prev/ui-findings.json" >> "$GITHUB_ENV"
-
-      - name: Detect new features, parity gaps and untested operations
-        run: python3 tests/conformance/hourly/detect_new_features.py
 
       - name: Upstream backlog (open upstream-drift issues)
         env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
@@ -112,25 +89,97 @@ jobs:
           gh issue list -R "${{ github.repository }}" --label upstream-drift --state open --limit 200 \
             --json number,title,labels,createdAt,body > tests/conformance/hourly/out/upstream_issues.json || echo '[]' > tests/conformance/hourly/out/upstream_issues.json
           echo "open upstream-drift issues: $(python3 -c "import json;print(len(json.load(open('tests/conformance/hourly/out/upstream_issues.json'))))")"
+          # Issues filed automatically from users' simulators: the fixers take these first.
+          gh issue list -R "${{ github.repository }}" --label user-reported --state open --limit 200 \
+            --json number,title,labels,createdAt,body,author > tests/conformance/hourly/out/user_reported.json || echo '[]' > tests/conformance/hourly/out/user_reported.json
+          echo "open user-reported issues: $(python3 -c "import json;print(len(json.load(open('tests/conformance/hourly/out/user_reported.json'))))")"
 
-      - name: Run conformance test beds
-        run: python3 tests/conformance/hourly/run_suites.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prepare-${{ github.run_id }}
+          path: |
+            prev/
+            tests/conformance/hourly/out/upstream_issues.json
+            tests/conformance/hourly/out/user_reported.json
+          retention-days: 7
 
-      - name: Triage findings into one slice per cloud
+  # Six shards in parallel, each on its own stack: wall time stays flat as
+  # services are added (add shards, not minutes). Within a shard suites still run
+  # one at a time: offline suites share the appliance's active space (622398c).
+  # Cloud-less suites run in the aws shard of their target; the crawls are split
+  # per cloud (run_suites.py --cloud). Feature detection needs a live appliance,
+  # so it runs once, in the offline/aws shard.
+  detect:
+    needs: prepare
+    runs-on: ubuntu-latest
+    # A hang guard, not a deadline: a shard takes as long as its suites need
+    # (each suite has its own timeout in suites.json).
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [offline, nano]
+        cloud: [aws, gcp, azure]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.daily_branch }}
+
+      # Tooling comes from THIS workflow's commit, not the daily branch (which
+      # may predate it); kept out of git so agents never commit it.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .ci-tools
+          sparse-checkout: |
+            .github/actions
+            tests/conformance/hourly/run_suites.py
+            tests/conformance/hourly/ui_crawler.mjs
+      - run: echo ".ci-tools/" >> .git/info/exclude
+      # The daily branch normally has main's runner (prepare merges main in); if
+      # that merge was aborted, use this commit's sharding-aware copies.
+      - name: Sharding-aware runner
+        run: |
+          grep -q -- '--cloud' tests/conformance/hourly/run_suites.py \
+            || cp .ci-tools/tests/conformance/hourly/run_suites.py tests/conformance/hourly/run_suites.py
+          grep -q 'ONLY_CLOUDS' tests/conformance/hourly/ui_crawler.mjs \
+            || cp .ci-tools/tests/conformance/hourly/ui_crawler.mjs tests/conformance/hourly/ui_crawler.mjs
+
+      - uses: ./.ci-tools/.github/actions/conformance-stack
+        with:
+          test-license-jwt: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prepare-${{ github.run_id }}
+      - name: Last run's baselines
+        run: |
+          if [ -f prev/inventory.json ]; then echo "PREV_INVENTORY=$PWD/prev/inventory.json" >> "$GITHUB_ENV"; fi
+          if [ -f prev/ui-findings.json ]; then echo "PREV_UI=$PWD/prev/ui-findings.json" >> "$GITHUB_ENV"; fi
+
+      - name: Detect new features, parity gaps and untested operations
+        if: matrix.target == 'offline' && matrix.cloud == 'aws'
+        run: python3 tests/conformance/hourly/detect_new_features.py
+
+      - name: Run conformance test beds (${{ matrix.target }} / ${{ matrix.cloud }})
+        run: python3 tests/conformance/hourly/run_suites.py --target ${{ matrix.target }} --cloud ${{ matrix.cloud }}
+
+      # Always present, so the artifact keeps the repo-root layout (upload-artifact
+      # roots it at the common parent of the matched files) and merges cleanly.
+      - name: Keep the relay log
         if: always()
         run: |
-          python3 .ci-tools/tests/conformance/hourly/triage.py --out tests/conformance/hourly/out
-          cat tests/conformance/hourly/out/slices/*.md >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Hand findings to the fixers and the publisher
+          log="relay-${{ matrix.target }}-${{ matrix.cloud }}.log"
+          if [ -f relay.log ]; then mv relay.log "$log"; else : > "$log"; fi
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: hourly-findings-${{ github.run_id }}
+          name: shard-${{ matrix.target }}-${{ matrix.cloud }}-${{ github.run_id }}
           path: |
             tests/conformance/hourly/out/
-            prev/
-            relay.log
+            relay-*.log
           include-hidden-files: true
           retention-days: 7
 
@@ -138,13 +187,53 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml down -v
 
+  collect:
+    needs: [prepare, detect]
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: tests/conformance/hourly
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/download-artifact@v4
+        with:
+          name: prepare-${{ github.run_id }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: shard-*-${{ github.run_id }}
+          merge-multiple: true
+      - name: Merge the shards
+        run: python3 tests/conformance/hourly/merge_shards.py
+
+      - name: Triage findings into one slice per cloud
+        run: |
+          python3 tests/conformance/hourly/triage.py --out tests/conformance/hourly/out
+          cat tests/conformance/hourly/out/slices/*.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Hand findings to the fixers and the publisher
+        uses: actions/upload-artifact@v4
+        with:
+          name: hourly-findings-${{ github.run_id }}
+          path: |
+            tests/conformance/hourly/out/
+            prev/
+            relay-*.log
+          include-hidden-files: true
+          retention-days: 7
+
   # Three agents fix in parallel, one cloud each, on their own stack. Clouds map
   # to mostly separate files (static|wasm/<cloud>-console.html, providers/<cloud>_*),
   # so pushes rarely collide; each rebases before pushing and leaves a conflicting
   # fix for the next run.
   fix:
-    needs: detect
-    if: ${{ !inputs.skip_agent }}
+    needs: [prepare, collect]
+    if: ${{ !inputs.skip_agent && needs.collect.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -156,12 +245,12 @@ jobs:
       issues: read
       id-token: write
     env:
-      DAILY_BRANCH: ${{ needs.detect.outputs.daily_branch }}
+      DAILY_BRANCH: ${{ needs.prepare.outputs.daily_branch }}
       SLICE: ${{ matrix.cloud }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.detect.outputs.daily_branch }}
+          ref: ${{ needs.prepare.outputs.daily_branch }}
           fetch-depth: 0
 
       - name: Bot identity
@@ -185,7 +274,7 @@ jobs:
         with:
           test-license-jwt: ${{ secrets.VYOMI_TEST_LICENSE_JWT }}
 
-      - name: This hour's findings
+      - name: This cycle's findings
         uses: actions/download-artifact@v4
         with:
           name: hourly-findings-${{ github.run_id }}
@@ -198,8 +287,8 @@ jobs:
           # Either auth works: a Claude Max/Pro OAuth token (claude setup-token)
           # or an Anthropic API key. Whichever secret is set is used.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Chained runs are dispatched by the workflow token, so the actor is
-          # github-actions[bot]; the action refuses bot actors unless allowed.
+          # Cycles are dispatched by the watchdog with the workflow token, so the
+          # actor is github-actions[bot]; the action refuses bot actors unless allowed.
           allowed_bots: 'github-actions'
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -234,13 +323,13 @@ jobs:
         run: docker compose -f docker-compose.yml -f tests/conformance/hourly/docker-compose.ci.yml down -v
 
   publish:
-    needs: [detect, fix]
+    needs: [collect, fix]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
       contents: write     # conformance-report branch
-      actions: write      # chain the next hourly run
+      actions: write      # hand over to the watchdog; refresh the pipeline page
       pages: write
       id-token: write
     environment:
@@ -253,7 +342,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - name: This hour's findings
+      - name: This cycle's findings
         uses: actions/download-artifact@v4
         with:
           name: hourly-findings-${{ github.run_id }}
@@ -305,48 +394,13 @@ jobs:
         env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
         run: gh workflow run pipeline-status.yml -R "${{ github.repository }}" --ref main || true
 
-      # GitHub's cron scheduler doesn't reliably fire for this repo, and hourly
-      # runs are non-negotiable: each run starts the next one, waiting out the
-      # rest of the hour first. Skipped if a run is already queued (e.g. a
-      # manual one or a late cron), so there is only ever one chain.
-      - name: Chain the next hourly run
+      # Hand over: the watchdog waits out the cooldown, then starts the next
+      # cycle (and does the end-of-day daily PR and expansion-agent duties this
+      # step used to). Its 15-minute cron is the backup if this never runs.
+      - name: Hand over to the watchdog
         if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
         run: |
-          # End of day (IST): open/refresh the daily PR — GitHub's cron for
-          # conformance-daily-pr.yml doesn't fire either. From 23:00 IST each
-          # run refreshes today's PR (idempotent); after midnight, the first run
-          # makes sure yesterday's branch got its PR.
-          ist_hour=$(TZ=Asia/Kolkata date +%H)
-          if [ "$ist_hour" -ge 23 ]; then
-            gh workflow run conformance-daily-pr.yml -R "${{ github.repository }}" --ref main && echo "Daily PR dispatched for $(TZ=Asia/Kolkata date +%F)."
-          fi
-          yday=$(TZ=Asia/Kolkata date -d yesterday +%F)
-          if git ls-remote --exit-code origin "refs/heads/conformance/daily-$yday" >/dev/null 2>&1 \
-             && [ -z "$(gh pr list -R "${{ github.repository }}" --head "conformance/daily-$yday" --state all --json number -q '.[0].number')" ]; then
-            gh workflow run conformance-daily-pr.yml -R "${{ github.repository }}" --ref main -f date="$yday" && echo "Daily PR dispatched for $yday (missed)."
-          fi
-          # Nano → portal now ships with each release (conformance-release.yml),
-          # so appliance and portal always release together.
-          # Expansion agent: daily cadence = one run per 24h started from here;
-          # continuous = revive its chain if nothing is running or queued.
-          if gh workflow view expansion-agent.yml -R "${{ github.repository }}" >/dev/null 2>&1; then
-            live=$(gh run list -R "${{ github.repository }}" --workflow expansion-agent.yml -L 20 \
-              --json status -q '[.[] | select(.status!="completed")] | length')
-            last=$(gh run list -R "${{ github.repository }}" --workflow expansion-agent.yml -L 1 --json createdAt -q '.[0].createdAt // empty')
-            age=999999; [ -n "$last" ] && age=$(( $(date -u +%s) - $(date -u -d "$last" +%s) ))
-            if [ "${live:-0}" -eq 0 ] && { [ "${{ vars.EXPANSION_CADENCE || 'continuous' }}" = "continuous" ] || [ "$age" -ge 86400 ]; }; then
-              gh workflow run expansion-agent.yml -R "${{ github.repository }}" --ref main && echo "Expansion agent started."
-            fi
-          fi
-          queued=$(gh run list -R "${{ github.repository }}" --workflow conformance-hourly.yml \
-            --json status -q '[.[] | select(.status=="queued" or .status=="pending" or .status=="waiting")] | length')
-          if [ "${queued:-0}" -gt 0 ]; then echo "A run is already queued; not chaining."; exit 0; fi
-          start=$(gh run view "${{ github.run_id }}" -R "${{ github.repository }}" --json startedAt -q .startedAt)
-          elapsed=$(( $(date -u +%s) - $(date -u -d "$start" +%s) ))
-          wait=$(( 3600 - elapsed ))
-          if [ "$wait" -gt 0 ]; then echo "Waiting ${wait}s to keep an hourly cadence"; sleep "$wait"; fi
-          gh workflow run conformance-hourly.yml -R "${{ github.repository }}" --ref main
-          echo "Next hourly run dispatched."
-
+          gh workflow run conformance-watchdog.yml -R "${{ github.repository }}" --ref main \
+            -f wait_min="${{ vars.CONFORMANCE_COOLDOWN_MIN || '60' }}"
+          echo "Next cycle in ~${{ vars.CONFORMANCE_COOLDOWN_MIN || '60' }} min (conformance-watchdog.yml)."

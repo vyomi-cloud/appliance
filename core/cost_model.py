@@ -80,8 +80,11 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.lambda": 0.20,       # minimal invocations
     "aws.s3": 0.50,           # ~20GB storage
     "aws.sqs": 0.40,          # ~1M requests
+    "aws.kinesis": 10.95,     # 1 provisioned shard x 730h @ $0.015/shard-hour
+    "aws.sns": 0.50,          # per topic: ~1M publishes at $0.50 per million
     "aws.dynamodb": 1.25,     # on-demand, light usage
     "aws.apigateway": 3.50,   # ~1M calls
+    "aws.apigatewayv2": 1.00, # HTTP API $1.00/M requests (~1M calls)
     "aws.stepfunctions": 2.50, # Standard workflow: $0.025/1K state transitions (~100K/month)
     "aws.vpc": 0.00,          # free (NAT GW extra)
     "aws.logs": 2.53,         # CloudWatch Logs: ~5GB ingested ($0.50/GB) + ~1GB stored ($0.03/GB)
@@ -89,6 +92,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.kms": 1.00,             # $1.00 per customer-managed key per month
     "aws.eventbridge": 0.00,     # rules / custom buses are free; events billed per use
     "aws.ssm": 0.05,          # Parameter Store advanced-tier parameter $0.05/mo (standard tier is free)
+    "aws.cloudwatch": 0.10,   # standard-resolution metric alarm, per alarm-month
     # GCP
     "gcp.sql": 25.00,         # db-f1-micro 730h
     "gcp.functions": 0.20,    # minimal invocations
@@ -98,6 +102,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.apigateway": 3.00,   # ~1M calls
     "gcp.vpc": 0.00,
     "gcp.iam": 0.00,
+    "gcp.redis": 35.77,         # Basic tier $0.049/GB-hr × 1 GB × ~730 h (Standard doubles it)
     "gcp.container": 73.00,     # $0.10/hr cluster management fee (~730 h); one zonal/Autopilot cluster per account is free
     "gcp.iamcredentials": 0.03,  # per issued credential: the API itself is free; priced at the Cloud KMS software-key signing rate (~$0.03 per 10k ops) it replaces
     "gcp.monitoring": 0.10,     # $0.10 per alert-policy condition per month (metrics ingestion billed per MiB)
@@ -105,6 +110,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.secretmanager": 0.06,  # $0.06 per active secret version per month
     "gcp.kms": 0.06,            # $0.06 per software key version per month
     "gcp.eventarc": 0.00,       # triggers are free; events billed per use
+    "gcp.artifactregistry": 0.50,  # ~5 GB stored at $0.10/GB-month (first 0.5 GB free)
     # Azure
     "azure.vm": 0.00,         # priced via VM hourly
     "azure.sql": 4.99,        # Basic DTU
@@ -117,6 +123,25 @@ SERVICE_MONTHLY: dict[str, float] = {
     "azure.eventgrid": 0.60,  # ~1M events
     "azure.keyvault": 0.03,   # per 10K ops
     "azure.rbac": 0.00,
+    "azure.appconfiguration": 36.50,  # Standard tier: $1.20 per store per day (~30.4 days/month); requests included to 200K/day
+    "azure.cognitiveservices": 1.00,  # S0 pay-as-you-go: ~1K transactions/month (~$1 per 1K text records / transactions); F0 is free
+    "azure.operationalinsights": 2.76,  # Log Analytics PerGB2018: $2.76/GB ingested beyond the 5 GB/month free allowance; modelled at ~1 GB/month
+    "azure.dns": 0.50,        # Azure DNS: $0.50 per hosted zone per month (first 25 zones; $0.10 beyond) + $0.40 per million queries
+    "azure.monitor": 0.10,    # metric alert rule: $0.10 per monitored time series per month (static threshold, 1 resource); action groups: first 1,000 emails/month free
+    "azure.app": 39.42,       # Container Apps Consumption: one always-on 0.5 vCPU / 1 GiB replica (~$0.000024/vCPU-s + $0.000003/GiB-s, ~2.63M s/month)
+}
+
+# ── Usage-based storage pricing (public list prices, USD) ────────────
+# Real clouds bill object storage by GB-month stored plus per-request fees, so
+# data written to a bucket / storage account raises the savings, not just its
+# existence. Per key: (USD per GB-month, USD per 1,000 write requests).
+#   aws.s3         S3 Standard, us-east-1: $0.023/GB-mo, PUT/COPY/POST/LIST $0.005 per 1,000
+#   gcp.storage    Cloud Storage Standard, us-central1: $0.020/GB-mo, Class A ops $0.005 per 1,000
+#   azure.storage  Blob Hot LRS, East US: $0.0184/GB-mo, write ops $0.055 per 10,000
+STORAGE_USAGE_RATES: dict[str, tuple[float, float]] = {
+    "aws.s3": (0.023, 0.005),
+    "gcp.storage": (0.020, 0.005),
+    "azure.storage": (0.0184, 0.0055),
 }
 
 # Fallback hourly rates by provider for unknown instance types
@@ -227,11 +252,16 @@ def estimate_space_savings(nodes: list[dict],
 
         cost = estimate_resource_cost(provider, service, kind, itype, uptime_hours)
         usd = cost["uptime_cost_usd"]
+        rates = STORAGE_USAGE_RATES.get(f"{provider}.{service}")
+        if rates and (node.get("stored_bytes") or node.get("write_requests")):
+            gb = float(node.get("stored_bytes") or 0) / (1024 ** 3)
+            usd += (gb * rates[0] * (uptime_hours / HOURS_PER_MONTH)
+                    + float(node.get("write_requests") or 0) / 1000.0 * rates[1])
         total += usd
 
-        by_provider[provider] = round(by_provider.get(provider, 0.0) + usd, 2)
+        by_provider[provider] = round(by_provider.get(provider, 0.0) + usd, 6)
         svc_key = f"{provider}.{service}"
-        by_service[svc_key] = round(by_service.get(svc_key, 0.0) + usd, 2)
+        by_service[svc_key] = round(by_service.get(svc_key, 0.0) + usd, 6)
 
         per_resource.append({
             "resource_id": node.get("resource_id", ""),
@@ -240,15 +270,15 @@ def estimate_space_savings(nodes: list[dict],
             "kind": kind,
             "name": node.get("name", ""),
             "instance_type": itype,
-            "real_cloud_cost_usd": round(usd, 2),
+            "real_cloud_cost_usd": round(usd, 6),
             "monthly_rate_usd": cost["monthly_usd"],
             "hourly_rate_usd": cost["hourly_usd"],
         })
 
     return {
-        "real_cloud_cost_usd": round(total, 2),
+        "real_cloud_cost_usd": round(total, 6),
         "simulator_cost_usd": 0.0,
-        "savings_usd": round(total, 2),
+        "savings_usd": round(total, 6),
         "savings_pct": 100.0 if total > 0 else 0.0,
         "uptime_hours": uptime_hours,
         "resource_count": len(nodes),

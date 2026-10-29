@@ -32,7 +32,7 @@ def build_backed_router() -> AwsWireRouter:
     from core.persistent_store import (SqliteStateBackend, PersistentAzureBlobStore,
                                         PersistentNoSqlStore, PersistentFirestoreStore,
                                         PersistentCosmosStore, PersistentAzureQueueStore,
-                                        PersistentMessagingStore)
+                                        PersistentMessagingStore, PersistentCloudWatchStore)
     from core.nats_backed_store import NatsBackedMessagingStore
 
     minio = dict(
@@ -79,10 +79,15 @@ def build_backed_router() -> AwsWireRouter:
         # (topics+subscriptions, bytes-aware codec handles message bodies)
         "az_sb": PersistentMessagingStore(
             SqliteStateBackend(_cfg("VYOMI_AZSB_DB", "/tmp/vyomi-azsb.sqlite")), store_id="azsb"),
+        # CloudWatch — durable metrics / alarms / dashboards via the file-backed substrate
+        "cw": PersistentCloudWatchStore(
+            SqliteStateBackend(_cfg("VYOMI_CW_DB", "/tmp/vyomi-cw.sqlite"))),
         # messaging — SQS/SNS + Pub/Sub on NATS JetStream (separate KV buckets)
         "msg": NatsBackedMessagingStore(servers=nats_servers, bucket="aws_msg"),
         "gcp_msg": NatsBackedMessagingStore(servers=nats_servers, bucket="gcp_msg"),
     }
+    from core.apigatewayv2_core import shared_store
+    stores["apigwv2"] = shared_store()   # shared with the console REST (/api/apigatewayv2)
     from core.stepfunctions_core import shared_store as _sfn_store
     stores["sfn"] = _sfn_store()   # shared with the console REST (/api/stepfunctions)
     from core.gcp_cloudscheduler_core import shared_store as _gcp_sched_store
@@ -91,6 +96,8 @@ def build_backed_router() -> AwsWireRouter:
     stores["gcp_gke"] = _gcp_gke_store()   # shared with the console REST (/api/gcp/container)
     from core.gcp_iamcredentials_core import shared_store as _gcp_iamc_store
     stores["gcp_iamc"] = _gcp_iamc_store()   # shared with the console REST (/api/gcp/iamcredentials)
+    from core.gcp_redis_core import shared_store as _gcp_redis_store
+    stores["gcp_redis"] = _gcp_redis_store()   # shared with the console REST (/api/gcp/redis)
     from core.gcp_monitoring_core import shared_store as _gcp_mon_store
     stores["gcp_mon"] = _gcp_mon_store()   # shared with the console REST (/api/gcp/monitoring)
     return AwsWireRouter(stores=stores)
@@ -125,6 +132,7 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
 
         /2015-03-31/functions...        Lambda (serverless invoke)
         /restapis...                    API Gateway
+        /v2/apis, /v2/domainnames, /v2/vpclinks, /v2/tags   API Gateway V2
         /azure-sql/...                  Azure SQL data plane
         /providers/Microsoft.Authorization/...   Azure RBAC checkAccess
 
@@ -137,12 +145,14 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     unified ingress (mount())."""
     from fastapi import Request, Response
 
+    from core.apigatewayv2_core import shared_store as _apigwv2_store
     from core.stepfunctions_core import shared_store as _sfn_store, set_lambda_store as _sfn_lambda
     from core.gcp_cloudscheduler_core import shared_store as _gcp_sched_store
     from core.gcp_container_core import shared_store as _gcp_gke_store
     from core.gcp_iamcredentials_core import shared_store as _gcp_iamc_store
+    from core.gcp_redis_core import shared_store as _gcp_redis_store
     from core.gcp_monitoring_core import shared_store as _gcp_mon_store
-    r = router or AwsWireRouter(stores={"sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_mon": _gcp_mon_store()})
+    r = router or AwsWireRouter(stores={"apigwv2": _apigwv2_store(), "sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_redis": _gcp_redis_store(), "gcp_mon": _gcp_mon_store()})
     _sfn_lambda(r.lam)   # Step Functions Task states invoke the Lambdas this router serves
 
     async def _proxy(request: Request):
@@ -153,7 +163,7 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
                         headers={k: v for k, v in (out["headers"] or {}).items()})
 
     methods = ["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"]
-    for prefix in ("/2015-03-31/functions", "/restapis", "/azure-sql",
+    for prefix in ("/2015-03-31/functions", "/restapis", "/v2/apis", "/v2/domainnames", "/v2/vpclinks", "/v2/tags", "/azure-sql",
                    "/providers/Microsoft.Authorization"):
         app.add_route(prefix, _proxy, methods=methods)
         app.add_route(prefix + "/{rest:path}", _proxy, methods=methods)

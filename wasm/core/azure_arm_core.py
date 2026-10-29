@@ -32,6 +32,36 @@ try:                                              # host: package import
 except ImportError:                               # Pyodide: cores are flat on sys.path
     from azure_arm_data import CATALOG, ROLES      # type: ignore
 
+try:                                              # Container Apps engine (Microsoft.App)
+    from core import azure_app_core as app_engine
+except ImportError:
+    import azure_app_core as app_engine            # type: ignore
+
+try:                                              # App Configuration engine (Microsoft.AppConfiguration)
+    from core import azure_appconfiguration_core as appconfig_engine
+except ImportError:
+    import azure_appconfiguration_core as appconfig_engine   # type: ignore
+
+try:                                              # Cognitive Services engine (Microsoft.CognitiveServices)
+    from core import azure_cognitiveservices_core as cogs_engine
+except ImportError:
+    import azure_cognitiveservices_core as cogs_engine   # type: ignore
+
+try:                                              # Azure DNS engine (Microsoft.Network/dnsZones)
+    from core import azure_dns_core as dns_engine
+except ImportError:
+    import azure_dns_core as dns_engine            # type: ignore
+
+try:                                              # Azure Monitor engine (Microsoft.Insights)
+    from core import azure_monitor_core as monitor_engine
+except ImportError:
+    import azure_monitor_core as monitor_engine    # type: ignore
+
+try:                                              # Azure Log Analytics engine (Microsoft.OperationalInsights)
+    from core import azure_operationalinsights_core as oi_engine
+except ImportError:
+    import azure_operationalinsights_core as oi_engine   # type: ignore
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -108,6 +138,23 @@ def _expand_tokens(obj, name: str, base: str):
     return obj
 
 
+_APIM_DEFAULT_POLICY = ("<policies>\r\n  <inbound />\r\n  <backend>\r\n    <forward-request />\r\n"
+                        "  </backend>\r\n  <outbound />\r\n  <on-error />\r\n</policies>")
+
+
+def _apim_default_policy(type_chain, names, state, rid=""):
+    """A new API Management service ships with the default global policy, so
+    GET .../service/{n}/policies/policy returns it instead of 404 until PUT."""
+    if (len(type_chain) == 3 and len(names) == 2 and names[1].lower() == "policy"
+            and type_chain[1].lower() == "service" and type_chain[2].lower() == "policies"
+            and type_chain[0].lower() == "microsoft.apimanagement"):
+        parent = rid.rsplit("/policies/", 1)[0].lower()
+        if parent in state:
+            return {"id": rid, "name": "policy", "type": "Microsoft.ApiManagement/service/policies",
+                    "properties": {"format": "xml", "value": _APIM_DEFAULT_POLICY}}
+    return None
+
+
 def _canonical_id(sub: str, rg, type_chain, names) -> str:
     seg = [f"/subscriptions/{sub}"]
     if rg:
@@ -148,8 +195,8 @@ class AzureArm:
     """In-memory Azure Resource Manager control plane (one per Nano instance)."""
 
     def __init__(self, base: str = ""):
-        self._state: dict = {}
-        self._operations: dict = {}
+        self.state: dict = {}
+        self.operations: dict = {}
         self._base = base                       # endpoint/LRO URL prefix (relative by default)
 
     # ── public entry ──────────────────────────────────────────────────────
@@ -159,10 +206,11 @@ class AzureArm:
         # LRO poll — every operation completes immediately in the sim.
         if "/api/azure/operations/" in path:
             op_id = path.split("/api/azure/operations/", 1)[1].split("?", 1)[0].strip("/")
-            op = self._operations.get(op_id)
+            op = self.operations.get(op_id)
             base = {"status": "Succeeded", "properties": {"provisioningState": "Succeeded"}}
             if op:
                 base.update({"id": op["id"], "name": op["name"], "startTime": op["startTime"], "endTime": op["endTime"]})
+                base.update(op.get("result") or {})
             return _ok(base)
         i = path.find("/subscriptions/")
         if i == -1:
@@ -224,11 +272,36 @@ class AzureArm:
                 names.append(token)
         is_collection = (len(chain) % 2 == 1)
 
+        # Microsoft.AppConfiguration: the substrate-free engine owns the store / key-value semantics;
+        # this class's flat store is its resource map (so it persists with the rest of ARM).
+        if namespace.lower() == "microsoft.appconfiguration":
+            return self._appconfig(method, sub, rg, chain, payload, query)
+
+        # Microsoft.Network/dnsZones (+ record sets): the Azure DNS engine owns the zone semantics.
+        if namespace.lower() == "microsoft.network" and dns_engine.handles(chain):
+            return self._dns(method, sub, rg, chain, payload, query)
+
+        # Microsoft.Insights (action groups, metric / activity log alerts, autoscale): the Azure Monitor engine.
+        if namespace.lower() == "microsoft.insights" and monitor_engine.handles(chain):
+            return self._monitor(method, sub, rg, chain, payload, query)
+
+        # Microsoft.OperationalInsights (Log Analytics workspaces, saved searches, tables, data sources).
+        if namespace.lower() == "microsoft.operationalinsights" and oi_engine.handles(chain):
+            return self._oi(method, sub, rg, chain, payload, query)
+
+        if namespace.lower() == "microsoft.cognitiveservices":
+            return self._cogs(method, sub, rg, chain, payload, query)
+
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
             supported = ", ".join(sorted(c["namespace"] + "/" + c["type"] for c in CATALOG))
             return _err(404, "ResourceTypeNotSupported",
                         f"Type '{namespace}/{type_chain[1]}' is not simulated. Supported: {supported}.")
+
+        # Microsoft.App (Container Apps): the substrate-free engine owns the semantics; this
+        # class's flat store is its resource map (so it persists with the rest of ARM).
+        if namespace.lower() == "microsoft.app":
+            return self._app(method, sub, rg, chain, payload, query)
 
         # POST action verbs (listKeys / start / powerOff / …)
         if method == "POST" and is_collection and len(type_chain) >= 3 and names:
@@ -248,7 +321,9 @@ class AzureArm:
         lro = (len(type_chain) == 2 and namespace.lower() != "microsoft.authorization")
 
         if method == "GET":
-            rec = self._state.get(key)
+            rec = self.state.get(key)
+            if not rec:
+                rec = _apim_default_policy(type_chain, names, self.state, rid)
             if not rec:
                 return _err(404, "ResourceNotFound", f"Resource '{rid}' not found.")
             return _ok(_view(rec))
@@ -261,15 +336,72 @@ class AzureArm:
                 resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
             return resp
         if method == "DELETE":
-            rec = self._state.pop(key, None)
+            rec = self.state.pop(key, None)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+    def _dns(self, method, sub, rg, chain, payload, query):
+        dn = dns_engine
+        r = dn.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or dn.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
+    def _monitor(self, method, sub, rg, chain, payload, query):
+        r = monitor_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
+    def _oi(self, method, sub, rg, chain, payload, query):
+        r = oi_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        resp = {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or oi_engine.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
+    def _cogs(self, method, sub, rg, chain, payload, query):
+        cs = cogs_engine
+        r = cs.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or cs.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
+    def _appconfig(self, method, sub, rg, chain, payload, query):
+        ac = appconfig_engine
+        r = ac.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or ac.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
+    def _app(self, method, sub, rg, chain, payload, query):
+        app = app_engine
+        r = app.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            result = r["body"] if r["verb"] == "start" and chain[0].lower() == "jobs" else None
+            op_id = self._make_operation(r["rid"], method, result)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or app.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
 
     # ── CRUD primitives ───────────────────────────────────────────────────
     def _list(self, sub, rg, full_type):
         ft = full_type.lower()
         items = []
-        for rec in self._state.values():
+        for rec in self.state.values():
             if rec.get("_type", "").lower() != ft:
                 continue
             if rec.get("_sub") != sub:
@@ -280,13 +412,13 @@ class AzureArm:
         return _ok({"value": items})
 
     def _upsert(self, rid, key, full_type, name, catalog, payload, base, patch=False):
-        existed = key in self._state
+        existed = key in self.state
         is_top = full_type.lower() == (catalog["namespace"] + "/" + catalog["type"]).lower()
         defaults = _expand_tokens(catalog.get("defaults", {}), name, base) if is_top else {"properties": {"provisioningState": "Succeeded"}}
         endpoints = catalog.get("endpoints", {}) if is_top else {}
 
         if patch and existed:
-            rec = self._state[key]
+            rec = self.state[key]
         else:
             rec = {"id": rid, "name": name, "type": full_type,
                    "location": payload.get("location") or DEFAULT_LOCATION,
@@ -312,7 +444,7 @@ class AzureArm:
             if _get_path(rec, path_expr) in (None, ""):
                 _set_path(rec, path_expr, base + suffix.replace("__NAME__", name))
 
-        self._state[key] = rec
+        self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)
 
     def _arm_action(self, action, type_chain, resource_name, parent_rid=""):
@@ -322,7 +454,7 @@ class AzureArm:
             if ns != "microsoft.compute" or typ != "virtualmachines":
                 return _err(400, "ActionNotSupported",
                             f"Action '{action}' is only supported on Microsoft.Compute/virtualMachines.")
-            rec = self._state.get(parent_rid.lower()) if parent_rid else None
+            rec = self.state.get(parent_rid.lower()) if parent_rid else None
             if not rec:
                 return _err(404, "ResourceNotFound", f"Virtual machine '{resource_name}' not found.")
             new_status = {"start": "running", "restart": "running",
@@ -351,7 +483,7 @@ class AzureArm:
 
     def _list_resource_groups(self, sub):
         names = {DEFAULT_RG: True}
-        for rec in self._state.values():
+        for rec in self.state.values():
             if rec.get("_sub") == sub and rec.get("_rg"):
                 names[rec["_rg"]] = True
         return [{"id": f"/subscriptions/{sub}/resourceGroups/{n}", "name": n,
@@ -368,10 +500,12 @@ class AzureArm:
             return _ok(None, status=200)
         return _ok(body, status=200 if method in ("PUT", "PATCH", "GET") else 405)
 
-    def _make_operation(self, resource_id, method):
+    def _make_operation(self, resource_id, method, result=None):
         op_id = uuid.uuid4().hex
         now = _now()
-        self._operations[op_id] = {"id": op_id, "name": op_id, "status": "Succeeded",
+        self.operations[op_id] = {"id": op_id, "name": op_id, "status": "Succeeded",
                                    "startTime": now, "endTime": now,
                                    "resourceId": resource_id, "method": method}
+        if result:
+            self.operations[op_id]["result"] = result
         return op_id

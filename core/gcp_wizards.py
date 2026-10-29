@@ -486,6 +486,29 @@ _EVENTARC_WIZARD = _basic_wizard(
 # ============================================================================
 # Secret Manager — Create secret
 # ============================================================================
+def _artifactregistry_wizard():
+    w = _basic_wizard(
+        name_field=_name("Name", "my-repo", r"^[a-z][a-z0-9-]{0,61}[a-z0-9]$",
+                         "1-63 chars, lowercase letters, digits, hyphens; start with a letter"),
+        name_default="my-repo", region_or_zone="region",
+        extra_basic_fields=[
+            {"name": "format", "label": "Format", "type": "select", "required": True, "default": "DOCKER",
+             "options": [{"value": "DOCKER", "label": "Docker"}, {"value": "MAVEN", "label": "Maven"},
+                         {"value": "NPM", "label": "npm"}, {"value": "PYTHON", "label": "Python"},
+                         {"value": "APT", "label": "Apt"}, {"value": "YUM", "label": "Yum"},
+                         {"value": "GO", "label": "Go"}, {"value": "GENERIC", "label": "Generic"}]},
+            {"name": "mode", "label": "Mode", "type": "select", "default": "STANDARD_REPOSITORY",
+             "options": [{"value": "STANDARD_REPOSITORY", "label": "Standard"},
+                         {"value": "VIRTUAL_REPOSITORY", "label": "Virtual"},
+                         {"value": "REMOTE_REPOSITORY", "label": "Remote"}]},
+            {"name": "description", "label": "Description", "default": "Created in Vyomi"},
+        ])
+    w["synthetic_map"] = {"__region__": {"location": "$value"}}
+    return w
+
+
+_ARTIFACTREGISTRY_WIZARD = _artifactregistry_wizard()
+
 _SECRETMANAGER_WIZARD = _basic_wizard(
     name_field=_name("Name", "my-secret",
                      r"^[A-Za-z0-9_-]{1,255}$",
@@ -692,6 +715,28 @@ _MONITORING_WIZARD = _basic_wizard(
         ]},
     ],
 )
+# Memorystore for Redis — Create instance (core/gcp_redis_core.job_from_form)
+# ============================================================================
+_REDIS_WIZARD = _basic_wizard(
+    name_field=_name("Instance ID", "my-redis", r"^[a-z]([-a-z0-9]{0,38}[a-z0-9])?$",
+                     "Up to 40 chars: lowercase letters, digits, hyphens; start with a letter"),
+    name_default="my-redis", region_or_zone="region",
+    extra_basic_fields=[
+        {"name": "displayName", "label": "Display name", "default": "Demo Redis cache"},
+        {"name": "tier", "label": "Tier", "type": "radio", "default": "BASIC", "options": [
+            {"value": "BASIC",       "label": "Basic (no replication)"},
+            {"value": "STANDARD_HA", "label": "Standard (high availability, replica in a second zone)"},
+        ]},
+        {"name": "memorySizeGb", "label": "Capacity (GB)", "type": "number", "default": 1},
+        {"name": "redisVersion", "label": "Redis version", "type": "select", "default": "REDIS_7_0", "options": [
+            {"value": v, "label": v.replace("REDIS_", "Redis ").replace("_X", ".x").replace("_", ".")}
+            for v in ("REDIS_7_2", "REDIS_7_0", "REDIS_6_X", "REDIS_5_0", "REDIS_4_0", "REDIS_3_2")]},
+        {"name": "network", "label": "Authorized network", "default": "default"},
+        {"name": "authEnabled", "label": "Enable AUTH", "type": "select", "default": "false", "options": [
+            {"value": "false", "label": "Disabled"}, {"value": "true", "label": "Enabled"}]},
+    ],
+)
+_REDIS_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
 
 
 WIZARDS: dict[str, dict] = {
@@ -706,9 +751,11 @@ WIZARDS: dict[str, dict] = {
     "iam":           _IAM_WIZARD,
     "eventarc":      _EVENTARC_WIZARD,
     "secretmanager": _SECRETMANAGER_WIZARD,
+    "artifactregistry": _ARTIFACTREGISTRY_WIZARD,
     "kms":           _KMS_WIZARD,
     "cloudscheduler": _CLOUDSCHEDULER_WIZARD,
     "iamcredentials": _IAMCREDENTIALS_WIZARD,
     "container":     _CONTAINER_WIZARD,
     "monitoring":    _MONITORING_WIZARD,
+    "redis":         _REDIS_WIZARD,
 }

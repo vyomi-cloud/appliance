@@ -397,6 +397,66 @@ _MONITORING_SUB = [
 ]
 
 
+# ============================================================================
+# Memorystore for Redis — instance detail (reuses the generic `schedkv` key/value renderer:
+# `fields` is [[field, label], …] read off the instance's console view, every value filled)
+# ============================================================================
+_REDIS_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Instance", "items": [
+        {"key": "details", "label": "Details", "icon": "info", "type": "schedkv",
+         "fields": [["status", "Status"], ["tier_label", "Tier"], ["version", "Redis version"],
+                    ["capacity", "Capacity"], ["display_name", "Display name"], ["created", "Created"],
+                    ["data_plane", "Data plane"]]},
+        {"key": "connection", "label": "Connection", "icon": "cable", "type": "schedkv",
+         "fields": [["endpoint", "Primary endpoint"], ["read_endpoint", "Read endpoint"], ["connect_cmd", "Connect with"],
+                    ["auth", "AUTH"], ["encryption", "In-transit encryption"], ["network", "Authorized network"],
+                    ["reservedIpRange", "Reserved IP range"], ["connectMode", "Connect mode"]]},
+        {"key": "replication", "label": "Replication", "icon": "dns", "type": "schedkv",
+         "fields": [["zone", "Primary zone"], ["alt_zone", "Secondary zone"], ["replicas", "Replica count"],
+                    ["read_replicas", "Read replicas"], ["node_summary", "Nodes"]]},
+        {"key": "configuration", "label": "Configuration", "icon": "tune", "type": "schedkv",
+         "fields": [["redis_configs_text", "Redis configs"], ["persistence", "Persistence"],
+                    ["maintenance_window", "Maintenance window"], ["labels_text", "Labels"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
+# ============================================================================
+# Artifact Registry — repository detail
+# ============================================================================
+_ARTIFACTREGISTRY_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Artifacts", "items": [
+        {"key": "images",   "label": "Images",   "icon": "deployed_code", "type": "sublist",
+         "source": "images", "empty": "No images yet. Push one with docker, or use Push sample image.",
+         "columns": [["name", "Image"], ["digest", "Digest"], ["tags", "Tags"], ["size", "Size"], ["uploaded", "Uploaded"]],
+         "actions": [{"label": "Push sample image", "op": "pushSample"}]},
+        {"key": "packages", "label": "Packages", "icon": "inventory_2", "type": "sublist",
+         "source": "packages", "empty": "No packages in this repository.",
+         "columns": [["name", "Package"], ["versions", "Versions"], ["tags", "Tags"], ["created", "Created"], ["updated", "Updated"]]},
+        {"key": "versions", "label": "Versions", "icon": "history", "type": "sublist",
+         "source": "versions", "empty": "No versions in this repository.",
+         "columns": [["name", "Version"], ["package", "Package"], ["tags", "Tags"], ["size", "Size"], ["created", "Created"]]},
+        {"key": "tags",     "label": "Tags",     "icon": "sell", "type": "sublist",
+         "source": "tags", "empty": "No tags in this repository.",
+         "columns": [["name", "Tag"], ["package", "Package"], ["version", "Version"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "labels", "label": "Labels", "icon": "sell", "type": "tags"},
+        {"key": "iam",    "label": "Permissions", "icon": "admin_panel_settings", "type": "iam"},
+        *_settings_props(),
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -410,9 +470,11 @@ SUB_BLADES: dict[str, list] = {
     "iam":           _IAM_SUB,
     "eventarc":      _EVENTARC_SUB,
     "secretmanager": _SECRETMANAGER_SUB,
+    "artifactregistry": _ARTIFACTREGISTRY_SUB,
     "kms":           _KMS_SUB,
     "cloudscheduler": _CLOUDSCHEDULER_SUB,
     "iamcredentials": _IAMCREDENTIALS_SUB,
     "container":     _CONTAINER_SUB,
     "monitoring":    _MONITORING_SUB,
+    "redis":         _REDIS_SUB,
 }
