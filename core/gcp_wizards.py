@@ -570,6 +570,122 @@ _KMS_WIZARD = _basic_wizard(
 )
 
 
+# ============================================================================
+# Cloud Scheduler — Create job (the REST fields: name, region, description, schedule,
+# timeZone + an HTTP or Pub/Sub target; core/gcp_cloudscheduler_core.job_from_form)
+# ============================================================================
+_CLOUDSCHEDULER_WIZARD = _basic_wizard(
+    name_field=_name("Name", "my-job", r"^[A-Za-z0-9_-]{1,500}$",
+                     "Letters, numbers, hyphens and underscores"),
+    name_default="my-job", region_or_zone="region",
+    extra_basic_fields=[
+        {"name": "description", "label": "Description", "default": "Runs every five minutes"},
+        {"name": "schedule", "label": "Frequency (unix-cron)", "default": "*/5 * * * *", "required": True,
+         "help": "Five fields: minute hour day-of-month month day-of-week, e.g. 0 9 * * 1-5",
+         "validate": {"regex": r"^\S+(\s+\S+){4}$|^@\w+$", "message": "Use five space-separated cron fields"}},
+        {"name": "timeZone", "label": "Time zone", "default": "Etc/UTC", "required": True},
+    ],
+    sections=[
+        {"label": "Configure the execution", "fields": [
+            {"name": "targetType", "label": "Target type", "type": "radio", "default": "HTTP", "options": [
+                {"value": "HTTP",    "label": "HTTP"},
+                {"value": "Pub/Sub", "label": "Pub/Sub"},
+            ]},
+            {"name": "url", "label": "URL", "default": "https://example.com/hook",
+             "ifEquals": {"targetType": "HTTP"}},
+            {"name": "httpMethod", "label": "HTTP method", "type": "select", "default": "POST",
+             "ifEquals": {"targetType": "HTTP"}, "options": [
+                {"value": m, "label": m} for m in ("POST", "GET", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")]},
+            {"name": "topic", "label": "Cloud Pub/Sub topic", "default": "projects/demo/topics/my-topic",
+             "ifEquals": {"targetType": "Pub/Sub"}},
+            {"name": "message", "label": "Message body", "default": "scheduled",
+             "ifEquals": {"targetType": "Pub/Sub"}},
+        ]},
+    ],
+)
+_CLOUDSCHEDULER_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
+
+
+# ============================================================================
+# Kubernetes Engine — Create cluster (core/gcp_container_core.job_from_form)
+# ============================================================================
+_CONTAINER_WIZARD = _basic_wizard(
+    name_field=_name("Name", "my-cluster", r"^[a-z]([-a-z0-9]{0,38}[a-z0-9])?$",
+                     "Up to 40 chars: lowercase letters, digits, hyphens; start with a letter"),
+    name_default="my-cluster", region_or_zone="region",
+    extra_basic_fields=[
+        {"name": "description", "label": "Description", "default": "Demo GKE cluster"},
+        {"name": "mode", "label": "Cluster mode", "type": "radio", "default": "Standard", "options": [
+            {"value": "Standard",  "label": "Standard (you manage node pools)"},
+            {"value": "Autopilot", "label": "Autopilot (Google manages nodes)"},
+        ]},
+        {"name": "releaseChannel", "label": "Release channel", "type": "select", "default": "REGULAR", "options": [
+            {"value": c, "label": c.title()} for c in ("RAPID", "REGULAR", "STABLE", "EXTENDED")]},
+        {"name": "network", "label": "Network", "default": "default"},
+    ],
+    sections=[
+        {"label": "Default node pool", "fields": [
+            {"name": "nodeCount", "label": "Number of nodes", "type": "number", "default": 3,
+             "ifEquals": {"mode": "Standard"}},
+            {"name": "machineType", "label": "Machine type", "type": "vmSize", "default": "e2-medium",
+             "ifEquals": {"mode": "Standard"}},
+        ]},
+    ],
+)
+_CONTAINER_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
+
+
+# ============================================================================
+# IAM Service Account Credentials — Issue credential (core/gcp_iamcredentials_core.issue_from_form)
+# ============================================================================
+_IAMCREDENTIALS_WIZARD = _basic_wizard(
+    name_field={"name": "name", "label": "Service account", "default": "vyomi-sa@demo.iam.gserviceaccount.com",
+                "required": True, "validate": {"regex": r"^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*\.gserviceaccount\.com$",
+                                               "message": "A service account email, e.g. my-sa@my-project.iam.gserviceaccount.com"}},
+    name_default="vyomi-sa@demo.iam.gserviceaccount.com", region_or_zone=None,
+    extra_basic_fields=[
+        {"name": "credentialType", "label": "Credential type", "type": "radio", "default": "Access token", "options": [
+            {"value": "Access token", "label": "Access token"},
+            {"value": "ID token",     "label": "ID token"},
+            {"value": "Signed blob",  "label": "Signed blob"},
+            {"value": "Signed JWT",   "label": "Signed JWT"},
+        ]},
+        {"name": "detail", "label": "Scopes (access token), audience (ID token) or data to sign",
+         "default": "https://www.googleapis.com/auth/cloud-platform", "required": True,
+         "help": "Space-separated OAuth scopes for an access token; the audience URL for an ID token; text to sign for a blob."},
+        {"name": "lifetime", "label": "Lifetime", "default": "3600s", "ifEquals": {"credentialType": "Access token"},
+         "help": "Up to 43200s (12 hours)."},
+        {"name": "delegates", "label": "Delegates (comma-separated service account emails)", "default": "",
+         "help": "Optional delegation chain; each must exist."},
+    ],
+)
+
+
+# ============================================================================
+# Memorystore for Redis — Create instance (core/gcp_redis_core.job_from_form)
+# ============================================================================
+_REDIS_WIZARD = _basic_wizard(
+    name_field=_name("Instance ID", "my-redis", r"^[a-z]([-a-z0-9]{0,38}[a-z0-9])?$",
+                     "Up to 40 chars: lowercase letters, digits, hyphens; start with a letter"),
+    name_default="my-redis", region_or_zone="region",
+    extra_basic_fields=[
+        {"name": "displayName", "label": "Display name", "default": "Demo Redis cache"},
+        {"name": "tier", "label": "Tier", "type": "radio", "default": "BASIC", "options": [
+            {"value": "BASIC",       "label": "Basic (no replication)"},
+            {"value": "STANDARD_HA", "label": "Standard (high availability, replica in a second zone)"},
+        ]},
+        {"name": "memorySizeGb", "label": "Capacity (GB)", "type": "number", "default": 1},
+        {"name": "redisVersion", "label": "Redis version", "type": "select", "default": "REDIS_7_0", "options": [
+            {"value": v, "label": v.replace("REDIS_", "Redis ").replace("_X", ".x").replace("_", ".")}
+            for v in ("REDIS_7_2", "REDIS_7_0", "REDIS_6_X", "REDIS_5_0", "REDIS_4_0", "REDIS_3_2")]},
+        {"name": "network", "label": "Authorized network", "default": "default"},
+        {"name": "authEnabled", "label": "Enable AUTH", "type": "select", "default": "false", "options": [
+            {"value": "false", "label": "Disabled"}, {"value": "true", "label": "Enabled"}]},
+    ],
+)
+_REDIS_WIZARD["synthetic_map"] = {"__region__": {"*": {"region": "$value"}}}
+
+
 WIZARDS: dict[str, dict] = {
     "compute":       _COMPUTE_WIZARD,
     "storage":       _STORAGE_WIZARD,
@@ -583,4 +699,8 @@ WIZARDS: dict[str, dict] = {
     "eventarc":      _EVENTARC_WIZARD,
     "secretmanager": _SECRETMANAGER_WIZARD,
     "kms":           _KMS_WIZARD,
+    "cloudscheduler": _CLOUDSCHEDULER_WIZARD,
+    "iamcredentials": _IAMCREDENTIALS_WIZARD,
+    "container":     _CONTAINER_WIZARD,
+    "redis":         _REDIS_WIZARD,
 }

@@ -1,0 +1,51 @@
+{
+  "cloud": "azure",
+  "key": "monitor",
+  "name": "Monitor alerts",
+  "upstream": "monitor",
+  "issue": 86,
+  "core": "core/azure_monitor_core.py",
+  "operations": [
+    "ActionGroups_CreateOrUpdate",
+    "ActionGroups_Update",
+    "ActionGroups_Delete",
+    "ActionGroups_Get",
+    "ActionGroups_ListBySubscriptionId",
+    "ActionGroups_ListByResourceGroup",
+    "ActionGroups_EnableReceiver",
+    "ActionGroups_PostTestNotifications",
+    "ActionGroups_CreateNotificationsAtActionGroupResourceLevel",
+    "ActionGroups_GetTestNotifications",
+    "MetricAlerts_CreateOrUpdate",
+    "MetricAlerts_Update",
+    "MetricAlerts_Delete",
+    "MetricAlerts_Get",
+    "MetricAlerts_ListByResourceGroup",
+    "MetricAlerts_ListBySubscription",
+    "MetricAlertsStatus_List",
+    "ActivityLogAlerts_CreateOrUpdate",
+    "ActivityLogAlerts_Update",
+    "ActivityLogAlerts_Delete",
+    "ActivityLogAlerts_Get",
+    "ActivityLogAlerts_ListBySubscriptionId",
+    "ActivityLogAlerts_ListByResourceGroup",
+    "AutoscaleSettings_CreateOrUpdate",
+    "AutoscaleSettings_Update",
+    "AutoscaleSettings_Delete",
+    "AutoscaleSettings_Get",
+    "AutoscaleSettings_ListByResourceGroup",
+    "AutoscaleSettings_ListBySubscription"
+  ],
+  "backend": {
+    "kind": "in-process",
+    "reason": "Alert rules, action groups and autoscale settings are plain control-plane data the engine already holds (the same code runs in Nano); nothing in Monitor needs a real data plane, so no container is added. Metric evaluation, notification delivery and diagnostic settings / metrics queries are not simulated."
+  },
+  "suites": [
+    "offline-sdk-java-azure-monitor",
+    "offline-sdk-go-azure-monitor",
+    "offline-cli-azure-monitor",
+    "offline-ui-azure-monitor",
+    "nano-ui-azure-monitor"
+  ],
+  "status": "ready"
+}

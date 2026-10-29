@@ -1,0 +1,71 @@
+{
+  "cloud": "aws",
+  "key": "ssm",
+  "name": "Systems Manager",
+  "upstream": "ssm",
+  "issue": 63,
+  "core": "core/ssm_core.py",
+  "operations": [
+    "AddTagsToResource",
+    "CancelCommand",
+    "CreateAssociation",
+    "CreateDocument",
+    "CreateMaintenanceWindow",
+    "CreatePatchBaseline",
+    "DeleteAssociation",
+    "DeleteDocument",
+    "DeleteMaintenanceWindow",
+    "DeleteParameter",
+    "DeleteParameters",
+    "DeletePatchBaseline",
+    "DeregisterTargetFromMaintenanceWindow",
+    "DescribeAssociation",
+    "DescribeDocument",
+    "DescribeInstanceInformation",
+    "DescribeMaintenanceWindowTargets",
+    "DescribeMaintenanceWindows",
+    "DescribeParameters",
+    "DescribePatchBaselines",
+    "GetCommandInvocation",
+    "GetDocument",
+    "GetMaintenanceWindow",
+    "GetParameter",
+    "GetParameterHistory",
+    "GetParameters",
+    "GetParametersByPath",
+    "GetPatchBaseline",
+    "LabelParameterVersion",
+    "ListAssociations",
+    "ListCommandInvocations",
+    "ListCommands",
+    "ListDocumentVersions",
+    "ListDocuments",
+    "ListTagsForResource",
+    "PutParameter",
+    "RegisterTargetWithMaintenanceWindow",
+    "RemoveTagsFromResource",
+    "SendCommand",
+    "UnlabelParameterVersion",
+    "UpdateDocument",
+    "UpdateDocumentDefaultVersion",
+    "UpdateMaintenanceWindow"
+  ],
+  "backend": {
+    "kind": "in-process"
+  },
+  "suites": [
+    "offline-sdk-java-aws-ssm",
+    "offline-sdk-go-aws-ssm",
+    "offline-cli-aws-ssm",
+    "offline-ui-aws-ssm",
+    "nano-ui-aws-ssm"
+  ],
+  "status": "ready",
+  "blank_like_real_console": [
+    {
+      "tab": "History",
+      "column": "Labels",
+      "why": "AWS Parameter Store shows - in the Labels column for a parameter version that has no labels"
+    }
+  ]
+}

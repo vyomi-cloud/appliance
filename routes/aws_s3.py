@@ -1054,6 +1054,12 @@ def _aws_query_target_service(request: Request) -> str:
         return "secretsmanager"
     if target.startswith("AWSEvents."):
         return "events"
+    if target.startswith("Logs_20140328."):
+        return "logs"
+    if target.startswith("AmazonSSM."):
+        return "ssm"
+    if target.startswith("AWSStepFunctions."):
+        return "states"
     return ""
 
 
@@ -1092,13 +1098,31 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     async def aws_query_root(request: Request) -> Response:
         """Root dispatch for real AWS SDK/CLI query + JSON protocol requests."""
         service = _aws_query_target_service(request)
+        if service == "states":
+            # Step Functions (X-Amz-Target AWSStepFunctions.*) — in-process engine, shared with the console REST.
+            from core import stepfunctions_core as _sfn
+            try:
+                _sfn_body = json.loads(await request.body() or b"{}")
+            except Exception:
+                _sfn_body = {}
+            _r = _sfn.dispatch(_sfn.shared_store(), request.headers.get("x-amz-target", ""), _sfn_body)
+            return Response(content=json.dumps(_r.body), status_code=_r.status, headers=dict(_r.headers or {}),
+                            media_type="application/x-amz-json-1.0")
         if service == "ec2":
             params = await _srv()._ec2_query_params(request)
             if str(params.get("Action", "")).strip() in _EC2_VPC_ACTIONS:
                 return await _srv().api_vpc_query(request)
             return await _srv().api_ec2_query(request)
+        if service == "logs":
+            from routes import aws_logs as _aws_logs
+            return await _aws_logs.wire(request)
         if service == "sqs":
             return await _srv().api_sqs_query(request)
+        if service == "elasticloadbalancing":
+            from core import elbv2_core as _elb
+            from routes.aws_elbv2 import STORE as _elb_store
+            _elb_r = _elb.dispatch(_elb_store, await _srv()._ec2_query_params(request))
+            return Response(content=_elb_r.body, status_code=_elb_r.status, media_type="text/xml")
         if service == "rds":
             return await _srv().api_rds_query(request)
         if service == "dynamodb":
@@ -1108,6 +1132,18 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return await _srv().api_iam_query(request)
         if service == "sts":
             return await _srv().api_sts_query(request)
+        if service == "ssm":
+            # Systems Manager: in-process engine (core/ssm_core.py), same store as the console REST.
+            from core import ssm_core as _ssm_core
+            try:
+                _payload = json.loads(await request.body() or b"{}")
+            except Exception:
+                _payload = {}
+            _tgt = request.headers.get("x-amz-target", "")
+            _r = _ssm_core.dispatch(_ssm_core.shared_store(), _tgt, _payload)
+            _srv()._ssm_usage(_tgt, _payload, _r)
+            return Response(content=json.dumps(_r.body), status_code=_r.status,
+                            media_type="application/x-amz-json-1.1", headers=dict(_r.headers or {}))
         if service in ("kms", "secretsmanager", "events"):
             target = request.headers.get("x-amz-target", "")
             prefix = target.split(".", 1)[0] if "." in target else ""

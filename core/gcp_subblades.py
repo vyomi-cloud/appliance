@@ -282,6 +282,125 @@ _KMS_SUB = [
 ]
 
 
+# ============================================================================
+# Cloud Scheduler — job detail (generic `schedkv` renderer: `fields` is
+# [[field, label], …] read off the job's console view, every value filled)
+# ============================================================================
+_CLOUDSCHEDULER_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Job", "items": [
+        {"key": "execution", "label": "Last execution", "icon": "history", "type": "schedkv",
+         "fields": [["last_run", "Last attempt"], ["last_status", "Result"], ["next_run", "Next run"],
+                    ["state", "State"]]},
+        {"key": "target",    "label": "Target",        "icon": "ads_click",   "type": "schedkv",
+         "fields": [["target_type", "Target type"], ["target", "Target"], ["attempt_deadline", "Attempt deadline"]]},
+        {"key": "retry",     "label": "Retry policy",  "icon": "restart_alt", "type": "schedkv",
+         "fields": [["retry_summary", "Retry configuration"], ["attempt_deadline", "Attempt deadline"]]},
+        {"key": "schedule",  "label": "Schedule",      "icon": "schedule",    "type": "schedkv",
+         "fields": [["frequency", "Frequency (unix-cron)"], ["timezone", "Time zone"],
+                    ["description_text", "Description"], ["created", "Last updated"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
+# ============================================================================
+# Kubernetes Engine — cluster detail (reuses the generic `schedkv` key/value renderer:
+# `fields` is [[field, label], …] read off the cluster's console view, every value filled)
+# ============================================================================
+_CONTAINER_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Cluster", "items": [
+        {"key": "details", "label": "Details", "icon": "info", "type": "schedkv",
+         "fields": [["status", "Status"], ["mode", "Mode"], ["version", "Control plane version"],
+                    ["channel", "Release channel"], ["endpoint", "Endpoint"], ["created", "Created"],
+                    ["description_text", "Description"], ["data_plane", "Kubernetes API"]]},
+        {"key": "nodes",   "label": "Nodes", "icon": "dns", "type": "schedkv",
+         "fields": [["pool_summary", "Node pools"], ["nodes", "Number of nodes"], ["vcpus", "Total vCPUs"],
+                    ["memory", "Total memory"], ["machine_types", "Machine types"], ["image_type", "Image type"],
+                    ["disk", "Boot disk"], ["autoscaling", "Autoscaling"], ["auto_upgrade", "Auto-upgrade"]]},
+        {"key": "networking", "label": "Networking", "icon": "lan", "type": "schedkv",
+         "fields": [["network", "Network"], ["subnetwork", "Subnet"], ["clusterIpv4Cidr", "Pod address range"],
+                    ["servicesIpv4Cidr", "Service address range"]]},
+        {"key": "observability", "label": "Observability", "icon": "monitoring", "type": "schedkv",
+         "fields": [["loggingService", "Logging"], ["monitoringService", "Monitoring"],
+                    ["notifications", "Upgrade notifications"], ["labels_text", "Labels"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
+# ============================================================================
+# IAM Service Account Credentials — issued-credential detail (generic `schedkv`
+# renderer: `fields` is [[field, label], …] read off the credential's console view)
+# ============================================================================
+_IAMCREDENTIALS_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Credential", "items": [
+        {"key": "credential", "label": "Credential", "icon": "key", "type": "schedkv",
+         "fields": [["type", "Type"], ["service_account", "Service account"], ["scope_or_audience", "Scopes / audience"],
+                    ["state", "Status"]]},
+        {"key": "lifetime",   "label": "Lifetime",   "icon": "timer", "type": "schedkv",
+         "fields": [["issued", "Issued"], ["expires", "Expires"], ["lifetime", "Lifetime"]]},
+        {"key": "delegation", "label": "Delegation", "icon": "account_tree", "type": "schedkv",
+         "fields": [["delegation", "Delegation chain"], ["delegate_count", "Delegates"]]},
+        {"key": "signing",    "label": "Signing",    "icon": "draw", "type": "schedkv",
+         "fields": [["signing_algorithm", "Algorithm"], ["key_id", "Key ID"], ["api_method", "API method"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
+# ============================================================================
+# Memorystore for Redis — instance detail (reuses the generic `schedkv` key/value renderer:
+# `fields` is [[field, label], …] read off the instance's console view, every value filled)
+# ============================================================================
+_REDIS_SUB = [
+    {"key": "overview",    "label": "Overview",      "icon": "dashboard",   "type": "overview"},
+    {"group": "Instance", "items": [
+        {"key": "details", "label": "Details", "icon": "info", "type": "schedkv",
+         "fields": [["status", "Status"], ["tier_label", "Tier"], ["version", "Redis version"],
+                    ["capacity", "Capacity"], ["display_name", "Display name"], ["created", "Created"],
+                    ["data_plane", "Data plane"]]},
+        {"key": "connection", "label": "Connection", "icon": "cable", "type": "schedkv",
+         "fields": [["endpoint", "Primary endpoint"], ["read_endpoint", "Read endpoint"], ["connect_cmd", "Connect with"],
+                    ["auth", "AUTH"], ["encryption", "In-transit encryption"], ["network", "Authorized network"],
+                    ["reservedIpRange", "Reserved IP range"], ["connectMode", "Connect mode"]]},
+        {"key": "replication", "label": "Replication", "icon": "dns", "type": "schedkv",
+         "fields": [["zone", "Primary zone"], ["alt_zone", "Secondary zone"], ["replicas", "Replica count"],
+                    ["read_replicas", "Read replicas"], ["node_summary", "Nodes"]]},
+        {"key": "configuration", "label": "Configuration", "icon": "tune", "type": "schedkv",
+         "fields": [["redis_configs_text", "Redis configs"], ["persistence", "Persistence"],
+                    ["maintenance_window", "Maintenance window"], ["labels_text", "Labels"]]},
+    ]},
+    {"group": "Settings", "items": [
+        {"key": "properties", "label": "Properties", "icon": "info", "type": "properties"},
+        {"key": "json",       "label": "JSON",       "icon": "data_object", "type": "json"},
+    ]},
+    {"group": "Monitoring", "items": [
+        {"key": "metrics",    "label": "Metrics",    "icon": "show_chart", "type": "metrics"},
+    ]},
+]
+
+
 # Public registry — keyed by catalog ``key``
 SUB_BLADES: dict[str, list] = {
     "compute":       _COMPUTE_SUB,
@@ -296,4 +415,8 @@ SUB_BLADES: dict[str, list] = {
     "eventarc":      _EVENTARC_SUB,
     "secretmanager": _SECRETMANAGER_SUB,
     "kms":           _KMS_SUB,
+    "cloudscheduler": _CLOUDSCHEDULER_SUB,
+    "iamcredentials": _IAMCREDENTIALS_SUB,
+    "container":     _CONTAINER_SUB,
+    "redis":         _REDIS_SUB,
 }

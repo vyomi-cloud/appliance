@@ -1,48 +1,546 @@
 {
- "_comment": "Offline data-plane backends for new services. The engine in core/ is always the API surface (and is what Nano runs in the browser); a backend is the real, cheap, permissively licensed software behind it offline, used only where the service's behaviour needs a real data plane (a registry you can docker push to, DNS that resolves, a cache you can redis-cli). The gate enforces `policy` on every manifest's `backend`. `recommended` is the default pick per upstream id; the agent may choose differently only with `backend.reason` in the manifest. EXPANSION.md explains the rules.",
+ "_comment": "Offline data-plane backends for new services. The engine in core/ is always the API surface (and is what Nano runs in the browser); a backend is the real, cheap, permissively licensed software behind it offline, used only where the service's behaviour needs a real data plane (a registry you can docker push to, DNS that resolves, a cache you can redis-cli). The gate enforces `policy` on every manifest's `backend`. `recommended` is the default pick per upstream id; the agent may choose a different real backend only with `backend.reason` in the manifest, and may never replace a recommended backend with in-process (the gate refuses it). EXPANSION.md explains the rules.",
  "policy": {
-  "license_allow": ["Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC", "MPL-2.0", "PostgreSQL", "Zlib", "Unlicense"],
-  "license_allow_separate_process": ["GPL-2.0", "GPL-3.0", "LGPL-2.1", "LGPL-3.0"],
-  "license_deny": ["SSPL-1.0", "BUSL-1.1", "BSL-1.1", "RSALv2", "Elastic-2.0", "AGPL-3.0", "Commons-Clause", "proprietary"],
-  "arch_required": ["amd64", "arm64"],
+  "license_allow": [
+   "Apache-2.0",
+   "MIT",
+   "BSD-2-Clause",
+   "BSD-3-Clause",
+   "ISC",
+   "MPL-2.0",
+   "PostgreSQL",
+   "Zlib",
+   "Unlicense"
+  ],
+  "license_allow_separate_process": [
+   "GPL-2.0",
+   "GPL-3.0",
+   "LGPL-2.1",
+   "LGPL-3.0"
+  ],
+  "license_deny": [
+   "SSPL-1.0",
+   "BUSL-1.1",
+   "BSL-1.1",
+   "RSALv2",
+   "Elastic-2.0",
+   "AGPL-3.0",
+   "Commons-Clause",
+   "proprietary"
+  ],
+  "arch_required": [
+   "amd64",
+   "arm64"
+  ],
   "image_tag": "pinned version, never latest; prefer a vyomi/<name>:<version> multi-arch mirror (as with vyomi/minio) so an upstream image disappearing can't break installs",
-  "budget_idle_mb": {"free": 64, "lite": 128, "pro": 512, "max": 2048},
-  "budget_image_mb": {"free": 100, "lite": 200, "pro": 600, "max": 2000},
-  "prefer": ["in-process (pure Python in core/, zero extra containers)", "one shared backend for the same capability across clouds", "small single-binary servers (Go/Rust/C)", "JVM or multi-process servers only for Max"],
+  "budget_idle_mb": {
+   "free": 64,
+   "lite": 128,
+   "pro": 512,
+   "max": 2048
+  },
+  "budget_image_mb": {
+   "free": 100,
+   "lite": 200,
+   "pro": 600,
+   "max": 2000
+  },
+  "prefer": [
+   "in-process (pure Python in core/, zero extra containers)",
+   "one shared backend for the same capability across clouds",
+   "small single-binary servers (Go/Rust/C)",
+   "JVM or multi-process servers only for Max"
+  ],
   "compose": "container backends go in docker-compose.yml AND docker-compose.cloudlite.yml under profile `full`, with a mem limit at the tier budget and a healthcheck, and are listed in tests/conformance/hourly/ci-services.txt so CI, the gate and the hourly run start them"
  },
  "shared": {
-  "valkey":    {"image": "valkey/valkey:8.0.1-alpine", "license": "BSD-3-Clause", "idle_mb": 8, "tier": "lite", "for": ["aws:elasticache", "gcp:redis/v1", "azure:redis"], "why": "Redis-protocol compatible; Redis 7.4+ is RSALv2/SSPL"},
-  "registry":  {"image": "registry:2.8.3", "license": "Apache-2.0", "idle_mb": 10, "tier": "lite", "for": ["aws:ecr", "gcp:artifactregistry/v1", "azure:containerregistry"], "why": "CNCF Distribution: real docker push/pull"},
-  "coredns":   {"image": "coredns/coredns:1.11.3", "license": "Apache-2.0", "idle_mb": 15, "tier": "lite", "for": ["aws:route53", "gcp:dns/v1", "azure:dns", "azure:privatedns"], "why": "records resolve with dig/nslookup; zones written by the engine"},
-  "mailpit":   {"image": "axllent/mailpit:v1.20", "license": "MIT", "idle_mb": 15, "tier": "lite", "for": ["aws:sesv2"], "why": "captures sent mail, inspectable in a UI"},
-  "nats":      {"image": "nats:2.10-alpine", "license": "Apache-2.0", "idle_mb": 10, "tier": "lite", "for": ["aws:kinesis", "aws:firehose", "azure:eventhub"], "why": "JetStream streams/shards/consumer offsets; already in the stack"},
-  "caddy":     {"image": "caddy:2.8-alpine", "license": "Apache-2.0", "idle_mb": 15, "tier": "lite", "for": ["aws:elbv2", "azure:frontdoor", "azure:cdn"], "why": "real L7 load balancing via the admin API; already in the stack"},
-  "duckdb":    {"kind": "in-process", "license": "MIT", "for": ["gcp:bigquery/v2", "aws:athena", "aws:glue", "azure:synapse", "azure:operationalinsights"], "why": "embedded analytical SQL over local/MinIO files, zero containers"},
-  "docker":    {"kind": "substrate", "tier": "pro", "for": ["aws:ecs", "aws:batch", "aws:codebuild", "gcp:run/v2", "gcp:cloudbuild/v1", "gcp:batch/v1", "azure:app", "azure:batch"], "why": "existing Pro Docker compute backend runs the real containers; Free/Lite get the control plane only"},
-  "k3s":       {"image": "rancher/k3s:v1.30.5-k3s1", "license": "Apache-2.0", "idle_mb": 500, "tier": "max", "for": ["aws:eks", "gcp:container/v1", "azure:containerservice"], "why": "real Kubernetes API for kubectl; Max only, control plane below"},
-  "postgres":  {"image": "postgres:16.4-alpine", "license": "PostgreSQL", "idle_mb": 40, "tier": "lite", "for": ["azure:postgresql"], "why": "already in the stack"},
-  "mariadb":   {"image": "mariadb:11.4", "license": "GPL-2.0", "idle_mb": 90, "tier": "pro", "for": ["azure:mysql"], "why": "MySQL wire compatible, unmodified separate container"},
-  "kafka":     {"image": "apache/kafka:3.8.0", "license": "Apache-2.0", "idle_mb": 400, "tier": "max", "for": ["aws:kafka"], "why": "Apache Kafka KRaft single node (not Redpanda: BSL)"},
-  "opensearch":{"image": "opensearchproject/opensearch:2.17.1", "license": "Apache-2.0", "idle_mb": 700, "tier": "max", "for": ["aws:opensearch"], "why": "not Elasticsearch: Elastic License/SSPL"},
-  "rabbitmq":  {"image": "rabbitmq:3.13-alpine", "license": "MPL-2.0", "idle_mb": 100, "tier": "pro", "for": ["aws:mq"], "why": "Amazon MQ for RabbitMQ engine"},
-  "spanner-emulator": {"image": "gcr.io/cloud-spanner-emulator/emulator:1.5.25", "license": "Apache-2.0", "idle_mb": 150, "tier": "pro", "for": ["gcp:spanner/v1"], "why": "Google's open-source emulator; verify arm64 before use, else mirror-build"},
-  "ollama":    {"image": "ollama/ollama:0.3.14", "license": "MIT", "idle_mb": 50, "tier": "max", "for": ["aws:bedrock-runtime", "gcp:aiplatform/v1", "azure:cognitiveservices"], "why": "optional real inference with small local models; without it the engine returns deterministic canned responses"}
+  "valkey": {
+   "image": "valkey/valkey:8.0.1-alpine",
+   "license": "BSD-3-Clause",
+   "idle_mb": 8,
+   "tier": "lite",
+   "for": [
+    "aws:elasticache",
+    "gcp:redis/v1",
+    "azure:redis"
+   ],
+   "why": "Redis-protocol compatible; Redis 7.4+ is RSALv2/SSPL"
+  },
+  "registry": {
+   "image": "registry:2.8.3",
+   "license": "Apache-2.0",
+   "idle_mb": 10,
+   "tier": "lite",
+   "for": [
+    "aws:ecr",
+    "gcp:artifactregistry/v1",
+    "azure:containerregistry"
+   ],
+   "why": "CNCF Distribution: real docker push/pull"
+  },
+  "coredns": {
+   "image": "coredns/coredns:1.11.3",
+   "license": "Apache-2.0",
+   "idle_mb": 15,
+   "tier": "lite",
+   "for": [
+    "aws:route53",
+    "gcp:dns/v1",
+    "azure:dns",
+    "azure:privatedns"
+   ],
+   "why": "records resolve with dig/nslookup; zones written by the engine"
+  },
+  "mailpit": {
+   "image": "axllent/mailpit:v1.20",
+   "license": "MIT",
+   "idle_mb": 15,
+   "tier": "lite",
+   "for": [
+    "aws:sesv2",
+    "aws:ses"
+   ],
+   "why": "real SMTP: SES SendEmail and the SES SMTP interface deliver into a local inbox (UI :8025). Optional per-space outbound relay to the user's own SMTP server and optional inbound (local SMTP port or IMAP poll of the user's mailbox) feeding SES receipt rules. See issue #61."
+  },
+  "nats": {
+   "image": "nats:2.10-alpine",
+   "license": "Apache-2.0",
+   "idle_mb": 10,
+   "tier": "lite",
+   "for": [
+    "aws:kinesis",
+    "aws:firehose",
+    "azure:eventhub",
+    "aws:sns",
+    "aws:events",
+    "gcp:cloudtasks/v2"
+   ],
+   "why": "JetStream streams/shards/consumer offsets; already in the stack. Also the durable delivery path for push services (SNS, EventBridge, Cloud Tasks): a stream per topic/bus/queue, a durable consumer per subscription/target, delivery workers that really call HTTP endpoints, Lambda, SQS and email (Mailpit), with retry/backoff, dead-letter queues and FIFO dedup. The in-process engine keeps the API and serves Nano."
+  },
+  "caddy": {
+   "image": "caddy:2.8-alpine",
+   "license": "Apache-2.0",
+   "idle_mb": 15,
+   "tier": "lite",
+   "for": [
+    "aws:elbv2",
+    "aws:apigateway",
+    "aws:apigatewayv2",
+    "aws:apigatewaymanagementapi",
+    "gcp:apigateway/v1",
+    "azure:apimanagement",
+    "azure:Microsoft.ApiManagement",
+    "azure:frontdoor",
+    "azure:cdn"
+   ],
+   "why": "One shared gateway for every gateway-type service: real HTTP traffic on each invoke URL / listener, routes changed live through Caddy's admin API (no reload) as users create them, TLS, CORS, rate limits, JWT checks. AWS-specific parts (Lambda proxy integration, VTL mapping templates, Lambda authorizers, usage plans/API keys, APIM policies) are a Vyomi handler Caddy forwards to. Already in the stack.",
+   "agent_for": [
+    "aws:apprunner",
+    "aws:ecs",
+    "azure:app",
+    "gcp:run/v2"
+   ],
+   "role": "gateway"
+  },
+  "workflow-engine": {
+   "kind": "in-process",
+   "license": "(Vyomi code)",
+   "idle_mb": 0,
+   "for": [
+    "aws:stepfunctions",
+    "gcp:workflows/v1",
+    "azure:logic"
+   ],
+   "why": "One durable workflow engine for all three clouds, generalized from core/stepfunctions_core.py (already a real ASL interpreter): executions + per-step history persisted, retry/backoff, try/catch, parallel and loops, waits/timers on the shared dispatcher (survive restarts), callbacks / task tokens, real calls to HTTP and Vyomi services. Thin language front ends: ASL (Step Functions), GCP Workflows YAML + stdlib + connectors, Logic Apps workflow definitions. Same code in Nano. No off-the-shelf engine runs these three languages; Node-RED rejected (own flow format, not durable, no execution history); n8n/Windmill/Restate denied by license."
+  },
+  "iac-engine": {
+   "kind": "in-process",
+   "license": "(Vyomi code)",
+   "idle_mb": 0,
+   "for": [
+    "aws:cloudformation",
+    "aws:cloudcontrol",
+    "azure:resources",
+    "gcp:deploymentmanager/v2"
+   ],
+   "why": "One in-process infrastructure-as-code engine: templates provision through Vyomi's own service engines with each cloud's exact semantics. CloudFormation: stacks, change sets, drift, events, automatic rollback, nested stacks, DeletionPolicy/UpdatePolicy, custom resources that really invoke Lambda, WaitCondition/cfn-signal; its resource handlers also serve the Cloud Control API (so AWS CDK and pulumi-aws-native work). Azure: ARM template deployments (what-if, modes, nested/linked templates); Bicep compiles to ARM with the Bicep CLI (MIT, optional). GCP Deployment Manager (being retired) rides the same engine if built. OpenTofu/Pulumi rejected as CloudFormation/ARM backends: different resource model, no rollback, no stack events or custom resources."
+  },
+  "logstore": {
+   "kind": "in-process",
+   "engine": "duckdb",
+   "license": "MIT",
+   "idle_mb": 0,
+   "for": [
+    "aws:logs",
+    "gcp:logging/v2",
+    "azure:operationalinsights",
+    "azure:applicationinsights"
+   ],
+   "why": "One log store for all three clouds, in-process on DuckDB (same code as Nano): entries, retention, sinks/exports, subscription filters and log-based metrics, with each cloud's own query language on top (CloudWatch Logs Insights, the Cloud Logging filter, a KQL subset). Logs are data, so in-process is the real backend. Fluent Bit (below) is the agent that ships workload logs in; VictoriaLogs is the optional heavy store."
+  },
+  "duckdb": {
+   "kind": "in-process",
+   "license": "MIT",
+   "for": [
+    "gcp:bigquery/v2",
+    "aws:athena",
+    "aws:glue",
+    "azure:synapse"
+   ],
+   "why": "embedded analytical SQL over local/MinIO files, zero containers"
+  },
+  "docker": {
+   "kind": "substrate",
+   "tier": "pro",
+   "for": [
+    "aws:ecs",
+    "aws:batch",
+    "aws:codebuild",
+    "gcp:run/v2",
+    "gcp:cloudbuild/v1",
+    "gcp:batch/v1",
+    "azure:app",
+    "azure:batch",
+    "aws:apprunner"
+   ],
+   "why": "Existing Pro Docker compute backend runs the real containers (Free/Lite get the control plane only). For serverless containers (Cloud Run, Container Apps, App Runner, ECS services): each revision is a real container with $PORT, the shared Caddy gateway gives the service URL and the weighted traffic split across revisions (admin API, live), and a Vyomi scaler adds/removes containers by concurrency with min/max instances and scale to zero (Caddy holds the first request through the cold start). Cloud Run Jobs / Container Apps jobs / ECS tasks run to completion with retries."
+  },
+  "k3s": {
+   "image": "rancher/k3s:v1.30.5-k3s1",
+   "license": "Apache-2.0",
+   "idle_mb": 500,
+   "tier": "max",
+   "for": [
+    "aws:eks",
+    "gcp:container/v1",
+    "azure:containerservice"
+   ],
+   "why": "real Kubernetes API for kubectl; Max only, control plane below"
+  },
+  "postgres": {
+   "image": "postgres:16.4-alpine",
+   "license": "PostgreSQL",
+   "idle_mb": 40,
+   "tier": "lite",
+   "for": [
+    "azure:postgresql"
+   ],
+   "why": "already in the stack"
+  },
+  "mariadb": {
+   "image": "mariadb:11.4",
+   "license": "GPL-2.0",
+   "idle_mb": 90,
+   "tier": "pro",
+   "for": [
+    "azure:mysql"
+   ],
+   "why": "MySQL wire compatible, unmodified separate container"
+  },
+  "kafka": {
+   "image": "apache/kafka:3.8.0",
+   "license": "Apache-2.0",
+   "idle_mb": 400,
+   "tier": "max",
+   "for": [
+    "aws:kafka"
+   ],
+   "why": "Apache Kafka KRaft single node (not Redpanda: BSL)"
+  },
+  "opensearch": {
+   "image": "opensearchproject/opensearch:2.17.1",
+   "license": "Apache-2.0",
+   "idle_mb": 700,
+   "tier": "max",
+   "for": [
+    "aws:opensearch"
+   ],
+   "why": "not Elasticsearch: Elastic License/SSPL"
+  },
+  "rabbitmq": {
+   "image": "rabbitmq:3.13-alpine",
+   "license": "MPL-2.0",
+   "idle_mb": 100,
+   "tier": "pro",
+   "for": [
+    "aws:mq"
+   ],
+   "why": "Amazon MQ for RabbitMQ engine"
+  },
+  "spanner-emulator": {
+   "image": "gcr.io/cloud-spanner-emulator/emulator:1.5.25",
+   "license": "Apache-2.0",
+   "idle_mb": 150,
+   "tier": "pro",
+   "for": [
+    "gcp:spanner/v1"
+   ],
+   "why": "Google's open-source emulator; verify arm64 before use, else mirror-build"
+  },
+  "ollama": {
+   "image": "ollama/ollama:0.3.14",
+   "license": "MIT",
+   "idle_mb": 50,
+   "tier": "max",
+   "for": [
+    "aws:bedrock-runtime",
+    "gcp:aiplatform/v1",
+    "azure:cognitiveservices"
+   ],
+   "why": "optional real inference with small local models; without it the engine returns deterministic canned responses"
+  },
+  "fluent-bit": {
+   "image": "fluent/fluent-bit:3.1.9",
+   "license": "Apache-2.0",
+   "idle_mb": 5,
+   "tier": "lite",
+   "role": "agent",
+   "agent_for": [
+    "aws:logs",
+    "gcp:logging/v2",
+    "azure:operationalinsights",
+    "azure:applicationinsights"
+   ],
+   "why": "Not a store: the real log agent, started on demand. Collects logs from Vyomi compute (EC2/GCE/VM on Docker, Lambda/Functions runs, ECS/Cloud Run/Container Apps containers, k3s pods) and any user container, and ships them through its NATIVE outputs (cloudwatch_logs, stackdriver, azure_logs_ingestion) into the logstore, so the real ingestion path is tested end to end."
+  },
+  "victorialogs": {
+   "image": "victoriametrics/victoria-logs (pin a release when adopted)",
+   "license": "Apache-2.0",
+   "idle_mb": 30,
+   "tier": "max",
+   "role": "optional",
+   "optional_for": [
+    "aws:logs",
+    "gcp:logging/v2",
+    "azure:operationalinsights",
+    "azure:applicationinsights"
+   ],
+   "why": "Optional heavy log store for large local volumes (Max): single Go binary; each cloud's query language translated to LogsQL, so edge cases can differ from the in-process store. Loki is not an option (AGPL, denied)."
+  },
+  "victoriametrics": {
+   "image": "victoriametrics/victoria-metrics:v1.104.0",
+   "license": "Apache-2.0",
+   "idle_mb": 40,
+   "tier": "lite",
+   "for": [
+    "aws:cloudwatch",
+    "aws:amp",
+    "gcp:monitoring/v3",
+    "azure:monitor"
+   ],
+   "why": "One metrics store for all three clouds: CloudWatch PutMetricData/GetMetricData/Metric Math, Cloud Monitoring timeSeries (aligners, reducers, PromQL) and Azure Monitor metrics map to labels + step + MetricsQL aggregations. Also the real Prometheus backend (remote write, /metrics scraping) for Amazon/GCP/Azure managed Prometheus, Grafana-compatible. Every Vyomi service pushes its built-in metrics (Docker stats for VMs, Lambda invocations/duration/errors, bucket size, queue depth) and logstore metric filters write here. Roll-ups (CloudWatch 1-min → 5-min → 1-h) are applied at query time (downsampling is Enterprise-only). Nano keeps a small in-process store with the same API."
+  },
+  "vmalert": {
+   "image": "victoriametrics/vmalert:v1.104.0",
+   "license": "Apache-2.0",
+   "idle_mb": 10,
+   "tier": "lite",
+   "role": "agent",
+   "agent_for": [
+    "aws:cloudwatch",
+    "aws:amp",
+    "gcp:monitoring/v3",
+    "azure:monitor"
+   ],
+   "why": "The shared alert evaluator: CloudWatch alarms (actions to SNS, Lambda, Auto Scaling), Cloud Monitoring alerting policies (notification channels) and Azure Monitor metric alerts (action groups: webhooks, email via Mailpit) are compiled to vmalert rules over VictoriaMetrics, so alarms really change state and really fire."
+  },
+  "knative": {
+   "image": "Knative Serving + Kourier on the shared k3s (pin a release when adopted)",
+   "license": "Apache-2.0",
+   "idle_mb": 400,
+   "tier": "max",
+   "role": "optional",
+   "optional_for": [
+    "gcp:run/v2",
+    "azure:app"
+   ],
+   "why": "Optional most-faithful backend on Max: Cloud Run's v1 API is the Knative Serving API, so revisions, traffic splits, concurrency autoscaling and scale to zero come natively. Needs the shared k3s (~500 MB) plus ~300-500 MB. Not Coolify (a second PaaS control plane, ~500 MB+, no revisions/traffic split/scale to zero) and not Fission (Kubernetes FaaS, function-first rather than any-container)."
+  },
+  "temporal": {
+   "image": "Temporal dev server (temporal server start-dev, SQLite; pin a release when adopted)",
+   "license": "MIT",
+   "idle_mb": 150,
+   "tier": "pro",
+   "role": "engine",
+   "agent_for": [
+    "aws:stepfunctions",
+    "gcp:workflows/v1",
+    "azure:logic"
+   ],
+   "why": "Pro and up: the same three language front ends run as Temporal workflows (Temporal's DSL-interpreter pattern), so durable executions, timers, retries, signals and the event history come from a battle-tested engine; Temporal's UI helps debugging. Free/Lite and Nano use the in-process engine."
+  },
+  "opentofu": {
+   "image": "opentofu/opentofu (pin a release when adopted)",
+   "license": "MPL-2.0",
+   "idle_mb": 0,
+   "tier": "lite",
+   "for": [
+    "gcp:config/v1"
+   ],
+   "why": "GCP Infrastructure Manager runs Terraform configurations, so OpenTofu (the MPL-2.0 fork) with the google provider pointed at Vyomi is its faithful backend: deployments, revisions, previews, state in Vyomi GCS. Runs per deployment, nothing idle. Terraform itself is excluded: BSL 1.1 since v1.6 (license_deny)."
+  }
  },
  "in_process": {
   "_comment": "No container: the core/ engine holds the state (SQLite-backed where it must survive restarts). Same code as Nano.",
-  "aws": ["sts", "ssm", "logs", "cloudwatch", "cloudformation", "stepfunctions", "cognito-idp", "apigatewayv2", "sns", "dynamodbstreams", "efs", "appsync", "acm", "autoscaling", "scheduler", "backup", "xray"],
-  "gcp": ["logging/v2", "monitoring/v3", "cloudtasks/v2", "cloudscheduler/v1", "workflows/v1", "iamcredentials/v1", "file/v1", "datastore/v1", "dataflow/v1b3", "dataproc/v1", "composer/v1", "translate/v3", "cloudtrace/v2", "certificatemanager/v1", "bigtableadmin/v2"],
-  "azure": ["applicationinsights", "monitor", "appconfiguration", "msi", "signalr", "notificationhubs", "search", "datafactory", "servicefabric"]
+  "aws": [
+   "sts",
+   "ssm",
+   "cognito-idp",
+   "dynamodbstreams",
+   "efs",
+   "appsync",
+   "acm",
+   "autoscaling",
+   "scheduler",
+   "backup",
+   "xray"
+  ],
+  "gcp": [
+   "cloudscheduler/v1",
+   "iamcredentials/v1",
+   "file/v1",
+   "datastore/v1",
+   "dataflow/v1b3",
+   "dataproc/v1",
+   "composer/v1",
+   "translate/v3",
+   "cloudtrace/v2",
+   "certificatemanager/v1",
+   "bigtableadmin/v2"
+  ],
+  "azure": [
+   "appconfiguration",
+   "msi",
+   "signalr",
+   "notificationhubs",
+   "search",
+   "datafactory",
+   "servicefabric"
+  ]
  },
  "current_stack_audit": {
   "_comment": "Existing offline backends checked against the same policy (2026-10-26). Not changed automatically; each is a product decision.",
   "issues": [
-   {"service": "vyomi-vault", "image": "hashicorp/vault:1.15", "problem": "Vault 1.15+ is BUSL-1.1 (denied)", "option": "OpenBao (MPL-2.0 fork, same API) or in-process for Secrets Manager/Key Vault"},
-   {"service": "vyomi-dynamodb", "image": "amazon/dynamodb-local:latest", "problem": "DynamoDB Local license agreement (not OSI); unpinned", "option": "in-process DynamoDB core (already what Nano runs)"},
-   {"service": "vyomi-pubsub / vyomi-firestore", "image": "gcr.io/google.com/cloudsdktool/google-cloud-cli", "problem": "~1 GB image each, JVM emulators (~300 MB RAM)", "option": "a slim emulator-only image, or in-process Pub/Sub + Firestore cores (Nano already has them)"},
-   {"service": "vyomi-gcs, vyomi-dynamodb, vyomi-elasticmq, vyomi-azurite, vyomi-minio", "image": ":latest", "problem": "unpinned tags", "option": "pin versions (release.yml already pins the appliance's own images)"},
-   {"service": "vyomi-nats, vyomi-postgres, caddy", "image": "nats:2-alpine, postgres:16-alpine, caddy:2-alpine", "problem": "major-only tags", "option": "pin full versions"}
+   {
+    "service": "vyomi-vault",
+    "image": "hashicorp/vault:1.15",
+    "problem": "Vault 1.15+ is BUSL-1.1 (denied)",
+    "option": "OpenBao (MPL-2.0 fork, same API) or in-process for Secrets Manager/Key Vault"
+   },
+   {
+    "service": "vyomi-dynamodb",
+    "image": "amazon/dynamodb-local:latest",
+    "problem": "DynamoDB Local license agreement (not OSI); unpinned",
+    "option": "in-process DynamoDB core (already what Nano runs)"
+   },
+   {
+    "service": "vyomi-pubsub / vyomi-firestore",
+    "image": "gcr.io/google.com/cloudsdktool/google-cloud-cli",
+    "problem": "~1 GB image each, JVM emulators (~300 MB RAM)",
+    "option": "a slim emulator-only image, or in-process Pub/Sub + Firestore cores (Nano already has them)"
+   },
+   {
+    "service": "vyomi-gcs, vyomi-dynamodb, vyomi-elasticmq, vyomi-azurite, vyomi-minio",
+    "image": ":latest",
+    "problem": "unpinned tags",
+    "option": "pin versions (release.yml already pins the appliance's own images)"
+   },
+   {
+    "service": "vyomi-nats, vyomi-postgres, caddy",
+    "image": "nats:2-alpine, postgres:16-alpine, caddy:2-alpine",
+    "problem": "major-only tags",
+    "option": "pin full versions"
+   }
   ]
+ },
+ "live": {
+  "_comment": "What is actually behind each released service today (audited 2026-10-28), shown as 'Wired today' on the pipeline page. state: real = the resource really works; partial = some of it does; api = management API only, nothing behind it. Update when a backend is wired.",
+  "aws:logs": {
+   "state": "real",
+   "today": "in-process engine, SQLite store; filter + Insights queries"
+  },
+  "aws:elbv2": {
+   "state": "api",
+   "today": "no traffic forwarded (Caddy not wired)"
+  },
+  "aws:ssm": {
+   "state": "partial",
+   "today": "Parameter Store real; Run Command reports Success without running"
+  },
+  "aws:stepfunctions": {
+   "state": "real",
+   "today": "ASL interpreter runs executions and calls Lambda; Wait doesn't sleep"
+  },
+  "gcp:cloudscheduler/v1": {
+   "state": "partial",
+   "today": "cron fires only on reads; HTTP targets not sent (#147-#149)"
+  },
+  "gcp:container/v1": {
+   "state": "api",
+   "today": "no Kubernetes API; kubectl can't connect (k3s not wired)"
+  },
+  "gcp:iamcredentials/v1": {
+   "state": "real",
+   "today": "real RS256-signed tokens, JWTs and blobs"
+  },
+  "gcp:redis/v1": {
+   "state": "partial",
+   "today": "one shared 64 MB Valkey; port not published, no per-instance AUTH"
+  },
+  "azure:app": {
+   "state": "partial",
+   "today": "real containers on Pro/Max only; no ingress URL"
+  },
+  "azure:appconfiguration": {
+   "state": "real",
+   "today": "real key-value data plane"
+  },
+  "azure:cognitiveservices": {
+   "state": "api",
+   "today": "no model inference (Ollama not wired)"
+  },
+  "azure:dns": {
+   "state": "api",
+   "today": "no DNS server answers (CoreDNS not wired)"
+  },
+  "azure:monitor": {
+   "state": "api",
+   "today": "alert rules stored, never evaluated or fired (vmalert not wired)"
+  },
+  "azure:operationalinsights": {
+   "state": "api",
+   "today": "workspaces only; no ingestion or KQL queries"
+  },
+  "aws:events": {
+   "state": "partial",
+   "today": "rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered"
+  }
+ },
+ "test_beds": {
+  "_comment": "Real tools run against Vyomi in the hourly conformance run (apply, update, destroy sample stacks with the official providers/SDKs, endpoints changed only). Not backends: they prove users' own IaC works. Users may of course run their own Terraform; the license rule is about what Vyomi bundles.",
+  "opentofu": {
+   "license": "MPL-2.0",
+   "providers": [
+    "hashicorp/aws",
+    "hashicorp/google",
+    "hashicorp/azurerm"
+   ],
+   "state": "Vyomi S3 / GCS / Blob backends"
+  },
+  "pulumi": {
+   "license": "Apache-2.0",
+   "providers": [
+    "aws-native (Cloud Control API)",
+    "azure-native (ARM specs)",
+    "aws",
+    "gcp",
+    "azure"
+   ],
+   "state": "self-managed: pulumi login s3:// / gs:// / azblob:// against Vyomi"
+  },
+  "aws-cdk": {
+   "license": "Apache-2.0",
+   "what": "cdk synth → CloudFormation → cdk deploy against the iac-engine"
+  }
  }
 }

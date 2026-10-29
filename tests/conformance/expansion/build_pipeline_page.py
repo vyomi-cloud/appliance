@@ -109,6 +109,25 @@ def main() -> int:
         tier = b.get("tier") or x.get("tier", "")
         bits = [name] + ([f"{x['idle_mb']} MB"] if x.get("idle_mb") else []) + ([tier.capitalize()] if tier else [])
         return " · ".join(bits) + ("" if b else " (default)")
+
+    def real_backend_cell(cloud: str, upstream: str) -> str:
+        """The backend the service should have: the shared default for its
+        upstream id, else in-process (the engine itself is the backend)."""
+        name = next((n for n, x in bk["shared"].items() if f"{cloud}:{upstream}" in x.get("for", [])), None)
+        if not name:
+            return "in-process" if upstream in bk["in_process"].get(cloud, []) else "—"
+        x = bk["shared"][name]
+        extra = ["in-process"] if x.get("kind") == "in-process" else ([x["tier"].capitalize()] if x.get("tier") else [])
+        comp = [f"+ {n} {y.get('role', 'agent')}" for n, y in bk["shared"].items() if f"{cloud}:{upstream}" in y.get("agent_for", [])]
+        return " · ".join([name] + extra + comp)
+
+    LIVE_ICON = {"real": "✅", "partial": "🟡", "api": "⚪"}
+
+    def wired_cell(cloud: str, upstream: str) -> str:
+        x = bk.get("live", {}).get(f"{cloud}:{upstream}")
+        if not x:
+            return "not audited"
+        return f"{LIVE_ICON.get(x['state'], '')} {x['today']}".replace("|", "/")
     # Nano ↔ offline feature parity from the hourly inventory (routes are an
     # offline-only concept, so they're left out).
     feats: dict = {}
@@ -223,6 +242,8 @@ def main() -> int:
             up = "⬜ not watched" if up.startswith("⬜") else ("⚠️ " + up.split("⚠️ ")[1] if "⚠️" in up else "✅ watched")
             ver = s.get("released_in", "")
             rel_rows.append({"name": s["name"], "console": console_cell(cloud, s["name"]).replace("off ", "").replace("Nano ", ""),
+                             "real": real_backend_cell(cloud, s.get("upstream") or s["key"]),
+                             "wired": wired_cell(cloud, s.get("upstream") or s["key"]),
                              "issues": " · ".join(issues_n), "upstream": up,
                              "release": f"[v{ver}]({GH}/releases/tag/v{ver})" if re.match(r"^\d", ver) else "before gate"})
         moving, queued = [], []
@@ -253,7 +274,8 @@ def main() -> int:
                 except ValueError:
                     mb = None
             row = {"name": name, "link": link, "priority": s["priority"], "stage": stage,
-                   "backend": backend_cell(cloud, s["id"], mb).replace(" (default)", "")}
+                   "backend": backend_cell(cloud, s["id"], mb).replace(" (default)", ""),
+                   "real": real_backend_cell(cloud, s["id"])}
             if stage.startswith(("📋", "Not")):
                 queued.append(row)
                 continue
@@ -323,19 +345,23 @@ def main() -> int:
 
     md += ["", "## In progress", ""]
     if moving_all:
-        md += ["| Service | Cloud | Stage | Checks | Still missing |", "|---|---|---|---|---|"]
+        md += ["| Service | Cloud | Stage | Checks | Real backend | Built with | Still missing |", "|---|---|---|---|---|---|---|"]
         for lbl, r in moving_all:
             miss = "; ".join(r["missing"][:3]) + (f" (+{len(r['missing']) - 3} more)" if len(r["missing"]) > 3 else "")
-            md.append(f"| {r['name']} {r['link']} | {lbl} | {r['stage']} | {r['checks']} | {miss or '—'} |")
+            md.append(f"| {r['name']} {r['link']} | {lbl} | {r['stage']} | {r['checks']} | {r['real']} | {r['backend']} | {miss or '—'} |")
     else:
         md.append("- Nothing is being built right now.")
 
     md += ["", "## Released services", "",
            "- **Console live:** parts of the console that are really implemented, offline · Nano",
-           "- **UI issues:** problems the latest hourly crawl found, offline · Nano", ""]
+           "- **UI issues:** problems the latest hourly crawl found, offline · Nano",
+           "- **Real backend:** what the service should run on ([backends.json]"
+           f"({GH}/blob/main/tests/conformance/expansion/backends.json)) · **Wired today:** ✅ real · 🟡 partial · ⚪ management API only", ""]
     for c, d in data.items():
-        md += [f"### {d['label']}", "", "| Service | Console live | UI issues | Upstream | Release |", "|---|---|---|---|---|"]
-        md += [f"| {r['name']} | {r['console']} | {r['issues']} | {r['upstream']} | {r['release']} |" for r in d["released"]]
+        md += [f"### {d['label']}", "", "| Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |",
+               "|---|---|---|---|---|---|---|"]
+        md += [f"| {r['name']} | {r['real']} | {r['wired']} | {r['console']} | {r['issues']} | {r['upstream']} | {r['release']} |"
+               for r in d["released"]]
         if d["gaps"]:
             md += ["", "- **Nano ↔ offline gaps:** " + ", ".join(
                 f"{svc} ({'offline-only' if o else 'Nano-only'})" for svc, o, n in d["gaps"])]
@@ -344,8 +370,8 @@ def main() -> int:
     md += ["## Up next", ""]
     for c, d in data.items():
         md += [f"<details><summary><b>{d['label']}</b> — {len(d['queued'])} queued</summary>", "",
-               "| Service | Priority | Issue | Offline backend |", "|---|---|---|---|"]
-        md += [f"| {r['name']} | {r['priority']} | {r['link'] or 'not filed'} | {r['backend']} |" for r in d["queued"]]
+               "| Service | Priority | Issue | Real backend |", "|---|---|---|---|"]
+        md += [f"| {r['name']} | {r['priority']} | {r['link'] or 'not filed'} | {r['real']} |" for r in d["queued"]]
         md += ["", "</details>", ""]
 
     md += ["## Details", ""]

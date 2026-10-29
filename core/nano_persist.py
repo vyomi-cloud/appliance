@@ -29,10 +29,17 @@ _B64 = "__b64__"
 # router attrs AND the shared-registry keys (nano_registry), so one snapshot maps
 # cleanly onto either the router or the console adapter's registry.
 STORE_ATTRS = [
-    "s3", "ddb", "kms", "sec", "rds", "iam", "msg",
+    "s3", "ddb", "kms", "sec", "rds", "iam", "msg", "logs", "elbv2",
     "gcs", "gcp_fs", "gcp_kms", "gcp_sec", "gcp_msg", "gcp_iam", "gcp_sql",
     "az_blob", "az_cosmos", "az_kvsec", "az_kvkeys", "az_queue", "az_sb",
     "compute", "vpc_net", "extras",   # Lambda/API Gateway + VPC models (private _lambda_functions etc., see _DURABLE_PRIVATE)
+    "az_arm",   # Azure ARM control plane (core/azure_arm_core.AzureArm.state — Container Apps, VMs, …)
+    "ssm",      # Systems Manager (core/ssm_core.SsmStore)
+    "gcp_gke",    # Kubernetes Engine (core/gcp_container_core.ContainerStore)
+    "gcp_redis",  # Memorystore for Redis (core/gcp_redis_core.RedisStore)
+    "gcp_iamc",   # IAM Credentials issue log (core/gcp_iamcredentials_core.IamCredentialsStore)
+    "gcp_sched",  # Cloud Scheduler (core/gcp_cloudscheduler_core.CloudSchedulerStore)
+    "sfn",      # Step Functions (core/stepfunctions_core.StepFunctionsStore)
     "events",   # per-resource cloudsim event/activity log (core/nano_events.EventStore)
 ]
 

@@ -43,7 +43,7 @@ _REGISTRY: dict[str, CloudProvider] = {}
 _MUTATING_OPS = {
     "Create", "Update", "Delete", "Terminate", "Start", "Stop", "Reboot", "Modify",
     # native sub-resource ops seen on the _resource path (GCP cores)
-    "CreateSubscription", "CreateDatabase", "DeleteObject", "PutObject",
+    "CreateSubscription", "CreateDatabase", "DeleteObject", "PutObject", "Pause", "Resume", "Run", "Resize", "Upgrade", "Failover",
 }
 
 
@@ -295,6 +295,20 @@ def _weigh(resources: int, vms: int) -> dict:
     }
 
 
+def _logs_group_count() -> int:
+    """CloudWatch Logs groups held by the shared in-browser store (core/logs_core.py)."""
+    try:
+        from core import nano_registry
+        return len(nano_registry.get()["logs"].log_groups)
+    except Exception:
+        return 0
+
+
+def _elb_census():
+    from core import nano_registry
+    return nano_registry.get()["elbv2"].load_balancers
+
+
 def _census_dispatch(backends: Backends, provider: str) -> dict:
     """Count the LIVE in-memory resources this page's backend holds for `provider`,
     across every core store, and weight them the same way the appliance does. The
@@ -320,7 +334,19 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                         len(A.iam_list_policies().get("policies", [])) +
                         len(A.iam_list_groups().get("groups", []))),
                 "rds":            len(A.rds_list().get("databases", [])),
+                "logs":           _logs_group_count(),
+                "elbv2":          len(_elb_census()),
             }
+            try:   # Systems Manager parameters live in the shared registry store
+                from core import nano_registry
+                aws_counts["ssm"] = len(nano_registry.get()["ssm"].parameters)
+            except Exception:
+                pass
+            try:   # Step Functions lives in the shared registry store (console + relay wire)
+                from core import nano_registry
+                aws_counts["stepfunctions"] = len(nano_registry.get()["sfn"].machines)
+            except Exception:
+                pass
             for svc, n in aws_counts.items():
                 if n:
                     by_service[svc] = by_service.get(svc, 0) + n
@@ -377,7 +403,7 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                     by_service[svc] = by_service.get(svc, 0) + n
         if provider == "gcp":
             from . import gcp_core_adapter as GC
-            for svc in ("storage", "firestore", "kms", "secretmanager", "pubsub", "iam", "cloudsql"):
+            for svc in ("storage", "firestore", "kms", "secretmanager", "pubsub", "iam", "cloudsql", "cloudscheduler", "container", "iamcredentials", "redis"):
                 n = len(GC.resource_op(svc, "List").get("items", []))
                 if n:
                     by_service[svc] = by_service.get(svc, 0) + n

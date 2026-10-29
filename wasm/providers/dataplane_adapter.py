@@ -18,7 +18,10 @@ import json
 import types
 
 from core import lambda_core, apigateway_core, vpc_core, eventbridge_core
+from core import elbv2_core
+from core import ssm_core
 from core import azure_servicebus_core, azure_sql_core, azure_iam_core
+from core import stepfunctions_core
 from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
 
 # Compute/registry stores. Lambda + API Gateway share ONE namespace so an
@@ -525,3 +528,209 @@ def extras_config_get(p):
 def extras_config_put(p):
     _EXTRAS_CFG[p.get("key", "")] = _extras_vals(p)
     return {"ok": True}
+
+
+# ── CloudWatch Logs (core/logs_core.py) ─────────────────────────────────────
+def logs_console(p):
+    """Console REST for CloudWatch Logs: the SAME logs_core.console_dispatch the
+    offline appliance serves, on the shared registry store (so the console and an
+    SDK/CLI on the relay see one set of log groups)."""
+    from core import logs_core, nano_registry
+    status, body = logs_core.console_dispatch(
+        nano_registry.get()["logs"], p.get("method") or "GET", p.get("path") or "",
+        p.get("query") or {}, p.get("body") or {})
+    return {"ok": status < 400, "__http": {"status": status, "headers": {}, "body": body}}
+# ── ELBv2 (core/elbv2_core.py) — shared store with the native wire ──────────
+def _elb_store():
+    from core import nano_registry
+    return nano_registry.get()["elbv2"]
+
+
+def _elb_call(fn, *a):
+    try:
+        return fn(_elb_store(), *a)
+    except elbv2_core.Elbv2Error as e:
+        return {"ok": False, "code": e.code, "message": e.message}
+
+
+def elb_list(p=None):
+    return _elb_call(elbv2_core.console_list)
+
+
+def elb_create(p):
+    return _elb_call(elbv2_core.console_create, dict(p or {}))
+
+
+def elb_get(p):
+    return _elb_call(elbv2_core.console_get, str(p.get("name") or ""))
+
+
+def elb_delete(p):
+    return _elb_call(elbv2_core.console_delete, str(p.get("name") or ""))
+
+
+def elb_tags(p):
+    return _elb_call(elbv2_core.console_set_tags, str(p.get("name") or ""), p.get("tags") or {})
+
+
+def elb_children(p):
+    return _elb_call(elbv2_core.console_children, str(p.get("kind") or ""))
+
+
+def elb_child_create(p):
+    return _elb_call(elbv2_core.console_child_create, str(p.get("kind") or ""), dict(p))
+
+
+def elb_child_delete(p):
+    return _elb_call(elbv2_core.console_child_delete, str(p.get("kind") or ""), str(p.get("name") or ""))
+# ── Systems Manager Parameter Store — core/ssm_core.py ─────────────────────
+# Store = the shared registry's `ssm`, the SAME one the native AmazonSSM relay wire
+# reads/writes, so console-created parameters are visible to the CLI/SDK and vice-versa.
+def _ssm():
+    from core import nano_registry
+    return nano_registry.get()["ssm"]
+
+
+def _ssm_call(op, body):
+    r = ssm_core.dispatch(_ssm(), "AmazonSSM." + op, body)
+    return r.status, r.body
+
+
+def ssm_list(p=None):
+    items = [ssm_core.console_view(n, r) for n, r in sorted(_ssm().parameters.items())]
+    return {"ok": True, "items": items, "parameters": items, "count": len(items)}
+
+
+def ssm_put(p, overwrite):
+    name = str(p.get("name") or "").strip()
+    cur = _ssm().parameters.get(name)
+    if overwrite and cur:
+        v = ssm_core.console_view(name, cur)
+        p = {"name": name, "value": p.get("value", v["value"]), "type": v["type"],
+             "description": p.get("description", v["description"]), "tier": v["tier"]}
+    body = {"Name": name, "Value": str(p.get("value") if p.get("value") is not None else ""),
+            "Type": p.get("type") or "String", "Overwrite": bool(overwrite)}
+    if p.get("description"):
+        body["Description"] = p["description"]
+    if p.get("tier"):
+        body["Tier"] = p["tier"]
+    st, out = _ssm_call("PutParameter", body)
+    if st >= 300:
+        return {"ok": False, "code": out.get("__type", "ValidationException"), "message": out.get("message", "")}
+    return {"ok": True, **ssm_core.console_view(name, _ssm().parameters[name])}
+
+
+def ssm_get(p):
+    name = str(p.get("name") or p.get("id") or "")
+    rec = _ssm().parameters.get(name)
+    if not rec:
+        return {"ok": False, "code": "ParameterNotFound", "message": f"Parameter {name} not found."}
+    return {"ok": True, **ssm_core.console_view(name, rec)}
+
+
+def ssm_tag(p):
+    name = str(p.get("name") or p.get("id") or "")
+    rec = _ssm().parameters.get(name)
+    if not rec:
+        return {"ok": False, "code": "ParameterNotFound"}
+    if isinstance(p.get("tags"), dict):
+        rec["tags"] = {str(k): str(v) for k, v in p["tags"].items()}
+    return {"ok": True, **ssm_core.console_view(name, rec)}
+
+
+def ssm_delete(p):
+    name = str(p.get("name") or p.get("id") or "")
+    st, out = _ssm_call("DeleteParameter", {"Name": name})
+    return {"ok": st < 300, "message": out.get("message", "")}
+
+
+def ssm_history(p):
+    name = str(p.get("name") or p.get("id") or "")
+    rec = _ssm().parameters.get(name)
+    if not rec:
+        return {"ok": False, "code": "ParameterNotFound"}
+    return {"ok": True, "history": ssm_core.console_history(name, rec)}
+
+
+# ── Step Functions (state machines + executions) — core/stepfunctions_core.py ───
+# Store = the shared registry's `sfn`, the SAME one the native relay wire reads/writes,
+# so console-created state machines are visible to the CLI/SDK and vice-versa.
+def _sfn():
+    from core import nano_registry
+    return nano_registry.get()["sfn"]
+
+
+def _sfn_call(op, **body):
+    r = stepfunctions_core.dispatch(_sfn(), "AWSStepFunctions." + op, body, lambda_store=_COMPUTE)
+    return r.status, r.body
+
+
+def _sfn_view(name):
+    return stepfunctions_core.machine_view(_sfn().machines[name], _sfn())
+
+
+def _sfn_err(body):
+    return {"ok": False, "code": body.get("__type", "Error"), "message": body.get("message", "")}
+
+
+def sfn_list(p=None):
+    ms = sorted((stepfunctions_core.machine_view(m, _sfn()) for m in _sfn().machines.values()),
+                key=lambda m: (m["created"], m["name"]))
+    return {"ok": True, "items": ms, "count": len(ms)}
+
+
+def sfn_create(p):
+    name = str(p.get("name") or "").strip()
+    st, out = _sfn_call("CreateStateMachine", name=name,
+                        definition=p.get("definition") or stepfunctions_core.default_definition(),
+                        roleArn=p.get("role_arn") or stepfunctions_core.default_role_arn(),
+                        type=str(p.get("type") or "STANDARD").upper())
+    if st >= 300:
+        return _sfn_err(out)
+    return {"ok": True, **_sfn_view(name)}
+
+
+def sfn_get(p):
+    name = str(p.get("id") or p.get("name") or "")
+    return {"ok": True, **_sfn_view(name)} if name in _sfn().machines else {"ok": False, "code": "StateMachineDoesNotExist"}
+
+
+def sfn_patch(p):
+    name = str(p.get("id") or p.get("name") or "")
+    sm = _sfn().machines.get(name)
+    if not sm:
+        return {"ok": False, "code": "StateMachineDoesNotExist"}
+    upd = {k: p[k] for k in ("definition", "roleArn") if p.get(k)}
+    if upd:
+        _sfn_call("UpdateStateMachine", stateMachineArn=sm["stateMachineArn"], **upd)
+    if isinstance(p.get("tags"), dict):
+        _sfn().tags[sm["stateMachineArn"]] = {str(k): str(v) for k, v in p["tags"].items()}
+    return {"ok": True, **_sfn_view(name)}
+
+
+def sfn_delete(p):
+    name = str(p.get("id") or p.get("name") or "")
+    sm = _sfn().machines.get(name)
+    if not sm:
+        return {"ok": False, "code": "StateMachineDoesNotExist"}
+    st, out = _sfn_call("DeleteStateMachine", stateMachineArn=sm["stateMachineArn"])
+    return {"ok": st < 300, "message": out.get("message", "")}
+
+
+def sfn_start(p):
+    name = str(p.get("id") or p.get("name") or "")
+    sm = _sfn().machines.get(name)
+    if not sm:
+        return {"ok": False, "code": "StateMachineDoesNotExist"}
+    st, out = _sfn_call("StartExecution", stateMachineArn=sm["stateMachineArn"], input=p.get("input") or "{}")
+    if st >= 300:
+        return _sfn_err(out)
+    return {"ok": True, **stepfunctions_core.execution_view(_sfn().executions[out["executionArn"]])}
+
+
+def sfn_children(p):
+    """GET /api/stepfunctions/machines/{id}/{executions|versions|aliases}."""
+    sm = _sfn().machines.get(str(p.get("id") or ""))
+    if not sm:
+        return {"ok": False, "code": "StateMachineDoesNotExist"}
+    return {"ok": True, **stepfunctions_core.children(_sfn(), sm, p.get("kind"))}

@@ -27,6 +27,15 @@ from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
 from core.nano_events import EventStore
+from core.logs_core import LogsStore
+from core.elbv2_core import Elbv2Store
+from core.ssm_core import SsmStore
+from core.stepfunctions_core import StepFunctionsStore
+from core.gcp_cloudscheduler_core import CloudSchedulerStore
+from core.gcp_iamcredentials_core import IamCredentialsStore
+from core.gcp_redis_core import RedisStore
+from core.gcp_container_core import ContainerStore
+from core.azure_arm_core import AzureArm
 
 import types
 
@@ -54,11 +63,19 @@ def get() -> dict:
             "compute": types.SimpleNamespace(),
             "vpc_net": types.SimpleNamespace(),
             "extras": types.SimpleNamespace(items={}, cfg={}),   # console EC2/VPC/EventBridge sub-resource CRUD
+            "logs": LogsStore(),               # CloudWatch Logs (core/logs_core.py)
+            "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
+            "ssm": SsmStore(),
+            "sfn": StepFunctionsStore(),
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),
             "gcp_kms": InMemoryKeyStore(),
             "gcp_sec": InMemoryKvStore(),
+            "gcp_gke": ContainerStore(),   # Kubernetes Engine clusters
+            "gcp_redis": RedisStore(),   # Memorystore for Redis instances
+            "gcp_iamc": IamCredentialsStore(),   # IAM Credentials issue log
+            "gcp_sched": CloudSchedulerStore(),   # Cloud Scheduler jobs
             "gcp_msg": InMemoryMessagingStore(),
             "gcp_iam": InMemoryIamStore(),
             "gcp_sql": InMemorySqlStore(),
@@ -69,6 +86,7 @@ def get() -> dict:
             "az_kvkeys": InMemoryKeyStore(),
             "az_queue":  AzureQueueStore(),
             "az_sb":     InMemoryMessagingStore(),   # Service Bus (router-only today)
+            "az_arm":    AzureArm(),                 # ARM control plane (VMs, apps, …): public `state` map → persisted + synced
             # ── cross-cloud ── per-resource cloudsim event / activity log. DURABLE
             # + bounded: recorded on every mutating dispatch; persisted + cross-tab
             # synced via nano_persist (public dict attr `by_resource`, union-merge).

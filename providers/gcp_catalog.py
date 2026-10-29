@@ -351,6 +351,167 @@ RESOURCE_CATALOG_GCP = [
             {"name": "keyring", "label": "Key ring",  "default": "my-keyring"},
         ],
     },
+    # ========================================================================
+    # Cloud Scheduler — cron jobs that call HTTP endpoints / publish to Pub/Sub
+    # (core/gcp_cloudscheduler_core.py). Console REST at /api/gcp/cloudscheduler/*;
+    # the native /v1/projects/*/locations/*/jobs wire serves the SDKs / gcloud.
+    # ========================================================================
+    {
+        "key": "cloudscheduler", "label": "Cloud Scheduler", "icon": "schedule",
+        "namespace": "GCP/CloudScheduler", "service": "cloudscheduler",
+        "collection_path": "/api/gcp/cloudscheduler/jobs",
+        "resource_path":   "/api/gcp/cloudscheduler/jobs/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "jobs":   {"method": "GET",    "path": "/api/gcp/cloudscheduler/jobs"},
+            "pause":  {"method": "POST",   "path": "/api/gcp/sub/cloudscheduler/pause/{name}"},
+            "resume": {"method": "POST",   "path": "/api/gcp/sub/cloudscheduler/resume/{name}"},
+            "run":    {"method": "POST",   "path": "/api/gcp/sub/cloudscheduler/run/{name}"},
+            "delete": {"method": "DELETE", "path": "/api/gcp/cloudscheduler/jobs/{name}"},
+        },
+        "columns": [
+            ["id",          "Name"],
+            ["region",      "Region"],
+            ["state",       "State"],
+            ["last_status", "Status of last execution"],
+            ["frequency",   "Frequency"],
+            ["timezone",    "Time zone"],
+            ["target_type", "Target type"],
+            ["target",      "Target"],
+            ["last_run",    "Last run"],
+            ["next_run",    "Next run"],
+        ],
+        "createFields": [
+            {"name": "name",        "label": "Name",                         "default": "my-job"},
+            {"name": "region",      "label": "Region",                       "default": "us-central1"},
+            {"name": "description", "label": "Description",                  "default": "Runs every five minutes"},
+            {"name": "schedule",    "label": "Frequency (unix-cron)",        "default": "*/5 * * * *"},
+            {"name": "timeZone",    "label": "Time zone",                    "default": "Etc/UTC"},
+            {"name": "targetType",  "label": "Target type (HTTP or Pub/Sub)", "default": "HTTP"},
+            {"name": "url",         "label": "URL (HTTP target)",            "default": "https://example.com/hook"},
+            {"name": "httpMethod",  "label": "HTTP method",                  "default": "POST"},
+            {"name": "topic",       "label": "Topic (Pub/Sub target)",       "default": "projects/demo/topics/my-topic"},
+            {"name": "message",     "label": "Message body (Pub/Sub target)", "default": "scheduled"},
+        ],
+    },
+    # ========================================================================
+    # Kubernetes Engine (GKE) — clusters + node pools (core/gcp_container_core.py).
+    # Console REST at /api/gcp/container/*; the native /v1/projects/*/locations/*/clusters
+    # wire serves the SDKs / gcloud. Control plane only (no Kubernetes API behind it).
+    # ========================================================================
+    {
+        "key": "container", "label": "Kubernetes Engine", "icon": "hub",
+        "namespace": "GCP/Container", "service": "container",
+        "collection_path": "/api/gcp/container/clusters",
+        "resource_path":   "/api/gcp/container/clusters/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "clusters": {"method": "GET",    "path": "/api/gcp/container/clusters"},
+            "resize":   {"method": "POST",   "path": "/api/gcp/sub/container/resize/{name}"},
+            "delete":   {"method": "DELETE", "path": "/api/gcp/container/clusters/{name}"},
+        },
+        "columns": [
+            ["id",        "Name"],
+            ["region",    "Location"],
+            ["status",    "Status"],
+            ["mode",      "Mode"],
+            ["nodes",     "Number of nodes"],
+            ["vcpus",     "Total vCPUs"],
+            ["memory",    "Total memory"],
+            ["version",   "Version"],
+            ["channel",   "Release channel"],
+            ["endpoint",  "Endpoint"],
+        ],
+        "createFields": [
+            {"name": "name",        "label": "Name",                       "default": "my-cluster"},
+            {"name": "region",      "label": "Location (region or zone)",  "default": "us-central1"},
+            {"name": "mode",        "label": "Mode (Standard or Autopilot)", "default": "Standard"},
+            {"name": "nodeCount",   "label": "Nodes per pool (Standard)",  "default": "3"},
+            {"name": "machineType", "label": "Machine type (Standard)",    "default": "e2-medium"},
+            {"name": "releaseChannel", "label": "Release channel",         "default": "REGULAR"},
+            {"name": "network",     "label": "Network",                    "default": "default"},
+            {"name": "description", "label": "Description",                "default": "Demo GKE cluster"},
+        ],
+    },
+    # ========================================================================
+    # IAM Service Account Credentials — short-lived tokens, ID tokens, signed blobs/JWTs
+    # for a service account (core/gcp_iamcredentials_core.py). The grid is the log of
+    # credentials issued (never the secrets). Console REST at
+    # /api/gcp/iamcredentials/*; the native /v1/projects/-/serviceAccounts/{sa}:verb wire
+    # serves the SDKs / gcloud --impersonate-service-account.
+    # ========================================================================
+    {
+        "key": "iamcredentials", "label": "IAM Service Account Credentials", "icon": "key",
+        "namespace": "GCP/IAMCredentials", "service": "iamcredentials",
+        "collection_path": "/api/gcp/iamcredentials/credentials",
+        "resource_path":   "/api/gcp/iamcredentials/credentials/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "credentials": {"method": "GET",    "path": "/api/gcp/iamcredentials/credentials"},
+            "delete":      {"method": "DELETE", "path": "/api/gcp/iamcredentials/credentials/{name}"},
+        },
+        "columns": [
+            ["id",                "Credential ID"],
+            ["type",              "Type"],
+            ["service_account",   "Service account"],
+            ["scope_or_audience", "Scopes / audience"],
+            ["delegation",        "Delegation chain"],
+            ["issued",            "Issued"],
+            ["expires",           "Expires"],
+            ["state",             "Status"],
+        ],
+        "createFields": [
+            {"name": "name",           "label": "Service account",             "default": "vyomi-sa@demo.iam.gserviceaccount.com"},
+            {"name": "credentialType", "label": "Credential type (Access token, ID token, Signed blob or Signed JWT)", "default": "Access token"},
+            {"name": "detail",         "label": "Scopes / audience / data",    "default": "https://www.googleapis.com/auth/cloud-platform"},
+            {"name": "lifetime",       "label": "Lifetime (access tokens)",    "default": "3600s"},
+            {"name": "delegates",      "label": "Delegates (comma-separated service account emails)", "default": ""},
+        ],
+    },
+    # ========================================================================
+    # Memorystore for Redis — instances (core/gcp_redis_core.py). Console REST at
+    # /api/gcp/redis/*; the native /v1/projects/*/locations/*/instances wire serves the SDKs /
+    # gcloud. Data plane: the shared Valkey container offline (control plane only in Nano).
+    # ========================================================================
+    {
+        "key": "redis", "label": "Memorystore for Redis", "icon": "memory",
+        "namespace": "GCP/Redis", "service": "redis",
+        "collection_path": "/api/gcp/redis/instances",
+        "resource_path":   "/api/gcp/redis/instances/{name}",
+        "name_field":      "id",
+        "create_method":   "POST",
+        "api_paths": {
+            "instances": {"method": "GET",    "path": "/api/gcp/redis/instances"},
+            "resize":    {"method": "POST",   "path": "/api/gcp/sub/redis/resize/{name}"},
+            "failover":  {"method": "POST",   "path": "/api/gcp/sub/redis/failover/{name}"},
+            "delete":    {"method": "DELETE", "path": "/api/gcp/redis/instances/{name}"},
+        },
+        "columns": [
+            ["id",          "Instance ID"],
+            ["region",      "Location"],
+            ["status",      "Status"],
+            ["tier_label",  "Tier"],
+            ["version",     "Redis version"],
+            ["capacity",    "Capacity"],
+            ["endpoint",    "Primary endpoint"],
+            ["replicas",    "Replicas"],
+            ["network",     "Network"],
+            ["auth",        "AUTH"],
+        ],
+        "createFields": [
+            {"name": "name",        "label": "Instance ID",                      "default": "my-redis"},
+            {"name": "region",      "label": "Region",                           "default": "us-central1"},
+            {"name": "tier",        "label": "Tier (BASIC or STANDARD_HA)",      "default": "BASIC"},
+            {"name": "memorySizeGb", "label": "Capacity (GB)",                   "default": "1"},
+            {"name": "redisVersion", "label": "Redis version",                   "default": "REDIS_7_0"},
+            {"name": "network",     "label": "Authorized network",               "default": "default"},
+            {"name": "authEnabled", "label": "Enable AUTH (true or false)",      "default": "false"},
+            {"name": "displayName", "label": "Display name",                     "default": "Demo Redis cache"},
+        ],
+    },
 ]
 
 _BY_KEY = {c["key"]: c for c in RESOURCE_CATALOG_GCP}

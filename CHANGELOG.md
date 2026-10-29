@@ -4,6 +4,157 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.23] — 2026-10-27
+
+New service release.
+
+- New service: AZURE Log Analytics
+- expansion(azure/operationalinsights): Log Analytics engine (workspace…
+- expansion(azure/operationalinsights): Java and Go SDK test beds
+- expansion(azure/operationalinsights): CLI smoke
+- expansion(azure/operationalinsights): offline console test
+- expansion(azure/operationalinsights): Nano console test
+- expansion(azure/operationalinsights): unit tests, hand-over (suites, …
+
+## [3.0.22] — 2026-10-27
+
+New service release.
+
+- New service: AZURE Monitor alerts
+- expansion(azure/monitor): Azure Monitor engine (action groups, metric…
+- expansion(azure/monitor): Java, Go and CLI test beds
+- expansion(azure/monitor): offline console test
+- expansion(azure/monitor): Nano UI test, hand-over (suites, upstream w…
+- expansion(azure/monitor): portal-style create wizard so Create is rea…
+
+## [3.0.21] — 2026-10-27
+
+New service release.
+
+- New service: AZURE DNS zones
+- expansion(azure/dns): Azure DNS engine (zones, record sets), ARM wire…
+- expansion(azure/dns): Java, Go and CLI test beds
+- expansion(azure/dns): UI tests (offline + Nano), unit tests, hand-ove…
+
+## [3.0.20] — 2026-10-27
+
+New service release.
+
+- New service: AZURE Azure AI services
+- expansion(azure/cognitiveservices): engine, ARM wire, catalog, Nano w…
+- expansion(azure/cognitiveservices): AI services engine (ARM), console…
+
+## [3.0.19] — 2026-10-27
+
+New service release.
+
+- New service: AZURE App Configuration
+- expansion(azure/appconfiguration): App Configuration engine (ARM + da…
+
+## [3.0.18] — 2026-10-27
+
+New service release.
+
+- New service: AZURE Container Apps
+- expansion(azure/app): Container Apps engine, ARM wiring (offline + Na…
+- expansion(azure/app): Go + Java SDK test beds, Docker runtime hook, c…
+- expansion(azure/app): CLI smoke, console tests (offline + Nano), unit…
+
+## [3.0.17] — 2026-10-27
+
+New service release.
+
+- New service: GCP Memorystore for Redis
+- expansion(gcp/redis): Memorystore engine, wire, console REST + catalo…
+- expansion(gcp/redis): Java + Go SDK test beds, console tests (offline…
+- expansion(gcp/redis): console view name = instance id so Nano Metrics…
+
+## [3.0.16] — 2026-10-27
+
+New service release.
+
+- New service: GCP IAM Service Account Credentials
+- expansion(gcp/iamcredentials): IAM Credentials engine core + unit tests
+- expansion(gcp/iamcredentials): wire, console REST + catalog, Nano ven…
+- expansion(gcp/iamcredentials): Go SDK test bed; signBlob takes 'paylo…
+- expansion(gcp/iamcredentials): Java SDK test bed; proto3 default life…
+- expansion(gcp/iamcredentials): gcloud CLI test bed
+- expansion(gcp/iamcredentials): console tests (offline), wizard name f…
+- expansion(gcp/iamcredentials): hourly hand-over, upstream watch, regi…
+- expansion(gcp/iamcredentials): manifest ready
+- expansion(gcp/iamcredentials): 'Create credential' button so the craw…
+
+## [3.0.15] — 2026-10-27
+
+New service release.
+
+- New service: GCP Kubernetes Engine
+- expansion(gcp/container): GKE engine core + unit tests
+- expansion(gcp/container): wire, console REST + catalog, Nano vendorin…
+- expansion(gcp/container): gcloud CLI test bed; share the /operations …
+- expansion(gcp/container): Java SDK test bed
+- expansion(gcp/container): Go SDK test bed
+- expansion(gcp/container): console tests (offline + Nano)
+- expansion(gcp/container): hourly hand-over, upstream watch, registry …
+
+## [3.0.14] — 2026-10-27
+
+New service release.
+
+- New service: GCP Cloud Scheduler
+- expansion(gcp/cloudscheduler): Cloud Scheduler engine core + unit tests
+- expansion(gcp/cloudscheduler): wire, console catalog, Nano vendoring …
+- expansion(gcp/cloudscheduler): Java SDK test bed, enum-encoding=int +…
+- expansion(gcp/cloudscheduler): Go SDK + gcloud CLI test beds
+- expansion(gcp/cloudscheduler): create wizard, console tests (offline …
+- expansion(gcp/cloudscheduler): console record name is the short job i…
+
+## [3.0.13] — 2026-10-27
+
+New service release.
+
+- New service: AWS Step Functions
+- expansion(aws/stepfunctions): ASL engine core + unit tests
+- expansion(aws/stepfunctions): wire, console catalog, Nano vendoring, …
+- expansion(aws/stepfunctions): console UI tests (offline + Nano), hour…
+
+## [3.0.12] — 2026-10-27
+
+New service release.
+
+- New service: AWS Systems Manager
+- expansion(aws/ssm): SSM engine, native wire, console + Nano, CLI/UI t…
+- expansion(aws/ssm): Java + Go test beds, hourly suites, upstream trac…
+- expansion(aws/ssm): Nano activity events carry a detail; declare Hist…
+- expansion(aws/ssm): keep other services' Nano files exactly as on mai…
+- expansion(aws/ssm): add only SSM to main's Nano registry/persist (don…
+
+## [3.0.11] — 2026-10-27
+
+New service release.
+
+- New service: AWS CloudWatch Logs
+- expansion(aws/logs): CloudWatch Logs engine core + conformance test
+- expansion(aws/logs): offline wire + console REST + catalog, Nano wiring
+- expansion(aws/logs): CLI, Go and Java SDK test beds; savings hook
+- expansion(aws/logs): offline console test + rail entry
+- expansion(aws/logs): manifest, registry, hourly suites, upstream watch
+- expansion(aws/logs): drop unused helper in console dispatch
+- expansion(aws/logs): Nano space cost-savings metrics (cost_model vend…
+- expansion(aws/logs): merge main (ELBv2) so Nano changes apply to the …
+
+## [3.0.10] — 2026-10-27
+
+New service release.
+
+- New service: AWS Elastic Load Balancing
+- expansion(aws/elbv2): engine, native Query wire, offline console REST…
+- expansion(aws/elbv2): Java, Go and aws-cli conformance beds
+- expansion(aws/elbv2): console tests (offline + Nano), engine unit tes…
+- expansion(aws/elbv2): rail label matches service name so the UI crawl…
+- expansion(aws/elbv2): Nano serves cost_savings on /api/spaces and fil…
+- expansion(aws/elbv2): rebase on main; regenerate Nano catalog fixture…
+
 ## [3.0.9] — 2026-10-27
 
 Daily conformance release.

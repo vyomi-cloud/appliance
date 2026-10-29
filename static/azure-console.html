@@ -1014,6 +1014,7 @@ function renderGrid(svc, items){
   const stats = el("span",{class:"stats"});
   bar.append(fi, stats);
   wrap.append(bar);
+  if (svc.banner) wrap.append(el("div",{class:"sub-info",style:"margin:8px 0"}, svc.banner));
 
   const tbl = el("table"); wrap.append(tbl);
 
@@ -1928,6 +1929,524 @@ function listChildResources(svc, full, host, childTypeKey, columns, emptyMsg){
     host.append(t);
   }).catch(()=>host.append(emptyState(emptyMsg)));
 }
+
+// ---- Container Apps (Microsoft.App) renderers -----------------------------------
+function appKv(host, rows){
+  const kv = el("div",{class:"kv prop-kv"});
+  rows.forEach(([k,v])=>kv.append(el("div",{class:"k"},k), el("div",{class:"v"}, String(v))));
+  host.append(kv);
+}
+function appTable(host, cols, rows, emptyMsg){
+  if (!rows.length) { host.append(emptyState(emptyMsg)); return; }
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); cols.forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  rows.forEach(r=>{ const tr = el("tr",{}); r.forEach(v=>tr.append(el("td",{}, String(v)))); t.append(tr); });
+  host.append(t);
+}
+SUB_RENDERERS.revisionslist = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Revisions of this container app and their traffic split. Single revision mode keeps only the latest revision active."));
+  fetch(ORIGIN + full.id + "/revisions?api-version=" + svc.apiVersion).then(r=>r.json()).then(j=>{
+    appTable(host, ["Name","Active","Traffic %","Replicas","Health","Created"],
+      (j.value||[]).map(r=>[r.name, r.properties.active ? "Yes" : "No", r.properties.trafficWeight, r.properties.replicas,
+                            r.properties.healthState, r.properties.createdTime]),
+      "No revisions yet.");
+  }).catch(()=>host.append(emptyState("No revisions yet.")));
+};
+SUB_RENDERERS.appcontainers = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Containers in the latest revision template."));
+  const t = getPath(full,"properties.template") || {};
+  appTable(host, ["Name","Image","CPU (cores)","Memory","Environment variables"],
+    (t.containers||[]).map(c=>[c.name, c.image, (c.resources||{}).cpu, (c.resources||{}).memory, (c.env||[]).length]),
+    "No containers.");
+};
+SUB_RENDERERS.appingress = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Ingress routes HTTP/TCP traffic to the app."));
+  const ing = getPath(full,"properties.configuration.ingress");
+  if (!ing) { host.append(emptyState("Ingress is disabled for this container app.")); return; }
+  appKv(host, [["Ingress","Enabled"], ["Ingress traffic", ing.external ? "Accepting traffic from anywhere" : "Limited to the Container Apps environment"],
+               ["Target port", ing.targetPort], ["Transport", ing.transport],
+               ["Insecure connections", ing.allowInsecure ? "Allowed" : "Not allowed"],
+               ["Application URL", "https://" + ing.fqdn],
+               ["Revision mode", getPath(full,"properties.configuration.activeRevisionsMode")]]);
+};
+SUB_RENDERERS.appscale = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Replica range and scale rules for the latest revision."));
+  const sc = getPath(full,"properties.template.scale") || {};
+  appKv(host, [["Min replicas", sc.minReplicas], ["Max replicas", sc.maxReplicas],
+               ["Scale rules", (sc.rules||[]).length ? sc.rules.map(r=>r.name).join(", ") : "None (default HTTP scaling)"]]);
+};
+SUB_RENDERERS.appsecrets = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Secret names. Values are never returned by the API (POST listSecrets returns them)."));
+  appTable(host, ["Name","Source"], (getPath(full,"properties.configuration.secrets")||[]).map(s=>[s.name, "Container Apps secret"]),
+    "No secrets defined.");
+};
+
+// ---- App Configuration (Microsoft.AppConfiguration) renderers --------------------
+SUB_RENDERERS.appconfigexplorer = function(svc, full, host){
+  const base = ORIGIN + full.id + "/keyValues";
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"}, "Key-values in ", el("strong",{}, full.name),
+      ". The App Configuration SDKs and `az appconfig kv` read and write the same data at ", getPath(full,"properties.endpoint")||"the store endpoint", "."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center;flex-wrap:wrap"});
+    bar.append(el("button",{class:"btn",onclick:addKv}, icon("add"), "Create key-value"),
+               el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base + q).then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      if (!items.length){ listHost.append(emptyState("No key-values — click Create key-value to add one.")); return; }
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Key","Label","Value","Content type","Last modified",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      items.forEach(it=>{
+        const p = it.properties || {};
+        t.append(el("tr",{},
+          el("td",{}, p.key), el("td",{}, p.label || "(No label)"), el("td",{}, p.value == null ? "" : String(p.value)),
+          el("td",{}, p.contentType || "—"), el("td",{}, p.lastModified || "—"),
+          el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>{
+            fetch(base + "/" + encodeURIComponent(it.name) + q, {method:"DELETE"}).then(()=>{ toast("Key-value deleted"); render(); });
+          }}, "Delete"))));
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("No key-values — click Create key-value to add one.")));
+  }
+  function addKv(){
+    const key = (prompt("Key:")||"").trim(); if(!key) return;
+    const value = prompt("Value:");  if(value===null) return;
+    const label = (prompt("Label (optional):")||"").trim();
+    const name = label ? key + "$" + label : key;
+    fetch(base + "/" + encodeURIComponent(name) + q, {method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({properties:{value:value, contentType:"text/plain"}})})
+      .then(r=>r.json()).then(()=>{ toast("Key-value saved"); render(); });
+  }
+  render();
+};
+SUB_RENDERERS.appconfigaccess = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Access keys authenticate SDKs and the CLI with a connection string. Read-only keys cannot modify key-values."));
+  const url = ORIGIN + full.id + "/listKeys?api-version=" + svc.apiVersion;
+  if (getPath(full,"properties.disableLocalAuth") === true){
+    host.append(emptyState("Access keys are disabled for this store (Microsoft Entra ID authentication only)."));
+    return;
+  }
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    fetch(url, {method:"POST"}).then(r=>r.json()).then(j=>{
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Name","Id","Secret","Connection string","Read only"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      (j.value||[]).forEach(k=>t.append(el("tr",{},
+        el("td",{}, k.name), el("td",{}, k.id), el("td",{}, k.value), el("td",{}, k.connectionString), el("td",{}, k.readOnly ? "Yes" : "No"))));
+      wrap.append(t);
+    }).catch(()=>wrap.append(emptyState("Could not load access keys.")));
+  }
+  render();
+};
+SUB_RENDERERS.appconfigreplicas = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Replicas serve the same key-values from other regions (Standard and Premium tiers)."));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Name","Location","Endpoint","Status"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  t.append(el("tr",{}, el("td",{}, full.name + " (origin)"), el("td",{}, full.location||"—"),
+                       el("td",{}, getPath(full,"properties.endpoint")||"—"), el("td",{}, getPath(full,"properties.provisioningState")||"Succeeded")));
+  host.append(t);
+  fetch(ORIGIN + full.id + "/replicas?api-version=" + svc.apiVersion).then(r=>r.json()).then(j=>{
+    (j.value||[]).forEach(r=>t.append(el("tr",{}, el("td",{}, r.name), el("td",{}, r.location||"—"),
+      el("td",{}, getPath(r,"properties.endpoint")||"—"), el("td",{}, getPath(r,"properties.provisioningState")||"Succeeded"))));
+  }).catch(()=>{});
+};
+
+// ---- Azure AI services (Microsoft.CognitiveServices) renderers -------------------
+SUB_RENDERERS.cogskeys = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Use these keys and the endpoint to call the service from your app. Keep them secret; regenerate a key if it leaks."));
+  const base = ORIGIN + full.id;
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"kv prop-kv"},
+      el("div",{class:"k"},"Endpoint"), el("div",{class:"v"}, getPath(full,"properties.endpoint")||"—"),
+      el("div",{class:"k"},"Location"), el("div",{class:"v"}, full.location||"—"),
+      el("div",{class:"k"},"Kind"), el("div",{class:"v"}, full.kind||"—")));
+    if (getPath(full,"properties.disableLocalAuth") === true){
+      wrap.append(emptyState("Keys are disabled for this account (Microsoft Entra ID authentication only)."));
+      return;
+    }
+    fetch(base + "/listKeys" + q, {method:"POST"}).then(r=>r.json()).then(j=>{
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Name","Key",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      [["KEY 1","key1","Key1"],["KEY 2","key2","Key2"]].forEach(([label,prop,kn])=>t.append(el("tr",{},
+        el("td",{}, label), el("td",{}, j[prop]||"—"),
+        el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>{
+          fetch(base + "/regenerateKey" + q, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({keyName:kn})})
+            .then(()=>{ toast(label + " regenerated"); render(); });
+        }}, "Regenerate")))));
+      wrap.append(t);
+    }).catch(()=>wrap.append(emptyState("Could not load keys.")));
+  }
+  render();
+};
+SUB_RENDERERS.cogsdeployments = function(svc, full, host){
+  const base = ORIGIN + full.id + "/deployments";
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    if (["OpenAI","AIServices"].indexOf(full.kind) < 0){
+      wrap.append(emptyState("Model deployments are available on OpenAI and AI Services accounts."));
+      return;
+    }
+    wrap.append(el("div",{class:"sub-info"},"Deployments make a model available at ", getPath(full,"properties.endpoint")||"the account endpoint", " under a deployment name."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"});
+    bar.append(el("button",{class:"btn",onclick:add}, icon("add"), "Create deployment"), el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base + q).then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      if (!items.length){ listHost.append(emptyState("No deployments — click Create deployment to add one.")); return; }
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Deployment name","Model","Version","SKU","Capacity (K TPM)","State",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      items.forEach(d=>{
+        const m = getPath(d,"properties.model")||{};
+        t.append(el("tr",{}, el("td",{}, d.name), el("td",{}, m.name||"—"), el("td",{}, m.version||"—"),
+          el("td",{}, getPath(d,"sku.name")||"—"), el("td",{}, String(getPath(d,"sku.capacity")||"—")),
+          el("td",{}, getPath(d,"properties.provisioningState")||"Succeeded"),
+          el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>{
+            fetch(base + "/" + encodeURIComponent(d.name) + q, {method:"DELETE"}).then(()=>{ toast("Deployment deleted"); render(); });
+          }}, "Delete"))));
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("No deployments — click Create deployment to add one.")));
+  }
+  function add(){
+    const name = (prompt("Deployment name:", "gpt-4o")||"").trim(); if(!name) return;
+    const model = (prompt("Model name:", "gpt-4o")||"").trim(); if(!model) return;
+    const version = (prompt("Model version:", "2024-08-06")||"").trim();
+    const cap = parseInt(prompt("Capacity (thousands of tokens per minute):", "10")||"10", 10);
+    fetch(base + "/" + encodeURIComponent(name) + q, {method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({sku:{name:"Standard", capacity:cap}, properties:{model:{format:"OpenAI", name:model, version:version}}})})
+      .then(r=>r.json()).then(j=>{ if (j.error) toast(j.error.message); else toast("Deployment created"); render(); });
+  }
+  render();
+};
+SUB_RENDERERS.cogsquotas = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Usage against the quotas of this account."));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Quota","Current","Limit","Unit"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  host.append(t);
+  fetch(ORIGIN + full.id + "/usages?api-version=" + svc.apiVersion).then(r=>r.json()).then(j=>{
+    const items = j.value || [];
+    if (!items.length){ host.append(emptyState("No quotas apply to this account.")); return; }
+    items.forEach(u=>t.append(el("tr",{}, el("td",{}, getPath(u,"name.localizedValue")||getPath(u,"name.value")||"—"),
+      el("td",{}, String(u.currentValue)), el("td",{}, String(u.limit)), el("td",{}, u.unit||"Count"))));
+  }).catch(()=>host.append(emptyState("Could not load quotas.")));
+};
+
+// ---- Azure DNS (Microsoft.Network/dnsZones) renderers ---------------------------
+const DNS_FIELDS = {A:"ARecords",AAAA:"AAAARecords",CAA:"caaRecords",CNAME:"CNAMERecord",DS:"DSRecords",MX:"MXRecords",NAPTR:"NAPTRRecords",
+  NS:"NSRecords",PTR:"PTRRecords",SOA:"SOARecord",SRV:"SRVRecords",TLSA:"TLSARecords",TXT:"TXTRecords"};
+function dnsValues(type, props){
+  const v = props[DNS_FIELDS[type]];
+  const list = Array.isArray(v) ? v : (v ? [v] : []);
+  const out = list.map(r=>{
+    switch(type){
+      case "A": return r.ipv4Address; case "AAAA": return r.ipv6Address; case "CNAME": return r.cname;
+      case "NS": return r.nsdname; case "PTR": return r.ptrdname; case "MX": return r.preference+" "+r.exchange;
+      case "SRV": return r.priority+" "+r.weight+" "+r.port+" "+r.target; case "TXT": return (r.value||[]).join("");
+      case "CAA": return r.flags+" "+r.tag+" \""+r.value+"\"";
+      case "SOA": return r.host+" "+r.email+" "+r.serialNumber+" "+r.refreshTime+" "+r.retryTime+" "+r.expireTime+" "+r.minimumTTL;
+      default: return JSON.stringify(r);
+    }
+  });
+  if (!out.length && props.targetResource && props.targetResource.id) return "Alias: " + props.targetResource.id;
+  return out.join(", ") || "—";
+}
+function dnsBuildRecord(type, text){
+  const t = text.trim(), p = t.split(/\s+/);
+  switch(type){
+    case "A": return {ARecords: t.split(/[\s,]+/).filter(Boolean).map(x=>({ipv4Address:x}))};
+    case "AAAA": return {AAAARecords: t.split(/[\s,]+/).filter(Boolean).map(x=>({ipv6Address:x}))};
+    case "CNAME": return {CNAMERecord:{cname:t}};
+    case "NS": return {NSRecords:[{nsdname:t}]};
+    case "PTR": return {PTRRecords:[{ptrdname:t}]};
+    case "MX": return {MXRecords:[{preference:+p[0], exchange:p[1]}]};
+    case "SRV": return {SRVRecords:[{priority:+p[0], weight:+p[1], port:+p[2], target:p[3]}]};
+    case "CAA": return {caaRecords:[{flags:+p[0], tag:p[1], value:(p.slice(2).join(" ")).replace(/^"|"$/g,"")}]};
+    default: return {TXTRecords:[{value:[t]}]};
+  }
+}
+SUB_RENDERERS.dnsrecordsets = function(svc, full, host){
+  const base = ORIGIN + full.id;
+  const q = "?api-version=" + svc.apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    wrap.append(el("div",{class:"sub-info"}, "Record sets in ", el("strong",{}, full.name),
+      ". The Azure DNS SDKs and `az network dns record-set` read and write the same data."));
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center;flex-wrap:wrap"});
+    bar.append(el("button",{class:"btn",onclick:addSet}, icon("add"), "Add record set"),
+               el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base + "/recordsets" + q).then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Name","Type","TTL","Value","Alias resource",""].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      items.forEach(it=>{
+        const p = it.properties || {}, type = it.type.split("/").pop();
+        const locked = type === "SOA" || (type === "NS" && it.name === "@");
+        t.append(el("tr",{},
+          el("td",{}, it.name), el("td",{}, type), el("td",{}, String(p.TTL)), el("td",{}, dnsValues(type, p)),
+          el("td",{}, (p.targetResource && p.targetResource.id) || "—"),
+          el("td",{style:"text-align:right"}, locked ? "" : el("button",{class:"btn sec",onclick:()=>{
+            fetch(base + "/" + type + "/" + encodeURIComponent(it.name) + q, {method:"DELETE"}).then(()=>{ toast("Record set deleted"); render(); });
+          }}, "Delete"))));
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load record sets.")));
+  }
+  function addSet(){
+    const name = (prompt("Name (use @ for the zone apex):", "www")||"").trim(); if(!name) return;
+    const type = (prompt("Type (A, AAAA, CNAME, MX, NS, PTR, SRV, TXT, CAA):", "A")||"").trim().toUpperCase(); if(!type) return;
+    const ttl = parseInt(prompt("TTL (seconds):", "3600")||"3600", 10);
+    const value = prompt("Value (e.g. 10.0.0.4 · target host · \"10 mail.example.com\" for MX):", "10.0.0.4"); if(value===null) return;
+    const props = Object.assign({TTL: ttl}, dnsBuildRecord(type, value));
+    fetch(base + "/" + type + "/" + encodeURIComponent(name) + q, {method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({properties: props})})
+      .then(r=>r.json().then(j=>({ok:r.ok, j}))).then(({ok,j})=>{
+        if(ok) toast("Record set saved"); else toast((j.error&&j.error.message)||"Could not save record set","err");
+        render(); });
+  }
+  render();
+};
+SUB_RENDERERS.dnsnameservers = function(svc, full, host){
+  const ns = getPath(full,"properties.nameServers") || [];
+  host.append(el("div",{class:"sub-info"},"Delegate your domain to these Azure DNS name servers at your registrar. Delegation is not performed in the simulator; use Test query to check answers."));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["#","Name server"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  if (!ns.length) t.append(el("tr",{}, el("td",{colspan:2}, "Private zones are resolved inside linked virtual networks and have no public name servers.")));
+  ns.forEach((n,i)=>t.append(el("tr",{}, el("td",{}, String(i+1)), el("td",{}, n))));
+  host.append(t);
+};
+SUB_RENDERERS.dnsquery = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Ask this zone a DNS question (what `dig` would receive). Also available over HTTP at /azure-data/dns/query."));
+  const form = el("div",{style:"display:flex;gap:8px;margin:10px 0;align-items:center;flex-wrap:wrap"});
+  const nm = el("input",{value:full.name, style:"min-width:260px"});
+  const ty = el("select",{}); ["A","AAAA","CNAME","MX","NS","PTR","SOA","SRV","TXT","CAA"].forEach(t=>ty.append(el("option",{value:t},t)));
+  const out = el("div",{});
+  const go = el("button",{class:"btn",onclick:run}, icon("search"), "Query");
+  form.append(nm, ty, go); host.append(form, out);
+  function run(){
+    out.innerHTML = "";
+    const u = ORIGIN + full.id + "/resolve?api-version=" + svc.apiVersion + "&name=" + encodeURIComponent(nm.value) + "&type=" + ty.value;
+    fetch(u).then(r=>r.json()).then(j=>{
+      const status = j.Status === 0 ? "NOERROR" : j.Status === 3 ? "NXDOMAIN" : "REFUSED";
+      out.append(el("div",{class:"sub-info"}, "Status: ", el("strong",{}, status), " · ", (j.Answer||[]).length + " answer(s)"));
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); ["Name","Type","TTL","Data"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+      (j.Answer||[]).forEach(a=>t.append(el("tr",{}, el("td",{}, a.name), el("td",{}, a.type), el("td",{}, String(a.TTL)), el("td",{}, a.data))));
+      out.append(t);
+    }).catch(()=>out.append(emptyState("Query failed.")));
+  }
+  run();
+};
+
+// ---- Azure Monitor (Microsoft.Insights) renderers ------------------------------
+SUB_RENDERERS.monitorcondition = function(svc, full, host){
+  const p = full.properties || {}, cr = p.criteria || {};
+  host.append(el("div",{class:"sub-info"},"Condition evaluated every ", el("strong",{}, p.evaluationFrequency||"—"),
+    " over a ", el("strong",{}, p.windowSize||"—"), " window · severity ", el("strong",{}, String(p.severity))));
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); ["Name","Metric","Aggregation","Operator","Threshold"].forEach(c=>hdr.append(el("th",{},c))); t.append(hdr);
+  (cr.allOf||[]).forEach(c=>t.append(el("tr",{}, el("td",{}, c.name), el("td",{}, c.metricName), el("td",{}, c.timeAggregation),
+    el("td",{}, c.operator), el("td",{}, c.threshold==null ? (c.alertSensitivity||"—") : String(c.threshold)))));
+  if (!(cr.allOf||[]).length) t.append(el("tr",{}, el("td",{colspan:5}, "Availability test criteria: " + JSON.stringify(cr))));
+  host.append(t);
+  const acts = p.actions || [];
+  host.append(el("div",{class:"sub-info",style:"margin-top:14px"}, "Action groups notified when the alert fires: ",
+    acts.length ? acts.map(a=>a.actionGroupId.split("/").pop()).join(", ") : "none"));
+};
+function monitorCollection(svc, full, host, type, apiVersion, cols, label, makeBody){
+  const rg = full.id.split("/")[4];
+  const base = ORIGIN + "/subscriptions/" + full.id.split("/")[2] + "/resourceGroups/" + rg + "/providers/Microsoft.Insights/" + type;
+  const q = "?api-version=" + apiVersion;
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center"});
+    bar.append(el("button",{class:"btn",onclick:add}, icon("add"), "Add " + label),
+               el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    fetch(base + q).then(r=>r.json()).then(j=>{
+      const items = j.value || [];
+      if (!items.length) { listHost.append(emptyState("No " + label + "s in resource group " + rg + ".")); return; }
+      const t = el("table",{class:"sub-table"});
+      const hdr = el("tr",{}); cols.forEach(c=>hdr.append(el("th",{},c[1]))); hdr.append(el("th",{},"")); t.append(hdr);
+      items.forEach(it=>{
+        const tr = el("tr",{});
+        cols.forEach(c=>{ const v = getPath(it,c[0]); tr.append(el("td",{}, v==null ? "—" : (typeof v==="object" ? JSON.stringify(v) : String(v)))); });
+        tr.append(el("td",{style:"text-align:right"}, el("button",{class:"btn sec",onclick:()=>{
+          fetch(base + "/" + encodeURIComponent(it.name) + q, {method:"DELETE"}).then(()=>{ toast(label + " deleted"); render(); });
+        }}, "Delete")));
+        t.append(tr);
+      });
+      listHost.append(t);
+    }).catch(()=>listHost.append(emptyState("Could not load " + label + "s.")));
+  }
+  function add(){
+    const body = makeBody(); if(!body) return;
+    fetch(base + "/" + encodeURIComponent(body.name) + q, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body.body)})
+      .then(r=>r.json().then(j=>({ok:r.ok, j}))).then(({ok,j})=>{
+        if(ok) toast(label + " saved"); else toast((j.error&&j.error.message)||"Could not save","err");
+        render(); });
+  }
+  render();
+}
+SUB_RENDERERS.monitoractiongroups = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Action groups in this resource group: who is notified (email, SMS, webhook…) when an alert fires."));
+  monitorCollection(svc, full, host, "actionGroups", "2023-01-01",
+    [["name","Name"],["properties.groupShortName","Short name"],["properties.enabled","Enabled"],["properties.emailReceivers","Email receivers"],["location","Location"]],
+    "action group", ()=>{
+      const name = (prompt("Action group name:", "ops-team")||"").trim(); if(!name) return null;
+      const short = (prompt("Short name (max 12 characters):", "ops")||"").trim(); if(!short) return null;
+      const email = (prompt("Email address to notify:", "oncall@example.com")||"").trim();
+      return {name, body:{location:"Global", properties:{groupShortName:short, enabled:true,
+        emailReceivers: email ? [{name:"oncall", emailAddress:email, useCommonAlertSchema:true}] : []}}};
+    });
+};
+SUB_RENDERERS.monitoractivityalerts = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Activity log alert rules in this resource group (fire on control-plane events such as a failed deployment)."));
+  const sub = full.id.split("/")[2];
+  monitorCollection(svc, full, host, "activityLogAlerts", "2020-10-01",
+    [["name","Name"],["properties.enabled","Enabled"],["properties.condition.allOf","Condition"],["properties.scopes","Scopes"],["location","Location"]],
+    "activity log alert", ()=>{
+      const name = (prompt("Alert rule name:", "deploy-failed")||"").trim(); if(!name) return null;
+      const cat = (prompt("Category (Administrative, ServiceHealth, ResourceHealth, Alert, Autoscale, Recommendation, Security, Policy):", "Administrative")||"").trim(); if(!cat) return null;
+      return {name, body:{location:"Global", properties:{enabled:true, scopes:["/subscriptions/"+sub],
+        condition:{allOf:[{field:"category", equals:cat}]}, actions:{actionGroups:[]}}}};
+    });
+};
+SUB_RENDERERS.monitorautoscale = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Autoscale settings in this resource group: scale a resource between a minimum and maximum instance count."));
+  const sub = full.id.split("/")[2], rg = full.id.split("/")[4];
+  monitorCollection(svc, full, host, "autoscaleSettings", "2022-10-01",
+    [["name","Name"],["properties.enabled","Enabled"],["properties.profiles.0.capacity","Capacity"],["properties.targetResourceUri","Target"],["location","Location"]],
+    "autoscale setting", ()=>{
+      const name = (prompt("Autoscale setting name:", "web-autoscale")||"").trim(); if(!name) return null;
+      const target = "/subscriptions/"+sub+"/resourceGroups/"+rg+"/providers/Microsoft.Web/serverfarms/cloudlearn-plan";
+      return {name, body:{location:LOCATION, properties:{enabled:true, targetResourceUri:target,
+        profiles:[{name:"default", capacity:{minimum:"1", maximum:"5", default:"1"}, rules:[{
+          metricTrigger:{metricName:"CpuPercentage", metricResourceUri:target, timeGrain:"PT1M", statistic:"Average", timeWindow:"PT10M", timeAggregation:"Average", operator:"GreaterThan", threshold:70},
+          scaleAction:{direction:"Increase", type:"ChangeCount", value:"1", cooldown:"PT5M"}}]}]}}};
+    });
+};
+
+// ---- Azure Log Analytics (Microsoft.OperationalInsights) renderers --------------
+const OI_AV = "?api-version=2022-10-01";
+function oiTable(host, cols, rows, emptyMsg, onDelete){
+  if (!rows.length) { host.append(emptyState(emptyMsg)); return; }
+  const t = el("table",{class:"sub-table"});
+  const hdr = el("tr",{}); cols.forEach(c=>hdr.append(el("th",{},c[1]))); if (onDelete) hdr.append(el("th",{},"")); t.append(hdr);
+  rows.forEach(it=>{
+    const tr = el("tr",{});
+    cols.forEach(c=>{ const v = getPath(it,c[0]); tr.append(el("td",{}, v==null||v==="" ? "—" : (typeof v==="object" ? JSON.stringify(v) : String(v)))); });
+    if (onDelete) tr.append(el("td",{style:"text-align:right"}, onDelete(it)));
+    t.append(tr);
+  });
+  host.append(t);
+}
+function oiCollection(full, host, coll, cols, label, makeBody, opts){
+  opts = opts || {};
+  const base = ORIGIN + full.id + "/" + coll;
+  const wrap = el("div",{}); host.append(wrap);
+  function load(){
+    if (!opts.kinds) return fetch(base + OI_AV).then(r=>r.json()).then(j=>j.value||[]);
+    return Promise.all(opts.kinds.map(k=>fetch(base + OI_AV + "&$filter=" + encodeURIComponent("kind eq '" + k + "'")).then(r=>r.json()).then(j=>j.value||[]))).then(a=>[].concat(...a));
+  }
+  function render(){
+    wrap.innerHTML = "";
+    const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px;align-items:center"});
+    if (makeBody) bar.append(el("button",{class:"btn",onclick:add}, icon("add"), "Add " + label));
+    bar.append(el("button",{class:"btn",onclick:render}, icon("refresh"), "Refresh"));
+    wrap.append(bar);
+    const listHost = el("div",{}); wrap.append(listHost);
+    load().then(items=>{
+      oiTable(listHost, cols, items, "No " + label + "s in workspace " + full.name + ".", it=>{
+        if (opts.canDelete && !opts.canDelete(it)) return el("span",{}, "");
+        return el("button",{class:"btn sec",onclick:()=>{
+          fetch(base + "/" + encodeURIComponent(it.name) + OI_AV, {method:"DELETE"}).then(r=>r.ok ? r.text() : r.json().then(j=>{ throw new Error((j.error&&j.error.message)||"Could not delete"); }))
+            .then(()=>{ toast(label + " deleted"); render(); }).catch(e=>toast(e.message,"err"));
+        }}, "Delete");
+      });
+    }).catch(()=>listHost.append(emptyState("Could not load " + label + "s.")));
+  }
+  function add(){
+    const b = makeBody(); if(!b) return;
+    fetch(base + "/" + encodeURIComponent(b.name) + OI_AV, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(b.body)})
+      .then(r=>r.json().then(j=>({ok:r.ok, j}))).then(({ok,j})=>{
+        if(ok) toast(label + " saved"); else toast((j.error&&j.error.message)||"Could not save","err");
+        render(); });
+  }
+  render();
+}
+SUB_RENDERERS.oisavedsearches = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Saved KQL searches in this workspace (also reachable with the Log Analytics SDKs and `az monitor log-analytics workspace saved-search`)."));
+  oiCollection(full, host, "savedSearches",
+    [["name","Id"],["properties.displayName","Display name"],["properties.category","Category"],["properties.query","Query"],["properties.version","Version"]],
+    "saved search", ()=>{
+      const name = (prompt("Saved search id:", "top-heartbeats")||"").trim(); if(!name) return null;
+      const query = (prompt("KQL query:", "Heartbeat | summarize count() by Computer")||"").trim(); if(!query) return null;
+      return {name, body:{properties:{category:"General", displayName:name, query, version:2}}};
+    });
+};
+SUB_RENDERERS.oitables = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Tables hold the workspace's data. Built-in tables follow the workspace retention; custom tables (_CL) can be added and removed."));
+  oiCollection(full, host, "tables",
+    [["name","Name"],["properties.schema.tableType","Type"],["properties.plan","Plan"],["properties.retentionInDays","Interactive retention (days)"],["properties.totalRetentionInDays","Total retention (days)"]],
+    "table", ()=>{
+      const name = (prompt("Custom table name (must end in _CL):", "AppEvents_CL")||"").trim(); if(!name) return null;
+      return {name, body:{properties:{retentionInDays:30, totalRetentionInDays:30, plan:"Analytics",
+        schema:{name, columns:[{name:"TimeGenerated", type:"dateTime"},{name:"Message", type:"string"}]}}}};
+    }, {canDelete: it=>/_(CL|RST)$/.test(it.name)});
+};
+SUB_RENDERERS.oidatasources = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Data sources decide which events and counters agents send to this workspace."));
+  oiCollection(full, host, "dataSources",
+    [["name","Name"],["kind","Kind"],["properties","Settings"]],
+    "data source", ()=>{
+      const name = (prompt("Data source name:", "WindowsApplicationLog")||"").trim(); if(!name) return null;
+      return {name, body:{kind:"WindowsEvent", properties:{eventLogName:"Application", eventTypes:[{eventType:"Error"},{eventType:"Warning"}]}}};
+    }, {kinds:["WindowsEvent","WindowsPerformanceCounter","LinuxSyslog","LinuxPerformanceObject","CustomLog","IISLogs","AzureActivityLog"]});
+};
+SUB_RENDERERS.oikeys = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Workspace ID and shared keys that agents use to connect to this workspace."));
+  const wrap = el("div",{}); host.append(wrap);
+  function render(){
+    wrap.innerHTML = "";
+    fetch(ORIGIN + full.id + "/sharedKeys" + OI_AV, {method:"POST"}).then(r=>r.json()).then(k=>{
+      const kv = el("div",{class:"kv prop-kv"});
+      [["Workspace ID", (full.properties||{}).customerId],["Primary key", k.primarySharedKey],["Secondary key", k.secondarySharedKey]]
+        .forEach(([a,b])=>kv.append(el("div",{class:"k"},a), el("div",{class:"v",style:"word-break:break-all"}, String(b))));
+      wrap.append(kv);
+      const bar = el("div",{style:"display:flex;gap:8px;margin:14px 0"});
+      ["primary","secondary"].forEach(w=>bar.append(el("button",{class:"btn sec",onclick:()=>{
+        fetch(ORIGIN + full.id + "/regenerateSharedKey" + OI_AV, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name:w})})
+          .then(()=>{ toast("Regenerated " + w + " key"); render(); });
+      }}, "Regenerate " + w + " key")));
+      wrap.append(bar);
+    }).catch(()=>wrap.append(emptyState("Could not load workspace keys.")));
+  }
+  render();
+};
+SUB_RENDERERS.oiusage = function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Usage and quota for this workspace (daily cap: ", el("strong",{}, String(((full.properties||{}).workspaceCapping||{}).dailyQuotaGb)), " GB, -1 = no cap)."));
+  const wrap = el("div",{}); host.append(wrap);
+  fetch(ORIGIN + full.id + "/usages" + OI_AV).then(r=>r.json()).then(j=>{
+    const rows = (j.value||[]).map(u=>({name:u.name.localizedValue, unit:u.unit, currentValue:u.currentValue, limit:u.limit, nextResetTime:u.nextResetTime}));
+    oiTable(wrap, [["name","Metric"],["unit","Unit"],["currentValue","Current"],["limit","Limit"],["nextResetTime","Resets"]], rows, "No usage reported.");
+  }).catch(()=>wrap.append(emptyState("Could not load usage.")));
+};
 
 SUB_RENDERERS.databases = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"Databases under this SQL server."));

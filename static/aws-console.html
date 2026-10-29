@@ -709,9 +709,10 @@ function renderRail(){
       ["Compute", ["ec2", "lambda"]],
       ["Storage", ["s3"]],
       ["Databases", ["rds", "dynamodb"]],
-      ["Application Integration", ["sqs", "apigateway", "eventbridge"]],
-      ["Networking & Content Delivery", ["vpc"]],
+      ["Application Integration", ["sqs", "apigateway", "eventbridge", "stepfunctions"]],
+      ["Networking & Content Delivery", ["vpc", "elbv2"]],
       ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
+      ["Management & Governance", ["logs", "ssm"]],
     ];
     groups.forEach(([label, keys]) => {
       rail.append(el("div",{class:"group"}, label));
@@ -970,6 +971,7 @@ async function renderList(main){
                      : (svc.key === "rds") ? "Create database"
                      : (svc.key === "lambda") ? "Create function"
                      : (svc.key === "apigateway") ? "Create API"
+                     : (svc.key === "stepfunctions") ? "Create state machine"
                      : (svc.key === "vpc") ? "Create VPC"
                      : "Create";
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
@@ -1282,6 +1284,14 @@ function childSpec(svc, childType){
       "amis": {key:"amis", label:"AMIs", absolutePath:"/api/ec2/amis", arrayKey:"amis",
         columns: [["image_id","AMI ID"],["name","Name"],["state","State"],
                   ["architecture","Architecture"],["platform","Platform"]]},
+    },
+    elbv2: {
+      "target-groups": {label:"Target groups", absolutePath:"/api/aws/elbv2/target-groups", arrayKey:"items",
+        columns: [["name","Name"],["protocol","Protocol"],["port","Port"],["target_type","Target type"],
+                  ["vpc_id","VPC ID"],["load_balancer","Load balancer"],["targets","Registered targets"],["health_check","Health check"]]},
+      "listeners":     {label:"Listeners", absolutePath:"/api/aws/elbv2/listeners", arrayKey:"items",
+        columns: [["name","Listener ID"],["load_balancer","Load balancer"],["protocol","Protocol"],["port","Port"],
+                  ["default_action","Default action"],["rules","Rules"]]},
     },
     iam: {
       "iam-groups":    {label:"User groups",      absolutePath:"/api/iam/groups",    arrayKey:"groups",
@@ -2954,6 +2964,26 @@ SUB_RENDERERS.igws = function(svc, full, host){
   });
 };
 
+// Generic "table from an API path" tab — the catalog tab names an api_paths key
+// (tab.api), the columns ([[field, label], …]) and an empty-state message.
+SUB_RENDERERS.apitable = async function(svc, full, host, tab){
+  const ap = (svc.api_paths || {})[tab.api];
+  if (!ap) { host.append(el("div",{class:"empty"}, "Path not configured.")); return; }
+  const r = await api(ap.method, fillPath(ap.path, {name: itemKey(svc, full)}));
+  const items = (r.json || {}).items || (r.json || {}).value || [];
+  if (!r.ok) { host.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status)); return; }
+  if (!items.length) { host.append(el("div",{class:"empty"}, tab.empty || "No items.")); return; }
+  const cols = tab.columns || [];
+  const tbl = el("table",{class:"aws"});
+  const hdr = el("tr",{}); cols.forEach(c => hdr.append(el("th",{}, c[1]))); tbl.append(hdr);
+  items.forEach(it => {
+    const tr = el("tr",{});
+    cols.forEach(c => { const v = getPath(it, c[0]);
+      tr.append(el("td",{class: /message|arn|destination/.test(c[0]) ? "mono small" : ""}, v == null || v === "" ? "None" : String(v))); });
+    tbl.append(tr);
+  });
+  host.append(tbl);
+};
 // IAM composite — each sub-tab fetches a different IAM collection
 SUB_RENDERERS.iamusers    = (svc, full, host) => loadIamList(svc, host, "users",
   [["user_name","User name"],["arn","ARN"],["created","Created"]]);
@@ -3260,6 +3290,33 @@ SUB_RENDERERS.apiresources = function(svc, full, host){
     host.append(tbl);
   });
 };
+// Step Functions — generic list tab. `tab.list_key` selects svc.api_paths[list_key];
+// `tab.cols` is [[field,label],…]. Rows come back as {items:[…]} with every cell filled.
+SUB_RENDERERS.sfnlist = function(svc, full, host, tab){
+  const ap = (svc.api_paths || {})[tab.list_key];
+  fetch(ORIGIN + fillPath(ap.path, {name: full.name || full.id})).then(r=>r.json()).then(j=>{
+    const items = j.items || [];
+    if (!items.length) { host.append(el("div",{class:"empty"}, "No " + tab.label.toLowerCase() + " for this state machine yet.")); return; }
+    const cols = tab.cols || [];
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, ...cols.map(c => el("th",{}, c[1]))));
+    items.forEach(it => tbl.append(el("tr",{}, ...cols.map(c => {
+      const v = it[c[0]];
+      return el("td",{class:/arn|id/i.test(c[0]) ? "mono small" : ""}, (v === undefined || v === null || v === "") ? "none" : String(v));
+    }))));
+    host.append(tbl);
+  }).catch(e => host.append(el("div",{class:"alert err"}, "Failed to load: " + e.message)));
+};
+// Step Functions — the Amazon States Language definition, pretty-printed.
+SUB_RENDERERS.sfndefinition = function(svc, full, host){
+  let txt = full.definition || "";
+  try { txt = JSON.stringify(JSON.parse(txt), null, 2); } catch (_) {}
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Amazon States Language definition"));
+  card.append(el("pre",{class:"mono small", style:"white-space:pre-wrap;margin:0"}, txt || "none"));
+  host.append(card);
+};
+
 SUB_RENDERERS.apistages = function(svc, full, host){
   fetch(ORIGIN+fillPath(svc.api_paths.stages.path, {name: full.rest_api_id || full.id || full.name})).then(r=>r.json()).then(j=>{
     const items = j.stages || j.value || j.items || [];
@@ -3272,6 +3329,49 @@ SUB_RENDERERS.apistages = function(svc, full, host){
       el("td",{class:"small mono"}, s.invoke_url||"—"))));
     host.append(tbl);
   });
+};
+
+// Systems Manager — parameter value (SecureString decrypted via GET), editable → PUT = new version.
+SUB_RENDERERS.ssmvalue = function(svc, full, host){
+  const name = itemKey(svc, full);
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  let value = full.value != null ? String(full.value) : "", editing = false;
+  function render(){
+    panel.innerHTML = "";
+    panel.append(el("div",{class:"panel-h"}, icon("key"), "Parameter value"));
+    const body = el("div",{style:"padding:14px"}); panel.append(body);
+    if (!editing){
+      body.append(el("pre",{class:"json", id:"ssm-value"}, value));
+      body.append(el("button",{class:"btn",onclick:()=>{ editing = true; render(); }}, icon("edit"), "Edit value"));
+    } else {
+      const ta = el("textarea",{style:"width:100%;min-height:90px;font-family:Consolas,Menlo,monospace"}); ta.value = value;
+      body.append(ta);
+      body.append(el("div",{style:"display:flex;gap:8px;margin-top:12px"},
+        el("button",{class:"btn primary",onclick:async ()=>{
+          const r = await api("PUT", fillPath(svc.resource_path,{name}), {value: ta.value});
+          if (r.ok){ value = ta.value; editing = false; toast("New parameter version saved"); render(); } else toast("Save failed","err");
+        }}, icon("save"), "Save new version"),
+        el("button",{class:"btn",onclick:()=>{ editing = false; render(); }}, "Cancel")));
+    }
+  }
+  render();
+};
+
+// Systems Manager — generic list tab. `tab.list_key` selects svc.api_paths[list_key]; the response
+// array is `tab.result_key`; `tab.cols` is [[field,label],…].
+SUB_RENDERERS.ssmlist = function(svc, full, host, tab){
+  const ap = (svc.api_paths || {})[tab.list_key];
+  fetch(ORIGIN + fillPath(ap.path, {name: itemKey(svc, full)})).then(r=>r.json()).then(j=>{
+    const items = j[tab.result_key] || [];
+    if (!items.length) { host.append(el("div",{class:"empty"}, "No " + tab.label.toLowerCase() + " for this parameter yet.")); return; }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, ...tab.cols.map(c => el("th",{}, c[1]))));
+    items.forEach(it => tbl.append(el("tr",{}, ...tab.cols.map(c => {
+      const v = it[c[0]];
+      return el("td",{class:/value|user/i.test(c[0]) ? "mono small" : ""}, (v === undefined || v === null || v === "") ? "none" : String(v));
+    }))));
+    host.append(tbl);
+  }).catch(e => host.append(el("div",{class:"alert err"}, "Failed to load: " + e.message)));
 };
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──

@@ -1,7 +1,8 @@
 # Hourly conformance agent — instructions
 
 You run once an hour in GitHub Actions on the `vyomi-cloud/appliance` repo, after
-the test beds have run. The offline appliance stack is up at `$VYOMI_BASE_URL`
+the test beds have run, as one of three fixers working in parallel (see
+"Parallel fixers"). The offline appliance stack is up at `$VYOMI_BASE_URL`
 (http://localhost:9000) and the Nano relay at `$RELAY_HTTP` (http://127.0.0.1:8090).
 Your job is to make Vyomi's UI and SDK/CLI/API surface work like the real clouds,
 fast, and to prove it with conformance tests.
@@ -28,6 +29,31 @@ fast, and to prove it with conformance tests.
   operations, new API versions, deprecations, retirements) found by the hourly
   upstream watcher (`tests/conformance/upstream/`). Each body says what changed
   and what to do.
+
+## Parallel fixers
+
+Three agents run at the same time, one per cloud: `aws`, `gcp`, `azure` (yours is
+in the prompt and in `$SLICE`). Each has its own appliance stack and relay.
+
+- **Your work list is `tests/conformance/hourly/out/slices/$SLICE.json`** (summary:
+  `slices/$SLICE.md`). Work only on what is in it: `ui_root_causes` (findings
+  already grouped by root cause, largest first — fix the cause, then re-crawl the
+  affected services, don't patch rows one by one), `failing_suites`, `parity`,
+  `new`, `untested_ops`, `uncovered`, `upstream_issues`. Items marked
+  `"shared": true` are cross-cloud and were assigned to you.
+- **Stay in your cloud's files**: `static/$SLICE-console.html`,
+  `wasm/$SLICE-console.html`, `providers/$SLICE*` / `routes/$SLICE*`, your cloud's
+  cores and tests. Never edit another cloud's console or provider files. Shared
+  files (`server.py`, `core/`, `wasm/sw.js`, `wasm/clouds.html`, `suites.json`) are
+  allowed when the fix needs them: keep those edits small and self-contained, so a
+  rebase over the other fixers' pushes stays clean.
+- **Push small and often**: one finding (or one root cause) per commit, pushed as
+  soon as it's verified, so the others rebase over short changes. If
+  `git pull --rebase` conflicts, `git rebase --abort`, drop that fix and move on —
+  the next run will retry it from the new base.
+- Don't re-run every suite to confirm a fix: run the suites and crawls for what you
+  touched (`run_suites.py --only <ids>`), plus any green suite that shares a file
+  you edited.
 
 ## Priorities, in order
 
@@ -138,7 +164,7 @@ only make reporting more accurate, never hide a real problem.
 
 ## Time budget and summary
 
-You have about 40 minutes. Stop starting new work after ~32 minutes. Last, write
+You have about 80 minutes. Stop starting new work after ~70 minutes. Last, write
 `tests/conformance/hourly/out/agent_summary.md` (do not commit it): first line a
 one-sentence summary (e.g. "Fixed 3 UI findings (Azure Cosmos blank Region…), added
 4 tests, 0 regressions"), then a short list of fixes, tests added, and what you left

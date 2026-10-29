@@ -28,6 +28,10 @@ from core.messaging_store import InMemoryMessagingStore
 from core import gcp_iam_core as _iam
 from core.iam_store import InMemoryIamStore
 from core import gcp_cloudsql_core as _sql
+from core import gcp_cloudscheduler_core as _sched
+from core import gcp_container_core as _gke
+from core import gcp_iamcredentials_core as _iamc
+from core import gcp_redis_core as _redis
 from core.sql_store import InMemorySqlStore
 
 PROJ = "demo"          # the console's default project
@@ -48,11 +52,15 @@ _STORES = {
     "pubsub":        _R["gcp_msg"],
     "iam":           _R["gcp_iam"],
     "cloudsql":      _R["gcp_sql"],
+    "cloudscheduler": _R["gcp_sched"],
+    "container":     _R["gcp_gke"],
+    "iamcredentials": _R["gcp_iamc"],
+    "redis":         _R["gcp_redis"],
 }
 
 _MOD = {
     "storage": _gcs, "firestore": _fs, "kms": _kms, "secretmanager": _sec,
-    "pubsub": _ps, "iam": _iam, "cloudsql": _sql,
+    "pubsub": _ps, "iam": _iam, "cloudsql": _sql, "cloudscheduler": _sched, "container": _gke, "iamcredentials": _iamc, "redis": _redis,
 }
 
 
@@ -169,10 +177,206 @@ def _sub_delete(service, parent, child_type, child):
     return {"ok": existed, "code": None if existed else "NotFound", "name": child}
 
 
+def _sched_invoke(kind, d):
+    """Cloud Scheduler firing a pubsub target: publish into the Pub/Sub core."""
+    if kind != "pubsub":
+        return True
+    msg = {"messages": [{"data": d.get("data", ""), "attributes": d.get("attributes") or {}}]}
+    st, _ = _call("pubsub", "POST", "/v1/%s:publish" % d["topicName"], {}, msg)
+    return True if st < 300 else "Topic %s not found." % d["topicName"]
+
+
+def _sched_op(operation, name, body):
+    """Cloud Scheduler console CRUD + pause/resume/run over core/gcp_cloudscheduler_core."""
+    store = _STORES["cloudscheduler"]
+
+    def find(nm):
+        for full in store.jobs:
+            if full.rsplit("/", 1)[-1] == nm or full == nm:
+                return full
+        return None
+
+    def run(method, full, verb="", query=None, payload=None):
+        path = "/v1/" + full + (":" + verb if verb else "")
+        r = _sched.dispatch(store, method, path, query or {}, {}, json.dumps(payload).encode() if payload is not None else b"",
+                            invoker=_sched_invoke)
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    if operation == "List":
+        return {"ok": True, "items": _sched.list_all(store)}
+    if operation == "Create":
+        job = _sched.job_from_form(body, PROJ)
+        loc = job["name"].split("/")[3]
+        st, p = run("POST", "projects/%s/locations/%s/jobs" % (PROJ, loc), payload=job)
+        if st < 300:
+            return {"ok": True, **_sched.console_view(store.jobs[job["name"]])}
+        return {"ok": False, "code": p.get("error", {}).get("status", "CreateFailed"),
+                "message": p.get("error", {}).get("message", ""), "name": body.get("name")}
+    full = find(name)
+    if not full:
+        return {"ok": False, "code": "NotFound", "name": name}
+    if operation == "Get":
+        run("GET", full)
+        return {"ok": True, **_sched.console_view(store.jobs[full])}
+    if operation == "Delete":
+        st, _ = run("DELETE", full)
+        return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+    if operation == "Update":
+        upd = {k: body[k] for k in ("description", "schedule", "timeZone") if body.get(k)}
+        st, p = run("PATCH", full, query={"updateMask": ",".join(upd)}, payload=upd)
+        return {"ok": True, **_sched.console_view(store.jobs[full])} if st < 300 else \
+            {"ok": False, "code": p.get("error", {}).get("status", "UpdateFailed"), "name": name}
+    if operation in ("Pause", "Resume", "Run"):
+        st, p = run("POST", full, operation.lower())
+        return {"ok": True, **_sched.console_view(store.jobs[full])} if st < 300 else \
+            {"ok": False, "code": p.get("error", {}).get("status", "ActionFailed"), "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "cloudscheduler"}
+
+
+def _gke_op(operation, name, body):
+    """Kubernetes Engine console CRUD (+ resize/upgrade) over core/gcp_container_core."""
+    store = _STORES["container"]
+
+    def find(nm):
+        for full in store.clusters:
+            if full.rsplit("/", 1)[-1] == nm or full == nm:
+                return full
+        return None
+
+    def run(method, path, query=None, payload=None):
+        r = _gke.dispatch(store, method, "/v1/" + path, query or {}, {}, json.dumps(payload).encode() if payload is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    if operation == "List":
+        return {"ok": True, "items": _gke.list_all(store)}
+    if operation == "Create":
+        req = _gke.job_from_form(body, PROJ)
+        st, p = run("POST", req["parent"] + "/clusters", payload={"cluster": req["cluster"]})
+        if st < 300:
+            return {"ok": True, **_gke.view_by_name(store, _gke.cluster_name(PROJ, req["location"], req["cluster"]["name"]))}
+        return {"ok": False, "code": p.get("error", {}).get("status", "CreateFailed"),
+                "message": p.get("error", {}).get("message", ""), "name": body.get("name")}
+    full = find(name)
+    if not full:
+        return {"ok": False, "code": "NotFound", "name": name}
+    if operation == "Get":
+        return {"ok": True, **_gke.view_by_name(store, full)}
+    if operation == "Delete":
+        st, _ = run("DELETE", full)
+        return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+    if operation in ("Resize", "Upgrade"):
+        if operation == "Resize":
+            pool = (store.clusters[full]["nodePools"] or [{"name": "default-pool"}])[0]["name"]
+            st, p = run("POST", "%s/nodePools/%s:setSize" % (full, pool), payload={"nodeCount": int(body.get("nodeCount", 3))})
+        else:
+            st, p = run("PUT", full, payload={"update": {"desiredMasterVersion": body.get("version") or "latest"}})
+        return {"ok": True, **_gke.view_by_name(store, full)} if st < 300 else \
+            {"ok": False, "code": p.get("error", {}).get("status", "ActionFailed"), "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "container"}
+
+
+def _iamc_resolve(ident):
+    """IAM Credentials: service-account email / uniqueId -> email (IAM core store) or None."""
+    for email, sa in (getattr(_STORES["iam"], "gcp_service_accounts", None) or {}).items():
+        if ident in (email, sa.get("uniqueId")):
+            return email
+    return None
+
+
+def _iamc_op(operation, name, body):
+    """IAM Credentials console grid (the issued-credentials log) over core/gcp_iamcredentials_core."""
+    store = _STORES["iamcredentials"]
+    if operation == "List":
+        return {"ok": True, "items": _iamc.list_all(store)}
+    if operation == "Create":
+        sa = _iamc.form_service_account(body)
+        if "@" in sa and not _iamc_resolve(sa):   # the console issues for the account, creating it if absent
+            acct, _, rest = sa.partition("@")
+            _call("iam", "POST", "/v1/projects/%s/serviceAccounts" % rest.split(".")[0], {}, {"accountId": acct})
+        try:
+            out = {"ok": True, **_iamc.issue_from_form(store, body, _iamc_resolve)}
+            try:   # the Metrics tab reads events by credential id (the dispatcher logs under the account)
+                from core import nano_events
+                nano_events.record(provider="gcp", service="iamcredentials", resource=str(out.get("id") or ""),
+                                   action="Create", status="ok", detail="gcp/iamcredentials: Create %s" % out.get("id"))
+            except Exception:
+                pass
+            return out
+        except _iamc._E as e:
+            return {"ok": False, "code": e.gcp_status, "message": e.message, "name": body.get("serviceAccount")}
+    rec = store.issued.get(name)
+    if rec is None:
+        return {"ok": False, "code": "NotFound", "name": name}
+    if operation == "Get":
+        return {"ok": True, **_iamc.console_view(rec)}
+    if operation == "Delete":
+        del store.issued[name]
+        return {"ok": True, "code": None, "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "iamcredentials"}
+
+
+def _redis_op(operation, name, body):
+    """Memorystore for Redis console CRUD (+ resize/failover) over core/gcp_redis_core."""
+    store = _STORES["redis"]
+
+    def find(nm):
+        for full in store.instances:
+            if full.rsplit("/", 1)[-1] == nm or full == nm:
+                return full
+        return None
+
+    def run(method, path, query=None, payload=None):
+        r = _redis.dispatch(store, method, "/v1/" + path, query or {}, {}, json.dumps(payload).encode() if payload is not None else b"")
+        try:
+            return r.status, json.loads(r.body or b"{}")
+        except Exception:
+            return r.status, {}
+
+    if operation == "List":
+        return {"ok": True, "items": _redis.list_all(store)}
+    if operation == "Create":
+        req = _redis.job_from_form(body, PROJ)
+        st, p = run("POST", req["parent"] + "/instances", {"instanceId": req["instanceId"]}, req["instance"])
+        if st < 300:
+            return {"ok": True, **_redis.view_by_name(store, _redis.instance_name(PROJ, req["location"], req["instanceId"]))}
+        return {"ok": False, "code": p.get("error", {}).get("status", "CreateFailed"),
+                "message": p.get("error", {}).get("message", ""), "name": body.get("name")}
+    full = find(name)
+    if not full:
+        return {"ok": False, "code": "NotFound", "name": name}
+    if operation == "Get":
+        return {"ok": True, **_redis.view_by_name(store, full)}
+    if operation == "Delete":
+        st, _ = run("DELETE", full)
+        return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+    if operation in ("Resize", "Failover"):
+        if operation == "Resize":
+            st, p = run("PATCH", full, {"updateMask": "memorySizeGb"}, {"memorySizeGb": int(body.get("memorySizeGb", 1))})
+        else:
+            st, p = run("POST", full + ":failover", payload={"dataProtectionMode": "LIMITED_DATA_LOSS"})
+        return {"ok": True, **_redis.view_by_name(store, full)} if st < 300 else \
+            {"ok": False, "code": p.get("error", {}).get("status", "ActionFailed"), "name": name}
+    return {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": "redis"}
+
+
 def resource_op(service, operation, name="", body=None):
     """Console CRUD → GCP core. Returns the registry _resource_dispatch envelope."""
     body = body or {}
     svc = service
+    if svc == "cloudscheduler":
+        return _sched_op(operation, name, body)
+    if svc == "container":
+        return _gke_op(operation, name, body)
+    if svc == "iamcredentials":
+        return _iamc_op(operation, name, body)
+    if svc == "redis":
+        return _redis_op(operation, name, body)
     rid = str(body.get("name") or body.get("accountId") or body.get("secretId")
               or body.get("topicId") or name or "").strip()
 

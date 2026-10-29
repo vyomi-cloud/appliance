@@ -34,6 +34,10 @@ AWS_RDS_HOURLY: dict[str, float] = {
     "db.r5.large": 0.24, "db.r5.xlarge": 0.48, "db.r5.2xlarge": 0.96,
 }
 
+AWS_ELBV2_HOURLY: dict[str, float] = {   # us-east-1 on-demand, per load balancer-hour (excl. LCUs)
+    "application": 0.0225, "network": 0.0225, "gateway": 0.0125,
+}
+
 GCP_VM_HOURLY: dict[str, float] = {
     "e2-micro": 0.0084, "e2-small": 0.0168, "e2-medium": 0.0336,
     "e2-standard-2": 0.067, "e2-standard-4": 0.134, "e2-standard-8": 0.268,
@@ -78,10 +82,13 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.sqs": 0.40,          # ~1M requests
     "aws.dynamodb": 1.25,     # on-demand, light usage
     "aws.apigateway": 3.50,   # ~1M calls
+    "aws.stepfunctions": 2.50, # Standard workflow: $0.025/1K state transitions (~100K/month)
     "aws.vpc": 0.00,          # free (NAT GW extra)
+    "aws.logs": 2.53,         # CloudWatch Logs: ~5GB ingested ($0.50/GB) + ~1GB stored ($0.03/GB)
     "aws.secretsmanager": 0.40,  # $0.40 per secret per month
     "aws.kms": 1.00,             # $1.00 per customer-managed key per month
     "aws.eventbridge": 0.00,     # rules / custom buses are free; events billed per use
+    "aws.ssm": 0.05,          # Parameter Store advanced-tier parameter $0.05/mo (standard tier is free)
     # GCP
     "gcp.sql": 25.00,         # db-f1-micro 730h
     "gcp.functions": 0.20,    # minimal invocations
@@ -91,6 +98,10 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.apigateway": 3.00,   # ~1M calls
     "gcp.vpc": 0.00,
     "gcp.iam": 0.00,
+    "gcp.redis": 35.77,         # Basic tier $0.049/GB-hr × 1 GB × ~730 h (Standard doubles it)
+    "gcp.container": 73.00,     # $0.10/hr cluster management fee (~730 h); one zonal/Autopilot cluster per account is free
+    "gcp.iamcredentials": 0.03,  # per issued credential: the API itself is free; priced at the Cloud KMS software-key signing rate (~$0.03 per 10k ops) it replaces
+    "gcp.cloudscheduler": 0.10, # $0.10 per job per month (first 3 jobs per billing account free)
     "gcp.secretmanager": 0.06,  # $0.06 per active secret version per month
     "gcp.kms": 0.06,            # $0.06 per software key version per month
     "gcp.eventarc": 0.00,       # triggers are free; events billed per use
@@ -106,6 +117,12 @@ SERVICE_MONTHLY: dict[str, float] = {
     "azure.eventgrid": 0.60,  # ~1M events
     "azure.keyvault": 0.03,   # per 10K ops
     "azure.rbac": 0.00,
+    "azure.appconfiguration": 36.50,  # Standard tier: $1.20 per store per day (~30.4 days/month); requests included to 200K/day
+    "azure.cognitiveservices": 1.00,  # S0 pay-as-you-go: ~1K transactions/month (~$1 per 1K text records / transactions); F0 is free
+    "azure.operationalinsights": 2.76,  # Log Analytics PerGB2018: $2.76/GB ingested beyond the 5 GB/month free allowance; modelled at ~1 GB/month
+    "azure.dns": 0.50,        # Azure DNS: $0.50 per hosted zone per month (first 25 zones; $0.10 beyond) + $0.40 per million queries
+    "azure.monitor": 0.10,    # metric alert rule: $0.10 per monitored time series per month (static threshold, 1 resource); action groups: first 1,000 emails/month free
+    "azure.app": 39.42,       # Container Apps Consumption: one always-on 0.5 vCPU / 1 GiB replica (~$0.000024/vCPU-s + $0.000003/GiB-s, ~2.63M s/month)
 }
 
 # ── Usage-based storage pricing (public list prices, USD) ────────────
@@ -174,6 +191,17 @@ def estimate_resource_cost(provider: str, service: str, kind: str,
     # Database instances — use DB hourly pricing
     if kind in ("db_instance", "database") and service in ("rds", "sql", "gcp_sql", "cloudsql"):
         rate = db_hourly_rate(provider, instance_type)
+        return {
+            "hourly_usd": round(rate, 4),
+            "monthly_usd": round(rate * HOURS_PER_MONTH, 2),
+            "uptime_cost_usd": round(rate * uptime_hours, 2),
+            "uptime_hours": uptime_hours,
+            "source": "on-demand",
+        }
+
+    # ELBv2 load balancers — per-hour pricing by load balancer type
+    if provider == "aws" and service == "elbv2":
+        rate = AWS_ELBV2_HOURLY.get(instance_type, 0.0225)
         return {
             "hourly_usd": round(rate, 4),
             "monthly_usd": round(rate * HOURS_PER_MONTH, 2),

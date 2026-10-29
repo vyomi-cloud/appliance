@@ -181,13 +181,13 @@ register_azure_routes(app, None)
 # ── Route module registration ────────────────────────────────────────
 from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
-from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb
-from routes import lazy_backends, shared, console_next
+from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2
+from routes import lazy_backends, shared, console_next, aws_logs
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
-            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb,
-            lazy_backends, shared, console_next]:
+            aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2,
+            lazy_backends, shared, console_next, aws_logs]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -2531,6 +2531,52 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(api, dict):
             add("aws", "apigateway", "api", api_id, api)
 
+    try:   # Systems Manager parameters — the shared wire/console store
+        from core.ssm_core import shared_store as _ssm_store
+        for _n in _ssm_store().parameters:
+            add("aws", "ssm", "parameter", _n, {"name": _n})
+    except Exception:
+        pass
+
+    try:   # Step Functions — the shared wire/console store (console + SDK/CLI created state machines)
+        from core.stepfunctions_core import shared_store as _sfn_store
+        for sm_name, sm in _sfn_store().machines.items():
+            add("aws", "stepfunctions", "state_machine", sm_name, {"name": sm_name, "created": sm["creationDate"]})
+    except Exception:
+        pass
+
+    try:   # Cloud Scheduler — the shared wire/console store (console + SDK/CLI created jobs)
+        from core.gcp_cloudscheduler_core import shared_store as _gcs_sched_store
+        for _jn, _job in _gcs_sched_store().jobs.items():
+            add("gcp", "cloudscheduler", "job", _jn.rsplit("/", 1)[-1],
+                {"name": _jn.rsplit("/", 1)[-1], "created": _job.get("userUpdateTime", "")})
+    except Exception:
+        pass
+
+    try:   # Memorystore for Redis — the shared wire/console store (console + SDK/CLI created instances)
+        from core.gcp_redis_core import shared_store as _redis_store
+        for _rn, _ri in _redis_store().instances.items():
+            add("gcp", "redis", "instance", _rn.rsplit("/", 1)[-1],
+                {"name": _rn.rsplit("/", 1)[-1], "created": _ri.get("createTime", "")})
+    except Exception:
+        pass
+
+    try:   # Kubernetes Engine — the shared wire/console store (console + SDK/CLI created clusters)
+        from core.gcp_container_core import shared_store as _gke_store
+        for _cn, _cl in _gke_store().clusters.items():
+            add("gcp", "container", "cluster", _cn.rsplit("/", 1)[-1],
+                {"name": _cn.rsplit("/", 1)[-1], "created": _cl.get("createTime", "")})
+    except Exception:
+        pass
+
+    try:   # IAM Credentials — the shared wire/console issue log (never the secrets)
+        from core.gcp_iamcredentials_core import shared_store as _iamc_store
+        for _cid, _cr in _iamc_store().issued.items():
+            add("gcp", "iamcredentials", "credential", _cid,
+                {"name": _cid, "created": _cr.get("issueTime", "")})
+    except Exception:
+        pass
+
     aws_lambda = _cloudsim_service_state(space, "lambda")
     for fn_name, fn in aws_lambda.get("functions", {}).items():
         if isinstance(fn, dict):
@@ -2541,10 +2587,22 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(queue, dict):
             add("aws", "sqs", "queue", queue_name, queue)
 
+    aws_elbv2 = _cloudsim_service_state(space, "elbv2")
+    for lb_arn, lb in aws_elbv2.get("load_balancers", {}).items():
+        if isinstance(lb, dict):
+            add("aws", "elbv2", "load_balancer", lb.get("LoadBalancerName", lb_arn),
+                {**lb, "name": lb.get("LoadBalancerName", lb_arn), "instance_type": lb.get("Type", "application"),
+                 "state": (lb.get("State") or {}).get("Code", "active"), "created": lb.get("CreatedTime", "")})
+
     aws_ddb = _cloudsim_service_state(space, "dynamodb")
     for table_name, table in aws_ddb.get("tables", {}).items():
         if isinstance(table, dict):
             add("aws", "dynamodb", "table", table_name, table)
+
+    aws_logs = _cloudsim_service_state(space, "logs")
+    for group_name, group in aws_logs.get("log_groups", {}).items():
+        if isinstance(group, dict):
+            add("aws", "logs", "log_group", group_name, group)
 
     gcp_compute = _cloudsim_service_state(space, "gcp_compute")
     for instance_id, instance in gcp_compute.get("instances", {}).items():
@@ -21337,6 +21395,9 @@ def _aws_query_target_service(request: Request) -> str:
     # EventBridge uses AWSEvents.* targets.
     if target.startswith("AWSEvents."):
         return "events"
+    # Systems Manager uses AmazonSSM.* targets.
+    if target.startswith("AmazonSSM."):
+        return "ssm"
     return ""
 
 
@@ -21511,6 +21572,24 @@ _EC2_VPC_ACTIONS = {
 }
 
 
+def _ssm_usage(target: str, payload: dict, resp) -> None:
+    """Mirror SDK/CLI Parameter Store writes into the CloudSim resource table + usage
+    meter, exactly as console-created parameters are (so counts/cost-savings agree)."""
+    try:
+        op = target.rsplit(".", 1)[-1]
+        if resp.status >= 300:
+            return
+        if op == "PutParameter":
+            _cloudsim_sync_service_resource("aws", "ssm", "parameter", payload["Name"], {"name": payload["Name"]}, None)
+            _record_usage("ssm.put_parameter", {"name": payload["Name"]})
+        elif op in ("DeleteParameter", "DeleteParameters"):
+            for n in ([payload.get("Name")] if op == "DeleteParameter" else payload.get("Names") or []):
+                _cloudsim_sync_service_resource("aws", "ssm", "parameter", n, {}, None, action="delete")
+                _record_usage("ssm.delete_parameter", {"name": n})
+    except Exception:
+        pass
+
+
 async def aws_query_root(request: Request) -> Response:
     """Root dispatch for real AWS SDK/CLI query + JSON protocol requests."""
     service = _aws_query_target_service(request)
@@ -21531,6 +21610,17 @@ async def aws_query_root(request: Request) -> Response:
         return await api_iam_query(request)
     if service == "sts":
         return await api_sts_query(request)
+    if service == "ssm":
+        # Systems Manager: in-process engine (core/ssm_core.py) shared with the console REST.
+        from core import ssm_core as _ssm_core
+        try:
+            _payload = json.loads(await request.body() or b"{}")
+        except Exception:
+            _payload = {}
+        _r = _ssm_core.dispatch(_ssm_core.shared_store(), request.headers.get("x-amz-target", ""), _payload)
+        _ssm_usage(request.headers.get("x-amz-target", ""), _payload, _r)
+        return Response(content=json.dumps(_r.body), status_code=_r.status,
+                        media_type="application/x-amz-json-1.1", headers=dict(_r.headers or {}))
     if service in ("kms", "secretsmanager", "events"):
         # Backend-backed services. The X-Amz-Target prefix maps to one of the
         # dispatchers registered in _aws_xamz_dispatchers by vault_routes /
@@ -23188,6 +23278,125 @@ _UNIFIED_INGRESS = os.environ.get("VYOMI_UNIFIED_INGRESS", "").strip().lower() i
 # we registered the @app.post("/{bucket}/{key:path}") catch-all up
 # top (as the file originally did), it swallowed POST /api/auth/...
 # with bucket=api, key=auth/... and returned a NoSuchBucket XML.
+# Systems Manager console REST (/api/ssm/*) — shares its store with the native AmazonSSM wire.
+try:
+    from providers import aws_ssm_console as _ssm_console
+
+    def _ssm_changed(action, name):
+        if action == "delete":
+            _cloudsim_sync_service_resource("aws", "ssm", "parameter", name, {}, None, action="delete")
+            _record_usage("ssm.delete_parameter", {"name": name})
+        else:
+            _cloudsim_sync_service_resource("aws", "ssm", "parameter", name, {"name": name}, None)
+            _record_usage("ssm.put_parameter", {"name": name})
+    _ssm_console.register(app, _ssm_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[ssm] console routes skipped: {_e}")
+# Step Functions console REST (/api/stepfunctions/*) — shares its store with the native JSON wire.
+try:
+    from providers import aws_stepfunctions_console as _sfn_console
+
+    def _sfn_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("aws", "stepfunctions", "state_machine", payload, {}, None, action="delete")
+            _record_usage("stepfunctions.delete_state_machine", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("aws", "stepfunctions", "state_machine", payload["name"],
+                                            {"name": payload["name"], "created": payload["created"]}, None)
+            _record_usage("stepfunctions.create_state_machine", {"name": payload["name"]})
+    _sfn_console.register(app, _sfn_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[stepfunctions] console routes skipped: {_e}")
+
+# Cloud Scheduler: native /v1/projects/*/locations/*/jobs wire + console REST (/api/gcp/cloudscheduler/*).
+try:
+    from providers import gcp_cloudscheduler_console as _gcs_sched_console
+
+    def _gcs_sched_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "cloudscheduler", "job", payload, {}, None, action="delete")
+            _record_usage("gcp.cloudscheduler.delete_job", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "cloudscheduler", "job", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("state", "ENABLED")}, None,
+                                            region=payload.get("region", "us-central1"))
+            _record_usage("gcp.cloudscheduler.create_job", {"name": payload["id"]})
+    _gcs_sched_console.register(app, _gcs_sched_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[cloudscheduler] routes skipped: {_e}")
+
+# Kubernetes Engine: native /v1/projects/*/locations/*/clusters wire + console REST (/api/gcp/container/*).
+try:
+    from providers import gcp_container_console as _gke_console
+
+    def _gke_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "container", "cluster", payload, {}, None, action="delete")
+            _record_usage("gcp.container.delete_cluster", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "container", "cluster", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("status", "RUNNING")}, None,
+                                            region=payload.get("region", "us-central1"))
+            _record_usage("gcp.container.create_cluster", {"name": payload["id"]})
+    _gke_console.register(app, _gke_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[container] routes skipped: {_e}")
+
+# Azure Container Apps: run each active revision on the Docker compute backend (Pro/Max); control plane only below.
+try:
+    from providers import azure_app_runtime as _azure_app_runtime
+    _azure_app_runtime.attach()
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-app] runtime skipped: {_e}")
+
+# Azure App Configuration data plane (/azure-data/appconfig/{store}/kv …); the ARM control plane is in azure_services.
+try:
+    from providers import azure_appconfiguration_routes as _azure_appconfig_routes
+    _azure_appconfig_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-appconfig] routes skipped: {_e}")
+
+# Azure DNS resolution (/azure-data/dns/query); the ARM control plane (dnsZones) is in azure_services.
+try:
+    from providers import azure_dns_routes as _azure_dns_routes
+    _azure_dns_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-dns] routes skipped: {_e}")
+
+# Memorystore for Redis: native /v1/projects/*/locations/*/instances wire + console REST (/api/gcp/redis/*).
+try:
+    from providers import gcp_redis_console as _redis_console
+
+    def _redis_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "redis", "instance", payload, {}, None, action="delete")
+            _record_usage("gcp.redis.delete_instance", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "redis", "instance", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("status", "READY")}, None,
+                                            region=payload.get("region", "us-central1"))
+            _record_usage("gcp.redis.create_instance", {"name": payload["id"]})
+    _redis_console.register(app, _redis_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[redis] routes skipped: {_e}")
+
+# IAM Service Account Credentials: native /v1/projects/-/serviceAccounts/{sa}:verb wire + console REST (/api/gcp/iamcredentials/*).
+try:
+    from providers import gcp_iamcredentials_console as _iamc_console
+
+    def _iamc_changed(action, payload):
+        if action == "delete":
+            _cloudsim_sync_service_resource("gcp", "iamcredentials", "credential", payload, {}, None, action="delete")
+            _record_usage("gcp.iamcredentials.delete_credential", {"name": payload})
+        else:
+            _cloudsim_sync_service_resource("gcp", "iamcredentials", "credential", payload["id"],
+                                            {"name": payload["id"], "state": payload.get("state", "ISSUED")}, None,
+                                            region="global")
+            _record_usage("gcp.iamcredentials.%s" % payload.get("method", "issue"), {"name": payload["id"]})
+    _iamc_console.register(app, _iamc_changed)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[iamcredentials] routes skipped: {_e}")
+
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)
     # on the DEFAULT path — targeted, additive routes for path prefixes that have no
