@@ -4,6 +4,35 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.29] — 2026-10-29
+
+New service release. **6 product fixes** (GCP 6); 4 reach Nano and 6 reach the offline appliance.
+
+### Highlights
+
+- **A GCP container registry is now available in Nano and offline.** You can `docker push` images to it and they show up in the simulator, and the console catalog's sub-blades now merge correctly.
+- **GCP cost savings now work in the console.** The cost-savings view works in both the offline appliance and Nano, including usage events and initial slot setup.
+- **GCP services speak the native v1 wire format, and the console has more coverage.** The new GCP service's engine and console catalog are wired into Nano and the offline appliance.
+- **Java and Go GCP SDKs work offline.** Integer enums and method overrides now come through correctly on the wire, and the gcloud CLI is smoke-tested against the simulator. `MODE_UNSPECIFIED` is now treated as standard.
+
+### New services
+
+- **GCP Artifact Registry**
+
+### Fixes — GCP
+
+- **[Nano + offline]** Rebase onto main; shared registry:2 container backend (docker push ingested into the engine); fix catalog sub-blades merge
+- **[Nano + offline]** Space cost-savings offline (usage events, slot init) and Nano (census); gate green
+- **[Nano + offline]** Console tests (offline + Nano), hourly suites, upstream watch, registry, manifest (ready)
+- **[offline]** Java and Go SDK test beds; int enums and method override on the wire
+- **[offline]** Gcloud CLI smoke; MODE_UNSPECIFIED means standard
+- **[Nano + offline]** Engine, native v1 wire, console catalog, Nano wiring
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.29`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.28] — 2026-10-29
 
 New service release. **7 product fixes** (AWS 7); 4 reach Nano and 6 reach the offline appliance; 3 test and harness improvements.
