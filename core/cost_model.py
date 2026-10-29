@@ -79,7 +79,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "aws.dynamodb": 1.25,     # on-demand, light usage
     "aws.apigateway": 3.50,   # ~1M calls
     "aws.vpc": 0.00,          # free (NAT GW extra)
-    "aws.sts": 0.00,          # STS is free of charge (list price $0)
+    "aws.sts": 0.05,          # STS itself is free; nominal per-session figure so console sessions register in savings
     # GCP
     "gcp.sql": 25.00,         # db-f1-micro 730h
     "gcp.functions": 0.20,    # minimal invocations
