@@ -69,6 +69,37 @@ const SECTIONS = {
     const perm = await tab("Permissions");
     check("ec2 Permissions: evaluated for this instance's ARN", perm.includes(`instance/${iid}`), perm);
   },
+  async s3() {
+    const name = "rt-" + Date.now().toString(36);
+    await call("POST", `/api/s3/buckets/${name}`, {});
+    await call("PUT", `/api/s3/buckets/${name}/config/cors`, { value: [{ id: "cors-" + name, allowed_methods: ["GET"], allowed_origins: ["https://x.example"] }] });
+    await openService("^s3$");
+    await openRow(name);
+    const enc = await tab("Default encryption");
+    check("s3 Default encryption: SSE-S3 from the backend", /SSE-S3/.test(enc), enc);
+    await tab("Lifecycle rules");
+    const inputs = page.locator("#main .kv-card").last().locator("input");
+    await inputs.nth(0).fill("expire-" + name);
+    await inputs.nth(2).fill("45");
+    await page.locator("#main button", { hasText: "Create rule" }).click();
+    await sleep(1500);
+    await tab("Versions");
+    const lc = await tab("Lifecycle rules");
+    check("s3 Lifecycle: rule created in the tab persists after reopening it", lc.includes("expire-" + name) && /45 days/.test(lc), lc);
+    check("s3 Lifecycle: backend has the rule", (await call("GET", `/api/s3/buckets/${name}/config/lifecycle`)).json.value[0]?.id === "expire-" + name);
+    const cors = await tab("Cross-origin resource sharing (CORS)");
+    check("s3 CORS: the bucket's rule", cors.includes("cors-" + name) && cors.includes("https://x.example"), cors);
+    await tab("Block Public Access");
+    await page.locator("#main input[data-pab=block_public_policy]").uncheck();
+    await page.locator("#main button", { hasText: "Save changes" }).click();
+    await sleep(1500);
+    await tab("Versions");
+    await tab("Block Public Access");
+    check("s3 Block Public Access: change persists after reopening the tab",
+      !(await page.locator("#main input[data-pab=block_public_policy]").isChecked()) && await page.locator("#main input[data-pab=block_public_acls]").isChecked());
+    const pol = await tab("Bucket Policy");
+    check("s3 Bucket Policy: names this bucket's ARN", pol.includes("arn:aws:s3:::" + name), pol);
+  },
 };
 
 let server;

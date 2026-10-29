@@ -87,7 +87,20 @@ def _bucket_view(name: str) -> dict:
     b = OBJ.buckets.get(name, {})
     ver = b.get("versioning", "Disabled")
     return {"name": name, "creation_date": b.get("creation_date", ""), "region": REGION,
-            "versioning": ver, "versioning_enabled": ver == "Enabled"}
+            "versioning": ver, "versioning_enabled": ver == "Enabled",
+            "arn": f"arn:aws:s3:::{name}", "access": DET.s3_access_summary(b), "tags": dict(b.get("tags") or {})}
+
+
+def s3_put_tagging(p: dict) -> dict:
+    """PutBucketTagging — the bucket's Tags tab saves its whole tag set."""
+    name = str(p.get("bucket") or "")
+    if name not in OBJ.buckets:
+        return _no_bucket(name)
+    tags = p.get("tags") or {}
+    if not isinstance(tags, dict) or len(tags) > 50:
+        return _det_err(DET.DetailError("InvalidTag", "A bucket can have up to 50 tags."))
+    OBJ.buckets[name]["tags"] = {str(k): str(v) for k, v in tags.items() if str(k)}
+    return {"ok": True, "name": name, "tags": OBJ.buckets[name]["tags"]}
 
 
 def s3_create_bucket(p: dict) -> dict:
@@ -126,6 +139,13 @@ def s3_set_versioning(p: dict) -> dict:
     status = str(p.get("status") or "Suspended")
     OBJ.buckets[name]["versioning"] = status if status in ("Enabled", "Suspended", "Disabled") else "Suspended"
     return {"ok": True, "status": OBJ.buckets[name]["versioning"]}
+
+
+def s3_get_versioning(p: dict) -> dict:
+    name = str(p.get("bucket") or p.get("name") or "")
+    if not OBJ.bucket_exists(name):
+        return _no_bucket(name)
+    return {"ok": True, "name": name, "versioning": OBJ.versioning_status(name)}
 
 
 def s3_list_objects(p: dict) -> dict:
@@ -783,3 +803,49 @@ def iam_principals() -> list:
 def resource_access(p):
     arn = str(p.get("arn") or "")
     return {"ok": True, "resource_arn": arn, "statements": DET.resource_access(iam_principals(), arn, str(p.get("service") or ""))}
+
+
+# ── S3 bucket detail tabs (core/aws_console_detail.py, same engine as offline) ──
+def _no_bucket(name):
+    return {"ok": False, "code": "NoSuchBucket",
+            "__http": {"status": 404, "body": {"detail": {"code": "NoSuchBucket", "message": "The specified bucket does not exist"}}}}
+
+
+def s3_bucket_config(p):
+    name = str(p.get("bucket") or "")
+    b = OBJ.buckets.get(name)
+    if b is None:
+        return _no_bucket(name)
+    kind, method = str(p.get("kind") or ""), p.get("method") or "GET"
+    try:
+        if method == "PUT":
+            DET.s3_put_bucket_config(b, name, kind, p.get("value"))
+        elif method == "DELETE":
+            if kind not in ("lifecycle", "cors", "policy"):
+                raise DET.DetailError("InvalidRequest", f"{kind} cannot be deleted.")
+            DET.s3_put_bucket_config(b, name, kind, [] if kind != "policy" else "")
+        return {"ok": True, "bucket": name, "kind": kind, "value": DET.s3_bucket_config(b, kind)}
+    except DET.DetailError as e:
+        return _det_err(e)
+
+
+def s3_list_versions(p):
+    name = str(p.get("bucket") or "")
+    if name not in OBJ.buckets:
+        return _no_bucket(name)
+    v = DET.s3_versions(OBJ.objects.get(name) or {}, str(p.get("prefix") or ""))
+    return {"ok": True, "bucket": name, "versions": v, "count": len(v)}
+
+
+def s3_notifications(p):
+    name = str(p.get("bucket") or "")
+    b = OBJ.buckets.get(name)
+    if b is None:
+        return _no_bucket(name)
+    try:
+        if p.get("method") == "PUT":
+            DET.s3_put_notifications(b, p.get("body") or {})
+    except DET.DetailError as e:
+        return _det_err(e)
+    n = {**DET.s3_notifications_default(), **(b.get("notifications") or {})}
+    return {"ok": True, "bucket": name, **n}

@@ -179,6 +179,14 @@ class Aws(CloudProvider):
             ("ec2", "GetSerialConsoleAccess"):  lambda b, a, p: A.ec2_serial_access(p),
             ("ec2", "ModifySerialConsoleAccess"): lambda b, a, p: A.ec2_serial_access(p),
             ("iam", "ResourceAccess"):          lambda b, a, p: A.resource_access(p),
+            ("s3", "PutBucketTagging"):         lambda b, a, p: A.s3_put_tagging(p),
+            ("s3", "GetVersioning"):           lambda b, a, p: A.s3_get_versioning(p),
+            ("s3", "GetBucketConfig"):         lambda b, a, p: A.s3_bucket_config(p),
+            ("s3", "PutBucketConfig"):          lambda b, a, p: A.s3_bucket_config(p),
+            ("s3", "DeleteBucketConfig"):       lambda b, a, p: A.s3_bucket_config(p),
+            ("s3", "ListObjectVersions"):       lambda b, a, p: A.s3_list_versions(p),
+            ("s3", "GetBucketNotification"):    lambda b, a, p: A.s3_notifications(p),
+            ("s3", "PutBucketNotification"):    lambda b, a, p: A.s3_notifications(p),
         }
 
 

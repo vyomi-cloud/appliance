@@ -79,7 +79,40 @@ def ec2():
     check("Activity: this instance's attribute/profile changes recorded", any(e["action"] == "ModifyInstanceAttribute" for e in ev), ev)
 
 
-SECTIONS = {"ec2": ec2}
+
+
+def s3():
+    print("── S3 bucket")
+    import base64
+    d("s3", "CreateBucket", {"name": "tabs-bkt"})
+    cfg = lambda k: d("s3", "GetBucketConfig", {"bucket": "tabs-bkt", "kind": k})["value"]
+    put = lambda k, v: d("s3", "PutBucketConfig", {"bucket": "tabs-bkt", "kind": k, "method": "PUT", "value": v})
+    check("new bucket: SSE-S3, Block Public Access on, owner enforced",
+          cfg("encryption")["sse_algorithm"] == "AES256" and all(cfg("public_access_block").values()) and cfg("ownership") == "BucketOwnerEnforced")
+    check("Lifecycle: rule saved", put("lifecycle", [{"id": "tmp", "prefix": "tmp/", "expiration_days": 7}]).get("ok") and cfg("lifecycle")[0]["expiration_days"] == 7)
+    check("Lifecycle: rule without an action rejected", put("lifecycle", [{"id": "x"}]).get("code") == "InvalidRequest")
+    check("CORS: rule saved", put("cors", [{"allowed_methods": "GET", "allowed_origins": "*"}]).get("ok") and cfg("cors")[0]["allowed_methods"] == ["GET"])
+    pub = {"Statement": [{"Effect": "Allow", "Principal": "*", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::tabs-bkt/*"}]}
+    check("Policy: public policy blocked while BlockPublicPolicy is on", put("policy", pub).get("code") == "AccessDenied")
+    put("public_access_block", {"block_public_acls": True, "ignore_public_acls": True, "block_public_policy": False, "restrict_public_buckets": False})
+    check("Policy: saved after Block Public Access allows it", put("policy", pub).get("ok") and "GetObject" in cfg("policy"))
+    row = next(b for b in d("s3", "ListBuckets")["buckets"] if b["name"] == "tabs-bkt")
+    check("bucket list Access = Public", row["access"] == "Public", row)
+    d("s3", "PutVersioning", {"bucket": "tabs-bkt", "status": "Enabled"})
+    check("Versioning: GET reads Enabled", d("s3", "GetVersioning", {"bucket": "tabs-bkt"})["versioning"] == "Enabled")
+    for body in (b"one", b"two"):
+        d("s3", "PutObject", {"bucket": "tabs-bkt", "key": "k.txt", "body_b64": base64.b64encode(body).decode()})
+    v = d("s3", "ListObjectVersions", {"bucket": "tabs-bkt"})["versions"]
+    check("Versions: both versions of k.txt", len(v) == 2 and v[0]["is_latest"] and not v[1]["is_latest"], v)
+    n = d("s3", "PutBucketNotification", {"bucket": "tabs-bkt", "method": "PUT", "body": {"rules": [
+        {"id": "n1", "events": ["s3:ObjectRemoved:*"], "destination_type": "TopicConfiguration", "destination": "arn:aws:sns:us-east-1:123456789012:t"}]}})
+    check("Notifications: topic configuration saved", d("s3", "GetBucketNotification", {"bucket": "tabs-bkt"})["topicConfigurations"][0]["id"] == "n1", n)
+    d("s3", "PutBucketTagging", {"bucket": "tabs-bkt", "tags": {"env": "dev"}})
+    check("Tags: on the bucket", d("s3", "GetBucket", {"bucket": "tabs-bkt"})["tags"] == {"env": "dev"})
+    ev = d("_events", "List", {"resource": "tabs-bkt", "provider": "aws"})["events"]
+    check("Activity: bucket configuration changes recorded", any(e["action"] == "PutBucketConfig" for e in ev), ev)
+
+SECTIONS = {"ec2": ec2, "s3": s3}
 
 if __name__ == "__main__":
     for k in sys.argv[1:] or list(SECTIONS):

@@ -488,8 +488,19 @@ async function route(method, path, body, query) {
     if (method === "POST") return { tuple: ["aws", "s3", "CreateBucket", body || {}] };
   }
   m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/versioning$/);
+  if (m && method === "GET") return { tuple: ["aws", "s3", "GetVersioning", { bucket: dec(m[1]) }] };
   if (m && (method === "PUT" || method === "POST"))
     return { tuple: ["aws", "s3", "PutVersioning", { bucket: dec(m[1]), status: (body && body.status) || "Enabled" }] };
+  // Bucket detail tabs: configuration (lifecycle/cors/encryption/public_access_block/
+  // policy/ownership), object versions, event notifications (core/aws_console_detail.py).
+  m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/config\/([a-z_]+)$/);
+  if (m) return { tuple: ["aws", "s3", { GET: "GetBucketConfig", PUT: "PutBucketConfig", DELETE: "DeleteBucketConfig" }[method] || "GetBucketConfig",
+                          { bucket: dec(m[1]), kind: m[2], method, value: (body || {}).value }] };
+  m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/versions$/);
+  if (m && method === "GET") return { tuple: ["aws", "s3", "ListObjectVersions", { bucket: dec(m[1]), prefix: (query && query.prefix) || "" }] };
+  m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/notifications?$/);
+  if (m && method === "GET") return { tuple: ["aws", "s3", "GetBucketNotification", { bucket: dec(m[1]) }] };
+  if (m && method === "PUT") return { tuple: ["aws", "s3", "PutBucketNotification", { bucket: dec(m[1]), method, body: body || {} }] };
   m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/objects\/?$/);
   if (m && method === "GET") return { tuple: ["aws", "s3", "ListObjects", { bucket: dec(m[1]) }] };
   // (POST upload to this path is multipart — handled in the fetch listener.)
@@ -498,6 +509,7 @@ async function route(method, path, body, query) {
   if (m && method === "DELETE") return { tuple: ["aws", "s3", "DeleteObject", { bucket: dec(m[1]), key: m[2] }] };
   m = path.match(/^\/api\/s3\/buckets\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "s3", "GetBucket", { bucket: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "s3", "PutBucketTagging", { bucket: dec(m[1]), tags: (body || {}).tags || {} }] };
   if (m && method === "DELETE") return { tuple: ["aws", "s3", "DeleteBucket", { bucket: dec(m[1]) }] };
   // Console-next creates a bucket with the name in the PATH (/api/s3/buckets/{bucket}),
   // not the collection path — route that POST to CreateBucket (was falling through → 501).

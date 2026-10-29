@@ -632,3 +632,307 @@ def resource_access(principals: list, resource_arn: str, service: str) -> list:
                             "policy_arn": pol.get("arn", ""), "effect": st.get("Effect", "Allow"),
                             "actions": ", ".join(hit), "resource": ", ".join(res)})
     return out
+
+
+# ── S3 bucket configuration (Properties / Permissions tabs) ──────────────────
+S3_NS = "http://s3.amazonaws.com/doc/2006-03-01/"
+S3_KINDS = ("lifecycle", "cors", "encryption", "public_access_block", "policy", "ownership")
+_STORAGE_CLASSES = {"STANDARD_IA": 30, "ONEZONE_IA": 30, "INTELLIGENT_TIERING": 0, "GLACIER_IR": 0,
+                    "GLACIER": 0, "DEEP_ARCHIVE": 0}
+_CORS_METHODS = {"GET", "PUT", "POST", "DELETE", "HEAD"}
+
+
+def _x(s) -> str:
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _int(v, field):
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        raise DetailError("InvalidArgument", f"{field} must be an integer.")
+    if n <= 0:
+        raise DetailError("InvalidArgument", f"'{field}' for the rule must be a positive integer.")
+    return n
+
+
+def _lifecycle_rule(r: dict, i: int) -> dict:
+    rid = str(r.get("id") or r.get("ID") or "").strip() or f"rule-{i + 1}"
+    if len(rid) > 255:
+        raise DetailError("InvalidArgument", "ID length should not exceed allowed limit of 255")
+    status = str(r.get("status") or "Enabled")
+    if status not in ("Enabled", "Disabled"):
+        raise DetailError("MalformedXML", "Rule Status must be Enabled or Disabled.")
+    out = {"id": rid, "status": status, "prefix": str(r.get("prefix") or "")}
+    if r.get("expiration_days") not in (None, ""):
+        out["expiration_days"] = _int(r["expiration_days"], "Days")
+    if r.get("noncurrent_expiration_days") not in (None, ""):
+        out["noncurrent_expiration_days"] = _int(r["noncurrent_expiration_days"], "NoncurrentDays")
+    if r.get("abort_incomplete_multipart_days") not in (None, ""):
+        out["abort_incomplete_multipart_days"] = _int(r["abort_incomplete_multipart_days"], "DaysAfterInitiation")
+    tr = []
+    for t in r.get("transitions") or []:
+        sc = str(t.get("storage_class") or "")
+        if sc not in _STORAGE_CLASSES:
+            raise DetailError("InvalidArgument", f"The storage class you specified is not valid: {sc}")
+        days = _int(t.get("days"), "Days")
+        if days < _STORAGE_CLASSES[sc]:
+            raise DetailError("InvalidArgument", f"'Days' in Transition action must be greater than or equal to "
+                              f"{_STORAGE_CLASSES[sc]} for storageClass '{sc}'")
+        tr.append({"days": days, "storage_class": sc})
+    if tr:
+        out["transitions"] = tr
+    if not any(k in out for k in ("expiration_days", "noncurrent_expiration_days", "abort_incomplete_multipart_days", "transitions")):
+        raise DetailError("InvalidRequest", "At least one action needs to be specified in a rule")
+    return out
+
+
+def _lifecycle_xml(rules: list) -> str:
+    parts = []
+    for r in rules:
+        x = f"<Rule><ID>{_x(r['id'])}</ID><Filter><Prefix>{_x(r['prefix'])}</Prefix></Filter><Status>{r['status']}</Status>"
+        for t in r.get("transitions", []):
+            x += f"<Transition><Days>{t['days']}</Days><StorageClass>{t['storage_class']}</StorageClass></Transition>"
+        if "expiration_days" in r:
+            x += f"<Expiration><Days>{r['expiration_days']}</Days></Expiration>"
+        if "noncurrent_expiration_days" in r:
+            x += (f"<NoncurrentVersionExpiration><NoncurrentDays>{r['noncurrent_expiration_days']}"
+                  "</NoncurrentDays></NoncurrentVersionExpiration>")
+        if "abort_incomplete_multipart_days" in r:
+            x += (f"<AbortIncompleteMultipartUpload><DaysAfterInitiation>{r['abort_incomplete_multipart_days']}"
+                  "</DaysAfterInitiation></AbortIncompleteMultipartUpload>")
+        parts.append(x + "</Rule>")
+    return f'<?xml version="1.0" encoding="UTF-8"?><LifecycleConfiguration xmlns="{S3_NS}">{"".join(parts)}</LifecycleConfiguration>'
+
+
+def _cors_rule(r: dict) -> dict:
+    def lst(v):
+        if isinstance(v, str):
+            v = v.split(",")
+        return [str(x).strip() for x in (v or []) if str(x).strip()]
+    methods = [m.upper() for m in lst(r.get("allowed_methods"))]
+    origins = lst(r.get("allowed_origins"))
+    if not methods or not origins:
+        raise DetailError("MalformedXML", "Each CORS rule needs at least one AllowedMethod and one AllowedOrigin.")
+    bad = [m for m in methods if m not in _CORS_METHODS]
+    if bad:
+        raise DetailError("InvalidRequest", f"Found unsupported HTTP method in CORS config. Unsupported method is {bad[0]}")
+    out = {"id": str(r.get("id") or ""), "allowed_methods": methods, "allowed_origins": origins,
+           "allowed_headers": lst(r.get("allowed_headers")), "expose_headers": lst(r.get("expose_headers"))}
+    if r.get("max_age_seconds") not in (None, ""):
+        out["max_age_seconds"] = _int(r["max_age_seconds"], "MaxAgeSeconds")
+    return out
+
+
+def _cors_xml(rules: list) -> str:
+    parts = []
+    for r in rules:
+        x = "<CORSRule>" + (f"<ID>{_x(r['id'])}</ID>" if r.get("id") else "")
+        x += "".join(f"<AllowedMethod>{m}</AllowedMethod>" for m in r["allowed_methods"])
+        x += "".join(f"<AllowedOrigin>{_x(o)}</AllowedOrigin>" for o in r["allowed_origins"])
+        x += "".join(f"<AllowedHeader>{_x(h)}</AllowedHeader>" for h in r["allowed_headers"])
+        x += "".join(f"<ExposeHeader>{_x(h)}</ExposeHeader>" for h in r["expose_headers"])
+        if "max_age_seconds" in r:
+            x += f"<MaxAgeSeconds>{r['max_age_seconds']}</MaxAgeSeconds>"
+        parts.append(x + "</CORSRule>")
+    return f'<?xml version="1.0" encoding="UTF-8"?><CORSConfiguration xmlns="{S3_NS}">{"".join(parts)}</CORSConfiguration>'
+
+
+def _xml_rules(xml: str, kind: str) -> list:
+    """Rules an SDK/CLI wrote over the native wire (XML), for the console view."""
+    import xml.etree.ElementTree as ET
+    try:
+        root = ET.fromstring(xml)
+    except ET.ParseError:
+        return []
+
+    def loc(el):
+        return el.tag.split("}")[-1]
+
+    def t(el, name):
+        for c in el.iter():
+            if loc(c) == name:
+                return (c.text or "").strip()
+        return ""
+
+    def all_(el, name):
+        return [(c.text or "").strip() for c in el if loc(c) == name]
+    out = []
+    for r in root:
+        if kind == "cors" and loc(r) == "CORSRule":
+            o = {"id": t(r, "ID"), "allowed_methods": all_(r, "AllowedMethod"), "allowed_origins": all_(r, "AllowedOrigin"),
+                 "allowed_headers": all_(r, "AllowedHeader"), "expose_headers": all_(r, "ExposeHeader")}
+            if t(r, "MaxAgeSeconds"):
+                o["max_age_seconds"] = int(t(r, "MaxAgeSeconds"))
+            out.append(o)
+        elif kind == "lifecycle" and loc(r) == "Rule":
+            o = {"id": t(r, "ID"), "status": t(r, "Status") or "Enabled", "prefix": t(r, "Prefix")}
+            for c in r:
+                if loc(c) == "Expiration" and t(c, "Days"):
+                    o["expiration_days"] = int(t(c, "Days"))
+                elif loc(c) == "NoncurrentVersionExpiration" and t(c, "NoncurrentDays"):
+                    o["noncurrent_expiration_days"] = int(t(c, "NoncurrentDays"))
+                elif loc(c) == "AbortIncompleteMultipartUpload" and t(c, "DaysAfterInitiation"):
+                    o["abort_incomplete_multipart_days"] = int(t(c, "DaysAfterInitiation"))
+                elif loc(c) == "Transition" and t(c, "Days"):
+                    o.setdefault("transitions", []).append({"days": int(t(c, "Days")), "storage_class": t(c, "StorageClass")})
+            out.append(o)
+    return out
+
+
+def _is_public_policy(doc: dict) -> bool:
+    for st in _as_list(doc.get("Statement")):
+        if not isinstance(st, dict) or st.get("Effect") != "Allow" or st.get("Condition"):
+            continue
+        pr = st.get("Principal")
+        if pr == "*" or (isinstance(pr, dict) and "*" in _as_list(pr.get("AWS"))):
+            return True
+    return False
+
+
+def s3_bucket_config(bucket: dict, kind: str):
+    """GetBucket{Lifecycle,Cors,Encryption,PublicAccessBlock,Policy,OwnershipControls}.
+    Buckets that never had one set get what S3 gives every new bucket since 2023:
+    SSE-S3 default encryption, all four Block Public Access settings on, Object
+    Ownership "Bucket owner enforced"; no lifecycle, CORS or policy."""
+    if kind == "lifecycle":
+        rules = bucket.get("lifecycle_rules")
+        if rules is None and bucket.get("lifecycle"):
+            rules = _xml_rules(bucket["lifecycle"], "lifecycle")
+        return rules or []
+    if kind == "cors":
+        rules = bucket.get("cors_rules")
+        if rules is None and bucket.get("cors"):
+            rules = _xml_rules(bucket["cors"], "cors")
+        return rules or []
+    if kind == "encryption":
+        return dict(bucket.get("encryption_config") or {"sse_algorithm": "AES256", "kms_master_key_id": "", "bucket_key_enabled": False})
+    if kind == "public_access_block":
+        return dict(bucket.get("public_access_block") or {"block_public_acls": True, "ignore_public_acls": True,
+                                                          "block_public_policy": True, "restrict_public_buckets": True})
+    if kind == "policy":
+        return bucket.get("policy") or ""
+    if kind == "ownership":
+        return bucket.get("object_ownership") or "BucketOwnerEnforced"
+    raise DetailError("InvalidRequest", f"Unknown bucket configuration '{kind}'.")
+
+
+def s3_put_bucket_config(bucket: dict, name: str, kind: str, value):
+    """PutBucket* with S3's validation. Lifecycle/CORS also keep the native-wire XML
+    so an SDK GetBucketCors / GetBucketLifecycleConfiguration returns the same rules."""
+    import json
+    if kind == "lifecycle":
+        rules = [_lifecycle_rule(r, i) for i, r in enumerate(value or [])]
+        ids = [r["id"] for r in rules]
+        if len(ids) != len(set(ids)):
+            raise DetailError("InvalidArgument", "Rule ID must be unique. Found same ID for more than one rule")
+        bucket["lifecycle_rules"] = rules
+        bucket["lifecycle"] = _lifecycle_xml(rules) if rules else ""
+        return rules
+    if kind == "cors":
+        rules = [_cors_rule(r) for r in (value or [])]
+        if len(rules) > 100:
+            raise DetailError("InvalidRequest", "The number of CORS rules should not exceed allowed limit of 100 rules.")
+        bucket["cors_rules"] = rules
+        bucket["cors"] = _cors_xml(rules) if rules else ""
+        return rules
+    if kind == "encryption":
+        v = dict(value or {})
+        alg = str(v.get("sse_algorithm") or "AES256")
+        if alg not in ("AES256", "aws:kms", "aws:kms:dsse"):
+            raise DetailError("MalformedXML", f"Unsupported SSEAlgorithm: {alg}")
+        key = str(v.get("kms_master_key_id") or "") if alg != "AES256" else ""
+        bucket["encryption_config"] = {"sse_algorithm": alg, "kms_master_key_id": key,
+                                       "bucket_key_enabled": v.get("bucket_key_enabled") in _TRUE}
+        return bucket["encryption_config"]
+    if kind == "public_access_block":
+        v = dict(value or {})
+        bucket["public_access_block"] = {k: v.get(k) in _TRUE for k in
+                                         ("block_public_acls", "ignore_public_acls", "block_public_policy", "restrict_public_buckets")}
+        return bucket["public_access_block"]
+    if kind == "policy":
+        if not value:
+            bucket["policy"] = ""
+            return ""
+        try:
+            doc = json.loads(value) if isinstance(value, str) else dict(value)
+        except (ValueError, TypeError):
+            raise DetailError("MalformedPolicy", "Policies must be valid JSON and the first byte must be '{'")
+        sts = _as_list(doc.get("Statement"))
+        if not sts:
+            raise DetailError("MalformedPolicy", "Missing required field Statement")
+        arn = f"arn:aws:s3:::{name}"
+        for st in sts:
+            if not isinstance(st, dict) or st.get("Effect") not in ("Allow", "Deny"):
+                raise DetailError("MalformedPolicy", "Invalid effect")
+            if "Principal" not in st and "NotPrincipal" not in st:
+                raise DetailError("MalformedPolicy", "Missing required field Principal")
+            for res in _as_list(st.get("Resource")):
+                if not (str(res) == arn or str(res).startswith(arn + "/")):
+                    raise DetailError("MalformedPolicy", "Policy has invalid resource")
+        if _is_public_policy(doc) and s3_bucket_config(bucket, "public_access_block").get("block_public_policy"):
+            raise DetailError("AccessDenied", "User is not authorized to perform s3:PutBucketPolicy because public "
+                              "policies are blocked by the BlockPublicPolicy block public access setting.", 403)
+        bucket["policy"] = json.dumps(doc, indent=2)
+        return bucket["policy"]
+    if kind == "ownership":
+        if value not in ("BucketOwnerEnforced", "BucketOwnerPreferred", "ObjectWriter"):
+            raise DetailError("MalformedXML", "ObjectOwnership must be BucketOwnerEnforced, BucketOwnerPreferred or ObjectWriter.")
+        bucket["object_ownership"] = value
+        return value
+    raise DetailError("InvalidRequest", f"Unknown bucket configuration '{kind}'.")
+
+
+def s3_versions(objects: dict, prefix: str = "") -> list:
+    """ListObjectVersions over the {key: {versions:[…]}} map both substrates keep."""
+    out = []
+    for key in sorted(objects or {}):
+        if prefix and not key.startswith(prefix):
+            continue
+        entry = objects[key] if isinstance(objects[key], dict) else {}
+        for i, v in enumerate(entry.get("versions") or []):
+            out.append({"key": key, "version_id": v.get("version_id") or "null", "is_latest": i == 0,
+                        "is_delete_marker": bool(v.get("is_delete_marker")), "last_modified": v.get("last_modified", ""),
+                        "size": v.get("size", 0), "storage_class": v.get("storage_class", "STANDARD"),
+                        "etag": v.get("etag", "")})
+    return out
+
+
+def s3_notifications_default() -> dict:
+    return {"eventBridgeEnabled": False, "topicConfigurations": [], "queueConfigurations": [],
+            "cloudFunctionConfigurations": []}
+
+
+def s3_put_notifications(bucket: dict, payload: dict) -> dict:
+    """PutBucketNotificationConfiguration in the shape the offline appliance keeps
+    (queue / topic / Lambda configurations + EventBridge)."""
+    notif = s3_notifications_default()
+    notif["eventBridgeEnabled"] = (payload or {}).get("event_bridge_enabled") in _TRUE
+    key = {"QueueConfiguration": ("queueConfigurations", "queue"),
+           "CloudFunctionConfiguration": ("cloudFunctionConfigurations", "cloudFunction"),
+           "TopicConfiguration": ("topicConfigurations", "topic")}
+    for i, r in enumerate((payload or {}).get("rules") or []):
+        events = [e.strip() for e in (r.get("events") or []) if e and e.strip()]
+        dest = str(r.get("destination") or "").strip()
+        if not events or not dest:
+            raise DetailError("InvalidArgument", "A notification configuration needs at least one event and a destination ARN.")
+        coll, field = key.get(r.get("destination_type") or "", key["TopicConfiguration"])
+        notif[coll].append({"id": str(r.get("id") or "").strip() or f"notification-{i + 1}", "events": events,
+                            "prefix": str(r.get("prefix") or ""), "suffix": str(r.get("suffix") or ""), field: dest})
+    notif["updatedAt"] = _now()
+    bucket["notifications"] = {**(bucket.get("notifications") or {}), **notif}
+    return bucket["notifications"]
+
+
+def s3_access_summary(bucket: dict) -> str:
+    """The bucket list's "Access" column: public only with a public bucket policy
+    that Block Public Access does not restrict."""
+    import json
+    pol = bucket.get("policy")
+    if pol and not s3_bucket_config(bucket, "public_access_block").get("restrict_public_buckets"):
+        try:
+            if _is_public_policy(json.loads(pol)):
+                return "Public"
+        except ValueError:
+            pass
+    return "Bucket and objects not public"

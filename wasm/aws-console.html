@@ -2787,6 +2787,11 @@ SUB_RENDERERS.listtable = function(svc, full, host, tab){
 SUB_RENDERERS.properties = async function(svc, full, host){
   // EC2: every property DescribeInstances returns for the instance, not just the grid row.
   if (svc.key === "ec2") { const r = await api("GET", _ec2p(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
+  // S3: the bucket overview plus its default encryption and Object Ownership.
+  if (svc.key === "s3") {
+    const [e, o] = await Promise.all([api("GET", _s3p(full, "config/encryption")), api("GET", _s3p(full, "config/ownership"))]);
+    full = {...full, default_encryption: e.ok ? e.json.value : undefined, object_ownership: o.ok ? o.json.value : undefined};
+  }
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "All properties"));
   const grid = el("div",{style:"display:grid;grid-template-columns:280px 1fr;gap:4px 12px;font-size:12.5px"});
@@ -3188,38 +3193,6 @@ SUB_RENDERERS.bucketobjects = function(svc, full, host){
     host.append(tbl);
   });
 };
-SUB_RENDERERS.bucketversioning = function(svc, full, host){
-  const enabled = !!full.versioning_enabled || full.versioning === "Enabled";
-  host.append(el("div",{class:"alert info"}, icon("history_edu"),
-    el("div",{}, "Versioning preserves an object's full history (including delete markers).")));
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Bucket Versioning"));
-  card.append(el("div",{class:"kv-grid"},
-    el("div",{}, el("div",{class:"k"}, "Status"), el("div",{class:"v"}, enabled ? "Enabled" : "Suspended"))));
-  card.append(el("div",{style:"margin-top:14px"},
-    el("button",{class:"btn primary",onclick:async()=>{
-      const r = await api(svc.api_paths.versioning.method,
-        fillPath(svc.api_paths.versioning.path, {name: full.name}),
-        {status: enabled ? "Suspended" : "Enabled"});
-      if (r.ok) toast("Versioning "+(enabled?"suspended":"enabled")); else toast("Update failed","err");
-    }}, enabled ? "Suspend versioning" : "Enable versioning")));
-  host.append(card);
-};
-SUB_RENDERERS.bucketnotifications = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("notifications"),
-    el("div",{}, "Notify EventBridge, SNS, SQS, or Lambda on object events.")));
-  // FUNCTIONAL: create/list/delete notification configurations, persisted via the
-  // generic sub-resource store (durable across reload + cross-tab).
-  renderSubResourceTab(svc, full, host, {key:"notifications", type:"bucketnotifications", icon:"notifications"}, {
-    kind:"list", title:"Event notifications", singular:"notification",
-    fields:[{k:"name",label:"Name",ph:"on-object-created"},
-            {k:"destination_type",label:"Destination type",ph:"SQS | SNS | Lambda | EventBridge"},
-            {k:"destination_arn",label:"Destination ARN",ph:"arn:aws:sqs:…"},
-            {k:"events",label:"Events",ph:"s3:ObjectCreated:*"}],
-    columns:[["name","Name"],["destination_type","Destination"],["events","Events"],["status","Status"]],
-  });
-};
-
 // Lambda specific
 SUB_RENDERERS.lambdacode = function(svc, full, host){
   host.append(el("div",{class:"alert info"}, icon("code"),
@@ -3712,24 +3685,6 @@ const SUBRES_CATALOG = {
   "iam:accessAdvisor": {kind:"settings", title:"Access Analyzer",
     fields:[{k:"analyzer_enabled",label:"Enable analyzer",type:"toggle",default:false},
             {k:"analyzer_name",label:"Analyzer name",ph:"default-analyzer"}]},
-  // ── S3 ──
-  "s3:lifecycle": {kind:"list", title:"Lifecycle rules", singular:"rule",
-    fields:[{k:"name",label:"Rule name",ph:"expire-logs"},{k:"prefix",label:"Prefix",ph:"logs/"},
-            {k:"expiration_days",label:"Expire after (days)",ph:"90"}],
-    columns:[["name","Rule"],["prefix","Prefix"],["expiration_days","Expire (days)"],["status","Status"]]},
-  "s3:encryption": {kind:"settings", title:"Default encryption",
-    fields:[{k:"sse_algorithm",label:"Encryption type",type:"select",options:["AES256","aws:kms"]},
-            {k:"kms_key_id",label:"KMS key (if aws:kms)",ph:"alias/aws/s3"},
-            {k:"bucket_key_enabled",label:"Bucket key",type:"toggle",default:true}]},
-  "s3:blockPublic": {kind:"settings", title:"Block Public Access",
-    fields:[{k:"block_public_acls",label:"Block public ACLs",type:"toggle",default:true},
-            {k:"ignore_public_acls",label:"Ignore public ACLs",type:"toggle",default:true},
-            {k:"block_public_policy",label:"Block public bucket policies",type:"toggle",default:true},
-            {k:"restrict_public_buckets",label:"Restrict public buckets",type:"toggle",default:true}]},
-  "s3:cors": {kind:"list", title:"Cross-origin resource sharing (CORS)", singular:"rule",
-    fields:[{k:"name",label:"Rule ID",ph:"allow-get"},{k:"allowed_origins",label:"Allowed origins",ph:"*"},
-            {k:"allowed_methods",label:"Allowed methods",ph:"GET,PUT"}],
-    columns:[["name","Rule"],["allowed_origins","Origins"],["allowed_methods","Methods"]]},
   // ── VPC ──
   "vpc:natGateways": {kind:"list", title:"NAT gateways", singular:"NAT gateway",
     fields:[{k:"name",label:"Name",ph:"nat-1"},{k:"subnet_id",label:"Subnet",ph:"subnet-abc"}],
@@ -3744,10 +3699,6 @@ const SUBRES_CATALOG = {
     fields:[{k:"name",label:"Name",ph:"flow-1"},{k:"destination",label:"Destination",ph:"cloud-watch-logs"},
             {k:"traffic_type",label:"Traffic type",ph:"ALL"}],
     columns:[["name","Name"],["destination","Destination"],["traffic_type","Traffic"],["status","Status"]]},
-  // ── S3 (versions) ──
-  "s3:versions": {kind:"list", title:"Object versions", singular:"version",
-    fields:[{k:"name",label:"Version ID",ph:"v1"},{k:"key",label:"Object key",ph:"file.txt"}],
-    columns:[["name","Version ID"],["key","Object key"],["status","Status"]]},
   // ── SQS (purge = a single toggle-style confirmation setting) ──
   "sqs:purge": {kind:"settings", title:"Purge messages",
     fields:[{k:"confirm_purge",label:"Mark queue for purge",type:"toggle",default:false}]},
@@ -4257,6 +4208,170 @@ SUB_RENDERERS.ec2serial = async function(svc, full, host){
   card.append(el("div",{class:"h"}, "Console output", el("span",{class:"small",style:"margin-left:8px;color:var(--sub);font-weight:400"}, out.timestamp || "")));
   card.append(out.output ? el("pre",{class:"json","data-testid":"ec2-console-output"}, out.output)
     : el("div",{class:"empty"}, "No console output has been recorded for " + (full.instance_id || "this instance") + "."));
+  host.append(card);
+};
+
+// ── S3 bucket tabs: versions, versioning, notifications, lifecycle, encryption,
+//    Block Public Access, bucket policy, CORS (GET/PUT /api/s3/buckets/{b}/config/{kind}).
+function _s3p(full, tail){ return "/api/s3/buckets/" + encodeURIComponent(full.name || "") + "/" + tail; }
+async function _s3put(full, kind, value, okMsg){
+  const r = await api("PUT", _s3p(full, "config/" + kind), {value});
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Save failed: " + _derr(r), "err"); return false;
+}
+function _field(label, input){ return el("div",{class:"field"}, el("label",{}, label), input); }
+function _csv(v){ return String(v || "").split(",").map(s => s.trim()).filter(Boolean); }
+
+SUB_RENDERERS.s3versions = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "versions")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Object versions (" + (j.versions || []).length + ")"));
+  card.append(_dtbl([["key","Name",1],["version_id","Version ID",1],[r => r.is_latest ? "Yes" : "No","Latest"],
+    [r => r.is_delete_marker ? "Delete marker" : "Object","Type"],["last_modified","Last modified"],["size","Size (bytes)"],["storage_class","Storage class"]],
+    j.versions || [], "No objects in " + full.name + " yet, so there are no versions."));
+  host.append(card);
+};
+
+SUB_RENDERERS.bucketversioning = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "versioning")); if (!j) return;
+  const st = j.versioning || j.status || "Disabled";
+  const on = st === "Enabled";
+  host.append(_dkv("Bucket Versioning", [["Bucket", full.name, 1], ["Bucket Versioning", st === "Disabled" ? "Disabled" : st]],
+    el("button",{class:"btn primary",style:"margin-left:auto",onclick:async()=>{
+      const r = await api("PUT", _s3p(full, "versioning"), {status: on ? "Suspended" : "Enabled"});
+      if (r.ok) { toast("Versioning " + (on ? "suspended" : "enabled")); _rerender(); } else toast("Update failed: " + _derr(r), "err");
+    }}, on ? "Suspend" : "Enable")));
+};
+
+SUB_RENDERERS.bucketnotifications = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "notifications")); if (!j) return;
+  const rows = [];
+  (j.queueConfigurations||[]).forEach(c => rows.push({...c, destination_type:"QueueConfiguration", type:"SQS queue", destination:c.queue}));
+  (j.topicConfigurations||[]).forEach(c => rows.push({...c, destination_type:"TopicConfiguration", type:"SNS topic", destination:c.topic}));
+  (j.cloudFunctionConfigurations||[]).forEach(c => rows.push({...c, destination_type:"CloudFunctionConfiguration", type:"Lambda function", destination:c.cloudFunction}));
+  const save = async (list, eb) => {
+    const r = await api("PUT", _s3p(full, "notifications"), {event_bridge_enabled: eb,
+      rules: list.map(x => ({id:x.id, events:x.events, prefix:x.prefix, suffix:x.suffix, destination_type:x.destination_type, destination:x.destination}))});
+    if (r.ok) { toast("Event notifications saved"); _rerender(); } else toast("Save failed: " + _derr(r), "err");
+  };
+  host.append(_dkv("Amazon EventBridge", [["Send notifications to Amazon EventBridge for all events in this bucket", j.eventBridgeEnabled ? "On" : "Off"]],
+    el("button",{class:"btn",style:"margin-left:auto",onclick:()=>save(rows, !j.eventBridgeEnabled)}, j.eventBridgeEnabled ? "Turn off" : "Turn on")));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Event notifications (" + rows.length + ")"));
+  card.append(_dtbl([["id","Name"],[r => (r.events||[]).join(", "),"Event types"],[r => [r.prefix && "prefix " + r.prefix, r.suffix && "suffix " + r.suffix].filter(Boolean).join(", ") || "All objects","Filters"],
+    ["type","Destination type"],["destination","Destination",1],
+    [r => el("button",{class:"btn",onclick:()=>save(rows.filter(x => x !== r), j.eventBridgeEnabled)}, "Delete"),"Actions"]], rows,
+    "No event notifications are configured for " + full.name + "."));
+  const f = {id:el("input",{placeholder:"on-upload"}), events:el("input",{value:"s3:ObjectCreated:*"}), prefix:el("input",{}), suffix:el("input",{}),
+    type:el("select",{}, el("option",{value:"QueueConfiguration"}, "SQS queue"), el("option",{value:"TopicConfiguration"}, "SNS topic"),
+      el("option",{value:"CloudFunctionConfiguration"}, "Lambda function")), dest:el("input",{placeholder:"arn:aws:sqs:" + REGION + ":" + ACCOUNT + ":my-queue"})};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Create event notification"),
+    _field("Event name", f.id), _field("Event types (comma-separated)", f.events), _field("Prefix", f.prefix), _field("Suffix", f.suffix),
+    _field("Destination", f.type), _field("Destination ARN", f.dest),
+    el("button",{class:"btn primary",onclick:()=>save([...rows, {id:f.id.value, events:_csv(f.events.value), prefix:f.prefix.value, suffix:f.suffix.value,
+      destination_type:f.type.value, destination:f.dest.value}], j.eventBridgeEnabled)}, icon("add"), "Save changes"));
+  host.append(card);
+};
+
+SUB_RENDERERS.s3lifecycle = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "config/lifecycle")); if (!j) return;
+  const rules = j.value || [];
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Lifecycle rules (" + rules.length + ")"));
+  card.append(_dtbl([["id","Lifecycle rule name"],["status","Status"],[r => r.prefix || "Entire bucket","Scope"],
+    [r => (r.transitions||[]).map(t => t.storage_class + " after " + t.days + " days").join("; ") || "None","Transitions"],
+    [r => r.expiration_days ? "Expire after " + r.expiration_days + " days" : "None","Expiration"],
+    [r => r.noncurrent_expiration_days ? r.noncurrent_expiration_days + " days" : "None","Noncurrent versions expire"],
+    [r => el("button",{class:"btn",onclick:()=>_s3put(full, "lifecycle", rules.filter(x => x !== r), "Lifecycle rule deleted")}, "Delete"),"Actions"]],
+    rules, "There are no lifecycle rules for " + full.name + "."));
+  const f = {id:el("input",{placeholder:"expire-logs"}), prefix:el("input",{placeholder:"logs/"}), exp:el("input",{type:"number",min:"1"}),
+    tdays:el("input",{type:"number",min:"1"}), tclass:el("select",{}, ...["STANDARD_IA","ONEZONE_IA","INTELLIGENT_TIERING","GLACIER_IR","GLACIER","DEEP_ARCHIVE"].map(c => el("option",{value:c}, c))),
+    nc:el("input",{type:"number",min:"1"})};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Create lifecycle rule"),
+    _field("Lifecycle rule name", f.id), _field("Prefix (empty = entire bucket)", f.prefix), _field("Expire current versions after (days)", f.exp),
+    _field("Transition after (days)", f.tdays), _field("Transition to storage class", f.tclass), _field("Permanently delete noncurrent versions after (days)", f.nc),
+    el("button",{class:"btn primary",onclick:()=>{
+      const r = {id:f.id.value, status:"Enabled", prefix:f.prefix.value};
+      if (f.exp.value) r.expiration_days = f.exp.value;
+      if (f.nc.value) r.noncurrent_expiration_days = f.nc.value;
+      if (f.tdays.value) r.transitions = [{days:f.tdays.value, storage_class:f.tclass.value}];
+      _s3put(full, "lifecycle", [...rules, r], "Lifecycle rule created");
+    }}, icon("add"), "Create rule"));
+  host.append(card);
+};
+
+SUB_RENDERERS.s3encryption = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "config/encryption")); if (!j) return;
+  const v = j.value || {};
+  const label = {"AES256":"Server-side encryption with Amazon S3 managed keys (SSE-S3)","aws:kms":"Server-side encryption with AWS KMS keys (SSE-KMS)",
+                 "aws:kms:dsse":"Dual-layer server-side encryption with AWS KMS keys (DSSE-KMS)"};
+  host.append(_dkv("Default encryption", [["Encryption type", label[v.sse_algorithm] || v.sse_algorithm],
+    ["Bucket Key", v.bucket_key_enabled ? "Enabled" : "Disabled"], ...(v.kms_master_key_id ? [["AWS KMS key ARN", v.kms_master_key_id, 1]] : [])]));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Edit default encryption"));
+  const alg = el("select",{}, ...Object.keys(label).map(k => el("option",{value:k}, label[k]))); alg.value = v.sse_algorithm || "AES256";
+  const key = el("input",{placeholder:"arn:aws:kms:" + REGION + ":" + ACCOUNT + ":key/…", value: v.kms_master_key_id || ""});
+  const bk = el("input",{type:"checkbox"}); if (v.bucket_key_enabled) bk.checked = true;
+  card.append(_field("Encryption type", alg), _field("AWS KMS key (SSE-KMS / DSSE-KMS)", key),
+    el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, bk, el("span",{}, "Bucket Key")),
+    el("button",{class:"btn primary",onclick:()=>_s3put(full, "encryption", {sse_algorithm:alg.value, kms_master_key_id:key.value, bucket_key_enabled:bk.checked}, "Default encryption saved")},
+      icon("save"), "Save changes"));
+  host.append(card);
+};
+
+SUB_RENDERERS.s3publicaccess = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "config/public_access_block")); if (!j) return;
+  const v = j.value || {};
+  const labels = [["block_public_acls","Block public access to buckets and objects granted through new access control lists (ACLs)"],
+    ["ignore_public_acls","Block public access to buckets and objects granted through any access control lists (ACLs)"],
+    ["block_public_policy","Block public access to buckets and objects granted through new public bucket or access point policies"],
+    ["restrict_public_buckets","Block public and cross-account access to buckets and objects through any public bucket or access point policies"]];
+  const all = labels.every(([k]) => v[k]);
+  host.append(_dkv("Block public access (bucket settings)", [["Block all public access", all ? "On" : "Off"], ...labels.map(([k, l]) => [l, v[k] ? "On" : "Off"])]));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Edit Block public access"));
+  const boxes = {};
+  labels.forEach(([k, l]) => { boxes[k] = el("input",{type:"checkbox","data-pab":k}); if (v[k]) boxes[k].checked = true;
+    card.append(el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, boxes[k], el("span",{}, l))); });
+  card.append(el("button",{class:"btn primary",onclick:()=>_s3put(full, "public_access_block",
+    Object.fromEntries(labels.map(([k]) => [k, boxes[k].checked])), "Block Public Access saved")}, icon("save"), "Save changes"));
+  host.append(card);
+};
+
+SUB_RENDERERS.s3policy = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "config/policy")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Bucket policy"));
+  card.append(el("div",{class:"small",style:"color:var(--sub);margin-bottom:6px"}, "Bucket ARN: arn:aws:s3:::" + full.name));
+  if (!j.value) card.append(el("div",{class:"empty"}, "No policy to display. " + full.name + " has no bucket policy."));
+  const ta = el("textarea",{"data-testid":"s3-policy",style:"width:100%;min-height:200px;font-family:Consolas,Menlo,monospace"});
+  ta.value = j.value || "";
+  card.append(ta, el("div",{style:"display:flex;gap:8px;margin-top:10px"},
+    el("button",{class:"btn primary",onclick:()=>_s3put(full, "policy", ta.value, "Bucket policy saved")}, icon("save"), "Save changes"),
+    j.value ? el("button",{class:"btn",onclick:async()=>{
+      const r = await api("DELETE", _s3p(full, "config/policy"));
+      if (r.ok) { toast("Bucket policy deleted"); _rerender(); } else toast("Delete failed: " + _derr(r), "err");
+    }}, icon("delete"), "Delete") : null));
+  host.append(card);
+};
+
+SUB_RENDERERS.s3cors = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "config/cors")); if (!j) return;
+  const rules = j.value || [];
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Cross-origin resource sharing (CORS) rules (" + rules.length + ")"));
+  card.append(_dtbl([[r => r.id || "(unnamed)","ID"],[r => r.allowed_methods.join(", "),"Allowed methods"],[r => r.allowed_origins.join(", "),"Allowed origins",1],
+    [r => (r.allowed_headers||[]).join(", ") || "None","Allowed headers"],[r => (r.expose_headers||[]).join(", ") || "None","Expose headers"],
+    [r => r.max_age_seconds != null ? r.max_age_seconds + " s" : "None","Max age"],
+    [r => el("button",{class:"btn",onclick:()=>_s3put(full, "cors", rules.filter(x => x !== r), "CORS rule deleted")}, "Delete"),"Actions"]],
+    rules, "No CORS configuration for " + full.name + ": browsers on other origins cannot read its objects."));
+  const f = {id:el("input",{placeholder:"allow-web"}), m:el("input",{value:"GET,HEAD"}), o:el("input",{value:"*"}), h:el("input",{}), e:el("input",{}), age:el("input",{type:"number",min:"1"})};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Add CORS rule"),
+    _field("ID", f.id), _field("Allowed methods (comma-separated)", f.m), _field("Allowed origins", f.o), _field("Allowed headers", f.h),
+    _field("Expose headers", f.e), _field("Max age (seconds)", f.age),
+    el("button",{class:"btn primary",onclick:()=>_s3put(full, "cors", [...rules, {id:f.id.value, allowed_methods:_csv(f.m.value),
+      allowed_origins:_csv(f.o.value), allowed_headers:_csv(f.h.value), expose_headers:_csv(f.e.value), max_age_seconds:f.age.value || null}], "CORS rule added")},
+      icon("add"), "Save changes"));
   host.append(card);
 };
 

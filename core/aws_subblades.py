@@ -84,18 +84,18 @@ _S3_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Objects", "items": [
         {"key": "objects",        "label": "Objects",                "icon": "folder",        "type": "bucketObjects"},
-        {"key": "versions",       "label": "Versions",               "icon": "history",       "type": "stub"},
+        {"key": "versions",       "label": "Versions",               "icon": "history",       "type": "s3Versions"},
     ]},
     {"group": "Properties", "items": [
         {"key": "versioning",     "label": "Bucket Versioning",      "icon": "history_edu",   "type": "bucketVersioning"},
         {"key": "notifications",  "label": "Event notifications",    "icon": "notifications", "type": "bucketNotifications"},
-        {"key": "lifecycle",      "label": "Lifecycle rules",        "icon": "history_toggle_off", "type": "stub"},
-        {"key": "encryption",     "label": "Default encryption",     "icon": "enhanced_encryption", "type": "stub"},
+        {"key": "lifecycle",      "label": "Lifecycle rules",        "icon": "history_toggle_off", "type": "s3Lifecycle"},
+        {"key": "encryption",     "label": "Default encryption",     "icon": "enhanced_encryption", "type": "s3Encryption"},
     ]},
     {"group": "Permissions", "items": [
-        {"key": "blockPublic",    "label": "Block Public Access",    "icon": "shield",        "type": "stub"},
-        {"key": "iam",            "label": "Bucket Policy",          "icon": "policy",        "type": "iam"},
-        {"key": "cors",           "label": "Cross-origin resource sharing (CORS)", "icon": "open_in_new", "type": "stub"},
+        {"key": "blockPublic",    "label": "Block Public Access",    "icon": "shield",        "type": "s3PublicAccess"},
+        {"key": "policy",         "label": "Bucket Policy",          "icon": "policy",        "type": "s3Policy"},
+        {"key": "cors",           "label": "Cross-origin resource sharing (CORS)", "icon": "open_in_new", "type": "s3Cors"},
     ]},
     {"group": "Management", "items": [
         {"key": "metrics",        "label": "Metrics",                "icon": "show_chart",    "type": "metrics"},

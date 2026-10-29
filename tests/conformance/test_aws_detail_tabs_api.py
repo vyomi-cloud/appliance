@@ -121,7 +121,73 @@ def ec2():
     requests.post(BASE + p + "/terminate", timeout=60)
 
 
-SECTIONS = {"ec2": ec2}
+
+
+def s3():
+    print("── S3 bucket")
+    name = f"tabs-s3-{int(time.time())}"
+    r = requests.post(f"{BASE}/api/s3/buckets/{name}", timeout=30)
+    check("create bucket", r.status_code < 300, r.text)
+    p = f"/api/s3/buckets/{name}"
+    cfg = lambda k: get(p + "/config/" + k).json()["value"]
+    put = lambda k, v: requests.put(BASE + p + "/config/" + k, json={"value": v}, timeout=30)
+    check("Default encryption: new bucket has SSE-S3", cfg("encryption")["sse_algorithm"] == "AES256")
+    check("Block Public Access: all four on for a new bucket", all(cfg("public_access_block").values()))
+    check("Object Ownership: bucket owner enforced", cfg("ownership") == "BucketOwnerEnforced")
+    check("no lifecycle / CORS / policy yet", cfg("lifecycle") == [] and cfg("cors") == [] and cfg("policy") == "")
+
+    r = put("lifecycle", [{"id": "expire-logs", "prefix": "logs/", "expiration_days": 30,
+                           "transitions": [{"days": 30, "storage_class": "STANDARD_IA"}]}])
+    check("Lifecycle: create rule", r.status_code == 200, r.text)
+    check("Lifecycle: rule persists", cfg("lifecycle")[0]["id"] == "expire-logs")
+    xml = requests.get(f"{BASE}/{name}?lifecycle", timeout=30).text
+    check("Lifecycle: native GetBucketLifecycleConfiguration returns the same rule", "<ID>expire-logs</ID>" in xml, xml[:300])
+    r = put("lifecycle", [{"id": "bad", "transitions": [{"days": 5, "storage_class": "STANDARD_IA"}]}])
+    check("Lifecycle: STANDARD_IA under 30 days rejected like S3", r.status_code == 400 and "30" in r.text, r.text)
+
+    r = put("cors", [{"id": "web", "allowed_methods": ["GET", "PUT"], "allowed_origins": ["https://example.com"], "max_age_seconds": 600}])
+    check("CORS: add rule", r.status_code == 200 and cfg("cors")[0]["max_age_seconds"] == 600, r.text)
+    check("CORS: native GetBucketCors returns it", "https://example.com" in requests.get(f"{BASE}/{name}?cors", timeout=30).text)
+    check("CORS: unsupported method rejected", put("cors", [{"allowed_methods": ["PATCH"], "allowed_origins": ["*"]}]).status_code == 400)
+
+    r = put("encryption", {"sse_algorithm": "aws:kms", "kms_master_key_id": "alias/aws/s3", "bucket_key_enabled": True})
+    check("Default encryption: switch to SSE-KMS with a bucket key", r.status_code == 200 and cfg("encryption")["bucket_key_enabled"] is True, r.text)
+
+    public = {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": "*", "Action": "s3:GetObject",
+                                                       "Resource": f"arn:aws:s3:::{name}/*"}]}
+    r = put("policy", public)
+    check("Bucket policy: public policy blocked by BlockPublicPolicy", r.status_code == 403 and "BlockPublicPolicy" in r.text, r.text)
+    r = put("policy", {"Statement": [{"Effect": "Allow", "Principal": "*", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::other/*"}]})
+    check("Bucket policy: resource outside the bucket rejected", r.status_code == 400 and "invalid resource" in r.text, r.text)
+    put("public_access_block", {"block_public_acls": True, "ignore_public_acls": True, "block_public_policy": False, "restrict_public_buckets": False})
+    r = put("policy", public)
+    check("Bucket policy: saved once Block Public Access allows it", r.status_code == 200 and "s3:GetObject" in cfg("policy"), r.text)
+    b = next(x for x in get("/api/s3/buckets").json()["buckets"] if x["name"] == name)
+    check("bucket list shows it as Public", b.get("access") == "Public", b)
+    requests.delete(BASE + p + "/config/policy", timeout=30)
+    check("Bucket policy: delete", cfg("policy") == "")
+
+    requests.put(BASE + p + "/versioning", json={"status": "Enabled"}, timeout=30)
+    check("Bucket Versioning: enabled", get(p + "/versioning").json()["versioning"] == "Enabled")
+    for body in (b"v1", b"v2"):
+        requests.post(BASE + p + "/objects", files={"file": ("a.txt", body, "text/plain")}, timeout=30)
+    v = get(p + "/versions").json()["versions"]
+    check("Versions: two versions of a.txt, newest latest", len([x for x in v if x["key"] == "a.txt"]) == 2 and v[0]["is_latest"], v)
+
+    r = requests.put(BASE + p + "/notifications", timeout=30, json={"event_bridge_enabled": True, "rules": [
+        {"id": "on-put", "events": ["s3:ObjectCreated:*"], "prefix": "in/", "suffix": "", "destination_type": "QueueConfiguration",
+         "destination": "arn:aws:sqs:us-east-1:123456789012:tabs-q"}]})
+    n = get(p + "/notifications").json()
+    check("Event notifications: queue configuration + EventBridge saved", r.status_code == 200 and n["eventBridgeEnabled"]
+          and n["queueConfigurations"][0]["id"] == "on-put", n)
+
+    r = requests.patch(BASE + p, json={"tags": {"team": "data"}}, timeout=30)
+    check("Tags: saved and returned with the bucket", r.status_code == 200 and get(p).json()["tags"] == {"team": "data"}, r.text)
+    acc = get("/api/aws/resource-access", params={"arn": f"arn:aws:s3:::{name}", "service": "s3"}).json()
+    check("Permissions: evaluated for the bucket ARN", acc["resource_arn"] == f"arn:aws:s3:::{name}")
+    requests.delete(f"{BASE}{p}?force=1", timeout=30)
+
+SECTIONS = {"ec2": ec2, "s3": s3}
 
 if __name__ == "__main__":
     only = sys.argv[1:] or list(SECTIONS)

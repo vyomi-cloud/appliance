@@ -189,6 +189,62 @@ def register(app: FastAPI) -> None:
         ctx.record_usage("ec2.serial_console_access", {"enabled": on})
         return {"serial_console_access_enabled": on}
 
+    # ── S3 bucket configuration tabs (lifecycle, CORS, encryption, BPA, policy, ownership) ──
+    def _bucket(name: str) -> dict:
+        b = ctx.buckets.get(name)
+        if not isinstance(b, dict):
+            raise HTTPException(404, detail="NoSuchBucket")
+        return b
+
+    @app.get("/api/s3/buckets/{name}")
+    def s3_get_bucket(name: str):
+        # GetBucket + its tag set (GetBucketTagging), which the Tags tab edits.
+        b = _bucket(name)
+        return {"name": name, **{k: v for k, v in b.items() if k not in ("cors", "lifecycle")}, "tags": dict(b.get("tags") or {})}
+
+    @app.patch("/api/s3/buckets/{name}")
+    async def s3_put_tagging(name: str, request: Request):
+        # PutBucketTagging: the Tags tab saves the whole tag set.
+        b = _bucket(name)
+        tags = (await _body(request)).get("tags") or {}
+        if not isinstance(tags, dict) or len(tags) > 50:
+            raise HTTPException(400, detail={"code": "InvalidTag", "message": "A bucket can have up to 50 tags."})
+        b["tags"] = {str(k): str(v) for k, v in tags.items() if str(k)}
+        ctx.persist_state()
+        ctx.record_usage("s3.put_bucket_tagging", {"bucket": name, "resource_id": name})
+        return {"name": name, "tags": b["tags"]}
+
+    @app.get("/api/s3/buckets/{name}/config/{kind}")
+    def s3_get_config(name: str, kind: str):
+        try:
+            return {"bucket": name, "kind": kind, "value": D.s3_bucket_config(_bucket(name), kind)}
+        except D.DetailError as e:
+            _fail(e)
+
+    @app.put("/api/s3/buckets/{name}/config/{kind}")
+    async def s3_put_config(name: str, kind: str, request: Request):
+        b = _bucket(name)
+        try:
+            val = D.s3_put_bucket_config(b, name, kind, (await _body(request)).get("value"))
+        except D.DetailError as e:
+            _fail(e)
+        if kind == "policy" or kind == "public_access_block":
+            b["access"] = D.s3_access_summary(b)
+        ctx.persist_state()
+        ctx.record_usage(f"s3.put_bucket_{kind}", {"bucket": name, "resource_id": name})
+        return {"bucket": name, "kind": kind, "value": val}
+
+    @app.delete("/api/s3/buckets/{name}/config/{kind}")
+    def s3_delete_config(name: str, kind: str):
+        b = _bucket(name)
+        if kind not in ("lifecycle", "cors", "policy"):
+            raise HTTPException(400, detail={"code": "InvalidRequest", "message": f"{kind} cannot be deleted."})
+        D.s3_put_bucket_config(b, name, kind, [] if kind != "policy" else "")
+        b["access"] = D.s3_access_summary(b)
+        ctx.persist_state()
+        ctx.record_usage(f"s3.delete_bucket_{kind}", {"bucket": name, "resource_id": name})
+        return {"bucket": name, "kind": kind, "value": D.s3_bucket_config(b, kind)}
+
     # ── Permissions tab (every service): identity policies covering a resource ──
     @app.get("/api/aws/resource-access")
     def resource_access(arn: str, service: str):
