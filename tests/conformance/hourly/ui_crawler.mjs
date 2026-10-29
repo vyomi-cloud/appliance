@@ -116,7 +116,9 @@ function textFindings(text) {
 // column header so the agent knows which field is missing.
 const PLACEHOLDER_CELLS = (page) => page.evaluate(() => {
   const out = [];
-  const isPh = (t) => /^(-|—|–|n\/a|null|none)?$/i.test(t.trim());
+  // A literal "NONE" is a real enum value (e.g. API Gateway authorizationType);
+  // only the consoles' lowercase "none" missing-value fallback is a placeholder.
+  const isPh = (t) => /^(-|—|–|n\/a|null)?$/i.test(t.trim()) || t.trim() === "none";
   for (const table of document.querySelectorAll("#main table")) {
     const heads = [...table.querySelectorAll("thead th, tr:first-child th")].map((h) => (h.innerText || "").trim());
     // Consoles build tables with DOM calls (no <tbody>): data rows are the <tr>s with <td>s.
