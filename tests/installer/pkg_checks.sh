@@ -70,10 +70,11 @@ fi
 if [ -n "$v" ]; then
   CT=$(mktemp -d); mkdir -p "$CT/bin" "$CT/home"
   printf '#!/bin/sh\necho "docker $*" >> "%s/docker.log"; exit 0\n' "$CT" > "$CT/bin/docker"; chmod +x "$CT/bin/docker"
-  vy() { env HOME="$CT/home" PATH="$CT/bin:$PATH" VYOMI_SUBSTRATE=docker VYOMI_NO_BANNER=1 CI=1 \
+  vy() { env HOME="$CT/home" PATH="$CT/bin:$PATH" GITHUB_TOKEN="${GITHUB_TOKEN:-}" VYOMI_SUBSTRATE=docker VYOMI_NO_BANNER=1 CI=1 \
            VYOMI_URL=http://127.0.0.1:9 VYOMI_NO_SELF_UPDATE=1 "$@"; }
   pin() { sed -nE 's#.*vyomi/appliance:([0-9]+\.[0-9]+\.[0-9]+).*#\1#p' "$1" 2>/dev/null | head -1; }
-  LATEST=$(curl -fsSL --max-time 15 "https://api.github.com/repos/vyomi-cloud/appliance/releases/latest" 2>/dev/null \
+  AUTH=(); [ -n "${GITHUB_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  LATEST=$(curl -fsSL --max-time 15 "${AUTH[@]}" "https://api.github.com/repos/vyomi-cloud/appliance/releases/latest" 2>/dev/null \
     | sed -nE 's/.*"tag_name": *"v?([0-9]+\.[0-9]+\.[0-9]+)".*/\1/p' | head -1)
 
   for flag in --version version -V; do
