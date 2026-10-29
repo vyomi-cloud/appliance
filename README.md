@@ -2,15 +2,10 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-10-29T09:51:06+00:00
+### Upstream watch — 2026-10-29T10:51:07+00:00
 
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**5 change(s), 4 actionable.**
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
-- 🔧 `operation-changed` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
-- · `announcement` Cloud Monitoring: Fixed (October 23, 2026) ([link](https://docs.cloud.google.com/release-notes#October_23_2026))
+**0 change(s), 0 actionable.**
 
-Filed 4 backlog issue(s) labelled `upstream-drift`; 0 pending.
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
