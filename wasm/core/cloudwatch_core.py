@@ -139,6 +139,7 @@ class CloudWatchStore:
         self.insight_rules: dict[str, dict] = {}
         self.streams: dict[str, dict] = {}
         self.action_hook = None                   # optional (arn, alarm, new_state, reason) -> None
+        self.metric_sink = None                   # optional (namespace, name, dims, point) -> None; mirrors samples to a metrics backend
 
     def persist(self) -> None:
         """Flush hook (no-op in memory)."""
@@ -332,6 +333,11 @@ def op_put_metric_data(store, a):
         s["unit"] = pt[5]
         s["last"] = max(s["last"], pt[0])
         touched.add((ns, name, _dim_key(dims)))
+        if store.metric_sink is not None:
+            try:
+                store.metric_sink(ns, name, dims, pt)
+            except Exception:   # a metrics backend outage never fails PutMetricData
+                pass
     _evaluate_for(store, touched, now)
     store.persist()
     return None

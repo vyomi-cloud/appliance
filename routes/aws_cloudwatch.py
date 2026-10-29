@@ -15,13 +15,34 @@ from core import cloudwatch_core as cw
 from core.persistent_store import PersistentCloudWatchStore, SqliteStateBackend
 
 _store: PersistentCloudWatchStore | None = None
+VM_URL = os.environ.get("CLOUDLEARN_VICTORIAMETRICS_URL", "").strip().rstrip("/")   # shared VictoriaMetrics (compose profile `full`)
 _USAGE_ACTIONS = ("PutMetricAlarm", "PutCompositeAlarm", "DeleteAlarms", "PutDashboard", "DeleteDashboards")
+
+
+def _vm_sink(ns: str, name: str, dims: list, pt: list) -> None:
+    """Mirror each PutMetricData sample into VictoriaMetrics (Prometheus text import), so
+    PromQL / MetricsQL / Grafana see the same series. Best effort: the engine stays the API."""
+    import re
+    import urllib.request
+    lab = lambda k: re.sub(r"[^a-zA-Z0-9_]", "_", k)   # noqa: E731
+    esc = lambda v: str(v).replace("\\", "\\\\").replace('"', '\\"')   # noqa: E731
+    labels = {"namespace": ns, **{lab(d.get("Name", "")): d.get("Value", "") for d in dims}}
+    lbl = ",".join(f'{k}="{esc(v)}"' for k, v in labels.items())
+    ts = int(pt[0] * 1000)
+    base = "cloudwatch_" + lab(name)
+    # point = [ts, sum, count, min, max, unit, values]
+    lines = [f"{base}_{suf}{{{lbl}}} {val} {ts}" for suf, val in
+             (("sum", pt[1]), ("count", pt[2]), ("min", pt[3]), ("max", pt[4]))]
+    req = urllib.request.Request(VM_URL + "/api/v1/import/prometheus", data="\n".join(lines).encode(), method="POST")
+    urllib.request.urlopen(req, timeout=2).close()
 
 
 def get_store() -> PersistentCloudWatchStore:
     global _store
     if _store is None:
         _store = PersistentCloudWatchStore(SqliteStateBackend(os.environ.get("VYOMI_CW_DB", "/tmp/vyomi-cw.sqlite")))
+        if VM_URL:
+            _store.metric_sink = _vm_sink
     return _store
 
 
