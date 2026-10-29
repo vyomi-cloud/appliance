@@ -321,6 +321,42 @@ RESOURCE_CATALOG_GCP = [
         ],
     },
     # ========================================================================
+    # Artifact Registry — repositories for container images and language
+    # packages (core/gcp_artifactregistry_core.py, the engine the native
+    # artifactregistry/v1 wire serves).
+    # ========================================================================
+    {
+        "key": "artifactregistry", "label": "Artifact Registry", "icon": "inventory_2",
+        "namespace": "GCP/ArtifactRegistry", "service": "artifactregistry",
+        "collection_path": "/api/gcp/artifactregistry/repositories",
+        "resource_path":   "/api/gcp/artifactregistry/repositories/{name}",
+        "name_field":      "name",
+        "create_method":   "POST",
+        "api_paths": {
+            "repositories": {"method": "GET",    "path": "/api/gcp/artifactregistry/repositories"},
+            "packages":     {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listPackages/{name}"},
+            "versions":     {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listVersions/{name}"},
+            "tags":         {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listTags/{name}"},
+            "images":       {"method": "GET",    "path": "/api/gcp/sub/artifactregistry/listImages/{name}"},
+            "pushSample":   {"method": "POST",   "path": "/api/gcp/sub/artifactregistry/pushSample/{name}"},
+            "delete":       {"method": "DELETE", "path": "/api/gcp/artifactregistry/repositories/{name}"},
+        },
+        "columns": [
+            ["name",       "Name"],
+            ["format",     "Format"],
+            ["mode",       "Mode"],
+            ["location",   "Location"],
+            ["encryption", "Encryption"],
+            ["size",       "Size"],
+            ["created",    "Created"],
+        ],
+        "createFields": [
+            {"name": "name",     "label": "Name",     "default": "my-repo"},
+            {"name": "format",   "label": "Format",   "default": "DOCKER"},
+            {"name": "location", "label": "Location", "default": "us-central1"},
+        ],
+    },
+    # ========================================================================
     # Cloud KMS — keys + key rings + versions + EKM
     # ========================================================================
     {

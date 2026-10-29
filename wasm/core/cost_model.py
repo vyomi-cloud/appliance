@@ -111,6 +111,7 @@ SERVICE_MONTHLY: dict[str, float] = {
     "gcp.secretmanager": 0.06,  # $0.06 per active secret version per month
     "gcp.kms": 0.06,            # $0.06 per software key version per month
     "gcp.eventarc": 0.00,       # triggers are free; events billed per use
+    "gcp.artifactregistry": 0.50,  # ~5 GB stored at $0.10/GB-month (first 0.5 GB free)
     # Azure
     "azure.vm": 0.00,         # priced via VM hourly
     "azure.sql": 4.99,        # Basic DTU

@@ -424,6 +424,13 @@
    "upstream": "sns",
    "status": "released",
    "released_in": "3.0.28"
+  },
+  {
+   "cloud": "gcp",
+   "key": "artifactregistry",
+   "name": "Artifact Registry",
+   "upstream": "artifactregistry/v1",
+   "status": "pending-release"
   }
  ]
 }
