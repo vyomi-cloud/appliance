@@ -142,6 +142,17 @@
    ],
    "role": "gateway"
   },
+  "workflow-engine": {
+   "kind": "in-process",
+   "license": "(Vyomi code)",
+   "idle_mb": 0,
+   "for": [
+    "aws:stepfunctions",
+    "gcp:workflows/v1",
+    "azure:logic"
+   ],
+   "why": "One durable workflow engine for all three clouds, generalized from core/stepfunctions_core.py (already a real ASL interpreter): executions + per-step history persisted, retry/backoff, try/catch, parallel and loops, waits/timers on the shared dispatcher (survive restarts), callbacks / task tokens, real calls to HTTP and Vyomi services. Thin language front ends: ASL (Step Functions), GCP Workflows YAML + stdlib + connectors, Logic Apps workflow definitions. Same code in Nano. No off-the-shelf engine runs these three languages; Node-RED rejected (own flow format, not durable, no execution history); n8n/Windmill/Restate denied by license."
+  },
   "logstore": {
    "kind": "in-process",
    "engine": "duckdb",
@@ -332,6 +343,19 @@
     "azure:app"
    ],
    "why": "Optional most-faithful backend on Max: Cloud Run's v1 API is the Knative Serving API, so revisions, traffic splits, concurrency autoscaling and scale to zero come natively. Needs the shared k3s (~500 MB) plus ~300-500 MB. Not Coolify (a second PaaS control plane, ~500 MB+, no revisions/traffic split/scale to zero) and not Fission (Kubernetes FaaS, function-first rather than any-container)."
+  },
+  "temporal": {
+   "image": "Temporal dev server (temporal server start-dev, SQLite; pin a release when adopted)",
+   "license": "MIT",
+   "idle_mb": 150,
+   "tier": "pro",
+   "role": "engine",
+   "agent_for": [
+    "aws:stepfunctions",
+    "gcp:workflows/v1",
+    "azure:logic"
+   ],
+   "why": "Pro and up: the same three language front ends run as Temporal workflows (Temporal's DSL-interpreter pattern), so durable executions, timers, retries, signals and the event history come from a battle-tested engine; Temporal's UI helps debugging. Free/Lite and Nano use the in-process engine."
   }
  },
  "in_process": {
@@ -340,7 +364,6 @@
    "sts",
    "ssm",
    "cloudformation",
-   "stepfunctions",
    "cognito-idp",
    "dynamodbstreams",
    "efs",
@@ -353,7 +376,6 @@
   ],
   "gcp": [
    "cloudscheduler/v1",
-   "workflows/v1",
    "iamcredentials/v1",
    "file/v1",
    "datastore/v1",
