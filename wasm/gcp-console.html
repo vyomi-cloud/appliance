@@ -1660,23 +1660,21 @@ async function renderActivityTab(host, svc, item){
 // Permissions tab — lists the service-account / project IAM bindings for this
 // resource. Service accounts have real durable members (via the /sub/ route);
 // other resources show the inherited project binding note with any attached ones.
-function renderIamTab(host, svc, item){
-  // For IAM service accounts, the Members sub-tab is the real editor; here show
-  // the effective inherited bindings as a clear, non-blank table.
-  const name = String((item && item.name) || getPath(item, svc.name_field) || "");
+async function renderIamTab(host, svc, item){
   host.append(el("div",{style:"font-size:12.5px;color:var(--sub,#5f6368);margin:-4px 0 14px"},
-    "IAM policy bindings effective on this resource (inherited from project-level roles)."));
-  const bindings = [
-    ["roles/owner", "user:admin@" + PROJECT + ".iam.gserviceaccount.com"],
-    ["roles/viewer", "serviceAccount:" + (svc.key === "iam" ? name : "compute@" + PROJECT + ".iam") ],
-  ];
-  const card = el("div",{class:"kv-card"});
-  const g = el("div",{class:"kv-grid"});
-  bindings.forEach(([role, member]) =>
-    g.append(el("div",{}, el("div",{class:"k"}, role), el("div",{class:"v"}, member))));
-  card.append(g); host.append(card);
-  host.append(el("div",{style:"font-size:11.5px;color:var(--hint,#80868b);margin-top:10px"},
-    "Edit project-level IAM in the IAM & Admin console. Service-account members are editable under the Members tab."));
+    "IAM bindings of project " + PROJECT + ", inherited by this resource."));
+  const r = await api("GET", "/api/gcp/sub/iam/getProjectPolicy/"+encodeURIComponent(PROJECT));
+  if (!r.ok) { host.append(el("div",{class:"empty"}, "Could not load the IAM policy ("+r.status+").")); return; }
+  const bindings = (r.json && r.json.bindings) || [];
+  if (!bindings.length) {
+    host.append(el("div",{class:"empty"}, el("span",{class:"ic material-symbols-outlined"}, "lock"),
+      el("div",{}, "No IAM bindings are set on project " + PROJECT + ".")));
+    return;
+  }
+  const tbl = el("table",{class:"gc",style:"width:100%"});
+  tbl.append(el("tr",{}, el("th",{}, "Role"), el("th",{}, "Members")));
+  bindings.forEach(b => tbl.append(el("tr",{}, el("td",{}, String(b.role)), el("td",{}, (b.members||[]).join(", ")))));
+  host.append(tbl);
 }
 // Logs / Query-Insights / Flow-logs tab — a clearly-labelled SIMULATED stream so
 // the pane is never blank. (Simulated, session-only — real log ingestion is out

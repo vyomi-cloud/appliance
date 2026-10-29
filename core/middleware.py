@@ -891,6 +891,12 @@ async def request_recorder_middleware(request, call_next):
         return await call_next(request)
     t0 = time.time()
     status = 500
+    body = b""
+    if request.method in _GCP_MUTATING and ("/gcp/" in path or path.startswith("/v1")):
+        try:
+            body = await request.body()
+        except Exception:
+            body = b""
     try:
         response = await call_next(request)
         status = response.status_code
@@ -902,8 +908,48 @@ async def request_recorder_middleware(request, call_next):
             if prov and svc:
                 _rm.record(prov, svc, request.method, path, status, (time.time() - t0) * 1000.0,
                            query=request.url.query or "", host=request.headers.get("host", ""))
+                if prov == "gcp" and request.method in _GCP_MUTATING and status < 300:
+                    _record_gcp_activity(svc, request.method, path, body)
         except Exception:
             pass
+
+
+_GCP_MUTATING = ("POST", "PUT", "PATCH", "DELETE")
+_GCP_READ_VERBS = ("get", "list", "search", "query", "lookup", "batchget", "test", "run", "read", "fetch")
+# Services that record their own, richer activity events.
+_GCP_SELF_RECORDING = ("artifactregistry",)
+
+
+def _record_gcp_activity(svc: str, method: str, path: str, body: bytes) -> None:
+    """Console Activity tab: one cloudsim event per successful GCP mutation, naming the
+    resource it touched (body `name`, else the last path segment)."""
+    if svc in _GCP_SELF_RECORDING:
+        return
+    last = path.rstrip("/").rsplit("/", 1)[-1]
+    action = last.split(":", 1)[1] if ":" in last else ""
+    if action.lower().startswith(_GCP_READ_VERBS):
+        return
+    name = last.split(":", 1)[0]
+    try:
+        import json as _json
+        doc = _json.loads(body) if body else {}
+        if isinstance(doc, dict):
+            for k in ("name", "id", "instanceId", "databaseId", "topicId", "triggerId"):
+                if isinstance(doc.get(k), str) and doc[k]:
+                    name = doc[k].rsplit("/", 1)[-1]
+                    break
+    except Exception:
+        pass
+    if method == "POST" and not action:
+        verb = "create"
+    elif method in ("PUT", "PATCH"):
+        verb = "update"
+    elif method == "DELETE":
+        verb = "delete"
+    else:
+        verb = action or "update"
+    from core.app_context import record_usage
+    record_usage(f"gcp.{svc}.{verb}", {"resource": name, "method": method, "path": path})
 
 
 def register_middleware(app) -> None:

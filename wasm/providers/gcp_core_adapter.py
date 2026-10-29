@@ -636,6 +636,12 @@ def _resource_op(service, operation, name="", body=None):
 
     # ---------------- IAM (service accounts) ----------------
     if svc == "iam":
+        if operation == "GetProjectPolicy":   # Permissions tab: the project's IAM bindings
+            st, p = _call(svc, "POST", f"/v1/projects/{name or PROJ}:getIamPolicy", {}, {})
+            return {"ok": st < 300, "bindings": (p or {}).get("bindings", []) if isinstance(p, dict) else []}
+        if operation == "SetProjectPolicy":
+            st, p = _call(svc, "POST", f"/v1/projects/{name or PROJ}:setIamPolicy", {}, {"policy": {"bindings": body.get("bindings", [])}})
+            return {"ok": st < 300, "bindings": (p or {}).get("bindings", []) if isinstance(p, dict) else []}
         base = f"{_P}/serviceAccounts"
         if operation == "List":
             return _ok_list(svc, name_field="email")

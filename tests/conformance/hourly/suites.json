@@ -361,6 +361,14 @@
       "timeout": 600
     },
     {
+      "id": "nano-ui-gcp-detail-panes",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-detail-panes.mjs",
+      "timeout": 600
+    },
+    {
       "id": "nano-ui-gcp-activity-detail",
       "target": "nano",
       "cloud": "gcp",
@@ -406,6 +414,14 @@
       "cloud": "gcp",
       "kind": "ui",
       "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/gcp node wasm/ui-tests/validate-gcp-pubsub-subscriptions.mjs",
+      "timeout": 300
+    },
+    {
+      "id": "offline-ui-gcp-detail-panes",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/gcp node wasm/ui-tests/validate-gcp-detail-panes.mjs",
       "timeout": 300
     },
     {
