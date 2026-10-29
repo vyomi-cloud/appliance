@@ -1564,7 +1564,7 @@ SUB_RENDERERS.activitylog = async function(svc, full, host){
         el("td",{class:"mono"}, ev.ts || ev.timestamp || "—"),
         el("td",{}, el("span",{class:"status-dot "+tone}), document.createTextNode(" "+op)),
         el("td",{}, st === "ok" ? "Succeeded" : st),
-        el("td",{class:"mono small"}, ev.detail || ev.resource || "—")));
+        el("td",{class:"mono small"}, (ev.detail && typeof ev.detail === "object" ? ev.detail.note : ev.detail) || ev.resource || "—")));
     });
     tableWrap.append(t);
   }
@@ -4454,6 +4454,540 @@ SUB_RENDERERS.egaccesskeys = function(svc, full, host){
   host.append(keyBlock("key1",k1), keyBlock("key2",k2));
 };
 
+// ===== REAL-BLADES:BEGIN — shared by static/azure-console.html and wasm/azure-console.html; keep both copies identical (tests/conformance/test_azure_real_blades.py) =====
+// Resource blades backed by this resource's ARM state (locks, managed identity,
+// resource health, NICs / public IPs / NSG rules, auto-shutdown schedules, run
+// commands, restore points, extensions, metric alert rules, …). Every value shown
+// comes from the ARM API; every action writes through it.
+const RB_API = {
+  locks: "2016-09-01", health: "2023-07-01-preview", network: "2023-11-01", compute: "2024-03-01",
+  devtestlab: "2018-09-15", insights: "2018-03-01", auth: "2022-04-01", identity: "2023-01-31",
+};
+async function rbGet(path, apiv){
+  const url = ORIGIN + path + (path.includes("?") ? "&" : "?") + "api-version=" + apiv;
+  const r = await fetch(url);
+  let j = null; try { j = await r.json(); } catch(_){}
+  return {ok: r.ok, status: r.status, json: j};
+}
+function rbErr(res){ return (res && res.json && ((res.json.error && res.json.error.message) || res.json.detail)) || ("HTTP " + (res && res.status)); }
+function rbRg(full){ return parseRgFromId(full.id) || RG; }
+function rbRgPath(full, ns, type){ return `/subscriptions/${SUB}/resourceGroups/${rbRg(full)}/providers/${ns}/${type}`; }
+function rbLeaf(id){ return String(id||"").split("/").filter(Boolean).pop() || ""; }
+function rbKv(rows, title){
+  const sec = el("div",{class:"essentials"});
+  if (title) sec.append(el("div",{class:"h"}, title));
+  const g = el("div",{class:"essentials-grid"});
+  rows.forEach(([k,v]) => g.append(el("div",{class:"k"}, k), el("div",{class:"v"}, v && v.nodeType ? v : String(v))));
+  sec.append(g);
+  return sec;
+}
+function rbTable(cols, rows){
+  const t = el("table",{class:"sub-table"});
+  const hr = el("tr",{}); cols.forEach(c => hr.append(el("th",{}, c))); t.append(hr);
+  rows.forEach(r => { const tr = el("tr",{}); r.forEach(v => tr.append(el("td",{}, v && v.nodeType ? v : String(v)))); t.append(tr); });
+  return t;
+}
+function rbBtn(label, onclick, cls, ic){ return el("button",{class:"btn"+(cls?" "+cls:""), onclick}, ic ? icon(ic) : null, label); }
+function rbInput(value, attrs){ return el("input", Object.assign({class:"sub-select", style:"min-width:220px", value: value==null ? "" : String(value)}, attrs||{})); }
+function rbSelect(options, value){
+  const s = el("select",{class:"sub-select"});
+  options.forEach(o => { const [v,l] = Array.isArray(o) ? o : [o,o]; const op = el("option",{value:v}, l); if (String(v) === String(value)) op.selected = true; s.append(op); });
+  return s;
+}
+function rbForm(title, fields, onSave, saveLabel){
+  const form = el("div",{class:"essentials",style:"margin-top:14px"});
+  form.append(el("div",{class:"h"}, title));
+  const g = el("div",{class:"essentials-grid"});
+  fields.forEach(([k, inp]) => g.append(el("div",{class:"k"}, k), el("div",{class:"v"}, inp)));
+  form.append(g);
+  form.append(el("div",{class:"blade-actions"},
+    rbBtn(saveLabel || "Save", async () => { await onSave(form); }),
+    rbBtn("Cancel", () => form.remove(), "sec")));
+  return form;
+}
+function rbStamp(){ return new Date().toISOString().replace(/[-:T]/g,"").slice(0,14); }
+
+// ---- Diagnose and solve problems: Resource Health + configuration checks ----
+SUB_RENDERERS.diagnose = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Resource health and configuration checks for ", el("strong",{}, full.name), "."));
+  const slot = el("div",{}); host.append(slot);
+  async function fill(){
+    slot.innerHTML = "";
+    const [h, lk] = await Promise.all([
+      rbGet(full.id + "/providers/Microsoft.ResourceHealth/availabilityStatuses/current", RB_API.health),
+      rbGet(full.id + "/providers/Microsoft.Authorization/locks", RB_API.locks)]);
+    if (!h.ok) { slot.append(emptyState("Resource health unavailable: " + rbErr(h))); return; }
+    const p = h.json.properties || {};
+    const st = String(p.availabilityState || "Unknown");
+    const badge = el("span",{class:"badge"+(st === "Available" ? "" : " warn")}, st);
+    const rows = [["Availability", badge], ["Summary", p.summary || ""]];
+    if (p.reasonType) rows.push(["Reason", p.reasonType]);
+    rows.push(["Since", p.occuredTime || ""], ["Last checked", p.reportedTime || ""]);
+    slot.append(rbKv(rows, "Resource health"));
+    const locks = (lk.ok && lk.json && lk.json.value) || [];
+    const prov = getPath(full,"properties.provisioningState") || getPath(full,"properties.state") || "";
+    const checks = [["Provisioning state", String(prov || "Succeeded")],
+                    ["Management locks", locks.length ? locks.map(l => l.name + " (" + getPath(l,"properties.level") + ")").join(", ") : "None — the resource can be modified and deleted"]];
+    slot.append(rbKv(checks, "Configuration checks"));
+  }
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Refresh", fill, "sec", "refresh")));
+  await fill();
+};
+
+// ---- Locks: Microsoft.Authorization/locks at this scope and inherited ----
+SUB_RENDERERS.locks = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},
+    "Locks prevent other users from accidentally deleting (Delete) or modifying (Read-only) this resource. Locks on the resource group or subscription are inherited."));
+  const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"}); host.append(bar);
+  const list = el("div",{}); host.append(list);
+  const label = l => l === "CanNotDelete" ? "Delete" : (l === "ReadOnly" ? "Read-only" : l);
+  async function fill(){
+    list.innerHTML = "";
+    const r = await rbGet(full.id + "/providers/Microsoft.Authorization/locks", RB_API.locks);
+    const locks = (r.ok && r.json && r.json.value) || [];
+    if (!r.ok) { list.append(emptyState("Could not load locks: " + rbErr(r))); return; }
+    if (!locks.length) { list.append(emptyState("This resource has no locks.")); return; }
+    list.append(rbTable(["Lock name","Lock type","Scope","Notes",""], locks.map(l => {
+      const scope = String(l.id).split("/providers/Microsoft.Authorization/locks/")[0];
+      const own = scope.toLowerCase() === String(full.id).toLowerCase();
+      return [l.name, label(getPath(l,"properties.level")), own ? full.name : scope, getPath(l,"properties.notes") || "",
+        rbBtn("Delete", async () => {
+          if (!confirm("Delete lock '" + l.name + "'?")) return;
+          const d = await arm("DELETE", l.id, undefined, RB_API.locks);
+          if (d.ok || d.status === 204) { toast("Lock deleted: " + l.name); fill(); } else toast("Delete failed: " + rbErr(d), "err");
+        }, "del", "delete")];
+    })));
+  }
+  bar.append(rbBtn("Add", () => {
+    const nm = rbInput("", {placeholder:"Lock name"}), lv = rbSelect([["CanNotDelete","Delete"],["ReadOnly","Read-only"]], "CanNotDelete"), nt = rbInput("", {placeholder:"Notes (optional)"});
+    host.append(rbForm("Add lock", [["Lock name", nm], ["Lock type", lv], ["Notes", nt]], async (form) => {
+      const n = nm.value.trim(); if (!n) { toast("Lock name is required","err"); return; }
+      const r = await arm("PUT", full.id + "/providers/Microsoft.Authorization/locks/" + encodeURIComponent(n),
+        {properties:{level: lv.value, notes: nt.value}}, RB_API.locks);
+      if (r.ok) { toast("Lock added: " + n); recordNotif("ok","Lock added", n + " on " + full.name); form.remove(); fill(); }
+      else toast("Add lock failed: " + rbErr(r), "err");
+    }, "OK"));
+  }, "", "add"), rbBtn("Refresh", fill, "sec", "refresh"));
+  await fill();
+};
+
+// ---- Identity: the resource's managed identity (system + user assigned) ----
+SUB_RENDERERS.identity = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},
+    "A system-assigned managed identity is tied to this resource's lifecycle and lets it authenticate to services that support Microsoft Entra ID."));
+  const slot = el("div",{}); host.append(slot);
+  async function fill(){
+    slot.innerHTML = "";
+    const r = await arm("GET", full.id, undefined, svc.apiVersion);
+    if (!r.ok) { slot.append(emptyState("Could not load the resource: " + rbErr(r))); return; }
+    const idn = r.json.identity || {type:"None"};
+    const type = String(idn.type || "None");
+    const sysOn = type.includes("SystemAssigned");
+    const sel = rbSelect([["off","Off"],["on","On"]], sysOn ? "on" : "off");
+    const rows = [["Status", sel]];
+    if (sysOn) rows.push(["Object (principal) ID", idn.principalId || ""], ["Tenant ID", idn.tenantId || ""]);
+    slot.append(rbKv(rows, "System assigned"));
+    slot.append(el("div",{class:"blade-actions"}, rbBtn("Save", async () => {
+      const want = sel.value === "on";
+      if (want === sysOn) { toast("No changes"); return; }
+      const user = type.includes("UserAssigned");
+      const nt = want ? (user ? "SystemAssigned, UserAssigned" : "SystemAssigned") : (user ? "UserAssigned" : "None");
+      const body = {identity: {type: nt}};
+      if (user) body.identity.userAssignedIdentities = Object.fromEntries(Object.keys(idn.userAssignedIdentities || {}).map(k => [k, {}]));
+      const p = await arm("PATCH", full.id, body, svc.apiVersion);
+      if (p.ok) { toast("Identity " + (want ? "enabled" : "disabled") + " on " + full.name); recordNotif("ok","Managed identity updated", full.name); fill(); }
+      else toast("Save failed: " + rbErr(p), "err");
+    })));
+    const uai = idn.userAssignedIdentities || {};
+    const keys = Object.keys(uai);
+    slot.append(el("div",{class:"essentials",style:"margin-top:14px"}, el("div",{class:"h"}, "User assigned")));
+    if (!keys.length) slot.append(emptyState("No user assigned managed identities are attached to this resource."));
+    else slot.append(rbTable(["Name","Principal ID","Client ID"], keys.map(k => [rbLeaf(k), uai[k].principalId || "", uai[k].clientId || ""])));
+  }
+  await fill();
+};
+
+// ---- VM networking: NICs attached to this VM, their IPs, subnet and NSG rules ----
+async function rbVmNics(full){
+  const r = await rbGet(rbRgPath(full, "Microsoft.Network", "networkInterfaces"), RB_API.network);
+  const all = (r.ok && r.json && r.json.value) || [];
+  const refs = (getPath(full,"properties.networkProfile.networkInterfaces") || []).map(n => String(n.id||"").toLowerCase());
+  return all.filter(n => String(getPath(n,"properties.virtualMachine.id")||"").toLowerCase() === String(full.id).toLowerCase()
+                         || refs.includes(String(n.id).toLowerCase()));
+}
+async function rbNicDetail(nic){
+  const ipc = (getPath(nic,"properties.ipConfigurations") || [])[0] || {};
+  const pipId = getPath(ipc,"properties.publicIPAddress.id");
+  const nsgId = getPath(nic,"properties.networkSecurityGroup.id");
+  const [pip, nsg] = await Promise.all([
+    pipId ? rbGet(pipId, RB_API.network) : Promise.resolve(null),
+    nsgId ? rbGet(nsgId, RB_API.network) : Promise.resolve(null)]);
+  const subId = String(getPath(ipc,"properties.subnet.id") || "");
+  const m = subId.match(/virtualNetworks\/([^/]+)\/subnets\/([^/]+)/i);
+  return {ipc, pip: pip && pip.ok ? pip.json : null, nsg: nsg && nsg.ok ? nsg.json : null,
+          vnet: m ? m[1] : "", subnet: m ? m[2] : "", privateIp: getPath(ipc,"properties.privateIPAddress") || ""};
+}
+async function rbAttachNicForm(full, host, after){
+  const vr = await rbGet(rbRgPath(full, "Microsoft.Network", "virtualNetworks"), RB_API.network);
+  const vnets = (vr.ok && vr.json && vr.json.value) || [];
+  const opts = [];
+  vnets.forEach(v => (getPath(v,"properties.subnets") || []).forEach(s => opts.push([v.id + "/subnets/" + s.name, v.name + " / " + s.name + " (" + (getPath(s,"properties.addressPrefix")||"") + ")"])));
+  if (!opts.length) { host.append(emptyState("No virtual network with a subnet exists in resource group " + rbRg(full) + " — create one in Virtual networks first.")); return; }
+  const sub = rbSelect(opts, opts[0][0]), pipSel = rbSelect([["new","(new) Standard static public IP"],["none","None"]], "new");
+  host.append(rbForm("Attach network interface", [["Virtual network / subnet", sub], ["Public IP", pipSel]], async (form) => {
+    const nicName = full.name + "-nic-" + rbStamp().slice(8);
+    const ipc = {name:"ipconfig1", properties:{subnet:{id: sub.value}, privateIPAllocationMethod:"Dynamic"}};
+    if (pipSel.value === "new") {
+      const pip = await arm("PUT", rbRgPath(full,"Microsoft.Network","publicIPAddresses") + "/" + encodeURIComponent(nicName + "-ip"),
+        {location: full.location, sku:{name:"Standard"}, properties:{publicIPAllocationMethod:"Static"}}, RB_API.network);
+      if (!pip.ok) { toast("Public IP failed: " + rbErr(pip), "err"); return; }
+      ipc.properties.publicIPAddress = {id: pip.json.id};
+    }
+    const nic = await arm("PUT", rbRgPath(full,"Microsoft.Network","networkInterfaces") + "/" + encodeURIComponent(nicName),
+      {location: full.location, properties:{ipConfigurations:[ipc]}}, RB_API.network);
+    if (!nic.ok) { toast("Network interface failed: " + rbErr(nic), "err"); return; }
+    const cur = (getPath(full,"properties.networkProfile.networkInterfaces") || []).map(n => ({id:n.id, properties:{primary:false}}));
+    const vm = await arm("PATCH", full.id, {properties:{networkProfile:{networkInterfaces: cur.concat([{id: nic.json.id, properties:{primary: !cur.length}}])}}}, "2023-09-01");
+    if (!vm.ok) { toast("Attach failed: " + rbErr(vm), "err"); return; }
+    full.properties = vm.json.properties;
+    toast("Attached " + nicName + " to " + full.name); recordNotif("ok","Network interface attached", nicName);
+    form.remove(); after();
+  }, "Attach"));
+}
+SUB_RENDERERS.networking = async function(svc, full, host){
+  if (svc.key !== "vm") return SUB_RENDERERS.paasnetworking(svc, full, host);
+  const slot = el("div",{}); host.append(slot);
+  async function fill(){
+    slot.innerHTML = "";
+    const nics = await rbVmNics(full);
+    if (!nics.length) {
+      slot.append(emptyState("No network interface is attached to " + full.name + "."));
+      slot.append(el("div",{class:"blade-actions"}, rbBtn("Attach network interface", () => rbAttachNicForm(full, slot, fill), "", "add")));
+      return;
+    }
+    for (const nic of nics) {
+      const d = await rbNicDetail(nic);
+      slot.append(rbKv([
+        ["Network interface", nic.name],
+        ["Virtual network/subnet", d.vnet + "/" + d.subnet],
+        ["NIC private IP", d.privateIp],
+        ["NIC public IP", d.pip ? (getPath(d.pip,"properties.ipAddress") || "") + " (" + d.pip.name + ")" : "None"],
+        ["Accelerated networking", getPath(nic,"properties.enableAcceleratedNetworking") ? "Enabled" : "Disabled"],
+        ["MAC address", getPath(nic,"properties.macAddress") || ""],
+        ["Network security group", d.nsg ? d.nsg.name : "None"],
+      ], "Network interface: " + nic.name));
+      if (d.nsg) {
+        const rules = getPath(d.nsg,"properties.securityRules") || [];
+        slot.append(el("div",{class:"sub-info",style:"margin-top:12px"}, "Security rules of ", el("strong",{}, d.nsg.name)));
+        if (!rules.length) slot.append(emptyState("Network security group " + d.nsg.name + " has no custom rules (only the Azure default rules apply)."));
+        else slot.append(rbTable(["Priority","Name","Direction","Port","Protocol","Source","Destination","Action"], rules.map(r => {
+          const p = r.properties || {};
+          return [p.priority, r.name, p.direction, p.destinationPortRange || (p.destinationPortRanges||[]).join(","), p.protocol,
+                  p.sourceAddressPrefix || "", p.destinationAddressPrefix || "", p.access];
+        })));
+      }
+    }
+  }
+  await fill();
+};
+
+// ---- Connect: SSH target from this VM's real NIC / public IP + agent status ----
+SUB_RENDERERS.connect = async function(svc, full, host){
+  const user = getPath(full,"properties.osProfile.adminUsername") || "azureuser";
+  const [iv, nics] = await Promise.all([rbGet(full.id + "/instanceView", "2023-09-01"), rbVmNics(full)]);
+  const st = ((iv.ok && iv.json && iv.json.statuses) || []).find(x => String(x.code).startsWith("PowerState/"));
+  const ag = ((iv.ok && iv.json && getPath(iv.json,"vmAgent.statuses")) || [])[0] || {};
+  const rows = [["Power state", st ? st.displayStatus : "Unknown"], ["VM agent", (ag.displayStatus || "Unknown") + (ag.message ? " — " + ag.message : "")],
+                ["Admin username", user]];
+  let target = "", kind = "";
+  if (nics.length) {
+    const d = await rbNicDetail(nics[0]);
+    const pub = d.pip && getPath(d.pip,"properties.ipAddress");
+    rows.push(["Public IP address", pub || "None"], ["Private IP address", d.privateIp]);
+    target = pub || d.privateIp; kind = pub ? "public" : "private";
+  } else rows.push(["Network interface", "None attached"]);
+  host.append(rbKv(rows, "Native SSH"));
+  if (target) {
+    host.append(el("div",{class:"sub-info",style:"margin-top:12px"}, "SSH using the VM's " + kind + " IP address:"));
+    host.append(makeCmdRow("ssh " + user + "@" + target));
+  } else host.append(emptyState("Attach a network interface (Networking) to get an address to connect to."));
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Open Connect dialog", () => openConnectModal(full), "", "terminal")));
+};
+
+// ---- Auto-shutdown: Microsoft.DevTestLab/schedules/shutdown-computevm-{vm} ----
+SUB_RENDERERS.autoshutdown = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Auto-shutdown stops this virtual machine at the same time every day."));
+  const slot = el("div",{}); host.append(slot);
+  const schedPath = rbRgPath(full, "Microsoft.DevTestLab", "schedules");
+  async function fill(){
+    slot.innerHTML = "";
+    const r = await rbGet(schedPath, RB_API.devtestlab);
+    const s = ((r.ok && r.json && r.json.value) || []).find(x => String(getPath(x,"properties.targetResourceId")||"").toLowerCase() === String(full.id).toLowerCase());
+    const p = (s && s.properties) || {};
+    const t = String(getPath(p,"dailyRecurrence.time") || "1900");
+    const en = rbSelect([["Enabled","On"],["Disabled","Off"]], s ? p.status : "Disabled");
+    const tm = rbInput(t.slice(0,2) + ":" + t.slice(2), {type:"time", style:"min-width:140px"});
+    const tz = rbSelect(["UTC","Pacific Standard Time","Eastern Standard Time","India Standard Time","GMT Standard Time","W. Europe Standard Time","Tokyo Standard Time"], p.timeZoneId || "UTC");
+    const nt = rbSelect([["Disabled","No"],["Enabled","Yes"]], getPath(p,"notificationSettings.status") || "Disabled");
+    const em = rbInput(getPath(p,"notificationSettings.emailRecipient") || "", {placeholder:"Email address"});
+    slot.append(rbKv([["Enabled", en], ["Scheduled shutdown", tm], ["Time zone", tz], ["Send notification before shutdown", nt], ["Email address", em],
+                      ["Schedule resource", s ? s.name : "Not configured"]], "Schedule"));
+    slot.append(el("div",{class:"blade-actions"}, rbBtn("Save", async () => {
+      const time = String(tm.value || "19:00").replace(":","");
+      const body = {location: full.location, properties:{status: en.value, taskType:"ComputeVmShutdownTask", dailyRecurrence:{time},
+        timeZoneId: tz.value, notificationSettings:{status: nt.value, timeInMinutes:30, emailRecipient: em.value},
+        targetResourceId: full.id}};
+      const w = await arm("PUT", schedPath + "/shutdown-computevm-" + encodeURIComponent(full.name), body, RB_API.devtestlab);
+      if (w.ok) { toast("Auto-shutdown saved for " + full.name); recordNotif("ok","Auto-shutdown saved", full.name + " " + en.value); fill(); }
+      else toast("Save failed: " + rbErr(w), "err");
+    })));
+  }
+  await fill();
+};
+
+// ---- Backup: VM restore points (Microsoft.Compute/restorePointCollections) ----
+SUB_RENDERERS.vmbackup = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Restore points capture this virtual machine's configuration and disks at a point in time."));
+  const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"}); host.append(bar);
+  const list = el("div",{}); host.append(list);
+  const collPath = rbRgPath(full, "Microsoft.Compute", "restorePointCollections");
+  async function coll(){
+    const r = await rbGet(collPath, RB_API.compute);
+    return ((r.ok && r.json && r.json.value) || []).find(c => String(getPath(c,"properties.source.id")||"").toLowerCase() === String(full.id).toLowerCase());
+  }
+  async function fill(){
+    list.innerHTML = "";
+    const c = await coll();
+    const rps = (c && getPath(c,"properties.restorePoints")) || [];
+    if (!rps.length) { list.append(emptyState("No restore points for " + full.name + " yet.")); return; }
+    list.append(el("div",{class:"sub-info"}, "Restore point collection ", el("strong",{}, c.name)));
+    list.append(rbTable(["Restore point","Created","Consistency","VM size","OS disk",""], rps.map(rp => [
+      rp.name, getPath(rp,"properties.timeCreated") || "", getPath(rp,"properties.consistencyMode") || "",
+      getPath(rp,"properties.sourceMetadata.hardwareProfile.vmSize") || "",
+      getPath(rp,"properties.sourceMetadata.storageProfile.osDisk.managedDisk.storageAccountType") || "",
+      rbBtn("Delete", async () => {
+        if (!confirm("Delete restore point '" + rp.name + "'?")) return;
+        const d = await arm("DELETE", rp.id, undefined, RB_API.compute);
+        if (d.ok || d.status === 204) { toast("Deleted " + rp.name); fill(); } else toast("Delete failed: " + rbErr(d), "err");
+      }, "del", "delete")])));
+  }
+  bar.append(rbBtn("Create restore point", async () => {
+    let c = await coll();
+    if (!c) {
+      const cr = await arm("PUT", collPath + "/" + encodeURIComponent(full.name + "-restorepoints"), {location: full.location, properties:{source:{id: full.id}}}, RB_API.compute);
+      if (!cr.ok) { toast("Create failed: " + rbErr(cr), "err"); return; }
+      c = cr.json;
+    }
+    const nm = "rp-" + rbStamp();
+    const r = await arm("PUT", c.id + "/restorePoints/" + nm, {properties:{consistencyMode:"CrashConsistent"}}, RB_API.compute);
+    if (r.ok) { toast("Restore point created: " + nm); recordNotif("ok","Restore point created", full.name + " / " + nm); fill(); }
+    else toast("Create failed: " + rbErr(r), "err");
+  }, "", "add"), rbBtn("Refresh", fill, "sec", "refresh"));
+  await fill();
+};
+
+// ---- Extensions + applications: virtualMachines/{vm}/extensions ----
+SUB_RENDERERS.vmextensions = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "VM extensions installed on ", el("strong",{}, full.name), " (post-deployment configuration and automation)."));
+  const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"}); host.append(bar);
+  const list = el("div",{}); host.append(list);
+  async function fill(){
+    list.innerHTML = "";
+    const r = await rbGet(full.id + "/extensions", "2023-09-01");
+    const ex = (r.ok && r.json && r.json.value) || [];
+    if (!ex.length) { list.append(emptyState("No extensions are installed on " + full.name + ".")); return; }
+    list.append(rbTable(["Name","Type","Publisher","Version","Status",""], ex.map(x => [
+      x.name, getPath(x,"properties.type") || "", getPath(x,"properties.publisher") || "", getPath(x,"properties.typeHandlerVersion") || "",
+      getPath(x,"properties.provisioningState") || "",
+      rbBtn("Uninstall", async () => {
+        if (!confirm("Uninstall extension '" + x.name + "'?")) return;
+        const d = await arm("DELETE", x.id, undefined, "2023-09-01");
+        if (d.ok || d.status === 204) { toast("Uninstalled " + x.name); fill(); } else toast("Uninstall failed: " + rbErr(d), "err");
+      }, "del", "delete")])));
+  }
+  const KNOWN = {CustomScript:["Microsoft.Azure.Extensions","2.1"], AADSSHLoginForLinux:["Microsoft.Azure.ActiveDirectory","1.0"],
+                 AzureMonitorLinuxAgent:["Microsoft.Azure.Monitor","1.0"], DependencyAgentLinux:["Microsoft.Azure.Monitoring.DependencyAgent","9.10"]};
+  bar.append(rbBtn("Add", () => {
+    const ty = rbSelect(Object.keys(KNOWN), "CustomScript");
+    const nm = rbInput("CustomScript"), cfg = el("textarea",{class:"sub-select",style:"min-width:320px;height:70px;padding:6px"}, '{"commandToExecute": "echo hello"}');
+    ty.addEventListener("change", () => { nm.value = ty.value; });
+    host.append(rbForm("Install an extension", [["Extension", ty], ["Name", nm], ["Settings (JSON)", cfg]], async (form) => {
+      let settings = {}; try { settings = JSON.parse(cfg.value || "{}"); } catch(e) { toast("Settings must be valid JSON","err"); return; }
+      const [pub, ver] = KNOWN[ty.value];
+      const r = await arm("PUT", full.id + "/extensions/" + encodeURIComponent(nm.value.trim() || ty.value),
+        {location: full.location, properties:{publisher: pub, type: ty.value, typeHandlerVersion: ver, autoUpgradeMinorVersion: true, settings}}, "2023-09-01");
+      if (r.ok) { toast("Extension installed: " + (nm.value || ty.value)); recordNotif("ok","Extension installed", full.name); form.remove(); fill(); }
+      else toast("Install failed: " + rbErr(r), "err");
+    }, "Install"));
+  }, "", "add"), rbBtn("Refresh", fill, "sec", "refresh"));
+  await fill();
+};
+
+// ---- Run command: virtualMachines/{vm}/runCommands (managed run commands) ----
+SUB_RENDERERS.runcommand = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Run a shell script inside ", el("strong",{}, full.name), " through the VM agent. Each run is recorded with its output."));
+  const script = el("textarea",{class:"sub-select",style:"min-width:420px;height:80px;padding:6px;font-family:Consolas,Menlo,monospace"}, "uname -a\ndf -h /");
+  const out = el("div",{});
+  host.append(rbKv([["Script (RunShellScript)", script]], "Run command script"));
+  host.append(el("div",{class:"blade-actions"}, rbBtn("Run", async () => {
+    const nm = "run-" + rbStamp();
+    const r = await arm("PUT", full.id + "/runCommands/" + nm, {location: full.location, properties:{source:{script: script.value}}}, RB_API.compute);
+    if (!r.ok) { toast("Run failed: " + rbErr(r), "err"); return; }
+    toast("Run " + nm + ": " + getPath(r.json,"properties.instanceView.executionState"));
+    fill();
+  }, "", "play_arrow")));
+  host.append(out);
+  async function fill(){
+    out.innerHTML = "";
+    const r = await rbGet(full.id + "/runCommands", RB_API.compute);
+    const runs = (r.ok && r.json && r.json.value) || [];
+    if (!runs.length) { out.append(emptyState("No run commands have been executed on " + full.name + ".")); return; }
+    out.append(el("div",{class:"sub-info",style:"margin-top:12px"}, "Run history"));
+    runs.forEach(rc => {
+      const iv = getPath(rc,"properties.instanceView") || {};
+      const w = el("div",{class:"keyblock"});
+      w.append(el("div",{class:"k"}, rc.name + " — " + (iv.executionState || "") + (iv.exitCode != null ? " (exit " + iv.exitCode + ")" : "") + " · " + (iv.startTime || "")));
+      w.append(el("pre",{class:"keyval"}, String(getPath(rc,"properties.source.script") || getPath(rc,"properties.source.commandId") || "")));
+      if (iv.output) w.append(el("pre",{class:"keyval"}, iv.output));
+      if (iv.error) w.append(el("pre",{class:"keyval"}, iv.error));
+      if (iv.executionMessage) w.append(el("div",{class:"hint"}, iv.executionMessage));
+      out.append(w);
+    });
+  }
+  await fill();
+};
+
+// ---- Alerts: metric alert rules scoped to this resource ----
+SUB_RENDERERS.resourcealerts = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"}, "Metric alert rules that monitor ", el("strong",{}, full.name), "."));
+  const bar = el("div",{style:"display:flex;gap:8px;margin:10px 0 14px"}); host.append(bar);
+  const list = el("div",{}); host.append(list);
+  const base = rbRgPath(full, "Microsoft.Insights", "metricAlerts");
+  const METRICS = {vm:["Percentage CPU","Available Memory Bytes","Network In Total","Network Out Total","Disk Read Bytes"]};
+  async function fill(){
+    list.innerHTML = "";
+    const r = await rbGet(base, RB_API.insights);
+    const mine = ((r.ok && r.json && r.json.value) || []).filter(a => (getPath(a,"properties.scopes")||[]).some(s => String(s).toLowerCase() === String(full.id).toLowerCase()));
+    if (!mine.length) { list.append(emptyState("No alert rules monitor " + full.name + ".")); return; }
+    list.append(rbTable(["Alert rule","Severity","Enabled","Condition","Frequency",""], mine.map(a => {
+      const c = (getPath(a,"properties.criteria.allOf") || [])[0] || {};
+      return [a.name, "Sev" + getPath(a,"properties.severity"), getPath(a,"properties.enabled") ? "Yes" : "No",
+              (c.timeAggregation||"") + " " + (c.metricName||"") + " " + (c.operator||"") + " " + (c.threshold!=null?c.threshold:""),
+              getPath(a,"properties.evaluationFrequency") || "",
+              rbBtn("Delete", async () => {
+                if (!confirm("Delete alert rule '" + a.name + "'?")) return;
+                const d = await arm("DELETE", a.id, undefined, RB_API.insights);
+                if (d.ok || d.status === 204) { toast("Deleted " + a.name); fill(); } else toast("Delete failed: " + rbErr(d), "err");
+              }, "del", "delete")];
+    })));
+  }
+  bar.append(rbBtn("Create alert rule", () => {
+    const nm = rbInput(full.name + "-cpu-high"), mt = rbSelect(METRICS[svc.key] || ["Percentage CPU"], (METRICS[svc.key]||["Percentage CPU"])[0]);
+    const op = rbSelect(["GreaterThan","GreaterThanOrEqual","LessThan","LessThanOrEqual"], "GreaterThan"), th = rbInput("80", {type:"number"});
+    const ag = rbSelect(["Average","Maximum","Minimum","Total","Count"], "Average"), sv = rbSelect([["0","0 - Critical"],["1","1 - Error"],["2","2 - Warning"],["3","3 - Informational"],["4","4 - Verbose"]], "2");
+    host.append(rbForm("Create alert rule", [["Alert rule name", nm], ["Signal", mt], ["Aggregation", ag], ["Operator", op], ["Threshold", th], ["Severity", sv]], async (form) => {
+      const body = {location:"global", properties:{description:"", severity:+sv.value, enabled:true, scopes:[full.id],
+        evaluationFrequency:"PT1M", windowSize:"PT5M", criteria:{"odata.type":"Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+        allOf:[{name:"Metric1", criterionType:"StaticThresholdCriterion", metricName: mt.value, timeAggregation: ag.value, operator: op.value, threshold:+th.value}]}, actions:[]}};
+      const r = await arm("PUT", base + "/" + encodeURIComponent(nm.value.trim()), body, RB_API.insights);
+      if (r.ok) { toast("Alert rule created: " + nm.value); recordNotif("ok","Alert rule created", nm.value); form.remove(); fill(); }
+      else toast("Create failed: " + rbErr(r), "err");
+    }, "Create"));
+  }, "", "add"), rbBtn("Refresh", fill, "sec", "refresh"));
+  await fill();
+};
+
+// ---- PaaS networking: public network access, firewall rules, private endpoints ----
+SUB_RENDERERS.paasnetworking = async function(svc, full, host){
+  const slot = el("div",{}); host.append(slot);
+  async function fill(){
+    slot.innerHTML = "";
+    const [r, pe] = await Promise.all([arm("GET", full.id, undefined, svc.apiVersion),
+                                       rbGet(full.id + "/privateEndpointConnections", svc.apiVersion)]);
+    if (!r.ok) { slot.append(emptyState("Could not load the resource: " + rbErr(r))); return; }
+    const p = r.json.properties || {};
+    const acl = p.networkAcls || p.networkRuleSet || null;
+    const pna = p.publicNetworkAccess || (acl ? (acl.defaultAction === "Deny" ? "Enabled from selected networks" : "Enabled from all networks") : "Enabled");
+    const rows = [["Public network access", pna]];
+    if (acl) {
+      rows.push(["Default action", acl.defaultAction || "Allow"]);
+      if (acl.bypass) rows.push(["Exceptions (bypass)", acl.bypass]);
+      rows.push(["IP rules", (acl.ipRules || []).map(x => x.value || x.ipAddressOrRange || x.ipMask).join(", ") || "None"]);
+      rows.push(["Virtual network rules", (acl.virtualNetworkRules || []).map(x => rbLeaf(x.id || x.subnet && x.subnet.id)).join(", ") || "None"]);
+    }
+    const tls = p.minimumTlsVersion || p.minimalTlsVersion || p.minimumTlsVersionAllowed || p.minTlsVersion;
+    if (tls) rows.push(["Minimum TLS version", tls]);
+    slot.append(rbKv(rows, "Public network access"));
+    const conns = (pe.ok && pe.json && pe.json.value) || [];
+    slot.append(el("div",{class:"sub-info",style:"margin-top:12px"}, "Private endpoint connections"));
+    if (!conns.length) slot.append(emptyState("No private endpoint connections to " + full.name + "."));
+    else slot.append(rbTable(["Connection","Private endpoint","Status"], conns.map(c => [c.name, rbLeaf(getPath(c,"properties.privateEndpoint.id")), getPath(c,"properties.privateLinkServiceConnectionState.status") || ""])));
+    if ("publicNetworkAccess" in p) {
+      const sel = rbSelect(["Enabled","Disabled"], p.publicNetworkAccess);
+      slot.append(rbForm("Change public network access", [["Public network access", sel]], async () => {
+        const w = await arm("PATCH", full.id, {properties:{publicNetworkAccess: sel.value}}, svc.apiVersion);
+        if (w.ok) { toast("Public network access: " + sel.value); fill(); } else toast("Save failed: " + rbErr(w), "err");
+      }));
+    }
+  }
+  await fill();
+};
+
+// VM create (portal parity): the wizard's Networking / Management choices become
+// real ARM resources — VNet + subnet, NSG with the inbound rule, public IP and
+// NIC — wired into the VM's networkProfile, plus identity and auto-shutdown.
+async function rbVmWizardPrepare(name, values, bodyObj){
+  const loc = bodyObj.location || LOCATION;
+  const net = (t) => `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/${t}`;
+  const vnetName = String(values.__vnet__ || (name + "-vnet")).trim();
+  const sm = String(values.__subnet__ || "default (10.0.0.0/24)").match(/^\s*([^\s(]+)\s*(?:\(([^)]+)\))?/);
+  const subName = (sm && sm[1]) || "default", subPrefix = (sm && sm[2]) || "10.0.0.0/24";
+  const vl = await rbGet(net("virtualNetworks"), RB_API.network);
+  let vnet = ((vl.ok && vl.json && vl.json.value) || []).find(v => v.name.toLowerCase() === vnetName.toLowerCase());
+  if (!vnet || !(getPath(vnet,"properties.subnets")||[]).some(s => s.name === subName)) {
+    const subnets = ((vnet && getPath(vnet,"properties.subnets")) || []).concat([{name: subName, properties:{addressPrefix: subPrefix}}]);
+    const prefixes = (vnet && getPath(vnet,"properties.addressSpace.addressPrefixes")) || ["10.0.0.0/16"];
+    const w = await arm("PUT", net("virtualNetworks") + "/" + encodeURIComponent(vnetName),
+      {location: loc, properties:{addressSpace:{addressPrefixes: prefixes}, subnets}}, RB_API.network);
+    if (!w.ok) throw new Error("virtual network: " + rbErr(w));
+    vnet = w.json;
+  }
+  const ipc = {name:"ipconfig1", properties:{subnet:{id: vnet.id + "/subnets/" + subName}, privateIPAllocationMethod:"Dynamic"}};
+  if ((values.__publicIp__ || "new") === "new") {
+    const pip = await arm("PUT", net("publicIPAddresses") + "/" + encodeURIComponent(name + "-ip"),
+      {location: loc, sku:{name:"Standard"}, properties:{publicIPAllocationMethod:"Static"}}, RB_API.network);
+    if (!pip.ok) throw new Error("public IP: " + rbErr(pip));
+    ipc.properties.publicIPAddress = {id: pip.json.id, properties:{deleteOption:"Delete"}};
+  }
+  const nicBody = {location: loc, properties:{ipConfigurations:[ipc]}};
+  if ((values.__nsg__ || "basic") !== "none") {
+    const PORTS = {ssh:[22,"SSH"], http:[80,"HTTP"], https:[443,"HTTPS"], rdp:[3389,"RDP"]};
+    const rules = [];
+    if ((values.__publicInbound__ || "selected") === "selected") {
+      const [port, label] = PORTS[values.__inboundPorts__ || "ssh"] || PORTS.ssh;
+      rules.push({name: label, properties:{priority:300, direction:"Inbound", access:"Allow", protocol:"Tcp",
+        sourceAddressPrefix:"*", sourcePortRange:"*", destinationAddressPrefix:"*", destinationPortRange: String(port)}});
+    }
+    const nsg = await arm("PUT", net("networkSecurityGroups") + "/" + encodeURIComponent(name + "-nsg"),
+      {location: loc, properties:{securityRules: rules}}, RB_API.network);
+    if (!nsg.ok) throw new Error("network security group: " + rbErr(nsg));
+    nicBody.properties.networkSecurityGroup = {id: nsg.json.id};
+  }
+  const nic = await arm("PUT", net("networkInterfaces") + "/" + encodeURIComponent(name + "-nic"), nicBody, RB_API.network);
+  if (!nic.ok) throw new Error("network interface: " + rbErr(nic));
+  bodyObj.properties = bodyObj.properties || {};
+  bodyObj.properties.networkProfile = {networkInterfaces:[{id: nic.json.id, properties:{primary:true, deleteOption:"Delete"}}]};
+  if (values.__managedIdentity__ === true || values.__managedIdentity__ === "true") bodyObj.identity = {type:"SystemAssigned"};
+}
+async function rbVmWizardFinish(name, values, vm){
+  if (!(values.__autoShutdown__ === true || values.__autoShutdown__ === "true") || !vm || !vm.id) return;
+  const time = String(values.__shutdownTime__ || "19:00").replace(":","");
+  await arm("PUT", `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DevTestLab/schedules/shutdown-computevm-` + encodeURIComponent(name),
+    {location: vm.location, properties:{status:"Enabled", taskType:"ComputeVmShutdownTask", dailyRecurrence:{time}, timeZoneId:"UTC",
+     notificationSettings:{status:"Disabled", timeInMinutes:30}, targetResourceId: vm.id}}, RB_API.devtestlab);
+}
+// ===== REAL-BLADES:END =====
+
 function emptyState(msg){
   return el("div",{class:"sub-empty"}, icon("inbox"), document.createTextNode(msg));
 }
@@ -4933,7 +5467,9 @@ async function submitWizard(svc, state, synth){
   recordNotif("ok","Creating "+name+" ("+svc.label+")");
   closeBlade();
   try {
+    if (svc.key === "vm") await rbVmWizardPrepare(name, state.values, bodyObj);
     const res = await arm("PUT", resPath(svc,name), bodyObj, svc.apiVersion);
+    if (res.ok && svc.key === "vm") await rbVmWizardFinish(name, state.values, res.json);
     if (res.ok) {
       toast(name+" created"); recordNotif("ok","Created "+name+" ("+svc.label+")");
       selectService(svc.key); refreshBudgetChip();   // re-fetches the list — no hard refresh needed

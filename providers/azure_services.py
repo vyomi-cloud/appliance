@@ -71,7 +71,7 @@ RESOURCE_CATALOG: list[dict] = [
             "properties": {
                 "hardwareProfile": {"vmSize": "Standard_B1s"},
                 "storageProfile": {"imageReference": {"publisher": "Canonical", "offer": "0001-com-ubuntu-server-jammy", "sku": "22_04-lts", "version": "latest"}},
-                "osProfile": {"computerName": "vm-demo", "adminUsername": "azureuser"},
+                "osProfile": {"computerName": "__NAME__", "adminUsername": "azureuser"},
                 "provisioningState": "Succeeded",
                 "vmId": "__UUID__",
             },
@@ -766,6 +766,26 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         return JSONResponse(_provider_info(after[0]))
     if len(after) < 2:
         return _error(400, "BadRequest", "Missing provider namespace/type.")
+
+    # Management locks guard every write under a locked scope; locks, identities,
+    # resource health, NICs/public IPs, auto-shutdown schedules, run commands and
+    # restore points are modelled by the shared core (same file Nano runs).
+    from core import azure_arm_ext_core as _ext
+    if method in ("PUT", "PATCH", "DELETE", "POST"):
+        _lk = _ext.lock_conflict(_state, _ext.target_id(sub, rg, after), method)
+        if _lk:
+            return JSONResponse(status_code=_lk["status"], content=_lk["body"])
+    _x = _ext.route(_state, method, sub, rg, after,
+                    await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {},
+                    dict(request.query_params), executor=_vm_run_executor)
+    if _x is not None:
+        if method != "GET" and _x["status"] < 300 and _x.get("scope"):
+            _record_usage(f"azure.{method.lower()}", {"type": _x["type"], "name": _x["name"],
+                                                       "resource_id": _x["scope"]})
+        if _x["body"] is None:
+            return Response(status_code=_x["status"])
+        return JSONResponse(status_code=_x["status"], content=_x["body"], headers=_x.get("headers") or {})
+
     namespace = after[0]
     # after = [ns, type, name?, childType?, childName?, ...]
     chain = after[1:]
@@ -825,7 +845,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if is_collection:
         if method != "GET":
             return _error(405, "MethodNotAllowed", "Collection supports GET only.")
-        return _list(sub, rg, full_type)
+        # A child collection lists only that parent's children.
+        parent = _canonical_id(sub, rg, type_chain[:-1], names) if names else None
+        return _list(sub, rg, full_type, parent)
 
     rid = _canonical_id(sub, rg, type_chain, names)
     key = rid.lower()
@@ -895,7 +917,13 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
                 raise
             except Exception:
                 pass
+        _bad = (_ext.validate_vm(_state, rid, payload) if full_type.lower() == _ext.VM_T
+                else _ext.validate_identity(payload))
+        if _bad:
+            return JSONResponse(status_code=_bad["status"], content=_bad["body"])
         resp = _upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
+        if full_type.lower() == _ext.VM_T and key in _state:
+            _ext.after_vm_upsert(_state, _state[key])
         # Data-plane provisioning hooks (real Postgres for SQL, etc.).
         _provision_on_create(full_type, _state.get(key), base)
         if lro:
@@ -912,6 +940,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         return resp
     if method == "DELETE":
         rec = _state.pop(key, None)
+        _ext.on_delete(_state, rec)
         _deprovision_on_delete(full_type, rec)
         if rec is not None:
             _record_usage("azure.delete", {"type": full_type, "name": leaf_name, "resource_id": rid})
@@ -1119,6 +1148,25 @@ def _arm_action(action: str, type_chain: list[str], resource_name: str,
     return JSONResponse({})
 
 
+def _vm_run_executor(vm: dict, script: str):
+    """Run a VM run-command script in the VM's guest (its runtime container) through
+    the same exec path as the in-console terminal. None when the VM has no guest
+    runtime (metadata-only VM) — the run is then recorded as not executed."""
+    rt = ((vm.get("properties") or {}).get("runtime") or {})
+    if not isinstance(rt, dict) or not rt.get("containerName"):
+        return None
+    try:
+        import server as _srv
+        inst = _srv._azure_vm_flat_instance(vm)
+        _srv._azure_vm_sync(inst, vm)
+        if str(inst.get("state") or "").lower() != "running":
+            return None
+        res = _srv._console_execute(inst, script)
+        return (int(res.get("exit_code", 1)), str(res.get("stdout", res.get("output", ""))), str(res.get("stderr", "")))
+    except Exception:
+        return None
+
+
 async def _safe_json(request: Request) -> dict:
     try:
         body = await request.json()
@@ -1127,11 +1175,14 @@ async def _safe_json(request: Request) -> dict:
         return {}
 
 
-def _list(sub: str, rg: str | None, full_type: str) -> JSONResponse:
+def _list(sub: str, rg: str | None, full_type: str, parent: str | None = None) -> JSONResponse:
     ft = full_type.lower()
+    pfx = parent.lower() + "/" if parent else None
     items = []
     for rec in _state.values():
         if rec.get("_type", "").lower() != ft:
+            continue
+        if pfx and not str(rec.get("id", "")).lower().startswith(pfx):
             continue
         if rec.get("_sub") != sub:
             continue
@@ -1200,6 +1251,9 @@ def _upsert(rid: str, key: str, full_type: str, name: str, catalog: dict,
         rec["sku"] = _merge(rec.get("sku", {}), payload["sku"])
     if isinstance(payload.get("properties"), dict):
         rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
+    from core import azure_arm_ext_core as _ext
+    _ext.apply_identity(rec, payload)
+    _ext.mark_changed(rec)
 
     rec.setdefault("properties", {})
     rec["properties"].setdefault("provisioningState", "Succeeded")

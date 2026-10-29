@@ -261,6 +261,19 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation}
 
 
+def _arm_event(method: str, scope: str, typ: str, name: str) -> None:
+    """Activity log for an ARM write: recorded against the resource it belongs to
+    (``scope``'s name), with the ARM operation name (``<type>/write|delete|action``)."""
+    try:
+        from core import nano_events
+        verb = {"DELETE": "delete", "POST": "action"}.get(method.upper(), "write")
+        top = scope.rstrip("/").split("/")[-1]
+        nano_events.record(provider="azure", service=typ, resource=top, action=f"{typ}/{verb}",
+                           status="ok", detail=f"{method.upper()} {typ} {name}".strip())
+    except Exception:
+        pass
+
+
 def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
     """Native Azure Resource Manager control plane. Unlike the generic
     catalog CRUD (which rides /api/{cloud}/{service} paths), the Azure console
@@ -284,6 +297,8 @@ def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
             from core.azure_arm_core import AzureArm
             arm = AzureArm()
         backends._azure_arm = arm
+    if getattr(arm, "on_event", None) is None:
+        arm.on_event = _arm_event
     resp = arm.handle(method, params.get("path", ""),
                       params.get("query") or {}, params.get("body"))
     return {"ok": resp["status"] < 400, "__http": resp}
@@ -458,6 +473,10 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 if len(tail) != 3:
                     continue
                 rtype = (tail[0] + "/" + tail[1]).lower()
+                # Locks, auto-shutdown schedules and NICs are configuration, not billed resources.
+                if rtype in ("microsoft.authorization/locks", "microsoft.devtestlab/schedules",
+                             "microsoft.network/networkinterfaces"):
+                    continue
                 by_service[rtype] = by_service.get(rtype, 0) + 1
                 if rtype in _VM_SERVICES["azure"]:
                     vms += 1

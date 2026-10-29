@@ -12,7 +12,9 @@ Universal types implemented in the SPA::
     tags          → key/value editor (PATCH on save)
     json          → raw JSON dump
     properties    → flattened recursive kv-grid of every property path
-    locks         → list of resource locks (read-only stub)
+    locks         → management locks (Microsoft.Authorization/locks) on / inherited by the resource
+    diagnose      → Resource Health availability + configuration checks
+    identity      → the resource's managed identity (system / user assigned)
     metrics       → time-series mock charts (synthesized sparklines)
 
 Per-service types::
@@ -42,7 +44,7 @@ _UNIVERSAL_TOP = [
     {"key": "iam",         "label": "Access control (IAM)","icon": "admin_panel_settings", "type": "iam"},
     {"key": "tags",        "label": "Tags",                "icon": "sell",          "type": "tags"},
     {"key": "diagnose",    "label": "Diagnose and solve problems",
-                                                          "icon": "healing",        "type": "stub"},
+                                                          "icon": "healing",        "type": "diagnose"},
 ]
 
 def _settings_props_locks():
@@ -62,18 +64,18 @@ _VM_SUB = [
         {"key": "connect",      "label": "Connect",           "icon": "terminal",     "type": "connect"},
         {"key": "disks",        "label": "Disks",             "icon": "storage",      "type": "disks"},
         {"key": "size",         "label": "Size",              "icon": "tune",         "type": "size"},
-        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "stub"},
+        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "identity"},
         *_settings_props_locks(),
     ]},
     {"group": "Operations", "items": [
         {"key": "autoShutdown", "label": "Auto-shutdown",     "icon": "schedule",     "type": "autoShutdown"},
-        {"key": "backup",       "label": "Backup",            "icon": "backup",       "type": "stub"},
-        {"key": "extensions",   "label": "Extensions + applications", "icon": "extension", "type": "stub"},
-        {"key": "runCommand",   "label": "Run command",       "icon": "play_circle",  "type": "stub"},
+        {"key": "backup",       "label": "Backup",            "icon": "backup",       "type": "vmBackup"},
+        {"key": "extensions",   "label": "Extensions + applications", "icon": "extension", "type": "vmExtensions"},
+        {"key": "runCommand",   "label": "Run command",       "icon": "play_circle",  "type": "runCommand"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "insights",     "label": "Insights",          "icon": "monitoring",   "type": "metrics"},
-        {"key": "alerts",       "label": "Alerts",            "icon": "notifications","type": "stub"},
+        {"key": "alerts",       "label": "Alerts",            "icon": "notifications","type": "resourceAlerts"},
         {"key": "metrics",      "label": "Metrics",           "icon": "show_chart",   "type": "metrics"},
     ]},
 ]
@@ -120,7 +122,7 @@ _SQL_SUB = [
     ]},
     {"group": "Settings", "items": [
         {"key": "connStrings",  "label": "Connection strings","icon": "vpn_key",      "type": "connStrings"},
-        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "stub"},
+        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "identity"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
@@ -139,7 +141,7 @@ _COSMOS_SUB = [
         {"key": "consistency",  "label": "Default consistency",     "icon": "tune",   "type": "stub"},
         {"key": "backup",       "label": "Backup & Restore",  "icon": "backup",       "type": "backup"},
         {"key": "networking",   "label": "Networking",        "icon": "lan",          "type": "networking"},
-        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "stub"},
+        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "identity"},
         *_settings_props_locks(),
     ]},
     {"group": "Integrations", "items": [
@@ -187,7 +189,7 @@ _SERVICEBUS_SUB = [
         {"key": "sharedAccess", "label": "Shared access policies", "icon": "vpn_key", "type": "sharedAccess"},
         {"key": "georecovery",  "label": "Geo-recovery",      "icon": "public",       "type": "stub"},
         {"key": "networking",   "label": "Networking",        "icon": "lan",          "type": "networking"},
-        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "stub"},
+        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "identity"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
@@ -275,7 +277,7 @@ _EVENTGRID_SUB = [
     ]},
     {"group": "Settings", "items": [
         {"key": "networking",  "label": "Networking",          "icon": "lan",           "type": "networking"},
-        {"key": "identity",    "label": "Identity",            "icon": "badge",         "type": "stub"},
+        {"key": "identity",    "label": "Identity",            "icon": "badge",         "type": "identity"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
