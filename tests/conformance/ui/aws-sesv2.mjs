@@ -146,6 +146,23 @@ try {
   const sent = await gridRows();
   check(sent.rows.some((r) => r.includes("ui hello")), "Sent emails lists the message", JSON.stringify(sent.rows.slice(0, 2)));
   filled(sent.headers, sent.rows, "Sent emails");
+  check(sent.headers.includes("Delivery") && sent.headers.includes("Inbox"), "Sent emails has Delivery and Inbox columns", sent.headers.join(", "));
+  const sentRow = sent.rows.find((r) => r.includes("ui hello")) || [];
+  check(sentRow.some((c) => /^Delivered$/.test(c)) && sentRow.some((c) => /\/view\//.test(c)), "Sent email shows Delivered and links to the Mailpit inbox message", JSON.stringify(sentRow));
+
+  // ── delivery settings (real delivery: outbound relay + inbound IMAP) and received mail ──
+  await openRail("Delivery settings");
+  const ds = await gridRows();
+  check(ds.rows.length >= 5, "Delivery settings lists the mail plane (inbox, SMTP interface, relay, inbound)", JSON.stringify(ds.rows.map((r) => r[0])));
+  filled(ds.headers, ds.rows, "Delivery settings");
+  await page.locator("#mailSettingsBtn").click({ timeout: 8000 });
+  await page.waitForTimeout(800);
+  check(await page.locator("#mailSettingsSave").count() === 1, "Configure delivery opens the 'Deliver to real inboxes' form");
+  await page.locator("#mailSettingsSave").click();
+  await page.waitForTimeout(1200);
+  check(await page.locator("#mailSettingsSave").count() === 0, "saving the delivery form closes it");
+  await openRail("Received emails");
+  check(/Received emails/.test(await text("#main")) && !/Renderer error|Failed to load/i.test(await text("#main")), "Received emails page renders");
 
   // ── delete from the UI ─────────────────────────────────────────────────
   await openRail("Verified identities");

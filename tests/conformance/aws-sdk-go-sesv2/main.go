@@ -10,6 +10,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -169,6 +172,33 @@ func main() {
 		Content: simple("hello", "world")})
 	step("SendEmail (Simple)", err)
 	chk("MessageId returned", err == nil && len(aws.ToString(se.MessageId)) > 10, "")
+	// real delivery: the SDK's message is readable in the local inbox (Mailpit API)
+	subj := "go-sdk-" + sfx
+	rawMsg := "From: " + email + "\r\nTo: inbox-" + sfx + "@example.net\r\nSubject: " + subj + "\r\nMIME-Version: 1.0\r\n" +
+		"Content-Type: multipart/mixed; boundary=\"b1\"\r\n\r\n--b1\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<p>go <b>html</b></p>\r\n" +
+		"--b1\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=\"g.txt\"\r\nContent-Transfer-Encoding: base64\r\n\r\n" +
+		"Z28tYXR0YWNo\r\n--b1--\r\n"
+	_, err = ses.SendEmail(ctx, &sesv2.SendEmailInput{FromEmailAddress: aws.String(email),
+		Destination: &types.Destination{ToAddresses: []string{"inbox-" + sfx + "@example.net"}},
+		Content:     &types.EmailContent{Raw: &types.RawMessage{Data: []byte(rawMsg)}}})
+	step("SendEmail (Raw, HTML + attachment) for the inbox check", err)
+	mp := os.Getenv("MAILPIT_URL")
+	if mp == "" {
+		mp = "http://127.0.0.1:8025"
+	}
+	inbox := ""
+	for i := 0; i < 20 && !strings.Contains(inbox, `"ID"`); i++ {
+		if r, herr := http.Get(mp + "/api/v1/search?query=" + url.QueryEscape(`subject:"`+subj+`"`)); herr == nil {
+			b, _ := io.ReadAll(r.Body)
+			r.Body.Close()
+			inbox = string(b)
+		}
+		if !strings.Contains(inbox, `"ID"`) {
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+	chk("SendEmail is delivered to the Mailpit inbox with subject and attachment",
+		strings.Contains(inbox, subj) && strings.Contains(inbox, `"Attachments":1`), inbox)
 	_, err = ses.SendEmail(ctx, &sesv2.SendEmailInput{FromEmailAddress: aws.String("anyone@" + domain),
 		Destination: &types.Destination{ToAddresses: []string{"to@example.net"}},
 		Content:     &types.EmailContent{Template: &types.Template{TemplateName: aws.String(tpl), TemplateData: aws.String("{}")}}})
@@ -177,7 +207,7 @@ func main() {
 		Destination: &types.Destination{ToAddresses: []string{"to@example.net"}}, Content: simple("a", "b")})
 	wantErr("unverified sender -> MessageRejected", "MessageRejected", err)
 	sb, err := ses.SendBulkEmail(ctx, &sesv2.SendBulkEmailInput{FromEmailAddress: aws.String(email),
-		DefaultContent: &types.BulkEmailContent{Template: &types.Template{TemplateName: aws.String(tpl), TemplateData: aws.String("{}")}},
+		DefaultContent:   &types.BulkEmailContent{Template: &types.Template{TemplateName: aws.String(tpl), TemplateData: aws.String("{}")}},
 		BulkEmailEntries: []types.BulkEmailEntry{{Destination: &types.Destination{ToAddresses: []string{"a@example.net"}}}}})
 	step("SendBulkEmail", err)
 	chk("bulk entry succeeded", err == nil && len(sb.BulkEmailEntryResults) == 1 && sb.BulkEmailEntryResults[0].Status == types.BulkEmailStatusSuccess, "")

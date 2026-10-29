@@ -90,6 +90,26 @@ q "mail" "list-tags-for-resource" list-tags-for-resource --resource-arn "$ARN"
 q "" "untag-resource" untag-resource --resource-arn "$ARN" --tag-keys team
 q "SendQuota" "get-account" get-account
 
+# real delivery: the message the CLI sends must be readable in the local inbox (Mailpit)
+MAILPIT="${MAILPIT_URL:-http://127.0.0.1:8025}"
+SUBJ="cli-mail-$SFX"
+v "send-email (HTML + text) for the inbox check" send-email --from-email-address "$EMAIL" \
+  --destination "ToAddresses=rcpt-$SFX@example.net" \
+  --content "{\"Simple\":{\"Subject\":{\"Data\":\"$SUBJ\"},\"Body\":{\"Text\":{\"Data\":\"cli text\"},\"Html\":{\"Data\":\"<p>cli <b>html</b></p>\"}},\"Attachments\":[{\"FileName\":\"note.txt\",\"ContentType\":\"text/plain\",\"RawContent\":\"Y2xpIGF0dGFjaA==\"}]}}"
+MID=""
+for _ in $(seq 1 20); do
+  MID=$(curl -s "$MAILPIT/api/v1/search?query=subject:%22$SUBJ%22" | python3 -c 'import json,sys;m=json.load(sys.stdin).get("messages") or [];print(m[0]["ID"] if m else "")')
+  [ -n "$MID" ] && break; sleep 0.5
+done
+[ -n "$MID" ]; chk $? "aws sesv2 send-email delivers a message Mailpit's API returns"
+if [ -n "$MID" ]; then
+  MSG=$(curl -s "$MAILPIT/api/v1/message/$MID")
+  printf '%s' "$MSG" | python3 -c 'import json,sys;m=json.load(sys.stdin);sys.exit(0 if m["Subject"]=="'"$SUBJ"'" and "<b>html</b>" in m["HTML"] and "cli text" in m["Text"] else 1)'
+  chk $? "delivered message keeps subject, HTML and text"
+  printf '%s' "$MSG" | python3 -c 'import json,sys;m=json.load(sys.stdin);sys.exit(0 if [a["FileName"] for a in m["Attachments"]]==["note.txt"] else 1)'
+  chk $? "delivered message keeps its attachment"
+fi
+
 # cleanup
 q "" "delete-contact" delete-contact --contact-list-name "$LIST" --email-address "sub@example.net"
 q "" "delete-contact-list" delete-contact-list --contact-list-name "$LIST"

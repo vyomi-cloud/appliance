@@ -55,7 +55,7 @@ const mk = (method, path, body) => page.evaluate(async ([m, p, b]) => {
 const sesSavings = () => page.evaluate(async () => {
   const j = await (await fetch("/api/spaces")).json();
   const sp = (j.spaces || []).find((s) => s.space_id === j.active_space_id) || (j.spaces || [])[0] || {};
-  return Number(((sp.cost_savings || {}).by_service || {})["aws.sesv2"] || 0);
+  return Number((sp.cost_savings || {}).savings_usd || 0);
 });
 
 try {
@@ -127,6 +127,22 @@ try {
     filled(g.headers, g.rows, label);
     await mk("DELETE", `/api/aws/sesv2/${kind}/${encodeURIComponent(name)}`);
   }
+  // ── delivery settings: Nano keeps the API + Sent list; real SMTP needs the offline appliance ──
+  await openRail("Delivery settings");
+  const ds = await gridRows();
+  check(ds.rows.length >= 5, "Delivery settings lists the mail plane", JSON.stringify(ds.rows.map((r) => r[0])));
+  filled(ds.headers, ds.rows, "Delivery settings");
+  check(ds.rows.some((r) => r.join(" ").includes("Not available in Nano")), "Nano says real delivery needs the offline appliance");
+  await page.locator("#mailSettingsBtn").click({ timeout: 8000 });
+  await page.waitForTimeout(800);
+  check(await page.locator("#mailSettingsSave").count() === 1, "Configure delivery opens the 'Deliver to real inboxes' form");
+  await page.locator("#mailSettingsSave").click();
+  await page.waitForTimeout(1200);
+  check(/offline appliance/i.test(await text("#main")) || /browser cannot speak SMTP/i.test(await text("body")), "saving in Nano explains it needs the offline appliance");
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => { const b = [...document.querySelectorAll("button")].find((x) => x.innerText.trim() === "Cancel"); if (b) b.click(); });
+  await openRail("Received emails");
+  check(/Received emails/.test(await text("#main")) && !/Renderer error|Failed to load/i.test(await text("#main")), "Received emails page renders");
   // ── delete from the UI ─────────────────────────────────────────────────
   await openRail("Verified identities");
   await page.locator("#main a.id, #main td a").filter({ hasText: DEFAULT_NAME }).first().click();

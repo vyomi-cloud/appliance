@@ -199,3 +199,105 @@ def test_sesv2_core():
 if __name__ == "__main__":
     run()
     print("sesv2 core: PASS")
+
+
+# ── mail plane (engine side; the sockets are core/ses_mail.py) ─────────────
+class _StubMailer:
+    ui_url = "http://inbox.test"
+
+    def __init__(self):
+        self.sent, self.published = [], []
+
+    def deliver(self, msg, raw, sender, rcpts, relay_to):
+        self.sent.append((sender, list(rcpts), list(relay_to), raw))
+        return {"inbox_id": "abc", "inbox_url": "http://inbox.test/view/abc", "relayed": list(relay_to)}
+
+    def publish_sns(self, topic, payload):
+        self.published.append((topic, payload))
+
+    def seal(self, plain):
+        return "sealed:" + plain[::-1]
+
+
+def test_sesv2_mail_plane():
+    s = ses.SesV2Store()
+    s.mailer = _StubMailer()
+    ses.create_email_identity(s, {}, {}, {"EmailIdentity": "from@vyomi.example.com"})
+    ses.create_config_set(s, {}, {}, {"ConfigurationSetName": "cs"})
+    ses.create_event_destination(s, {"ConfigurationSetName": "cs"}, {}, {"EventDestinationName": "d", "EventDestination": {
+        "Enabled": True, "MatchingEventTypes": ["SEND", "DELIVERY"], "SnsDestination": {"TopicArn": "arn:aws:sns:us-east-1:1:t"}}})
+    r = ses.send_email(s, {}, {}, {"FromEmailAddress": "from@vyomi.example.com", "ConfigurationSetName": "cs",
+                                   "Destination": {"ToAddresses": ["a@x.com"], "BccAddresses": ["b@x.com"]},
+                                   "Content": {"Simple": {"Subject": {"Data": "Hi"}, "Body": {"Html": {"Data": "<b>x</b>"}, "Text": {"Data": "x"}},
+                                                          "Attachments": [{"FileName": "a.txt", "ContentType": "text/plain", "RawContent": "aGk="}]}}})
+    mid = json.loads(r.body)["MessageId"]
+    sender, rcpts, relay, raw = s.mailer.sent[0]
+    _check("mailer got envelope sender + all recipients (Bcc included)", sender == "from@vyomi.example.com" and rcpts == ["a@x.com", "b@x.com"])
+    _check("message has HTML, text, attachment and the SES Message-ID",
+           b"<b>x</b>" in raw and b'filename="a.txt"' in raw and f"{mid}@email.amazonses.com".encode() in raw and b"Bcc" not in raw)
+    _check("events recorded and published to the SNS destination", [e["Type"] for e in s.messages[-1]["Events"]] == ["Send", "Delivery"]
+           and len(s.mailer.published) == 2)
+    # sandbox relay rule
+    s.mail_settings = {"relay": {"enabled": True, "host": "h"}}
+    s.mailer.sent.clear()
+    ses.send_email(s, {}, {}, {"FromEmailAddress": "from@vyomi.example.com", "Destination": {"ToAddresses": ["from@vyomi.example.com", "z@x.com"]},
+                               "Content": {"Simple": {"Subject": {"Data": "Hi"}, "Body": {"Text": {"Data": "x"}}}}})
+    _check("sandbox relays only verified recipients", s.mailer.sent[0][2] == ["from@vyomi.example.com"])
+    # SMTP credentials
+    pw = ses.smtp_password("secret")
+    _check("SMTP password is v4-derived and version-prefixed", __import__("base64").b64decode(pw)[0] == 4 and len(pw) == 44)
+    ses.smtp_register(s, "AKIA1", "secret")
+    _check("SMTP auth: right password", ses.smtp_authenticate(s, "AKIA1", pw))
+    _check("SMTP auth: wrong password / unknown user", not ses.smtp_authenticate(s, "AKIA1", "x") and not ses.smtp_authenticate(s, "nobody", pw))
+    _check("SMTP ingest of an unverified sender is refused",
+           _raises(ses.SmtpRefused, lambda: ses.smtp_ingest(s, "x@evil.test", ["a@x.com"], b"From: x@evil.test\r\nTo: a@x.com\r\nSubject: s\r\n\r\nb\r\n")))
+    _check("SMTP ingest of a verified sender is recorded and delivered",
+           ses.smtp_ingest(s, "from@vyomi.example.com", ["a@x.com"], b"From: from@vyomi.example.com\r\nTo: a@x.com\r\nSubject: s\r\n\r\nb\r\n").startswith("Ok "))
+    # relay settings: password sealed, never echoed
+    out = ses.console_mail_settings_put(s, {"relay": {"enabled": True, "host": "smtp.example.net", "password": "hunter2"}})
+    _check("relay password stored sealed and not returned", s.mail_settings["relay"]["password_enc"] == "sealed:2retnuh" and "hunter2" not in json.dumps(out)
+           and out["relay"]["has_password"] is True)
+    # receipt rules (SES v1 Query)
+    q = lambda **p: ses.dispatch_query(s, p)
+    _check("create rule set", q(Action="CreateReceiptRuleSet", RuleSetName="rs").status == 200)
+    _check("duplicate rule set", b"AlreadyExists" in q(Action="CreateReceiptRuleSet", RuleSetName="rs").body)
+    r = q(Action="CreateReceiptRule", RuleSetName="rs", **{"Rule.Name": "r1", "Rule.Enabled": "true", "Rule.Recipients.member.1": "vyomi.example.com",
+          "Rule.Actions.member.1.LambdaAction.FunctionArn": "arn:aws:lambda:us-east-1:1:function:f",
+          "Rule.Actions.member.2.StopAction.Scope": "RuleSet",
+          "Rule.Actions.member.3.S3Action.BucketName": "never"})
+    _check("create rule", r.status == 200)
+    d = q(Action="DescribeReceiptRuleSet", RuleSetName="rs").body.decode()
+    _check("describe renders members", "<Rules><member><Name>r1</Name>" in d and "<LambdaAction><FunctionArn>" in d)
+    q(Action="SetActiveReceiptRuleSet", RuleSetName="rs")
+    ses.create_email_identity(s, {}, {}, {"EmailIdentity": "vyomi.example.com"})
+    _check("inbound accepts a verified domain only", ses.inbound_accepts(s, "x@vyomi.example.com") and not ses.inbound_accepts(s, "x@other.test"))
+    plan = ses.inbound_plan(s, ["x@vyomi.example.com"], "f@y.test", b"Subject: in\r\n\r\nbody")
+    _check("plan runs actions up to StopAction (S3 after Stop never runs)", [a["type"] for a in plan["plan"]] == ["LambdaAction", "StopAction"])
+    ev = ses.inbound_event(plan, plan["plan"][0])["Records"][0]
+    _check("Lambda event is the SES receipt event", ev["eventSource"] == "aws:ses" and ev["ses"]["mail"]["commonHeaders"]["subject"] == "in")
+    _check("received message is logged for the console", ses.console_children(s, "received-emails")["items"][0]["actions"] == "LambdaAction, StopAction")
+    _check("delivery settings rows are all filled", all(v not in ("", None, "-") for r in ses.console_children(s, "mail-settings")["items"] for v in r.values()))
+    _check("cannot delete the active rule set", b"CannotDelete" in q(Action="DeleteReceiptRuleSet", RuleSetName="rs").body)
+
+
+def _raises(exc, fn):
+    try:
+        fn()
+    except exc:
+        return True
+    return False
+
+
+def test_sesv2_no_mailer_records_only():
+    """Nano: no mailer -> the message and its SES events are recorded, nothing else."""
+    s = ses.SesV2Store()
+    ses.create_email_identity(s, {}, {}, {"EmailIdentity": "a@b.com"})
+    ses.send_email(s, {}, {}, {"FromEmailAddress": "a@b.com", "Destination": {"ToAddresses": ["c@d.com"]},
+                               "Content": {"Simple": {"Subject": {"Data": "s"}, "Body": {"Text": {"Data": "t"}}}}})
+    row = ses.console_children(s, "sent-emails")["items"][0]
+    _check("Nano sent row: delivery + inbox + events filled", row["delivery"].startswith("Recorded") and row["inbox"] and row["events"] == "Send, Delivery")
+    try:
+        ses.console_mail_settings_put(s, {"relay": {"enabled": True, "host": "h"}})
+        _check("Nano refuses real-delivery settings", False)
+    except ses.SesV2Error as e:
+        _check("Nano refuses real-delivery settings", e.code == "NotSupported")

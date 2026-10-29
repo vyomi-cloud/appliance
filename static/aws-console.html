@@ -1346,7 +1346,7 @@ async function openMailSettings(main){
     el("button",{class:"btn",onclick:()=>ov.remove()}, "Cancel"),
     el("button",{class:"btn primary",id:"mailSettingsSave",onclick:async()=>{
       const r = await api("POST", "/api/aws/sesv2/mail-settings", body());
-      if (!r.ok) { err.textContent = (r.json && (r.json.detail || r.json.error)) || "Could not save delivery settings"; return; }
+      if (!r.ok) { err.textContent = (r.json && (r.json.detail || r.json.error || r.json.message)) || "Could not save delivery settings"; return; }
       ov.remove(); renderChildList(main);
     }}, "Save")));
   ov.append(box); document.body.append(ov);

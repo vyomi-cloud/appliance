@@ -128,6 +128,30 @@ public class SesV2Conformance {
                 .content(EmailContent.builder().simple(Message.builder().subject(Content.builder().data("hello").build())
                         .body(Body.builder().text(Content.builder().data("world").build()).build()).build()).build()).build()));
         chk("MessageId returned", se != null && se.messageId() != null && se.messageId().length() > 10);
+        // real delivery: the SDK's message is readable in the local inbox (Mailpit API)
+        String subj = "java-sdk-" + sfx;
+        String rawMsg = "From: " + email + "\r\nTo: inbox-" + sfx + "@example.net\r\nSubject: " + subj + "\r\nMIME-Version: 1.0\r\n"
+                + "Content-Type: multipart/mixed; boundary=\"b1\"\r\n\r\n--b1\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n<p>java <b>html</b></p>\r\n"
+                + "--b1\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=\"j.txt\"\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+                + "amF2YS1hdHRhY2g=\r\n--b1--\r\n";
+        run("SendEmail (Raw, HTML + attachment) for the inbox check", () -> ses.sendEmail(SendEmailRequest.builder().fromEmailAddress(email)
+                .destination(Destination.builder().toAddresses("inbox-" + sfx + "@example.net").build())
+                .content(EmailContent.builder().raw(RawMessage.builder().data(software.amazon.awssdk.core.SdkBytes.fromUtf8String(rawMsg)).build()).build()).build()));
+        String inboxJson = "";
+        try {
+            String mp = System.getenv().getOrDefault("MAILPIT_URL", "http://127.0.0.1:8025");
+            java.net.http.HttpClient http = java.net.http.HttpClient.newHttpClient();
+            for (int i = 0; i < 20 && !inboxJson.contains("\"ID\""); i++) {
+                String q = java.net.URLEncoder.encode("subject:\"" + subj + "\"", "UTF-8");
+                inboxJson = http.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(mp + "/api/v1/search?query=" + q)).build(),
+                        java.net.http.HttpResponse.BodyHandlers.ofString()).body();
+                if (!inboxJson.contains("\"ID\"")) Thread.sleep(500);
+            }
+            chk("SendEmail is delivered to the Mailpit inbox with subject and attachment",
+                    inboxJson.contains(subj) && inboxJson.contains("\"Attachments\":1"), inboxJson.length() > 200 ? inboxJson.substring(0, 200) : inboxJson);
+        } catch (Exception e) {
+            chk("SendEmail is delivered to the Mailpit inbox with subject and attachment", false, e.toString());
+        }
         run("SendEmail (from a verified domain)", () -> ses.sendEmail(SendEmailRequest.builder().fromEmailAddress("anyone@" + domain)
                 .destination(Destination.builder().toAddresses("to@example.net").build())
                 .content(EmailContent.builder().template(Template.builder().templateName(tpl).templateData("{}").build()).build()).build()));
