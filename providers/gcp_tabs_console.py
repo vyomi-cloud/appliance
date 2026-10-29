@@ -1065,7 +1065,41 @@ SERVICES = ("compute", "storage", "cloudsql", "pubsub", "firestore", "functions"
             "iam", "eventarc", "secretmanager", "kms")
 
 
+# Per-tab reads (`get<Tab>`) of the newer services' detail tabs: the resource's console view
+# as the service's own GET serves it (each tab reads it under its own name).
+_VIEW_ROUTES = {
+    "container": ("/api/container/clusters/{name}", "name"),
+    "redis": ("/api/redis/instances/{name}", "name"),
+    "cloudscheduler": ("/api/cloudscheduler/jobs/{name}", "name"),
+    "iamcredentials": ("/api/iamcredentials/credentials/{name}", "name"),
+    "monitoring": ("/api/monitoring/policies/{pid}", "pid"),
+}
+
+
+def _register_views(app) -> None:
+    import inspect
+
+    for svc, (path, param) in _VIEW_ROUTES.items():
+        async def view(op: str, name: str, _path=path, _param=param):
+            if not op.startswith("get") or len(op) <= 3:
+                return JSONResponse({"ok": False, "code": "UNIMPLEMENTED", "message": "Unknown read %s." % op}, status_code=404)
+            ep = next((r.endpoint for r in app.router.routes
+                       if getattr(r, "path", "") == _path and "GET" in (getattr(r, "methods", None) or ())), None)
+            if ep is None:
+                return JSONResponse({"ok": False, "code": "UNAVAILABLE", "message": "Service not mounted."}, status_code=503)
+            out = ep(**{_param: name})
+            if inspect.isawaitable(out):
+                out = await out
+            if hasattr(out, "status_code") and hasattr(out, "body"):
+                return out
+            return {"ok": True, "item": out}
+        view.__name__ = "gcp_tab_view_%s" % svc
+        for prefix in ("/api/gcp/sub/", "/api/sub/"):
+            app.add_api_route(prefix + svc + "/{op}/{name:path}", view, methods=["GET"], include_in_schema=False)
+
+
 def register(app) -> None:
+    _register_views(app)
     for svc in SERVICES:
         async def endpoint(op: str, name: str, request: Request, _svc=svc):
             return await _dispatch(_svc, op, name, request)

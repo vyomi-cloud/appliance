@@ -1443,6 +1443,21 @@ def tab_dispatch(svc, operation, name, body, resources=None, account="default"):
     try:
         if svc == "iam" and operation in ("GetProjectPolicy", "GrantAccess", "RevokeAccess"):
             return _project_policy(operation, name, body)
+        if svc == "artifactregistry" and operation in ("GetLabels", "SetLabels"):
+            full, repo = _ar.console_find(_STORES[svc], name)
+            if repo is None:
+                return {"ok": False, "code": "NotFound", "name": name}
+            if operation == "SetLabels":
+                labels = _T.validate_labels(body.get("labels", {}))
+                _ar.dispatch(_STORES[svc], "PATCH", "/v1/" + full, {"updateMask": "labels"}, {}, json.dumps({"labels": labels}).encode())
+            return {"ok": True, "item": {"name": name, "labels": dict(_STORES[svc].repos[full].get("labels") or {})}}
+        # per-tab reads of the newer services: the resource's console view
+        if svc in ("container", "redis", "cloudscheduler", "iamcredentials", "monitoring") \
+                and operation.startswith("Get") and len(operation) > 3:
+            out = _resource_op(svc, "Get", name, {})
+            if not out.get("ok"):
+                return out
+            return {"ok": True, "item": {k: v for k, v in out.items() if k != "ok"}}
         h = _TAB_HANDLERS.get(svc)
         if h is None or operation in _CRUD:
             return None

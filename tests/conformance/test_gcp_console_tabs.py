@@ -981,3 +981,29 @@ def test_eventarc_matching_and_destination(c, trigger):
     assert st == 200
     st, out = c.sub("eventarc", "getDestination", trigger)
     assert out["item"]["destination"] == {"type": "cloud-run", "service": "billing", "path": "/events", "region": "europe-west1"}
+
+
+# ── newer services: per-tab reads + Artifact Registry labels ─────────────────
+def test_key_value_tabs_read_the_resource_under_their_own_name(c):
+    name = uid("tabsched")
+    st, _ = c.create("cloudscheduler", {"name": name, "schedule": "*/5 * * * *", "timeZone": "Etc/UTC",
+                                        "targetType": "HTTP", "url": "https://example.com/hook", "httpMethod": "POST"})
+    assert st == 200
+    st, out = c.sub("cloudscheduler", "getSchedule", name)
+    assert st == 200 and out["item"]["frequency"] == "*/5 * * * *"
+    st, out = c.sub("cloudscheduler", "getTarget", name)
+    assert "example.com" in out["item"]["target"]
+    c.delete("cloudscheduler", name)
+
+
+def test_artifact_registry_labels_tab(c):
+    name = uid("tabrepo")
+    st, _ = c.create("artifactregistry", {"name": name, "format": "DOCKER", "mode": "STANDARD_REPOSITORY"})
+    assert st == 200
+    st, _ = c.sub("artifactregistry", "setLabels", name, {"labels": {"team": "build"}})
+    assert st == 200
+    st, out = c.sub("artifactregistry", "getLabels", name)
+    assert out["item"]["labels"] == {"team": "build"}
+    st, bad = c.sub("artifactregistry", "setLabels", name, {"labels": {"Bad Key": "x"}})
+    assert st == 400
+    c.delete("artifactregistry", name)

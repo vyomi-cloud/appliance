@@ -1017,7 +1017,8 @@ async function renderDetail(main){
     if (t === "secretvalue") return renderSecretValueTab(content, svc, STATE.item);
     if (t === "sublist")  return renderSublistTab(content, svc, STATE.item, item);
   if (t === "kmsconfig") return renderKmsConfigTab(content, svc, STATE.item);
-    if (t === "schedkv")  return freshItem(svc, STATE.item).then(it => renderSchedKvTab(host, it, item.fields || []));
+    // each key/value tab reads the resource under its own name (get<Tab>)
+    if (t === "schedkv")  return tabView(svc, STATE.item, item.key.charAt(0).toUpperCase() + item.key.slice(1)).then(it => renderSchedKvTab(host, it, item.fields || []));
     if (t === "objects")  return renderObjectsTab(content, svc, STATE.item);
     if (t === "json")     return content.append(el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto"}, JSON.stringify(STATE.item, null, 2)));
     if (t === "metrics")  return renderMetricsTab(content, svc);
