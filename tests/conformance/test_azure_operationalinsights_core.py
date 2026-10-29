@@ -76,4 +76,11 @@ resp = arm.handle("GET", "/subscriptions/sub1/providers/Microsoft.OperationalIns
 check("ARM subscription list sees the workspace", any(w["name"] == "law-arm" for w in resp["body"]["value"]), str(resp)[:200])
 
 print(f"{PASS} passed, {FAIL} failed")
-sys.exit(1 if FAIL else 0)
+
+
+def test_all_checks_pass():
+    assert FAIL == 0
+
+
+if __name__ == "__main__":
+    sys.exit(1 if FAIL else 0)

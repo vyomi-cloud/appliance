@@ -75,4 +75,11 @@ resp = arm.handle("PUT", base, {"api-version": cs.API_VERSION}, {"kind": "OpenAI
 check("ARM dispatcher delegates to the engine", resp["status"] in (200, 201) and resp["body"]["kind"] == "OpenAI", resp)
 
 print(f"{PASS} passed, {FAIL} failed")
-sys.exit(1 if FAIL else 0)
+
+
+def test_all_checks_pass():
+    assert FAIL == 0
+
+
+if __name__ == "__main__":
+    sys.exit(1 if FAIL else 0)

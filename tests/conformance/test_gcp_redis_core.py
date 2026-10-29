@@ -82,4 +82,11 @@ blank = [(x["id"], k) for x in v for k in ("id", "region", "status", "tier_label
 check("console view: every grid column filled", not blank, blank)
 check("delete", call(st, "DELETE", L + "/instances/r1")[1]["done"] and call(st, "GET", L + "/instances/r1")[0] == 404)
 print(f"RESULT pass={PASS} fail={FAIL}")
-sys.exit(1 if FAIL else 0)
+
+
+def test_all_checks_pass():
+    assert FAIL == 0
+
+
+if __name__ == "__main__":
+    sys.exit(1 if FAIL else 0)

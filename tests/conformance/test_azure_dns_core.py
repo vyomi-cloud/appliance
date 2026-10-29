@@ -87,4 +87,11 @@ r = arm.handle("DELETE", P + "/dnsZones/nano.example.com", {}, None)
 check("Nano ARM: zone delete (LRO headers)", r["status"] == 200 and "Azure-AsyncOperation" in r["headers"], r)
 
 print(f"{PASS} passed, {FAIL} failed")
-sys.exit(1 if FAIL else 0)
+
+
+def test_all_checks_pass():
+    assert FAIL == 0
+
+
+if __name__ == "__main__":
+    sys.exit(1 if FAIL else 0)
