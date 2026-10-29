@@ -1,11 +1,11 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-29 04:41 UTC · refreshes after every pipeline run_
+_Updated 2026-10-29 04:48 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
-- **Released:** 50 services (AWS 16 · GCP 16 · Azure 18) of 1,068 the clouds publish
-- **Building now:** Amazon CloudWatch (AWS, 17/18 checks), Amazon Cognito Identity Provider (AWS, 18/18 checks), Amazon EC2 Container Service (AWS, 19/19 checks), Amazon Elastic Container Registry (AWS, 20/20 checks), Amazon ElastiCache (AWS, 20/20 checks), Amazon Kinesis (AWS, 17/18 checks), Amazon Route 53 (AWS, 20/20 checks), Amazon Simple Email Service (AWS, 17/18 checks), Amazon Simple Notification Service (AWS, 17/18 checks), AmazonApiGatewayV2 (AWS, 20/20 checks), AWS CloudFormation (AWS, 19/20 checks), AWS Security Token Service (AWS, 18/18 checks), Artifact Registry API (GCP, 17/18 checks), BigQuery API (GCP, 17/18 checks), Cloud DNS API (GCP, 17/18 checks), Cloud Logging API (GCP, 17/18 checks), Cloud Monitoring API (GCP, 17/18 checks), Cloud Run Admin API (GCP, 19/19 checks), Cloud Tasks API (GCP, 17/18 checks), Workflows API (GCP, 17/18 checks), applicationinsights (Azure, 16/17 checks), containerregistry (Azure, 20/20 checks), containerservice (Azure, 16/17 checks), eventhub (Azure, 16/17 checks), msi (Azure, 17/17 checks), redis (Azure, 20/20 checks)
+- **Released:** 51 services (AWS 17 · GCP 16 · Azure 18) of 1,068 the clouds publish
+- **Building now:** Amazon CloudWatch (AWS, 17/18 checks), Amazon Cognito Identity Provider (AWS, 18/18 checks), Amazon EC2 Container Service (AWS, 19/19 checks), Amazon Elastic Container Registry (AWS, 20/20 checks), Amazon ElastiCache (AWS, 20/20 checks), Amazon Kinesis (AWS, 17/18 checks), Amazon Route 53 (AWS, 20/20 checks), Amazon Simple Email Service (AWS, 17/18 checks), Amazon Simple Notification Service (AWS, 17/18 checks), AWS CloudFormation (AWS, 19/20 checks), AWS Security Token Service (AWS, 18/18 checks), Artifact Registry API (GCP, 17/18 checks), BigQuery API (GCP, 17/18 checks), Cloud DNS API (GCP, 17/18 checks), Cloud Logging API (GCP, 17/18 checks), Cloud Monitoring API (GCP, 17/18 checks), Cloud Run Admin API (GCP, 19/19 checks), Cloud Tasks API (GCP, 17/18 checks), Workflows API (GCP, 17/18 checks), applicationinsights (Azure, 16/17 checks), containerregistry (Azure, 20/20 checks), containerservice (Azure, 16/17 checks), eventhub (Azure, 16/17 checks), msi (Azure, 17/17 checks), redis (Azure, 20/20 checks)
 - **In the gate / releasing:** nothing
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 57% · Nano 63%
@@ -16,7 +16,7 @@ _Updated 2026-10-29 04:41 UTC · refreshes after every pipeline run_
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 16 | 12 | 0 | 17 | 51% · 60% |
+| AWS | 17 | 11 | 0 | 17 | 51% · 60% |
 | GCP | 16 | 8 | 0 | 12 | 48% · 60% |
 | Azure | 18 | 6 | 0 | 12 | 70% · 66% |
 
@@ -33,7 +33,6 @@ _Updated 2026-10-29 04:41 UTC · refreshes after every pipeline run_
 | Amazon Route 53 [#60](https://github.com/vyomi-cloud/appliance/issues/60) | AWS | 🛠 Building | 20/20 | coredns · Lite | coredns · 15 MB · Lite | — |
 | Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🛠 Building | 17/18 | mailpit · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Amazon Simple Notification Service [#62](https://github.com/vyomi-cloud/appliance/issues/62) | AWS | 🛠 Building | 17/18 | nats · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| AmazonApiGatewayV2 [#50](https://github.com/vyomi-cloud/appliance/issues/50) | AWS | 🛠 Building | 20/20 | caddy · Lite | caddy · 15 MB · Lite | — |
 | AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🛠 Building | 19/20 | iac-engine · in-process | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🛠 Building | 18/18 | in-process | in-process | — |
 | Artifact Registry API [#66](https://github.com/vyomi-cloud/appliance/issues/66) | GCP | 🛠 Building | 17/18 | registry · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
@@ -77,6 +76,7 @@ _Updated 2026-10-29 04:41 UTC · refreshes after every pipeline run_
 | Elastic Load Balancing | caddy · Lite | ⚪ no traffic forwarded (Caddy not wired) | 🧩 7/8 · 🧩 7/8 | 0 · 0 | ✅ watched | [v3.0.10](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.10) |
 | Systems Manager | in-process | 🟡 Parameter Store real; Run Command reports Success without running | 🧩 5/10 · 🧩 5/10 | 1 · 1 | ✅ watched | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
 | Step Functions | workflow-engine · in-process · + temporal engine | ✅ ASL interpreter runs executions and calls Lambda; Wait doesn't sleep | 🧩 8/12 · 🧩 8/12 | 0 · 0 | ✅ watched | [v3.0.13](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.13) |
+| API Gateway V2 | caddy · Lite | not audited | — | – · – | ✅ watched | [v3.0.25](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.25) |
 
 ### GCP
 
@@ -520,33 +520,6 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'in-process'} |
 | ❌ | backend is the recommended one, or a different real backend the manifest justifies | recommended: nats; chose in-process |
 | ✅ | claimed operations exist in the real API | not upstream: [] |
-
-</details>
-
-<details><summary>Gate checks — AmazonApiGatewayV2 (AWS)</summary>
-
-| | Check | Detail |
-|---|---|---|
-| ✅ | manifest has cloud, key, name, upstream, core, operations, suites |  |
-| ✅ | manifest status is ready | status=ready |
-| ✅ | engine exists in core/ | core/apigatewayv2_core.py |
-| ✅ | Nano copy is byte-identical (wasm/core/) | wasm/core/apigatewayv2_core.py |
-| ✅ | engine listed in wasm/build_cores.py |  |
-| ✅ | service in the Nano console catalog (wasm/fixtures) | aws-catalog.json |
-| ✅ | Nano console entry is identical to the offline catalog's (build_fixtures.py) |  |
-| ✅ | registry entry (pending-release or released) |  |
-| ✅ | every manifest suite is registered in the hourly suites.json | missing: [] |
-| ✅ | has a offline sdk-java test bed |  |
-| ✅ | has a offline sdk-go test bed |  |
-| ✅ | has a offline cli test bed |  |
-| ✅ | has a offline ui test bed |  |
-| ✅ | has a nano ui test bed |  |
-| ✅ | upstream id tracked by the hourly upstream watcher | apigatewayv2 |
-| ✅ | manifest declares its offline backend (in-process / container / substrate) | backend={'kind': 'container', 'name': 'caddy', 'image': 'caddy:2.8.4-alpine', 'license': 'Apache-2.0', 'tier': 'lite', 'compose_service': 'v |
-| ✅ | backend is the recommended one, or a different real backend the manifest justifies | recommended: caddy; chose caddy |
-| ✅ | backend license is permissive (or GPL as an unmodified separate container) | license=Apache-2.0 |
-| ✅ | backend license is not denied (SSPL / BSL / RSAL / Elastic / AGPL / proprietary) | license=Apache-2.0 |
-| ✅ | backend image is pinned to a version (not latest) | caddy:2.8.4-alpine |
 
 </details>
 
