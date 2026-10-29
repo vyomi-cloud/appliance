@@ -252,8 +252,19 @@ def register(app: FastAPI) -> None:
                 for col_path in column_paths:
                     if col_path.lower() == field_label and (payload.get(col_path) in (None, "", "\u2014")):
                         payload[col_path] = payload[field_name]
+        # Fill what the console form didn't send the way the real API would:
+        # the form field defaults, then the resource's initial lifecycle state.
+        for f in (schema.get("create_fields") or []):
+            if f.get("default") is not None and payload.get(f["name"]) in (None, "", "\u2014"):
+                payload[f["name"]] = f["default"]
+        if stub_path == "eventbridge/rules":
+            # A new EventBridge rule is ENABLED; its target count is what was attached.
+            if payload.get("state") in (None, "", "\u2014"):
+                payload["state"] = "ENABLED"
+            if payload.get("target_count") in (None, "", "\u2014"):
+                payload["target_count"] = 1 if payload.get("target_arn") else 0
         for col_path, _ in (schema.get("columns") or []):
-            if "." in col_path or col_path in payload:
+            if "." in col_path or (col_path in payload and payload[col_path] not in (None, "")):
                 continue
             # Auto-generate identifier columns instead of em-dashing them.
             if col_path in ("key_id", "id") or col_path.endswith("_id"):

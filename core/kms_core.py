@@ -117,9 +117,12 @@ def _key_metadata(store: KeyStore, key_id: str) -> dict:
         "KeyManager": "CUSTOMER",
         "KeySpec": spec,
         "CustomerMasterKeySpec": spec,
-        "EncryptionAlgorithms": ["SYMMETRIC_DEFAULT"],
         "MultiRegion": False,
     }
+    if md["KeyUsage"] == "ENCAPSULATE_DECAPSULATE":
+        md["EncapsulationAlgorithms"] = ["ML_KEM"]
+    else:
+        md["EncryptionAlgorithms"] = ["SYMMETRIC_DEFAULT"]
     if "DeletionDate" in k:
         md["DeletionDate"] = k["DeletionDate"]
     return md
@@ -189,6 +192,47 @@ def _decrypt(store: KeyStore, body: dict) -> dict:
         raise KmsError("InvalidCiphertextException", str(e), 400)
     return {"KeyId": _key_arn(store, key_id), "Plaintext": _b64e(plaintext),
             "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"}
+
+
+_SHARED_SECRET_BYTES = 32
+
+
+def _encapsulation_key(store: KeyStore, body: dict) -> str:
+    if str(body.get("EncapsulationAlgorithm") or "") != "ML_KEM":
+        raise KmsError("ValidationException",
+                       "EncapsulationAlgorithm must be ML_KEM.", 400)
+    key_id = _require_active_key(store, body.get("KeyId", ""))
+    if store.get_key(key_id).get("KeyUsage") != "ENCAPSULATE_DECAPSULATE":
+        raise KmsError("InvalidKeyUsageException",
+                       f"{_key_arn(store, key_id)} key usage is not ENCAPSULATE_DECAPSULATE.", 400)
+    return key_id
+
+
+def _encapsulate(store: KeyStore, body: dict) -> dict:
+    """ML-KEM Encapsulate. Simulated: the shared secret is random and the
+    ciphertext is that secret sealed under the key's material, so Decapsulate on
+    the same key recovers it (no real lattice math — wire shape and key-usage/state
+    rules match AWS)."""
+    import os
+    key_id = _encapsulation_key(store, body)
+    secret = os.urandom(_SHARED_SECRET_BYTES)
+    blob = store.engine.encrypt(store.get_material(key_id), key_id, secret)
+    return {"KeyId": _key_arn(store, key_id), "SharedSecret": _b64e(secret),
+            "SharedSecretCiphertextBlob": _b64e(blob), "EncapsulationAlgorithm": "ML_KEM"}
+
+
+def _decapsulate(store: KeyStore, body: dict) -> dict:
+    key_id = _encapsulation_key(store, body)
+    blob = _b64d(body.get("SharedSecretCiphertextBlob", ""))
+    if store.engine.key_id_in(blob) != key_id:
+        raise KmsError("IncorrectKeyException",
+                       "The key supplied does not match the ciphertext's key.", 400)
+    try:
+        secret = store.engine.decrypt(store.get_material(key_id), blob)
+    except Exception as e:
+        raise KmsError("InvalidCiphertextException", str(e), 400)
+    return {"KeyId": _key_arn(store, key_id), "SharedSecret": _b64e(secret),
+            "EncapsulationAlgorithm": "ML_KEM"}
 
 
 def _generate_data_key(store: KeyStore, body: dict, with_plaintext: bool = True) -> dict:
@@ -326,6 +370,10 @@ def dispatch(store: KeyStore, target: str, payload: dict | None = None) -> KmsRe
             return _ok(_encrypt(store, body))
         if action == "Decrypt":
             return _ok(_decrypt(store, body))
+        if action == "Encapsulate":
+            return _ok(_encapsulate(store, body))
+        if action == "Decapsulate":
+            return _ok(_decapsulate(store, body))
         if action == "GenerateDataKey":
             return _ok(_generate_data_key(store, body, with_plaintext=True))
         if action == "GenerateDataKeyWithoutPlaintext":

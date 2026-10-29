@@ -31,6 +31,8 @@ known-class issues so true regressions are visible:
      PASS w/ reason "parent resource not created").
 """
 from __future__ import annotations
+from urllib.parse import quote
+
 import pytest
 
 from .catalog_reader import enumerate_actions
@@ -147,6 +149,8 @@ _ENV_PATTERNS = (
     (507, "insufficient_disk"),       # disk preflight gate (EC2/Compute/VM)
     (503, "error: the remote"),       # LXD image-source remote missing (RDS/CloudSQL postgres)
     (503, "lxdunavailable"),          # LXD daemon not running
+    (503, "dockerunavailable"),       # Docker compute backend not reachable
+    (503, "runtimeunavailable"),      # no VM runtime on this host
 )
 
 
@@ -189,7 +193,9 @@ def test_aws_action(spec, http_session, base_url):
             placeholder = create_placeholder
         else:
             placeholder = _CREATED_IDS.get(spec.service) or f"vyomi-conf-{spec.service}"
-        path = path.replace("{name}", placeholder)
+        # Slash names go in one path segment, encoded, as the console's
+        # encodeURIComponent(name) sends them.
+        path = path.replace("{name}", quote(placeholder, safe="") if "/" in placeholder else placeholder)
     # Substitute sub-resource placeholders ({sg}, {rtb}, {igw}, {subnet}).
     # If the marker hasn't been captured yet → skip; the parent sub-create
     # never produced a usable id.
@@ -302,7 +308,11 @@ def test_aws_action(spec, http_session, base_url):
             if isinstance(data, dict) and spec.name_field:
                 val = data.get(spec.name_field)
                 if val and str(val) not in _PLACEHOLDERS:
-                    captured = str(val).rstrip("/").split("/")[-1]
+                    v = str(val)
+                    # The name field IS the key (SSM parameter names, log group
+                    # names are slash paths): keep it whole. Only ARNs / URLs
+                    # are reduced to their last segment.
+                    captured = v.rstrip("/").split("/")[-1] if (v.startswith("arn:") or "://" in v) else v
             if not captured:
                 for k in ("instance_id", "vpc_id", "user_name",
                           "table_name", "queue_url", "function_name",

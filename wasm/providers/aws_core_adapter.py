@@ -493,6 +493,41 @@ def iam_create_user(p):
     return {"ok": True, **_iam_user_row(IAM.get_user(name))}
 
 
+def _iam_detail(kind, name, row):
+    """Detail record for the IAM resource page: the list row plus what the
+    detail tabs show (attached policies, group membership)."""
+    return {"ok": True, **row, "path": "/", "attached_policies": list(kind.get("attached_policies", [])),
+            "policies": list(kind.get("attached_policies", []))}
+
+
+def iam_get_user(p):
+    name = str(p.get("name") or "")
+    u = IAM.get_user(name)
+    if not u:
+        return {"ok": False, "code": "NoSuchEntity", "name": name}
+    out = _iam_detail(u, name, _iam_user_row(u))
+    out["groups"] = sorted(g for g, rec in IAM.groups.items() if name in rec.get("members", []))
+    return out
+
+
+def iam_get_role(p):
+    name = str(p.get("name") or "")
+    r = IAM.get_role(name)
+    if not r:
+        return {"ok": False, "code": "NoSuchEntity", "name": name}
+    return _iam_detail(r, name, _iam_role_row(r))
+
+
+def iam_get_group(p):
+    name = str(p.get("name") or "")
+    g = IAM.get_group(name)
+    if not g:
+        return {"ok": False, "code": "NoSuchEntity", "name": name}
+    out = _iam_detail(g, name, _iam_group_row(g))
+    out["members"] = list(g.get("members", []))
+    return out
+
+
 def iam_delete_user(p):
     name = str(p.get("name") or "")
     r = iam.dispatch(IAM, {"Action": "DeleteUser", "UserName": name})

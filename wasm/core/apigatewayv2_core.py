@@ -1,3 +1,5 @@
+# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
+# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
 """API Gateway V2 core — substrate-independent HTTP + WebSocket API control plane
 (botocore `apigatewayv2`, 2018-11-29, rest-json).
 

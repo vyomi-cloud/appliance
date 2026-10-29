@@ -1,0 +1,41 @@
+{
+  "cloud": "gcp",
+  "key": "redis",
+  "name": "Memorystore for Redis",
+  "upstream": "redis/v1",
+  "issue": 75,
+  "core": "core/gcp_redis_core.py",
+  "operations": [
+    "redis.projects.locations.instances.create",
+    "redis.projects.locations.instances.get",
+    "redis.projects.locations.instances.list",
+    "redis.projects.locations.instances.patch",
+    "redis.projects.locations.instances.delete",
+    "redis.projects.locations.instances.failover",
+    "redis.projects.locations.instances.upgrade",
+    "redis.projects.locations.instances.import",
+    "redis.projects.locations.instances.export",
+    "redis.projects.locations.instances.rescheduleMaintenance",
+    "redis.projects.locations.instances.getAuthString",
+    "redis.projects.locations.operations.get",
+    "redis.projects.locations.operations.list",
+    "redis.projects.locations.operations.delete",
+    "redis.projects.locations.operations.cancel"
+  ],
+  "backend": {
+    "kind": "container",
+    "name": "valkey",
+    "image": "valkey/valkey:8.0.1-alpine",
+    "license": "BSD-3-Clause",
+    "tier": "lite",
+    "compose_service": "vyomi-valkey"
+  },
+  "suites": [
+    "offline-sdk-java-gcp-redis",
+    "offline-sdk-go-gcp-redis",
+    "offline-cli-gcp-redis",
+    "offline-ui-gcp-redis",
+    "nano-ui-gcp-redis"
+  ],
+  "status": "ready"
+}

@@ -33,6 +33,11 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amazon+Ember:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Symbols+Outlined">
 <style>
+/* Clickable things always show the hand cursor. Many console links are <a> without an href
+   (JS-handled), which browsers render with the text I-beam. First in the sheet and low
+   specificity, so later rules (cursor:not-allowed on disabled controls) still win. */
+a,[onclick],[role="link"],[role="button"],[role="tab"],[role="menuitem"],summary,label[for],select,
+button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:not(:disabled){cursor:pointer}
   :root{
     /* Updated to 2024+ AWS skin: darker navy header, AWS-blue row-selection tint. */
     --navy:#0f1b2d; --navy-d:#000a16; --navy-l:#1a2737;
@@ -289,6 +294,15 @@
   .alert.warn{background:#fff4e5;color:var(--warn);border:1px solid #f4d680}
   .alert.err{background:#fde7e9;color:var(--err);border:1px solid #f5b8be}
 
+  /* Service cards on Console Home: same layout as the GCP and Azure dashboards. */
+  .svc-cards-h{font-size:13px;color:var(--sub);margin:18px 0 12px}
+  .svc-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+  .svc-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px;cursor:pointer;transition:box-shadow .12s,transform .12s}
+  .svc-card:hover{box-shadow:0 3px 12px rgba(0,0,0,.10);transform:translateY(-2px)}
+  .svc-card .t{display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px}
+  .svc-card .t .ic{width:30px;height:30px;border-radius:4px;background:#fff4e5;color:var(--orange);display:flex;align-items:center;justify-content:center}
+  .svc-card .n{font-size:30px;font-weight:700;margin-top:10px;line-height:1}
+  .svc-card .s{font-size:12px;color:var(--sub);margin-top:2px}
   /* AWS-style Console Home widgets */
   .widget-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;margin-top:14px}
   .widget{grid-column:span 6;background:#fff;border:1px solid var(--line);border-radius:8px;padding:0;overflow:hidden;display:flex;flex-direction:column}
@@ -380,6 +394,8 @@
 <style>#acctBtn{display:none!important;}</style>
 </head>
 <body>
+<script src="./nano-kernel.js"></script>
+<script>window.__nk = window.NanoKernel && NanoKernel.start("AWS console");</script>
 
 <!-- ==================== TOP BAR ==================== -->
 <header class="aws-top">
@@ -739,7 +755,10 @@ function renderRail(){
       ["Databases", ["rds", "dynamodb"]],
       ["Application Integration", ["sqs", "apigateway", "apigatewayv2", "eventbridge"]],
       ["Networking & Content Delivery", ["vpc"]],
+      ["Application Integration", ["sqs", "apigateway", "eventbridge", "stepfunctions"]],
+      ["Networking & Content Delivery", ["vpc", "elbv2"]],
       ["Security, Identity & Compliance", ["iam", "secretsmanager", "kms"]],
+      ["Management & Governance", ["logs", "ssm"]],
     ];
     groups.forEach(([label, keys]) => {
       rail.append(el("div",{class:"group"}, label));
@@ -842,70 +861,18 @@ function renderHome(main){
     el("a",{class:"info",style:"font-size:12px;font-weight:500;color:var(--link);cursor:pointer;margin-left:8px",
       onclick:()=>toast("Console Home shows widgets you can customize.","ok")}, "Info")));
   idCol.append(el("div",{class:"meta"}, `Account: ${ACCOUNT}  ·  Region: ${REGION} (${friendlyRegion(REGION)})`));
-  const actCol = el("div",{style:"display:flex;gap:8px;flex-shrink:0"});
-  actCol.append(el("button",{class:"btn",onclick:()=>toast("Widget customization coming soon","ok")},
-    icon("add"), "Add widgets"));
-  actCol.append(el("button",{class:"btn",onclick:()=>toast("Reset to defaults","ok")}, icon("refresh"), "Reset to default layout"));
-  h.append(idCol, actCol);
+  h.append(idCol);
   main.append(h);
 
   // Widget grid — 12-col responsive layout (real AWS pattern)
   const grid = el("div",{class:"widget-grid"});
-
-  // 1) Welcome to AWS (col-6)
-  const welcome = el("div",{class:"widget"});
-  welcome.append(el("div",{class:"wh"}, icon("waving_hand"), "Welcome to AWS",
-    el("a",{class:"info",onclick:()=>toast("Welcome guide","ok")}, "Info")));
-  welcome.append(el("div",{class:"wb"},
-    el("div",{class:"desc"},
-      "AWS Management Console (simulated). Get started by selecting a service from the left rail or the Recently visited widget. ",
-      el("a",{onclick:()=>toast("Documentation","ok"),style:"color:var(--link);cursor:pointer"},"Get started with AWS"), "."),
-    el("div",{class:"stats"},
-      el("div",{class:"stat"}, el("strong",{}, String(CATALOG.services.length)), "Services"),
-      el("div",{class:"stat"}, el("strong",{}, REGION), "Region"),
-      el("div",{class:"stat"}, el("strong",{}, ACCOUNT.length>=4?ACCOUNT.slice(-4):"…"), "Account suffix"))));
-  grid.append(welcome);
-
-  // 2) Recently visited (col-6) — fed from localStorage
-  const recent = el("div",{class:"widget"});
-  recent.append(el("div",{class:"wh"}, icon("history"), "Recently visited",
-    el("a",{class:"info"}, "View all")));
-  const visits = getRecentVisits();
-  if (!visits.length) {
-    // Negative left/right/bottom margins negate the .wb padding (14px 18px)
-    // so list rows span edge-to-edge and dividers reach the card border.
-    // Same pattern as the "Build a solution" widget below.
-    recent.append(el("div",{class:"wb"},
-      el("div",{class:"desc"}, "Services you visit will show here. Click any service in the left rail to navigate."),
-      el("div",{class:"recent-list",style:"margin:14px -18px -14px"},
-        ...CATALOG.services.slice(0,5).map(s => el("a",{onclick:()=>{recordRecentVisit(s.key); navigate({view:"list", service:s.key, item:null});}},
-          el("span",{class:"material-symbols-outlined ic"}, s.icon),
-          el("span",{}, s.label),
-          el("span",{class:"when"}, "Suggested"))))));
-  } else {
-    // List appends directly to .widget (no padding), so NO negative margins
-    // needed — rows already span the full card width via the .recent-list a
-    // default styling.
-    const list = el("div",{class:"recent-list"});
-    visits.forEach(v => {
-      const s = svcByKey(v.key); if (!s) return;
-      const when = new Date(v.at);
-      const ago = Math.max(1, Math.floor((Date.now() - when.getTime())/60000));
-      list.append(el("a",{onclick:()=>{recordRecentVisit(s.key); navigate({view:"list", service:s.key, item:null});}},
-        el("span",{class:"material-symbols-outlined ic"}, s.icon),
-        el("span",{}, s.label),
-        el("span",{class:"when"}, ago < 60 ? ago+"m ago" : Math.floor(ago/60)+"h ago")));
-    });
-    recent.append(list);
-  }
-  grid.append(recent);
 
   // 3) Cost savings (col-6) — REAL 12-month projection from the LIVE in-browser
   //    resource census (/api/runtime/host-distribution → providers.aws.by_service),
   //    priced with rates that mirror core/cost_model. Simulator cost = $0, so every
   //    dollar of real-AWS cost for what you've spun up is a dollar saved.
   const _NANO_RATE = {
-    s3:0.50, dynamodb:1.25, kms:1.00, secretsmanager:0.40, sqs:0.40, iam:0, rds:25.55, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0,
+    s3:0.50, dynamodb:1.25, kms:1.00, secretsmanager:0.40, sqs:0.40, iam:0, rds:25.55, elbv2:16.43, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0, ssm:0.05,
     compute:24.53, storage:0.50, cloudsql:25.00, pubsub:0.40, firestore:0.18, functions:0.20, secretmanager:0.18,
     'microsoft.compute/virtualmachines':30.37, 'microsoft.sql/servers':4.99, 'microsoft.storage/storageaccounts':0.50,
     'microsoft.documentdb/databaseaccounts':24.48, 'microsoft.web/sites':0.20, 'microsoft.servicebus/namespaces':9.81, 'microsoft.keyvault/vaults':0.03
@@ -915,7 +882,7 @@ function renderHome(main){
   }
   // Friendly service label for a by_service census key.
   function nanoSvcLabel(k){
-    var M={s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",
+    var M={elbv2:"Load Balancing",s3:"S3",dynamodb:"DynamoDB",kms:"KMS",secretsmanager:"Secrets Manager",sqs:"SQS",iam:"IAM",rds:"RDS",ec2:"EC2",lambda:"Lambda",apigateway:"API Gateway",vpc:"VPC",ssm:"Systems Manager",
       compute:"Compute Engine",storage:"Cloud Storage",cloudsql:"Cloud SQL",pubsub:"Pub/Sub",firestore:"Firestore",functions:"Cloud Functions",secretmanager:"Secret Manager"};
     if (M[k]) return M[k];
     var s=String(k||""), i=s.lastIndexOf("/"); if(i>=0) s=s.slice(i+1); return s.charAt(0).toUpperCase()+s.slice(1);
@@ -966,7 +933,7 @@ function renderHome(main){
       }
     }).catch(function(){});
   }
-  const cost = el("div",{class:"widget"});
+  const cost = el("div",{class:"widget",style:"grid-column:1 / -1"});
   cost.append(el("div",{class:"wh"}, icon("savings"), "Cost savings",
     el("a",{class:"info"}, "Info")));
   const costBody = el("div",{class:"wb"});
@@ -991,27 +958,28 @@ function renderHome(main){
   grid.append(cost);
   nanoLoadSavings("aws", "var(--orange,#ec7211)", "AWS", {amt:costAmt, breakdown:costBreakdown, bar:bar, foot:costFoot, desc:costDesc});
 
-  // 4) Build a solution (col-6)
-  const build = el("div",{class:"widget"});
-  build.append(el("div",{class:"wh"}, icon("rocket_launch"), "Build a solution",
-    el("a",{class:"info"}, "Info")));
-  const bb = el("div",{class:"wb"});
-  bb.append(el("div",{class:"desc"}, "Get started with quick-build templates."));
-  const links = el("div",{class:"recent-list",style:"margin:14px -18px -14px"});
-  [
-    ["Launch a virtual machine with EC2",     "ec2",        "computer"],
-    ["Create a web app with Elastic Beanstalk", "lambda",   "rocket_launch"],
-    ["Build a website using S3",              "s3",         "storage"],
-    ["Set up a managed database with RDS",    "rds",        "database"],
-  ].forEach(([label, key, ic]) => {
-    links.append(el("a",{onclick:()=>{recordRecentVisit(key); navigate({view:"list", service:key, item:null});}},
-      el("span",{class:"material-symbols-outlined ic"}, ic), el("span",{}, label)));
-  });
-  bb.append(links);
-  build.append(bb);
-  grid.append(build);
 
   main.append(grid);
+
+  // Service cards: the same layout as the GCP and Azure dashboards. Each card shows
+  // the live resource count from the service's own list endpoint.
+  main.append(el("div",{class:"svc-cards-h"}, "Services — click to manage resources."));
+  const cards = el("div",{class:"svc-cards"});
+  for (const s of (CATALOG.services||[])) {
+    const n = el("div",{class:"n"}, "—");
+    cards.append(el("div",{class:"svc-card",onclick:()=>{recordRecentVisit(s.key); navigate({view:"list", service:s.key, item:null});}},
+      el("div",{class:"t"}, el("div",{class:"ic"}, icon(s.icon)), s.label),
+      n,
+      el("div",{class:"s"}, s.namespace || ("AWS/"+s.label))));
+    if (!s.collection_path) { n.textContent = "0"; continue; }
+    api("GET", s.collection_path).then(r => {
+      if (!r.ok) { n.textContent = r.status === 403 ? "🔒" : "—"; if (r.status === 403) n.title = "Not included in your tier"; return; }
+      const d = r.json;
+      const list = Array.isArray(d) ? d : Object.values(d || {}).find(v => Array.isArray(v));
+      n.textContent = String(list ? list.length : 0);
+    }).catch(() => {});
+  }
+  main.append(cards);
 }
 
 // =====================================================================
@@ -1038,6 +1006,7 @@ async function renderList(main){
                      : (svc.key === "rds") ? "Create database"
                      : (svc.key === "lambda") ? "Create function"
                      : (svc.key === "apigateway") ? "Create API"
+                     : (svc.key === "stepfunctions") ? "Create state machine"
                      : (svc.key === "vpc") ? "Create VPC"
                      : "Create";
   ab.append(el("button",{class:"btn primary",onclick:()=>navigate({view:"create", item:null})},
@@ -1141,7 +1110,7 @@ async function renderList(main){
         return av.localeCompare(bv) * state.sortDir;
       });
     }
-    document.getElementById("countChip").textContent = `(${filtered.length})`;
+    { const chip = document.getElementById("countChip"); if (chip) chip.textContent = `(${filtered.length})`; }
     statsSpan.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;
@@ -1351,6 +1320,14 @@ function childSpec(svc, childType){
         columns: [["image_id","AMI ID"],["name","Name"],["state","State"],
                   ["architecture","Architecture"],["platform","Platform"]]},
     },
+    elbv2: {
+      "target-groups": {label:"Target groups", absolutePath:"/api/aws/elbv2/target-groups", arrayKey:"items",
+        columns: [["name","Name"],["protocol","Protocol"],["port","Port"],["target_type","Target type"],
+                  ["vpc_id","VPC ID"],["load_balancer","Load balancer"],["targets","Registered targets"],["health_check","Health check"]]},
+      "listeners":     {label:"Listeners", absolutePath:"/api/aws/elbv2/listeners", arrayKey:"items",
+        columns: [["name","Listener ID"],["load_balancer","Load balancer"],["protocol","Protocol"],["port","Port"],
+                  ["default_action","Default action"],["rules","Rules"]]},
+    },
     iam: {
       "iam-groups":    {label:"User groups",      absolutePath:"/api/iam/groups",    arrayKey:"groups",
         columns: [["group_name","Group name"],["arn","ARN"],["created","Created"]]},
@@ -1427,7 +1404,7 @@ async function renderChildList(main){
     if (q) filtered = filtered.filter(it => spec.columns.some(c => {
       const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
     }));
-    document.getElementById("childCountChip").textContent = `(${filtered.length})`;
+    { const chip = document.getElementById("childCountChip"); if (chip) chip.textContent = `(${filtered.length})`; }
     statsSpan.textContent = filtered.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${filtered.length} of ${items.length} match`;
@@ -1526,7 +1503,7 @@ async function renderCrudStub(main, svc, fullKey, schema){
     if (q) f = f.filter(it => schema.columns.some(c => {
       const v = getPath(it, c[0]); return v != null && String(v).toLowerCase().includes(q);
     }));
-    document.getElementById("stubCountChip").textContent = `(${f.length})`;
+    { const chip = document.getElementById("stubCountChip"); if (chip) chip.textContent = `(${f.length})`; }
     statsSpan.textContent = f.length === items.length
       ? `${items.length} item${items.length===1?"":"s"}`
       : `${f.length} of ${items.length} match`;
@@ -2644,7 +2621,23 @@ SUB_RENDERERS.kmsconfig = function(svc, full, host){
   render();
 };
 
-SUB_RENDERERS.overview = function(svc, full, host){
+SUB_RENDERERS.overview = function(svc, full, host, tab){
+  if (svc.key === "vpc" && tab && tab.key === "details"){
+    // VPC console "Details" card: the VPC's own attributes (not the generic summary)
+    const card = el("div",{class:"kv-card"});
+    card.append(el("div",{class:"h"}, "Details"));
+    const grid = el("div",{class:"kv-grid"});
+    [["VPC ID", full.vpc_id], ["State", full.state], ["IPv4 CIDR", full.cidr_block],
+     ["Tenancy", full.tenancy], ["DHCP option set", full.dhcp_options_id],
+     ["Main route table", full.main_route_table_id], ["Default security group", full.default_security_group_id],
+     ["Internet gateway", full.internet_gateway_id || "No internet gateway attached"],
+     ["IPv6 mode", full.ipv6_mode], ["Encryption control", full.encryption_controls],
+     ["Created", full.created], ["Owner ID", ACCOUNT]
+    ].forEach(([k,v])=>{ if (v == null || v === "") return;
+      grid.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"+(/id|table|group|set/i.test(k)?" mono":"")}, String(v)))); });
+    card.append(grid); host.append(card);
+    return;
+  }
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Resource details"));
   const grid = el("div",{class:"kv-grid"});
@@ -2794,7 +2787,20 @@ SUB_RENDERERS.properties = function(svc, full, host){
   }
   walk(full, ""); card.append(grid); host.append(card);
 };
-SUB_RENDERERS.metrics = function(svc, full, host){
+SUB_RENDERERS.metrics = function(svc, full, host, tab){
+  if (svc.key === "ec2" && tab && tab.key === "statusChecks") {
+    // Status checks reflect the instance's own state (EC2 DescribeInstanceStatus).
+    const running = String(full.state || "").toLowerCase() === "running";
+    const res = running ? "Passed" : "Not applicable";
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, el("th",{}, "Check"), el("th",{}, "Status"), el("th",{}, "Instance")));
+    ["System reachability","Instance reachability","Attached EBS status"].forEach(c => tbl.append(el("tr",{},
+      el("td",{}, c), el("td",{}, res), el("td",{}, el("span",{class:"mono"}, full.instance_id || full.name || "")))));
+    host.append(el("div",{class:"alert info"}, icon("monitor_heart"),
+      el("div",{}, "Instance state: " + (full.state || "unknown") + ". Status checks run while the instance is running.")));
+    host.append(tbl);
+    return;
+  }
   host.append(el("div",{class:"alert info"}, icon("show_chart"),
     el("div",{}, "Synthesized CloudWatch metrics. Real telemetry ingestion is future work.")));
   const series = svc.key === "ec2"
@@ -2908,16 +2914,25 @@ SUB_RENDERERS.connect = function(svc, full, host){
 };
 SUB_RENDERERS.ec2networking = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Networking details"));
+  card.append(el("div",{class:"h"}, svc.key === "rds" ? "Connectivity & security" : "Networking details"));
   const g = el("div",{class:"kv-grid"});
-  const rows = [
+  // RDS instances have an endpoint / subnet group, not EC2 IPv4 addresses.
+  const rows = svc.key === "rds" ? [
+    ["Endpoint",             full.endpoint_address || full.endpoint || (full.db_instance_identifier ? full.db_instance_identifier+"."+REGION+".rds.amazonaws.com" : "")],
+    ["Port",                 full.endpoint_port || full.port || 5432],
+    ["VPC ID",               full.vpc_id || "default"],
+    ["Subnet group",         full.db_subnet_group_name || "default"],
+    ["Availability Zone",    full.availability_zone || REGION+"a"],
+    ["Security groups",      (full.security_group_ids||[]).join(", ") || "default (sg-default)"],
+    ["Publicly accessible",  full.publicly_accessible ? "Yes" : "No"],
+  ] : [
     ["Private IPv4 address", full.private_ip || "—"],
     ["Public IPv4 address",  full.public_ip || "—"],
     ["Public IPv4 DNS",      full.public_dns || "—"],
     ["VPC ID",               full.vpc_id || "default"],
-    ["Subnet ID",            full.subnet_id || "—"],
+    ["Subnet ID",            full.subnet_id || "subnet-default"],
     ["Availability Zone",    full.availability_zone || REGION+"a"],
-    ["Security groups",      (full.security_groups || []).join(", ") || "—"],
+    ["Security groups",      ((full.security_groups && full.security_groups.length ? full.security_groups : (full.security_group_ids || [])).map(g => (g && (g.groupName || g.name || g.id)) || g).join(", ")) || "default (sg-default)"],
     ["Network interfaces",   String((full.network_interfaces||[]).length || 1)],
   ];
   rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k),
@@ -2931,7 +2946,7 @@ SUB_RENDERERS.ec2security = function(svc, full, host){
   [
     ["IAM role",       full.iam_instance_profile || "—"],
     ["Owner",          ACCOUNT],
-    ["Launch time",    full.launch_time || "—"],
+    ["Launch time",    full.launch_time || full.created || "—"],
     ["Key pair name",  full.key_name || "(no key pair)"],
     ["State transition reason", full.state_reason || "—"],
   ].forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, String(v)))));
@@ -2960,8 +2975,8 @@ SUB_RENDERERS.sgrules = function(svc, full, host){
     tbl.append(el("tr",{}, el("th",{}, "Security group ID"), el("th",{}, "Name"),
       el("th",{}, "Description"), el("th",{}, "Inbound rules")));
     sgs.forEach(sg => tbl.append(el("tr",{},
-      el("td",{}, el("a",{class:"id"}, sg.id||sg.group_id||"—")),
-      el("td",{}, sg.name||"—"),
+      el("td",{}, el("a",{class:"id"}, sg.security_group_id||sg.id||sg.group_id||"—")),
+      el("td",{}, sg.group_name||sg.name||"—"),
       el("td",{}, sg.description||"—"),
       el("td",{}, String((sg.ingress||sg.ip_permissions||[]).length)))));
     host.append(tbl);
@@ -3011,6 +3026,26 @@ SUB_RENDERERS.igws = function(svc, full, host){
   });
 };
 
+// Generic "table from an API path" tab — the catalog tab names an api_paths key
+// (tab.api), the columns ([[field, label], …]) and an empty-state message.
+SUB_RENDERERS.apitable = async function(svc, full, host, tab){
+  const ap = (svc.api_paths || {})[tab.api];
+  if (!ap) { host.append(el("div",{class:"empty"}, "Path not configured.")); return; }
+  const r = await api(ap.method, fillPath(ap.path, {name: itemKey(svc, full)}));
+  const items = (r.json || {}).items || (r.json || {}).value || [];
+  if (!r.ok) { host.append(el("div",{class:"empty"}, "Failed to load: HTTP "+r.status)); return; }
+  if (!items.length) { host.append(el("div",{class:"empty"}, tab.empty || "No items.")); return; }
+  const cols = tab.columns || [];
+  const tbl = el("table",{class:"aws"});
+  const hdr = el("tr",{}); cols.forEach(c => hdr.append(el("th",{}, c[1]))); tbl.append(hdr);
+  items.forEach(it => {
+    const tr = el("tr",{});
+    cols.forEach(c => { const v = getPath(it, c[0]);
+      tr.append(el("td",{class: /message|arn|destination/.test(c[0]) ? "mono small" : ""}, v == null || v === "" ? "None" : String(v))); });
+    tbl.append(tr);
+  });
+  host.append(tbl);
+};
 // IAM composite — each sub-tab fetches a different IAM collection
 SUB_RENDERERS.iamusers    = (svc, full, host) => loadIamList(svc, host, "users",
   [["user_name","User name"],["arn","ARN"],["created","Created"]]);
@@ -3222,9 +3257,13 @@ SUB_RENDERERS.sqsmessages = function(svc, full, host){
 SUB_RENDERERS.sqsdlq = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Dead-letter queue"));
+  // Like the real console: with no redrive policy the tab only says "Disabled"
+  // (no queue / maximum-receives fields to fill).
   card.append(el("div",{class:"kv-grid"},
-    el("div",{}, el("div",{class:"k"}, "Queue"), el("div",{class:"v"}, full.dlq_arn || "Not configured")),
-    el("div",{}, el("div",{class:"k"}, "Maximum receives"), el("div",{class:"v"}, String(full.max_receive_count||"—")))));
+    ...(full.dlq_arn ? [
+      el("div",{}, el("div",{class:"k"}, "Queue"), el("div",{class:"v"}, full.dlq_arn)),
+      el("div",{}, el("div",{class:"k"}, "Maximum receives"), el("div",{class:"v"}, String(full.max_receive_count||5)))]
+    : [el("div",{}, el("div",{class:"k"}, "Dead-letter queue"), el("div",{class:"v"}, "Disabled"))])));
   host.append(card);
 };
 
@@ -3271,8 +3310,8 @@ SUB_RENDERERS.rdsendpoints = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Endpoint & port"));
   card.append(el("div",{class:"kv-grid"},
-    el("div",{}, el("div",{class:"k"}, "Endpoint"), el("div",{class:"v mono"}, full.endpoint || "—")),
-    el("div",{}, el("div",{class:"k"}, "Port"),     el("div",{class:"v"}, String(full.port || 5432))),
+    el("div",{}, el("div",{class:"k"}, "Endpoint"), el("div",{class:"v mono"}, full.endpoint_address || full.endpoint || (full.db_instance_identifier ? full.db_instance_identifier+"."+REGION+".rds.amazonaws.com" : "—"))),
+    el("div",{}, el("div",{class:"k"}, "Port"),     el("div",{class:"v"}, String(full.endpoint_port || full.port || 5432))),
     el("div",{}, el("div",{class:"k"}, "Status"),   el("div",{class:"v"}, full.status || "available")),
     el("div",{}, el("div",{class:"k"}, "Master username"), el("div",{class:"v"}, full.master_username || "postgres"))));
   host.append(card);
@@ -3319,6 +3358,33 @@ SUB_RENDERERS.apiresources = function(svc, full, host){
     host.append(tbl);
   });
 };
+// Step Functions — generic list tab. `tab.list_key` selects svc.api_paths[list_key];
+// `tab.cols` is [[field,label],…]. Rows come back as {items:[…]} with every cell filled.
+SUB_RENDERERS.sfnlist = function(svc, full, host, tab){
+  const ap = (svc.api_paths || {})[tab.list_key];
+  fetch(ORIGIN + fillPath(ap.path, {name: full.name || full.id})).then(r=>r.json()).then(j=>{
+    const items = j.items || [];
+    if (!items.length) { host.append(el("div",{class:"empty"}, "No " + tab.label.toLowerCase() + " for this state machine yet.")); return; }
+    const cols = tab.cols || [];
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, ...cols.map(c => el("th",{}, c[1]))));
+    items.forEach(it => tbl.append(el("tr",{}, ...cols.map(c => {
+      const v = it[c[0]];
+      return el("td",{class:/arn|id/i.test(c[0]) ? "mono small" : ""}, (v === undefined || v === null || v === "") ? "none" : String(v));
+    }))));
+    host.append(tbl);
+  }).catch(e => host.append(el("div",{class:"alert err"}, "Failed to load: " + e.message)));
+};
+// Step Functions — the Amazon States Language definition, pretty-printed.
+SUB_RENDERERS.sfndefinition = function(svc, full, host){
+  let txt = full.definition || "";
+  try { txt = JSON.stringify(JSON.parse(txt), null, 2); } catch (_) {}
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Amazon States Language definition"));
+  card.append(el("pre",{class:"mono small", style:"white-space:pre-wrap;margin:0"}, txt || "none"));
+  host.append(card);
+};
+
 SUB_RENDERERS.apistages = function(svc, full, host){
   fetch(ORIGIN+fillPath(svc.api_paths.stages.path, {name: full.id || full.name})).then(r=>r.json()).then(j=>{
     const items = j.stages || j.value || j.items || [];
@@ -3915,6 +3981,44 @@ SUB_RENDERERS.apigw2list = function(svc, full, host, tab){
     items.forEach(it => tbl.append(el("tr",{}, ...cols.map(c => {
       const v = it[c[0]];
       return el("td",{class:/uri|id|key/i.test(c[0]) ? "mono small" : ""}, (v === undefined || v === null || v === "") ? "none" : String(v));
+// Systems Manager — parameter value (SecureString decrypted via GET), editable → PUT = new version.
+SUB_RENDERERS.ssmvalue = function(svc, full, host){
+  const name = itemKey(svc, full);
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  let value = full.value != null ? String(full.value) : "", editing = false;
+  function render(){
+    panel.innerHTML = "";
+    panel.append(el("div",{class:"panel-h"}, icon("key"), "Parameter value"));
+    const body = el("div",{style:"padding:14px"}); panel.append(body);
+    if (!editing){
+      body.append(el("pre",{class:"json", id:"ssm-value"}, value));
+      body.append(el("button",{class:"btn",onclick:()=>{ editing = true; render(); }}, icon("edit"), "Edit value"));
+    } else {
+      const ta = el("textarea",{style:"width:100%;min-height:90px;font-family:Consolas,Menlo,monospace"}); ta.value = value;
+      body.append(ta);
+      body.append(el("div",{style:"display:flex;gap:8px;margin-top:12px"},
+        el("button",{class:"btn primary",onclick:async ()=>{
+          const r = await api("PUT", fillPath(svc.resource_path,{name}), {value: ta.value});
+          if (r.ok){ value = ta.value; editing = false; toast("New parameter version saved"); render(); } else toast("Save failed","err");
+        }}, icon("save"), "Save new version"),
+        el("button",{class:"btn",onclick:()=>{ editing = false; render(); }}, "Cancel")));
+    }
+  }
+  render();
+};
+
+// Systems Manager — generic list tab. `tab.list_key` selects svc.api_paths[list_key]; the response
+// array is `tab.result_key`; `tab.cols` is [[field,label],…].
+SUB_RENDERERS.ssmlist = function(svc, full, host, tab){
+  const ap = (svc.api_paths || {})[tab.list_key];
+  fetch(ORIGIN + fillPath(ap.path, {name: itemKey(svc, full)})).then(r=>r.json()).then(j=>{
+    const items = j[tab.result_key] || [];
+    if (!items.length) { host.append(el("div",{class:"empty"}, "No " + tab.label.toLowerCase() + " for this parameter yet.")); return; }
+    const tbl = el("table",{class:"aws"});
+    tbl.append(el("tr",{}, ...tab.cols.map(c => el("th",{}, c[1]))));
+    items.forEach(it => tbl.append(el("tr",{}, ...tab.cols.map(c => {
+      const v = it[c[0]];
+      return el("td",{class:/value|user/i.test(c[0]) ? "mono small" : ""}, (v === undefined || v === null || v === "") ? "none" : String(v));
     }))));
     host.append(tbl);
   }).catch(e => host.append(el("div",{class:"alert err"}, "Failed to load: " + e.message)));

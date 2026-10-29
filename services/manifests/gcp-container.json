@@ -1,0 +1,44 @@
+{
+  "cloud": "gcp",
+  "key": "container",
+  "name": "Kubernetes Engine",
+  "upstream": "container/v1",
+  "issue": 70,
+  "core": "core/gcp_container_core.py",
+  "operations": [
+    "container.projects.locations.clusters.create",
+    "container.projects.locations.clusters.get",
+    "container.projects.locations.clusters.list",
+    "container.projects.locations.clusters.update",
+    "container.projects.locations.clusters.delete",
+    "container.projects.locations.clusters.setResourceLabels",
+    "container.projects.locations.clusters.setLogging",
+    "container.projects.locations.clusters.setMonitoring",
+    "container.projects.locations.clusters.setMaintenancePolicy",
+    "container.projects.locations.clusters.setLegacyAbac",
+    "container.projects.locations.clusters.nodePools.create",
+    "container.projects.locations.clusters.nodePools.get",
+    "container.projects.locations.clusters.nodePools.list",
+    "container.projects.locations.clusters.nodePools.update",
+    "container.projects.locations.clusters.nodePools.delete",
+    "container.projects.locations.clusters.nodePools.setSize",
+    "container.projects.locations.clusters.nodePools.setAutoscaling",
+    "container.projects.locations.clusters.nodePools.setManagement",
+    "container.projects.locations.operations.get",
+    "container.projects.locations.operations.list",
+    "container.projects.locations.operations.cancel",
+    "container.projects.locations.getServerConfig"
+  ],
+  "backend": {
+    "kind": "in-process",
+    "reason": "Control plane only: clusters, node pools and operations live in the engine (same code as Nano). The recommended k3s data plane (500 MB idle, Max-only) would only add a real Kubernetes API behind each cluster's endpoint; the console says the Kubernetes API is not served below Max."
+  },
+  "suites": [
+    "offline-sdk-java-gcp-container",
+    "offline-sdk-go-gcp-container",
+    "offline-cli-gcp-container",
+    "offline-ui-gcp-container",
+    "nano-ui-gcp-container"
+  ],
+  "status": "ready"
+}

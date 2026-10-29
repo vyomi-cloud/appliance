@@ -1054,7 +1054,43 @@ def _aws_query_target_service(request: Request) -> str:
         return "secretsmanager"
     if target.startswith("AWSEvents."):
         return "events"
+    if target.startswith("Logs_20140328."):
+        return "logs"
+    if target.startswith("AmazonSSM."):
+        return "ssm"
+    if target.startswith("AWSStepFunctions."):
+        return "states"
+    if target.startswith("AmazonSQS."):
+        return "sqs"
     return ""
+
+
+# Query-protocol Action -> service for UNSIGNED requests (plain curl, docs
+# snippets, health probes). Signed SDK/CLI calls route by SigV4 credential
+# scope above and never hit this table. Mirrors core/aws_wire_router._QUERY_ACTION.
+# Neptune/DocumentDB reuse RDS action names; they default to RDS here.
+_UNSIGNED_QUERY_ACTION = {
+    # RDS
+    "CreateDBInstance": "rds", "DescribeDBInstances": "rds", "DeleteDBInstance": "rds",
+    "ModifyDBInstance": "rds", "StartDBInstance": "rds", "StopDBInstance": "rds",
+    "RebootDBInstance": "rds", "CreateDBSnapshot": "rds", "DescribeDBSnapshots": "rds",
+    "CreateDBCluster": "rds", "DescribeDBClusters": "rds", "DeleteDBCluster": "rds",
+    # IAM
+    "CreateUser": "iam", "DeleteUser": "iam", "ListUsers": "iam", "GetUser": "iam",
+    "CreateRole": "iam", "DeleteRole": "iam", "ListRoles": "iam", "GetRole": "iam",
+    "CreatePolicy": "iam", "DeletePolicy": "iam", "ListPolicies": "iam",
+    "AttachUserPolicy": "iam", "DetachUserPolicy": "iam", "AttachRolePolicy": "iam",
+    "SimulatePrincipalPolicy": "iam", "CreateGroup": "iam", "ListGroups": "iam",
+    # STS
+    "GetCallerIdentity": "sts", "AssumeRole": "sts", "GetSessionToken": "sts",
+    # SQS (legacy query protocol)
+    "CreateQueue": "sqs", "DeleteQueue": "sqs", "ListQueues": "sqs", "GetQueueUrl": "sqs",
+    "SendMessage": "sqs", "ReceiveMessage": "sqs", "DeleteMessage": "sqs",
+    "GetQueueAttributes": "sqs", "SetQueueAttributes": "sqs", "PurgeQueue": "sqs",
+    # EC2 (compute; VPC actions are matched via _EC2_VPC_ACTIONS in register())
+    "RunInstances": "ec2", "DescribeInstances": "ec2", "TerminateInstances": "ec2",
+    "StartInstances": "ec2", "StopInstances": "ec2", "DescribeImages": "ec2",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -1092,13 +1128,36 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     async def aws_query_root(request: Request) -> Response:
         """Root dispatch for real AWS SDK/CLI query + JSON protocol requests."""
         service = _aws_query_target_service(request)
+        if not service:
+            # Unsigned Query-protocol request: infer the service from Action.
+            _p = await _srv()._ec2_query_params(request)
+            _a = str(_p.get("Action", "")).strip()
+            service = "ec2" if _a in _EC2_VPC_ACTIONS else _UNSIGNED_QUERY_ACTION.get(_a, "")
+        if service == "states":
+            # Step Functions (X-Amz-Target AWSStepFunctions.*) — in-process engine, shared with the console REST.
+            from core import stepfunctions_core as _sfn
+            try:
+                _sfn_body = json.loads(await request.body() or b"{}")
+            except Exception:
+                _sfn_body = {}
+            _r = _sfn.dispatch(_sfn.shared_store(), request.headers.get("x-amz-target", ""), _sfn_body)
+            return Response(content=json.dumps(_r.body), status_code=_r.status, headers=dict(_r.headers or {}),
+                            media_type="application/x-amz-json-1.0")
         if service == "ec2":
             params = await _srv()._ec2_query_params(request)
             if str(params.get("Action", "")).strip() in _EC2_VPC_ACTIONS:
                 return await _srv().api_vpc_query(request)
             return await _srv().api_ec2_query(request)
+        if service == "logs":
+            from routes import aws_logs as _aws_logs
+            return await _aws_logs.wire(request)
         if service == "sqs":
             return await _srv().api_sqs_query(request)
+        if service == "elasticloadbalancing":
+            from core import elbv2_core as _elb
+            from routes.aws_elbv2 import STORE as _elb_store
+            _elb_r = _elb.dispatch(_elb_store, await _srv()._ec2_query_params(request))
+            return Response(content=_elb_r.body, status_code=_elb_r.status, media_type="text/xml")
         if service == "rds":
             return await _srv().api_rds_query(request)
         if service == "dynamodb":
@@ -1108,6 +1167,18 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return await _srv().api_iam_query(request)
         if service == "sts":
             return await _srv().api_sts_query(request)
+        if service == "ssm":
+            # Systems Manager: in-process engine (core/ssm_core.py), same store as the console REST.
+            from core import ssm_core as _ssm_core
+            try:
+                _payload = json.loads(await request.body() or b"{}")
+            except Exception:
+                _payload = {}
+            _tgt = request.headers.get("x-amz-target", "")
+            _r = _ssm_core.dispatch(_ssm_core.shared_store(), _tgt, _payload)
+            _srv()._ssm_usage(_tgt, _payload, _r)
+            return Response(content=json.dumps(_r.body), status_code=_r.status,
+                            media_type="application/x-amz-json-1.1", headers=dict(_r.headers or {}))
         if service in ("kms", "secretsmanager", "events"):
             target = request.headers.get("x-amz-target", "")
             prefix = target.split(".", 1)[0] if "." in target else ""
@@ -1132,10 +1203,16 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
                     content=json.dumps({"__type": "InternalFailure", "message": f"{service}/{target} unhandled or backend unavailable"}),
                     status_code=500, media_type="application/x-amz-json-1.1",
                 )
-            return Response(content=json.dumps(resp), media_type="application/x-amz-json-1.1")
+            return Response(content=json.dumps(resp), media_type="application/x-amz-json-1.1",
+                            status_code=400 if isinstance(resp, dict) and "__type" in resp else 200)
         params = await _srv()._ec2_query_params(request)
         action = str(params.get("Action", "")).strip()
-        return _error_xml("InvalidAction", f"Root dispatch could not route service={service or 'unknown'!r} action={action or 'unknown'!r}.", "/", 400)
+        hint = "" if service else (
+            " Request is unsigned and the Action is not in the unsigned-routing table;"
+            " sign it (any AWS SDK/CLI with dummy creds) or add an Authorization header"
+            " with Credential=<key>/<date>/<region>/<service>/aws4_request."
+        )
+        return _error_xml("InvalidAction", f"Root dispatch could not route service={service or 'unknown'!r} action={action or 'unknown'!r}.{hint}", "/", 400)
 
     # ── S3 REST API — root level ────────────────────────────────────────
 
@@ -1147,6 +1224,11 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         table). The old /pricing route is retired and 302-redirects here.
         The SPA still lives at /ui for users who want to skip the launch.
         """
+        # Query-protocol services (RDS/IAM/SQS/STS/EC2) also accept GET with the
+        # params in the query string — real AWS does. Without this, the docs'
+        # `curl "{EP}/?Action=..."` silently returned S3 ListBuckets XML.
+        if "Action" in request.query_params:
+            return await aws_query_root(request)
         accept = request.headers.get("accept", "")
         user_agent = request.headers.get("user-agent", "")
         if "text/html" in accept or "Mozilla" in user_agent:

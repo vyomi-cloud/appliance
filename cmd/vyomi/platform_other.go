@@ -6,3 +6,6 @@ package main
 // the OS service manager, so these are no-ops. (This VM path ships on Windows.)
 func addMultipassToPath() {}
 func startMultipassHost() {}
+
+// enableVT: Unix terminals render ANSI escapes natively.
+func enableVT() bool { return true }

@@ -11,6 +11,65 @@ The offline appliance is running at `$VYOMI_BASE_URL` (built from this branch),
 the Nano relay at `$RELAY_HTTP`. The issue number is in `$ISSUE`; its body has
 the upstream id and the checklist.
 
+
+
+## Platform features
+
+Cross-cutting features (not a cloud service), labelled `platform-feature` with a
+marker `<!-- feature: slug=<slug> -->`. They are the **highest priority**: picked
+before backend upgrades and new services, even when an upgrade is in progress
+(its branch waits and resumes later).
+
+1. Build on `expansion/feature-<slug>`, cut from `origin/main`, exactly to the issue's
+   spec. Changes in this repo cover the offline appliance, sandboxes (the same
+   appliance) and Nano (`wasm/`, both copies of anything mirrored).
+2. **Portal changes** go on a branch `feature/<slug>` in `vyomi-cloud/portal` with a PR
+   there. **Never merge or deploy the portal** (every portal merge is a paid
+   production deploy); a person merges it after local verification.
+3. **Secrets and external setup** the issue says a person must create (a GitHub App,
+   new portal secrets) are not invented: build behind configuration so the feature
+   works without them (fallback path) and switches on when they are set.
+4. Tests: every behaviour the spec lists gets a test that fails before and passes
+   after (unit + the real path: appliance middleware, Nano service worker, console,
+   portal endpoint). Run the affected conformance suites so nothing regresses.
+5. Status file `tests/conformance/expansion/features/<slug>.json`:
+   `{"status": "building" | "ready", "title": "...", "pr_body": "<what was built,
+   how to configure, what a person must still do, test results>", "portal_pr": "<url>"}`.
+   `ready` only when everything in the spec is built and tested. The workflow then
+   opens a PR labelled `platform-feature` for human review; it is never auto-merged.
+
+## Backend upgrades
+
+Some work arrives as a stack of existing PRs that improves services already
+released (Rohith's Azure Service Bus AMQP stack, the Siftly Blob / pgvector /
+app-profile stack). They are tracked as issues labelled `backend-upgrade` with
+a marker `<!-- upgrade: slug=<slug> prs=<n,n,...> -->` and are picked before
+new services.
+
+1. **Never touch the source PRs.** Don't push to their branches, close them or
+   rewrite their history. Work only on `expansion/upgrade-<slug>`, cut from
+   `origin/main`.
+2. **Rebuild in order.** For each source PR in the marker's order,
+   `git cherry-pick` its commits (`gh pr view <n> --json commits`) so authorship
+   is kept. Resolve conflicts in favour of keeping **both** main's newer work
+   and the PR's behaviour; never drop main's changes. Record every non-trivial
+   resolution (file, what each side did, what you kept) for the PR body.
+3. **Fit the backend rules.** The result must match `backends.json` (e.g. Service
+   Bus = `messaging-core` + `amqp` adapter + NATS). Don't restructure into
+   `libs/` yet; that's a later phase.
+4. **Test what the stack claims and what it touches.** Run the acceptance suites
+   named in the issue (e.g. Siftly A1-A9, BL1-BL5, PG1-PG5) and every suite of a
+   service the stack changes (the Service Bus stack ports SQS onto `core/lease.py`,
+   so every SQS SDK/CLI/console/Nano suite must stay green). Fails before / passes
+   after where the stack fixes something.
+5. **Status file** `tests/conformance/expansion/upgrades/<slug>.json`:
+   `{"status": "building" | "ready", "title": "...", "source_prs": [...],
+   "suites": [...], "pr_body": "<what changed, conflict resolutions, suite results>"}`.
+   Set `ready` only when every listed suite passes. The workflow then opens a PR
+   labelled `backend-upgrade` with the source PRs' author as reviewer. It is
+   **not** auto-merged: a person merges it after review.
+6. After the PR is open, comment once on each source PR linking it.
+
 ## Definition of done (the gate checks every item)
 
 1. **Engine** `core/<cloud>_<key>_core.py` (AWS: `core/<key>_core.py`) — the
@@ -63,8 +122,13 @@ the upstream id and the checklist.
    2 GB Max); and listed in `tests/conformance/hourly/ci-services.txt`. The gate
    checks all of it and measures idle memory. Heavy backends (k3s, Kafka,
    OpenSearch) are Max-only: below Max the service runs control-plane only and
-   says so in the console. Deviating from the default pick needs
-   `backend.reason` in the manifest.
+   says so in the console. Picking a different real backend needs
+   `backend.reason` in the manifest; replacing a recommended backend with
+   in-process is refused, whatever the reason. The resource must really work:
+   traffic flows through a load balancer, `kubectl` reaches a cluster, `dig`
+   answers, sent mail arrives. Shared in-process backends (the `logstore`
+   for CloudWatch Logs, Cloud Logging, Log Analytics and App Insights) are
+   declared by name: `{"kind": "in-process", "name": "logstore"}`.
 6. **Conformance test beds**, using the **official SDKs/CLIs** with only the
    endpoint changed, each printing one `[PASS]`/`[FAIL]` line per check and
    exiting non-zero on failure:

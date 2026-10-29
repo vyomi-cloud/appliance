@@ -55,7 +55,7 @@ async def run_contract(store):
     _check("missing instance → 400 BadRequestException",
            miss.status == 400 and miss.headers.get("x-amzn-errortype") == "BadRequestException")
 
-    _check("create table → 200", (await _exec(store, "CREATE TABLE app (id INTEGER, name TEXT, active BOOLEAN)")).status == 200)
+    _check("ExecuteStatement create table → 200", (await _exec(store, "CREATE TABLE app (id INTEGER, name TEXT, active BOOLEAN)")).status == 200)
 
     # parameterized INSERT with AWS-typed named params; DML → numberOfRecordsUpdated
     ins = await _exec(store, "INSERT INTO app (id, name, active) VALUES (:id, :name, :active)",

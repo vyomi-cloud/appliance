@@ -48,6 +48,7 @@ from core import iam_core as iam
 from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
 from core import sns_core as sns
+from core import elbv2_core as elbv2
 from core import rds_data_core as rds_data
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
 from core import gcp_firestore_core as gcp_fs
@@ -57,6 +58,10 @@ from core import gcp_secretmanager_core as gcp_sec
 from core import gcp_pubsub_core as gcp_ps
 from core import gcp_iam_core as gcp_iam
 from core import gcp_cloudsql_core as gcp_sql
+from core import gcp_cloudscheduler_core as gcp_sched
+from core import gcp_container_core as gcp_gke
+from core import gcp_iamcredentials_core as gcp_iamc
+from core import gcp_redis_core as gcp_redis
 
 
 def _gcp_service(path):
@@ -69,6 +74,12 @@ def _gcp_service(path):
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if "/projects/" in path:
+        if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/instances([/:]|$)", path):
+            return "gcp-redis"
+        if re.search(r"^/v1(beta1)?/projects/[^/]+/(locations|zones)/[^/]+/(clusters|operations|serverConfig)([/:]|$)", path):
+            return "gcp-container"
+        if re.search(r"/locations/[^/]+/jobs([/:]|$)", path) or re.search(r"^/v1(beta1)?/projects/[^/]+/locations/?$", path):
+            return "gcp-cloudscheduler"
         if "/databases/" in path and "/documents" in path:
             return "gcp-firestore"
         if "/keyRings" in path:
@@ -77,6 +88,8 @@ def _gcp_service(path):
             return "gcp-secretmanager"
         if "/topics" in path or "/subscriptions" in path:
             return "gcp-pubsub"
+        if re.search(r"^/v1/projects/[^/]+/serviceAccounts/[^/:]+:(generateAccessToken|generateIdToken|signBlob|signJwt)$", path):
+            return "gcp-iamcredentials"
         if "/serviceAccounts" in path or path.endswith(
                 (":getIamPolicy", ":setIamPolicy", ":testIamPermissions")):
             return "gcp-iam"
@@ -93,9 +106,12 @@ from core import azure_queue_core as az_queue
 from core.azure_queue_core import AzureQueueStore
 from core import azure_servicebus_core as az_sb
 from core import eventbridge_core as events
+from core import logs_core as logs
 from core import lambda_core as lam
 from core import apigateway_core as apigw
 from core import apigatewayv2_core as apigw2
+from core import ssm_core as ssm
+from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
@@ -147,20 +163,27 @@ _SIGNING = {
     "dynamodb": "dynamodb", "kms": "kms", "secretsmanager": "secretsmanager",
     "sqs": "sqs", "sns": "sns", "iam": "iam", "rds": "rds", "s3": "s3",
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
-    "events": "events", "lambda": "lambda", "ec2": "vpc",
+    "events": "events", "lambda": "lambda", "ec2": "vpc", "logs": "logs", "states": "stepfunctions",
+    "elasticloadbalancing": "elbv2",
+    "ssm": "ssm",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
 _TARGET_PREFIX = {
     "DynamoDB_": "dynamodb", "TrentService": "kms",
     "secretsmanager": "secretsmanager", "AmazonSQS": "sqs", "AWSEvents": "events",
+    "Logs_20140328": "logs",
+    "AmazonSSM": "ssm",
+    "AWSStepFunctions": "stepfunctions",
 }
 
 # Native JSON content-types the real SDK expects back per service.
 _JSON_CT = {
     "dynamodb": "application/x-amz-json-1.0", "kms": "application/x-amz-json-1.1",
     "secretsmanager": "application/x-amz-json-1.1", "sqs": "application/x-amz-json-1.0",
-    "events": "application/x-amz-json-1.1",
+    "events": "application/x-amz-json-1.1", "logs": "application/x-amz-json-1.1",
+    "ssm": "application/x-amz-json-1.1",
+    "stepfunctions": "application/x-amz-json-1.0",
 }
 
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
@@ -188,6 +211,14 @@ _QUERY_ACTION = {
     "DescribeVpcs": "vpc", "CreateNetworkAcl": "vpc", "CreateNetworkAclEntry": "vpc",
     "AssociateNetworkAcl": "vpc", "AnalyzeReachability": "vpc",
 }
+
+
+# ELBv2 (Query protocol; signs as `elasticloadbalancing`). Tag / limit verbs are
+# shared with other services, so unsigned requests only route here for the rest.
+_AMBIGUOUS_ELB = {"AddTags", "RemoveTags", "DescribeTags", "DescribeAccountLimits"}
+for _a in elbv2.OPERATIONS:
+    if _a not in _AMBIGUOUS_ELB:
+        _QUERY_ACTION.setdefault(_a, "elbv2")
 
 
 def _lower_headers(headers):
@@ -219,6 +250,10 @@ class AwsWireRouter:
         self.gcp_msg = s.get("gcp_msg") or InMemoryMessagingStore()
         self.gcp_iam = s.get("gcp_iam") or InMemoryIamStore()
         self.gcp_sql = s.get("gcp_sql") or InMemorySqlStore()
+        self.gcp_sched = s.get("gcp_sched") or gcp_sched.CloudSchedulerStore()   # Cloud Scheduler jobs
+        self.gcp_gke = s.get("gcp_gke") or gcp_gke.ContainerStore()   # Kubernetes Engine clusters
+        self.gcp_redis = s.get("gcp_redis") or gcp_redis.RedisStore()   # Memorystore for Redis instances
+        self.gcp_iamc = s.get("gcp_iamc") or gcp_iamc.IamCredentialsStore()   # IAM Service Account Credentials issue log
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -229,12 +264,42 @@ class AwsWireRouter:
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
         # its own lightweight function registry (a namespace the core attaches to).
         self.events = s.get("events") or self.msg
+        self.ssm = s.get("ssm") or ssm.SsmStore()   # Systems Manager (Parameter Store, documents, Run Command, …)
         self.lam = s.get("lam") or _types.SimpleNamespace()
         # API Gateway shares the Lambda store so an AWS_PROXY integration can reach
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
         self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
         self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
+        self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
+        self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
+        self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
+
+    def _iamc_resolve(self, ident):
+        """IAM Credentials: service-account email / uniqueId -> email, or None if unknown
+        (IAM core store, then the appliance's console-side IAM state when present)."""
+        for email, sa in (getattr(self.gcp_iam, "gcp_service_accounts", None) or {}).items():
+            if ident in (email, sa.get("uniqueId")):
+                return email
+        try:
+            from providers.gcp_iam import gcp_iam_state
+            for accts in gcp_iam_state.get("service_accounts", {}).values():
+                for rec in accts.values():
+                    if ident in (rec.get("email"), rec.get("uniqueId")):
+                        return rec["email"]
+        except Exception:
+            pass
+        return None
+
+    def _sched_invoke(self, kind, d):
+        """Cloud Scheduler firing a job: deliver a pubsub target via the Pub/Sub core
+        (returns True, or an error string recorded on the job's status)."""
+        if kind != "pubsub":
+            return True
+        topic = d["topicName"]
+        msg = {"messages": [{"data": d.get("data", ""), "attributes": d.get("attributes") or {}}]}
+        r = gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/%s:publish" % topic, {}, {}, json.dumps(msg).encode())
+        return True if r.status < 300 else "Topic %s not found." % topic
 
     def _servicebus_service(self, method, path, lheaders):
         """Azure Service Bus (topics) — the pub/sub-fan-out peer of SNS/Pub-Sub.
@@ -406,10 +471,20 @@ class AwsWireRouter:
                 "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs),
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
-                "gcp-cloudsql": (gcp_sql, self.gcp_sql),
+                "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
+                "gcp-container": (gcp_gke, self.gcp_gke), "gcp-iamcredentials": (gcp_iamc, self.gcp_iamc),
+                "gcp-redis": (gcp_redis, self.gcp_redis),
             }[svc]
             mod, store = _gcp_core
-            r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
+            if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), resolver=self._iamc_resolve)
+            elif svc == "gcp-cloudscheduler":   # a pubsub target publishes into the Pub/Sub core
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), invoker=self._sched_invoke)
+            elif svc == "gcp-container" and re.search(r"/operations([/:]|$)", path):   # operations are shared with Memorystore
+                r = gcp_redis.dispatch_shared_operations(
+                    self.gcp_redis, lambda *a: gcp_gke.dispatch(self.gcp_gke, *a), method, path, query or {}, headers or {}, bytes(body))
+            else:
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
@@ -439,6 +514,12 @@ class AwsWireRouter:
                 r = secrets.dispatch(self.sec, target, payload)
             elif svc == "events":
                 r = events.dispatch(self.events, target, payload)
+            elif svc == "logs":
+                r = logs.dispatch(self.logs, target, payload)
+            elif svc == "ssm":
+                r = ssm.dispatch(self.ssm, target, payload)
+            elif svc == "stepfunctions":
+                r = sfn.dispatch(self.sfn, target, payload, lambda_store=self.lam)
             else:  # sqs
                 r = sqs.dispatch(self.msg, target, payload)
             hdrs = dict(r.headers or {})
@@ -454,6 +535,8 @@ class AwsWireRouter:
             r = rds.dispatch(self.rds, params)
         elif svc == "vpc":
             r = vpc.dispatch(self.vpc, params)
+        elif svc == "elbv2":
+            r = elbv2.dispatch(self.elbv2, params)
         else:  # sns
             r = sns.dispatch(self.msg, params)
         hdrs = dict(r.headers or {})
