@@ -41,6 +41,7 @@ STORE_ATTRS = [
     "gcp_redis",  # Memorystore for Redis (core/gcp_redis_core.RedisStore)
     "gcp_iamc",   # IAM Credentials issue log (core/gcp_iamcredentials_core.IamCredentialsStore)
     "gcp_sched",  # Cloud Scheduler (core/gcp_cloudscheduler_core.CloudSchedulerStore)
+    "gcp_logging",  # Cloud Logging (core/gcp_logging_core.LoggingStore)
     "gcp_rm", "gcp_pam",  # IAM & Admin: Resource Manager + Privileged Access Manager
     "gcp_compute_vm",  # Compute Engine VMs/disks/images/templates (core/gcp_compute_instances_core.ComputeStore)
     "gcp_compute",  # VPC network: networks/subnets/firewalls/routes/addresses (core/gcp_compute_core.ComputeStore)

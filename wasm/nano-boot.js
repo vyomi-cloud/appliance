@@ -265,10 +265,17 @@ import builtins; builtins._disp = _disp
       if (notify && _bc) { try { _bc.postMessage({ k: STORE_KEY, t: Date.now() }); } catch (_) {} }
     } catch (_) { /* best-effort */ }
   }
-  const scheduleStoresSave = () => {
-    if (_storeTimer) return;
-    _storeTimer = setTimeout(() => { _storeTimer = null; writeStores(true); }, 400);
+  // Reads batch their (no-op) saves on a 400 ms debounce; a WRITE saves on the next tick, so a
+  // reload / tab close right after creating something no longer drops it (the 400 ms window
+  // used to lose writes made just before a reload).
+  const scheduleStoresSave = (write) => {
+    if (_storeTimer && !write) return;
+    if (_storeTimer) clearTimeout(_storeTimer);
+    _storeTimer = setTimeout(() => { _storeTimer = null; writeStores(true); }, write ? 0 : 400);
   };
+  const isWrite = (tuple) => tuple[0] === "_wire"
+    ? !["GET", "HEAD", "OPTIONS"].includes(String(tuple[2]).toUpperCase())
+    : !/^(get|list|describe|head|query|search|read)/i.test(String(tuple[2] || ""));
   if (_bc) _bc.onmessage = async (e) => {
     if (!e.data || e.data.k !== STORE_KEY || _restoring) return;
     _restoring = true;
@@ -300,7 +307,7 @@ import builtins; builtins._disp = _disp
       const [prov, svc, op, params] = ev.data.tuple;
       port.postMessage(dispatch(prov, svc, op, params || {}));
       scheduleCensus();       // any op may have mutated state — refresh the footprint
-      scheduleStoresSave();   // …and persist + notify the other context (Fix #1/#2)
+      scheduleStoresSave(isWrite(ev.data.tuple));   // …and persist + notify the other context (Fix #1/#2)
     } catch (e) {
       port.postMessage({ ok: false, error: String(e) });
     }

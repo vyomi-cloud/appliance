@@ -23,4 +23,16 @@ if unvendored:
     raise SystemExit(f"RESULT: FAIL — core/aws_wire_router.py imports cores not vendored for Nano (wasm/build_cores.py): {unvendored}")
 if missing:
     raise SystemExit(f"RESULT: FAIL — vendored for Nano but not loaded by wasm/nano-boot.js: {missing}")
+# Every store the router reads from its `stores` dict must exist in Nano's registry under that name
+# (or a declared alias) AND be persisted — otherwise the router silently builds a private store
+# whose state is lost on reload and invisible to the SDK relay.
+ALIASES = {"lam": "compute", "apigw": "compute", "vpc": "vpc_net"}
+reg = (ROOT / "core/nano_registry.py").read_text()
+per = (ROOT / "core/nano_persist.py").read_text()
+in_reg = set(re.findall(r'^\s*"([a-z0-9_]+)":', reg, re.M))
+in_per = set(re.findall(r'"([a-z0-9_]+)"', per[: per.index("def _enc")]))
+gaps = [k for k in sorted(set(re.findall(r's\.get\("([a-z0-9_]+)"\)', router)))
+        if ALIASES.get(k, k) not in in_reg or ALIASES.get(k, k) not in in_per]
+if gaps:
+    raise SystemExit(f"RESULT: FAIL — router stores not registered+persisted on Nano: {gaps}")
 print(f"RESULT: PASS — all {len(cores) - len(OFFLINE_ONLY & set(cores))} vendored cores are loaded by Nano")

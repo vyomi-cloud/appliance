@@ -337,14 +337,16 @@ class AwsWireRouter:
         # its own lightweight function registry (a namespace the core attaches to).
         self.events = s.get("events") or self.msg
         self.ssm = s.get("ssm") or ssm.SsmStore()   # Systems Manager (Parameter Store, documents, Run Command, …)
-        self.lam = s.get("lam") or _types.SimpleNamespace()
+        # Nano's registry names these "compute" / "vpc_net" (persisted via their private
+        # _lambda_functions / _apigateway_apis / _vpc_model attrs) — use them, else state is lost.
+        self.lam = s.get("lam") or s.get("compute") or _types.SimpleNamespace()
         # API Gateway shares the Lambda store so an AWS_PROXY integration can reach
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
         self.kinesis = s.get("kinesis") or kinesis.KinesisStore()   # Kinesis Data Streams
         self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
-        self.vpc = s.get("vpc") or _types.SimpleNamespace()   # EC2/VPC network model
+        self.vpc = s.get("vpc") or s.get("vpc_net") or _types.SimpleNamespace()   # EC2/VPC network model
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)

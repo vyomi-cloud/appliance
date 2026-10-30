@@ -185,7 +185,7 @@ jobs:
           PYTHONPATH=. python3 tests/conformance/test_capabilities.py | tail -3 || smoke=1
           core=0
           for f in $(git diff --name-only origin/${{ env.BASE_BRANCH }}...HEAD -- tests/conformance/ | grep '\.py$'); do PYTHONPATH=. python3 "$f" || core=1; done
-          for f in tests/conformance/test_s3_core.py tests/conformance/test_dynamodb_core.py tests/conformance/test_aws_wire_router.py tests/conformance/test_capabilities.py tests/conformance/test_gcp_storage_core.py tests/conformance/test_azure_blob_core.py tests/conformance/test_azure_arm_core.py tests/conformance/test_nano_core_manifest.py; do PYTHONPATH=. python3 "$f" >/dev/null || core=1; done
+          for f in tests/conformance/test_s3_core.py tests/conformance/test_dynamodb_core.py tests/conformance/test_aws_wire_router.py tests/conformance/test_capabilities.py tests/conformance/test_gcp_storage_core.py tests/conformance/test_azure_blob_core.py tests/conformance/test_azure_arm_core.py tests/conformance/test_nano_core_manifest.py tests/conformance/test_console_registry_unique.py; do PYTHONPATH=. python3 "$f" >/dev/null || core=1; done
           echo "ui=$ui smoke=$smoke core=$core"
           echo "ok=$([ $ui -eq 0 ] && [ $smoke -eq 0 ] && [ $core -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           cp -r $RUNNER_TEMP/ui-out ui-out 2>/dev/null; cp -r $RUNNER_TEMP/smoke-out smoke-out 2>/dev/null; cp $RUNNER_TEMP/gate.txt gate.txt 2>/dev/null
