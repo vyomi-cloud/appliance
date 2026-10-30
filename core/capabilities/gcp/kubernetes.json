@@ -1,0 +1,106 @@
+{
+ "$doc": "Vyomi capability registry — GKE (Kubernetes Engine). One entry per console feature; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py. GCP ids carry no AWS-shaped probe, so every supported level lists 'tests' instead.",
+ "gcp.kubernetes.cluster.crud": {
+  "title": "Clusters (create, list, get, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["projects.locations.clusters.create", "projects.locations.clusters.list", "projects.locations.clusters.get", "projects.locations.clusters.delete"],
+  "tests": ["tests/conformance/test_gcp_container_core.py"]
+ },
+ "gcp.kubernetes.cluster.autopilot-create": {
+  "title": "Create an Autopilot cluster",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["projects.locations.clusters.create"],
+  "tests": ["tests/conformance/test_gcp_container_core.py"]
+ },
+ "gcp.kubernetes.cluster.settings": {
+  "title": "Cluster settings (labels, release channel, logging/monitoring service, master/node version)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["projects.locations.clusters.setResourceLabels", "projects.locations.clusters.update"],
+  "tests": ["tests/conformance/test_gcp_container_core.py"]
+ },
+ "gcp.kubernetes.nodepool.crud": {
+  "title": "Node pools (add, resize, autoscaling, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["projects.locations.clusters.nodePools.create", "projects.locations.clusters.nodePools.delete",
+          "projects.locations.clusters.nodePools.setSize", "projects.locations.clusters.nodePools.setAutoscaling"],
+  "tests": ["tests/conformance/test_gcp_container_core.py"]
+ },
+ "gcp.kubernetes.cluster.connect": {
+  "title": "Connect to cluster (gcloud / kubectl command)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The displayed gcloud/kubectl commands are accurate (real endpoint, cluster CA certificate), but no Kubernetes API server runs behind a cluster's endpoint — kubectl commands against it fail. A control-plane-only simulation; the data plane needs the Max-tier k3s backend."
+  ],
+  "api": ["projects.locations.clusters.get"],
+  "tests": ["tests/conformance/test_gcp_container_core.py"]
+ },
+ "gcp.kubernetes.cluster.private-networking": {
+  "title": "Restricting cluster access by DNS / IPv4 (private clusters)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Vyomi always creates clusters with a public endpoint; privateClusterConfig is not modeled."]
+ },
+ "gcp.kubernetes.cluster.nodes": {
+  "title": "Nodes (kubectl get nodes)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Kubernetes Node objects live in the cluster's API server, which Vyomi does not run. Node pools (the GKE control-plane resource) are fully modeled — see the Node pools table."]
+ },
+ "gcp.kubernetes.workloads": {
+  "title": "Workloads (Deployments, StatefulSets, Pods, Jobs)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Needs a live Kubernetes API server behind the cluster endpoint; below the Max tier Vyomi only models the GKE control plane (clusters and node pools)."]
+ },
+ "gcp.kubernetes.secrets-configmaps": {
+  "title": "Secrets & ConfigMaps",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Kubernetes-native Secret/ConfigMap objects live in the cluster's API server, which Vyomi does not run."]
+ },
+ "gcp.kubernetes.discovery": {
+  "title": "Gateways, Services & Ingress",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Gateway/Service/Ingress objects live in the cluster's API server, which Vyomi does not run."]
+ },
+ "gcp.kubernetes.storage": {
+  "title": "Kubernetes Storage (PersistentVolumes, StorageClasses, snapshots)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["PersistentVolume/StorageClass objects live in the cluster's API server, which Vyomi does not run."]
+ },
+ "gcp.kubernetes.object-browser": {
+  "title": "Object Browser (generic Kubernetes resource browser)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Browses live objects from the cluster's API server, which Vyomi does not run."]
+ },
+ "gcp.kubernetes.backup": {
+  "title": "Backup for GKE",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Backup for GKE is a separate control plane (gkebackup.googleapis.com) that Vyomi does not implement."]
+ },
+ "gcp.kubernetes.config": {
+  "title": "Config (Config Sync / Policy Controller / fleet configuration)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["GKE Enterprise fleet configuration is not implemented."]
+ },
+ "gcp.kubernetes.applications": {
+  "title": "Applications",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Groups live Kubernetes objects by application label; needs the cluster's API server, which Vyomi does not run."]
+ },
+ "gcp.kubernetes.fleet-registration": {
+  "title": "Fleet registration (GKE Hub / Anthos)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["GKE Hub fleet membership (gkehub.googleapis.com) is not implemented."]
+ },
+ "gcp.kubernetes.observability": {
+  "title": "Observability & Cost optimization",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Cluster/fleet metrics, logs-based observability and cost-optimization recommendations need Cloud Monitoring data this simulator does not generate for GKE."]
+ },
+ "gcp.kubernetes.logs": {
+  "title": "Logs",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Cloud Logging entries for cluster/workload events are not generated."]
+ }
+}
