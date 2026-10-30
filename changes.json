@@ -1,124 +1,14 @@
 {
- "at": "2026-10-30T19:47:35+00:00",
+ "at": "2026-10-30T20:47:37+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "aws",
-   "service": "logs",
-   "kind": "operation-changed",
-   "key": "aws:logs:DeleteAccountPolicy:1f1da347d99a",
-   "title": "AWS logs: operation DeleteAccountPolicy changed",
-   "detail": {
-    "in": {
-     "was": [
-      "policyName",
-      "policyType"
-     ],
-     "now": [
-      "dryRun",
-      "policyName",
-      "policyType"
-     ]
-    },
-    "out": {
-     "was": [],
-     "now": [
-      "dryRunResult"
-     ]
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "logs",
-   "kind": "operation-changed",
-   "key": "aws:logs:PutAccountPolicy:733a9caf3a70",
-   "title": "AWS logs: operation PutAccountPolicy changed",
-   "detail": {
-    "in": {
-     "was": [
-      "policyDocument",
-      "policyName",
-      "policyType",
-      "scope",
-      "selectionCriteria"
-     ],
-     "now": [
-      "dryRun",
-      "policyDocument",
-      "policyName",
-      "policyType",
-      "scope",
-      "selectionCriteria"
-     ]
-    },
-    "out": {
-     "was": [
-      "accountPolicy"
-     ],
-     "now": [
-      "accountPolicy",
-      "dryRunResult"
-     ]
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:fd389969f2ca",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStartRequest",
-     "now": "WorkloadCapturesStartRequest"
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:f421c3d61dc0",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStartReplayRequest",
-     "now": "WorkloadCapturesStartReplayRequest"
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:c8c00d855f73",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStopRequest",
-     "now": "WorkloadCapturesStopRequest"
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:acd5b7e919b1",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
-   "detail": {
-    "request": {
-     "was": "SqlWorkloadCapturesStopReplayRequest",
-     "now": "WorkloadCapturesStopReplayRequest"
-    }
-   },
+   "cloud": "azure",
+   "service": "storage",
+   "kind": "spec-commit",
+   "key": "azure:storage:e92d565075",
+   "title": "Azure storage: Storage STG105 (TypeSpec) (#47158)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/e92d56507558ffba90b5a9362d2ae4b64fdf4592",
    "actionable": false
   },
   {
@@ -131,55 +21,17 @@
    "actionable": false
   },
   {
-   "cloud": "sdk",
-   "service": "pypi:boto3",
-   "kind": "release",
-   "key": "ver:pypi:boto3:1.43.123",
-   "title": "pypi:boto3: 1.43.122 \u2192 1.43.123",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:botocore",
-   "kind": "release",
-   "key": "ver:pypi:botocore:1.43.123",
-   "title": "pypi:botocore: 1.43.122 \u2192 1.43.123",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb",
-   "kind": "release",
-   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/dynamodb:v1.72.3",
-   "title": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.72.2 \u2192 v1.72.3",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "go:github.com/aws/aws-sdk-go-v2/service/sqs",
-   "kind": "release",
-   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/sqs:v1.52.8",
-   "title": "go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.7 \u2192 v1.52.8",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "cli:aws",
-   "kind": "release",
-   "key": "ver:cli:aws:2.39.3",
-   "title": "cli:aws: 2.39.2 \u2192 2.39.3",
-   "actionable": false
-  },
-  {
    "cloud": "aws",
-   "service": "Amazon RDS",
+   "service": "Amazon S3",
    "kind": "announcement",
-   "key": "feed:aws:46202e42ed65",
-   "title": "Amazon RDS for Oracle no longer requires automatic minor version upgrades for JVM, Spatial, Locator, and OLAP options",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/oracle-jvm-spatial-locator-olap-options-amvu-optional/",
-   "detail": "Amazon Relational Database Service (Amazon RDS) for Oracle now lets you turn off automatic minor version upgrades on new and existing DB instances that use the JVM, Spatial, Locator, or OLAP option. Previously, these options required automatic minor version upgrades to be enabled. With this change, you decide when to apply minor version upgrades to DB instances using these options. If you turn off automatic minor version upgrades, we recommend that you apply new minor versions regularly so your DB instances keep the latest Oracle security fixes. To keep automatic minor version upgrades turned ",
+   "key": "feed:aws:5c6928d6a6f5",
+   "title": "Amazon Connect Customer automatically saves in-progress emails as drafts",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-connect-email-draft-save/",
+   "detail": "Amazon Connect Customer automatically saves in-progress emails as drafts, helping agents resume work without losing progress when connectivity is interrupted or when their browser is accidentally closed or refreshed. When agents return, their drafts are restored with the message body, recipients, subject line, and attachment references intact. Customers can also access saved draft data in their Amazon S3 buckets to build integrations with other applications.",
    "actionable": false
   }
  ],
- "errors": []
+ "errors": [
+  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
+ ]
 }
