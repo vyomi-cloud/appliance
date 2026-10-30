@@ -17,6 +17,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert } from "../../kit/common.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
 import { TAG_I18N } from "./InstanceDetail.jsx";
 import * as api from "./api.js";
 
@@ -29,7 +30,7 @@ export function PlacementGroups() {
   const t = useAsync(() => api.describePlacementGroups(), []);
   const rows = t.data || [];
   return (
-    <ContentLayout header={<Header variant="h1">Placement groups</Header>}>
+    <ContentLayout header={<Header variant="h1" actions={<CapabilityBadge id="ec2.placement-groups" />}>Placement groups</Header>}>
       <ResourceTable
         resourceName="Placement groups"
         items={rows}

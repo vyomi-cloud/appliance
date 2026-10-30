@@ -151,7 +151,54 @@ def run() -> int:
     lt = call({"Action": "CreateLaunchTemplate", "LaunchTemplateName": "v4-lt", "LaunchTemplateData.InstanceType": "t3.micro"})
     lt_id = xid(lt, "launchTemplateId")
     _check("launch template stores its config", "v4-lt" in call({"Action": "DescribeLaunchTemplates", "LaunchTemplateId.1": lt_id}))
+
+    # 11b. Launch template versions: a new version is created, enumerable, and can be made default.
+    ltv2 = call({"Action": "CreateLaunchTemplateVersion", "LaunchTemplateId": lt_id, "SourceVersion": "1",
+                 "VersionDescription": "v2", "LaunchTemplateData.InstanceType": "t3.small"})
+    _check("CreateLaunchTemplateVersion bumps the version number", "<versionNumber>2</versionNumber>" in ltv2)
+    versions = call({"Action": "DescribeLaunchTemplateVersions", "LaunchTemplateId": lt_id})
+    _check("DescribeLaunchTemplateVersions lists both versions", "<versionNumber>1</versionNumber>" in versions and "<versionNumber>2</versionNumber>" in versions)
+    _check("version 2 carries its own instance type", "<instanceType>t3.small</instanceType>" in versions)
+    call({"Action": "ModifyLaunchTemplate", "LaunchTemplateId": lt_id, "DefaultVersion": "2"})
+    _check("ModifyLaunchTemplate switches the default version",
+           "<defaultVersionNumber>2</defaultVersionNumber>" in call({"Action": "DescribeLaunchTemplates", "LaunchTemplateId.1": lt_id}))
     call({"Action": "DeleteLaunchTemplate", "LaunchTemplateId": lt_id})
+
+    # 11c. Placement groups are now enforced, not just stored: spread caps at 7 running
+    #      instances per AZ, and partition groups round-robin a real partition number.
+    call({"Action": "CreatePlacementGroup", "GroupName": "v4-spread", "Strategy": "spread"})
+    spread_ids = []
+    for _ in range(7):
+        r = call({"Action": "RunInstances", "InstanceType": "t3.micro", "MaxCount": "1",
+                  "Placement.GroupName": "v4-spread", "Placement.AvailabilityZone": "us-east-1a"})
+        spread_ids.append(xid(r, "instanceId"))
+    overflow = vpc.dispatch(s, {"Action": "RunInstances", "InstanceType": "t3.micro", "MaxCount": "1",
+                                 "Placement.GroupName": "v4-spread", "Placement.AvailabilityZone": "us-east-1a"})
+    _check("8th instance in a spread group's AZ is rejected", overflow.status == 400 and "InsufficientInstanceCapacity" in overflow.body)
+    blocked_pg_del = vpc.dispatch(s, {"Action": "DeletePlacementGroup", "GroupName": "v4-spread"})
+    _check("placement group with running instances cannot be deleted", blocked_pg_del.status == 400 and "InUse" in blocked_pg_del.body)
+    call({"Action": "TerminateInstances", **{f"InstanceId.{i + 1}": iid2 for i, iid2 in enumerate(spread_ids)}})
+    call({"Action": "DeletePlacementGroup", "GroupName": "v4-spread"})
+
+    call({"Action": "CreatePlacementGroup", "GroupName": "v4-partition", "Strategy": "partition", "PartitionCount": "3"})
+    part_ids = []
+    for _ in range(4):
+        r = call({"Action": "RunInstances", "InstanceType": "t3.micro", "MaxCount": "1", "Placement.GroupName": "v4-partition"})
+        part_ids.append(xid(r, "instanceId"))
+    part_desc = call({"Action": "DescribeInstances", **{f"InstanceId.{i + 1}": pid for i, pid in enumerate(part_ids)}})
+    partition_numbers = re.findall(r"<partitionNumber>(\d+)</partitionNumber>", part_desc)
+    _check("partition placement group round-robins a real partition number", partition_numbers == ["1", "2", "3", "1"])
+    call({"Action": "TerminateInstances", **{f"InstanceId.{i + 1}": pid for i, pid in enumerate(part_ids)}})
+    call({"Action": "DeletePlacementGroup", "GroupName": "v4-partition"})
+
+    # 11d. DescribeInstanceStatus: a real, non-CloudWatch status check derived from instance state.
+    status_running = call({"Action": "DescribeInstanceStatus", "InstanceId.1": iid})
+    _check("running instance passes its status checks", "<status>ok</status>" in status_running and "passed" in status_running)
+    call({"Action": "StopInstances", "InstanceId.1": iid})
+    _check("stopped instance is excluded from DescribeInstanceStatus by default", iid not in call({"Action": "DescribeInstanceStatus"}))
+    stopped_status = call({"Action": "DescribeInstanceStatus", "InstanceId.1": iid, "IncludeAllInstances": "true"})
+    _check("stopped instance included with IncludeAllInstances shows not-applicable", "<status>not-applicable</status>" in stopped_status)
+    call({"Action": "StartInstances", "InstanceId.1": iid})
 
     # 12. EBS encryption-by-default: an account setting that actually changes new-volume behavior.
     call({"Action": "EnableEbsEncryptionByDefault"})

@@ -14,6 +14,9 @@ import Button from "@cloudscape-design/components/button";
 import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
 import TagEditor from "@cloudscape-design/components/tag-editor";
 import Box from "@cloudscape-design/components/box";
+import Modal from "@cloudscape-design/components/modal";
+import Table from "@cloudscape-design/components/table";
+import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
@@ -27,6 +30,7 @@ const opt = (v) => ({ value: v, label: v });
 export function LaunchTemplates() {
   const notify = useNotify();
   const [sel, setSel] = useState([]);
+  const [versionsOf, setVersionsOf] = useState(null);
   const t = useAsync(() => api.describeLaunchTemplates(), []);
   return (
     <ContentLayout header={<Header variant="h1">New launch template</Header>}>
@@ -51,7 +55,8 @@ export function LaunchTemplates() {
         ]}
         actions={
           <SpaceBetween direction="horizontal" size="xs">
-            <ButtonDropdown disabled={!sel.length} items={[{ id: "delete", text: "Delete template" }]} onItemClick={async () => {
+            <ButtonDropdown disabled={!sel.length} items={[{ id: "versions", text: "Manage versions" }, { id: "delete", text: "Delete template" }]} onItemClick={async ({ detail }) => {
+              if (detail.id === "versions") { setVersionsOf(sel[0]); return; }
               await api.deleteLaunchTemplate(sel[0].launchTemplateId); notify.success(`Deleted launch template "${sel[0].launchTemplateName}".`); setSel([]); t.reload();
             }}>Actions</ButtonDropdown>
             <Button variant="primary" href={href("ec2", "create-launch-template")} onFollow={follow}>Create launch template</Button>
@@ -59,7 +64,45 @@ export function LaunchTemplates() {
         }
         empty={{ title: "No launch templates", action: <Button href={href("ec2", "create-launch-template")} onFollow={follow}>Create launch template</Button> }}
       />
+      {versionsOf && <VersionsModal lt={versionsOf} onDismiss={() => setVersionsOf(null)} onChange={t.reload} />}
     </ContentLayout>
+  );
+}
+
+function VersionsModal({ lt, onDismiss, onChange }) {
+  const notify = useNotify();
+  const v = useAsync(() => api.describeLaunchTemplateVersions(lt.launchTemplateId), [lt.launchTemplateId]);
+  const [busy, setBusy] = useState(false);
+  const createVersion = async () => {
+    setBusy(true);
+    try {
+      await api.createLaunchTemplateVersion(lt.launchTemplateId, String(lt.latestVersionNumber), {}, `Version ${Number(lt.latestVersionNumber) + 1}`);
+      notify.success("Created a new launch template version.");
+      v.reload(); onChange();
+    } catch (e) { notify.error(e.message); } finally { setBusy(false); }
+  };
+  const setDefault = async (versionNumber) => {
+    await api.modifyLaunchTemplate(lt.launchTemplateId, String(versionNumber));
+    notify.success(`Set version ${versionNumber} as the default.`);
+    v.reload(); onChange();
+  };
+  return (
+    <Modal visible onDismiss={onDismiss} size="large" header={`Versions for ${lt.launchTemplateName}`}
+      footer={<Box float="right"><Button onClick={onDismiss}>Close</Button></Box>}>
+      <Table
+        loading={v.loading}
+        items={v.data || []}
+        columnDefinitions={[
+          { id: "v", header: "Version", cell: (x) => x.versionNumber },
+          { id: "default", header: "Default", cell: (x) => (x.DefaultVersion ? <StatusIndicator type="success">Default</StatusIndicator> : "-") },
+          { id: "desc", header: "Description", cell: (x) => x.versionDescription || "-" },
+          { id: "type", header: "Instance type", cell: (x) => x.launchTemplateData?.instanceType || "-" },
+          { id: "ami", header: "AMI ID", cell: (x) => x.launchTemplateData?.imageId || "-" },
+          { id: "actions", header: "Actions", cell: (x) => (!x.DefaultVersion && <Button onClick={() => setDefault(x.versionNumber)}>Set as default</Button>) },
+        ]}
+        header={<Header counter={`(${v.data?.length || 0})`} actions={<Button loading={busy} onClick={createVersion}>Create new version</Button>}>Versions</Header>}
+      />
+    </Modal>
   );
 }
 

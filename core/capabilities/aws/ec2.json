@@ -35,14 +35,27 @@
    "tests/conformance/test_ec2_console_v4_core.py"
   ]
  },
- "ec2.instances.status-alarms": {
-  "title": "Status checks, CloudWatch alarms, and instance metrics",
+ "ec2.instances.status-checks": {
+  "title": "System and instance status checks",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "DescribeInstanceStatus derives a real ok/not-applicable result from the instance's actual lifecycle state, but a running instance passes immediately — AWS's few-minute 'initializing' window before checks turn green isn't modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.instances.alarms-metrics": {
+  "title": "CloudWatch alarms and instance metrics",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "System/instance status checks and CloudWatch alarms for an instance aren't modeled by Vyomi; a running instance has no real health-check or alarm backend.",
+   "CloudWatch alarms for an instance aren't modeled; there is no alarm evaluation backend.",
    "No CloudWatch metrics are collected: CPU utilization (%), Network in (bytes), Network out (bytes), Network packets in (count), Network packets out (count), Status check failed (any) (count), CPU credit usage (count), CPU credit balance (count)."
   ]
  },
@@ -70,12 +83,10 @@
  "ec2.launch-templates": {
   "title": "Launch templates",
   "level": {
-   "nano": "limited",
-   "offline": "limited"
+   "nano": "full",
+   "offline": "full"
   },
-  "limitations": [
-   "Create/describe/delete is real and stateful, but CreateLaunchTemplateVersion and per-version default selection aren't modeled — every template has exactly one version."
-  ],
+  "limitations": [],
   "tests": [
    "tests/conformance/test_ec2_console_v4_core.py"
   ]
@@ -189,7 +200,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Create/describe/delete is real and stateful, but cluster/spread/partition placement has no physical effect — Vyomi has no real racks or hosts to place instances on."
+   "Partition groups assign and round-robin a real partition number, and spread groups enforce AWS's 7-running-instances-per-Availability-Zone cap, but there are no real racks or hosts underneath — cluster placement has no network-latency effect and a spread group's instances aren't actually host-isolated."
   ],
   "tests": [
    "tests/conformance/test_ec2_console_v4_core.py"

@@ -88,7 +88,7 @@ function DetailsTab({ i }) {
       ]} />
       <KeyValue title="Host and placement group" columns={3} items={[
         ["Host ID", "-"], ["Affinity", "-"], ["Placement group", i.placement?.groupName || "-"], ["Host resource group name", "-"],
-        ["Tenancy", i.placement?.tenancy || "default"], ["Partition number", "-"], ["Virtualization type", i.virtualizationType],
+        ["Tenancy", i.placement?.tenancy || "default"], ["Partition number", i.placement?.partitionNumber || "-"], ["Virtualization type", i.virtualizationType],
         ["Number of vCPUs", "-"],
       ]} />
       <KeyValue title="Capacity reservation" columns={2} items={[["Capacity Reservation ID", "-"], ["Capacity Reservation setting", "open"]]} />
@@ -98,20 +98,25 @@ function DetailsTab({ i }) {
 }
 
 function StatusTab({ i }) {
-  const ok = i.instanceState?.name === "running";
+  const st = useAsync(() => api.describeInstanceStatus(i.instanceId), [i.instanceId]);
+  const sys = st.data?.systemStatus?.status;
+  const ins = st.data?.instanceStatus?.status;
+  const label = (s) => (s === "ok" ? "2/2 checks passed" : "-");
   return (
     <SpaceBetween size="l">
-      <KeyValue title="Status checks" columns={3} items={[
-        ["System status checks", ok ? "2/2 checks passed" : "-"], ["Instance status checks", ok ? "2/2 checks passed" : "-"],
-        ["Attached EBS status checks", ok ? "ok" : "-"],
-      ]} />
-      <CapabilityContainer id="ec2.instances.status-alarms" title="Alarms" />
+      <CapabilityContainer id="ec2.instances.status-checks" title="Status checks">
+        <KeyValue columns={3} items={[
+          ["System status checks", st.loading ? "-" : label(sys)], ["Instance status checks", st.loading ? "-" : label(ins)],
+          ["Attached EBS status checks", st.loading ? "-" : label(sys)],
+        ]} />
+      </CapabilityContainer>
+      <CapabilityContainer id="ec2.instances.alarms-metrics" title="Alarms" />
     </SpaceBetween>
   );
 }
 
 function MonitoringTab() {
-  return <CapabilityContainer id="ec2.instances.status-alarms" title="Monitoring" />;
+  return <CapabilityContainer id="ec2.instances.alarms-metrics" title="Monitoring" />;
 }
 
 function SecurityTab({ i }) {

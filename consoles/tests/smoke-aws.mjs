@@ -492,6 +492,23 @@ try {
   check("EC2 create security group over wire → visible in UI", true, sgId);
   await shot("16-ec2-security-groups");
 
+  // EC2: launch template created over the wire, a new version created through the UI's
+  // "Manage versions" modal (UI → CLI direction), verified back over the native wire.
+  const LTN = `v4-smoke-lt-${Date.now() % 100000}`;
+  const ltCreated = await ec2("CreateLaunchTemplate", { LaunchTemplateName: LTN, "LaunchTemplateData.InstanceType": "t3.micro" });
+  const ltId = xtag(ltCreated, "launchTemplateId");
+  await page.goto(UI + "#/ec2/launch-templates");
+  await page.getByRole("row", { name: new RegExp(ltId) }).getByRole("radio").check();
+  await page.getByRole("button", { name: "Actions" }).click();
+  await page.getByRole("menuitem", { name: "Manage versions" }).click();
+  await page.getByRole("button", { name: "Create new version" }).click();
+  await page.getByText("2", { exact: true }).first().waitFor({ timeout: 10000 });
+  const ltVersions = await ec2("DescribeLaunchTemplateVersions", { LaunchTemplateId: ltId });
+  check("EC2 launch template version created (UI) → visible over native wire", ltVersions.includes("<versionNumber>2</versionNumber>"), ltVersions.slice(0, 200));
+  await shot("16b-ec2-launch-template-versions");
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+  await ec2("DeleteLaunchTemplate", { LaunchTemplateId: ltId });
+
   // EC2: terminate the smoke instance and clean up the security group over the wire.
   if (instanceId) await ec2("TerminateInstances", { "InstanceId.1": instanceId });
   await ec2("DeleteSecurityGroup", { GroupId: sgId });
