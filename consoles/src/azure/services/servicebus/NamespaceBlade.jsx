@@ -3,7 +3,7 @@
  * are backed by native ARM calls (+ the Service Bus data plane for queue message counts);
  * everything else in the menu renders its honest capability level via CapabilityContainer
  * (core/capabilities/azure/servicebus.json — never a hand-written disclaimer). */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
   Radio, RadioGroup, Select, Spinner, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Tab, TabList,
@@ -18,7 +18,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
-import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
+import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, downloadCsv, fmtDate } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
@@ -749,39 +749,73 @@ function CreateTopicDialog({ open, onClose, a, onCreated }) {
 }
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this namespace) ──
+// Edit columns / Download as CSV / Reset filters are real (client-side over the rows the
+// real ARM activity-log read returned, like the Locks panel's BrowseGrid toolbar above) —
+// only the actions that need a separate Azure product (Insights workbook, portal telemetry,
+// dashboard pinning) or a per-event detail flyout stay an honest "Not simulated" gap.
+const ACTIVITY_LOG_COLUMNS = [
+  { key: "operationName", label: "Operation name", value: (r) => r.operationName?.localizedValue || r.operationName?.value, csv: (r) => r.operationName?.value },
+  { key: "status", label: "Status", value: (r) => r.status?.localizedValue || r.status?.value, csv: (r) => r.status?.value },
+  { key: "time", label: "Time", value: (r) => fmtDate(r.eventTimestamp) },
+  { key: "timestamp", label: "Time stamp", value: (r) => r.eventTimestamp },
+  { key: "subscription", label: "Subscription", value: (r) => r.subscriptionId },
+  { key: "caller", label: "Event initiated by", value: (r) => r.caller },
+];
+
 function ActivityLog({ a }) {
   const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
   const [gap, setGap] = useState(null);
+  const [filter, setFilter] = useState("");
+  const [visible, setVisible] = useState(() => new Set(ACTIVITY_LOG_COLUMNS.map((c) => c.key)));
+  const [editCols, setEditCols] = useState(false);
   const rows = data || [];
+  const shownCols = ACTIVITY_LOG_COLUMNS.filter((c) => visible.has(c.key));
+  const filtered = useMemo(() => {
+    const f = filter.trim().toLowerCase();
+    if (!f) return rows;
+    return rows.filter((r) => ACTIVITY_LOG_COLUMNS.some((c) => String(c.value(r) ?? "").toLowerCase().includes(f)));
+  }, [rows, filter]);
   return (
     <CapabilityContainer id="azure.servicebus.namespace.activitylog" title={`${a.name} | Activity log`}>
       <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
         <ToolbarButton onClick={() => setGap("Activity")}>Activity</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
+        <ToolbarButton onClick={() => setEditCols(true)}>Edit columns</ToolbarButton>
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={() => setGap("Download as CSV")}>Download as CSV</ToolbarButton>
+        <ToolbarButton icon={<ArrowDownload20Regular />} disabled={!filtered.length}
+          onClick={() => downloadCsv("activity-log.csv", shownCols, filtered)}>Download as CSV</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Insights")}>Insights</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Reset filters")}>Reset filters</ToolbarButton>
+        <ToolbarButton onClick={() => setFilter("")}>Reset filters</ToolbarButton>
+      </div>
+      <div className="vy-filters">
+        <Input size="small" style={{ width: 280 }} placeholder="Filter by operation, status or caller..."
+          value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Filter by operation, status or caller..." />
       </div>
       <ErrorBar error={error} />
       <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
+        <thead><tr>{shownCols.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
         <tbody>
-          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
-              <td>{r.status?.localizedValue || r.status?.value}</td>
-              <td>{fmtDate(r.eventTimestamp)}</td>
-              <td>{r.eventTimestamp}</td>
-              <td>{r.subscriptionId}</td>
-              <td>{r.caller}</td>
-            </tr>
-          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
+          {loading ? <tr><td colSpan={shownCols.length || 1}><Spinner size="tiny" /></td></tr> : filtered.length ? filtered.map((r) => (
+            <tr key={r.id}>{shownCols.map((c) => <td key={c.key}>{c.value(r)}</td>)}</tr>
+          )) : <tr><td colSpan={shownCols.length || 1} className="vy-muted">No events to display</td></tr>}
         </tbody>
       </table>
+      <Dialog open={editCols} onOpenChange={(_, d) => setEditCols(d.open)}>
+        <DialogSurface aria-label="Edit columns">
+          <DialogBody>
+            <DialogTitle>Edit columns</DialogTitle>
+            <DialogContent>
+              {ACTIVITY_LOG_COLUMNS.map((c) => (
+                <div key={c.key}><Checkbox label={c.label} checked={visible.has(c.key)}
+                  onChange={(_, d) => setVisible((v) => { const n = new Set(v); d.checked ? n.add(c.key) : n.delete(c.key); return n; })} /></div>
+              ))}
+            </DialogContent>
+            <DialogActions><Button appearance="primary" onClick={() => setEditCols(false)}>Save</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
           <DialogBody><CapabilityContainer id="azure.servicebus.namespace.listactions" title={gap || ""} /></DialogBody>
