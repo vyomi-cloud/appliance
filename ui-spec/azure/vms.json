@@ -1,0 +1,2271 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "azure",
+  "service": "vms",
+  "console_path": "#browse/Microsoft.Compute%2FVirtualMachines",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "vm-overview"
+    },
+    {
+      "label": "Activity log",
+      "page_id": "vm-activity-log"
+    },
+    {
+      "label": "Access control (IAM)",
+      "page_id": "vm-access-control-iam"
+    },
+    {
+      "label": "Tags",
+      "page_id": "vm-tags"
+    },
+    {
+      "label": "Diagnose and solve problems",
+      "page_id": "vm-diagnose-and-solve-problems"
+    },
+    {
+      "label": "Resource visualizer",
+      "page_id": "vm-resource-visualizer"
+    },
+    {
+      "label": "Connect",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Connect",
+          "page_id": "vm-connect"
+        },
+        {
+          "label": "Bastion",
+          "page_id": "vm-bastion"
+        }
+      ]
+    },
+    {
+      "label": "Networking",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Network settings",
+          "page_id": "vm-network-settings"
+        },
+        {
+          "label": "Load balancing",
+          "page_id": "vm-load-balancing"
+        },
+        {
+          "label": "Application security groups",
+          "page_id": "vm-application-security-groups"
+        },
+        {
+          "label": "Network manager",
+          "page_id": "vm-network-manager"
+        }
+      ]
+    },
+    {
+      "label": "Settings",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Disks",
+          "page_id": "vm-disks"
+        },
+        {
+          "label": "Extensions + applications",
+          "page_id": "vm-extensions-applications"
+        },
+        {
+          "label": "Operating system",
+          "page_id": "vm-operating-system"
+        },
+        {
+          "label": "Configuration",
+          "page_id": "vm-configuration"
+        },
+        {
+          "label": "Advisor recommendations",
+          "page_id": "vm-advisor-recommendations"
+        },
+        {
+          "label": "Properties",
+          "page_id": "vm-properties"
+        },
+        {
+          "label": "Locks",
+          "page_id": "vm-locks"
+        }
+      ]
+    },
+    {
+      "label": "Availability + scale",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Size",
+          "page_id": "vm-size"
+        },
+        {
+          "label": "Availability + scaling",
+          "page_id": "vm-availability-scaling"
+        }
+      ]
+    },
+    {
+      "label": "Security",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Microsoft Defender for Cloud",
+          "page_id": "vm-microsoft-defender-for-cloud"
+        },
+        {
+          "label": "Identity",
+          "page_id": "vm-identity"
+        }
+      ]
+    },
+    {
+      "label": "Backup + disaster recovery",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Backup",
+          "page_id": "vm-backup"
+        },
+        {
+          "label": "Disaster recovery",
+          "page_id": "vm-disaster-recovery"
+        }
+      ]
+    },
+    {
+      "label": "Operations",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Auto-shutdown",
+          "page_id": "vm-auto-shutdown"
+        },
+        {
+          "label": "Run command",
+          "page_id": "vm-run-command"
+        },
+        {
+          "label": "Updates",
+          "page_id": "vm-updates"
+        },
+        {
+          "label": "Inventory",
+          "page_id": "vm-inventory"
+        },
+        {
+          "label": "Change tracking",
+          "page_id": "vm-change-tracking"
+        }
+      ]
+    },
+    {
+      "label": "Monitoring",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Insights",
+          "page_id": "vm-insights"
+        },
+        {
+          "label": "Alerts",
+          "page_id": "vm-alerts"
+        },
+        {
+          "label": "Metrics",
+          "page_id": "vm-metrics"
+        },
+        {
+          "label": "Diagnostic settings",
+          "page_id": "vm-diagnostic-settings"
+        },
+        {
+          "label": "Logs",
+          "page_id": "vm-logs"
+        },
+        {
+          "label": "Connection monitor",
+          "page_id": "vm-connection-monitor"
+        },
+        {
+          "label": "Workbooks",
+          "page_id": "vm-workbooks"
+        }
+      ]
+    },
+    {
+      "label": "Automation",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Tasks",
+          "page_id": "vm-tasks"
+        },
+        {
+          "label": "Export template",
+          "page_id": "vm-export-template"
+        }
+      ]
+    },
+    {
+      "label": "Help",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Resource health",
+          "page_id": "vm-resource-health"
+        },
+        {
+          "label": "Boot diagnostics",
+          "page_id": "vm-boot-diagnostics"
+        },
+        {
+          "label": "Performance diagnostics",
+          "page_id": "vm-performance-diagnostics"
+        },
+        {
+          "label": "Reset password",
+          "page_id": "vm-reset-password"
+        },
+        {
+          "label": "Redeploy + reapply",
+          "page_id": "vm-redeploy-reapply"
+        },
+        {
+          "label": "Serial console",
+          "page_id": "vm-serial-console"
+        },
+        {
+          "label": "Support + Troubleshooting",
+          "page_id": "vm-support-troubleshooting"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "virtual-machines",
+      "kind": "list",
+      "title": "Virtual machines",
+      "route": "#browse/Microsoft.Compute%2FVirtualMachines",
+      "breadcrumbs": [
+        "Home"
+      ],
+      "captures": [
+        "A-browse-microsoft-compute-virtualmachines/001-L1-landing"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Browse now lands in Compute infrastructure (captured); VM grid is reference",
+      "table": {
+        "columns": [
+          "Name",
+          "Type",
+          "Subscription",
+          "Resource group",
+          "Location",
+          "Status",
+          "Operating system",
+          "Size",
+          "Public IP address",
+          "Disks"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "Create",
+          "Switch to classic",
+          "Reservations",
+          "Manage view",
+          "Refresh",
+          "Export to CSV",
+          "Open query",
+          "Assign tags",
+          "Start",
+          "Restart",
+          "Stop",
+          "Delete",
+          "Services",
+          "Maintenance"
+        ],
+        "filter_placeholder": "Filter for any field...",
+        "filters": [
+          "Subscription equals all",
+          "Resource group equals all",
+          "Location equals all",
+          "Add filter"
+        ],
+        "empty_state": "No virtual machines to display",
+        "empty_state_action": "Create virtual machine",
+        "pagination": true,
+        "provenance": "reference",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-virtual-machine",
+      "kind": "create",
+      "title": "Create a virtual machine",
+      "route": "#create/Microsoft.VirtualMachine-ARM",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "Create a virtual machine"
+      ],
+      "captures": [
+        "C-forms/02-create-microsoft-virtualmachine-arm/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Basics",
+          "sections": [
+            {
+              "title": "Project details",
+              "fields": [
+                {
+                  "label": "Subscription",
+                  "type": "select",
+                  "required": true,
+                  "placeholder": "Select a subscription"
+                },
+                {
+                  "label": "Resource group",
+                  "type": "select",
+                  "required": true,
+                  "actions": [
+                    "Create new"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Instance details",
+              "fields": [
+                {
+                  "label": "Virtual machine name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Region",
+                  "type": "select",
+                  "required": true,
+                  "default": "(US) East US"
+                },
+                {
+                  "label": "Availability options",
+                  "type": "select",
+                  "default": "Availability zone",
+                  "options": [
+                    "No infrastructure redundancy required",
+                    "Availability zone",
+                    "Virtual machine scale set",
+                    "Availability set"
+                  ]
+                },
+                {
+                  "label": "Zone options",
+                  "type": "radio",
+                  "default": "Self-selected zone",
+                  "options": [
+                    "Self-selected zone",
+                    "Azure-selected zone (Preview)"
+                  ],
+                  "visible_when": "Availability options = Availability zone"
+                },
+                {
+                  "label": "Availability zone",
+                  "type": "select",
+                  "default": "Zone 1",
+                  "options": [
+                    "Zone 1",
+                    "Zone 2",
+                    "Zone 3"
+                  ]
+                },
+                {
+                  "label": "Security type",
+                  "type": "select",
+                  "default": "Trusted launch virtual machines",
+                  "options": [
+                    "Standard",
+                    "Trusted launch virtual machines",
+                    "Confidential virtual machines"
+                  ]
+                },
+                {
+                  "label": "Image",
+                  "type": "select",
+                  "required": true,
+                  "default": "Ubuntu Server 24.04 LTS - x64 Gen2",
+                  "actions": [
+                    "See all images",
+                    "Configure VM generation"
+                  ]
+                },
+                {
+                  "label": "VM architecture",
+                  "type": "radio",
+                  "default": "x64",
+                  "options": [
+                    "Arm64",
+                    "x64"
+                  ]
+                },
+                {
+                  "label": "Run with Azure Spot discount",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Size",
+                  "type": "select",
+                  "required": true,
+                  "actions": [
+                    "See all sizes"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Administrator account",
+              "fields": [
+                {
+                  "label": "Authentication type",
+                  "type": "radio",
+                  "default": "SSH public key",
+                  "options": [
+                    "SSH public key",
+                    "Password"
+                  ]
+                },
+                {
+                  "label": "Username",
+                  "type": "text",
+                  "required": true,
+                  "default": "azureuser"
+                },
+                {
+                  "label": "SSH public key source",
+                  "type": "select",
+                  "default": "Generate new key pair",
+                  "options": [
+                    "Generate new key pair",
+                    "Use existing key stored in Azure",
+                    "Use existing public key"
+                  ],
+                  "visible_when": "Authentication type = SSH public key"
+                },
+                {
+                  "label": "SSH Key Type",
+                  "type": "radio",
+                  "default": "RSA SSH Format",
+                  "options": [
+                    "RSA SSH Format",
+                    "Ed25519 SSH Format"
+                  ],
+                  "visible_when": "SSH public key source = Generate new key pair"
+                },
+                {
+                  "label": "Key pair name",
+                  "type": "text",
+                  "required": true,
+                  "visible_when": "SSH public key source = Generate new key pair"
+                },
+                {
+                  "label": "Password",
+                  "type": "text",
+                  "required": true,
+                  "visible_when": "Authentication type = Password"
+                },
+                {
+                  "label": "Confirm password",
+                  "type": "text",
+                  "required": true,
+                  "visible_when": "Authentication type = Password"
+                }
+              ]
+            },
+            {
+              "title": "Inbound port rules",
+              "fields": [
+                {
+                  "label": "Public inbound ports",
+                  "type": "radio",
+                  "default": "Allow selected ports",
+                  "options": [
+                    "None",
+                    "Allow selected ports"
+                  ]
+                },
+                {
+                  "label": "Select inbound ports",
+                  "type": "select",
+                  "default": "SSH (22)",
+                  "options": [
+                    "HTTP (80)",
+                    "HTTPS (443)",
+                    "SSH (22)",
+                    "RDP (3389)"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Disks",
+          "sections": [
+            {
+              "title": "VM disk encryption",
+              "fields": [
+                {
+                  "label": "Encryption at host",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "OS disk",
+              "fields": [
+                {
+                  "label": "OS disk size",
+                  "type": "select",
+                  "default": "Image default (30 GiB)"
+                },
+                {
+                  "label": "OS disk type",
+                  "type": "select",
+                  "default": "Premium SSD (locally-redundant storage)",
+                  "options": [
+                    "Premium SSD (locally-redundant storage)",
+                    "Standard SSD (locally-redundant storage)",
+                    "Standard HDD (locally-redundant storage)",
+                    "Premium SSD (zone-redundant storage)",
+                    "Standard SSD (zone-redundant storage)"
+                  ]
+                },
+                {
+                  "label": "Delete with VM",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Key management",
+                  "type": "select",
+                  "default": "Platform-managed key",
+                  "options": [
+                    "Platform-managed key",
+                    "Customer-managed key",
+                    "Platform-managed and customer-managed keys"
+                  ]
+                },
+                {
+                  "label": "Enable Ultra Disk compatibility",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Data disks for {resource-name}",
+              "fields": [
+                {
+                  "label": "Data disks",
+                  "type": "table",
+                  "columns": [
+                    "LUN",
+                    "Name",
+                    "Size (GiB)",
+                    "Disk type",
+                    "Host caching",
+                    "Delete with VM"
+                  ],
+                  "actions": [
+                    "Create and attach a new disk",
+                    "Attach an existing disk"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Networking",
+          "sections": [
+            {
+              "title": "Network interface",
+              "fields": [
+                {
+                  "label": "Virtual network",
+                  "type": "select",
+                  "required": true,
+                  "actions": [
+                    "Create new"
+                  ]
+                },
+                {
+                  "label": "Subnet",
+                  "type": "select",
+                  "required": true,
+                  "actions": [
+                    "Manage subnet configuration"
+                  ]
+                },
+                {
+                  "label": "Public IP",
+                  "type": "select",
+                  "actions": [
+                    "Create new"
+                  ]
+                },
+                {
+                  "label": "NIC network security group",
+                  "type": "radio",
+                  "default": "Basic",
+                  "options": [
+                    "None",
+                    "Basic",
+                    "Advanced"
+                  ]
+                },
+                {
+                  "label": "Public inbound ports",
+                  "type": "radio",
+                  "options": [
+                    "None",
+                    "Allow selected ports"
+                  ]
+                },
+                {
+                  "label": "Select inbound ports",
+                  "type": "select",
+                  "options": [
+                    "HTTP (80)",
+                    "HTTPS (443)",
+                    "SSH (22)",
+                    "RDP (3389)"
+                  ]
+                },
+                {
+                  "label": "Delete public IP and NIC when VM is deleted",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Enable accelerated networking",
+                  "type": "checkbox"
+                }
+              ]
+            },
+            {
+              "title": "Load balancing",
+              "fields": [
+                {
+                  "label": "Load balancing options",
+                  "type": "radio",
+                  "default": "None",
+                  "options": [
+                    "None",
+                    "Azure load balancer",
+                    "Application gateway"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Management",
+          "sections": [
+            {
+              "title": "Microsoft Defender for Cloud",
+              "fields": [
+                {
+                  "label": "Your subscription is protected by Microsoft Defender for Cloud basic plan.",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Identity",
+              "fields": [
+                {
+                  "label": "Enable system assigned managed identity",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Microsoft Entra ID",
+              "fields": [
+                {
+                  "label": "Login with Microsoft Entra ID",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Auto-shutdown",
+              "fields": [
+                {
+                  "label": "Enable auto-shutdown",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Backup",
+              "fields": [
+                {
+                  "label": "Enable backup",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Guest OS updates",
+              "fields": [
+                {
+                  "label": "Patch orchestration options",
+                  "type": "select",
+                  "default": "Image Default",
+                  "options": [
+                    "Azure orchestrated",
+                    "Image Default",
+                    "Manual updates"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Monitoring",
+          "sections": [
+            {
+              "title": "Alerts",
+              "fields": [
+                {
+                  "label": "Enable recommended alert rules",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Diagnostics",
+              "fields": [
+                {
+                  "label": "Boot diagnostics",
+                  "type": "radio",
+                  "default": "Enable with managed storage account (recommended)",
+                  "options": [
+                    "Enable with managed storage account (recommended)",
+                    "Enable with custom storage account",
+                    "Disable"
+                  ]
+                },
+                {
+                  "label": "Enable OS guest diagnostics",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Health",
+              "fields": [
+                {
+                  "label": "Enable application health monitoring",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Advanced",
+          "sections": [
+            {
+              "title": "Extensions",
+              "fields": [
+                {
+                  "label": "Extensions",
+                  "type": "table",
+                  "columns": [
+                    "Extension",
+                    "Status"
+                  ],
+                  "actions": [
+                    "Select an extension to install"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "VM applications",
+              "fields": [
+                {
+                  "label": "VM applications",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Version"
+                  ],
+                  "actions": [
+                    "Select a VM application to install"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Custom data and cloud init",
+              "fields": [
+                {
+                  "label": "Custom data",
+                  "type": "textarea"
+                }
+              ]
+            },
+            {
+              "title": "User data",
+              "fields": [
+                {
+                  "label": "Enable user data",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Host",
+              "fields": [
+                {
+                  "label": "Host group",
+                  "type": "select"
+                }
+              ]
+            },
+            {
+              "title": "Capacity reservations",
+              "fields": [
+                {
+                  "label": "Capacity reservation group",
+                  "type": "select"
+                }
+              ]
+            },
+            {
+              "title": "Proximity placement group",
+              "fields": [
+                {
+                  "label": "Proximity placement group",
+                  "type": "select"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Value",
+                    "Resource"
+                  ],
+                  "help": "Name/value pairs to categorize resources and view consolidated billing"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review + create",
+          "sections": [
+            {
+              "title": "Basics"
+            },
+            {
+              "title": "Disks"
+            },
+            {
+              "title": "Networking"
+            },
+            {
+              "title": "Management"
+            },
+            {
+              "title": "Monitoring"
+            },
+            {
+              "title": "Advanced"
+            },
+            {
+              "title": "Tags"
+            }
+          ]
+        }
+      ],
+      "submit": "Create",
+      "notes": "Footer: Review + create / < Previous / Next : <tab> >; Download a template for automation"
+    },
+    {
+      "id": "vm-overview",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Connect",
+        "Start",
+        "Restart",
+        "Stop",
+        "Hibernate",
+        "Capture",
+        "Delete",
+        "Refresh",
+        "Open in mobile",
+        "Feedback",
+        "CLI / PS"
+      ],
+      "tabs": [
+        "Properties",
+        "Monitoring",
+        "Capabilities",
+        "Recommendations",
+        "Tutorials"
+      ],
+      "sections": [
+        {
+          "title": "Essentials",
+          "actions": [
+            "JSON View"
+          ],
+          "fields": [
+            {
+              "label": "Resource group",
+              "type": "readonly"
+            },
+            {
+              "label": "Status",
+              "type": "readonly"
+            },
+            {
+              "label": "Location",
+              "type": "readonly"
+            },
+            {
+              "label": "Subscription",
+              "type": "readonly"
+            },
+            {
+              "label": "Subscription ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Availability zone",
+              "type": "readonly"
+            },
+            {
+              "label": "Operating system",
+              "type": "readonly"
+            },
+            {
+              "label": "Size",
+              "type": "readonly"
+            },
+            {
+              "label": "Public IP address",
+              "type": "readonly"
+            },
+            {
+              "label": "Virtual network/subnet",
+              "type": "readonly"
+            },
+            {
+              "label": "DNS name",
+              "type": "readonly"
+            },
+            {
+              "label": "Health state",
+              "type": "readonly"
+            },
+            {
+              "label": "Time created",
+              "type": "readonly"
+            },
+            {
+              "label": "Tags",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tab_panels": [
+        {
+          "label": "Properties",
+          "sections": [
+            {
+              "title": "Virtual machine",
+              "fields": [
+                {
+                  "label": "Computer name",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Operating system",
+                  "type": "readonly"
+                },
+                {
+                  "label": "VM generation",
+                  "type": "readonly"
+                },
+                {
+                  "label": "VM architecture",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Agent status",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Agent version",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Hibernation",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Host group",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Proximity placement group",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Capacity reservation group",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Networking",
+              "fields": [
+                {
+                  "label": "Public IP address",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Private IP address",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Virtual network/subnet",
+                  "type": "readonly"
+                },
+                {
+                  "label": "DNS name",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Size",
+              "fields": [
+                {
+                  "label": "Size",
+                  "type": "readonly"
+                },
+                {
+                  "label": "vCPUs",
+                  "type": "readonly"
+                },
+                {
+                  "label": "RAM",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Source image details",
+              "fields": [
+                {
+                  "label": "Source image publisher",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Source image offer",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Source image plan",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Disk",
+              "fields": [
+                {
+                  "label": "OS disk",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Encryption at host",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Azure disk encryption",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Ephemeral OS disk",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Data disks",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Azure Spot",
+              "fields": [
+                {
+                  "label": "Azure Spot",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Azure Spot eviction policy",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Extensions + applications",
+              "fields": [
+                {
+                  "label": "Extensions",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Applications",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Monitoring",
+          "confidence": "low"
+        },
+        {
+          "label": "Capabilities",
+          "confidence": "low"
+        },
+        {
+          "label": "Recommendations",
+          "confidence": "low"
+        },
+        {
+          "label": "Tutorials",
+          "confidence": "low"
+        }
+      ]
+    },
+    {
+      "id": "vm-activity-log",
+      "kind": "list",
+      "title": "{resource-name} | Activity log",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "notes": "Same grid as Monitor | Activity log (captured), filtered to this resource",
+      "table": {
+        "columns": [
+          "Operation name",
+          "Status",
+          "Time",
+          "Time stamp",
+          "Subscription",
+          "Event initiated by"
+        ],
+        "header_actions": [
+          "Activity",
+          "Edit columns",
+          "Refresh",
+          "Export Activity Logs",
+          "Download as CSV",
+          "Insights",
+          "Feedback",
+          "Pin current filters",
+          "Reset filters"
+        ],
+        "filters": [
+          "Management Group : None",
+          "Subscription",
+          "Event severity : All",
+          "Timespan : Last 6 hours",
+          "Resource group",
+          "Resource",
+          "Add Filter"
+        ],
+        "empty_state": "No events to display",
+        "pagination": false
+      }
+    },
+    {
+      "id": "vm-access-control-iam",
+      "kind": "other",
+      "title": "{resource-name} | Access control (IAM)",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "header_actions": [
+        "Add",
+        "Download role assignments",
+        "Edit columns",
+        "Refresh",
+        "Remove",
+        "Feedback"
+      ],
+      "tabs": [
+        "Check access",
+        "Role assignments",
+        "Roles",
+        "Deny assignments",
+        "Classic administrators"
+      ],
+      "tab_panels": [
+        {
+          "label": "Check access",
+          "sections": [
+            {
+              "title": "My access",
+              "fields": [
+                {
+                  "label": "View my access",
+                  "type": "button"
+                }
+              ]
+            },
+            {
+              "title": "Check access",
+              "fields": [
+                {
+                  "label": "Check access",
+                  "type": "button"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Role assignments",
+          "sections": [
+            {
+              "title": "Role assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Type",
+                  "Role",
+                  "Scope",
+                  "Condition"
+                ],
+                "selection": "multi",
+                "filter_placeholder": "Search by name or email"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Roles",
+          "sections": [
+            {
+              "title": "Roles",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Type",
+                  "Category",
+                  "Details"
+                ],
+                "filter_placeholder": "Search by role name, description, permission, or ID"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Deny assignments",
+          "sections": [
+            {
+              "title": "Deny assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Principal",
+                  "Scope"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Classic administrators"
+        }
+      ]
+    },
+    {
+      "id": "vm-tags",
+      "kind": "settings",
+      "title": "{resource-name} | Tags",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "table",
+              "columns": [
+                "Name",
+                "Value"
+              ],
+              "actions": [
+                "Delete"
+              ],
+              "help": "Name/value pairs; the same tag can apply to multiple resources"
+            }
+          ]
+        }
+      ],
+      "header_actions": [
+        "Apply",
+        "Discard changes",
+        "Delete all"
+      ]
+    },
+    {
+      "id": "vm-diagnose-and-solve-problems",
+      "kind": "other",
+      "title": "{resource-name} | Diagnose and solve problems",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-resource-visualizer",
+      "kind": "other",
+      "title": "{resource-name} | Resource visualizer",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-connect",
+      "kind": "other",
+      "title": "{resource-name} | Connect",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "sections": [
+        {
+          "title": "Connect",
+          "fields": [
+            {
+              "label": "Admin username",
+              "type": "readonly"
+            },
+            {
+              "label": "Public IP address",
+              "type": "readonly"
+            },
+            {
+              "label": "Port",
+              "type": "readonly"
+            },
+            {
+              "label": "Native SSH",
+              "type": "button"
+            },
+            {
+              "label": "SSH using Azure CLI",
+              "type": "button"
+            },
+            {
+              "label": "Connect via Bastion",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vm-bastion",
+      "kind": "other",
+      "title": "{resource-name} | Bastion",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-network-settings",
+      "kind": "settings",
+      "title": "{resource-name} | Network settings",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Attach network interface",
+        "Detach network interface",
+        "Refresh",
+        "Feedback"
+      ],
+      "sections": [
+        {
+          "title": "Network interface / IP configuration",
+          "fields": [
+            {
+              "label": "Network interface",
+              "type": "readonly"
+            },
+            {
+              "label": "IP configuration",
+              "type": "readonly"
+            },
+            {
+              "label": "Virtual network/subnet",
+              "type": "readonly"
+            },
+            {
+              "label": "Public IP",
+              "type": "readonly"
+            },
+            {
+              "label": "Private IP",
+              "type": "readonly"
+            },
+            {
+              "label": "Accelerated networking",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Rules",
+          "fields": [
+            {
+              "label": "Network security group",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Inbound port rules",
+        "Outbound port rules",
+        "Application security groups",
+        "Load balancing"
+      ],
+      "table": {
+        "columns": [
+          "Priority",
+          "Name",
+          "Port",
+          "Protocol",
+          "Source",
+          "Destination",
+          "Action"
+        ],
+        "header_actions": [
+          "Create port rule"
+        ],
+        "filter_placeholder": "Filter by name"
+      }
+    },
+    {
+      "id": "vm-load-balancing",
+      "kind": "other",
+      "title": "{resource-name} | Load balancing",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-application-security-groups",
+      "kind": "other",
+      "title": "{resource-name} | Application security groups",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-network-manager",
+      "kind": "other",
+      "title": "{resource-name} | Network manager",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-disks",
+      "kind": "settings",
+      "title": "{resource-name} | Disks",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Refresh",
+        "Feedback"
+      ],
+      "sections": [
+        {
+          "title": "OS disk",
+          "fields": [
+            {
+              "label": "OS disk",
+              "type": "table",
+              "columns": [
+                "Disk name",
+                "Storage type",
+                "Size (GiB)",
+                "Max IOPS",
+                "Max throughput (MBps)",
+                "Encryption",
+                "Host caching"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Data disks",
+          "fields": [
+            {
+              "label": "Data disks",
+              "type": "table",
+              "columns": [
+                "LUN",
+                "Disk name",
+                "Storage type",
+                "Size (GiB)",
+                "Max IOPS",
+                "Max throughput (MBps)",
+                "Encryption",
+                "Host caching"
+              ],
+              "actions": [
+                "Create and attach a new disk",
+                "Attach existing disks"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Disk settings",
+          "fields": [
+            {
+              "label": "Encryption at host",
+              "type": "radio",
+              "options": [
+                "Enabled",
+                "Disabled"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vm-extensions-applications",
+      "kind": "other",
+      "title": "{resource-name} | Extensions + applications",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-operating-system",
+      "kind": "other",
+      "title": "{resource-name} | Operating system",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-configuration",
+      "kind": "other",
+      "title": "{resource-name} | Configuration",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-advisor-recommendations",
+      "kind": "other",
+      "title": "{resource-name} | Advisor recommendations",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-properties",
+      "kind": "other",
+      "title": "{resource-name} | Properties",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-locks",
+      "kind": "list",
+      "title": "{resource-name} | Locks",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Lock name",
+          "Lock type",
+          "Scope",
+          "Notes"
+        ],
+        "header_actions": [
+          "Add",
+          "Subscription",
+          "Resource group",
+          "Refresh",
+          "Feedback"
+        ],
+        "filter_placeholder": "Search to filter items...",
+        "empty_state": "This resource has no locks."
+      },
+      "sections": [
+        {
+          "title": "Add lock",
+          "fields": [
+            {
+              "label": "Lock name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Lock type",
+              "type": "select",
+              "required": true,
+              "options": [
+                "Read-only",
+                "Delete"
+              ]
+            },
+            {
+              "label": "Notes",
+              "type": "textarea"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vm-size",
+      "kind": "list",
+      "title": "{resource-name} | Size",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "VM Size",
+          "Type",
+          "vCPUs",
+          "RAM (GiB)",
+          "Data disks",
+          "Max IOPS",
+          "Local storage (GiB)",
+          "Cost/month"
+        ],
+        "selection": "single",
+        "filter_placeholder": "Search by VM size...",
+        "header_actions": [
+          "Resize"
+        ]
+      }
+    },
+    {
+      "id": "vm-availability-scaling",
+      "kind": "other",
+      "title": "{resource-name} | Availability + scaling",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-microsoft-defender-for-cloud",
+      "kind": "other",
+      "title": "{resource-name} | Microsoft Defender for Cloud",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-identity",
+      "kind": "settings",
+      "title": "{resource-name} | Identity",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "System assigned",
+        "User assigned"
+      ],
+      "header_actions": [
+        "Save",
+        "Discard",
+        "Refresh"
+      ],
+      "sections": [
+        {
+          "title": "System assigned",
+          "fields": [
+            {
+              "label": "Status",
+              "type": "radio",
+              "options": [
+                "Off",
+                "On"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vm-backup",
+      "kind": "other",
+      "title": "{resource-name} | Backup",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-disaster-recovery",
+      "kind": "other",
+      "title": "{resource-name} | Disaster recovery",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-auto-shutdown",
+      "kind": "settings",
+      "title": "{resource-name} | Auto-shutdown",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Save",
+        "Discard",
+        "Feedback"
+      ],
+      "sections": [
+        {
+          "title": "Auto-shutdown",
+          "fields": [
+            {
+              "label": "Enabled",
+              "type": "radio",
+              "options": [
+                "On",
+                "Off"
+              ]
+            },
+            {
+              "label": "Scheduled shutdown",
+              "type": "text",
+              "default": "7:00:00 PM"
+            },
+            {
+              "label": "Time zone",
+              "type": "select"
+            },
+            {
+              "label": "Send notification before auto-shutdown",
+              "type": "radio",
+              "options": [
+                "Yes",
+                "No"
+              ]
+            },
+            {
+              "label": "Webhook URL",
+              "type": "text"
+            },
+            {
+              "label": "Email address",
+              "type": "text"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vm-run-command",
+      "kind": "list",
+      "title": "{resource-name} | Run command",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "table": {
+        "columns": [
+          "Name",
+          "Description"
+        ],
+        "header_actions": [
+          "Create",
+          "Refresh"
+        ],
+        "filter_placeholder": "Filter by name"
+      },
+      "sections": [
+        {
+          "title": "Run Command Script",
+          "fields": [
+            {
+              "label": "Linux Shell Script",
+              "type": "textarea"
+            },
+            {
+              "label": "Run",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vm-updates",
+      "kind": "other",
+      "title": "{resource-name} | Updates",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-inventory",
+      "kind": "other",
+      "title": "{resource-name} | Inventory",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-change-tracking",
+      "kind": "other",
+      "title": "{resource-name} | Change tracking",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-insights",
+      "kind": "other",
+      "title": "{resource-name} | Insights",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-alerts",
+      "kind": "other",
+      "title": "{resource-name} | Alerts",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-metrics",
+      "kind": "other",
+      "title": "{resource-name} | Metrics",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-diagnostic-settings",
+      "kind": "other",
+      "title": "{resource-name} | Diagnostic settings",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-logs",
+      "kind": "other",
+      "title": "{resource-name} | Logs",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-connection-monitor",
+      "kind": "other",
+      "title": "{resource-name} | Connection monitor",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-workbooks",
+      "kind": "other",
+      "title": "{resource-name} | Workbooks",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-tasks",
+      "kind": "other",
+      "title": "{resource-name} | Tasks",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-export-template",
+      "kind": "other",
+      "title": "{resource-name} | Export template",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Download",
+        "Add to library (preview)",
+        "Deploy",
+        "Visualize template"
+      ],
+      "tabs": [
+        "ARM Template",
+        "Bicep",
+        "Terraform"
+      ],
+      "sections": [
+        {
+          "title": "Template",
+          "fields": [
+            {
+              "label": "Include parameters",
+              "type": "checkbox",
+              "default": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vm-resource-health",
+      "kind": "other",
+      "title": "{resource-name} | Resource health",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-boot-diagnostics",
+      "kind": "other",
+      "title": "{resource-name} | Boot diagnostics",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-performance-diagnostics",
+      "kind": "other",
+      "title": "{resource-name} | Performance diagnostics",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-reset-password",
+      "kind": "other",
+      "title": "{resource-name} | Reset password",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-redeploy-reapply",
+      "kind": "other",
+      "title": "{resource-name} | Redeploy + reapply",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-serial-console",
+      "kind": "other",
+      "title": "{resource-name} | Serial console",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    },
+    {
+      "id": "vm-support-troubleshooting",
+      "kind": "other",
+      "title": "{resource-name} | Support + Troubleshooting",
+      "breadcrumbs": [
+        "Home",
+        "Virtual machines",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Virtual machine blade menu item; title only"
+    }
+  ],
+  "gaps_note": "Browse lands in the Compute infrastructure hub (captured); create wizard showed 'No subscriptions', so all wizard tabs, the VM grid and the resource blade are provenance=reference. nav = VM resource menu."
+}

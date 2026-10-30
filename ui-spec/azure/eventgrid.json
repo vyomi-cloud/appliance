@@ -1,0 +1,1198 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "azure",
+  "service": "eventgrid",
+  "console_path": "#browse/Microsoft.EventGrid%2Ftopics",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "event-grid-overview"
+    },
+    {
+      "label": "Multipurpose",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Namespaces",
+          "page_id": "event-grid-namespaces"
+        }
+      ]
+    },
+    {
+      "label": "Azure service events",
+      "expandable": true,
+      "children": [
+        {
+          "label": "System topics",
+          "page_id": "event-grid-system-topics"
+        }
+      ]
+    },
+    {
+      "label": "Custom events",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Topics",
+          "page_id": "event-grid-topics"
+        },
+        {
+          "label": "Domains",
+          "page_id": "event-grid-domains"
+        }
+      ]
+    },
+    {
+      "label": "Partner events",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Partner configurations",
+          "page_id": "event-grid-partner-configurations"
+        },
+        {
+          "label": "Partner topics",
+          "page_id": "event-grid-partner-topics"
+        }
+      ]
+    },
+    {
+      "label": "Partner events - Publishers",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Partner registrations",
+          "page_id": "event-grid-partner-registrations"
+        },
+        {
+          "label": "Partner namespaces",
+          "page_id": "event-grid-partner-namespaces"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "event-grid-overview",
+      "kind": "dashboard",
+      "title": "Event Grid",
+      "provenance": "capture",
+      "confidence": "high",
+      "captures": [
+        "A-browse-microsoft-eventgrid-topics/001-L1-landing"
+      ],
+      "route": "#browse/Microsoft.EventGrid%2Ftopics",
+      "breadcrumbs": [
+        "All services",
+        "Event Grid"
+      ],
+      "sections": [
+        {
+          "title": "MQTT broker",
+          "fields": [
+            {
+              "label": "Namespaces",
+              "type": "other",
+              "actions": [
+                "Create",
+                "View"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Azure service events",
+          "fields": [
+            {
+              "label": "System topics",
+              "type": "other",
+              "actions": [
+                "Create",
+                "View"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Custom events",
+          "fields": [
+            {
+              "label": "Namespaces",
+              "type": "other",
+              "actions": [
+                "Create",
+                "View"
+              ]
+            },
+            {
+              "label": "Topics",
+              "type": "other",
+              "actions": [
+                "Create",
+                "View"
+              ]
+            },
+            {
+              "label": "Domains",
+              "type": "other",
+              "actions": [
+                "Create",
+                "View"
+              ]
+            },
+            {
+              "label": "Topics in Kubernetes",
+              "type": "other",
+              "actions": [
+                "Create",
+                "View"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Partner events",
+          "fields": [
+            {
+              "label": "Available partners",
+              "type": "other",
+              "actions": [
+                "View"
+              ]
+            },
+            {
+              "label": "Partner topics",
+              "type": "other",
+              "actions": [
+                "Create",
+                "View"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "event-grid-topics",
+      "kind": "list",
+      "title": "Event Grid Topics",
+      "breadcrumbs": [
+        "Home"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Reached via Event Grid > Custom events > Topics",
+      "table": {
+        "columns": [
+          "Name",
+          "Resource group",
+          "Location",
+          "Subscription"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "Create",
+          "Manage view",
+          "Refresh",
+          "Export to CSV",
+          "Open query",
+          "Assign tags",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter for any field...",
+        "filters": [
+          "Subscription equals all",
+          "Resource group equals all",
+          "Location equals all",
+          "Add filter"
+        ],
+        "empty_state": "No event grid topics to display",
+        "empty_state_action": "Create topic",
+        "pagination": true,
+        "provenance": "reference",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "event-grid-namespaces",
+      "kind": "list",
+      "title": "Event Grid Namespaces",
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Out of Vyomi scope beyond the page title"
+    },
+    {
+      "id": "event-grid-system-topics",
+      "kind": "list",
+      "title": "System topics",
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Out of Vyomi scope beyond the page title"
+    },
+    {
+      "id": "event-grid-domains",
+      "kind": "list",
+      "title": "Domains",
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Out of Vyomi scope beyond the page title"
+    },
+    {
+      "id": "event-grid-partner-configurations",
+      "kind": "list",
+      "title": "Partner configurations",
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Out of Vyomi scope beyond the page title"
+    },
+    {
+      "id": "event-grid-partner-topics",
+      "kind": "list",
+      "title": "Partner topics",
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Out of Vyomi scope beyond the page title"
+    },
+    {
+      "id": "event-grid-partner-registrations",
+      "kind": "list",
+      "title": "Partner registrations",
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Out of Vyomi scope beyond the page title"
+    },
+    {
+      "id": "event-grid-partner-namespaces",
+      "kind": "list",
+      "title": "Partner namespaces",
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Out of Vyomi scope beyond the page title"
+    },
+    {
+      "id": "create-event-grid-topic",
+      "kind": "create",
+      "title": "Create Topic",
+      "route": "#create/Microsoft.EventGridTopic",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "Create Topic"
+      ],
+      "captures": [
+        "C-forms/15-create-microsoft-eventgridtopic/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Basics",
+          "sections": [
+            {
+              "title": "Project details",
+              "fields": [
+                {
+                  "label": "Subscription",
+                  "type": "select",
+                  "required": true,
+                  "placeholder": "Select a subscription"
+                },
+                {
+                  "label": "Resource group",
+                  "type": "select",
+                  "required": true,
+                  "actions": [
+                    "Create new"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Topic Details",
+              "fields": [
+                {
+                  "label": "Name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Region",
+                  "type": "select",
+                  "required": true,
+                  "default": "(US) East US"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Networking",
+          "sections": [
+            {
+              "title": "Network connectivity",
+              "fields": [
+                {
+                  "label": "Connectivity method",
+                  "type": "radio",
+                  "default": "Public access",
+                  "options": [
+                    "Public access",
+                    "Private access"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Security",
+          "sections": [
+            {
+              "title": "Managed identity",
+              "fields": [
+                {
+                  "label": "Managed identity type",
+                  "type": "select",
+                  "default": "None",
+                  "options": [
+                    "None",
+                    "System assigned",
+                    "User assigned"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Access keys",
+              "fields": [
+                {
+                  "label": "Enable access keys and Shared Access Signatures (SAS)",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            },
+            {
+              "title": "Minimum TLS version",
+              "fields": [
+                {
+                  "label": "Minimum TLS version",
+                  "type": "select",
+                  "default": "1.2",
+                  "options": [
+                    "1.0",
+                    "1.1",
+                    "1.2"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Advanced",
+          "sections": [
+            {
+              "title": "Event Schema",
+              "fields": [
+                {
+                  "label": "Event Schema",
+                  "type": "select",
+                  "default": "Cloud Event Schema v1.0",
+                  "options": [
+                    "Event Grid Schema",
+                    "Cloud Event Schema v1.0",
+                    "Custom Input Schema"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Value",
+                    "Resource"
+                  ],
+                  "help": "Name/value pairs to categorize resources and view consolidated billing"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review + create",
+          "sections": [
+            {
+              "title": "Basics"
+            },
+            {
+              "title": "Networking"
+            },
+            {
+              "title": "Security"
+            },
+            {
+              "title": "Advanced"
+            },
+            {
+              "title": "Tags"
+            }
+          ]
+        }
+      ],
+      "submit": "Create",
+      "notes": "Footer: Review + create / < Previous / Next : <tab> >; Download a template for automation"
+    },
+    {
+      "id": "create-event-subscription",
+      "kind": "create",
+      "title": "Create Event Subscription",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}",
+        "Create Event Subscription"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Basic",
+          "sections": [
+            {
+              "title": "Event Subscription Details",
+              "fields": [
+                {
+                  "label": "Name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Event Schema",
+                  "type": "select",
+                  "default": "Event Grid Schema",
+                  "options": [
+                    "Event Grid Schema",
+                    "Cloud Event Schema v1.0"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Topic Details",
+              "fields": [
+                {
+                  "label": "Topic Type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Source Resource",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Event Types",
+              "fields": [
+                {
+                  "label": "Filter to Event Types",
+                  "type": "select"
+                }
+              ]
+            },
+            {
+              "title": "Endpoint Details",
+              "fields": [
+                {
+                  "label": "Endpoint Type",
+                  "type": "select",
+                  "required": true,
+                  "options": [
+                    "Azure Function",
+                    "Storage Queues",
+                    "Event Hubs",
+                    "Hybrid Connections",
+                    "Service Bus Queue",
+                    "Service Bus Topic",
+                    "Web Hook",
+                    "Namespace topic"
+                  ]
+                },
+                {
+                  "label": "Endpoint",
+                  "type": "other",
+                  "actions": [
+                    "Configure an endpoint"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Filters",
+          "sections": [
+            {
+              "title": "Subject Filters",
+              "fields": [
+                {
+                  "label": "Enable subject filtering",
+                  "type": "checkbox"
+                },
+                {
+                  "label": "Subject Begins With",
+                  "type": "text"
+                },
+                {
+                  "label": "Subject Ends With",
+                  "type": "text"
+                },
+                {
+                  "label": "Case-sensitive subject matching",
+                  "type": "checkbox"
+                }
+              ]
+            },
+            {
+              "title": "Advanced Filters",
+              "fields": [
+                {
+                  "label": "Advanced filters",
+                  "type": "table",
+                  "columns": [
+                    "Key",
+                    "Operator",
+                    "Value"
+                  ],
+                  "actions": [
+                    "Add new filter"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Additional Features",
+          "sections": [
+            {
+              "title": "Dead-lettering",
+              "fields": [
+                {
+                  "label": "Enable dead-lettering",
+                  "type": "checkbox"
+                }
+              ]
+            },
+            {
+              "title": "Retry policies",
+              "fields": [
+                {
+                  "label": "Max event delivery attempts",
+                  "type": "number",
+                  "default": 30
+                },
+                {
+                  "label": "Event time to live",
+                  "type": "other",
+                  "default": "1 day"
+                }
+              ]
+            },
+            {
+              "title": "Event subscription expiration time",
+              "fields": [
+                {
+                  "label": "Enable expiration time",
+                  "type": "checkbox"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Delivery Properties",
+          "sections": [
+            {
+              "title": "Delivery Properties",
+              "fields": [
+                {
+                  "label": "Header",
+                  "type": "table",
+                  "columns": [
+                    "Header name",
+                    "Type",
+                    "Value",
+                    "Is secret"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Advanced Editor"
+        }
+      ],
+      "submit": "Create"
+    },
+    {
+      "id": "event-grid-topic-overview",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Event Subscription",
+        "Refresh",
+        "Move",
+        "Delete"
+      ],
+      "sections": [
+        {
+          "title": "Essentials",
+          "actions": [
+            "JSON View"
+          ],
+          "fields": [
+            {
+              "label": "Resource group",
+              "type": "readonly"
+            },
+            {
+              "label": "Location",
+              "type": "readonly"
+            },
+            {
+              "label": "Subscription",
+              "type": "readonly"
+            },
+            {
+              "label": "Subscription ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Topic Endpoint",
+              "type": "readonly"
+            },
+            {
+              "label": "Status",
+              "type": "readonly"
+            },
+            {
+              "label": "Tags",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Endpoint",
+          "Provisioning state",
+          "Event Schema"
+        ],
+        "resource_label": "Event Subscriptions",
+        "filter_placeholder": "Filter by name..."
+      }
+    },
+    {
+      "id": "event-grid-topic-activity-log",
+      "kind": "list",
+      "title": "{resource-name} | Activity log",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "notes": "Same grid as Monitor | Activity log (captured), filtered to this resource",
+      "table": {
+        "columns": [
+          "Operation name",
+          "Status",
+          "Time",
+          "Time stamp",
+          "Subscription",
+          "Event initiated by"
+        ],
+        "header_actions": [
+          "Activity",
+          "Edit columns",
+          "Refresh",
+          "Export Activity Logs",
+          "Download as CSV",
+          "Insights",
+          "Feedback",
+          "Pin current filters",
+          "Reset filters"
+        ],
+        "filters": [
+          "Management Group : None",
+          "Subscription",
+          "Event severity : All",
+          "Timespan : Last 6 hours",
+          "Resource group",
+          "Resource",
+          "Add Filter"
+        ],
+        "empty_state": "No events to display",
+        "pagination": false
+      }
+    },
+    {
+      "id": "event-grid-topic-access-control-iam",
+      "kind": "other",
+      "title": "{resource-name} | Access control (IAM)",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "header_actions": [
+        "Add",
+        "Download role assignments",
+        "Edit columns",
+        "Refresh",
+        "Remove",
+        "Feedback"
+      ],
+      "tabs": [
+        "Check access",
+        "Role assignments",
+        "Roles",
+        "Deny assignments",
+        "Classic administrators"
+      ],
+      "tab_panels": [
+        {
+          "label": "Check access",
+          "sections": [
+            {
+              "title": "My access",
+              "fields": [
+                {
+                  "label": "View my access",
+                  "type": "button"
+                }
+              ]
+            },
+            {
+              "title": "Check access",
+              "fields": [
+                {
+                  "label": "Check access",
+                  "type": "button"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Role assignments",
+          "sections": [
+            {
+              "title": "Role assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Type",
+                  "Role",
+                  "Scope",
+                  "Condition"
+                ],
+                "selection": "multi",
+                "filter_placeholder": "Search by name or email"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Roles",
+          "sections": [
+            {
+              "title": "Roles",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Type",
+                  "Category",
+                  "Details"
+                ],
+                "filter_placeholder": "Search by role name, description, permission, or ID"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Deny assignments",
+          "sections": [
+            {
+              "title": "Deny assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Principal",
+                  "Scope"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Classic administrators"
+        }
+      ]
+    },
+    {
+      "id": "event-grid-topic-tags",
+      "kind": "settings",
+      "title": "{resource-name} | Tags",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "table",
+              "columns": [
+                "Name",
+                "Value"
+              ],
+              "actions": [
+                "Delete"
+              ],
+              "help": "Name/value pairs; the same tag can apply to multiple resources"
+            }
+          ]
+        }
+      ],
+      "header_actions": [
+        "Apply",
+        "Discard changes",
+        "Delete all"
+      ]
+    },
+    {
+      "id": "event-grid-topic-diagnose-and-solve-problems",
+      "kind": "other",
+      "title": "{resource-name} | Diagnose and solve problems",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Event Grid Topic blade menu item; title only"
+    },
+    {
+      "id": "event-grid-topic-event-subscriptions",
+      "kind": "list",
+      "title": "{resource-name} | Event Subscriptions",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Name",
+          "Endpoint",
+          "Provisioning state",
+          "Event Schema"
+        ],
+        "header_actions": [
+          "Event Subscription",
+          "Refresh"
+        ],
+        "filter_placeholder": "Filter by name..."
+      }
+    },
+    {
+      "id": "event-grid-topic-networking",
+      "kind": "other",
+      "title": "{resource-name} | Networking",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Event Grid Topic blade menu item; title only"
+    },
+    {
+      "id": "event-grid-topic-identity",
+      "kind": "other",
+      "title": "{resource-name} | Identity",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Event Grid Topic blade menu item; title only"
+    },
+    {
+      "id": "event-grid-topic-configuration",
+      "kind": "other",
+      "title": "{resource-name} | Configuration",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Event Grid Topic blade menu item; title only"
+    },
+    {
+      "id": "event-grid-topic-access-keys",
+      "kind": "settings",
+      "title": "{resource-name} | Access keys",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Access keys",
+          "fields": [
+            {
+              "label": "Key 1",
+              "type": "readonly",
+              "actions": [
+                "Regenerate"
+              ]
+            },
+            {
+              "label": "Key 2",
+              "type": "readonly",
+              "actions": [
+                "Regenerate"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "event-grid-topic-properties",
+      "kind": "other",
+      "title": "{resource-name} | Properties",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Event Grid Topic blade menu item; title only"
+    },
+    {
+      "id": "event-grid-topic-locks",
+      "kind": "list",
+      "title": "{resource-name} | Locks",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Lock name",
+          "Lock type",
+          "Scope",
+          "Notes"
+        ],
+        "header_actions": [
+          "Add",
+          "Subscription",
+          "Resource group",
+          "Refresh",
+          "Feedback"
+        ],
+        "filter_placeholder": "Search to filter items...",
+        "empty_state": "This resource has no locks."
+      },
+      "sections": [
+        {
+          "title": "Add lock",
+          "fields": [
+            {
+              "label": "Lock name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Lock type",
+              "type": "select",
+              "required": true,
+              "options": [
+                "Read-only",
+                "Delete"
+              ]
+            },
+            {
+              "label": "Notes",
+              "type": "textarea"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "event-grid-topic-alerts",
+      "kind": "other",
+      "title": "{resource-name} | Alerts",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Event Grid Topic blade menu item; title only"
+    },
+    {
+      "id": "event-grid-topic-metrics",
+      "kind": "other",
+      "title": "{resource-name} | Metrics",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Event Grid Topic blade menu item; title only"
+    },
+    {
+      "id": "event-grid-topic-diagnostic-settings",
+      "kind": "other",
+      "title": "{resource-name} | Diagnostic settings",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Event Grid Topic blade menu item; title only"
+    },
+    {
+      "id": "event-grid-topic-logs",
+      "kind": "other",
+      "title": "{resource-name} | Logs",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Event Grid Topic blade menu item; title only"
+    },
+    {
+      "id": "event-grid-topic-tasks",
+      "kind": "other",
+      "title": "{resource-name} | Tasks",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Event Grid Topic blade menu item; title only"
+    },
+    {
+      "id": "event-grid-topic-export-template",
+      "kind": "other",
+      "title": "{resource-name} | Export template",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Download",
+        "Add to library (preview)",
+        "Deploy",
+        "Visualize template"
+      ],
+      "tabs": [
+        "ARM Template",
+        "Bicep",
+        "Terraform"
+      ],
+      "sections": [
+        {
+          "title": "Template",
+          "fields": [
+            {
+              "label": "Include parameters",
+              "type": "checkbox",
+              "default": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "event-grid-topic-support-troubleshooting",
+      "kind": "other",
+      "title": "{resource-name} | Support + Troubleshooting",
+      "breadcrumbs": [
+        "Home",
+        "Event Grid Topics",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Event Grid Topic blade menu item; title only"
+    }
+  ],
+  "gaps_note": "Event Grid hub (nav groups + Create/View cards) is captured. nav = the Event Grid hub menu; the topic resource menu is on pages event-grid-topic-*. Topic grid, Create Topic wizard, event subscription wizard and topic blade are reference."
+}

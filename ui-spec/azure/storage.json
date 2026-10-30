@@ -1,0 +1,3071 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "azure",
+  "service": "storage",
+  "console_path": "#browse/Microsoft.Storage%2FStorageAccounts",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "storage-account-overview"
+    },
+    {
+      "label": "Activity log",
+      "page_id": "storage-account-activity-log"
+    },
+    {
+      "label": "Tags",
+      "page_id": "storage-account-tags"
+    },
+    {
+      "label": "Diagnose and solve problems",
+      "page_id": "storage-account-diagnose"
+    },
+    {
+      "label": "Access control (IAM)",
+      "page_id": "storage-account-iam"
+    },
+    {
+      "label": "Data migration",
+      "page_id": "storage-account-data-migration"
+    },
+    {
+      "label": "Events",
+      "page_id": "storage-account-events"
+    },
+    {
+      "label": "Storage browser",
+      "page_id": "storage-account-storage-browser"
+    },
+    {
+      "label": "Storage Mover",
+      "page_id": "storage-account-storage-mover"
+    },
+    {
+      "label": "Partner solutions",
+      "page_id": "storage-account-partner-solutions"
+    },
+    {
+      "label": "Data storage",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Containers",
+          "page_id": "storage-account-containers"
+        },
+        {
+          "label": "File shares",
+          "page_id": "storage-account-file-shares"
+        },
+        {
+          "label": "Queues",
+          "page_id": "storage-account-queues"
+        },
+        {
+          "label": "Tables",
+          "page_id": "storage-account-tables"
+        }
+      ]
+    },
+    {
+      "label": "Security + networking",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Networking",
+          "page_id": "storage-account-networking"
+        },
+        {
+          "label": "Front Door and CDN",
+          "page_id": "storage-account-front-door-and-cdn"
+        },
+        {
+          "label": "Access keys",
+          "page_id": "storage-account-access-keys"
+        },
+        {
+          "label": "Shared access signature",
+          "page_id": "storage-account-sas"
+        },
+        {
+          "label": "Encryption",
+          "page_id": "storage-account-encryption"
+        },
+        {
+          "label": "Microsoft Defender for Cloud",
+          "page_id": "storage-account-microsoft-defender-for-cloud"
+        }
+      ]
+    },
+    {
+      "label": "Data management",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Redundancy",
+          "page_id": "storage-account-redundancy"
+        },
+        {
+          "label": "Data protection",
+          "page_id": "storage-account-data-protection"
+        },
+        {
+          "label": "Object replication",
+          "page_id": "storage-account-object-replication"
+        },
+        {
+          "label": "Blob inventory",
+          "page_id": "storage-account-blob-inventory"
+        },
+        {
+          "label": "Static website",
+          "page_id": "storage-account-static-website"
+        },
+        {
+          "label": "Lifecycle management",
+          "page_id": "storage-account-lifecycle-management"
+        },
+        {
+          "label": "Azure AI Search",
+          "page_id": "storage-account-azure-ai-search"
+        }
+      ]
+    },
+    {
+      "label": "Settings",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Configuration",
+          "page_id": "storage-account-configuration"
+        },
+        {
+          "label": "Data Lake Gen2 upgrade",
+          "page_id": "storage-account-data-lake-gen2-upgrade"
+        },
+        {
+          "label": "Resource sharing (CORS)",
+          "page_id": "storage-account-cors"
+        },
+        {
+          "label": "Advisor recommendations",
+          "page_id": "storage-account-advisor-recommendations"
+        },
+        {
+          "label": "Endpoints",
+          "page_id": "storage-account-endpoints"
+        },
+        {
+          "label": "Locks",
+          "page_id": "storage-account-locks"
+        }
+      ]
+    },
+    {
+      "label": "Monitoring",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Insights",
+          "page_id": "storage-account-insights"
+        },
+        {
+          "label": "Alerts",
+          "page_id": "storage-account-alerts"
+        },
+        {
+          "label": "Metrics",
+          "page_id": "storage-account-metrics"
+        },
+        {
+          "label": "Workbooks",
+          "page_id": "storage-account-workbooks"
+        },
+        {
+          "label": "Diagnostic settings",
+          "page_id": "storage-account-diagnostic-settings"
+        },
+        {
+          "label": "Logs",
+          "page_id": "storage-account-logs"
+        }
+      ]
+    },
+    {
+      "label": "Automation",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Tasks",
+          "page_id": "storage-account-tasks"
+        },
+        {
+          "label": "Export template",
+          "page_id": "storage-account-export-template"
+        }
+      ]
+    },
+    {
+      "label": "Help",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Support + Troubleshooting",
+          "page_id": "storage-account-support-troubleshooting"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "storage-accounts",
+      "kind": "list",
+      "title": "Storage accounts",
+      "route": "#browse/Microsoft.Storage%2FStorageAccounts",
+      "breadcrumbs": [
+        "Home"
+      ],
+      "captures": [
+        "A-browse-microsoft-storage-storageaccounts/001-L1-landing",
+        "B-view-microsoft-azure-storagehub-storagehub-menuview/001-L1-landing--tab-03-summary"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Browse now lands in Storage center (captured); the grid itself is reference (no subscription)",
+      "table": {
+        "columns": [
+          "Name",
+          "Type",
+          "Kind",
+          "Resource group",
+          "Location",
+          "Subscription"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "Create",
+          "Restore",
+          "Manage view",
+          "Refresh",
+          "Export to CSV",
+          "Open query",
+          "Assign tags",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter for any field...",
+        "filters": [
+          "Subscription equals all",
+          "Resource group equals all",
+          "Location equals all",
+          "Add filter"
+        ],
+        "empty_state": "No storage accounts to display",
+        "empty_state_action": "Create storage account",
+        "pagination": true,
+        "provenance": "reference",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-storage-account",
+      "kind": "create",
+      "title": "Create a storage account",
+      "route": "#create/Microsoft.StorageAccount-ARM",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "Create a storage account"
+      ],
+      "captures": [
+        "C-forms/01-create-microsoft-storageaccount-arm/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Basics",
+          "sections": [
+            {
+              "title": "Project details",
+              "fields": [
+                {
+                  "label": "Subscription",
+                  "type": "select",
+                  "required": true,
+                  "placeholder": "Select a subscription"
+                },
+                {
+                  "label": "Resource group",
+                  "type": "select",
+                  "required": true,
+                  "actions": [
+                    "Create new"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Instance details",
+              "fields": [
+                {
+                  "label": "Storage account name",
+                  "type": "text",
+                  "required": true,
+                  "constraints": "3-24 characters; lowercase letters and numbers only; globally unique"
+                },
+                {
+                  "label": "Region",
+                  "type": "select",
+                  "required": true,
+                  "default": "(US) East US",
+                  "actions": [
+                    "Deploy to an Azure Extended Zone"
+                  ]
+                },
+                {
+                  "label": "Primary service",
+                  "type": "select",
+                  "options": [
+                    "Azure Blob Storage or Azure Data Lake Storage Gen 2",
+                    "Azure Files",
+                    "Other (tables and queues)"
+                  ],
+                  "help": "Optional; drives recommended settings"
+                },
+                {
+                  "label": "Performance",
+                  "type": "radio",
+                  "required": true,
+                  "default": "Standard",
+                  "options": [
+                    "Standard",
+                    "Premium"
+                  ],
+                  "help": "Standard: general-purpose v2; Premium: low latency"
+                },
+                {
+                  "label": "Premium account type",
+                  "type": "select",
+                  "options": [
+                    "Block blobs",
+                    "File shares",
+                    "Page blobs"
+                  ],
+                  "visible_when": "Performance = Premium",
+                  "required": true
+                },
+                {
+                  "label": "Redundancy",
+                  "type": "select",
+                  "required": true,
+                  "default": "Geo-redundant storage (GRS)",
+                  "options": [
+                    "Locally-redundant storage (LRS)",
+                    "Geo-redundant storage (GRS)",
+                    "Zone-redundant storage (ZRS)",
+                    "Geo-zone-redundant storage (GZRS)"
+                  ]
+                },
+                {
+                  "label": "Make read access to data available in the event of regional unavailability.",
+                  "type": "checkbox",
+                  "default": true,
+                  "visible_when": "Redundancy = GRS or GZRS"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Advanced",
+          "sections": [
+            {
+              "title": "Security",
+              "fields": [
+                {
+                  "label": "Require secure transfer for REST API operations",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Allow enabling anonymous access on individual containers",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Enable storage account key access",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Default to Microsoft Entra authorization in the Azure portal",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Minimum TLS version",
+                  "type": "select",
+                  "default": "Version 1.2",
+                  "options": [
+                    "Version 1.0",
+                    "Version 1.1",
+                    "Version 1.2"
+                  ]
+                },
+                {
+                  "label": "Permitted scope for copy operations (preview)",
+                  "type": "select",
+                  "default": "From any storage account",
+                  "options": [
+                    "From any storage account",
+                    "From storage accounts in the same Microsoft Entra tenant",
+                    "From storage accounts that have a private endpoint to the same virtual network"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Hierarchical Namespace",
+              "fields": [
+                {
+                  "label": "Enable hierarchical namespace",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Access protocols",
+              "fields": [
+                {
+                  "label": "Enable SFTP",
+                  "type": "checkbox",
+                  "default": false,
+                  "visible_when": "Enable hierarchical namespace"
+                },
+                {
+                  "label": "Enable network file system v3",
+                  "type": "checkbox",
+                  "default": false,
+                  "visible_when": "Enable hierarchical namespace"
+                }
+              ]
+            },
+            {
+              "title": "Blob storage",
+              "fields": [
+                {
+                  "label": "Allow cross-tenant replication",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Access tier",
+                  "type": "radio",
+                  "default": "Hot",
+                  "options": [
+                    "Hot",
+                    "Cool",
+                    "Cold"
+                  ],
+                  "help": "Hot: frequently accessed data; Cool: infrequent; Cold: rarely accessed"
+                }
+              ]
+            },
+            {
+              "title": "Azure Files",
+              "fields": [
+                {
+                  "label": "Enable large file shares",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Networking",
+          "sections": [
+            {
+              "title": "Network access",
+              "fields": [
+                {
+                  "label": "Public network access",
+                  "type": "radio",
+                  "default": "Enable",
+                  "options": [
+                    "Enable",
+                    "Disable"
+                  ]
+                },
+                {
+                  "label": "Public network access scope",
+                  "type": "radio",
+                  "default": "Enable from all networks",
+                  "options": [
+                    "Enable from all networks",
+                    "Enable from selected networks"
+                  ],
+                  "visible_when": "Public network access = Enable"
+                },
+                {
+                  "label": "Virtual networks",
+                  "type": "table",
+                  "columns": [
+                    "Virtual network",
+                    "Subnet",
+                    "Address range",
+                    "Endpoint status"
+                  ],
+                  "actions": [
+                    "Add existing virtual network",
+                    "Add new virtual network"
+                  ],
+                  "visible_when": "Public network access scope = Enable from selected networks"
+                }
+              ]
+            },
+            {
+              "title": "Private endpoints",
+              "fields": [
+                {
+                  "label": "Private endpoint",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Subscription",
+                    "Resource group",
+                    "Region",
+                    "Target sub-resource",
+                    "Subnet"
+                  ],
+                  "actions": [
+                    "Add private endpoint"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Network routing",
+              "fields": [
+                {
+                  "label": "Routing preference",
+                  "type": "radio",
+                  "default": "Microsoft network routing",
+                  "options": [
+                    "Microsoft network routing",
+                    "Internet routing"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Data protection",
+          "sections": [
+            {
+              "title": "Recovery",
+              "fields": [
+                {
+                  "label": "Enable point-in-time restore for containers",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Enable soft delete for blobs",
+                  "type": "checkbox",
+                  "default": true,
+                  "children": [
+                    {
+                      "label": "Days to retain deleted blobs",
+                      "type": "number",
+                      "default": 7,
+                      "constraints": "1-365"
+                    }
+                  ]
+                },
+                {
+                  "label": "Enable soft delete for containers",
+                  "type": "checkbox",
+                  "default": true,
+                  "children": [
+                    {
+                      "label": "Days to retain deleted containers",
+                      "type": "number",
+                      "default": 7,
+                      "constraints": "1-365"
+                    }
+                  ]
+                },
+                {
+                  "label": "Enable soft delete for file shares",
+                  "type": "checkbox",
+                  "default": true,
+                  "children": [
+                    {
+                      "label": "Days to retain deleted file shares",
+                      "type": "number",
+                      "default": 7,
+                      "constraints": "1-365"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Tracking",
+              "fields": [
+                {
+                  "label": "Enable versioning for blobs",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Enable blob change feed",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            },
+            {
+              "title": "Access control",
+              "fields": [
+                {
+                  "label": "Enable version-level immutability support",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Encryption",
+          "sections": [
+            {
+              "title": "Encryption",
+              "fields": [
+                {
+                  "label": "Encryption type",
+                  "type": "radio",
+                  "default": "Microsoft-managed keys (MMK)",
+                  "options": [
+                    "Microsoft-managed keys (MMK)",
+                    "Customer-managed keys (CMK)"
+                  ]
+                },
+                {
+                  "label": "Enable support for customer-managed keys",
+                  "type": "radio",
+                  "default": "Blobs and files only",
+                  "options": [
+                    "Blobs and files only",
+                    "All service types (blobs, files, tables, and queues)"
+                  ]
+                },
+                {
+                  "label": "Enable infrastructure encryption",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Value",
+                    "Resource"
+                  ],
+                  "help": "Name/value pairs to categorize resources and view consolidated billing"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review + create",
+          "sections": [
+            {
+              "title": "Basics"
+            },
+            {
+              "title": "Advanced"
+            },
+            {
+              "title": "Networking"
+            },
+            {
+              "title": "Data protection"
+            },
+            {
+              "title": "Encryption"
+            },
+            {
+              "title": "Tags"
+            }
+          ]
+        }
+      ],
+      "submit": "Create",
+      "notes": "Footer: Review + create / < Previous / Next : <tab> >; Download a template for automation"
+    },
+    {
+      "id": "storage-account-overview",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Upload",
+        "Open in Explorer",
+        "Delete",
+        "Move",
+        "Refresh",
+        "Open in mobile",
+        "CLI / PS",
+        "Feedback"
+      ],
+      "tabs": [
+        "Properties",
+        "Monitoring",
+        "Capabilities",
+        "Recommendations",
+        "Tutorials",
+        "Tools + SDKs"
+      ],
+      "sections": [
+        {
+          "title": "Essentials",
+          "actions": [
+            "JSON View"
+          ],
+          "fields": [
+            {
+              "label": "Resource group",
+              "type": "readonly"
+            },
+            {
+              "label": "Location",
+              "type": "readonly"
+            },
+            {
+              "label": "Primary/Secondary Location",
+              "type": "readonly"
+            },
+            {
+              "label": "Subscription",
+              "type": "readonly"
+            },
+            {
+              "label": "Subscription ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Disk state",
+              "type": "readonly"
+            },
+            {
+              "label": "Tags",
+              "type": "readonly"
+            },
+            {
+              "label": "Performance",
+              "type": "readonly"
+            },
+            {
+              "label": "Replication",
+              "type": "readonly"
+            },
+            {
+              "label": "Account kind",
+              "type": "readonly"
+            },
+            {
+              "label": "Provisioning state",
+              "type": "readonly"
+            },
+            {
+              "label": "Created",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tab_panels": [
+        {
+          "label": "Properties",
+          "sections": [
+            {
+              "title": "Blob service",
+              "fields": [
+                {
+                  "label": "Hierarchical namespace",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Default access tier",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Blob anonymous access",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Blob soft delete",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Container soft delete",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Versioning",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Change feed",
+                  "type": "readonly"
+                },
+                {
+                  "label": "NFS v3",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Allow cross-tenant replication",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Security",
+              "fields": [
+                {
+                  "label": "Require secure transfer for REST API operations",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Storage account key access",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Minimum TLS version",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Infrastructure encryption",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Networking",
+              "fields": [
+                {
+                  "label": "Allow access from",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Number of private endpoint connections",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Network routing",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Endpoint type",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "File service",
+              "fields": [
+                {
+                  "label": "Large file share",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Identity-based access",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Default share-level permissions",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Soft delete",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Share capacity",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Queue service"
+            },
+            {
+              "title": "Table service"
+            }
+          ]
+        },
+        {
+          "label": "Monitoring",
+          "confidence": "low"
+        },
+        {
+          "label": "Capabilities",
+          "confidence": "low"
+        },
+        {
+          "label": "Recommendations",
+          "confidence": "low"
+        },
+        {
+          "label": "Tutorials",
+          "confidence": "low"
+        },
+        {
+          "label": "Tools + SDKs",
+          "confidence": "low"
+        }
+      ]
+    },
+    {
+      "id": "storage-account-activity-log",
+      "kind": "list",
+      "title": "{resource-name} | Activity log",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "notes": "Same grid as Monitor | Activity log (captured), filtered to this resource",
+      "table": {
+        "columns": [
+          "Operation name",
+          "Status",
+          "Time",
+          "Time stamp",
+          "Subscription",
+          "Event initiated by"
+        ],
+        "header_actions": [
+          "Activity",
+          "Edit columns",
+          "Refresh",
+          "Export Activity Logs",
+          "Download as CSV",
+          "Insights",
+          "Feedback",
+          "Pin current filters",
+          "Reset filters"
+        ],
+        "filters": [
+          "Management Group : None",
+          "Subscription",
+          "Event severity : All",
+          "Timespan : Last 6 hours",
+          "Resource group",
+          "Resource",
+          "Add Filter"
+        ],
+        "empty_state": "No events to display",
+        "pagination": false
+      }
+    },
+    {
+      "id": "storage-account-tags",
+      "kind": "settings",
+      "title": "{resource-name} | Tags",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "table",
+              "columns": [
+                "Name",
+                "Value"
+              ],
+              "actions": [
+                "Delete"
+              ],
+              "help": "Name/value pairs; the same tag can apply to multiple resources"
+            }
+          ]
+        }
+      ],
+      "header_actions": [
+        "Apply",
+        "Discard changes",
+        "Delete all"
+      ]
+    },
+    {
+      "id": "storage-account-diagnose",
+      "kind": "other",
+      "title": "{resource-name} | Diagnose and solve problems",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-iam",
+      "kind": "other",
+      "title": "{resource-name} | Access control (IAM)",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "header_actions": [
+        "Add",
+        "Download role assignments",
+        "Edit columns",
+        "Refresh",
+        "Remove",
+        "Feedback"
+      ],
+      "tabs": [
+        "Check access",
+        "Role assignments",
+        "Roles",
+        "Deny assignments",
+        "Classic administrators"
+      ],
+      "tab_panels": [
+        {
+          "label": "Check access",
+          "sections": [
+            {
+              "title": "My access",
+              "fields": [
+                {
+                  "label": "View my access",
+                  "type": "button"
+                }
+              ]
+            },
+            {
+              "title": "Check access",
+              "fields": [
+                {
+                  "label": "Check access",
+                  "type": "button"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Role assignments",
+          "sections": [
+            {
+              "title": "Role assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Type",
+                  "Role",
+                  "Scope",
+                  "Condition"
+                ],
+                "selection": "multi",
+                "filter_placeholder": "Search by name or email"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Roles",
+          "sections": [
+            {
+              "title": "Roles",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Type",
+                  "Category",
+                  "Details"
+                ],
+                "filter_placeholder": "Search by role name, description, permission, or ID"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Deny assignments",
+          "sections": [
+            {
+              "title": "Deny assignments",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Principal",
+                  "Scope"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Classic administrators"
+        }
+      ]
+    },
+    {
+      "id": "storage-account-data-migration",
+      "kind": "other",
+      "title": "{resource-name} | Data migration",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-events",
+      "kind": "other",
+      "title": "{resource-name} | Events",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-storage-browser",
+      "kind": "other",
+      "title": "{resource-name} | Storage browser",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-storage-mover",
+      "kind": "other",
+      "title": "{resource-name} | Storage Mover",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-partner-solutions",
+      "kind": "other",
+      "title": "{resource-name} | Partner solutions",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-containers",
+      "kind": "list",
+      "title": "{resource-name} | Containers",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Name",
+          "Last modified",
+          "Anonymous access level",
+          "Lease state"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "Container",
+          "Change access level",
+          "Restore containers",
+          "Refresh",
+          "Delete",
+          "Give feedback"
+        ],
+        "filter_placeholder": "Search containers by prefix",
+        "filters": [
+          "Show deleted containers"
+        ],
+        "empty_state": "You don't have any containers yet.",
+        "pagination": true
+      },
+      "sections": [
+        {
+          "title": "New container",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true,
+              "constraints": "3-63 chars; lowercase letters, numbers and hyphens"
+            },
+            {
+              "label": "Anonymous access level",
+              "type": "select",
+              "default": "Private (no anonymous access)",
+              "options": [
+                "Private (no anonymous access)",
+                "Blob (anonymous read access for blobs only)",
+                "Container (anonymous read access for containers and blobs)"
+              ]
+            },
+            {
+              "label": "Encryption scope",
+              "type": "select",
+              "help": "Advanced"
+            },
+            {
+              "label": "Enable version-level immutability support",
+              "type": "checkbox",
+              "default": false,
+              "help": "Advanced"
+            },
+            {
+              "label": "Create",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-file-shares",
+      "kind": "list",
+      "title": "{resource-name} | File shares",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Name",
+          "Modified",
+          "Tier",
+          "Quota"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "File share",
+          "Refresh",
+          "Delete share",
+          "Give feedback"
+        ],
+        "filter_placeholder": "Search file shares by prefix (case-sensitive)",
+        "filters": [
+          "Show deleted shares"
+        ],
+        "empty_state": "You don't have any file shares yet."
+      },
+      "sections": [
+        {
+          "title": "New file share",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Access tier",
+              "type": "select",
+              "default": "Transaction optimized",
+              "options": [
+                "Transaction optimized",
+                "Hot",
+                "Cool"
+              ]
+            },
+            {
+              "label": "Enable backup",
+              "type": "checkbox",
+              "default": true
+            },
+            {
+              "label": "Review + create",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-queues",
+      "kind": "list",
+      "title": "{resource-name} | Queues",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Queue",
+          "Url"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "Queue",
+          "Refresh",
+          "Delete",
+          "Give feedback"
+        ],
+        "filter_placeholder": "Search queues by prefix",
+        "empty_state": "You don't have any queues yet."
+      },
+      "sections": [
+        {
+          "title": "Add queue",
+          "fields": [
+            {
+              "label": "Queue name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "OK",
+              "type": "button"
+            },
+            {
+              "label": "Cancel",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-tables",
+      "kind": "list",
+      "title": "{resource-name} | Tables",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "columns": [
+          "Table",
+          "Url"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "Table",
+          "Refresh",
+          "Delete",
+          "Give feedback"
+        ],
+        "filter_placeholder": "Search tables by prefix",
+        "empty_state": "You don't have any tables yet."
+      },
+      "sections": [
+        {
+          "title": "Add table",
+          "fields": [
+            {
+              "label": "Table name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "OK",
+              "type": "button"
+            },
+            {
+              "label": "Cancel",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-networking",
+      "kind": "settings",
+      "title": "{resource-name} | Networking",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "header_actions": [
+        "Save",
+        "Discard",
+        "Refresh",
+        "Give feedback"
+      ],
+      "tabs": [
+        "Public access",
+        "Private access",
+        "Advanced"
+      ],
+      "notes": "Networking blade was redesigned in 2025 (Public access / Private access); re-verify tab labels",
+      "tab_panels": [
+        {
+          "label": "Public access",
+          "sections": [
+            {
+              "title": "Public network access",
+              "fields": [
+                {
+                  "label": "Public network access",
+                  "type": "radio",
+                  "options": [
+                    "Enabled",
+                    "Disabled",
+                    "Secured by perimeter"
+                  ]
+                },
+                {
+                  "label": "Public network access scope",
+                  "type": "radio",
+                  "options": [
+                    "Enable from all networks",
+                    "Enable from selected networks"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Virtual networks",
+              "table": {
+                "columns": [
+                  "Virtual network",
+                  "Subnet",
+                  "Address range",
+                  "Endpoint status",
+                  "Resource group",
+                  "Subscription"
+                ]
+              }
+            },
+            {
+              "title": "Firewall",
+              "fields": [
+                {
+                  "label": "Address range",
+                  "type": "table",
+                  "columns": [
+                    "Address range"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Resource instances",
+              "fields": [
+                {
+                  "label": "Resource instances",
+                  "type": "table",
+                  "columns": [
+                    "Resource type",
+                    "Instance name"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Exceptions",
+              "fields": [
+                {
+                  "label": "Allow Azure services on the trusted services list to access this storage account",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Private access",
+          "sections": [
+            {
+              "title": "Private endpoint connections",
+              "table": {
+                "columns": [
+                  "Connection name",
+                  "Connection state",
+                  "Private endpoint",
+                  "Target sub-resource",
+                  "Description"
+                ],
+                "header_actions": [
+                  "Create a private endpoint",
+                  "Approve",
+                  "Reject",
+                  "Remove",
+                  "Refresh"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Advanced",
+          "sections": [
+            {
+              "title": "Network routing",
+              "fields": [
+                {
+                  "label": "Routing preference",
+                  "type": "radio",
+                  "options": [
+                    "Microsoft network routing",
+                    "Internet routing"
+                  ]
+                },
+                {
+                  "label": "Publish route-specific endpoints",
+                  "type": "checkbox",
+                  "children": [
+                    {
+                      "label": "Microsoft network routing",
+                      "type": "checkbox"
+                    },
+                    {
+                      "label": "Internet routing",
+                      "type": "checkbox"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Custom domain",
+              "fields": [
+                {
+                  "label": "Domain name",
+                  "type": "text"
+                },
+                {
+                  "label": "Use indirect CNAME validation",
+                  "type": "checkbox"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-front-door-and-cdn",
+      "kind": "other",
+      "title": "{resource-name} | Front Door and CDN",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-access-keys",
+      "kind": "settings",
+      "title": "{resource-name} | Access keys",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Set rotation reminder",
+        "Refresh",
+        "Give feedback"
+      ],
+      "sections": [
+        {
+          "title": "Storage account name",
+          "fields": [
+            {
+              "label": "Storage account name",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "key1",
+          "fields": [
+            {
+              "label": "Last rotated",
+              "type": "readonly"
+            },
+            {
+              "label": "Key",
+              "type": "readonly",
+              "actions": [
+                "Show",
+                "Copy to clipboard"
+              ]
+            },
+            {
+              "label": "Connection string",
+              "type": "readonly",
+              "actions": [
+                "Show",
+                "Copy to clipboard"
+              ]
+            },
+            {
+              "label": "Rotate key",
+              "type": "button"
+            }
+          ]
+        },
+        {
+          "title": "key2",
+          "fields": [
+            {
+              "label": "Last rotated",
+              "type": "readonly"
+            },
+            {
+              "label": "Key",
+              "type": "readonly",
+              "actions": [
+                "Show",
+                "Copy to clipboard"
+              ]
+            },
+            {
+              "label": "Connection string",
+              "type": "readonly",
+              "actions": [
+                "Show",
+                "Copy to clipboard"
+              ]
+            },
+            {
+              "label": "Rotate key",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-sas",
+      "kind": "settings",
+      "title": "{resource-name} | Shared access signature",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Shared access signature",
+          "fields": [
+            {
+              "label": "Allowed services",
+              "type": "checkbox",
+              "options": [
+                "Blob",
+                "File",
+                "Queue",
+                "Table"
+              ],
+              "default": [
+                "Blob",
+                "File",
+                "Queue",
+                "Table"
+              ]
+            },
+            {
+              "label": "Allowed resource types",
+              "type": "checkbox",
+              "options": [
+                "Service",
+                "Container",
+                "Object"
+              ]
+            },
+            {
+              "label": "Allowed permissions",
+              "type": "checkbox",
+              "options": [
+                "Read",
+                "Write",
+                "Delete",
+                "List",
+                "Add",
+                "Create",
+                "Update",
+                "Process",
+                "Immutable storage",
+                "Permanent delete"
+              ]
+            },
+            {
+              "label": "Blob versioning permissions",
+              "type": "checkbox",
+              "options": [
+                "Enables deletion of versions"
+              ]
+            },
+            {
+              "label": "Allowed blob index permissions",
+              "type": "checkbox",
+              "options": [
+                "Read/Write",
+                "Filter"
+              ]
+            },
+            {
+              "label": "Start and expiry date/time",
+              "type": "other",
+              "help": "Start / End date and time with time zone"
+            },
+            {
+              "label": "Allowed IP addresses",
+              "type": "text",
+              "placeholder": "for example, 168.1.5.65 or 168.1.5.65-168.1.5.70"
+            },
+            {
+              "label": "Allowed protocols",
+              "type": "radio",
+              "default": "HTTPS only",
+              "options": [
+                "HTTPS only",
+                "HTTPS and HTTP"
+              ]
+            },
+            {
+              "label": "Preferred routing tier",
+              "type": "radio",
+              "default": "Basic (default)",
+              "options": [
+                "Basic (default)",
+                "Microsoft network routing",
+                "Internet routing"
+              ]
+            },
+            {
+              "label": "Signing key",
+              "type": "select",
+              "default": "key1",
+              "options": [
+                "key1",
+                "key2"
+              ]
+            },
+            {
+              "label": "Generate SAS and connection string",
+              "type": "button"
+            },
+            {
+              "label": "Connection string",
+              "type": "readonly"
+            },
+            {
+              "label": "SAS token",
+              "type": "readonly"
+            },
+            {
+              "label": "Blob service SAS URL",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-encryption",
+      "kind": "settings",
+      "title": "{resource-name} | Encryption",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Encryption",
+        "Encryption scopes"
+      ],
+      "header_actions": [
+        "Save",
+        "Discard",
+        "Refresh"
+      ],
+      "tab_panels": [
+        {
+          "label": "Encryption",
+          "sections": [
+            {
+              "title": "Encryption selection",
+              "fields": [
+                {
+                  "label": "Enable support for customer-managed keys",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Infrastructure encryption",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Encryption type",
+                  "type": "radio",
+                  "options": [
+                    "Microsoft-managed keys",
+                    "Customer-managed keys"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Encryption scopes",
+          "sections": [
+            {
+              "title": "Encryption scopes",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Status",
+                  "Encryption type",
+                  "Key",
+                  "Infrastructure encryption"
+                ],
+                "header_actions": [
+                  "Add",
+                  "Refresh",
+                  "Enable",
+                  "Disable"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-microsoft-defender-for-cloud",
+      "kind": "other",
+      "title": "{resource-name} | Microsoft Defender for Cloud",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-redundancy",
+      "kind": "settings",
+      "title": "{resource-name} | Redundancy",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Save",
+        "Discard",
+        "Prepare for failover",
+        "Refresh"
+      ],
+      "sections": [
+        {
+          "title": "Redundancy",
+          "fields": [
+            {
+              "label": "Redundancy",
+              "type": "select",
+              "options": [
+                "Locally-redundant storage (LRS)",
+                "Geo-redundant storage (GRS)",
+                "Read-access geo-redundant storage (RA-GRS)",
+                "Zone-redundant storage (ZRS)",
+                "Geo-zone-redundant storage (GZRS)",
+                "Read-access geo-zone-redundant storage (RA-GZRS)"
+              ]
+            },
+            {
+              "label": "Last failover time",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Storage endpoints",
+          "table": {
+            "columns": [
+              "Location",
+              "Data center type",
+              "Status"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "storage-account-data-protection",
+      "kind": "settings",
+      "title": "{resource-name} | Data protection",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Save",
+        "Discard",
+        "Give feedback"
+      ],
+      "sections": [
+        {
+          "title": "Recovery",
+          "fields": [
+            {
+              "label": "Enable operational backup with Azure Backup",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Enable point-in-time restore for containers",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Enable soft delete for blobs",
+              "type": "checkbox",
+              "children": [
+                {
+                  "label": "Keep deleted blobs for (in days)",
+                  "type": "number",
+                  "default": 7
+                }
+              ]
+            },
+            {
+              "label": "Enable soft delete for containers",
+              "type": "checkbox",
+              "children": [
+                {
+                  "label": "Keep deleted containers for (in days)",
+                  "type": "number",
+                  "default": 7
+                }
+              ]
+            },
+            {
+              "label": "Enable permanent delete for soft deleted items",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Enable soft delete for file shares",
+              "type": "checkbox",
+              "children": [
+                {
+                  "label": "Keep deleted file shares for (in days)",
+                  "type": "number",
+                  "default": 7
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tracking",
+          "fields": [
+            {
+              "label": "Enable versioning for blobs",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Enable blob change feed",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        },
+        {
+          "title": "Access control",
+          "fields": [
+            {
+              "label": "Enable version-level immutability support",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-object-replication",
+      "kind": "other",
+      "title": "{resource-name} | Object replication",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-blob-inventory",
+      "kind": "other",
+      "title": "{resource-name} | Blob inventory",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-static-website",
+      "kind": "settings",
+      "title": "{resource-name} | Static website",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Save",
+        "Discard"
+      ],
+      "sections": [
+        {
+          "title": "Static website",
+          "fields": [
+            {
+              "label": "Static website",
+              "type": "radio",
+              "default": "Disabled",
+              "options": [
+                "Disabled",
+                "Enabled"
+              ]
+            },
+            {
+              "label": "Index document name",
+              "type": "text",
+              "visible_when": "Static website = Enabled"
+            },
+            {
+              "label": "Error document path",
+              "type": "text",
+              "visible_when": "Static website = Enabled"
+            },
+            {
+              "label": "Primary endpoint",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-lifecycle-management",
+      "kind": "list",
+      "title": "{resource-name} | Lifecycle management",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "tabs": [
+        "List View",
+        "Code View"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Status",
+          "Blob type",
+          "Base blobs",
+          "Snapshots",
+          "Versions"
+        ],
+        "selection": "multi",
+        "header_actions": [
+          "Add a rule",
+          "Enable",
+          "Disable",
+          "Refresh",
+          "Delete"
+        ],
+        "empty_state": "No rules have been created"
+      }
+    },
+    {
+      "id": "storage-account-azure-ai-search",
+      "kind": "other",
+      "title": "{resource-name} | Azure AI Search",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-configuration",
+      "kind": "settings",
+      "title": "{resource-name} | Configuration",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Save",
+        "Discard",
+        "Refresh",
+        "Give feedback"
+      ],
+      "sections": [
+        {
+          "title": "Configuration",
+          "fields": [
+            {
+              "label": "Account kind",
+              "type": "readonly"
+            },
+            {
+              "label": "Performance",
+              "type": "radio",
+              "options": [
+                "Standard",
+                "Premium"
+              ]
+            },
+            {
+              "label": "Secure transfer required",
+              "type": "radio",
+              "options": [
+                "Disabled",
+                "Enabled"
+              ]
+            },
+            {
+              "label": "Allow Blob anonymous access",
+              "type": "radio",
+              "options": [
+                "Disabled",
+                "Enabled"
+              ]
+            },
+            {
+              "label": "Allow storage account key access",
+              "type": "radio",
+              "options": [
+                "Disabled",
+                "Enabled"
+              ]
+            },
+            {
+              "label": "Default to Microsoft Entra authorization in the Azure portal",
+              "type": "radio",
+              "options": [
+                "Disabled",
+                "Enabled"
+              ]
+            },
+            {
+              "label": "Minimum TLS version",
+              "type": "select",
+              "options": [
+                "Version 1.0",
+                "Version 1.1",
+                "Version 1.2"
+              ]
+            },
+            {
+              "label": "Permitted scope for copy operations (preview)",
+              "type": "select",
+              "options": [
+                "From any storage account",
+                "From storage accounts in the same Microsoft Entra tenant",
+                "From storage accounts that have a private endpoint to the same virtual network"
+              ]
+            },
+            {
+              "label": "Blob access tier (default)",
+              "type": "radio",
+              "options": [
+                "Hot",
+                "Cool",
+                "Cold"
+              ]
+            },
+            {
+              "label": "Replication",
+              "type": "select",
+              "options": [
+                "Locally-redundant storage (LRS)",
+                "Geo-redundant storage (GRS)",
+                "Read-access geo-redundant storage (RA-GRS)",
+                "Zone-redundant storage (ZRS)",
+                "Geo-zone-redundant storage (GZRS)",
+                "Read-access geo-zone-redundant storage (RA-GZRS)"
+              ]
+            },
+            {
+              "label": "Large file shares",
+              "type": "radio",
+              "options": [
+                "Disabled",
+                "Enabled"
+              ]
+            },
+            {
+              "label": "Hierarchical namespace",
+              "type": "readonly",
+              "actions": [
+                "Upgrade"
+              ]
+            },
+            {
+              "label": "Allow cross-tenant replication",
+              "type": "radio",
+              "options": [
+                "Disabled",
+                "Enabled"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-data-lake-gen2-upgrade",
+      "kind": "other",
+      "title": "{resource-name} | Data Lake Gen2 upgrade",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-cors",
+      "kind": "settings",
+      "title": "{resource-name} | Resource sharing (CORS)",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Blob service",
+        "File service",
+        "Queue service",
+        "Table service"
+      ],
+      "header_actions": [
+        "Save",
+        "Discard",
+        "Delete all"
+      ],
+      "tab_panels": [
+        {
+          "label": "Blob service",
+          "sections": [
+            {
+              "title": "Blob service",
+              "fields": [
+                {
+                  "label": "CORS rules",
+                  "type": "table",
+                  "columns": [
+                    "Allowed origins",
+                    "Allowed methods",
+                    "Allowed headers",
+                    "Exposed headers",
+                    "Max age"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "File service",
+          "sections": [
+            {
+              "title": "File service",
+              "fields": [
+                {
+                  "label": "CORS rules",
+                  "type": "table",
+                  "columns": [
+                    "Allowed origins",
+                    "Allowed methods",
+                    "Allowed headers",
+                    "Exposed headers",
+                    "Max age"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Queue service",
+          "sections": [
+            {
+              "title": "Queue service",
+              "fields": [
+                {
+                  "label": "CORS rules",
+                  "type": "table",
+                  "columns": [
+                    "Allowed origins",
+                    "Allowed methods",
+                    "Allowed headers",
+                    "Exposed headers",
+                    "Max age"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Table service",
+          "sections": [
+            {
+              "title": "Table service",
+              "fields": [
+                {
+                  "label": "CORS rules",
+                  "type": "table",
+                  "columns": [
+                    "Allowed origins",
+                    "Allowed methods",
+                    "Allowed headers",
+                    "Exposed headers",
+                    "Max age"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-advisor-recommendations",
+      "kind": "other",
+      "title": "{resource-name} | Advisor recommendations",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-endpoints",
+      "kind": "settings",
+      "title": "{resource-name} | Endpoints",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "sections": [
+        {
+          "title": "Blob service",
+          "fields": [
+            {
+              "label": "Blob service",
+              "type": "readonly"
+            },
+            {
+              "label": "Blob service resource ID",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Data Lake Storage",
+          "fields": [
+            {
+              "label": "Data Lake Storage",
+              "type": "readonly"
+            },
+            {
+              "label": "Data Lake Storage resource ID",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Static website",
+          "fields": [
+            {
+              "label": "Primary endpoint",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "File service",
+          "fields": [
+            {
+              "label": "File service",
+              "type": "readonly"
+            },
+            {
+              "label": "File service resource ID",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Queue service",
+          "fields": [
+            {
+              "label": "Queue service",
+              "type": "readonly"
+            },
+            {
+              "label": "Queue service resource ID",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Table service",
+          "fields": [
+            {
+              "label": "Table service",
+              "type": "readonly"
+            },
+            {
+              "label": "Table service resource ID",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Storage account resource ID",
+          "fields": [
+            {
+              "label": "Storage account resource ID",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "notes": "Section grouping per current portal; secondary endpoints appear only for RA-GRS/RA-GZRS"
+    },
+    {
+      "id": "storage-account-locks",
+      "kind": "list",
+      "title": "{resource-name} | Locks",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "high",
+      "table": {
+        "columns": [
+          "Lock name",
+          "Lock type",
+          "Scope",
+          "Notes"
+        ],
+        "header_actions": [
+          "Add",
+          "Subscription",
+          "Resource group",
+          "Refresh",
+          "Feedback"
+        ],
+        "filter_placeholder": "Search to filter items...",
+        "empty_state": "This resource has no locks."
+      },
+      "sections": [
+        {
+          "title": "Add lock",
+          "fields": [
+            {
+              "label": "Lock name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Lock type",
+              "type": "select",
+              "required": true,
+              "options": [
+                "Read-only",
+                "Delete"
+              ]
+            },
+            {
+              "label": "Notes",
+              "type": "textarea"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-insights",
+      "kind": "other",
+      "title": "{resource-name} | Insights",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-alerts",
+      "kind": "other",
+      "title": "{resource-name} | Alerts",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-metrics",
+      "kind": "other",
+      "title": "{resource-name} | Metrics",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-workbooks",
+      "kind": "other",
+      "title": "{resource-name} | Workbooks",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-diagnostic-settings",
+      "kind": "other",
+      "title": "{resource-name} | Diagnostic settings",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-logs",
+      "kind": "other",
+      "title": "{resource-name} | Logs",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-tasks",
+      "kind": "other",
+      "title": "{resource-name} | Tasks",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-account-export-template",
+      "kind": "other",
+      "title": "{resource-name} | Export template",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Download",
+        "Add to library (preview)",
+        "Deploy",
+        "Visualize template"
+      ],
+      "tabs": [
+        "ARM Template",
+        "Bicep",
+        "Terraform"
+      ],
+      "sections": [
+        {
+          "title": "Template",
+          "fields": [
+            {
+              "label": "Include parameters",
+              "type": "checkbox",
+              "default": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage-account-support-troubleshooting",
+      "kind": "other",
+      "title": "{resource-name} | Support + Troubleshooting",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Storage account blade menu item; title only"
+    },
+    {
+      "id": "storage-container-detail",
+      "kind": "detail",
+      "title": "{container-name}",
+      "provenance": "reference",
+      "confidence": "medium",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name} | Containers",
+        "{container-name}"
+      ],
+      "notes": "Container blade menu: Overview, Access Control (IAM), Shared access tokens, Access policy, Properties, Metadata",
+      "header_actions": [
+        "Upload",
+        "Add Directory",
+        "Refresh",
+        "Rename",
+        "Delete",
+        "Change tier",
+        "Acquire lease",
+        "Break lease",
+        "View snapshots",
+        "Create snapshot",
+        "Give feedback"
+      ],
+      "sections": [
+        {
+          "title": "Authentication method",
+          "fields": [
+            {
+              "label": "Authentication method",
+              "type": "readonly",
+              "actions": [
+                "Switch to Microsoft Entra user account"
+              ]
+            },
+            {
+              "label": "Location",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Modified",
+          "Access tier",
+          "Archive status",
+          "Blob type",
+          "Size",
+          "Lease state"
+        ],
+        "selection": "multi",
+        "filter_placeholder": "Search blobs by prefix (case-sensitive)",
+        "filters": [
+          "Show deleted objects",
+          "Add filter"
+        ],
+        "empty_state": "No results"
+      }
+    },
+    {
+      "id": "upload-blob",
+      "kind": "create",
+      "title": "Upload blob",
+      "provenance": "reference",
+      "confidence": "medium",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name} | Containers",
+        "{container-name}"
+      ],
+      "sections": [
+        {
+          "title": "Upload blob",
+          "fields": [
+            {
+              "label": "Files",
+              "type": "file",
+              "required": true,
+              "help": "Drag and drop files here or Browse for files"
+            },
+            {
+              "label": "Overwrite if files already exist",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        },
+        {
+          "title": "Advanced",
+          "expandable": true,
+          "fields": [
+            {
+              "label": "Authentication type",
+              "type": "radio",
+              "options": [
+                "Azure AD user account",
+                "Account key"
+              ]
+            },
+            {
+              "label": "Blob type",
+              "type": "select",
+              "default": "Block blob",
+              "options": [
+                "Block blob",
+                "Page blob",
+                "Append blob"
+              ]
+            },
+            {
+              "label": "Block size",
+              "type": "select",
+              "default": "4 MiB"
+            },
+            {
+              "label": "Access tier",
+              "type": "select",
+              "default": "Hot (Inferred)",
+              "options": [
+                "Hot",
+                "Cool",
+                "Cold",
+                "Archive"
+              ]
+            },
+            {
+              "label": "Upload to folder",
+              "type": "text"
+            },
+            {
+              "label": "Blob index tags",
+              "type": "table",
+              "columns": [
+                "Key",
+                "Value"
+              ]
+            },
+            {
+              "label": "Encryption scope",
+              "type": "select"
+            }
+          ]
+        }
+      ],
+      "submit": "Upload"
+    },
+    {
+      "id": "storage-blob-detail",
+      "kind": "detail",
+      "title": "{blob-name}",
+      "provenance": "reference",
+      "confidence": "medium",
+      "breadcrumbs": [
+        "Home",
+        "Storage accounts",
+        "{resource-name} | Containers",
+        "{container-name}",
+        "{blob-name}"
+      ],
+      "header_actions": [
+        "Save",
+        "Discard",
+        "Download",
+        "Refresh",
+        "Delete",
+        "Change tier",
+        "Acquire lease",
+        "Break lease"
+      ],
+      "tabs": [
+        "Overview",
+        "Versions",
+        "Snapshots",
+        "Edit",
+        "Generate SAS"
+      ],
+      "tab_panels": [
+        {
+          "label": "Overview",
+          "sections": [
+            {
+              "title": "Properties",
+              "fields": [
+                {
+                  "label": "URL",
+                  "type": "readonly"
+                },
+                {
+                  "label": "LAST MODIFIED",
+                  "type": "readonly"
+                },
+                {
+                  "label": "CREATION TIME",
+                  "type": "readonly"
+                },
+                {
+                  "label": "TYPE",
+                  "type": "readonly"
+                },
+                {
+                  "label": "SIZE",
+                  "type": "readonly"
+                },
+                {
+                  "label": "ACCESS TIER",
+                  "type": "readonly"
+                },
+                {
+                  "label": "SERVER ENCRYPTED",
+                  "type": "readonly"
+                },
+                {
+                  "label": "ETAG",
+                  "type": "readonly"
+                },
+                {
+                  "label": "CONTENT-TYPE",
+                  "type": "readonly"
+                },
+                {
+                  "label": "CONTENT-MD5",
+                  "type": "readonly"
+                },
+                {
+                  "label": "LEASE STATUS",
+                  "type": "readonly"
+                },
+                {
+                  "label": "LEASE STATE",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Metadata",
+              "fields": [
+                {
+                  "label": "Metadata",
+                  "type": "table",
+                  "columns": [
+                    "Key",
+                    "Value"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Generate SAS",
+          "sections": [
+            {
+              "title": "Generate SAS",
+              "fields": [
+                {
+                  "label": "Signing method",
+                  "type": "radio",
+                  "options": [
+                    "Account key",
+                    "User delegation key"
+                  ]
+                },
+                {
+                  "label": "Signing key",
+                  "type": "select",
+                  "options": [
+                    "Key 1",
+                    "Key 2"
+                  ]
+                },
+                {
+                  "label": "Permissions",
+                  "type": "select",
+                  "default": "Read"
+                },
+                {
+                  "label": "Start",
+                  "type": "other"
+                },
+                {
+                  "label": "Expiry",
+                  "type": "other"
+                },
+                {
+                  "label": "Allowed IP addresses",
+                  "type": "text"
+                },
+                {
+                  "label": "Allowed protocols",
+                  "type": "radio",
+                  "options": [
+                    "HTTPS only",
+                    "HTTPS and HTTP"
+                  ]
+                },
+                {
+                  "label": "Generate SAS token and URL",
+                  "type": "button"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps_note": "Live crawl had no subscription: the browse grid, create wizard and the whole resource blade are provenance=reference from the current portal. Captured: Storage center hub (browse redirect), its Summary KPIs, and the Monitor Activity log grid reused for the blade. nav = the storage account resource menu. Page ids match consoles/src/azure/services/storage/spec-map.json; blade titles are '{resource-name} | <item>' so spec-map entries need vars.resource-name."
+}

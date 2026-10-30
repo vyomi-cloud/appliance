@@ -1,0 +1,763 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "azure",
+  "service": "cost",
+  "console_path": "#view/Microsoft_Azure_CostManagement/Menu",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "cost-overview"
+    },
+    {
+      "label": "Change scope",
+      "page_id": "cost-change-scope"
+    },
+    {
+      "label": "Diagnose and solve problems",
+      "page_id": "cost-diagnose-and-solve-problems"
+    },
+    {
+      "label": "Reporting + analytics",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Cost analysis",
+          "page_id": "cost-cost-analysis"
+        },
+        {
+          "label": "Exports",
+          "page_id": "cost-exports"
+        }
+      ]
+    },
+    {
+      "label": "Monitoring",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Cost alerts",
+          "page_id": "cost-cost-alerts"
+        },
+        {
+          "label": "Alert rules",
+          "page_id": "cost-alert-rules"
+        },
+        {
+          "label": "Budgets",
+          "page_id": "cost-budgets"
+        }
+      ]
+    },
+    {
+      "label": "Optimization",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Advisor recommendations",
+          "page_id": "cost-advisor-recommendations"
+        },
+        {
+          "label": "Reservations + Hybrid Benefit",
+          "page_id": "cost-reservations-hybrid-benefit"
+        },
+        {
+          "label": "Savings plans",
+          "page_id": "cost-savings-plans"
+        }
+      ]
+    },
+    {
+      "label": "Settings",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Cost allocation",
+          "page_id": "cost-cost-allocation"
+        },
+        {
+          "label": "Configuration",
+          "page_id": "cost-configuration"
+        },
+        {
+          "label": "Preview features",
+          "page_id": "cost-preview-features"
+        }
+      ]
+    },
+    {
+      "label": "Billing",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Invoices",
+          "page_id": "cost-invoices"
+        },
+        {
+          "label": "Payment methods",
+          "page_id": "cost-payment-methods"
+        },
+        {
+          "label": "Azure subscriptions",
+          "page_id": "cost-azure-subscriptions"
+        }
+      ]
+    },
+    {
+      "label": "Help",
+      "expandable": true,
+      "children": [
+        {
+          "label": "New support request",
+          "page_id": "cost-new-support-request"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "cost-overview",
+      "kind": "dashboard",
+      "title": "Cost Management | Overview",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Try preview",
+        "Help",
+        "Feedback"
+      ],
+      "tabs": [
+        "Get Started",
+        "Tutorials",
+        "What's new"
+      ],
+      "sections": [
+        {
+          "title": "Scope",
+          "fields": [
+            {
+              "label": "Scope",
+              "type": "readonly",
+              "actions": [
+                "change"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Analyze and optimize cloud costs"
+        },
+        {
+          "title": "Setup your account",
+          "fields": [
+            {
+              "label": "Configure",
+              "type": "button"
+            }
+          ]
+        },
+        {
+          "title": "Report on and analyze trends",
+          "fields": [
+            {
+              "label": "Analyze costs",
+              "type": "button"
+            }
+          ]
+        },
+        {
+          "title": "Control and optimize costs",
+          "fields": [
+            {
+              "label": "View recommendations",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cost-change-scope",
+      "kind": "other",
+      "title": "Cost Management | Change scope",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/003-L2-change-scope"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Select scope",
+          "fields": [
+            {
+              "label": "Scope",
+              "type": "table",
+              "columns": [
+                "Name",
+                "Type"
+              ]
+            },
+            {
+              "label": "Only show subscriptions selected in the global filter.",
+              "type": "checkbox"
+            },
+            {
+              "label": "Select",
+              "type": "button"
+            },
+            {
+              "label": "Cancel",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cost-diagnose-and-solve-problems",
+      "kind": "other",
+      "title": "Cost Management | Diagnose and solve problems",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/004-L2-diagnose-and-solve-problems",
+        "A-view-microsoft-azure-costmanagement-menu/004-L2-diagnose-and-solve-problems--tab-03-common-problems"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "cost-cost-analysis",
+      "kind": "dashboard",
+      "title": "Cost Management | Cost analysis",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/005-L2-cost-analysis"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Capture: 'No supported billing accounts to display'; view below is the current Accumulated costs view",
+      "header_actions": [
+        "Scope",
+        "Save",
+        "Save as",
+        "Delete view",
+        "Share",
+        "Refresh",
+        "Download",
+        "Settings",
+        "Feedback"
+      ],
+      "sections": [
+        {
+          "title": "View",
+          "fields": [
+            {
+              "label": "View",
+              "type": "select",
+              "default": "Accumulated costs",
+              "options": [
+                "Accumulated costs",
+                "Daily costs",
+                "Cost by service",
+                "Invoice details"
+              ]
+            },
+            {
+              "label": "Date range",
+              "type": "select",
+              "default": "This month"
+            },
+            {
+              "label": "Add filter",
+              "type": "button"
+            },
+            {
+              "label": "Group by",
+              "type": "select",
+              "default": "None"
+            },
+            {
+              "label": "Granularity",
+              "type": "select",
+              "default": "Accumulated",
+              "options": [
+                "Accumulated",
+                "Daily",
+                "Monthly"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Totals",
+          "fields": [
+            {
+              "label": "Actual cost (USD)",
+              "type": "readonly"
+            },
+            {
+              "label": "Forecast: chart view on",
+              "type": "readonly"
+            },
+            {
+              "label": "Budget: none",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Service name"
+        },
+        {
+          "title": "Location"
+        },
+        {
+          "title": "Resource group name"
+        }
+      ]
+    },
+    {
+      "id": "cost-exports",
+      "kind": "other",
+      "title": "Cost Management | Exports",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/006-L2-exports"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "cost-cost-alerts",
+      "kind": "list",
+      "title": "Cost Management | Cost alerts",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/007-L2-cost-alerts"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Add",
+        "Alert rules",
+        "Refresh",
+        "Dismiss",
+        "Re-Activate",
+        "Feedback",
+        "Help"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Type",
+          "Scope",
+          "Status",
+          "Created on"
+        ],
+        "provenance": "reference",
+        "confidence": "low",
+        "filters": [
+          "Scope : None selected"
+        ]
+      }
+    },
+    {
+      "id": "cost-alert-rules",
+      "kind": "other",
+      "title": "Cost Management | Alert rules",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/008-L2-alert-rules"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "cost-budgets",
+      "kind": "list",
+      "title": "Cost Management | Budgets",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/009-L2-budgets"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Capture: 'Select a scope' notice; grid is reference",
+      "header_actions": [
+        "Add",
+        "Refresh",
+        "Feedback"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Scope",
+          "Reset period",
+          "Amount",
+          "Evaluated spend",
+          "Forecast",
+          "Progress"
+        ],
+        "empty_state": "No budgets found",
+        "confidence": "low"
+      }
+    },
+    {
+      "id": "cost-advisor-recommendations",
+      "kind": "list",
+      "title": "Cost Management | Advisor recommendations",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/010-L2-advisor-recommendations"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Feedback",
+        "Download as CSV",
+        "Download as PDF",
+        "Create alert",
+        "Create recommendation digest",
+        "Group by none"
+      ]
+    },
+    {
+      "id": "cost-reservations-hybrid-benefit",
+      "kind": "other",
+      "title": "Cost Management | Reservations + Hybrid Benefit",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/011-L2-reservations-hybrid-benefit"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "cost-savings-plans",
+      "kind": "list",
+      "title": "Cost Management | Savings plans",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/012-L2-savings-plans"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Add",
+        "Columns",
+        "Refresh",
+        "Role Assignment",
+        "Feedback",
+        "View FAQs"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Status",
+          "Term",
+          "Benefit scope",
+          "Utilization",
+          "Renewal"
+        ],
+        "confidence": "low",
+        "filters": [
+          "Scope : All",
+          "7-day Utilization : All",
+          "Renewal : All",
+          "Reset filters"
+        ],
+        "empty_state": "No savings plans to display",
+        "empty_state_action": "Purchase Now"
+      }
+    },
+    {
+      "id": "cost-cost-allocation",
+      "kind": "other",
+      "title": "Cost Management | Cost allocation",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/013-L2-cost-allocation"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "cost-configuration",
+      "kind": "other",
+      "title": "Cost Management | Configuration",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/014-L2-configuration"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "cost-preview-features",
+      "kind": "settings",
+      "title": "Cost Management | Preview features",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/015-L2-preview-features"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Preview features",
+          "fields": [
+            {
+              "label": "Charts in the cost analysis preview",
+              "type": "checkbox"
+            },
+            {
+              "label": "Forecast in the cost analysis preview",
+              "type": "checkbox"
+            },
+            {
+              "label": "Change scope from menu",
+              "type": "checkbox"
+            },
+            {
+              "label": "Apply + reload",
+              "type": "button"
+            },
+            {
+              "label": "Cancel",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cost-invoices",
+      "kind": "other",
+      "title": "Cost Management | Invoices",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/016-L2-invoices"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "cost-payment-methods",
+      "kind": "other",
+      "title": "Cost Management | Payment methods",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/017-L2-payment-methods"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "cost-azure-subscriptions",
+      "kind": "other",
+      "title": "Cost Management | Azure subscriptions",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/018-L2-azure-subscriptions"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "cost-new-support-request",
+      "kind": "other",
+      "title": "Cost Management | New support request",
+      "breadcrumbs": [
+        "All services",
+        "Cost Management"
+      ],
+      "captures": [
+        "A-view-microsoft-azure-costmanagement-menu/019-L2-new-support-request"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "cost-create-budget",
+      "kind": "create",
+      "title": "Create budget",
+      "breadcrumbs": [
+        "Home",
+        "Cost Management | Budgets",
+        "Create budget"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Create a budget",
+          "sections": [
+            {
+              "title": "Budget scoping",
+              "fields": [
+                {
+                  "label": "Scope",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Filters",
+                  "type": "other",
+                  "actions": [
+                    "Add filter"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Budget Details",
+              "fields": [
+                {
+                  "label": "Name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Reset period",
+                  "type": "select",
+                  "default": "Monthly",
+                  "options": [
+                    "Monthly",
+                    "Quarterly",
+                    "Annually",
+                    "Billing month",
+                    "Billing quarter",
+                    "Billing year"
+                  ]
+                },
+                {
+                  "label": "Creation date",
+                  "type": "other"
+                },
+                {
+                  "label": "Expiration date",
+                  "type": "other"
+                }
+              ]
+            },
+            {
+              "title": "Budget Amount",
+              "fields": [
+                {
+                  "label": "Amount",
+                  "type": "number",
+                  "required": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Set alerts",
+          "sections": [
+            {
+              "title": "Alert conditions",
+              "fields": [
+                {
+                  "label": "Alert conditions",
+                  "type": "table",
+                  "columns": [
+                    "Type",
+                    "% of budget",
+                    "Amount",
+                    "Action group"
+                  ],
+                  "options": [
+                    "Actual",
+                    "Forecasted"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Alert recipients (email)",
+              "fields": [
+                {
+                  "label": "Alert recipients (email)",
+                  "type": "table",
+                  "columns": [
+                    "Email"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Language preference",
+              "fields": [
+                {
+                  "label": "Language preference",
+                  "type": "select",
+                  "default": "Default"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "submit": "Create",
+      "notes": "Footer: < Previous / Next > / Create"
+    }
+  ],
+  "gaps_note": "Cost Management menu fully crawled (18 L2 pages) but the account had no billing scope: most pages show 'Select a scope' or 'not supported'. Cost analysis view, budgets/alerts grids and Create budget are reference."
+}
