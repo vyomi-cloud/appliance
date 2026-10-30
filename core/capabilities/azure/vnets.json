@@ -1,0 +1,114 @@
+{
+ "$doc": "Vyomi capability registry — Azure Virtual networks. See aws/s3.json for the contract.",
+ "azure.vnets.vnet.crud": {
+  "title": "Virtual networks (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.address_space": {
+  "title": "Address space (IPv4 prefixes)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Only IPv4 CIDR prefixes are modelled; IPv6 address spaces are not."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.subnets": {
+  "title": "Subnets (Microsoft.Network/virtualNetworks/subnets)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Name, address range, the private-subnet (no default outbound access) flag and the Network security group association are real. NAT gateway and Route table are an honest gap — Vyomi does not model Microsoft.Network/natGateways or routeTables as resource types, so there is nothing to associate. Subnet delegation is not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.dns_servers": {
+  "title": "DNS servers (default vs. custom)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.peerings": {
+  "title": "Virtual network peerings (Microsoft.Network/virtualNetworks/virtualNetworkPeerings)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Adding a peering creates the real ARM peering object on both virtual networks (same as the portal's Add blade), with peeringState fixed at 'Connected' and peeringSyncLevel fixed at 'FullyInSync' — Vyomi has no asynchronous sync process to model, so 'Sync' is a no-op refresh."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.service_endpoints": {
+  "title": "Service endpoints (subnet properties.serviceEndpoints)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "A service endpoint is stored as a {service, locations} entry on the subnet, same as real ARM. Service endpoint policies (restricting which resource instances are reachable) are not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this virtual network",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this virtual network); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.activity_log": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.export_template": {
+  "title": "Export template",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only the ARM Template tab is generated from the live resource; Bicep and Terraform export are not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.iam": {
+  "title": "Access control (IAM)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Microsoft.Authorization/roleAssignments is only simulated at subscription scope, so role assignments/roles/deny assignments/classic administrators scoped to a single virtual network are an honest gap."
+  ]
+ },
+ "azure.vnets.tools": {
+  "title": "Diagnose and solve problems, Resource visualizer, Connection troubleshoot, Topology, Tasks, Support + Troubleshooting",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["These console tools require live network topology / traffic simulation Vyomi doesn't model."]
+ },
+ "azure.vnets.monitoring": {
+  "title": "Alerts, Metrics, Diagnostic settings, Logs",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Azure Monitor alert rules/diagnostic settings/metrics for virtual networks are not modelled."]
+ },
+ "azure.vnets.network_appliances": {
+  "title": "Azure Bastion, DDoS protection, Azure Firewall, Microsoft Defender for Cloud, Network Manager, Private endpoints",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Each of these is a separate resource type (bastionHosts, ddosProtectionPlans, azureFirewalls, privateEndpoints, networkManagers) or a security service Vyomi does not model; the virtual network create wizard's Bastion/Firewall/DDoS checkboxes and the resource menu items are an honest gap, not provisioned."
+  ]
+ },
+ "azure.vnets.connected_devices": {
+  "title": "Connected devices",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The list is a real ARM read (every Microsoft.Network/networkInterfaces resource in the subscription whose ipConfigurations[].subnet.id points at one of this vnet's subnets), so a NIC attached via ARM/the CLI/another tool shows up here. Device Type is always reported as 'Network interface' — Vyomi has no DHCP lease / ARP table to discover non-NIC clients (VMs/devices that never registered a network interface resource)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vnets.ip_address_management": {
+  "title": "IP address pools (Allocate using IP address pools) and advertised address prefixes (BGP)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Azure IPAM pool allocation and custom BGP route advertisement are advanced features Vyomi doesn't model."]
+ }
+}

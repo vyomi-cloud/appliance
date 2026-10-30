@@ -972,7 +972,6 @@ try {
     ruleGet.status === 200 && JSON.parse(ruleGet.text).properties?.direction === "Inbound", `HTTP ${ruleGet.status}`);
   await shot("25-nsg-inbound-rules");
 
-  // ── Lock created in the UI on the NSG → visible over native ARM ──────────────────────
   // ── Lock created in the UI → visible over the native ARM wire ─────────────────────────
   await openPanel("Locks");
   await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -1103,6 +1102,96 @@ try {
   await page.getByRole("heading", { name: "Azure Cosmos DB", exact: true }).waitFor({ timeout: 10000 });
   const cosmosGone = await cosmosArm("GET", `/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS}`);
   check("UI delete Azure Cosmos DB account → ARM GET 404", cosmosGone.status === 404, `HTTP ${cosmosGone.status}`);
+
+  // ── Virtual network created through the wizard → visible over native ARM, with its
+  // default subnet (a nested child resource created right after the vnet itself) ────────
+  const VNET = `vysmokevnet${n}`;
+  const VNET2 = `vywirevnet${n}`;
+  const SUBNET = `smoke-subnet-${n}`;
+  const PEERVNET = `vysmokepeer${n}`;
+  const PEERNAME = `smoke-peer-${n}`;
+  const VNETLOCK = `vyvnetlock${n}`;
+  await page.goto(UI + "#/vnets/create");
+  await page.getByLabel("Virtual network name", { exact: true }).fill(VNET);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await shot("28-vnet-create-basics");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: VNET, exact: true }).waitFor({ timeout: 10000 });
+  const vnetGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}`);
+  check("UI create virtual network → visible over native ARM", vnetGet.status === 200, `HTTP ${vnetGet.status}`);
+  const defaultSubnetGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/default`);
+  check("UI create virtual network → default subnet visible over native ARM (nested child resource)", defaultSubnetGet.status === 200, `HTTP ${defaultSubnetGet.status}`);
+  await shot("29-vnet-overview");
+
+  // ── Subnet added in the UI → visible as a native ARM nested child resource ────────────
+  await openPanel("Subnets");
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Subnet", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill(SUBNET);
+  await page.getByLabel("Starting address", { exact: true }).fill("10.0.5.0");
+  await page.getByRole("dialog").getByRole("button", { name: "Add" }).click();
+  await page.getByRole("cell", { name: SUBNET, exact: true }).waitFor({ timeout: 10000 });
+  const subnetGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/${SUBNET}`);
+  check("UI add subnet → visible over native ARM (nested child resource)", subnetGet.status === 200, `HTTP ${subnetGet.status}`);
+  await shot("30-vnet-subnets");
+
+  // ── Network interface created over the wire, attached to the subnet → shown in the UI's
+  // Connected devices list (CLI → UI direction; a subscription-wide scan filtered by
+  // ipConfigurations[].subnet.id, not a dedicated NIC console) ──────────────────────────
+  const NIC = `vysmokenic${n}`;
+  const nicPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NIC}`,
+    { location: "eastus", properties: { ipConfigurations: [{ name: "ipconfig1", properties: { subnet: { id: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/${SUBNET}` } } }] } });
+  check("ARM PUT network interface over wire", nicPut.status === 200 || nicPut.status === 201, `HTTP ${nicPut.status}`);
+  await openPanel("Connected devices");
+  await page.getByRole("cell", { name: NIC, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created network interface shown in Connected devices", true);
+  await shot("30b-vnet-connected-devices");
+
+  // ── Peering added in the UI → visible on BOTH virtual networks over native ARM ────────
+  const peerPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${PEERVNET}`, { location: "eastus" });
+  check("ARM PUT remote virtual network for peering over wire", peerPut.status === 200 || peerPut.status === 201, `HTTP ${peerPut.status}`);
+  await openPanel("Peerings");
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Peering link name", { exact: true }).fill(PEERNAME);
+  await page.getByLabel("Remote virtual network", { exact: true }).selectOption({ label: `${PEERVNET} (${RG})` });
+  await page.getByRole("dialog").getByRole("button", { name: "Add" }).click();
+  await page.getByRole("cell", { name: PEERNAME, exact: true }).waitFor({ timeout: 10000 });
+  const peeringGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/virtualNetworkPeerings/${PEERNAME}`);
+  check("UI add peering → visible over native ARM (nested child resource)", peeringGet.status === 200, `HTTP ${peeringGet.status}`);
+  const reciprocalGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${PEERVNET}/virtualNetworkPeerings/${PEERVNET}-to-${VNET}`);
+  check("UI add peering → reciprocal peering created on the remote virtual network", reciprocalGet.status === 200, `HTTP ${reciprocalGet.status}`);
+  await shot("31-vnet-peerings");
+
+  // ── Lock created in the UI → visible over the native ARM wire ─────────────────────────
+  await openPanel("Locks");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByLabel("Lock name", { exact: true }).fill(VNETLOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByText(VNETLOCK, { exact: true }).waitFor({ timeout: 10000 });
+  const vnetLockGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/providers/Microsoft.Authorization/locks/${VNETLOCK}`);
+  check("UI create lock on virtual network → visible over native ARM", vnetLockGet.status === 200, `HTTP ${vnetLockGet.status}`);
+  await shot("32-vnet-locks");
+
+  // ── Virtual network created over the wire → visible in the UI (CLI → UI), then deleted in the UI ──
+  const vnetPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET2}`, { location: "eastus" });
+  check("ARM PUT virtual network over wire", vnetPut.status === 200 || vnetPut.status === 201, `HTTP ${vnetPut.status}`);
+  await page.goto(UI + "#/vnets");
+  await page.getByRole("link", { name: VNET2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created virtual network shown in browse grid", true);
+  await shot("33-vnet-browse");
+  await page.getByRole("checkbox", { name: `Select /subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET2}` }).click();
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(VNET2);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("link", { name: VNET2, exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  let vnetGone = { status: 0 };
+  for (let i = 0; i < 20 && vnetGone.status !== 404; i++) {
+    vnetGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET2}`);
+    if (vnetGone.status !== 404) await page.waitForTimeout(500);
+  }
+  check("UI delete virtual network → ARM GET 404", vnetGone.status === 404, `HTTP ${vnetGone.status}`);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});

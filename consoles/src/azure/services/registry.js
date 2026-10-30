@@ -15,7 +15,7 @@ export const SERVICES = [
   { id: "servicebus", title: "Service Bus", type: "Microsoft.ServiceBus/namespaces", category: "Integration", icon: "servicebus", load: () => import("./servicebus/index.jsx") },
   { id: "functionapp", title: "Function App", type: "Microsoft.Web/sites (functionapp)", category: "Compute", icon: "functionapp", load: () => import("./functionapp/index.jsx") },
   { id: "appservices", title: "App Services", type: "Microsoft.Web/sites", category: "Compute", icon: "appservices", load: () => import("./appservices/index.jsx") },
-  { id: "vnets", title: "Virtual networks", type: "Microsoft.Network/virtualNetworks", category: "Networking", icon: "vnets" },
+  { id: "vnets", title: "Virtual networks", type: "Microsoft.Network/virtualNetworks", category: "Networking", icon: "vnets", load: () => import("./vnets/index.jsx") },
   { id: "nsgs", title: "Network security groups", type: "Microsoft.Network/networkSecurityGroups", category: "Networking", icon: "nsgs", load: () => import("./nsgs/index.jsx") },
   { id: "resourcegroups", title: "Resource groups", type: "Microsoft.Resources/resourceGroups", category: "Management and governance", icon: "resourcegroups", load: () => import("./resourcegroups/index.jsx") },
   { id: "acr", title: "Container registries", type: "Microsoft.ContainerRegistry/registries", category: "Containers", icon: "acr", load: () => import("./acr/index.jsx") },
