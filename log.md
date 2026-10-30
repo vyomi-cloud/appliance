@@ -1,3 +1,16 @@
+### Upstream watch — 2026-10-30T16:51:50+00:00
+
+Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**5 change(s), 0 actionable.**
+- · `announcement` AWS Glue Data Catalog now supports Apache Iceberg table optimization in the US West (N. California) Region ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/glue-data-catalog-optimizers-us-west-1/))
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-10-30T15:51:51+00:00
 
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
