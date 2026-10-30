@@ -58,6 +58,44 @@
       "hooks",
       "invocation-summary",
       "public-extensions"
+    ],
+    "vpc": [
+      "privatelink-getting-started",
+      "endpoints",
+      "endpoint-services",
+      "service-networks",
+      "lattice-services",
+      "resource-configurations",
+      "resource-gateways",
+      "lattice-target-groups",
+      "domain-verifications",
+      "dns-firewall-rule-groups",
+      "dns-firewall-domain-lists",
+      "firewalls",
+      "firewall-policies",
+      "network-firewall-rule-groups",
+      "tls-inspection-configurations",
+      "network-firewall-resource-groups",
+      "vpc-endpoint-associations",
+      "container-associations",
+      "customer-gateways",
+      "virtual-private-gateways",
+      "vpn-concentrators",
+      "vpn-connections",
+      "client-vpn-endpoints",
+      "verified-access-instances",
+      "verified-access-trust-providers",
+      "verified-access-groups",
+      "verified-access-endpoints",
+      "transit-gateways",
+      "transit-gateway-attachments",
+      "transit-gateway-policy-tables",
+      "transit-gateway-route-tables",
+      "transit-gateway-multicast",
+      "metering-policies",
+      "mirror-sessions",
+      "mirror-targets",
+      "mirror-filters"
     ]
   },
   "_planned": {
@@ -79,7 +117,8 @@
     ]
   },
   "_backlog": {
-    "aws.eventbridge": "connections + api-destinations are core EventBridge features worth building on eventbridge_core (CreateConnection / CreateApiDestination); allowlisted for v4.0.0 only"
+    "aws.eventbridge": "connections + api-destinations are core EventBridge features worth building on eventbridge_core (CreateConnection / CreateApiDestination); allowlisted for v4.0.0 only",
+    "aws.vpc": "VPC endpoints (gateway/interface) + endpoint services are common in real apps — worth modelling on vpc_core; allowlisted for v4.0.0 with PrivateLink/Lattice/Network Firewall/VPN/TGW/Verified Access/Traffic Mirroring (separate products)"
   },
   "_reference": {
     "aws": {
