@@ -23733,12 +23733,25 @@ if not _UNIFIED_INGRESS:
         _mount_new_services(app)
     except Exception as _e:   # never let this break appliance boot
         print(f"[wire_ingress] net-new service mount skipped: {_e}")
+    # v4 C0 — ONE engine: native S3 / DynamoDB / GCS wire is served by the shared
+    # conformance cores over the appliance's own (space-scoped, persisted) state —
+    # see core/wire_ingress.py + core/appliance_stores.py. Per-service opt-out:
+    # VYOMI_UNIFIED_INGRESS_SERVICES (default "s3,dynamodb,gcs"; "none" = legacy).
+    from core import wire_ingress as _wire_ingress
+    print(f"[wire_ingress] unified engine for: {sorted(_wire_ingress.unified_services()) or 'none (legacy handlers)'}")
+    if _wire_ingress.is_unified("gcs"):
+        _wire_ingress.mount_gcs(app)   # after the provider routes (folders/transfers win), before the S3 catch-all
     aws_s3.register(app, aws_xamz_dispatchers=_aws_xamz_dispatchers)
 else:
     # Retire the bespoke S3 handler; the unified ingress (final fallback catch-all)
-    # serves S3 + any native cloud wire no explicit route claims.
-    from core.wire_ingress import mount as _mount_unified_ingress
-    _mount_unified_ingress(app)
+    # serves S3 + any native cloud wire no explicit route claims. S3 / GCS / DynamoDB
+    # use the appliance-state stores (C0) so the console REST shares their state.
+    from core import wire_ingress as _wire_ingress
+    if _wire_ingress.is_unified("gcs"):
+        _wire_ingress.mount_gcs(app)
+    _wire_ingress.mount(app, _wire_ingress.build_backed_router(overrides={
+        k: v for k, v in _wire_ingress.appliance_stores().items()
+        if {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb"}[k] in _wire_ingress.unified_services()}))
 
 # v4 consoles: `/_wire/<native path>` → same app at `/<native path>` (outermost middleware; see routes/wire_prefix.py).
 try:

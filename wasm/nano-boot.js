@@ -86,7 +86,7 @@ const MODULES = [
 // The PROVEN conformance cores (vendored into wasm/core/ by build_cores.py).
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
 const CORES = [
-  "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_core.py",
+  "object_store.py", "s3_object_core.py", "nosql_store.py", "dynamodb_expr.py", "dynamodb_core.py",
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py",

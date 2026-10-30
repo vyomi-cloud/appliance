@@ -289,6 +289,10 @@ def is_gcp_native_path(path: str) -> bool:
         "/api/gcp/secrets",   # v2.0.9 console CRUD — Vault-backed Secret Manager
         "/api/gcp/kms/",      # v2.0.9 console CRUD — Vault-backed Cloud KMS
         "/api/gcp/artifactregistry/",   # Artifact Registry console CRUD
+        # v4 C0: the GCS console facade must resolve the SAME (gcp) space-scoped
+        # gcp_storage_state as the native GCS JSON API it mirrors — as an "aws"
+        # request it silently read/wrote a different space's copy.
+        "/api/console/gcs/",
     ))
 
 

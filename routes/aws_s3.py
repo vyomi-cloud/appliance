@@ -1117,12 +1117,50 @@ def _s3_sub_unsupported(params: dict) -> str | None:
     return next((k for k in _S3_SUB_UNSUPPORTED if k in params), None)
 
 
+def _register_unified_s3(app: FastAPI) -> None:
+    """v4 C0: the native S3 wire (bucket + object level) is served by the shared
+    conformance core (core/s3_object_core.py) over the appliance's own S3 state
+    (core/appliance_stores.py) — the same engine Nano and the consoles use. The
+    legacy handlers below stay reachable with VYOMI_UNIFIED_INGRESS_SERVICES
+    excluding "s3" (or VYOMI_LEGACY_WIRE=1)."""
+    from core import wire_ingress as _wi
+
+    methods = ["GET", "PUT", "POST", "DELETE", "HEAD"]
+
+    async def _serve(bucket: str, request: Request) -> Response:
+        if _is_reserved_bucket(bucket):
+            raise HTTPException(status_code=404, detail="Not found")
+        path = request.scope.get("path") or request.url.path
+        if request.method == "GET" and "/" in path.lstrip("/"):
+            # pre-v4 parity: a GCS XML-API style download (`/<gcs-bucket>/<object>`) of a
+            # bucket that is not an S3 bucket is answered from the GCS state.
+            r = _wi.appliance_router()
+            if not r.s3.bucket_exists(bucket) and r.gcs.bucket_exists(bucket):
+                key = path.lstrip("/").split("/", 1)[1]
+                ent = r.gcs.bucket_objects(bucket).get(key)
+                if ent is not None:
+                    from core.gcp_storage_core import _entry_bytes
+                    return Response(content=_entry_bytes(r.gcs, bucket, key, ent),
+                                    media_type=ent.get("contentType") or "application/octet-stream")
+        return await _wi.serve_service("s3", request, path=path)
+
+    @app.api_route("/{bucket}", methods=methods, include_in_schema=False)
+    async def s3_bucket_unified(bucket: str, request: Request) -> Response:
+        return await _serve(bucket, request)
+
+    @app.api_route("/{bucket}/{key:path}", methods=methods, include_in_schema=False)
+    async def s3_object_unified(bucket: str, key: str, request: Request) -> Response:
+        return await _serve(bucket, request)
+
+
 def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     """Register S3 REST API routes and the root AWS query-protocol dispatcher.
 
     CRITICAL: Call this LAST so the catch-all /{bucket} and
     /{bucket}/{key:path} routes don't shadow other routes.
     """
+    from core import wire_ingress as _wi
+    _s3_unified = _wi.is_unified("s3")
 
     _aws_xamz_dispatchers = aws_xamz_dispatchers or {}
 
@@ -1266,6 +1304,8 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             with open(_PRICING_HTML, "rb") as f:
                 return Response(content=f.read(), media_type="text/html", headers={"Cache-Control": "no-store, max-age=0"})
 
+        if _s3_unified:
+            return await _wi.serve_service("s3", request, path="/")
         now = _now()
         xml_parts = [
             '<?xml version="1.0" encoding="UTF-8"?>',
@@ -1277,6 +1317,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             xml_parts.append(f"<Bucket><Name>{name}</Name><CreationDate>{meta['created']}</CreationDate></Bucket>")
         xml_parts += ["</Buckets>", "</ListAllMyBucketsResult>"]
         return _xml_response("".join(xml_parts))
+
+    if _s3_unified:
+        _register_unified_s3(app)
+        return
 
     # ── S3 REST API — bucket level ──────────────────────────────────────
 

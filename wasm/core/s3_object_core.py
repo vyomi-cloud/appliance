@@ -10,9 +10,16 @@ Each operation takes plain inputs (bytes/dicts) and returns an `S3Response`
 x-amz-version-id, ListBucketResult, byte-range 206). A thin FastAPI adapter
 (Pro/Max) or the service-worker bridge (Nano) maps Request<->S3Response.
 
-Scope (v1 slice): PutObject, GetObject (+range), HeadObject, DeleteObject,
-ListObjectsV2 — the conformance core. Multipart / tagging / ACL / copy reuse
-the same helpers and slot in next.
+Scope: PutObject/GetObject(+range)/HeadObject/DeleteObject/CopyObject,
+DeleteObjects, ListObjects V1+V2 (marker / continuation-token / start-after),
+ListObjectVersions, multipart (+ListMultipartUploads), object tagging + ACL,
+bucket create/delete (name validation, BucketAlreadyOwnedByYou, BucketNotEmpty)
+and the bucket sub-resources (versioning, tagging, cors, lifecycle, encryption,
+policy, publicAccessBlock, ownershipControls, acl, notification, location,
+object-lock). v4 C0: this is now the ONE S3 engine for the offline appliance too,
+so every behaviour of the retired routes/aws_s3.py handlers lives here. The core
+calls `store.persist()` after every mutation and `store.emit_event()` for each
+S3 event (the appliance delivers notifications; Nano/tests no-op).
 """
 from __future__ import annotations
 
@@ -24,6 +31,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+from xml.etree import ElementTree as ET
 
 from core.object_store import ObjectStore
 
@@ -203,6 +211,29 @@ def _find_version(entry: dict | None, version_id: str | None) -> dict | None:
     return None
 
 
+def _version_bytes(store: ObjectStore, bucket: str, key: str, version: dict) -> bytes:
+    """A version's bytes: inline, else the substrate's external byte store."""
+    data = version.get("data")
+    if data is None or (data == b"" and int(version.get("size") or 0) > 0):
+        data = store.fetch_bytes(bucket, key)
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    return bytes(data or b"")
+
+
+def _mirror_current(store: ObjectStore, bucket: str, key: str) -> None:
+    """After a version-specific delete: re-sync the external byte store with the
+    key's (possibly older) current version, or remove it if none is visible."""
+    entry = store.bucket_objects(bucket).get(key)
+    cur = (entry or {}).get("versions", [None])[0] if isinstance(entry, dict) and entry.get("versions") else None
+    if not cur or cur.get("is_delete_marker"):
+        store.mirror_delete(bucket, key)
+    else:
+        store.mirror_put(bucket, key, _version_bytes(store, bucket, key, cur),
+                         content_type=cur.get("content_type", "application/octet-stream"),
+                         metadata=cur.get("metadata"))
+
+
 def _write_object_version(store: ObjectStore, bucket: str, key: str, version: dict,
                           replace_version_id: str | None = None) -> dict:
     if not version.get("is_delete_marker"):
@@ -248,7 +279,157 @@ def _delete_version(store: ObjectStore, bucket: str, key: str, version_id: str) 
 def _insert_simple_delete_marker(store: ObjectStore, bucket: str, key: str) -> dict:
     vid = _new_version_id(store, bucket)
     marker = _make_version_record(delete_marker=True, version_id=vid)
-    return _write_object_version(store, bucket, key, marker)
+    entry = _write_object_version(store, bucket, key, marker)
+    store.mirror_delete(bucket, key)   # the external byte store mirrors the CURRENT view
+    return entry
+
+
+# ── bucket naming / tagging / notification helpers (ported from routes/aws_s3.py) ──
+_OWNER_XML = "<Owner><ID>simulator</ID><DisplayName>cloudlearn-simulator</DisplayName></Owner>"
+
+
+def _validate_bucket_name(name: str) -> S3Response | None:
+    if len(name) < 3 or len(name) > 63:
+        return _error_xml("InvalidBucketName", "Bucket name must be between 3 and 63 characters.", f"/{name}", 400)
+    if not re.match(r"^[a-z0-9][a-z0-9\-.]*[a-z0-9]$", name):
+        return _error_xml("InvalidBucketName",
+                          "Bucket name can contain only lowercase letters, numbers, hyphens, and dots.", f"/{name}", 400)
+    return None
+
+
+def parse_tagging_xml(body: bytes) -> dict:
+    tags: dict = {}
+    if not body:
+        return tags
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        return tags
+    for tag in root.iter():
+        if _local(tag.tag) != "Tag":
+            continue
+        k = _child_text(tag, "Key")
+        if k:
+            tags[k] = _child_text(tag, "Value")
+    return tags
+
+
+def build_tagging_xml(tags: dict) -> str:
+    inner = "".join(f"<Tag><Key>{_xml_escape(k)}</Key><Value>{_xml_escape(v)}</Value></Tag>"
+                    for k, v in (tags or {}).items())
+    return f'<?xml version="1.0" encoding="UTF-8"?><Tagging xmlns="{S3_NS}"><TagSet>{inner}</TagSet></Tagging>'
+
+
+def _local(tag: str) -> str:
+    return (tag or "").rsplit("}", 1)[-1]
+
+
+def _child(elem, name: str):
+    for c in list(elem) if elem is not None else []:
+        if _local(c.tag) == name:
+            return c
+    return None
+
+
+def _children(elem, name: str) -> list:
+    return [c for c in list(elem) if _local(c.tag) == name] if elem is not None else []
+
+
+def _child_text(elem, name: str, default: str = "") -> str:
+    c = _child(elem, name)
+    return (c.text or default).strip() if c is not None else default
+
+
+def default_notifications() -> dict:
+    """The appliance's bucket["notifications"] shape (also read by its console)."""
+    return {"eventBridgeEnabled": False, "topicConfigurations": [], "queueConfigurations": [],
+            "cloudFunctionConfigurations": [], "deliveries": [], "updatedAt": _now()}
+
+
+def bucket_notifications(store: ObjectStore, bucket: str) -> dict:
+    meta = store.buckets[bucket]
+    n = meta.get("notifications")
+    if not isinstance(n, dict):
+        n = default_notifications()
+        meta["notifications"] = n
+    for k, v in default_notifications().items():
+        n.setdefault(k, v)
+    return n
+
+
+def parse_notification_xml(body: bytes) -> dict | S3Response:
+    """PutBucketNotificationConfiguration body → the stored config (or an error)."""
+    config = default_notifications()
+    if not body or not body.strip():
+        return config
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", "/", 400)
+    if _local(root.tag) != "NotificationConfiguration":
+        return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", "/", 400)
+    config["eventBridgeEnabled"] = _child(root, "EventBridgeConfiguration") is not None
+
+    def rule(el, kind: str) -> dict:
+        r = {"id": _child_text(el, "Id") or "notif-" + uuid.uuid4().hex[:12],
+             "events": [c.text.strip() for c in _children(el, "Event") if c.text and c.text.strip()],
+             "prefix": "", "suffix": ""}
+        dest = {"TopicConfiguration": ("topic", "Topic"), "QueueConfiguration": ("queue", "Queue"),
+                "CloudFunctionConfiguration": ("cloudFunction", "CloudFunction")}[kind]
+        r[dest[0]] = _child_text(el, dest[1])
+        s3key = _child(_child(el, "Filter"), "S3Key")
+        for fr in _children(s3key, "FilterRule"):
+            name = _child_text(fr, "Name").lower()
+            if name in ("prefix", "suffix"):
+                r[name] = _child_text(fr, "Value")
+        return r
+
+    config["topicConfigurations"] = [rule(e, "TopicConfiguration") for e in _children(root, "TopicConfiguration")]
+    config["queueConfigurations"] = [rule(e, "QueueConfiguration") for e in _children(root, "QueueConfiguration")]
+    # Lambda: the SDK serializes CloudFunctionConfiguration (+ <CloudFunction>).
+    config["cloudFunctionConfigurations"] = [rule(e, "CloudFunctionConfiguration")
+                                             for e in _children(root, "CloudFunctionConfiguration")]
+    return config
+
+
+def notification_xml(n: dict) -> str:
+    def filt(r: dict) -> str:
+        rules = "".join(f"<FilterRule><Name>{k}</Name><Value>{_xml_escape(r[k])}</Value></FilterRule>"
+                        for k in ("prefix", "suffix") if r.get(k))
+        return f"<Filter><S3Key>{rules}</S3Key></Filter>" if rules else ""
+
+    out = []
+    for key, tag, field_, dest in (("topicConfigurations", "TopicConfiguration", "topic", "Topic"),
+                                   ("queueConfigurations", "QueueConfiguration", "queue", "Queue"),
+                                   ("cloudFunctionConfigurations", "CloudFunctionConfiguration",
+                                    "cloudFunction", "CloudFunction")):
+        for r in n.get(key) or []:
+            out.append(f"<{tag}>" + (f"<Id>{_xml_escape(r.get('id', ''))}</Id>" if r.get("id") else "")
+                       + "".join(f"<Event>{_xml_escape(e)}</Event>" for e in r.get("events") or [])
+                       + f"<{dest}>{_xml_escape(r.get(field_, ''))}</{dest}>" + filt(r) + f"</{tag}>")
+    eb = "<EventBridgeConfiguration></EventBridgeConfiguration>" if n.get("eventBridgeEnabled") else ""
+    return (f'<?xml version="1.0" encoding="UTF-8"?><NotificationConfiguration xmlns="{S3_NS}">'
+            f'{"".join(out)}{eb}</NotificationConfiguration>')
+
+
+def _default_acl_xml() -> str:
+    return (f'<?xml version="1.0" encoding="UTF-8"?><AccessControlPolicy xmlns="{S3_NS}">{_OWNER_XML}'
+            '<AccessControlList><Grant><Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser"><ID>simulator</ID>'
+            '<DisplayName>cloudlearn-simulator</DisplayName></Grantee><Permission>FULL_CONTROL</Permission></Grant></AccessControlList></AccessControlPolicy>')
+
+
+def _done(store: ObjectStore, resp: S3Response) -> S3Response:
+    """Flush the durable substrate after a mutation (success or not — cheap)."""
+    store.persist()
+    return resp
+
+
+def _emit(store: ObjectStore, bucket: str, key: str, event: str, entry: dict | None, source: str) -> None:
+    version = (entry or {}).get("versions", [None])[0] if isinstance(entry, dict) and entry.get("versions") else None
+    try:
+        store.emit_event(bucket, key, event, version, source)
+    except Exception:   # delivery is best-effort; never fail the data-plane write
+        pass
 
 
 # ── the 5 operations (faithful ports of the handler bodies) ───────────────
@@ -260,15 +441,17 @@ def put_object(store: ObjectStore, bucket: str, key: str, body: bytes, headers: 
     content_type = headers.get("content-type", "application/octet-stream")
     storage_class = headers.get("x-amz-storage-class", "STANDARD")
     user_meta = {h[11:]: v for h, v in headers.items() if h.startswith("x-amz-meta-")}
+    tags = dict(urllib.parse.parse_qsl(headers.get("x-amz-tagging", ""), keep_blank_values=True))
     vstatus = store.versioning_status(bucket)
     vid = _new_version_id(store, bucket) if vstatus == "Enabled" else "null"
     version = _make_version_record(data=data, content_type=content_type,
-                                   storage_class=storage_class, metadata=user_meta,
+                                   storage_class=storage_class, metadata=user_meta, tags=tags,
                                    version_id=vid, delete_marker=False)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
-    return _empty_response(200, {"ETag": version["etag"],
-                                 "x-amz-version-id": entry.get("current_version_id", vid)})
+    _emit(store, bucket, key, "s3:ObjectCreated:Put", entry, "PutObject")
+    return _done(store, _empty_response(200, {"ETag": version["etag"],
+                                              "x-amz-version-id": entry.get("current_version_id", vid)}))
 
 
 def copy_object(store: ObjectStore, bucket: str, key: str, headers: dict) -> S3Response:
@@ -304,14 +487,21 @@ def copy_object(store: ObjectStore, bucket: str, key: str, headers: dict) -> S3R
         content_type = src_obj["content_type"]
         user_meta = copy.deepcopy(src_obj.get("metadata", {}))
     storage_class = headers.get("x-amz-storage-class", src_obj.get("storage_class", "STANDARD"))
+    if headers.get("x-amz-tagging-directive", "COPY").upper() == "REPLACE":
+        tags = dict(urllib.parse.parse_qsl(headers.get("x-amz-tagging", ""), keep_blank_values=True))
+    else:
+        tags = copy.deepcopy(src_obj.get("tags", {}))
 
     vstatus = store.versioning_status(bucket)
     vid = _new_version_id(store, bucket) if vstatus == "Enabled" else "null"
-    version = _make_version_record(data=src_obj["data"], content_type=content_type,
-                                   storage_class=storage_class, metadata=user_meta,
+    version = _make_version_record(data=_version_bytes(store, src_bucket, src_key, src_obj),
+                                   content_type=content_type,
+                                   storage_class=storage_class, metadata=user_meta, tags=tags,
                                    version_id=vid, delete_marker=False)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
+    _emit(store, bucket, key, "s3:ObjectCreated:Copy", entry, "CopyObject")
+    store.persist()
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            f'<CopyObjectResult xmlns="{S3_NS}">'
            f'<ETag>{version["etag"]}</ETag>'   # etag already carries literal quotes
@@ -356,7 +546,7 @@ def get_object(store: ObjectStore, bucket: str, key: str, query: dict, headers: 
         return _error_xml("NoSuchKey", "The specified key does not exist.", f"/{bucket}/{key}", 404)
     if not obj:
         return _error_xml("NoSuchKey", "The specified key does not exist.", f"/{bucket}/{key}", 404)
-    data = obj["data"]
+    data = _version_bytes(store, bucket, key, obj)
     status = 200
     content_range = None
     rng = headers.get("range")
@@ -390,15 +580,68 @@ def delete_object(store: ObjectStore, bucket: str, key: str, query: dict, header
     if vid:
         if not _delete_version(store, bucket, key, vid):
             return _error_xml("NoSuchVersion", "The specified version does not exist.", f"/{bucket}/{key}", 404)
-        return _empty_response(204, {"x-amz-version-id": vid})
+        _mirror_current(store, bucket, key)
+        _emit(store, bucket, key, "s3:ObjectRemoved:Delete", None, "DeleteObject")
+        return _done(store, _empty_response(204, {"x-amz-version-id": vid}))
     status = store.versioning_status(bucket)
     if status == "Disabled":
         store.bucket_objects(bucket).pop(key, None)
         store.mirror_delete(bucket, key)
-        return _empty_response(204)
+        _emit(store, bucket, key, "s3:ObjectRemoved:Delete", None, "DeleteObject")
+        return _done(store, _empty_response(204))
     entry = _insert_simple_delete_marker(store, bucket, key)
     vid = entry.get("current_version_id", "null") if isinstance(entry, dict) else "null"
-    return _empty_response(204, {"x-amz-delete-marker": "true", "x-amz-version-id": vid})
+    _emit(store, bucket, key, "s3:ObjectRemoved:DeleteMarkerCreated", entry, "DeleteObject")
+    return _done(store, _empty_response(204, {"x-amz-delete-marker": "true", "x-amz-version-id": vid}))
+
+
+def _list_page(store: ObjectStore, bucket: str, prefix: str, delimiter: str,
+               after: str, max_keys: int) -> tuple[list, list, bool, str]:
+    """Visible (non-delete-marker) keys > `after`, rolled up by delimiter, paged by
+    max_keys over keys + common prefixes in key order (the S3 semantics)."""
+    bucket_objects = store.bucket_objects(bucket)
+    rows: list = []          # (sort_key, kind, value)
+    seen_cp: set = set()
+    for key in sorted(bucket_objects):
+        if prefix and not key.startswith(prefix):
+            continue
+        entry = bucket_objects[key]
+        versions = entry.get("versions", []) if isinstance(entry, dict) else []
+        if not versions or versions[0].get("is_delete_marker"):
+            continue
+        if delimiter:
+            rest = key[len(prefix):]
+            if delimiter in rest:
+                cp = prefix + rest.split(delimiter, 1)[0] + delimiter
+                if cp not in seen_cp and cp > after:
+                    seen_cp.add(cp)
+                    rows.append((cp, "cp", cp))
+                continue
+        if key > after:
+            rows.append((key, "key", (key, versions[0])))
+    truncated = len(rows) > max_keys
+    rows = rows[:max_keys]
+    keys = [r[2] for r in rows if r[1] == "key"]
+    cps = [r[2] for r in rows if r[1] == "cp"]
+    return keys, cps, truncated, (rows[-1][0] if (truncated and rows) else "")
+
+
+def _max_keys(query: dict) -> int:
+    try:
+        return max(0, min(int(query.get("max-keys", 1000)), 1000))
+    except (TypeError, ValueError):
+        return 1000
+
+
+def _contents_xml(keys: list, owner: bool) -> list:
+    out = []
+    for key, v in keys:
+        out += ["<Contents>", f"<Key>{_xml_escape(key)}</Key>",
+                f"<LastModified>{v.get('last_modified', _now())}</LastModified>",
+                f"<ETag>{v.get('etag', '')}</ETag>", f"<Size>{v.get('size', 0)}</Size>",
+                f"<StorageClass>{v.get('storage_class', 'STANDARD')}</StorageClass>",
+                _OWNER_XML if owner else "", "</Contents>"]
+    return out
 
 
 def list_objects_v2(store: ObjectStore, bucket: str, query: dict) -> S3Response:
@@ -407,41 +650,44 @@ def list_objects_v2(store: ObjectStore, bucket: str, query: dict) -> S3Response:
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
     prefix = query.get("prefix", "") or ""
     delimiter = query.get("delimiter", "") or ""
-    try:
-        max_keys = int(query.get("max-keys", 1000))
-    except (TypeError, ValueError):
-        max_keys = 1000
-    bucket_objects = store.bucket_objects(bucket)
-    keys, common = [], set()
-    for key in sorted(bucket_objects):
-        entry = bucket_objects[key]
-        versions = entry.get("versions", []) if isinstance(entry, dict) else []
-        if not versions or versions[0].get("is_delete_marker"):
-            continue
-        if prefix and not key.startswith(prefix):
-            continue
-        if delimiter:
-            rest = key[len(prefix):]
-            if delimiter in rest:
-                common.add(prefix + rest.split(delimiter, 1)[0] + delimiter)
-                continue
-        keys.append((key, versions[0]))
-    truncated = len(keys) > max_keys
-    keys = keys[:max_keys]
+    token = query.get("continuation-token", "") or ""
+    start_after = query.get("start-after", "") or ""
+    max_keys = _max_keys(query)
+    keys, cps, truncated, nxt = _list_page(store, bucket, prefix, delimiter, token or start_after, max_keys)
     parts = ['<?xml version="1.0" encoding="UTF-8"?>', f'<ListBucketResult xmlns="{S3_NS}">',
-             f"<Name>{bucket}</Name>", f"<Prefix>{prefix}</Prefix>",
-             f"<KeyCount>{len(keys)}</KeyCount>", f"<MaxKeys>{max_keys}</MaxKeys>",
-             f"<Delimiter>{delimiter}</Delimiter>" if delimiter else "",
-             f"<IsTruncated>{'true' if truncated else 'false'}</IsTruncated>"]
-    for key, v in keys:
-        parts += ["<Contents>", f"<Key>{key}</Key>",
-                  f"<LastModified>{v.get('last_modified', _now())}</LastModified>",
-                  f"<ETag>{v.get('etag', '')}</ETag>", f"<Size>{v.get('size', 0)}</Size>",
-                  "<StorageClass>STANDARD</StorageClass>",
-                  "<Owner><ID>simulator</ID><DisplayName>cloudlearn-simulator</DisplayName></Owner>",
-                  "</Contents>"]
-    for cp in sorted(common):
-        parts += ["<CommonPrefixes>", f"<Prefix>{cp}</Prefix>", "</CommonPrefixes>"]
+             f"<Name>{bucket}</Name>", f"<Prefix>{_xml_escape(prefix)}</Prefix>",
+             f"<KeyCount>{len(keys) + len(cps)}</KeyCount>", f"<MaxKeys>{max_keys}</MaxKeys>",
+             f"<Delimiter>{_xml_escape(delimiter)}</Delimiter>" if delimiter else "",
+             f"<IsTruncated>{'true' if truncated else 'false'}</IsTruncated>",
+             f"<ContinuationToken>{_xml_escape(token)}</ContinuationToken>" if token else "",
+             f"<NextContinuationToken>{_xml_escape(nxt)}</NextContinuationToken>" if truncated else "",
+             f"<StartAfter>{_xml_escape(start_after)}</StartAfter>" if start_after else ""]
+    parts += _contents_xml(keys, owner=True)
+    for cp in cps:
+        parts += ["<CommonPrefixes>", f"<Prefix>{_xml_escape(cp)}</Prefix>", "</CommonPrefixes>"]
+    parts.append("</ListBucketResult>")
+    return _xml_response("".join(parts))
+
+
+def list_objects_v1(store: ObjectStore, bucket: str, query: dict) -> S3Response:
+    """GET /{bucket} without list-type=2 — ListObjects (V1, marker paging)."""
+    query = query or {}
+    if not store.bucket_exists(bucket):
+        return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    prefix = query.get("prefix", "") or ""
+    delimiter = query.get("delimiter", "") or ""
+    marker = query.get("marker", "") or ""
+    max_keys = _max_keys(query)
+    keys, cps, truncated, nxt = _list_page(store, bucket, prefix, delimiter, marker, max_keys)
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>', f'<ListBucketResult xmlns="{S3_NS}">',
+             f"<Name>{bucket}</Name>", f"<Prefix>{_xml_escape(prefix)}</Prefix>",
+             f"<Marker>{_xml_escape(marker)}</Marker>", f"<MaxKeys>{max_keys}</MaxKeys>",
+             f"<Delimiter>{_xml_escape(delimiter)}</Delimiter>" if delimiter else "",
+             f"<IsTruncated>{'true' if truncated else 'false'}</IsTruncated>",
+             f"<NextMarker>{_xml_escape(nxt)}</NextMarker>" if truncated else ""]
+    parts += _contents_xml(keys, owner=True)
+    for cp in cps:
+        parts += ["<CommonPrefixes>", f"<Prefix>{_xml_escape(cp)}</Prefix>", "</CommonPrefixes>"]
     parts.append("</ListBucketResult>")
     return _xml_response("".join(parts))
 
@@ -500,12 +746,25 @@ def create_multipart_upload(store, bucket, key, headers) -> S3Response:
         "metadata": {h[11:]: v for h, v in headers.items() if h.startswith("x-amz-meta-")},
         "storage_class": headers.get("x-amz-storage-class", "STANDARD"),
         "parts": {},
+        "initiated": _now(),
     }
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            f'<InitiateMultipartUploadResult xmlns="{S3_NS}">'
            f'<Bucket>{bucket}</Bucket><Key>{_xml_escape(key)}</Key>'
            f'<UploadId>{upload_id}</UploadId></InitiateMultipartUploadResult>')
-    return _xml_response(xml, status=200)
+    return _done(store, _xml_response(xml, status=200))
+
+
+def _parts(up: dict) -> dict:
+    """upload["parts"] keyed by int part number (a JSON-persisted upload comes back
+    with string keys)."""
+    parts = up.get("parts")
+    if not isinstance(parts, dict):
+        parts = up["parts"] = {}
+    if any(not isinstance(k, int) for k in parts):
+        parts = {int(k): v for k, v in parts.items()}
+        up["parts"] = parts
+    return parts
 
 
 def upload_part(store, bucket, key, query, body) -> S3Response:
@@ -521,8 +780,8 @@ def upload_part(store, bucket, key, query, body) -> S3Response:
         return _error_xml("InvalidArgument", "Part number must be 1..10000.", f"/{bucket}/{key}", 400)
     data = bytes(body or b"")
     etag = _etag(data)
-    up["parts"][part_number] = {"etag": etag, "data": data}
-    return _empty_response(200, {"ETag": etag})
+    _parts(up)[part_number] = {"etag": etag, "data": data, "size": len(data)}
+    return _done(store, _empty_response(200, {"ETag": etag}))
 
 
 def list_parts(store, bucket, key, query) -> S3Response:
@@ -533,7 +792,7 @@ def list_parts(store, bucket, key, query) -> S3Response:
     parts_xml = "".join(
         f"<Part><PartNumber>{n}</PartNumber><ETag>{p['etag']}</ETag>"
         f"<Size>{len(p['data'])}</Size></Part>"
-        for n, p in sorted(up["parts"].items()))
+        for n, p in sorted(_parts(up).items()))
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            f'<ListPartsResult xmlns="{S3_NS}"><Bucket>{bucket}</Bucket>'
            f'<Key>{_xml_escape(key)}</Key><UploadId>{upload_id}</UploadId>'
@@ -545,7 +804,7 @@ def abort_multipart_upload(store, bucket, key, query) -> S3Response:
     upload_id = query.get("uploadId", "")
     if _mpu(store).pop(upload_id, None) is None:
         return _error_xml("NoSuchUpload", "The specified upload does not exist.", f"/{bucket}/{key}", 404)
-    return _empty_response(204)
+    return _done(store, _empty_response(204))
 
 
 def _multipart_etag(parts: list) -> str:
@@ -563,25 +822,29 @@ def complete_multipart_upload(store, bucket, key, query, body) -> S3Response:
     # Honor the caller's part list + order when supplied; else all stored parts.
     requested = [int(n) for n in re.findall(r"<PartNumber>\s*(\d+)\s*</PartNumber>", body.decode("utf-8", "ignore"))] \
         if body else []
-    order = requested or sorted(up["parts"])
+    stored = _parts(up)
+    order = requested or sorted(stored)
     if not order:
         return _error_xml("InvalidRequest", "You must specify at least one part.", f"/{bucket}/{key}", 400)
     parts = []
     for n in order:
-        p = up["parts"].get(n)
+        p = stored.get(n)
         if p is None:
             return _error_xml("InvalidPart", f"Part {n} was not uploaded.", f"/{bucket}/{key}", 400)
         parts.append(p)
-    data = b"".join(p["data"] for p in parts)
+    data = b"".join(bytes(p["data"]) for p in parts)
     etag = _multipart_etag(parts)
     vstatus = store.versioning_status(bucket)
     vid = _new_version_id(store, bucket) if vstatus == "Enabled" else "null"
     version = _make_version_record(data=data, content_type=up["content_type"],
-                                   storage_class=up["storage_class"], metadata=up["metadata"],
+                                   storage_class=up.get("storage_class", "STANDARD"),
+                                   metadata=up.get("metadata") or {},
                                    version_id=vid, delete_marker=False, etag=etag)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
-    _write_object_version(store, bucket, key, version, replace_version_id=replace)
+    entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
     _mpu(store).pop(upload_id, None)
+    _emit(store, bucket, key, "s3:ObjectCreated:CompleteMultipartUpload", entry, "CompleteMultipartUpload")
+    store.persist()
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
            f'<CompleteMultipartUploadResult xmlns="{S3_NS}">'
            f'<Location>/{bucket}/{_xml_escape(key)}</Location>'
@@ -595,8 +858,8 @@ def list_all_buckets(store: ObjectStore) -> S3Response:
     rows = []
     buckets = getattr(store, "buckets", {}) or {}
     for name in sorted(buckets):
-        meta = buckets.get(name) if isinstance(buckets, dict) else None
-        created = (meta.get("creation_date") if isinstance(meta, dict) else None) or _now()
+        meta = buckets.get(name) if hasattr(buckets, "get") else None
+        created = ((meta.get("creation_date") or meta.get("created")) if isinstance(meta, dict) else None) or _now()
         rows.append(f"<Bucket><Name>{_xml_escape(name)}</Name>"
                     f"<CreationDate>{created}</CreationDate></Bucket>")
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
@@ -621,21 +884,43 @@ _SUBRESOURCES_STORED = {
     "cors": "NoSuchCORSConfiguration",
     "ownershipControls": "OwnershipControlsNotFoundError",
 }
+# Sub-resources whose PUT body must be well-formed XML (validated like real S3).
+_SUBRESOURCES_XML = ("tagging", "encryption", "publicAccessBlock", "lifecycle", "cors", "ownershipControls")
 _SUBRESOURCES_UNSUPPORTED = (
-    "website", "logging", "notification", "replication", "accelerate", "requestPayment",
+    "website", "logging", "replication", "accelerate", "requestPayment",
     "inventory", "analytics", "metrics", "intelligent-tiering", "object-lock",
 )
 _NS = 'xmlns="http://s3.amazonaws.com/doc/2006-03-01/"'
 
 
+def _list_multipart_uploads(store: ObjectStore, bucket: str, query: dict) -> S3Response:
+    prefix = (query or {}).get("prefix", "") or ""
+    rows = []
+    for uid, up in sorted(_mpu(store).items(), key=lambda kv: (kv[1].get("key", ""), kv[0])):
+        if up.get("bucket") != bucket or not str(up.get("key", "")).startswith(prefix):
+            continue
+        rows.append(f"<Upload><Key>{_xml_escape(up.get('key', ''))}</Key><UploadId>{uid}</UploadId>"
+                    f"<Initiator><ID>simulator</ID><DisplayName>cloudlearn-simulator</DisplayName></Initiator>"
+                    f"{_OWNER_XML}<StorageClass>{up.get('storage_class', 'STANDARD')}</StorageClass>"
+                    f"<Initiated>{up.get('initiated') or _now()}</Initiated></Upload>")
+    xml = (f'<?xml version="1.0" encoding="UTF-8"?><ListMultipartUploadsResult xmlns="{S3_NS}">'
+           f"<Bucket>{bucket}</Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker>"
+           f"<NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker>"
+           f"<Prefix>{_xml_escape(prefix)}</Prefix><MaxUploads>1000</MaxUploads>"
+           f"<IsTruncated>false</IsTruncated>{''.join(rows)}</ListMultipartUploadsResult>")
+    return _xml_response(xml)
+
+
 def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dict,
                         headers: dict, body: bytes) -> S3Response | None:
-    sub = next((k for k in ("versioning", "location", "acl", "object-lock", "versions", *_SUBRESOURCES_STORED)
-                if k in query), None)
+    sub = next((k for k in ("versioning", "location", "acl", "object-lock", "versions", "notification",
+                            "uploads", *_SUBRESOURCES_STORED) if k in query), None)
     if sub is None:
         sub = next((k for k in _SUBRESOURCES_UNSUPPORTED if k in query), None)
         if sub is None:
             return None
+    if sub == "uploads" and method != "GET":
+        return None
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist", f"/{bucket}", 404)
     meta = store.buckets[bucket]
@@ -650,7 +935,7 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
             if not m:
                 return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
             meta["versioning"] = m.group(1)
-            return _empty_response(200)
+            return _done(store, _empty_response(200))
     elif sub == "location":
         if method == "GET":
             region = meta.get("region", "")
@@ -658,19 +943,52 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
             return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><LocationConstraint {_NS}>{inner}</LocationConstraint>')
     elif sub == "acl":
         if method == "GET":
-            return _xml_response(
-                f'<?xml version="1.0" encoding="UTF-8"?><AccessControlPolicy {_NS}><Owner><ID>simulator</ID><DisplayName>cloudlearn-simulator</DisplayName></Owner>'
-                '<AccessControlList><Grant><Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser"><ID>simulator</ID>'
-                '<DisplayName>cloudlearn-simulator</DisplayName></Grantee><Permission>FULL_CONTROL</Permission></Grant></AccessControlList></AccessControlPolicy>')
+            return _xml_response(meta.get("acl") or _default_acl_xml())
+        if method == "PUT":
+            text = (body or b"").decode("utf-8", "replace").strip()
+            if text:
+                try:
+                    ET.fromstring(text)
+                except ET.ParseError:
+                    return _error_xml("MalformedACLError", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
+                meta["acl"] = text
+            canned = (headers or {}).get("x-amz-acl")
+            if canned:
+                meta["canned_acl"] = canned
+            return _done(store, _empty_response(200))
+    elif sub == "notification":
+        if method == "GET":
+            return _xml_response(notification_xml(bucket_notifications(store, bucket)))
+        if method == "PUT":
+            parsed = parse_notification_xml(body or b"")
+            if isinstance(parsed, S3Response):
+                return parsed
+            parsed["deliveries"] = bucket_notifications(store, bucket).get("deliveries", [])
+            meta["notifications"] = parsed
+            if (body or b"").strip():
+                try:
+                    store.emit_event(bucket, "", "s3:TestEvent", None, "PutBucketNotificationConfiguration")
+                except Exception:
+                    pass
+            return _done(store, _empty_response(200))
+        if method == "DELETE":
+            meta["notifications"] = default_notifications()
+            return _done(store, _empty_response(204))
     elif sub == "object-lock" and meta.get("object_lock"):
         if method == "GET":
             return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><ObjectLockConfiguration {_NS}><ObjectLockEnabled>Enabled</ObjectLockEnabled></ObjectLockConfiguration>')
     elif sub == "versions":
         if method == "GET":
             return _list_object_versions(store, bucket, query)
+    elif sub == "uploads":
+        return _list_multipart_uploads(store, bucket, query)
     elif sub in _SUBRESOURCES_STORED:
         if method == "GET":
             doc = cfg.get(sub)
+            if doc is None and sub == "tagging" and meta.get("tags"):
+                doc = build_tagging_xml(meta["tags"])          # tags set by the console REST
+            if doc is None and sub in ("cors", "lifecycle") and isinstance(meta.get(sub), str):
+                doc = meta[sub]                                   # pre-v4 appliance layout
             if doc is None:
                 return _error_xml(_SUBRESOURCES_STORED[sub], f"The {sub} configuration does not exist", f"/{bucket}", 404)
             if sub == "policy":
@@ -680,12 +998,151 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
             text = body.decode("utf-8", "replace").strip()
             if not text:
                 return _error_xml("MalformedXML" if sub != "policy" else "MalformedPolicy", "The request body is empty.", f"/{bucket}", 400)
+            if sub in _SUBRESOURCES_XML:
+                try:
+                    ET.fromstring(text)
+                except ET.ParseError:
+                    return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
             cfg[sub] = text
-            return _empty_response(204 if sub in ("tagging", "policy", "cors", "lifecycle") else 200)
+            if sub == "tagging":
+                meta["tags"] = parse_tagging_xml(text.encode("utf-8"))
+            if sub in ("cors", "lifecycle"):
+                meta.pop(sub, None)
+            return _done(store, _empty_response(204 if sub in ("tagging", "policy", "cors", "lifecycle") else 200))
         if method == "DELETE":
             cfg.pop(sub, None)
-            return _empty_response(204)
+            if sub == "tagging":
+                meta["tags"] = {}
+            if sub in ("cors", "lifecycle"):
+                meta.pop(sub, None)
+            return _done(store, _empty_response(204))
     return _error_xml("NotImplemented", f"Vyomi does not implement the bucket {sub} sub-resource yet.", f"/{bucket}?{sub}", 501)
+
+
+# ── object sub-resources (?tagging, ?acl) ─────────────────────────────────────────
+def _object_subresource(store: ObjectStore, method: str, bucket: str, key: str,
+                        query: dict, body: bytes) -> S3Response | None:
+    sub = "tagging" if "tagging" in query else ("acl" if "acl" in query else None)
+    if sub is None:
+        return None
+    if not store.bucket_exists(bucket):
+        return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    entry = _ensure_object_entry(store, bucket, key, create=False)
+    vid = query.get("versionId")
+    obj = _find_version(entry, vid) if entry else None
+    if not obj or obj.get("is_delete_marker"):
+        return _error_xml("NoSuchKey", "The specified key does not exist.", f"/{bucket}/{key}", 404)
+    extra = {"x-amz-version-id": obj.get("version_id", "null")}
+    if sub == "tagging":
+        if method == "GET":
+            return _xml_response(build_tagging_xml(obj.get("tags", {})), extra=extra)
+        if method == "PUT":
+            try:
+                ET.fromstring(body or b"")
+            except ET.ParseError:
+                return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}/{key}", 400)
+            obj["tags"] = parse_tagging_xml(body)
+        elif method == "DELETE":
+            obj["tags"] = {}
+        else:
+            return _error_xml("MethodNotAllowed", method, f"/{bucket}/{key}", 405)
+        _refresh_object_entry(entry)
+        return _done(store, _empty_response(204 if method == "DELETE" else 200, extra))
+    # acl
+    if method == "GET":
+        return _xml_response(obj.get("acl") or _default_acl_xml(), extra=extra)
+    if method == "PUT":
+        text = (body or b"").decode("utf-8", "replace").strip()
+        if text:
+            obj["acl"] = text
+        return _done(store, _empty_response(200, extra))
+    return _error_xml("MethodNotAllowed", method, f"/{bucket}/{key}", 405)
+
+
+def delete_objects(store: ObjectStore, bucket: str, body: bytes) -> S3Response:
+    """POST /{bucket}?delete — DeleteObjects (what `aws s3 rm --recursive` sends)."""
+    if not store.bucket_exists(bucket):
+        return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    try:
+        root = ET.fromstring(body or b"")
+    except ET.ParseError:
+        return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
+    quiet = _child_text(root, "Quiet").lower() == "true"
+    out = []
+    for el in _children(root, "Object"):
+        key = _child_text(el, "Key")
+        if not key:
+            continue
+        vid = _child_text(el, "VersionId")
+        if vid:
+            if not _delete_version(store, bucket, key, vid):
+                out.append(f"<Error><Key>{_xml_escape(key)}</Key><VersionId>{_xml_escape(vid)}</VersionId>"
+                           "<Code>NoSuchVersion</Code><Message>The specified version does not exist.</Message></Error>")
+                continue
+            _mirror_current(store, bucket, key)
+            _emit(store, bucket, key, "s3:ObjectRemoved:Delete", None, "DeleteObjects")
+            if not quiet:
+                out.append(f"<Deleted><Key>{_xml_escape(key)}</Key><VersionId>{_xml_escape(vid)}</VersionId></Deleted>")
+            continue
+        exists = key in store.bucket_objects(bucket)
+        if store.versioning_status(bucket) == "Disabled":
+            if exists:
+                store.bucket_objects(bucket).pop(key, None)
+                store.mirror_delete(bucket, key)
+                _emit(store, bucket, key, "s3:ObjectRemoved:Delete", None, "DeleteObjects")
+            if not quiet:
+                out.append(f"<Deleted><Key>{_xml_escape(key)}</Key></Deleted>")
+            continue
+        marker_vid = ""
+        if exists:
+            entry = _insert_simple_delete_marker(store, bucket, key)
+            marker_vid = entry.get("current_version_id", "null") if isinstance(entry, dict) else "null"
+            _emit(store, bucket, key, "s3:ObjectRemoved:DeleteMarkerCreated", entry, "DeleteObjects")
+        if not quiet:
+            dm = (f"<DeleteMarker>true</DeleteMarker><DeleteMarkerVersionId>{marker_vid}</DeleteMarkerVersionId>"
+                  if marker_vid else "")
+            out.append(f"<Deleted><Key>{_xml_escape(key)}</Key>{dm}</Deleted>")
+    xml = f'<?xml version="1.0" encoding="UTF-8"?><DeleteResult xmlns="{S3_NS}">{"".join(out)}</DeleteResult>'
+    return _done(store, _xml_response(xml))
+
+
+def _create_bucket(store: ObjectStore, bucket: str, headers: dict, body: bytes) -> S3Response:
+    bad = _validate_bucket_name(bucket)
+    if bad:
+        return bad
+    if store.bucket_exists(bucket):
+        return _error_xml("BucketAlreadyOwnedByYou",
+                          "Your previous request to create the named bucket succeeded and you already own it.",
+                          f"/{bucket}", 409)
+    store.enforce_quantity_cap("bucket")
+    m = re.search(r"<LocationConstraint>\s*([\w-]+)\s*</LocationConstraint>", (body or b"").decode("utf-8", "replace"))
+    store.create_bucket(bucket)
+    meta = store.buckets[bucket]
+    now = _now()
+    for k, v in (("region", m.group(1) if m else "us-east-1"), ("created", now), ("creation_date", now),
+                 ("access", "Bucket and objects not public"), ("versioning", "Disabled"),
+                 ("arn", f"arn:aws:s3:::{bucket}"), ("tags", {}), ("notifications", default_notifications())):
+        meta.setdefault(k, v)
+    if str((headers or {}).get("x-amz-bucket-object-lock-enabled", "")).lower() == "true":
+        meta["object_lock"] = True
+        meta["versioning"] = "Enabled"
+    canned = (headers or {}).get("x-amz-acl")
+    if canned:
+        meta["canned_acl"] = canned
+    store.bucket_objects(bucket)
+    return _done(store, _empty_response(200, {"Location": f"/{bucket}"}))
+
+
+def _delete_bucket(store: ObjectStore, bucket: str) -> S3Response:
+    if not store.bucket_exists(bucket):
+        return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    if any(isinstance(e, dict) and e.get("versions") for e in store.bucket_objects(bucket).values()):
+        return _error_xml("BucketNotEmpty", "The bucket you tried to delete is not empty.", f"/{bucket}", 409)
+    store.objects.pop(bucket, None)
+    store.buckets.pop(bucket, None)
+    for uid in [u for u, up in _mpu(store).items() if up.get("bucket") == bucket]:
+        _mpu(store).pop(uid, None)
+    return _done(store, _empty_response(204))
 
 
 def dispatch(store: ObjectStore, method: str, path: str,
@@ -693,8 +1150,10 @@ def dispatch(store: ObjectStore, method: str, path: str,
              body: bytes = b"") -> S3Response:
     query = query or {}
     headers = headers or {}
+    lheaders = {str(k).lower(): v for k, v in headers.items()}
     raw = (path or "/").lstrip("/")
     bucket, _, key = raw.partition("/")
+    bucket = urllib.parse.unquote(bucket)
     method = (method or "GET").upper()
     if not bucket:
         # Service-level root: GET / lists all buckets; others are genuinely invalid.
@@ -703,37 +1162,36 @@ def dispatch(store: ObjectStore, method: str, path: str,
         return _error_xml("InvalidRequest", "Missing bucket.", "/", 400)
     if not key:
         # bucket-level
-        sr = _bucket_subresource(store, method, bucket, query, headers, body)
+        sr = _bucket_subresource(store, method, bucket, query, lheaders, body)
         if sr is not None:
             return sr
-        if method in ("PUT",):
-            store.create_bucket(bucket)
-            m = re.search(r"<LocationConstraint>\s*([\w-]+)\s*</LocationConstraint>", (body or b"").decode("utf-8", "replace"))
-            store.buckets[bucket].setdefault("region", m.group(1) if m else "us-east-1")
-            if str((headers or {}).get("x-amz-bucket-object-lock-enabled", "")).lower() == "true":
-                store.buckets[bucket]["object_lock"] = True
-                store.buckets[bucket]["versioning"] = "Enabled"
-            return _empty_response(200, {"Location": f"/{bucket}"})
-        if method in ("GET",):
-            return list_objects_v2(store, bucket, query)
-        if method in ("HEAD",):
+        if method == "PUT":
+            return _create_bucket(store, bucket, lheaders, body)
+        if method == "GET":
+            if str(query.get("list-type", "")) == "2":
+                return list_objects_v2(store, bucket, query)
+            return list_objects_v1(store, bucket, query)
+        if method == "HEAD":
             return _empty_response(200 if store.bucket_exists(bucket) else 404)
-        if method in ("DELETE",):
-            store.objects.pop(bucket, None)
-            store.buckets.pop(bucket, None)
-            return _empty_response(204)
-        return _error_xml("MethodNotAllowed", method, f"/{bucket}", 405)
+        if method == "DELETE":
+            return _delete_bucket(store, bucket)
+        if method == "POST" and "delete" in query:
+            return delete_objects(store, bucket, body)
+        return _error_xml("MethodNotAllowed", "The specified method is not allowed against this resource.", f"/{bucket}", 405)
     # object-level
+    osr = _object_subresource(store, method, bucket, key, query, body)
+    if osr is not None:
+        return osr
     if method == "POST":
         if "uploads" in query:                          # ?uploads → initiate
             return create_multipart_upload(store, bucket, key, headers)
         if query.get("uploadId"):                        # ?uploadId → complete
             return complete_multipart_upload(store, bucket, key, query, body)
-        return _error_xml("MethodNotAllowed", method, f"/{bucket}/{key}", 405)
+        return _error_xml("MethodNotAllowed", "The specified method is not allowed against this resource.", f"/{bucket}/{key}", 405)
     if method == "PUT":
         if query.get("uploadId") and query.get("partNumber"):
-            return upload_part(store, bucket, key, query, body)
-        if any(h.lower() == "x-amz-copy-source" for h in (headers or {})):
+            return upload_part(store, bucket, key, query, _decode_aws_chunked(body or b"", lheaders))
+        if "x-amz-copy-source" in lheaders:
             return copy_object(store, bucket, key, headers)
         return put_object(store, bucket, key, body, headers)
     if method == "GET":
@@ -746,4 +1204,4 @@ def dispatch(store: ObjectStore, method: str, path: str,
         if query.get("uploadId"):
             return abort_multipart_upload(store, bucket, key, query)
         return delete_object(store, bucket, key, query, headers)
-    return _error_xml("MethodNotAllowed", method, f"/{bucket}/{key}", 405)
+    return _error_xml("MethodNotAllowed", "The specified method is not allowed against this resource.", f"/{bucket}/{key}", 405)
