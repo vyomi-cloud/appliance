@@ -1,0 +1,16 @@
+{
+ "cloud": "aws",
+ "service": "ec2",
+ "goal": "P2: native-fidelity console on real backends \u2014 fidelity >= 90%, high real coverage, no statics",
+ "must_build": [
+  "Instances list/detail (Details, Status and alarms, Monitoring, Security, Networking, Storage, Tags), Launch instance wizard (name/tags, AMI, instance type, key pair, network settings, storage, advanced) \u2014 RunInstances real; start/stop/reboot/terminate real",
+  "Security groups (+ inbound/outbound rule editors), Key pairs (create/import/delete), Volumes (create/attach/detach), AMIs, Snapshots, Elastic IPs, Network interfaces",
+  "Offline: real Docker-backed instances where the appliance has them; Nano: honest limited (no real VM) via capability registry"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/aws/<service>.json: one entry per console section with honest level + probe; tests/conformance/test_capabilities.py must pass",
+  "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
+  "Never edit .github/ (reverted before push)"
+ ]
+}

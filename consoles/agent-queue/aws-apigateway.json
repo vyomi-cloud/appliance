@@ -1,0 +1,15 @@
+{
+ "cloud": "aws",
+ "service": "apigateway",
+ "goal": "P2: native-fidelity console on real backends \u2014 fidelity >= 90%, high real coverage, no statics",
+ "must_build": [
+  "APIs list, Create API (REST / HTTP), REST API: resources tree, methods + integrations (Lambda/HTTP/mock), Deploy to stage, Stages with invoke URL that really works; HTTP API: routes, integrations, stages",
+  "API keys, Usage plans (create + associate), Custom domain names = config only or limited per registry"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/aws/<service>.json: one entry per console section with honest level + probe; tests/conformance/test_capabilities.py must pass",
+  "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
+  "Never edit .github/ (reverted before push)"
+ ]
+}

@@ -1,0 +1,15 @@
+{
+ "cloud": "aws",
+ "service": "rds",
+ "goal": "P2: native-fidelity console on real backends \u2014 fidelity >= 90%, high real coverage, no statics",
+ "must_build": [
+  "Databases list/detail (Connectivity & security, Monitoring, Logs & events, Configuration, Maintenance & backups, Tags), Create database (engine options incl. PostgreSQL/MySQL, templates, settings, instance config, storage, connectivity, auth, monitoring), Modify, Reboot, Delete with final snapshot",
+  "Snapshots (manual create/restore/delete), Subnet groups, Parameter groups (create/edit params); real SQL backends where Vyomi has them (PGlite on Nano, Postgres offline)"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/aws/<service>.json: one entry per console section with honest level + probe; tests/conformance/test_capabilities.py must pass",
+  "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
+  "Never edit .github/ (reverted before push)"
+ ]
+}

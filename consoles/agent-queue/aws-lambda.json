@@ -1,0 +1,15 @@
+{
+ "cloud": "aws",
+ "service": "lambda",
+ "goal": "P2: native-fidelity console on real backends \u2014 fidelity >= 90%, high real coverage, no statics",
+ "must_build": [
+  "Functions list, Create function (author from scratch: runtime, architecture, execution role), function detail (Code with editor + Deploy, Test events + Invoke with logs, Monitor, Configuration: general/env vars/triggers/permissions/function URL, Aliases, Versions)",
+  "Layers list/create; Invoke real in the core (python/node handlers as Vyomi supports); limitations in the registry"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/aws/<service>.json: one entry per console section with honest level + probe; tests/conformance/test_capabilities.py must pass",
+  "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
+  "Never edit .github/ (reverted before push)"
+ ]
+}
