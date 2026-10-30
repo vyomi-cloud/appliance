@@ -13,5 +13,6 @@
   "Capability feature ids MUST start with 'gcp.' (e.g. 'gcp.functions.<section>') — ids share one namespace with the AWS registry",
   "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
  ],
- "attempt": 1
+ "attempt": 2,
+ "note": "RESUME: first `git fetch origin v4/ui-gcp-functions-41039763319 && git merge --no-edit origin/v4/ui-gcp-functions-41039763319` — your previous attempt (already high fidelity). Then fix ONLY what the gate rejected: - list/detail pages without a liveness check (add \"live\" to spec-map + a fixture): function-source Liveness = add \"live\" to spec-map.json + a fixture in fixtures.mjs that creates a uniquely named resource over the native wire, and make the page really list/show it from the backend. Keep consoles/src/<cloud>/kit/Capability.jsx as on the base branch (just add your capability JSON; never re-create the file), list your service ONCE in registry.js, and register any NEW core in wasm/build_cores.py, wasm/nano-boot.js, core/nano_registry.py and core/nano_persist.py (tests/conformance/test_nano_core_manifest.py checks this). Rebuild bundles after merging (node build.mjs)."
 }
