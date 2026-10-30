@@ -72,6 +72,13 @@ jobs:
           s="${t#*-}"; echo "service=${s//__//}" >> "$GITHUB_OUTPUT"   # gcp-security__kms → security/kms
           echo "branch=v4/ui-${t}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
           git checkout -b "v4/ui-${t}-${{ github.run_id }}"
+          # Resume: a queue file may name an earlier run's branch (turn limit / gate feedback) —
+          # start from its work (merged onto the current base) instead of from scratch.
+          cf=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('continue_from',''))" "consoles/agent-queue/${t}.json" 2>/dev/null || true)
+          if [ -n "$cf" ] && git fetch -q origin "$cf"; then
+            git -c user.name=ci -c user.email=ci@local merge -q --no-edit "origin/$cf" \
+              && echo "resumed from $cf" || { git merge --abort; echo "::warning::could not resume from $cf — starting fresh"; }
+          fi
 
       # Private reference captures (screenshots + page text). Optional: without the deploy
       # key the agent works from the committed text spec alone.
