@@ -78,6 +78,8 @@ the UI → read back over the native wire, and the reverse), following the S3/Dy
 - Touch only: your service directory, `registry.js` (one line), the core(s) your service
   needs + their conformance tests, `wasm/core` re-vendor output, `ui-spec/<cloud>/<service>.json`,
   the two test files above. Other agents are building other services in parallel.
+- Never edit anything under `.github/` (CI and your own gate). Those changes are reverted
+  before push.
 - Commit on the branch the workflow gave you; the workflow opens the PR. Never push to
   `main` or to `release/v4.0.0-dev` directly.
 - End with a short summary: fidelity / coverage before → after, backend changes, honest gaps.

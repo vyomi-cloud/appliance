@@ -199,6 +199,12 @@ jobs:
         run: |
           git config user.name "vyomi-console-ui-agent"
           git config user.email "console-ui-agent@users.noreply.github.com"
+          # Agents may never change CI (their own gate): restore .github/ from the base branch.
+          # (The CI token also can't push workflow changes, which would lose the whole branch.)
+          if ! git diff --quiet origin/${{ env.BASE_BRANCH }}...HEAD -- .github; then
+            echo "::warning::agent modified .github/ — reverting those changes"
+            git checkout origin/${{ env.BASE_BRANCH }} -- .github && git commit -qm "ci: revert agent changes to .github (agents may not edit CI)" || true
+          fi
           git add static/v4 wasm/v4 && git commit -qm "build(v4): rebuild console bundles" || true
           if git diff --quiet origin/${{ env.BASE_BRANCH }}...HEAD; then echo "no changes"; exit 0; fi
           git push -q origin HEAD
