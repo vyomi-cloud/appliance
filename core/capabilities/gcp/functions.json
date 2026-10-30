@@ -1,0 +1,186 @@
+{
+ "$doc": "Vyomi capability registry — GCP Cloud Run functions (the real console folds /functions into Cloud Run; this registry covers every section of that console page set). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
+ "gcp.functions.services.crud": {
+  "title": "Services (deploy, list, get, update, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "projects.locations.services.create",
+   "projects.locations.services.get",
+   "projects.locations.services.list",
+   "projects.locations.services.patch",
+   "projects.locations.services.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.functions.services.revisions": {
+  "title": "Revisions (history, traffic splitting, rollback)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "projects.locations.services.revisions.get",
+   "projects.locations.services.revisions.list",
+   "projects.locations.services.revisions.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.functions.services.authentication": {
+  "title": "Authentication (allow unauthenticated / IAM invoker)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "projects.locations.services.getIamPolicy",
+   "projects.locations.services.setIamPolicy"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.functions.services.scaling_billing": {
+  "title": "Service scaling, ingress and CPU allocation (request-based / instance-based billing)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Billing is not metered; the console mirrors the cpuIdle setting but Vyomi does not charge for instance time."
+  ],
+  "api": [
+   "projects.locations.services.patch"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.functions.services.source": {
+  "title": "Source (inline function entry point, runtime, code)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi stores the entry point, runtime and source text on the service and returns them from the API exactly as configured, but does not build a container image or run the code; invocation is not simulated."
+  ],
+  "api": [
+   "projects.locations.services.patch"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.functions.services.yaml": {
+  "title": "YAML view of the service config",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The YAML view is generated read-only from the real service state; editing and re-applying YAML directly is not simulated — use the other tabs."
+  ],
+  "api": [
+   "projects.locations.services.get"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.functions.services.continuous_deployment": {
+  "title": "Continuously deploy from a repository (Cloud Build / GitHub)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi has no Cloud Build or source-repository integration."
+  ]
+ },
+ "gcp.functions.services.triggers": {
+  "title": "Event triggers (Eventarc) and Cloud Build source deploys",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi has no Eventarc or Cloud Build backend; only HTTP-style services are modelled."
+  ]
+ },
+ "gcp.functions.services.observability": {
+  "title": "Observability (request metrics, container instance count, logs)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi does not meter real request traffic against deployed services, so there is no metrics or log data to show."
+  ]
+ },
+ "gcp.functions.jobs.crud": {
+  "title": "Jobs (create, list, run, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "projects.locations.jobs.create",
+   "projects.locations.jobs.get",
+   "projects.locations.jobs.list",
+   "projects.locations.jobs.delete",
+   "projects.locations.jobs.run"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.functions.workerpools.crud": {
+  "title": "Worker pools (create, list, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Worker pool instance splits across revisions are not modelled; a worker pool always runs its current template."
+  ],
+  "api": [
+   "projects.locations.workerPools.create",
+   "projects.locations.workerPools.get",
+   "projects.locations.workerPools.list",
+   "projects.locations.workerPools.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ },
+ "gcp.functions.domainmappings.crud": {
+  "title": "Domain mappings (map a custom domain to a service, DNS records)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Vyomi does not provision a real TLS certificate or serve traffic on the mapped domain; the DNS records it returns are illustrative."
+  ],
+  "api": [
+   "domainmappings.create",
+   "domainmappings.get",
+   "domainmappings.list",
+   "domainmappings.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py"
+  ]
+ }
+}

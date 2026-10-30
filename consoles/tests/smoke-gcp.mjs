@@ -157,6 +157,39 @@ try {
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete bucket via UI → gone over native wire", (await wire(`/storage/v1/b/${B}`)).status === 404);
 
+  // Cloud Run functions: create a service via the UI → visible over the native Cloud Run
+  // Admin API v2 wire, then the reverse (a job created over the wire shows up in the UI).
+  const FN = `v4-gcp-fn-${Date.now() % 100000}`;
+  await page.goto(UI + "#/functions/create");
+  await page.getByRole("radio", { name: "Use an inline editor to create a function" }).check();
+  await page.getByLabel("Service name").fill(FN);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: FN, exact: true }).waitFor({ timeout: 10000 });
+  const fnWire = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${FN}`);
+  check("create function via UI → visible over native Cloud Run wire", fnWire.name?.endsWith(`/services/${FN}`), JSON.stringify(fnWire).slice(0, 200));
+  check("function deploy sets a container image (inline-source placeholder)", !!fnWire.template?.containers?.[0]?.image);
+  const fnPolicy = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${FN}:getIamPolicy`);
+  check("Allow public access → setIamPolicy grants allUsers run.invoker", (fnPolicy.bindings || []).some((b) => b.role === "roles/run.invoker" && b.members?.includes("allUsers")));
+  await shot("12-function-created");
+
+  const JOB = `v4-gcp-job-${Date.now() % 100000}`;
+  await wire("/v2/projects/vyomi-project/locations/us-central1/jobs?jobId=" + JOB, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ template: { template: { containers: [{ image: "us-docker.pkg.dev/cloudrun/container/hello" }] } } }),
+  });
+  await page.goto(UI + "#/functions/jobs");
+  await page.getByRole("cell", { name: JOB, exact: true }).waitFor({ timeout: 10000 });
+  check("job created over wire → shown in Jobs UI", true);
+  await shot("13-jobs");
+
+  await page.goto(UI + "#/functions/services");
+  await page.getByRole("checkbox", { name: `Select ${FN}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(FN);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  check("delete function via UI → gone over native wire", (await wire(`/v2/projects/vyomi-project/locations/us-central1/services/${FN}`)).status === 404);
+
   // Not-simulated gaps carry the conformance attribute
   await page.goto(UI + "#/storage/monitoring");
   await page.locator("[data-vyomi-not-simulated]").first().waitFor({ timeout: 5000 });

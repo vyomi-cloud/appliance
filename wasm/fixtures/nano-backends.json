@@ -135,6 +135,11 @@
   "category": "gcp"
  },
  {
+  "name": "gcp_run",
+  "label": "gcp_run \u00b7 RunStore",
+  "category": "gcp"
+ },
+ {
   "name": "az_blob",
   "label": "az_blob \u00b7 AzureBlobStore",
   "category": "azure"
