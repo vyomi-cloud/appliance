@@ -327,7 +327,7 @@ export default function Home() {
     return (
       <BoardItem
         i18nStrings={itemI18n}
-        header={<Header variant="h2" actions={actions[id]}>{id === "welcome" ? vy(CATALOG[id].title) : CATALOG[id].title}</Header>}
+        header={<Header variant="h2" actions={actions[id]}>{CATALOG[id].title}</Header>}
         settings={a && <ButtonDropdown variant="icon" ariaLabel={`${CATALOG[id].title} settings`} items={[{ id: "remove", text: "Remove" }]} onItemClick={() => a.removeItem()} />}
         footer={footers[id]}
       >

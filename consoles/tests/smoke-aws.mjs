@@ -188,6 +188,7 @@ try {
   const svc = `v4smokesvc${Date.now() % 100000}`;
   await kms("Encrypt", { KeyId: `alias/aws/${svc}`, Plaintext: Buffer.from("x").toString("base64") });
   await page.goto(UI + "#/kms/aws-managed-keys");
+  await page.getByPlaceholder("Filter keys by properties or tags").fill(`aws/${svc}`);   // the list paginates
   await page.getByText(`aws/${svc}`).waitFor({ timeout: 10000 });
   check("KMS Encrypt over wire against an unseen aws/ alias → AWS managed key shown in UI", true);
   await shot("14-kms-aws-managed-keys");

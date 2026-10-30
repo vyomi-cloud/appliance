@@ -1,5 +1,5 @@
 /* The Vyomi logo (static/brand/vyomi-text.png) inline in a line of text. Used ONLY for the
- * landing page's welcome line — everywhere else "Vyomi" stays plain text in the page font.
+ * AWS Console Home welcome banner header — everywhere else "Vyomi" stays plain text in the page font.
  * Drawn as a mask filled with currentColor so it matches the text colour (light and dark);
  * screen readers read "Vyomi". */
 import { Fragment } from "react";
