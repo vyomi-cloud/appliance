@@ -41,4 +41,21 @@ export default {
       body: { policy: { bindings: [{ role: "roles/monitoring.viewer", members: [member] }] } } });
     return member;
   },
+  "mon-error-entry": async (wire, uniq) => {
+    const msg = `vy-error-${uniq}`;
+    await wire("POST", "/v2/entries:write", { svc: null, body: {
+      logName: `projects/${PROJECT}/logs/vy-smoke`, resource: { type: "global" },
+      entries: [{ severity: "ERROR", textPayload: msg }],
+    } });
+    return msg;
+  },
+  "mon-alertpolicy": async (wire, uniq) => {
+    const name = `vy-policy-${uniq}`;
+    await wire("POST", `/v3/projects/${PROJECT}/alertPolicies`, { svc: null, body: {
+      displayName: name, conditions: [{ displayName: "cond", conditionThreshold: {
+        filter: 'metric.type="compute.googleapis.com/instance/cpu/utilization"', comparison: "COMPARISON_GT", thresholdValue: 0.8,
+      } }], combiner: "OR",
+    } });
+    return name;
+  },
 };

@@ -23,7 +23,8 @@ import Settings from "./Settings.jsx";
 import Permissions from "./Permissions.jsx";
 import MetricsManagement from "./MetricsManagement.jsx";
 import Integrations from "./Integrations.jsx";
-import { CostExplorer, ApplicationMonitoring, TraceExplorer, ErrorReporting } from "./SimplePages.jsx";
+import ErrorReporting from "./ErrorReporting.jsx";
+import { CostExplorer, ApplicationMonitoring, TraceExplorer } from "./SimplePages.jsx";
 import { classicHref } from "../registry.js";
 
 const ext = (text) => ({ text, href: classicHref("monitoring"), icon: OpenInNewIcon });

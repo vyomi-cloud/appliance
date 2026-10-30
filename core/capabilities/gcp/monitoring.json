@@ -205,11 +205,14 @@
  "gcp.monitoring.error-reporting": {
   "title": "Error reporting",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Error Reporting groups errors parsed out of Cloud Logging entries. Vyomi doesn't model log-based error grouping."
+   "Error Reporting groups errors parsed out of Cloud Logging entries into deduplicated signatures with occurrence counts and charts. Vyomi has no log-based error grouping, so this shows the real ERROR-and-above severity entries from Cloud Logging (the same entries:list API) as a flat, ungrouped list instead."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_logging_core.py"
   ]
  },
  "gcp.monitoring.application-monitoring": {

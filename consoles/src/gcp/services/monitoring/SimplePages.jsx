@@ -16,4 +16,3 @@ const page = (title, id, note) => function Page() {
 export const CostExplorer = page("Cost Explorer", "gcp.monitoring.cost-explorer", "Cost data");
 export const ApplicationMonitoring = page("Application monitoring", "gcp.monitoring.application-monitoring", "Application monitoring (APM)");
 export const TraceExplorer = page("Trace explorer", "gcp.monitoring.trace-explorer", "Distributed tracing");
-export const ErrorReporting = page("Error reporting", "gcp.monitoring.error-reporting", "Error reporting");

@@ -80,6 +80,15 @@ export const patchSnooze = (id, body, updateMask) => restJson("PATCH", `${v1()}/
 export const getProjectIamPolicy = () => restJson("POST", `/v1/projects/${e(getProject())}:getIamPolicy`, { body: {} });
 export const setProjectIamPolicy = (bindings) => restJson("POST", `/v1/projects/${e(getProject())}:setIamPolicy`, { body: { policy: { bindings } } });
 
+// ── Error reporting (Error Reporting reads error-severity entries out of Cloud Logging;
+// Vyomi shows the flat entries, not Google's deduplicated error-group aggregation) ──────────
+export async function listErrorEntries() {
+  const r = await restJson("POST", "/v2/entries:list", {
+    body: { resourceNames: [`projects/${e(getProject())}`], filter: 'severity>="ERROR"', orderBy: "timestamp desc", pageSize: 100 },
+  });
+  return r.entries || [];
+}
+
 // ── built-in metric catalog used by Metrics Explorer / alert condition pickers ──
 export const BUILTIN_METRICS = [
   ["compute.googleapis.com/instance/cpu/utilization", "VM Instance", "CPU utilization", "gce_instance"],

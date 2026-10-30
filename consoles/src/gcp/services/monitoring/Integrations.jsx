@@ -1,9 +1,15 @@
 /* Integrations — the Google-curated catalog of pre-built dashboards/alerts for common
  * platforms. This is reference catalog data (the same on every project), not a simulated
- * resource; installing one is out of scope (see gcp.monitoring.integrations). */
+ * resource; installing one is out of scope (see gcp.monitoring.integrations). What an
+ * install *produces* — dashboards in this project — is real, so the dashboards this
+ * project already has are surfaced below as the page's live, native-wire-backed content. */
 import { useState } from "react";
-import { Checkbox, FormControlLabel, Grid, Paper, Stack, Typography } from "@mui/material";
+import { Chip, Checkbox, FormControlLabel, Grid, Paper, Stack, Typography } from "@mui/material";
+import { useAsync } from "../../../common/useAsync.js";
 import { PageHeader, Section } from "../../kit/common.jsx";
+import { Link, hashHref } from "../../link.jsx";
+import { useProject } from "../../project.js";
+import * as api from "./api.js";
 
 const CATALOG = [
   { name: "MongoDB Atlas", platform: "Any platform", status: "Available", type: "Third-party" },
@@ -15,11 +21,13 @@ const CATALOG = [
 ];
 
 export default function Integrations() {
+  const project = useProject();
   const [platform, setPlatform] = useState([]);
   const [status, setStatus] = useState([]);
   const [type, setType] = useState([]);
   const toggle = (list, setList, v) => setList(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
   const shown = CATALOG.filter((c) => (!platform.length || platform.includes(c.platform)) && (!status.length || status.includes(c.status)) && (!type.length || type.includes(c.type)));
+  const { data: dashboards = [] } = useAsync(() => api.listDashboards(), [project]);
 
   return (
     <>
@@ -63,6 +71,17 @@ export default function Integrations() {
             </Grid>
           ))}
         </Grid>
+        <Section title="Dashboards in this project">
+          {dashboards.length ? (
+            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+              {dashboards.map((d) => (
+                <Chip key={d.name} component={Link} clickable href={hashHref("monitoring", "dashboards", d.name.split("/").pop())} label={d.displayName} />
+              ))}
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">An installed integration adds dashboards here — this project has none yet.</Typography>
+          )}
+        </Section>
       </Stack>
     </>
   );
