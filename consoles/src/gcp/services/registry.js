@@ -37,7 +37,7 @@ export const PRODUCTS = [
   { id: "security/kms", title: "Cloud KMS", description: "Manage encryption keys", category: "Security", icon: KeyIcon, classic: "kms" },
   { id: "iam-admin", title: "IAM & Admin", description: "Resource access control", category: "Management", icon: IamIcon, load: () => import("./iam-admin/index.jsx") },
   { id: "artifacts", title: "Artifact Registry", description: "Store, manage and secure container images and packages", category: "CI/CD", icon: ArtifactIcon, load: () => import("./artifacts/index.jsx") },
-  { id: "monitoring", title: "Monitoring", description: "Metrics, dashboards, alerting, uptime checks", category: "Observability", icon: ChartIcon, classic: "monitoring" },
+  { id: "monitoring", title: "Monitoring", description: "Metrics, dashboards, alerting, uptime checks", category: "Observability", icon: ChartIcon, load: () => import("./monitoring/index.jsx") },
   { id: "logs", title: "Logging", description: "Logs Explorer, routing and storage", category: "Observability", icon: LogIcon, load: () => import("./logs/index.jsx") },
 ];
 

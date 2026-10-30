@@ -1,0 +1,28 @@
+{
+  "_doc": "ui-spec page id -> v4 route. live = fixtures.mjs key proving the page isn't static (creates a uniquely named resource over the native wire, the page must show it).",
+  "overview": { "route": "#/monitoring" },
+  "dashboards": { "route": "#/monitoring/dashboards", "live": "mon-dashboard" },
+  "create-dashboard": { "route": "#/monitoring/dashboards/create" },
+  "metrics-explorer": { "route": "#/monitoring/metrics-explorer" },
+  "alerting": { "route": "#/monitoring/alerting" },
+  "alerts": { "route": "#/monitoring/alerting/alerts", "live": "mon-alertpolicy" },
+  "create-snooze": { "route": "#/monitoring/alerting/snooze/create" },
+  "create-alert-policy": { "route": "#/monitoring/alerting/policies/create", "expand": [
+    "role=button[name=\"Continue\"]", "role=button[name=\"Continue\"]", "role=button[name=\"Continue\"]"
+  ] },
+  "uptime-checks": { "route": "#/monitoring/uptime", "live": "mon-uptime" },
+  "create-uptime-check": { "route": "#/monitoring/uptime/create", "expand": [
+    "role=button[name=\"Continue\"]", "role=button[name=\"Continue\"]", "role=button[name=\"Continue\"]"
+  ] },
+  "synthetic-monitoring": { "route": "#/monitoring/synthetic-monitoring", "live": "mon-synthetic" },
+  "slos": { "route": "#/monitoring/services", "live": "mon-service" },
+  "groups": { "route": "#/monitoring/groups", "live": "mon-group" },
+  "settings": { "route": "#/monitoring/settings" },
+  "permissions": { "route": "#/monitoring/permissions", "live": "mon-principal" },
+  "metrics-management": { "route": "#/monitoring/metrics-management" },
+  "integrations": { "route": "#/monitoring/integrations", "live": "mon-dashboard" },
+  "cost-explorer": { "route": "#/monitoring/cost-explorer" },
+  "application-monitoring": { "route": "#/monitoring/application-monitoring" },
+  "trace-explorer": { "route": "#/monitoring/trace-explorer" },
+  "error-reporting": { "route": "#/monitoring/error-reporting", "live": "mon-error-entry" }
+}
