@@ -400,6 +400,30 @@ def run() -> int:
     _check("subnet carries its NSG association and address prefix",
            subnet_rec["properties"]["networkSecurityGroup"]["id"].lower() == nsg3.lower() and subnet_rec["properties"]["addressPrefix"] == "10.0.1.0/24")
 
+    # 23. Microsoft.DocumentDB/databaseAccounts listKeys / listReadOnlyKeys /
+    # listConnectionStrings / regenerateKey — the real Cosmos shape (not the generic
+    # storage-style {"keys": [...]}), and a round-trip for the account itself.
+    cosmos = _p(RG, "Microsoft.DocumentDB", "databaseAccounts", "uiccosmos")
+    r = arm.handle("PUT", cosmos, {"api-version": "2024-05-15"}, {"location": "eastus"})
+    _check("cosmos account put 200 (LRO)", r["status"] == 200 and r["body"]["name"] == "uiccosmos")
+    _check("cosmos account kind default", r["body"]["kind"] == "GlobalDocumentDB")
+    r = arm.handle("POST", cosmos + "/listKeys", {"api-version": "2024-05-15"})
+    _check("cosmos listKeys shape", r["status"] == 200
+           and all(k in r["body"] for k in ("primaryMasterKey", "secondaryMasterKey", "primaryReadonlyMasterKey", "secondaryReadonlyMasterKey")))
+    pk1 = r["body"]["primaryMasterKey"]
+    r2 = arm.handle("POST", cosmos + "/listKeys", {"api-version": "2024-05-15"})
+    _check("cosmos listKeys is stable across calls", r2["body"]["primaryMasterKey"] == pk1)
+    r = arm.handle("POST", cosmos + "/listReadOnlyKeys", {"api-version": "2024-05-15"})
+    _check("cosmos listReadOnlyKeys shape", r["status"] == 200 and set(r["body"]) == {"primaryReadonlyMasterKey", "secondaryReadonlyMasterKey"})
+    r = arm.handle("POST", cosmos + "/listConnectionStrings", {"api-version": "2024-05-15"})
+    _check("cosmos listConnectionStrings has 4 entries", r["status"] == 200 and len(r["body"]["connectionStrings"]) == 4)
+    _check("cosmos connection string embeds the primary key", pk1 in r["body"]["connectionStrings"][0]["connectionString"])
+    r = arm.handle("POST", cosmos + "/regenerateKey", {"api-version": "2024-05-15"}, {"keyKind": "primary"})
+    _check("cosmos regenerateKey succeeds", r["status"] == 200 and r["body"]["status"] == "Succeeded")
+    r = arm.handle("POST", cosmos + "/listKeys", {"api-version": "2024-05-15"})
+    _check("cosmos regenerateKey rotated only the primary key", r["body"]["primaryMasterKey"] != pk1
+           and r["body"]["secondaryMasterKey"] == r2["body"]["secondaryMasterKey"])
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 

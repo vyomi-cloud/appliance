@@ -24,6 +24,7 @@ where ``path`` is the request path (``/subscriptions/...`` or
 """
 from __future__ import annotations
 
+import base64
 import datetime
 import re
 import uuid
@@ -699,6 +700,9 @@ class AzureArm:
             ]})
         if ns == "microsoft.containerservice" and typ == "managedclusters":
             return self._aks_action(action, resource_name, parent_rid, payload or {})
+        if ns == "microsoft.documentdb" and typ == "databaseaccounts" and action in (
+                "listkeys", "listreadonlykeys", "listconnectionstrings", "regeneratekey"):
+            return self._cosmos_keys_action(action, resource_name, parent_rid, payload or {})
         if action in ("start", "poweroff", "restart", "deallocate"):
             if ns != "microsoft.compute" or typ != "virtualmachines":
                 return _err(400, "ActionNotSupported",
@@ -721,6 +725,40 @@ class AzureArm:
         if action == "listsecrets":
             return _ok({})
         return _ok({})
+
+    def _cosmos_keys_action(self, action, account_name, parent_rid, payload):
+        """Microsoft.DocumentDB/databaseAccounts listKeys / listReadOnlyKeys /
+        listConnectionStrings / regenerateKey — the real Cosmos ARM response shapes
+        (NOT the generic storage-style {"keys": [...]}), so the account's Keys blade
+        shows the same fields az cosmosdb / azure-mgmt-cosmosdb would get back."""
+        rec = self.state.get(parent_rid.lower()) if parent_rid else None
+        if not rec:
+            return _err(404, "ResourceNotFound", f"Database account '{account_name}' not found.")
+        keys = rec.setdefault("_cosmoskeys", {
+            k: base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes).decode()
+            for k in ("primaryMasterKey", "secondaryMasterKey", "primaryReadonlyMasterKey", "secondaryReadonlyMasterKey")
+        })
+        if action == "listkeys":
+            return _ok({k: keys[k] for k in ("primaryMasterKey", "secondaryMasterKey", "primaryReadonlyMasterKey", "secondaryReadonlyMasterKey")})
+        if action == "listreadonlykeys":
+            return _ok({k: keys[k] for k in ("primaryReadonlyMasterKey", "secondaryReadonlyMasterKey")})
+        if action == "listconnectionstrings":
+            uri = f"https://{account_name}.documents.azure.com:443/"
+            cs = lambda desc, key: {"connectionString": f"AccountEndpoint={uri};AccountKey={key};", "description": desc}
+            return _ok({"connectionStrings": [
+                cs("Primary SQL Connection String", keys["primaryMasterKey"]),
+                cs("Secondary SQL Connection String", keys["secondaryMasterKey"]),
+                cs("Primary Read-Only SQL Connection String", keys["primaryReadonlyMasterKey"]),
+                cs("Secondary Read-Only SQL Connection String", keys["secondaryReadonlyMasterKey"]),
+            ]})
+        # regenerateKey: body {"keyKind": "primary" | "secondary" | "primaryReadonly" | "secondaryReadonly"}
+        field = {"primary": "primaryMasterKey", "secondary": "secondaryMasterKey",
+                "primaryreadonly": "primaryReadonlyMasterKey", "secondaryreadonly": "secondaryReadonlyMasterKey",
+                }.get(str(payload.get("keyKind", "primary")).lower())
+        if not field:
+            return _err(400, "BadRequest", f"Unknown keyKind '{payload.get('keyKind')}'.")
+        keys[field] = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes).decode()
+        return _ok({"status": "Succeeded"})
 
     def _aks_action(self, action, cluster_name, parent_rid, payload):
         """POST actions on Microsoft.ContainerService/managedClusters/{name}/<action> — start/stop

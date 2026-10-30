@@ -1032,6 +1032,77 @@ try {
   const afterDelete = await graph("GET", "/users");
   const stillThere = (afterDelete.status === 200 ? JSON.parse(afterDelete.text).value : []).some((u) => u.displayName === EUSR);
   check("UI delete user → gone over native Microsoft Graph wire", !stillThere);
+  // ── Cosmos DB: account created through the wizard → visible over native ARM ───────────
+  const cosmosArm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-05-15`,
+    { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const COSMOS = `vysmokecosmos${n}`;
+  await page.goto(UI + "#/cosmos/create");
+  await page.getByRole("button", { name: "Create", exact: true }).click(); // API picker: NoSQL is selected by default
+  await page.getByLabel("Resource Group", { exact: true }).selectOption(RG);
+  await page.getByLabel("Account Name", { exact: true }).fill(COSMOS);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await shot("28-cosmos-create-review");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: COSMOS, exact: true }).waitFor({ timeout: 10000 });
+  const cosmosGet = await cosmosArm("GET", `/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS}`);
+  check("UI create Azure Cosmos DB account → visible over native ARM", cosmosGet.status === 200, `HTTP ${cosmosGet.status}`);
+  await shot("29-cosmos-overview");
+
+  // ── Data Explorer: database + container + item created through the UI → readable over
+  // the native Cosmos DB REST (SQL/Core API) data plane ───────────────────────────────────
+  const CDB = `smokedb${n}`;
+  const CCOLL = `smokecoll${n}`;
+  await openPanel("Data Explorer");
+  await page.getByLabel("Database id", { exact: true }).fill(CDB);
+  await page.getByLabel("Container id", { exact: true }).fill(CCOLL);
+  await page.getByLabel("Partition key", { exact: true }).fill("/pk");
+  await page.getByRole("button", { name: "OK", exact: true }).click();
+  await page.getByText(`${CDB} / ${CCOLL}`).waitFor({ timeout: 10000 });
+  await shot("30-cosmos-data-explorer-new-container");
+  await page.getByRole("button", { name: "New Item" }).click();
+  await page.getByLabel("New item JSON", { exact: true }).fill(JSON.stringify({ id: "smoke-item", pk: "p1", note: "smoke" }));
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByText("smoke-item", { exact: true }).waitFor({ timeout: 10000 });
+  await shot("31-cosmos-data-explorer-item");
+  const itemGet = await wire(`/dbs/${CDB}/colls/${CCOLL}/docs/smoke-item`);
+  let item = {};
+  try { item = JSON.parse(itemGet.text); } catch {}
+  check("UI create item in Data Explorer → readable over the native Cosmos DB data plane",
+    itemGet.status === 200 && item.note === "smoke", `HTTP ${itemGet.status}`);
+
+  // ── A document written directly over the native wire (SDK → UI direction) shows up when
+  // the UI's SQL query box is run ─────────────────────────────────────────────────────────
+  const wirePut = await wire(`/dbs/${CDB}/colls/${CCOLL}/docs`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "wire-item", pk: "p2", note: "from-wire" }),
+  });
+  check("native wire create document", wirePut.status === 201, `HTTP ${wirePut.status}`);
+  await page.getByLabel("SQL query", { exact: true }).fill("SELECT * FROM c WHERE c.note = 'from-wire'");
+  await page.getByRole("button", { name: "Execute" }).click();
+  await page.getByText("wire-item", { exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created document → readable via the UI's SQL query box", true);
+  await shot("32-cosmos-data-explorer-query");
+
+  // ── Lock created on the account → visible over native ARM ──────────────────────────────
+  await page.goto(UI + `#/cosmos/${RG}/${COSMOS}/locks`);
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const COSMOSLOCK = `smoke-cosmoslock-${n}`;
+  await page.getByLabel("Lock name", { exact: true }).fill(COSMOSLOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByText(COSMOSLOCK, { exact: true }).waitFor({ timeout: 10000 });
+  const cosmosLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS}/providers/Microsoft.Authorization/locks/${COSMOSLOCK}?api-version=2020-05-01`);
+  check("UI create lock on Cosmos account → visible over native ARM", cosmosLockGet.status === 200, `HTTP ${cosmosLockGet.status}`);
+  await shot("33-cosmos-locks");
+  await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS}/providers/Microsoft.Authorization/locks/${COSMOSLOCK}?api-version=2020-05-01`, { method: "DELETE" });
+
+  // ── Account deleted through the overview → gone over ARM ───────────────────────────────
+  await page.goto(UI + `#/cosmos/${RG}/${COSMOS}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete account" }).click();
+  await page.getByLabel("Confirm deletion").fill(COSMOS);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "Azure Cosmos DB", exact: true }).waitFor({ timeout: 10000 });
+  const cosmosGone = await cosmosArm("GET", `/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS}`);
+  check("UI delete Azure Cosmos DB account → ARM GET 404", cosmosGone.status === 404, `HTTP ${cosmosGone.status}`);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});
