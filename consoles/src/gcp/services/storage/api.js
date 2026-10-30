@@ -17,6 +17,22 @@ export const deleteBucket = (b) => restJson("DELETE", `/storage/v1/b/${e(b)}`);
 export const getIamPolicy = (b) => restJson("GET", `/storage/v1/b/${e(b)}/iam`);
 export const setIamPolicy = (b, policy) => restJson("PUT", `/storage/v1/b/${e(b)}/iam`, { body: policy });
 
+/** Storage Intelligence: Batch Operations jobs (bulk Delete / SetStorageClass over a
+ * bucket+prefix) and Insights dataset configs — see core/gcp_storage_core.py. */
+export async function listBatchJobs() {
+  const r = await restJson("GET", "/storage/v1/batchOperations");
+  return r.jobs || [];
+}
+export const createBatchJob = (body) => restJson("POST", "/storage/v1/batchOperations", { body });
+export const deleteBatchJob = (id) => restJson("DELETE", `/storage/v1/batchOperations/${e(id)}`);
+
+export async function listInsightsDatasets() {
+  const r = await restJson("GET", "/storage/v1/insightsDatasets");
+  return r.datasets || [];
+}
+export const createInsightsDataset = (body) => restJson("POST", "/storage/v1/insightsDatasets", { body });
+export const deleteInsightsDataset = (id) => restJson("DELETE", `/storage/v1/insightsDatasets/${e(id)}`);
+
 /** One "directory" level: folders (prefixes) + objects directly under `prefix`. */
 export async function listLevel(bucket, prefix = "") {
   const r = await restJson("GET", `/storage/v1/b/${e(bucket)}/o`, { query: { prefix, delimiter: "/" } });
@@ -31,6 +47,7 @@ export async function listAll(bucket, prefix = "") {
   return r.items || [];
 }
 export const getObject = (b, name) => restJson("GET", `/storage/v1/b/${e(b)}/o/${e(name)}`);
+export const patchObject = (b, name, body) => restJson("PATCH", `/storage/v1/b/${e(b)}/o/${e(name)}`, { body });
 export const deleteObject = (b, name) => restJson("DELETE", `/storage/v1/b/${e(b)}/o/${e(name)}`);
 export const downloadUrl = (b, name) => `${WIRE_BASE}/storage/v1/b/${e(b)}/o/${e(name)}?alt=media`;
 

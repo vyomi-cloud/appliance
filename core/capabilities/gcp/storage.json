@@ -1,0 +1,174 @@
+{
+  "$doc": "Vyomi capability registry — GCP Cloud Storage. See firestore.json for the contract. Feature ids share one namespace with the AWS registry, so they are prefixed gcp.storage.*",
+  "gcp.storage.buckets": {
+    "title": "Buckets (insert, list, get, patch/update, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Bucket create/patch/delete complete synchronously in Vyomi; the real API can return a long-running operation for cross-location moves."
+    ],
+    "tests": ["tests/conformance/test_gcs_bucket_config_core.py", "tests/conformance/test_gcp_storage_core.py"]
+  },
+  "gcp.storage.objects": {
+    "title": "Objects (list, get, insert — simple/multipart/resumable — delete, compose, range downloads, folders)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_gcp_storage_core.py", "tests/conformance/test_gcs_multipart_upload_core.py", "tests/conformance/test_gcs_resumable_core.py"]
+  },
+  "gcp.storage.lifecycle": {
+    "title": "Lifecycle rules (Delete / SetStorageClass actions)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Age, createdBefore, matchesPrefix/Suffix, matchesStorageClass and the custom-time conditions are evaluated against real object fields and really delete or transition objects (swept lazily on every request against the bucket's objects, not once a day like the real API).",
+      "numNewerVersions, daysSinceNoncurrentTime and noncurrentTimeBefore never match — Vyomi keeps no noncurrent object versions to evaluate them against.",
+      "The AbortIncompleteMultipartUpload action never fires — Vyomi's resumable-upload sessions carry no persistent \"incomplete upload\" record to sweep."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_lifecycle_core.py"]
+  },
+  "gcp.storage.permissions": {
+    "title": "Bucket IAM policy (getIamPolicy / setIamPolicy), uniform/fine-grained access control, public access prevention",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "Policies, the access-control mode and public access prevention round-trip through getIamPolicy/setIamPolicy/buckets.patch exactly as a client sets them, but Vyomi never checks them on a request — every object read/write it allows is unconditional."
+    ],
+    "tests": ["tests/conformance/test_gcs_bucket_config_core.py"]
+  },
+  "gcp.storage.retention": {
+    "title": "Bucket retention policy",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_gcs_bucket_config_core.py"]
+  },
+  "gcp.storage.object-holds": {
+    "title": "Object holds (temporaryHold / eventBasedHold) and per-object retention (Object Retention Lock)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "A locked bucket retention policy can't be shortened or removed in real GCS; Vyomi enforces the retention window itself but does not separately model the isLocked governance step."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_holds_core.py"]
+  },
+  "gcp.storage.batch-operations": {
+    "title": "Batch Operations (bulk Delete / SetStorageClass jobs over a bucket+prefix)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Modeled as a sub-resource of Vyomi's own Cloud Storage wire (/storage/v1/batchOperations) rather than the real separate storagebatchoperations.googleapis.com service, since no google-cloud-storage client calls it directly.",
+      "A job runs to completion synchronously and returns SUCCEEDED immediately; the real API is asynchronous and reports RUNNING while in flight."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_intelligence_core.py"]
+  },
+  "gcp.storage.insights-datasets": {
+    "title": "Insights datasets (Storage Intelligence inventory/usage dataset configs)",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "Dataset configs are accepted and listed exactly like the real create/list calls, but Vyomi never runs the underlying export — no BigQuery dataset is populated.",
+      "Modeled as a sub-resource of Vyomi's own wire (/storage/v1/insightsDatasets) rather than the real separate storageinsights.googleapis.com service."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_intelligence_core.py"]
+  },
+  "gcp.storage.cors": {
+    "title": "Cross-origin resource sharing (CORS) configuration",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "The cors list round-trips through buckets.patch exactly as a client sets it, but Vyomi's wire layer never adds Access-Control-* response headers or blocks a cross-origin browser request — the configuration is not enforced."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_config_sections_core.py"]
+  },
+  "gcp.storage.static-website": {
+    "title": "Static website configuration (main page suffix / 404 page)",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "The website config round-trips through buckets.patch exactly as a client sets it, but Vyomi does not run the separate public per-bucket static-website HTTP host (storage.googleapis.com website serving) — the suffix object and 404 page are never actually served."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_config_sections_core.py"]
+  },
+  "gcp.storage.requester-pays": {
+    "title": "Requester Pays billing",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "The billing.requesterPays flag round-trips through buckets.patch exactly as a client sets it, but Vyomi has no billing account or distinct \"requester\" identity separate from the bucket owner to charge — access is never actually billed to a requester."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_config_sections_core.py"]
+  },
+  "gcp.storage.versioning": {
+    "title": "Object versioning (noncurrent object versions)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Vyomi's GCS core keeps only the latest generation of an object; it has no store for noncurrent versions, so turning on versioning cannot preserve, list or restore older generations."
+    ]
+  },
+  "gcp.storage.soft-delete": {
+    "title": "Soft delete policy (for data recovery)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Soft delete restores a deleted/overwritten object from its prior generation within a retention window; it depends on the same noncurrent-version history Vyomi does not keep (see gcp.storage.versioning), so a deleted object cannot be recovered."
+    ]
+  },
+  "gcp.storage.encryption": {
+    "title": "Data encryption with customer-managed encryption keys (CMEK)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Vyomi always stores object data under Google-managed encryption; selecting a Cloud KMS key is not modeled since the GCS core does not delegate envelope encryption to Cloud KMS on object writes."
+    ]
+  },
+  "gcp.storage.hierarchical-namespace": {
+    "title": "Hierarchical namespace (HNS buckets with true folders)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Vyomi's GCS core models every bucket as a flat key-value namespace (folders are zero-byte \"name/\" placeholder objects); it has no HNS bucket mode with atomic folder rename/delete and folder-level IAM."
+    ]
+  },
+  "gcp.storage.tags": {
+    "title": "Resource tags (GCP-wide tag bindings, distinct from labels)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Tags are bindings against Resource Manager's separate Tags API (tagKeys/tagValues); Vyomi's GCS core has no integration with that service, so tags can't be attached to a bucket."
+    ]
+  },
+  "gcp.storage.security-insights": {
+    "title": "Security insights (bucket column) and Advisor recommendations",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Both are produced by IAM Recommender / Security Command Center analysis and usage-pattern ML over real production traffic; Vyomi runs no such analysis, so it has no findings or recommendations to show."
+    ]
+  },
+  "gcp.storage.observability": {
+    "title": "Monitoring (Cloud Monitoring charts: request/error rates, bandwidth)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Vyomi does not meter per-request traffic over time, so it has no time-series data to chart for request counts, error rates or bandwidth — including the Time range selector and the \"Filter by: All locations\" control, which have nothing to filter."
+    ]
+  },
+  "gcp.storage.operations": {
+    "title": "Long-running bucket operations (rename/relocate bucket, Turbo replication switch)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Vyomi's bucket operations complete synchronously (see gcp.storage.buckets); it keeps no separate long-running-operation resource to list or poll."
+    ]
+  },
+  "gcp.storage.inventory-reports": {
+    "title": "Inventory reports (per-bucket Storage Insights object inventory, CSV/Parquet to a destination bucket)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Inventory reports are a separate Storage Insights sub-product (distinct from gcp.storage.insights-datasets' project-level dataset configs); Vyomi has no report generator to run on a schedule and write CSV/Parquet output to a destination bucket."
+    ]
+  },
+  "gcp.storage.project-settings": {
+    "title": "Project access settings (public access prevention for the project, Cloud Storage service account, Cloud Storage IDs)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_gcs_bucket_config_core.py"]
+  },
+  "gcp.storage.object-enrichments": {
+    "title": "Object enrichments (Smart Storage — Document AI classification/extraction on upload)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Enrichments run Document AI (and other Vertex AI pipelines) against newly uploaded objects; Vyomi has no ML inference engine to classify or extract from object content."
+    ]
+  },
+  "gcp.storage.interoperability": {
+    "title": "Interoperable access (HMAC keys for service/user accounts)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "HMAC key issuance is a separate Cloud Storage Interoperability / IAM credentials flow; Vyomi's GCS core has no HMAC keystore or signature verification for the S3-compatible XML API that these keys authenticate against."
+    ]
+  }
+}

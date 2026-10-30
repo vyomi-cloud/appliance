@@ -8,7 +8,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { fmtDate, PageHeader } from "../../kit/common.jsx";
+import { fmtDate, fmtDuration, PageHeader } from "../../kit/common.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
@@ -57,7 +57,12 @@ export default function Buckets() {
           { id: "public", header: "Public access", cell: (b) => api.publicAccess(b, b._policy) },
           { id: "access", header: "Access control", sortValue: (b) => api.accessControl(b), cell: (b) => api.accessControl(b) },
           { id: "protection", header: "Protection", cell: (b) => api.protection(b) },
+          { id: "hns", header: "Hierarchical namespace", cell: () => "Disabled" },
+          { id: "bucketRetention", header: "Bucket retention", sortValue: (b) => Number(b.retentionPolicy?.retentionPeriod || 0), cell: (b) => b.retentionPolicy ? fmtDuration(b.retentionPolicy.retentionPeriod) : "Not set" },
           { id: "lifecycle", header: "Lifecycle rules", cell: (b) => api.lifecycleSummary(b) },
+          { id: "tags", header: "Tags", cell: () => "—" },
+          { id: "encryption", header: "Encryption", cell: () => "Google-managed key" },
+          { id: "security", header: "Security insights", cell: () => "—" },
           { id: "labels", header: "Labels", cell: labels },
         ]}
         empty={
