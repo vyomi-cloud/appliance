@@ -28,7 +28,7 @@
   "vm-backup": { "route": "#/vms/uic-rg/uicvm/backup", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },
   "vm-disaster-recovery": { "route": "#/vms/uic-rg/uicvm/disasterrecovery", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },
   "vm-auto-shutdown": { "route": "#/vms/uic-rg/uicvm/autoshutdown", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },
-  "vm-run-command": { "route": "#/vms/uic-rg/uicvm/runcommand", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },
+  "vm-run-command": { "route": "#/vms/uic-rg/uicvm/runcommand", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" }, "honest_page": true },
   "vm-updates": { "route": "#/vms/uic-rg/uicvm/updates", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },
   "vm-inventory": { "route": "#/vms/uic-rg/uicvm/inventory", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },
   "vm-change-tracking": { "route": "#/vms/uic-rg/uicvm/changetracking", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },

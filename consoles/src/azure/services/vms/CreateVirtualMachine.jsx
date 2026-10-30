@@ -45,6 +45,7 @@ export default function CreateVirtualMachine() {
   const set = (k) => (_, d) => setF((x) => ({ ...x, [k]: d.value }));
   const checked = (k) => (_, d) => setF((x) => ({ ...x, [k]: !!d.checked }));
   const rg = newRg ?? f.resourceGroup;
+  const sizes = useAsync(() => api.listSizesForLocation(f.location), [f.location]);
 
   const basicsErrors = () => {
     const e = [];
@@ -107,7 +108,7 @@ export default function CreateVirtualMachine() {
         <FormRow label="VM architecture"><RadioGroup layout="horizontal" value={f.architecture} onChange={set("architecture")} aria-label="VM architecture"><Radio value="Arm64" label="Arm64" /><Radio value="x64" label="x64" /></RadioGroup></FormRow>
         <FormRow label="Run with Azure Spot discount"><Checkbox checked={f.spot} onChange={checked("spot")} aria-label="Run with Azure Spot discount" /></FormRow>
         <FormRow label="Size" required htmlFor="vm-size">
-          <Select id="vm-size" value={f.size} onChange={set("size")} aria-label="Size">{api.SIZES.map((s) => <option key={s.size} value={s.size}>{s.size} ({s.vcpu} vcpu, {s.ramGiB} GiB memory)</option>)}</Select>
+          <Select id="vm-size" value={f.size} onChange={set("size")} aria-label="Size">{(sizes.data || []).map((s) => <option key={s.name} value={s.name}>{s.name} ({s.numberOfCores} vcpu, {s.memoryInMB / 1024} GiB memory)</option>)}</Select>
         </FormRow>
       </FormSection>
       <FormSection title="Administrator account">

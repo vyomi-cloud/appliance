@@ -24,7 +24,7 @@
   "title": "Size (list sizes, resize)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "The size list is a curated sample of real Azure VM size names (core/instance_catalog.py), not the full regional catalog, and Cost/month is a rough estimate derived from vCPU/RAM rather than live Azure retail pricing."
+   "The size list is a curated sample of real Azure VM size names and vCPU/RAM (core/instance_catalog.py) served over GET .../virtualMachines/{vm}/vmSizes, not the full regional catalog. Series and Max IOPS are derived server-side from each size's vCPU count/family rather than Azure's published per-SKU specs, and Cost/month is a rough estimate derived from vCPU/RAM rather than live Azure retail pricing."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },

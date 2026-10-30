@@ -73,34 +73,20 @@ export const listActivityLog = async (rg, name) => {
   return (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/eventtypes/management/values`, { query })).value || [];
 };
 
-// ── Size catalog (core/instance_catalog.py's AZURE sample, mirrored for the UI — see
-// azure.vms.size: a curated sample, not the full regional catalog) ─────────────────────
-export const SIZES = [
-  { size: "Standard_B1s", type: "B-series", vcpu: 1, ramGiB: 1, dataDisks: 2, maxIops: 400, localGiB: 4 },
-  { size: "Standard_B1ms", type: "B-series", vcpu: 1, ramGiB: 2, dataDisks: 2, maxIops: 400, localGiB: 4 },
-  { size: "Standard_B2s", type: "B-series", vcpu: 2, ramGiB: 4, dataDisks: 4, maxIops: 1300, localGiB: 8 },
-  { size: "Standard_B2ms", type: "B-series", vcpu: 2, ramGiB: 8, dataDisks: 4, maxIops: 1300, localGiB: 16 },
-  { size: "Standard_B4ms", type: "B-series", vcpu: 4, ramGiB: 16, dataDisks: 8, maxIops: 2400, localGiB: 32 },
-  { size: "Standard_B8ms", type: "B-series", vcpu: 8, ramGiB: 32, dataDisks: 16, maxIops: 4800, localGiB: 64 },
-  { size: "Standard_D2s_v5", type: "Dsv5-series", vcpu: 2, ramGiB: 8, dataDisks: 4, maxIops: 3750, localGiB: 0 },
-  { size: "Standard_D4s_v5", type: "Dsv5-series", vcpu: 4, ramGiB: 16, dataDisks: 8, maxIops: 6400, localGiB: 0 },
-  { size: "Standard_D8s_v5", type: "Dsv5-series", vcpu: 8, ramGiB: 32, dataDisks: 16, maxIops: 12800, localGiB: 0 },
-  { size: "Standard_D16s_v5", type: "Dsv5-series", vcpu: 16, ramGiB: 64, dataDisks: 32, maxIops: 25600, localGiB: 0 },
-  { size: "Standard_D32s_v5", type: "Dsv5-series", vcpu: 32, ramGiB: 128, dataDisks: 32, maxIops: 51200, localGiB: 0 },
-  { size: "Standard_F2s_v2", type: "Fsv2-series", vcpu: 2, ramGiB: 4, dataDisks: 4, maxIops: 3750, localGiB: 0 },
-  { size: "Standard_F4s_v2", type: "Fsv2-series", vcpu: 4, ramGiB: 8, dataDisks: 8, maxIops: 6400, localGiB: 0 },
-  { size: "Standard_F8s_v2", type: "Fsv2-series", vcpu: 8, ramGiB: 16, dataDisks: 16, maxIops: 12800, localGiB: 0 },
-  { size: "Standard_F16s_v2", type: "Fsv2-series", vcpu: 16, ramGiB: 32, dataDisks: 32, maxIops: 25600, localGiB: 0 },
-  { size: "Standard_E2s_v5", type: "Esv5-series", vcpu: 2, ramGiB: 16, dataDisks: 4, maxIops: 3750, localGiB: 0 },
-  { size: "Standard_E4s_v5", type: "Esv5-series", vcpu: 4, ramGiB: 32, dataDisks: 8, maxIops: 6400, localGiB: 0 },
-  { size: "Standard_E8s_v5", type: "Esv5-series", vcpu: 8, ramGiB: 64, dataDisks: 16, maxIops: 12800, localGiB: 0 },
-  { size: "Standard_E16s_v5", type: "Esv5-series", vcpu: 16, ramGiB: 128, dataDisks: 32, maxIops: 25600, localGiB: 0 },
-  { size: "Standard_L8s_v3", type: "Lsv3-series", vcpu: 8, ramGiB: 64, dataDisks: 16, maxIops: 20000, localGiB: 1920 },
-  { size: "Standard_NC6", type: "NC-series", vcpu: 6, ramGiB: 56, dataDisks: 24, maxIops: 20000, localGiB: 340 },
-];
+// ── Size catalog: real ARM Microsoft.Compute/locations/{location}/vmSizes (subscription +
+// location scoped) and .../virtualMachines/{vm}/vmSizes (resource-scoped, for an existing
+// VM's Resize blade) — core/instance_catalog.py's AZURE sample through the ARM engine; no
+// size list in the console itself (azure.vms.size: a curated sample, not the full regional
+// catalog). Each entry's shape is real ARM (name, numberOfCores, memoryInMB, maxDataDiskCount,
+// osDiskSizeInMB, resourceDiskSizeInMB) plus two reference-only extras (series, maxIops) the
+// backend derives from the same catalog for the console's table.
+const SIZE_API_VERSION = "2023-09-01";
+export const listSizesForLocation = async (location) =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Compute/locations/${location}/vmSizes`, { query: { "api-version": SIZE_API_VERSION } })).value || [];
+export const listSizesForVm = async (rg, name) =>
+  (await restJson("GET", `${ARM.path(rg, name)}/vmSizes`, { query: { "api-version": SIZE_API_VERSION } })).value || [];
 /** A rough, clearly-labelled monthly cost estimate (vCPU + RAM linear model) — not live Azure retail pricing. */
-export const estMonthlyCost = (s) => Math.round(s.vcpu * 18 + s.ramGiB * 4.5);
-export const lookupSize = (name) => SIZES.find((s) => s.size === name) || { size: name, type: "--", vcpu: "--", ramGiB: "--", dataDisks: "--", maxIops: "--", localGiB: "--" };
+export const estMonthlyCost = (s) => Math.round(s.numberOfCores * 18 + (s.memoryInMB / 1024) * 4.5);
 
 // ── create-VM form model → ARM bodies (VM + NIC + optional NSG) ─────────────────────────
 export function toVmBody(f) {

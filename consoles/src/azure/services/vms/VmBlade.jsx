@@ -101,7 +101,7 @@ export default function VmBlade({ params }) {
       autoshutdown: () => <AutoShutdown a={a} reload={reload} />,
       connect: () => <Connect a={a} />,
       networksettings: () => <NetworkSettings a={a} />,
-      runcommand: () => <RunCommand a={a} />,
+      runcommand: () => <RunCommand />,
       exporttemplate: () => <ExportTemplate a={a} />,
     }[panel];
     body = P ? P() : (
@@ -213,7 +213,10 @@ function Overview({ a, reload, self }) {
 function PropertiesTabPanel({ a, nic }) {
   const ipc = nic?.properties?.ipConfigurations?.[0]?.properties;
   const sp = a.properties?.storageProfile || {};
-  const size = api.lookupSize(a.properties?.hardwareProfile?.vmSize);
+  const vmSize = a.properties?.hardwareProfile?.vmSize;
+  const sizes = useAsync(() => api.listSizesForVm(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const match = sizes.data?.find((s) => s.name === vmSize);
+  const size = { size: vmSize, vcpu: match?.numberOfCores ?? "--", ramGiB: match ? match.memoryInMB / 1024 : "--" };
   return (
     <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 16 }}>
       <section className="vy-section"><h3>Virtual machine</h3>
@@ -490,13 +493,15 @@ function ActivityLog({ a }) {
   );
 }
 
-// ── Size (core/instance_catalog.py's AZURE sample, mirrored in api.js's SIZES) ─────────
+// ── Size — real ARM GET .../virtualMachines/{vm}/vmSizes (azure.vms.size), backed by
+// core/instance_catalog.py's AZURE sample through the ARM engine. No size list in the console. ──
 function Size({ a, reload }) {
   const notify = useNotify();
   const [sel, setSel] = useState(a.properties?.hardwareProfile?.vmSize);
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(false);
-  const rows = api.SIZES.filter((s) => s.size.toLowerCase().includes(filter.trim().toLowerCase()));
+  const sizes = useAsync(() => api.listSizesForVm(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const rows = (sizes.data || []).filter((s) => s.name.toLowerCase().includes(filter.trim().toLowerCase()));
   const resize = async () => {
     setBusy(true);
     try { await api.updateVm(a.resourceGroup, a.name, { properties: { hardwareProfile: { vmSize: sel } } }); notify.success(`Resized '${a.name}' to ${sel}.`, "Resize succeeded"); reload(); }
@@ -506,6 +511,7 @@ function Size({ a, reload }) {
   return (
     <CapabilityContainer id="azure.vms.size" title={`${a.name} | Size`} actions={<ToolbarButton disabled={busy || sel === a.properties?.hardwareProfile?.vmSize} onClick={resize}>{busy ? "Resizing..." : "Resize"}</ToolbarButton>}>
       <div className="vy-filters"><Input size="small" style={{ width: 260 }} placeholder="Search by VM size..." value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Search by VM size..." /></div>
+      {sizes.loading && !sizes.data ? <Loading /> : (
       <Table size="small" aria-label="VM sizes" className="vy-grid">
         <TableHeader><TableRow>
           <TableHeaderCell style={{ width: 32 }} /><TableHeaderCell>VM Size</TableHeaderCell><TableHeaderCell>Type</TableHeaderCell><TableHeaderCell>vCPUs</TableHeaderCell>
@@ -514,14 +520,16 @@ function Size({ a, reload }) {
         </TableRow></TableHeader>
         <TableBody>
           {rows.map((s) => (
-            <TableRow key={s.size} aria-selected={sel === s.size}>
-              <TableCell><input type="radio" name="vmsize" checked={sel === s.size} onChange={() => setSel(s.size)} aria-label={`Select ${s.size}`} /></TableCell>
-              <TableCell>{s.size}</TableCell><TableCell>{s.type}</TableCell><TableCell>{s.vcpu}</TableCell><TableCell>{s.ramGiB}</TableCell>
-              <TableCell>{s.dataDisks}</TableCell><TableCell>{s.maxIops}</TableCell><TableCell>{s.localGiB}</TableCell><TableCell>${api.estMonthlyCost(s)} (estimate)</TableCell>
+            <TableRow key={s.name} aria-selected={sel === s.name}>
+              <TableCell><input type="radio" name="vmsize" checked={sel === s.name} onChange={() => setSel(s.name)} aria-label={`Select ${s.name}`} /></TableCell>
+              <TableCell>{s.name}</TableCell><TableCell>{s.series}</TableCell><TableCell>{s.numberOfCores}</TableCell><TableCell>{s.memoryInMB / 1024}</TableCell>
+              <TableCell>{s.maxDataDiskCount}</TableCell><TableCell>{s.maxIops}</TableCell><TableCell>{s.resourceDiskSizeInMB / 1024}</TableCell>
+              <TableCell>${api.estMonthlyCost(s)} (estimate)</TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+      )}
     </CapabilityContainer>
   );
 }
@@ -862,43 +870,11 @@ function NetworkSettings({ a }) {
   );
 }
 
-// ── Run command — guest command execution needs a live VM agent (honest gap); the command
-// catalog itself is real, static reference content, same convention as the create wizard's
-// image/size dropdowns. ──────────────────────────────────────────────────────────────────
-const RUN_COMMANDS = [
-  { name: "RunShellScript", description: "Run a shell script on a Linux VM" },
-  { name: "IPConfig", description: "Show detailed TCP/IP configuration for all adapters" },
-  { name: "EnableRemotePS", description: "Enable remote PowerShell for a Windows VM" },
-  { name: "RDPSettings", description: "Enable RDP for a Windows VM" },
-  { name: "ResetAccessForWindowsVM", description: "Reset the local administrator password on a Windows VM" },
-];
-
-function RunCommand({ a }) {
-  const [filter, setFilter] = useState("");
-  const [script, setScript] = useState("");
-  const [gap, setGap] = useState(false);
-  const cap = capability("azure.vms.run_command");
-  const rows = RUN_COMMANDS.filter((c) => c.name.toLowerCase().includes(filter.trim().toLowerCase()));
-  return (
-    <>
-      <div className="vy-panel-title">Run command</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Run command commands"><ToolbarButton icon={<Add20Regular />} disabled>Create</ToolbarButton><ToolbarButton icon={<ArrowClockwise20Regular />}>Refresh</ToolbarButton></div>
-      <div className="vy-filters"><Input size="small" style={{ width: 260 }} placeholder="Filter by name" value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Filter by name" /></div>
-      <Table size="small" className="vy-grid"><TableHeader><TableRow><TableHeaderCell>Name</TableHeaderCell><TableHeaderCell>Description</TableHeaderCell></TableRow></TableHeader>
-        <TableBody>{rows.map((c) => <TableRow key={c.name}><TableCell>{c.name}</TableCell><TableCell>{c.description}</TableCell></TableRow>)}</TableBody>
-      </Table>
-      <section className="vy-section" style={{ marginTop: 16 }}><h3>Run Command Script</h3>
-        <Field label="Linux Shell Script"><Textarea value={script} onChange={(_, d) => setScript(d.value)} aria-label="Linux Shell Script" style={{ width: "100%", minHeight: 100, fontFamily: "monospace" }} /></Field>
-        <Button appearance="primary" style={{ marginTop: 8 }} onClick={() => setGap(true)}>Run</Button>
-      </section>
-      <Dialog open={gap} onOpenChange={(_, d) => !d.open && setGap(false)}>
-        <DialogSurface aria-label="Run">
-          <DialogBody><DialogTitle>Run</DialogTitle><DialogContent><NotSimulated feature="Running a command inside the guest OS" note={cap?.limitations?.join(" ")} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(false)}>Close</Button></DialogActions></DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </>
-  );
+// ── Run command — honest gap: guest command execution needs a live VM agent, which no
+// virtual machine in Vyomi has (metadata-only). Renders ONLY its title and a NotSimulated
+// note, never a skeleton of the real command list/script editor (see azure.vms.run_command). ──
+function RunCommand() {
+  return <CapabilityContainer id="azure.vms.run_command" title="Run command" />;
 }
 
 // ── Export template ────────────────────────────────────────────────────────────────────
