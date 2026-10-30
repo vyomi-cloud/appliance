@@ -597,13 +597,6 @@ try {
   const ACR2 = `vywireacr${n}`;
   await page.goto(UI + "#/acr/create");
   await page.getByLabel("Registry name", { exact: true }).fill(ACR);
-  // ── Service Bus: namespace created through the UI → visible over native ARM ────────────
-  const SBNS = `vysbns${n}`;
-  const SBQ = `vysbq${n}`;
-  const SBT2 = `vysbtwire${n}`;
-  const sbArm = `/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${SBNS}`;
-  await page.goto(UI + "#/servicebus/create");
-  await page.getByLabel("Namespace name", { exact: true }).fill(SBNS);
   await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
   await page.getByLabel("New resource group name").fill(RG);
   await page.getByRole("button", { name: "Review + create" }).click();
@@ -682,6 +675,17 @@ try {
     acrGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR2}`);
   }
   check("UI delete container registry → ARM GET 404", acrGone.status === 404, `HTTP ${acrGone.status}`);
+  // ── Service Bus: namespace created through the UI → visible over native ARM ────────────
+  const SBNS = `vysbns${n}`;
+  const SBQ = `vysbq${n}`;
+  const SBT2 = `vysbtwire${n}`;
+  const sbArm = `/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${SBNS}`;
+  await page.goto(UI + "#/servicebus/create");
+  await page.getByLabel("Namespace name", { exact: true }).fill(SBNS);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: SBNS, exact: true }).waitFor({ timeout: 10000 });
   const gotSbNs = await arm("GET", sbArm);
@@ -852,7 +856,8 @@ try {
   await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(ALERT);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
-  await page.getByText(ALERT, { exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  // the deleted row's own checkbox (the name text also appears in the delete notification)
+  await page.getByRole("checkbox", { name: `Select /subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}` }).waitFor({ state: "detached", timeout: 10000 });
   const alertGone = await armMonitor("GET", `/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}`);
   check("UI delete alert rule → ARM GET 404", alertGone.status === 404, `HTTP ${alertGone.status}`);
 } catch (e) {

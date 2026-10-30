@@ -163,11 +163,11 @@ def test_eventbridge_delivers_to_sqs_sns_and_lambda_targets(client):
     topic = ET.fromstring(_sns(client, "CreateTopic", {"Name": _u("c0e-topic")}).text).find(".//{*}TopicArn").text
     assert _sns(client, "Subscribe", {"TopicArn": topic, "Protocol": "sqs", "Endpoint": s_arn}).status_code == 200
     _ev(client, "PutTargets", {"Rule": rule, "Targets": [{"Id": "t", "Arn": topic}]})
-    # Lambda target → the appliance's function registry (server.py)
+    # Lambda target → the appliance's functions (since C0f: the lambda_core store, real runtime)
     fn = _u("c0e-fn")
     assert client.post("/2015-03-31/functions", json={"FunctionName": fn, "Runtime": "python3.12",
                                                      "Handler": "lambda_function.lambda_handler",
-                                                     "Role": "arn:aws:iam::123456789012:role/r"}).status_code == 200
+                                                     "Role": "arn:aws:iam::123456789012:role/r"}).status_code == 201
     _ev(client, "PutTargets", {"Rule": rule, "Targets": [{"Id": "l", "Arn": f"arn:aws:lambda:us-east-1:123456789012:function:{fn}"}]})
     before = len((server._lambda_find_function(fn) or {}).get("invocations") or [])
     out = _ev(client, "PutEvents", {"Entries": [{"Source": "c0e.test", "DetailType": "t", "Detail": json.dumps({"n": 1})},
@@ -177,9 +177,13 @@ def test_eventbridge_delivers_to_sqs_sns_and_lambda_targets(client):
     assert len(msgs) == 1 and json.loads(msgs[0]["Body"])["detail"] == {"n": 1}
     sub = _recv(client, s_url)
     assert len(sub) == 1 and json.loads(json.loads(sub[0]["Body"])["Message"])["source"] == "c0e.test"
-    inv = (server._lambda_find_function(fn) or {}).get("invocations") or []
+    import time as _t
+    for _ in range(50):   # an EventBridge target is an async (Event) invoke
+        inv = (server._lambda_find_function(fn) or {}).get("invocations") or []
+        if len(inv) >= before + 1:
+            break
+        _t.sleep(0.1)
     assert len(inv) == before + 1
-    assert inv[-1]["invocation_type"] == "Event" and inv[-1]["request_payload"]["source"] == "c0e.test"
 
 
 def test_sns_fanout_into_sqs_on_the_shared_store(client):

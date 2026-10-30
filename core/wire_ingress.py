@@ -51,6 +51,19 @@ topic's SQS subscriptions really deliver. Native wire on POST / and /_wire/ (rou
 aws_query_root) and on the queue URL itself (`POST /<account>/<queue>`, routes/
 aws_messaging_unified.py); the classic console REST (/api/sqs/*, /api/aws/sns/*,
 /api/eventbridge/rules*, /api/aws/extras/eventbridge/*) reads/writes the same store.
+
+v4 C0f adds "lambda" (the Lambda REST API /2015-03-31/… — core/lambda_core.py — whose Invoke
+runs the code in the appliance's REAL runtime through the store's `run_function` hook),
+"azure_keyvault" (Key Vault secrets / keys / certificates data planes, root `/secrets…`,
+`/keys…`, `/certificates…` with ?api-version AND `/azure-data/keyvault/{vault}/…` — core/
+azure_keyvault_*_core.py), "azure_acr" (the registry data plane /v2/… + /acr/v1/… —
+core/azure_acr_core.py) and "azure_servicebus" (the Service Bus REST data plane: entities +
+messages at the namespace root — core/azure_servicebus_core.py), each over
+core/appliance_stores.py. EventBridge / Scheduler / Step
+Functions / API Gateway / SNS / S3-notification Lambda targets reach the SAME functions
+(routes/aws_lambda_unified.py). ARM types the shared core ARM engine knows but the offline
+catalog does not (Microsoft.ContainerRegistry, Microsoft.ContainerService, …) are served by
+core/azure_arm_core.AzureArm over the offline ARM state (providers/azure_services.py).
 """
 from __future__ import annotations
 
@@ -64,10 +77,12 @@ def _cfg(key: str, default: str) -> str:
 
 
 _DEFAULT_SERVICES = ("s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager,"
-                     "gcp_firestore,gcp_compute,sqs,sns,events,scheduler")
+                     "gcp_firestore,gcp_compute,sqs,sns,events,scheduler,"
+                     "lambda,azure_keyvault,azure_acr,azure_servicebus")
 _KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
                    "kms", "secretsmanager", "gcp_firestore", "gcp_compute",
-                   "sqs", "sns", "events", "scheduler")
+                   "sqs", "sns", "events", "scheduler",
+                   "lambda", "azure_keyvault", "azure_acr", "azure_servicebus")
 
 
 def unified_services() -> frozenset:
@@ -99,7 +114,10 @@ def appliance_stores() -> dict:
             "gcp_kms": aps.gcp_kms_store(), "kms": aps.aws_kms_store(),
             "sec": aps.aws_secrets_store(), "gcp_fs": aps.gcp_firestore_store(),
             "gcp_compute": aps.gcp_compute_vpc_store(), "gcp_compute_vm": aps.gcp_compute_vm_store(),
-            "msg": aps.messaging_store(), "sched": aps.scheduler_store()}
+            "msg": aps.messaging_store(), "sched": aps.scheduler_store(),
+            "lam": aps.lambda_store(), "az_kvsec": aps.az_kv_secrets_store(),
+            "az_kvkeys": aps.az_kv_keys_store(), "az_kvcerts": aps.az_kv_certs_store(),
+            "az_acr": aps.acr_store(), "az_sb": aps.az_servicebus_store()}
 
 
 # router store key -> unified service name (which stores a full-ingress router overrides)
@@ -107,7 +125,9 @@ STORE_SERVICE = {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb", "az_blob": "azure_
                  "gcp_sec": "gcp_secrets", "gcp_kms": "gcp_kms", "kms": "kms",
                  "sec": "secretsmanager", "gcp_fs": "gcp_firestore",
                  "gcp_compute": "gcp_compute", "gcp_compute_vm": "gcp_compute",
-                 "msg": "sqs", "sched": "scheduler"}
+                 "msg": "sqs", "sched": "scheduler", "lam": "lambda",
+                 "az_kvsec": "azure_keyvault", "az_kvkeys": "azure_keyvault",
+                 "az_kvcerts": "azure_keyvault", "az_acr": "azure_acr", "az_sb": "azure_servicebus"}
 
 
 def appliance_router() -> AwsWireRouter:
@@ -236,7 +256,73 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
     if service in ("sqs", "sns", "events", "scheduler"):
         return _dispatch_messaging(service, r, method, path, query, headers, body)
+    if service == "lambda":
+        from core import lambda_core
+        st = r.lam
+        if hasattr(st, "adopt"):
+            st.adopt()                   # pre-v4 functions / layers → the core shape (once per space)
+        resp = lambda_core.dispatch(st, method, path, query or {}, headers or {}, body or b"")
+        hdrs = dict(resp.headers or {})
+        if resp.media_type and resp.body and not any(k.lower() == "content-type" for k in hdrs):
+            hdrs["content-type"] = resp.media_type
+        hdrs.setdefault("x-amzn-requestid", str(__import__("uuid").uuid4()))
+        return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
+    if service in ("azure_keyvault", "azure_acr", "azure_servicebus"):
+        return _dispatch_azure(service, r, method, path, query, headers, body)
     raise ValueError(f"not a unified service: {service}")
+
+
+_KV_HOST = "https://vault.vault.azure.net"
+
+
+def kv_core_path(path: str) -> str:
+    """`/azure-data/keyvault/{vault}/secrets/x` → `/secrets/x` (the core's path); root paths as-is."""
+    segs = [x for x in (path or "").split("?", 1)[0].split("/") if x]
+    if len(segs) >= 3 and segs[0] == "azure-data" and segs[1] == "keyvault":
+        return "/" + "/".join(segs[3:])
+    return path.split("?", 1)[0]
+
+
+def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, query: dict,
+                    headers: dict, body: bytes) -> dict:
+    """Key Vault / ACR data planes. The state is Azure's: the request is bound to the Azure
+    space for the duration (the provider middleware classifies these root paths as AWS)."""
+    from core import app_context as _ctx
+    tok = _ctx.REQUEST_PROVIDER.set("azure")
+    try:
+        if service in ("azure_acr", "azure_servicebus"):
+            from core import azure_acr_core, azure_servicebus_core
+            mod, st = (azure_acr_core, r.az_acr) if service == "azure_acr" else (azure_servicebus_core, r.az_sb)
+            resp = mod.dispatch(st, method, path, query or {}, headers or {}, body or b"")
+            hdrs = dict(resp.headers or {})
+            if resp.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = resp.media_type
+            return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
+        from core import (azure_keyvault_certificates_core as kvc, azure_keyvault_keys_core as kvk,
+                          azure_keyvault_secrets_core as kvs)
+        if hasattr(r.az_kvkeys, "adopt"):
+            r.az_kvkeys.adopt()          # pre-v4 Vault-backed secrets / RSA keys (once per space)
+        p = kv_core_path(path)
+        kind = p.lstrip("/").split("/", 1)[0]
+        mod, st = {"secrets": (kvs, r.az_kvsec), "keys": (kvk, r.az_kvkeys),
+                   "certificates": (kvc, r.az_kvcerts)}.get(kind, (None, None))
+        if mod is None:
+            return {"status": 404, "headers": {"content-type": "application/json"},
+                    "body": b'{"error":{"code":"NotFound","message":"Unknown Key Vault path."}}'}
+        resp = mod.dispatch(st, method, p, query or {}, headers or {}, body or b"")
+        hdrs = dict(resp.headers or {})
+        if resp.media_type and not any(k.lower() == "content-type" for k in hdrs):
+            hdrs["content-type"] = resp.media_type
+        out = resp.body or b""
+        # Identifiers (secret id / kid / cert id) name the vault the CLIENT talks to, as real
+        # Key Vault does — the native SDKs (CryptographyClient, …) send follow-ups to that host.
+        lh = {str(k).lower(): v for k, v in (headers or {}).items()}
+        host = lh.get("x-forwarded-host") or lh.get("host") or ""
+        if host and out and _KV_HOST.encode() in out:
+            out = out.replace(_KV_HOST.encode(), f"https://{host}".encode())
+        return {"status": resp.status, "headers": hdrs, "body": out}
+    finally:
+        _ctx.REQUEST_PROVIDER.reset(tok)
 
 
 def _lam_store(r: AwsWireRouter):
@@ -493,7 +579,11 @@ def build_backed_router(overrides: dict | None = None) -> AwsWireRouter:
     }
     if overrides.get("sched") is not None:   # C0e: EventBridge Scheduler on the appliance state
         stores["sched"] = overrides["sched"]
-    for _k in ("gcp_compute", "gcp_compute_vm"):   # C0d: Compute Engine on the appliance state
+    for _k in ("gcp_compute", "gcp_compute_vm",   # C0d: Compute Engine on the appliance state
+               "lam", "az_acr"):                  # C0f: Lambda + ACR on the appliance state
+        if overrides.get(_k) is not None:
+            stores[_k] = overrides[_k]
+    for _k in ("az_kvsec", "az_kvkeys", "az_kvcerts", "az_sb"):   # C0f: Key Vault / Service Bus on the appliance state
         if overrides.get(_k) is not None:
             stores[_k] = overrides[_k]
     from core.apigatewayv2_core import shared_store
@@ -562,7 +652,11 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     from core.gcp_iamcredentials_core import shared_store as _gcp_iamc_store
     from core.gcp_redis_core import shared_store as _gcp_redis_store
     from core.gcp_monitoring_core import shared_store as _gcp_mon_store
-    r = router or AwsWireRouter(stores={"apigwv2": _apigwv2_store(), "sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_redis": _gcp_redis_store(), "gcp_mon": _gcp_mon_store()})
+    _ns = {"apigwv2": _apigwv2_store(), "sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_redis": _gcp_redis_store(), "gcp_mon": _gcp_mon_store()}
+    if is_unified("lambda"):   # C0f: API Gateway / Step Functions / Scheduler reach the appliance's functions
+        from core import appliance_stores as _aps
+        _ns["lam"] = _aps.lambda_store()
+    r = router or AwsWireRouter(stores=_ns)
     _sfn_lambda(r.lam)   # Step Functions Task states invoke the Lambdas this router serves
     global _NEW_SERVICES_ROUTER
     _NEW_SERVICES_ROUTER = r   # C0e: EventBridge / Scheduler Lambda targets reach these functions too

@@ -186,8 +186,27 @@ def _persist(store):
             pass
 
 
-def _extract_source(code: dict) -> str:
-    """Function source from Code.ZipFile (base64) or Code.Source (plain string)."""
+def _zip_module(raw: bytes, handler: str = "") -> str:
+    """The handler module's source out of a real deployment package (a .zip archive, what
+    boto3 / the CLI / SAM send): `{module path}.py` for Handler `pkg.mod.fn`, else the first
+    .py file. "" when `raw` is not a zip."""
+    if not raw[:2] == b"PK":
+        return ""
+    try:
+        import io
+        import zipfile
+        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            names = zf.namelist()
+            module = (str(handler or "").rsplit(".", 1)[0].replace(".", "/") + ".py") if "." in str(handler or "") else ""
+            pick = module if module in names else next((n for n in names if n.endswith(".py")), "")
+            return zf.read(pick).decode("utf-8") if pick else ""
+    except Exception:
+        return ""
+
+
+def _extract_source(code: dict, handler: str = "") -> str:
+    """Function source from Code.ZipFile (base64 of a .zip deployment package, or of the bare
+    source), or the simulator-friendly Code.Source (plain string)."""
     if not isinstance(code, dict):
         return ""
     if code.get("Source"):
@@ -195,13 +214,29 @@ def _extract_source(code: dict) -> str:
     zf = code.get("ZipFile")
     if zf:
         try:
-            return base64.b64decode(zf).decode("utf-8")
+            raw = base64.b64decode(zf)
         except Exception:
-            try:
-                return zf.decode("utf-8") if isinstance(zf, (bytes, bytearray)) else str(zf)
-            except Exception:
-                return ""
+            raw = zf if isinstance(zf, (bytes, bytearray)) else str(zf).encode()
+        if raw[:2] == b"PK":
+            return _zip_module(bytes(raw), handler)
+        try:
+            return raw.decode("utf-8")
+        except Exception:
+            return ""
     return ""
+
+
+_NAME_OK = __import__("re").compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _norm_name(name: str) -> str:
+    """FunctionName as real Lambda accepts it in the path: a name, a full / partial ARN
+    (`arn:aws:lambda:…:function:NAME[:QUALIFIER]`, `ACCOUNT:function:NAME`)."""
+    from urllib.parse import unquote
+    n = unquote(str(name or ""))
+    if ":function:" in n:
+        n = n.split(":function:", 1)[1].split(":", 1)[0]
+    return n
 
 
 def _now_iso() -> str:
@@ -275,9 +310,13 @@ def _create_function(store, body):
     name = str(body.get("FunctionName", "")).strip()
     if not name:
         return _err(400, "InvalidParameterValueException", "FunctionName is required.")
+    if not _NAME_OK.match(name):
+        return _err(400, "InvalidParameterValueException",
+                    f"1 validation error detected: Value '{name}' at 'functionName' failed to satisfy "
+                    "constraint: Member must satisfy regular expression pattern: [a-zA-Z0-9-_]+ (1-64 chars)")
     if name in _functions(store):
         return _err(409, "ResourceConflictException", f"Function already exist: {name}")
-    source = _extract_source(body.get("Code") or {})
+    source = _extract_source(body.get("Code") or {}, str(body.get("Handler", "index.handler")))
     fn = {
         "name": name, "arn": _fn_arn(name), "runtime": str(body.get("Runtime", "python3.12")),
         "handler": str(body.get("Handler", "index.handler")), "source": source,
@@ -316,7 +355,7 @@ def _update_function_code(store, name, body):
         fn = _require_fn(store, name)
     except _NotFound as e:
         return _err(404, "ResourceNotFoundException", str(e))
-    source = _extract_source(body)
+    source = _extract_source(body, fn.get("handler", ""))
     if source:
         fn["source"] = source
         fn["code_sha256"] = base64.b64encode(hashlib.sha256(source.encode()).digest()).decode()
@@ -608,6 +647,7 @@ def _publish_layer_version(store, layer_name, body):
         "CompatibleRuntimes": body.get("CompatibleRuntimes") or [],
         "CompatibleArchitectures": body.get("CompatibleArchitectures") or [],
         "LicenseInfo": body.get("LicenseInfo", ""), "CodeSize": len(source),
+        "Source": source,   # merged into the function's runtime by stores with a real runtime
     }
     _persist(store)
     return _json(201, _layer_version_view(layer_name, version, entry["versions"][version]))
@@ -981,10 +1021,20 @@ def _add_permission(store, name, body):
         return _err(400, "InvalidParameterValueException", "StatementId is required.")
     if sid in fn["policy_statements"]:
         return _err(409, "ResourceConflictException", f"Statement already exists: {sid}")
+    principal = str(body.get("Principal", "*") or "*")
+    principal_doc = "*" if principal == "*" else (
+        {"AWS": principal} if principal.startswith("arn:") or principal.isdigit() else {"Service": principal})
     stmt = {"Sid": sid, "Effect": "Allow", "Action": body.get("Action", "lambda:InvokeFunction"),
-            "Principal": body.get("Principal", "*"), "Resource": _fn_arn(name)}
+            "Principal": principal_doc, "Resource": _fn_arn(name)}
+    cond: dict = {}
     if body.get("PrincipalOrgID"):
-        stmt["Condition"] = {"StringEquals": {"aws:PrincipalOrgID": body["PrincipalOrgID"]}}
+        cond.setdefault("StringEquals", {})["aws:PrincipalOrgID"] = body["PrincipalOrgID"]
+    if body.get("SourceArn"):
+        cond.setdefault("ArnLike", {})["AWS:SourceArn"] = body["SourceArn"]
+    if body.get("SourceAccount"):
+        cond.setdefault("StringEquals", {})["AWS:SourceAccount"] = body["SourceAccount"]
+    if cond:
+        stmt["Condition"] = cond
     fn["policy_statements"][sid] = stmt
     _persist(store)
     return _json(201, {"Statement": json.dumps(stmt)})
@@ -1087,53 +1137,122 @@ def _delete_function_event_invoke_config(store, name):
     return LambdaResponse(status=204)
 
 
-# ── data plane: synchronous Invoke ──────────────────────────────────────────────────────
-def _record_invocation(fn, request_id, duration_ms, error):
-    fn["invocations"].insert(0, {
+# ── data plane: Invoke ──────────────────────────────────────────────────────────────────
+def _record_invocation(fn, request_id, duration_ms, error, extra=None):
+    row = {
         "Timestamp": _now_iso(), "RequestId": request_id,
         "LogStream": f"{time.strftime('%Y/%m/%d')}/[$LATEST]{uuid.uuid4().hex}",
         "DurationInMS": round(duration_ms, 2), "BilledDurationInMS": max(1, round(duration_ms)),
         "MemorySetInMB": fn.get("memory_size", 128),
         "MemoryUsedInMB": max(16, round(fn.get("memory_size", 128) * 0.35)),
         "Error": bool(error),
-    })
+    }
+    row.update(extra or {})
+    fn["invocations"].insert(0, row)
     del fn["invocations"][RECENT_INVOCATIONS_KEPT:]
 
 
-def _invoke(store, name, body):
-    fn = _functions(store).get(name)
-    if not fn:
-        return _err(404, "ResourceNotFoundException", f"Function not found: {_fn_arn(name)}")
-    try:
-        event = json.loads(body.decode("utf-8")) if body else {}
-    except Exception:
-        event = {}
-    source = fn.get("source", "")
+def _sandbox_run(fn, event, context) -> dict:
+    """The in-process sandboxed Python runtime (Nano; any store without `run_function`)."""
     sandbox_globals = {"__builtins__": dict(_SAFE_BUILTINS), "json": json}
-    request_id = uuid.uuid4().hex
-    context = {"function_name": name, "aws_request_id": request_id,
-               "invoked_function_arn": _fn_arn(name)}
-    start = time.perf_counter()
     try:
-        exec(compile(source, f"<lambda:{name}>", "exec"), sandbox_globals)
+        exec(compile(fn.get("source", ""), f"<lambda:{fn['name']}>", "exec"), sandbox_globals)
         handler = sandbox_globals.get(fn.get("handler", "index.handler").split(".")[-1]) \
             or sandbox_globals.get("handler")
         if not callable(handler):
             raise RuntimeError("handler is not defined")
-        result = handler(event, context)
-        duration_ms = (time.perf_counter() - start) * 1000
-        _record_invocation(fn, request_id, duration_ms, error=False)
-        _persist(store)
-        return LambdaResponse(status=200, body=json.dumps(result).encode(),
-                              headers={"X-Amz-Executed-Version": "$LATEST"})
+        return {"ok": True, "result": handler(event, context)}
     except Exception as e:
-        duration_ms = (time.perf_counter() - start) * 1000
-        _record_invocation(fn, request_id, duration_ms, error=True)
-        _persist(store)
-        # Handled-error response: 200 with X-Amz-Function-Error, like real Lambda.
-        payload = {"errorType": type(e).__name__, "errorMessage": str(e)}
-        return LambdaResponse(status=200, body=json.dumps(payload).encode(),
-                              headers={"X-Amz-Function-Error": "Unhandled"})
+        return {"ok": False, "errorType": type(e).__name__, "error": str(e)}
+
+
+def _statement_principal(stmt) -> str:
+    p = stmt.get("Principal", "*")
+    if isinstance(p, dict):
+        p = p.get("Service") or p.get("AWS") or "*"
+    return str(p or "*")
+
+
+def can_invoke(fn: dict, principal: str = "", source_arn: str = "", source_account: str = "",
+               action: str = "lambda:InvokeFunction") -> bool:
+    """Resource-policy check for a SERVICE-originated invoke (S3 / SNS / EventBridge … name
+    their principal + source). A direct caller (no principal / source) is always allowed —
+    Vyomi does not evaluate identity policies here."""
+    import fnmatch
+    if not (principal or source_arn or source_account):
+        return True
+    for stmt in (fn.get("policy_statements") or {}).values():
+        act = stmt.get("Action", "lambda:InvokeFunction")
+        acts = act if isinstance(act, list) else [act]
+        if not any(a in ("*", "lambda:*", action) for a in acts):
+            continue
+        sp = _statement_principal(stmt)
+        if sp != "*" and (not principal or not fnmatch.fnmatchcase(principal, sp)):
+            continue
+        cond = stmt.get("Condition") or {}
+        want_arn = (cond.get("ArnLike") or {}).get("AWS:SourceArn") or (cond.get("ArnEquals") or {}).get("AWS:SourceArn")
+        if want_arn and (not source_arn or not fnmatch.fnmatchcase(source_arn, want_arn)):
+            continue
+        want_acct = (cond.get("StringEquals") or {}).get("AWS:SourceAccount")
+        if want_acct and want_acct != source_account:
+            continue
+        return True
+    return False
+
+
+def _invoke(store, name, body, headers=None, query=None):
+    fn = _functions(store).get(name)
+    if not fn:
+        return _err(404, "ResourceNotFoundException", f"Function not found: {_fn_arn(name)}")
+    lh = {str(k).lower(): v for k, v in (headers or {}).items()}
+    itype = str(lh.get("x-amz-invocation-type") or (query or {}).get("InvocationType") or "RequestResponse")
+    if itype == "DryRun":
+        return LambdaResponse(status=204, body=b"", media_type=None)
+    try:
+        event = json.loads(body.decode("utf-8")) if body else {}
+    except Exception:
+        event = {}
+    request_id = uuid.uuid4().hex
+    context = {"function_name": name, "aws_request_id": request_id,
+               "invoked_function_arn": _fn_arn(name), "memory_limit_in_mb": fn.get("memory_size", 128)}
+    # Runtime seam: a store with a REAL runtime (the offline appliance runs the code in a
+    # separate Python process with its environment, timeout and layers) supplies
+    # `run_function(fn, event, context) -> {ok, result | errorType, error, logs}`; otherwise
+    # the in-process sandbox runs it.
+    runner = getattr(store, "run_function", None)
+    start = time.perf_counter()
+    try:
+        out = runner(fn, event, context) if callable(runner) else _sandbox_run(fn, event, context)
+    except Exception as e:   # a runtime that itself failed
+        out = {"ok": False, "errorType": type(e).__name__, "error": str(e)}
+    duration_ms = (time.perf_counter() - start) * 1000
+    logs = str(out.get("logs") or "")
+    extra = {}
+    if logs:
+        extra["LogTail"] = logs[-4096:]
+    if not out.get("ok"):
+        extra["ErrorMessage"] = str(out.get("error") or "")[:1024]
+    _record_invocation(fn, request_id, duration_ms, error=not out.get("ok"), extra=extra)
+    _persist(store)
+    hdrs = {"X-Amz-Executed-Version": "$LATEST", "x-amzn-RequestId": request_id}
+    if str(lh.get("x-amz-log-type") or "").lower() == "tail":
+        tail = (logs + f"END RequestId: {request_id}\nREPORT RequestId: {request_id}\t"
+                f"Duration: {round(duration_ms, 2)} ms\n")[-4096:]
+        hdrs["X-Amz-Log-Result"] = base64.b64encode(tail.encode()).decode()
+    if itype == "Event":
+        return LambdaResponse(status=202, body=b"", headers=hdrs, media_type=None)
+    if out.get("ok"):
+        try:
+            payload = json.dumps(out.get("result")).encode()
+        except Exception:
+            payload = json.dumps(str(out.get("result"))).encode()
+        return LambdaResponse(status=200, body=payload, headers=hdrs)
+    # Function error: 200 with X-Amz-Function-Error, like real Lambda.
+    err = {"errorType": out.get("errorType") or "Exception", "errorMessage": str(out.get("error") or "")}
+    if out.get("stackTrace"):
+        err["stackTrace"] = out["stackTrace"]
+    return LambdaResponse(status=200, body=json.dumps(err).encode(),
+                          headers={**hdrs, "X-Amz-Function-Error": "Unhandled"})
 
 
 def invoke_by_arn(store, arn: str, event: dict) -> bool:
@@ -1141,7 +1260,7 @@ def invoke_by_arn(store, arn: str, event: dict) -> bool:
     event payload, for callers that only have an ARN (EventBridge targets).
     Returns False if the function does not exist; the result is discarded,
     same as a real Lambda event-source invocation (fire-and-forget)."""
-    name = str(arn).rsplit(":", 1)[-1]
+    name = _norm_name(str(arn).rsplit(":", 1)[-1] if ":function:" not in str(arn) else arn)
     if name not in _functions(store):
         return False
     try:
@@ -1204,7 +1323,7 @@ def dispatch(store, method: str, path: str,
     if kind == "event-source-mappings":
         return _dispatch_esms(store, method, tail, query, body)
     if kind == "functions":
-        return _dispatch_functions(store, method, tail, query, body)
+        return _dispatch_functions(store, method, tail, query, body, headers)
     if kind == "capacity-providers":
         return _dispatch_capacity_providers(store, method, tail, body)
     if kind == "code-signing-configs":
@@ -1337,7 +1456,7 @@ def _dispatch_esms(store, method, tail, query, body):
     return _err(405, "MethodNotAllowed", "Unsupported method on event-source-mapping")
 
 
-def _dispatch_functions(store, method, tail, query, body):
+def _dispatch_functions(store, method, tail, query, body, headers=None):
     if not tail:
         if method == "POST":
             return _create_function(store, _parse(body))
@@ -1345,7 +1464,7 @@ def _dispatch_functions(store, method, tail, query, body):
             return _list_functions(store)
         return _err(405, "MethodNotAllowed", f"Unsupported {method} on functions")
 
-    name = tail[0]
+    name = _norm_name(tail[0])
     if len(tail) == 1:
         if method == "GET":
             return _get_function(store, name, query.get("Qualifier"))
@@ -1360,7 +1479,7 @@ def _dispatch_functions(store, method, tail, query, body):
 
     if sub == "invocations" and not rest:
         if method == "POST":
-            return _invoke(store, name, body)
+            return _invoke(store, name, body, headers, query)
         if method == "GET":
             return _recent_invocations(store, name)
 

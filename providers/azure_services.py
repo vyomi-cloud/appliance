@@ -793,6 +793,22 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         return JSONResponse({"id": f"/subscriptions/{sub}", "subscriptionId": sub,
                              "displayName": "CloudLearn Subscription", "state": "Enabled"})
 
+    # v4 C0f — resource groups themselves (collection / item with real tags + cascade
+    # delete), a group's generic `/resources` list and its own Microsoft.Authorization/locks
+    # are the shared core ARM engine's (what Nano serves); the offline stub here returned a
+    # tag-less group for any name and ignored PATCH. A group delete first deprovisions the
+    # real runtimes (VMs, databases) of the resources it cascades away.
+    low = [s.lower() for s in rest_segs]
+    if low[0] == "resourcegroups" and (
+            len(low) <= 2
+            or (len(low) == 3 and low[2] == "resources")
+            or (len(low) >= 5 and low[2] == "providers" and low[3] == "microsoft.authorization" and low[4] == "locks")):
+        if method == "DELETE" and len(low) == 2:
+            for rec in [r for r in list(_state.values())
+                        if isinstance(r, dict) and r.get("_sub") == sub and (r.get("_rg") or "").lower() == low[1]]:
+                _deprovision_on_delete(str(rec.get("_type") or ""), rec)
+        return await _handle_core_arm(request, method, rest, base)
+
     # Resource-group collection / item: /subscriptions/{sub}/resourcegroups[/{rg}]
     if rest_segs[0].lower() == "resourcegroups" and (len(rest_segs) == 1 or
                                                       (len(rest_segs) == 2)):
@@ -881,6 +897,13 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         return await _handle_webapp(request, method, sub, rg, chain, names, base)
 
     top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
+    if top is None and _core_arm_handles(namespace, type_chain[1]):
+        # v4 C0f — ONE ARM engine: any resource type the shared core ARM engine
+        # (core/azure_arm_core.AzureArm, what Nano serves) knows but this offline catalog does
+        # not — Microsoft.ContainerRegistry, Microsoft.ContainerService (AKS), and every
+        # future v4 service added to core/azure_arm_data.CATALOG — is served by THAT engine
+        # over this same space-scoped `_state`, so offline never drifts behind Nano again.
+        return await _handle_core_arm(request, method, rest, base)
     if top is None:
         return _error(404, "ResourceTypeNotSupported",
                       f"Type '{namespace}/{type_chain[1]}' is not simulated. "
@@ -903,7 +926,11 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if is_collection:
         if method != "GET":
             return _error(405, "MethodNotAllowed", "Collection supports GET only.")
-        return _list(sub, rg, full_type)
+        # Nested child collections (service/{s}/apis, registries/{r}/webhooks, …) are scoped
+        # to their parent instance — the shared core engine's list (same parent_prefix rule).
+        parent_prefix = _canonical_id(sub, rg, type_chain[:-1], names).lower() + "/" if len(type_chain) > 2 else None
+        out = core_arm()._list(sub, rg, full_type, parent_prefix)
+        return JSONResponse(status_code=out["status"], content=out["body"])
 
     rid = _canonical_id(sub, rg, type_chain, names)
     key = rid.lower()
@@ -1134,6 +1161,51 @@ async def _handle_app(request: Request, method: str, sub: str, rg: str | None, c
     return resp
 
 
+def _core_arm_handles(namespace: str, top_type: str) -> bool:
+    """True when the shared core ARM engine's catalog knows `namespace/top_type`."""
+    try:
+        from core.azure_arm_data import CATALOG as _core_catalog
+    except Exception:
+        return False
+    key = (namespace.lower(), (top_type or "").lower())
+    return any((c["namespace"].lower(), c["type"].lower()) == key for c in _core_catalog)
+
+
+def core_arm():
+    """The shared core ARM engine bound to the offline ARM state (space-scoped proxy) and
+    the offline LRO operation store — so its writes are the same records every other offline
+    ARM consumer (resource-group lists, inventory, locks, activity log) reads."""
+    from core.azure_arm_core import AzureArm
+    arm = AzureArm()
+    arm.state = _state
+    arm.operations = _operations
+    return arm
+
+
+async def _handle_core_arm(request: Request, method: str, rest: str, base: str):
+    arm = core_arm()
+    arm._base = base
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    out = arm.handle(method, "/subscriptions/" + rest, dict(request.query_params), payload)
+    status, body = out.get("status", 200), out.get("body")
+    resp = JSONResponse(status_code=status, content=body) if body is not None else Response(status_code=status)
+    for hk, hv in (out.get("headers") or {}).items():
+        resp.headers[hk] = str(hv)
+    segs = [s for s in rest.split("/") if s]
+    # top-level resource writes → usage + cloudsim inventory (as the catalog path does)
+    if status < 300 and method in ("PUT", "PATCH", "DELETE") and "providers" in [s.lower() for s in segs]:
+        i = [s.lower() for s in segs].index("providers")
+        after = segs[i + 1:]
+        if len(after) == 3:
+            full_type, leaf = f"{after[0]}/{after[1]}", after[2]
+            rid = "/subscriptions/" + "/".join(segs)
+            _record_usage(f"azure.{'delete' if method == 'DELETE' else method.lower()}",
+                          {"type": full_type, "name": leaf, "resource_id": rid})
+            loc = str((body or {}).get("location") or DEFAULT_LOCATION) if isinstance(body, dict) else DEFAULT_LOCATION
+            _cloudsim_sync_arm_service(full_type, rid, leaf, loc, action="delete" if method == "DELETE" else "upsert")
+    return resp
+
+
 async def _handle_webapp(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
                          names: list[str], base: str) -> JSONResponse:
     from core import azure_webapp_core as _web
@@ -1290,50 +1362,11 @@ def _enforce_azure_quantity_cap(_srv_mod_unused, full_type: str, method: str) ->
 
 def _upsert(rid: str, key: str, full_type: str, name: str, catalog: dict,
             payload: dict, base: str, patch: bool = False) -> JSONResponse:
-    existed = key in _state
-    # Only the top-level type carries rich defaults; nested children get a
-    # minimal shell so any nested resource still works.
-    is_top = full_type.lower() == (catalog["namespace"] + "/" + catalog["type"]).lower()
-    defaults = _expand_tokens(catalog.get("defaults", {}), name, base) if is_top else {"properties": {"provisioningState": "Succeeded"}}
-    endpoints = catalog.get("endpoints", {}) if is_top else {}
-
-    if patch and existed:
-        rec = _state[key]
-    else:
-        rec = {
-            "id": rid, "name": name, "type": full_type,
-            "location": payload.get("location") or DEFAULT_LOCATION,
-            "tags": {}, "properties": {},
-            "_type": full_type,
-            "_sub": rid.split("/")[2],
-            "_rg": _rg_from_id(rid),
-            "_created": _now(),
-        }
-        # seed defaults
-        for dk, dv in defaults.items():
-            rec[dk] = dv if not isinstance(dv, dict) else dict(dv)
-
-    # overlay client payload (location/tags/sku/kind/properties)
-    for fld in ("location", "kind"):
-        if payload.get(fld) is not None:
-            rec[fld] = payload[fld]
-    if isinstance(payload.get("tags"), dict):
-        rec["tags"] = _merge(rec.get("tags", {}), payload["tags"])
-    if isinstance(payload.get("sku"), dict):
-        rec["sku"] = _merge(rec.get("sku", {}), payload["sku"])
-    if isinstance(payload.get("properties"), dict):
-        rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
-
-    rec.setdefault("properties", {})
-    rec["properties"].setdefault("provisioningState", "Succeeded")
-
-    # fill simulator-origin endpoints if not provided
-    for path_expr, suffix in endpoints.items():
-        if _get_path(rec, path_expr) in (None, ""):
-            _set_path(rec, path_expr, base + suffix.replace("__NAME__", name))
-
-    _state[key] = rec
-    return JSONResponse(status_code=200 if existed else 201, content=_view(rec))
+    """Generic catalog-resource create / update — the shared core ARM engine's
+    (AzureArm._upsert: defaults, payload overlay incl. identity, simulator-origin endpoints,
+    systemData) over this offline `_state`, so a record is shaped exactly as on Nano."""
+    out = core_arm()._upsert(rid, key, full_type, name, catalog, payload or {}, base, patch=patch)
+    return JSONResponse(status_code=out["status"], content=out["body"])
 
 
 def _rg_from_id(rid: str) -> str | None:

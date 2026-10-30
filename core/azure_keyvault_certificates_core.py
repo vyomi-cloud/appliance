@@ -91,6 +91,14 @@ def _bundle(name: str, version: str, rec: dict) -> dict:
 
 
 # ── dispatch ────────────────────────────────────────────────────────────────
+def _operation(name: str, rec: dict) -> dict:
+    pol = rec.get("policy") or {}
+    issuer = (pol.get("issuer") or {}).get("name") or "Self"
+    return {"id": f"{VAULT_HOST}/certificates/{name}/pending", "issuer": {"name": issuer},
+            "csr": "", "cancellation_requested": False, "status": "completed",
+            "target": _cert_id(name), "request_id": rec.get("version", "")}
+
+
 def dispatch(store: InMemoryKvStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> KvResponse:
@@ -155,7 +163,20 @@ def dispatch(store: InMemoryKvStore, method: str, path: str,
         store.put_secret(name, rec)
         store.persist()
         store.mirror_put(name, rec)
+        if _sdk:   # the azure-keyvault-certificates poller: 202 + a (completed) CertificateOperation
+            return _json(202, _operation(name, rec))
         return _json(200, _bundle(name, version, rec))
+
+    # ---- /certificates/{name}/pending (CertificateOperation — completes synchronously) ----
+    if len(segs) == 3 and segs[2] == "pending":
+        rec = store.get_secret(name)
+        if not rec or rec.get("deleted"):
+            return _err(404, "CertificateOperationNotFound", f"No pending operation for certificate {name}.")
+        if method == "GET":
+            return _json(200, _operation(name, rec))
+        if method == "DELETE":
+            return _json(200, _operation(name, rec))
+        return _err(405, "MethodNotAllowed", f"Unsupported method {method} on pending")
 
     # ---- /certificates/{name} ----
     if len(segs) == 2:
