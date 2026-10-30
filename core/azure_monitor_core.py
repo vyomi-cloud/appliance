@@ -1,4 +1,5 @@
-"""Azure Monitor core (``Microsoft.Insights`` — action groups, metric alerts, activity log alerts, autoscale).
+"""Azure Monitor core (``Microsoft.Insights`` — action groups, metric alerts, activity log alerts, autoscale,
+workbooks, data collection rules).
 
 Substrate-free (no fastapi / sockets / subprocess) so the SAME file runs offline and in Nano.
 
@@ -15,6 +16,8 @@ so ``azure-mgmt-monitor`` / ``armmonitor`` / ``com.azure.resourcemanager.monitor
     Microsoft.Insights/autoscaleSettings     2022-10-01  CreateOrUpdate / Update / Delete / Get / ListBy*
     Microsoft.Insights/eventtypes            2015-04-01  GET .../eventtypes/management/values (Activity Log feed,
                                                          subscription-scoped, ``$filter=resourceUri eq '{id}'``)
+    Microsoft.Insights/workbooks             2022-04-01  CreateOrUpdate / Update / Delete / Get / ListBy*
+    Microsoft.Insights/dataCollectionRules   2023-03-11  CreateOrUpdate / Update / Delete / Get / ListBy*
 
 Resources live in the shared ARM state map (offline ``azure_services._state``; Nano ``az_arm``), keyed by the
 lower-cased resource id, so they are space-scoped and persisted by the same seams as the rest of ARM. Activity
@@ -22,7 +25,9 @@ Log entries are written directly into that same map by the resource providers th
 core/azure_webapp_core.py's ``_record_event``) as ``Microsoft.Insights/eventtypes`` records; this module only
 reads them back for the feed.
 Not modelled: diagnostic settings, metric definitions / metrics and scheduled query rules (resource-scoped
-extension APIs), and conditional headers (If-Match / If-None-Match).
+extension APIs), data collection endpoints/pipelines, Azure Managed Grafana (``Microsoft.Dashboard``) and
+Azure Monitor workspaces for managed Prometheus (``Microsoft.Monitor``) — different resource providers this
+module does not own — and conditional headers (If-Match / If-None-Match).
 
 ``dispatch`` returns ``{"status","headers","body","lro","rid","verb"}`` (``body`` is a JSON-able object or ``None``).
 """
@@ -42,11 +47,15 @@ TYPES = {
     "metricalerts": ("metricAlerts", "2018-03-01"),
     "activitylogalerts": ("activityLogAlerts", "2020-10-01"),
     "autoscalesettings": ("autoscaleSettings", "2022-10-01"),
+    "workbooks": ("workbooks", "2022-04-01"),
+    "datacollectionrules": ("dataCollectionRules", "2023-03-11"),
 }
 # ARM echoes these type strings back (autoscale is lower-cased in the real service)
 TYPE_STRINGS = {"actiongroups": "Microsoft.Insights/actionGroups", "metricalerts": "Microsoft.Insights/metricAlerts",
                 "activitylogalerts": "Microsoft.Insights/activityLogAlerts",
-                "autoscalesettings": "Microsoft.Insights/autoscaleSettings"}
+                "autoscalesettings": "Microsoft.Insights/autoscaleSettings",
+                "workbooks": "Microsoft.Insights/workbooks",
+                "datacollectionrules": "Microsoft.Insights/dataCollectionRules"}
 
 EVAL_FREQUENCIES = ("PT1M", "PT5M", "PT15M", "PT30M", "PT1H")
 WINDOW_SIZES = ("PT1M", "PT5M", "PT15M", "PT30M", "PT1H", "PT6H", "PT12H", "P1D")
@@ -412,10 +421,61 @@ def _autoscale_props(props, old=None, name=""):
     return out
 
 
+# ═══════════════════════════ workbooks ═══════════════════════════════════════════
+def _workbook_props(props, old=None):
+    p = dict(old or {})
+    p.update(props)
+    out = {"displayName": _str(p.get("displayName"), "displayName"), "category": _str(p.get("category"), "category"),
+           "serializedData": _str(p.get("serializedData"), "serializedData"), "version": p.get("version") or "Notebook/1.0",
+           "sourceId": p.get("sourceId") or "Azure Monitor"}
+    return out
+
+
+# ═══════════════════════════ data collection rules ═══════════════════════════════
+def _dcr_destinations(dest):
+    if not isinstance(dest, dict):
+        raise _bad("The property 'destinations' is required.")
+    la = dest.get("logAnalytics")
+    if not isinstance(la, list) or not la:
+        raise _bad("The property 'destinations.logAnalytics' must contain at least one workspace destination.")
+    for d in la:
+        if not isinstance(d, dict) or not isinstance(d.get("workspaceResourceId"), str):
+            raise _bad("Each destinations.logAnalytics entry needs a 'workspaceResourceId'.")
+        _str(d.get("name"), "destinations.logAnalytics.name")
+    return dest
+
+
+def _dcr_dataflows(flows):
+    if not isinstance(flows, list) or not flows:
+        raise _bad("The property 'dataFlows' must contain at least one flow.")
+    out = []
+    for f in flows:
+        f = dict(f or {})
+        streams = f.get("streams")
+        if not isinstance(streams, list) or not streams:
+            raise _bad("Each dataFlows entry needs a non-empty 'streams' array.")
+        dests = f.get("destinations")
+        if not isinstance(dests, list) or not dests:
+            raise _bad("Each dataFlows entry needs a non-empty 'destinations' array.")
+        out.append(f)
+    return out
+
+
+def _dcr_props(props, old=None):
+    p = dict(old or {})
+    p.update(props)
+    out = {"description": p.get("description") or "", "dataSources": dict(p.get("dataSources") or {}),
+           "destinations": _dcr_destinations(p.get("destinations")), "dataFlows": _dcr_dataflows(p.get("dataFlows")),
+           "provisioningState": "Succeeded"}
+    return out
+
+
 _BUILDERS = {"actiongroups": lambda pr, old, nm: _action_group_props(pr, old),
              "metricalerts": lambda pr, old, nm: _metric_alert_props(pr, old),
              "activitylogalerts": lambda pr, old, nm: _activity_props(pr, old),
-             "autoscalesettings": _autoscale_props}
+             "autoscalesettings": _autoscale_props,
+             "workbooks": lambda pr, old, nm: _workbook_props(pr, old),
+             "datacollectionrules": lambda pr, old, nm: _dcr_props(pr, old)}
 
 
 # ═══════════════════════════ CRUD ════════════════════════════════════════════════

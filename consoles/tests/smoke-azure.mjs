@@ -815,6 +815,46 @@ try {
   check("UI delete kubernetes service → ARM GET 404", aksGone.status === 404, `HTTP ${aksGone.status}`);
   const poolGone = await armAks("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}/agentPools/${POOL}`);
   check("node pool cascade-deleted with the cluster", poolGone.status === 404, `HTTP ${poolGone.status}`);
+  // ── Monitor: metric alert rule created through the wizard → visible over native ARM ────
+  const MON_RG = "cloudlearn-rg";              // the Create alert rule / action group wizards' default resource group
+  const armMonitor = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2018-03-01`,
+    { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const ALERT = `vysmokealert${n}`;
+  await page.goto(UI + "#/monitor/createalertrule");
+  for (const label of ["Scope", "Condition", "Actions"]) {
+    await page.getByRole("tab", { name: label }).waitFor({ timeout: 10000 });
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+  }
+  await page.getByRole("tab", { name: "Details" }).waitFor({ timeout: 5000 });
+  await page.getByLabel("Alert rule name", { exact: true }).fill(ALERT);
+  await shot("22-monitor-alert-details");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(ALERT, { exact: true }).first().waitFor({ timeout: 10000 });
+  await shot("23-monitor-alerts");
+  const alertGet = await armMonitor("GET", `/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}`);
+  check("UI create alert rule → visible over native ARM", alertGet.status === 200, `HTTP ${alertGet.status}`);
+
+  // ── Action group created over the native wire → visible in the UI (CLI → UI) ───────────
+  const AG = `vysmokeag${n}`;
+  const agPut = await wire(`/subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.Insights/actionGroups/${AG}?api-version=2023-01-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ location: "Global", properties: { groupShortName: "smokeag", enabled: true } }) });
+  check("ARM PUT action group over wire", agPut.status === 200 || agPut.status === 201, `HTTP ${agPut.status}`);
+  await page.goto(UI + "#/monitor/actiongroups");
+  await page.getByText(AG, { exact: true }).first().waitFor({ timeout: 10000 });
+  check("wire-created action group shown in browse grid", true);
+  await shot("24-monitor-actiongroups");
+
+  // ── Delete the alert rule from the Alerts grid → gone over ARM ─────────────────────────
+  await page.goto(UI + "#/monitor/alerts");
+  await page.getByRole("checkbox", { name: `Select /subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}` }).click();
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(ALERT);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByText(ALERT, { exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  const alertGone = await armMonitor("GET", `/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}`);
+  check("UI delete alert rule → ARM GET 404", alertGone.status === 404, `HTTP ${alertGone.status}`);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});
