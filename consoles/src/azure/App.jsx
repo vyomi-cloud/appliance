@@ -98,7 +98,7 @@ export default function App() {
             <Tooltip content="Show portal menu" relationship="label">
               <Button className="vy-top-btn" appearance="transparent" icon={<Navigation20Regular />} aria-label="Show portal menu" onClick={() => setMenuOpen((v) => !v)} />
             </Tooltip>
-            <a className="vy-brand" href="#/" aria-label="Vyomi Azure — Home"><img src={AZ_BRAND.src} alt="vyomi | Azure" height={22} style={{ display: "block" }} /></a>
+            <a className="vy-brand" href="#/" aria-label="Vyomi Azure — Home"><img src={AZ_BRAND.src} alt="vyomi.cloud | Azure" height={26} style={{ display: "block" }} /></a>
             <GlobalSearch />
             <Button className="vy-copilot" size="small" icon={<Sparkle20Regular />} onClick={() => setDrawer((d) => (d === "copilot" ? null : "copilot"))}>Copilot</Button>
             {top(<WindowConsole20Regular />, "Cloud Shell", "shell")}
