@@ -122,6 +122,7 @@ from core import logs_core as logs
 from core import lambda_core as lam
 from core import apigateway_core as apigw
 from core import apigatewayv2_core as apigw2
+from core import apigatewayv2_gateway as apigw2_gw
 from core import ssm_core as ssm
 from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
@@ -249,6 +250,29 @@ _GENERIC_ACTIONS = {"TagResource", "UntagResource", "ListTagsForResource"}
 _AUTHZ_IAM = re.compile(r"/providers/microsoft\.authorization/(roleassignments|roledefinitions|checkaccess)", re.I)
 
 
+class ResourceCollections:
+    """Same public shape as wasm/backends/store.ResourceStore ({provider/account/service: {name:
+    record}}), so nano_persist snapshots move it between the console and the tunnel."""
+
+    def __init__(self) -> None:
+        self.collections: dict = {}
+
+
+def _execute_api_id(path, lheaders):
+    """The HTTP API an invoke-URL request is for: host `{id}.execute-api.<anything>` (as the CLI
+    prints it) or the path-style fallback `/apigw/{id}/…` (same as the offline gateway's)."""
+    host = (lheaders.get("host", "") or "").split(":", 1)[0].lower()
+    if ".execute-api." in host:
+        return host.split(".", 1)[0]
+    if path.startswith("/apigw/"):
+        return path[len("/apigw/"):].split("/", 1)[0].split("?", 1)[0]
+    return ""
+
+
+# A Microsoft.Sql database resource (GET/PUT answer carries its connectionInfo, like offline).
+_SQL_DB = re.compile(r"/providers/microsoft\.sql/servers/[^/]+/databases/[^/]+$", re.I)
+
+
 def _is_arm_path(path):
     """Azure Resource Manager: the subscription list, anything under a
     subscription, the tenant list, and the LRO poll URLs AzureArm hands out.
@@ -271,6 +295,14 @@ class AwsWireRouter:
         # Postgres, Vault, NATS) behind the identical seam. `sql_store` kept for
         # back-compat (the browser PGlite path).
         s = stores or {}
+        # The console's generic catalog store (EC2 instances, …) — wasm/backends/store.ResourceStore,
+        # registered in the shared registry as "resources". The tunnel never builds one, so give the
+        # registry a plain holder of the same shape: nano_persist then restores the console's
+        # resources into it, and DescribeInstances reads them. Looked up per request, because the
+        # console swaps in its full ResourceStore (adopting this one's contents) when it boots.
+        if isinstance(stores, dict):
+            stores.setdefault("resources", ResourceCollections())
+        self._stores = s
         self.s3 = s.get("s3") or InMemoryObjectStore()
         self.ddb = s.get("ddb") or InMemoryNoSqlStore()
         self.kms = s.get("kms") or InMemoryKeyStore()
@@ -307,7 +339,9 @@ class AwsWireRouter:
         # its own lightweight function registry (a namespace the core attaches to).
         self.events = s.get("events") or self.msg
         self.ssm = s.get("ssm") or ssm.SsmStore()   # Systems Manager (Parameter Store, documents, Run Command, …)
-        self.lam = s.get("lam") or _types.SimpleNamespace()
+        # Nano's shared registry calls it "compute" (Lambda functions + API Gateway APIs, the
+        # console's dataplane_adapter._COMPUTE): the same functions for the console and the CLI.
+        self.lam = s.get("lam") or s.get("compute") or _types.SimpleNamespace()
         # API Gateway shares the Lambda store so an AWS_PROXY integration can reach
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
@@ -378,6 +412,8 @@ class AwsWireRouter:
             return az
         if self._servicebus_service(method, path, lheaders):
             return "az-servicebus"
+        if _execute_api_id(path, lheaders):   # HTTP API invoke URL ({id}.execute-api.* or /apigw/{id}/…)
+            return "apigw-invoke"
         if "/2015-03-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
             return "lambda"
         if path.startswith("/v2/") and path[4:].split("/", 1)[0] in (   # API Gateway V2 control plane
@@ -422,6 +458,65 @@ class AwsWireRouter:
         if rds_data.is_data_api_path(path):  # unsigned Data API (rest-json path)
             return "rds-data"
         return "s3"  # default: bucket/key path-style
+
+    def _azure_sql_conn(self, base):
+        """What a Microsoft.Sql database is backed by here: the tunnel's /azure-sql data plane on
+        the shared SqlStore — real Postgres when PGlite is loaded, SQLite otherwise. Nano has no TCP
+        database to connect to, so unlike offline there is no host/port, only the HTTP data plane."""
+        pg = type(self.rds).__name__ == "PGliteSqlStore"
+        return {"engine": "PostgreSQL (PGlite, in-browser)" if pg else "SQLite (in-browser)",
+                "dataPlane": f"{base}/azure-sql"}
+
+    _EC2_NS = "http://ec2.amazonaws.com/doc/2016-11-15/"
+    _EC2_STATE_CODES = {"pending": 0, "running": 16, "shutting-down": 32, "terminated": 48,
+                        "stopping": 64, "stopped": 80}
+
+    def _ec2_describe_instances(self, params):
+        """EC2 DescribeInstances over the instances the Nano console launched (the shared
+        "resources" store) — `aws ec2 describe-instances` sees what the console shows. Filters:
+        InstanceId.N and instance-state-name / tag:Name (the common ones)."""
+        res = self._stores.get("resources") if isinstance(self._stores, dict) else None
+        cols = getattr(res, "collections", {}) or {}
+        ids = {v for k, v in params.items() if k.startswith("InstanceId.")}
+        filters = {}
+        for k, v in params.items():
+            m = re.match(r"Filter\.(\d+)\.Name$", k)
+            if m:
+                filters[v] = {params[x] for x in params if x.startswith(f"Filter.{m.group(1)}.Value.")}
+        acct = self.iam.account_id
+        items = []
+        for ns, recs in cols.items():
+            parts = ns.split("/")
+            if len(parts) != 3 or parts[0] != "aws" or parts[2] != "ec2":
+                continue
+            for name, r in (recs or {}).items():
+                iid = str(r.get("instance_id") or "")
+                state = str(r.get("state") or r.get("status") or "running").lower()
+                if not iid or (ids and iid not in ids):
+                    continue
+                if "instance-state-name" in filters and state not in filters["instance-state-name"]:
+                    continue
+                if "tag:Name" in filters and name not in filters["tag:Name"]:
+                    continue
+                x = _xml_escape
+                items.append(
+                    f"<item><reservationId>r-{iid[2:]}</reservationId><ownerId>{acct}</ownerId><groupSet/>"
+                    f"<instancesSet><item><instanceId>{x(iid)}</instanceId>"
+                    f"<imageId>{x(str(r.get('image_id') or ''))}</imageId>"
+                    f"<instanceState><code>{self._EC2_STATE_CODES.get(state, 16)}</code><name>{x(state)}</name></instanceState>"
+                    f"<privateDnsName>ip-{x(str(r.get('private_ip') or '').replace('.', '-'))}.ec2.internal</privateDnsName>"
+                    f"<dnsName>{x(str(r.get('public_dns') or ''))}</dnsName>"
+                    f"<instanceType>{x(str(r.get('instance_type') or 't3.micro'))}</instanceType>"
+                    f"<launchTime>{x(str(r.get('launch_time') or ''))}</launchTime>"
+                    f"<placement><availabilityZone>{x(str(r.get('availability_zone') or 'us-east-1a'))}</availabilityZone></placement>"
+                    f"<privateIpAddress>{x(str(r.get('private_ip') or ''))}</privateIpAddress>"
+                    f"<ipAddress>{x(str(r.get('public_ip') or ''))}</ipAddress>"
+                    f"<tagSet><item><key>Name</key><value>{x(name)}</value></item></tagSet>"
+                    f"</item></instancesSet></item>")
+        body = (f'<?xml version="1.0" encoding="UTF-8"?><DescribeInstancesResponse xmlns="{self._EC2_NS}">'
+                f"<requestId>{iam._req_id()}</requestId><reservationSet>{''.join(items)}</reservationSet>"
+                "</DescribeInstancesResponse>")
+        return {"status": 200, "headers": {"content-type": "text/xml"}, "body": body.encode()}
 
     _STS_NS = "https://sts.amazonaws.com/doc/2011-06-15/"
 
@@ -517,6 +612,32 @@ class AwsWireRouter:
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
+        if svc == "apigw-invoke":   # an HTTP API's invoke URL → the shared gateway engine
+            api_id = _execute_api_id(path, lheaders)
+            rest = path.split("?", 1)[0]
+            if rest.startswith(f"/apigw/{api_id}"):           # path-style: /apigw/{id}[/{stage}]/…
+                rest = rest[len(f"/apigw/{api_id}"):]
+            api = self.apigwv2.apis.get(api_id) or {}
+            first = rest.strip("/").split("/", 1)[0]
+            stage = first if first and first != "$default" and first in (api.get("stages") or {}) else "$default"
+            if stage != "$default":
+                rest = rest.strip("/")[len(stage):]
+            fstore = self.lam
+
+            def invoker(fn, event):   # the Lambda store this router serves (shared with the console)
+                fn = str(fn).split(":function:", 1)[-1].split(":", 1)[0]
+                out = lam.dispatch(fstore, "POST", f"/2015-03-31/functions/{fn}/invocations", {}, {},
+                                        json.dumps(event).encode())
+                if out.status >= 300 or (out.headers or {}).get("X-Amz-Function-Error"):
+                    return {"_error": True}
+                try:
+                    return json.loads((out.body or b"null").decode("utf-8"))
+                except Exception:
+                    return None
+            r = apigw2_gw.handle(self.apigwv2, api_id, stage, method, rest.lstrip("/"), headers or {},
+                                 query or {}, bytes(body), invoker=invoker)
+            return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
+
         if svc == "apigatewayv2":   # native API Gateway V2 control plane (/v2/apis, …)
             r = apigw2.dispatch(self.apigwv2, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
@@ -537,6 +658,8 @@ class AwsWireRouter:
             self.az_arm._base = f"{lheaders.get('x-forwarded-proto', 'http')}://{host}" if host else ""
             r = self.az_arm.handle(method, path, query or {}, self._json_body(body) if body else None)
             out = r.get("body")
+            if _SQL_DB.search(path.split("?", 1)[0]) and r["status"] < 300 and isinstance(out, dict):
+                out.setdefault("properties", {})["connectionInfo"] = self._azure_sql_conn(self.az_arm._base)
             hdrs = dict(r.get("headers") or {})
             if out is not None:
                 hdrs.setdefault("content-type", "application/json")
@@ -658,6 +781,8 @@ class AwsWireRouter:
         params = self._query_params(query, body)
         if svc == "sts":
             return self._sts(params)
+        if svc == "vpc" and params.get("Action") == "DescribeInstances":
+            return self._ec2_describe_instances(params)
         if svc == "iam":
             r = iam.dispatch(self.iam, params)
         elif svc == "rds":

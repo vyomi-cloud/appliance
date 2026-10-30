@@ -66,10 +66,13 @@ def lambda_list(p=None):
 
 
 def lambda_create(p):
-    name = str(p.get("name") or "").strip()
+    # The same name spellings the offline console API accepts (core/models.LambdaFunctionRequest).
+    name = str(p.get("FunctionName") or p.get("functionName") or p.get("function_name") or p.get("name") or "").strip()
     source = p.get("code") or p.get("source") or "def handler(event, context):\n    return {'ok': True, 'event': event}"
     body = {"FunctionName": name, "Runtime": p.get("runtime", "python3.12"),
             "Handler": p.get("handler", "index.handler"), "Code": {"Source": source}}
+    if isinstance(p.get("environment"), dict) and p["environment"]:
+        body["Environment"] = {"Variables": {str(k): str(v) for k, v in p["environment"].items()}}
     for src, dst in (("memory_size", "MemorySize"), ("memory", "MemorySize"), ("timeout", "Timeout"),
                      ("description", "Description"), ("role", "Role")):
         if p.get(src) not in (None, ""):

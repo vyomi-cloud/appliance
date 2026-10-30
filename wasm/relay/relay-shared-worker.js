@@ -78,6 +78,7 @@ setInterval(announce, 3000);
 let py = null, handle = null, booting = null, ws = null;
 let monitorTimer = null, localFails = 0, cloudFailStreak = 0;
 let scheduleStoresSave = () => {};   // real impl installed once Pyodide is up (store-sync in bootPyodide)
+let saveNow = async () => {};        // likewise: persist + notify now (awaited before each relayed response)
 
 // ── Tunnel selection: prefer the LOCAL relay when present, else CLOUD ─────────
 // A loopback fetch from an https tab is allowed (localhost is exempt from mixed
@@ -102,13 +103,28 @@ function externalFor(mode) {
     : state.cfg.cloudExternal + "/" + encodeURIComponent(state.session || "nano");
 }
 
+// zoneinfo has no zone files in Pyodide without the tzdata package (Cloud Scheduler and
+// the like would reject every time zone but UTC). py.loadPackage("tzdata") never settles
+// in this module worker, so unpack the wheel Pyodide's own lock file names, and never let
+// it hold up the tunnel (20 s cap; without it only non-UTC zones are affected).
+async function installTzdata() {
+  const job = (async () => {
+    const lock = await (await fetch(PYODIDE_INDEX + "pyodide-lock.json")).json();
+    const file = lock.packages && lock.packages.tzdata && lock.packages.tzdata.file_name;
+    if (!file) throw new Error("tzdata not in pyodide-lock.json");
+    py.unpackArchive(await (await fetch(PYODIDE_INDEX + file)).arrayBuffer(), "wheel");
+  })();
+  const cap = new Promise((_, no) => setTimeout(() => no(new Error("timed out")), 20000));
+  try { await Promise.race([job, cap]); } catch (e) { log("tzdata skipped: " + e, "dim"); }
+}
+
 async function bootPyodide() {
   if (booting) return booting;
   booting = (async () => {
     log("loading Pyodide…", "dim");
     py = await loadPyodide({ indexURL: PYODIDE_INDEX });   // explicit indexURL: required in a worker
     try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
-    try { await py.loadPackage("tzdata"); } catch (e) { log("tzdata load skipped: " + e, "dim"); }   // zoneinfo zones (Cloud Scheduler time zones)
+    await installTzdata();
     const hasPg = await installPGlite();
     py.globals.set("_USE_PGLITE", hasPg);
     py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
@@ -168,9 +184,13 @@ builtins._capture = _capture; builtins._restore = _restore
     let _storesBC = null; try { _storesBC = new BroadcastChannel("nano-stores"); } catch (_) {}
     let _restoring = false, _storeTimer = null;
     const capStores = () => { try { return py.runPython("_capture()"); } catch (_) { return null; } };
-    const resStores = (j) => { if (!j) return; try { py.globals.set("_vy_blob", j); py.runPython("_restore(_vy_blob)"); } catch (_) {} };
-    async function saveStores(notify) { try { const j = capStores(); if (!j) return; await idbPut(_SK, j); if (notify && _storesBC) { try { _storesBC.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
+    // Publish only a change from the state last saved or restored here: a read must never write
+    // back a snapshot older than the console's latest change (it would undo it). Same as nano-boot.js.
+    let _lastStores = null;
+    const resStores = (j) => { if (!j) return; try { py.globals.set("_vy_blob", j); py.runPython("_restore(_vy_blob)"); _lastStores = capStores(); } catch (_) {} };
+    async function saveStores(notify) { try { const j = capStores(); if (!j || j === _lastStores) return; _lastStores = j; await idbPut(_SK, j); if (notify && _storesBC) { try { _storesBC.postMessage({ k: _SK, t: Date.now() }); } catch (_) {} } } catch (_) {} }
     scheduleStoresSave = () => { if (_storeTimer) return; _storeTimer = setTimeout(() => { _storeTimer = null; saveStores(true); }, 400); };
+    saveNow = () => saveStores(true);
     if (_storesBC) _storesBC.onmessage = async (e) => { if (!e.data || e.data.k !== _SK || _restoring) return; _restoring = true; try { resStores(await idbGet(_SK)); } finally { _restoring = false; } };
     try { resStores(await idbGet(_SK)); } catch (_) {}   // boot: rehydrate before serving
     // Live engine status for Dashboard > Service status (same check as nano-boot.js).
@@ -235,9 +255,11 @@ function connect() {
     if (req.type === "ping") { sock.send(JSON.stringify({ type: "pong" })); return; }
     try {
       const resp = JSON.parse(await handle(JSON.stringify(req)));
+      // Persist + notify the consoles BEFORE answering: when the CLI/SDK gets the response,
+      // the change is already in the shared snapshot the console reads (parity, no race).
+      await saveNow();
       sock.send(JSON.stringify({ id: req.id, ...resp }));
       state.served++; state.lastActivity = Date.now(); announce();
-      scheduleStoresSave();   // persist the shared registry + notify the console (parity)
     } catch (e) {
       sock.send(JSON.stringify({ id: req.id, status: 500,
         headers: { "content-type": "text/plain" }, body: btoa("nano endpoint error: " + e) }));

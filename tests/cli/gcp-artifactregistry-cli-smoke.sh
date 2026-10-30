@@ -14,7 +14,7 @@ fi
 LOC="us-central1"
 REPO="cli-ar-$(date +%s)"
 fail=0
-chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; else echo "[FAIL] $2 :: $3"; fail=$((fail+1)); fi; }
+chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; else echo "[FAIL] $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 
 gcloud config set auth/disable_credentials true >/dev/null 2>&1
 gcloud config set core/project "$PROJECT" >/dev/null 2>&1

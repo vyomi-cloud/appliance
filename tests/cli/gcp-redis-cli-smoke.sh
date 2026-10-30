@@ -14,7 +14,7 @@ LOC=us-central1
 ID="cli-redis-$(date +%s)"
 HA="${ID}-ha"
 pass=0; fail=0
-chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: $3"; fail=$((fail+1)); fi; }
+chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 export CLOUDSDK_CORE_PROJECT="$PROJECT"

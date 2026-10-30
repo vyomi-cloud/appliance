@@ -18,7 +18,7 @@ if [ -z "${PROJECT:-}" ]; then
   [ -n "$PROJECT" ] || { echo "FAIL discover project :: \`gcloud projects list\` against $BASE returned nothing"; exit 1; }
 fi
 pass=0; fail=0
-chk() { if [ "$1" = "0" ]; then echo "PASS $2"; pass=$((pass+1)); else echo "FAIL $2 :: $3"; fail=$((fail+1)); fi; }
+chk() { if [ "$1" = "0" ]; then echo "PASS $2"; pass=$((pass+1)); else echo "FAIL $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 
 echo "== gcloud/gsutil against $BASE project=$PROJECT =="
 

@@ -242,6 +242,19 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
     return None
 
 
+def _aws_secret_entry(name: str, created: str) -> dict:
+    """A SecretListEntry / DescribeSecret body (dates as epoch seconds, as the SDKs parse them)."""
+    try:
+        ts = datetime.strptime(created.replace("Z", "")[:26], "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=timezone.utc).timestamp()
+    except ValueError:
+        try:
+            ts = datetime.strptime(created.replace("Z", ""), "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+        except ValueError:
+            ts = time.time()
+    return {"ARN": f"arn:aws:secretsmanager:us-east-1:000000000000:secret:{name}", "Name": name,
+            "CreatedDate": ts, "LastChangedDate": ts, "SecretVersionsToStages": {}}
+
+
 async def _aws_secrets_dispatch(target: str, body: dict, space: str) -> dict | None:
     op = target.split(".", 1)[-1]
     name = body.get("SecretId") or body.get("Name") or "default"
@@ -275,6 +288,18 @@ async def _aws_secrets_dispatch(target: str, body: dict, space: str) -> dict | N
         _aws_secret_index_remove(space, name)
         return {"Name": name, "ARN": f"arn:aws:secretsmanager:us-east-1:000000000000:secret:{name}",
                 "DeletionDate": time.time()}
+    if op == "ListSecrets":
+        # The same per-space index the console lists, so console- and SDK-created secrets
+        # both show (`aws secretsmanager list-secrets`). Filter: name (prefix match).
+        created = _aws_secret_created(space)
+        prefixes = [v for f in (body.get("Filters") or []) if f.get("Key") == "name" for v in (f.get("Values") or [])]
+        names = [n for n in _aws_secret_index_get(space) if not prefixes or any(n.startswith(p) for p in prefixes)]
+        return {"SecretList": [_aws_secret_entry(n, created.get(n, "")) for n in names]}
+    if op == "DescribeSecret":
+        if name not in _aws_secret_index_get(space) and vc.kv_get("aws", space, name) is None:
+            return {"__type": "ResourceNotFoundException",
+                    "message": "Secrets Manager can't find the specified secret."}
+        return _aws_secret_entry(name, _aws_secret_created(space).get(name, ""))
     if op == "ListSecretVersionIds":
         versions = vc.kv_list_versions("aws", space, name)
         return {"Name": name, "Versions": [

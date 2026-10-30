@@ -38,6 +38,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -62,6 +63,7 @@ ENV = dict(os.environ,
            AZURE_CORE_ONLY_SHOW_ERRORS="true")
 
 results: list[dict] = []
+not_applicable: list[dict] = []   # checks a target can't support, with the reason (see cli_suites)
 
 
 def check(section: str, name: str, ok: bool, detail: str = "") -> bool:
@@ -318,6 +320,10 @@ def both_ways(ids: dict) -> None:
 def cli_suites(ids: dict) -> None:
     env = {"ENDPOINT": B, "CONSOLE": CONSOLE, "PROJECT": ids["gcp"]["console"], "AZURE_SUBSCRIPTION_ID": ids["azure"]["console"],
            "AZURE_RESOURCE_GROUP": ids["azure"]["rg"]}
+    if TARGET == "nano":   # HTTP API invoke URLs ({id}.execute-api.localhost) are served by the tunnel itself
+        env["GATEWAY_HTTP_PORT"] = str(urllib.parse.urlsplit(B).port or 80)
+        env["SNS_RECEIVER_HOST"] = "127.0.0.1"   # the browser runs on this host, not in a container
+        env["SNS_HTTP_PUSH"] = "0"   # a browser tab can't push to HTTP endpoints → reported N/A, not passed
     for f in sorted(glob.glob(os.path.join(ROOT, "tests", "cli", "*-cli-smoke.sh"))):
         name = os.path.basename(f)[:-len("-cli-smoke.sh")]
         try:
@@ -327,6 +333,11 @@ def cli_suites(ids: dict) -> None:
             out, rc = "timed out after 900s", 124
         # Two output styles: "PASS name" / "FAIL name :: why" and "[PASS] name" / "[FAIL] name :: why".
         np, nf = len(re.findall(r"^\[?PASS\]? ", out, re.M)), len(re.findall(r"^\[?FAIL\]? ", out, re.M))
+        # "[N/A] what :: why": a check this target can't support (e.g. Nano can't push to HTTP).
+        # Not a pass and not a failure — listed on its own in the summary.
+        for line in re.findall(r"^\[N/A\] (.*)$", out, re.M):
+            what, _, why = line.partition(" :: ")
+            not_applicable.append({"suite": name, "check": what, "reason": why})
         skipped = re.search(r"^SKIP ", out, re.M) is not None
         fails = "; ".join(re.sub(r"^\[?FAIL\]? ", "", l).split(" :: ")[0] for l in out.splitlines()
                           if re.match(r"\[?FAIL\]? ", l))[:400]
@@ -361,10 +372,15 @@ def main() -> int:
         md += [f"### {title} ({sum(r['ok'] for r in rs)}/{len(rs)})", "", "| | Check | Detail |", "|---|---|---|"]
         md += [f"| {'✅' if r['ok'] else '❌'} | {r['name']} | {'' if r['ok'] else r['detail'][-240:].replace('|', '/').replace(chr(10), ' ')} |" for r in rs]
         md.append("")
+    if not_applicable:
+        md += [f"### Not applicable on this target ({len(not_applicable)}) — not counted as passed", "",
+               "| Suite | Check | Why |", "|---|---|---|"]
+        md += [f"| {n['suite']} | {n['check']} | {n['reason']} |" for n in not_applicable]
+        md.append("")
     if no_cli:
         md += [f"### Released services with no CLI suite yet ({len(no_cli)})", "", ", ".join(no_cli), ""]
     open(os.path.join(OUT, "summary.md"), "w").write("\n".join(md) + "\n")
-    json.dump({"endpoint": B, "console": CONSOLE, "target": TARGET, "identities": ids, "results": results, "no_cli_suite": no_cli},
+    json.dump({"endpoint": B, "console": CONSOLE, "target": TARGET, "identities": ids, "results": results, "not_applicable": not_applicable, "no_cli_suite": no_cli},
               open(os.path.join(OUT, "results.json"), "w"), indent=1)
     print(f"\n{ok}/{len(results)} checks passed → {OUT}/summary.md")
     return 0 if ok == len(results) else 1

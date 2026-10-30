@@ -26,7 +26,7 @@ if ! command -v az >/dev/null 2>&1; then
 fi
 
 pass=0; fail=0
-chk() { if [ "$1" = "0" ]; then echo "PASS $2"; pass=$((pass+1)); else echo "FAIL $2 :: $3"; fail=$((fail+1)); fi; }
+chk() { if [ "$1" = "0" ]; then echo "PASS $2"; pass=$((pass+1)); else echo "FAIL $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 
 echo "== az against $BASE subscription=$SUB =="
 az --version 2>&1 | head -1

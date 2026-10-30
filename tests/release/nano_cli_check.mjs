@@ -55,7 +55,8 @@ page.on("pageerror", (e) => console.log("[nano pageerror]", e.message));
 await page.goto(base + "/clouds.html", { waitUntil: "domcontentloaded" });
 await page.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller
   && document.querySelector("#nano-foot-toggle"), null, { timeout: 180000, polling: 500 });
-for (let i = 0; i < 120 && !(await health()).tab; i++) {
+// Up to 6 min: the worker downloads Pyodide, PGlite and the cores before it registers.
+for (let i = 0; i < 240 && !(await health()).tab; i++) {
   if (i % 20 === 0) {
     await page.evaluate(() => {
       const b = document.querySelector("#nano-foot-toggle");
@@ -64,7 +65,12 @@ for (let i = 0; i < 120 && !(await health()).tab; i++) {
   }
   await sleep(1500);
 }
-if (!(await health()).tab) { console.log("FAIL: the Nano tab never registered with the relay"); await browser.close(); server.close(); stop(1); }
+if (!(await health()).tab) {
+  // The tunnel worker logs into the footer's Logs pane — show it, it says where boot stopped.
+  const wlog = await page.evaluate(() => (document.getElementById("nano-foot-log") || {}).textContent || "").catch(() => "");
+  console.log("FAIL: the Nano tab never registered with the relay. Tunnel log:\n" + String(wlog).slice(-3000));
+  await browser.close(); server.close(); stop(1);
+}
 console.log("Nano tab registered with the relay:", JSON.stringify(await health()));
 
 // 3. the three consoles, each with its in-browser backend up

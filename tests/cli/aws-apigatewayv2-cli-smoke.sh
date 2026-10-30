@@ -55,9 +55,9 @@ A get-api --api-id "$API" >/dev/null 2>&1; [ $? -ne 0 ]; chk $? "get-api after d
 # ── data plane: the invoke URL is served by the shared Caddy gateway ─────────
 GW_HTTP="${GATEWAY_HTTP_PORT:-9080}"
 FN="apigw-cli-$SFX"
-# The appliance's Lambda runs the real handler; it is created through its REST API (same store the
-# API Gateway integration invokes).
-FNARN=$(FN="$FN" BASE="$BASE" python3 - <<'PY'
+# The appliance's Lambda runs the real handler; it is created through the console's Lambda API (same
+# store the API Gateway integration invokes; on Nano that API is the browser tab, $CONSOLE).
+FNARN=$(FN="$FN" BASE="$CONSOLE" python3 - <<'PY'
 import json, os, urllib.request
 code = ('import json\ndef handler(event, context):\n'
         '    return {"statusCode": 200, "headers": {"content-type": "application/json"}, "body": json.dumps('

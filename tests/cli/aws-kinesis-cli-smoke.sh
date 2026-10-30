@@ -20,7 +20,7 @@ fi
 NAME="cli-kin-$(date +%s)"
 fail=0
 k() { aws --endpoint-url "$BASE" kinesis "$@"; }
-chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; else echo "[FAIL] $2 :: $3"; fail=$((fail+1)); fi; }
+chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; else echo "[FAIL] $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 q() { python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
 
 out=$(k create-stream --stream-name "$NAME" --shard-count 2 2>&1); chk $? "create-stream" "$out"
