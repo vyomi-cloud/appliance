@@ -135,6 +135,11 @@
   "category": "gcp"
  },
  {
+  "name": "sched",
+  "label": "sched \u00b7 SchedulerStore",
+  "category": "aws"
+ },
+ {
   "name": "gcp_logging",
   "label": "gcp_logging \u00b7 LoggingStore",
   "category": "gcp"

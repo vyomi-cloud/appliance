@@ -18,8 +18,11 @@ Custom methods use the `:verb` suffix (`:encrypt`, `:decrypt`). `plaintext` /
 `ciphertext` fields are base64 per the REST wire. Errors use the Google shape
 `{"error":{"code","message","status"}}` (status e.g. NOT_FOUND / INVALID_ARGUMENT).
 
-Scope (v1 slice): keyRings create/get/list, cryptoKeys create/get/list/patch,
-cryptoKeyVersions get/list, :encrypt, :decrypt.
+Scope (v1 slice): keyRings create/get/list (location "-" aggregates across locations),
+cryptoKeys create/get/list/patch (location/keyRing "-" aggregates project-wide — the
+console's Key inventory), :encrypt, :decrypt (encrypt requires the primary version to
+be ENABLED), :updateCryptoKeyPrimaryVersion, :getIamPolicy/:setIamPolicy.
+cryptoKeyVersions get/list/create, patch (enable/disable), :destroy, :restore.
 
 v4 C0b — the offline appliance serves Cloud KMS through THIS core (over
 core/appliance_stores.py) instead of the retired Vault-transit handlers in
@@ -35,8 +38,9 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from core.kms_keystore import KeyStore
 
@@ -53,6 +57,10 @@ class GcpKmsResponse:
 # ── primitives ─────────────────────────────────────────────────────────────
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000000Z")
+
+
+def _future(seconds: int) -> str:
+    return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%S.000000Z")
 
 
 def _b64e(b: bytes) -> str:
@@ -112,7 +120,7 @@ def _version_name(key_name: str, ver: str) -> str:
 
 
 def _version_view(key_name: str, ver: str, entry: dict) -> dict:
-    return {
+    view = {
         "name": _version_name(key_name, ver),
         "state": entry.get("state", "ENABLED"),
         "protectionLevel": entry.get("protectionLevel", "SOFTWARE"),
@@ -120,6 +128,11 @@ def _version_view(key_name: str, ver: str, entry: dict) -> dict:
         "createTime": entry.get("createTime", _now()),
         "generateTime": entry.get("createTime", _now()),
     }
+    if entry.get("destroyTime"):
+        view["destroyTime"] = entry["destroyTime"]
+    if entry.get("destroyEventTime"):
+        view["destroyEventTime"] = entry["destroyEventTime"]
+    return view
 
 
 def _crypto_key_view(store: KeyStore, name: str) -> dict:
@@ -142,7 +155,12 @@ def _crypto_key_view(store: KeyStore, name: str) -> dict:
         view["rotationPeriod"] = meta["rotationPeriod"]
     if meta.get("nextRotationTime"):
         view["nextRotationTime"] = meta["nextRotationTime"]
+    view["destroyScheduledDuration"] = meta.get("destroyScheduledDuration", "86400s")
     return view
+
+
+def _default_policy() -> dict:
+    return {"version": 1, "etag": _b64e(b"0"), "bindings": []}
 
 
 # google-cloud-* REST clients send enums as numbers (`$alt=json;enum-encoding=int`).
@@ -160,13 +178,22 @@ def _enum(value, table: dict, default: str) -> str:
 
 
 _MUTABLE = {"labels": "labels", "rotation_period": "rotationPeriod", "rotationPeriod": "rotationPeriod",
-            "next_rotation_time": "nextRotationTime", "nextRotationTime": "nextRotationTime"}
+            "next_rotation_time": "nextRotationTime", "nextRotationTime": "nextRotationTime",
+            "destroy_scheduled_duration": "destroyScheduledDuration", "destroyScheduledDuration": "destroyScheduledDuration"}
+
+
+def _duration_seconds(d: str | None, default: int = 86400) -> int:
+    """Parse a protobuf Duration string ("2592000s") used on the Cloud KMS wire."""
+    try:
+        return int(str(d).rstrip("s")) if d else default
+    except (TypeError, ValueError):
+        return default
 
 
 def _apply_settings(meta: dict, payload: dict, mask: list) -> str | None:
     """Apply the mutable CryptoKey fields named by `mask` (all present ones when
     empty). Returns an error message for an unsupported mask path."""
-    fields = mask or [k for k in ("labels", "rotationPeriod", "nextRotationTime") if k in payload]
+    fields = mask or [k for k in ("labels", "rotationPeriod", "nextRotationTime", "destroyScheduledDuration") if k in payload]
     for f in fields:
         attr = _MUTABLE.get(f.strip())
         if not attr:
@@ -234,8 +261,9 @@ def dispatch(store: KeyStore, method: str, path: str,
             store.persist()
             return _json(200, _key_ring_view(name, rings[name]))
         if method == "GET":
+            pseg = parent.split("/")   # projects/{p}/locations/{l-or-"-"}/keyRings
             items = [_key_ring_view(n, e) for n, e in sorted(rings.items())
-                     if n.startswith(parent + "/") and n.count("/") == 5]
+                     if n.count("/") == 5 and all(p == "-" or p == n.split("/")[i] for i, p in enumerate(pseg))]
             return _json(200, {"keyRings": items})
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on keyRings")
 
@@ -281,9 +309,10 @@ def dispatch(store: KeyStore, method: str, path: str,
             store.persist()
             return _json(200, _crypto_key_view(store, name))
         if method == "GET":
+            pseg = ring_name.split("/")   # projects/{p}/locations/{l-or-"-"}/keyRings/{k-or-"-"}
             items = [_crypto_key_view(store, n) for n in store.key_ids()
-                     if n.startswith(ring_name + "/cryptoKeys/")
-                     and n.count("/") == 7]
+                     if n.count("/") == 7 and n.split("/")[6] == "cryptoKeys"
+                     and all(p == "-" or p == n.split("/")[i] for i, p in enumerate(pseg))]
             return _json(200, {"cryptoKeys": items})
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on cryptoKeys")
 
@@ -294,6 +323,32 @@ def dispatch(store: KeyStore, method: str, path: str,
             return _encrypt(store, name, payload)
         if verb == "decrypt":
             return _decrypt(store, name, payload)
+        if verb == "updateCryptoKeyPrimaryVersion":
+            if not store.key_exists(name):
+                return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+            meta = store.get_key(name)
+            ver = str(payload.get("cryptoKeyVersionId") or "")
+            if ver not in meta.get("versions", {}):
+                return _err(400, "INVALID_ARGUMENT", f"CryptoKeyVersion {ver} not found.")
+            meta["primary"] = ver
+            store.put_key(name, meta, store.get_material(name))
+            store.persist()
+            return _json(200, _crypto_key_view(store, name))
+        if verb == "getIamPolicy":
+            if not store.key_exists(name):
+                return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+            meta = store.get_key(name)
+            return _json(200, meta.get("iamPolicy") or _default_policy())
+        if verb == "setIamPolicy":
+            if not store.key_exists(name):
+                return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+            meta = store.get_key(name)
+            policy = dict(payload.get("policy") or {})
+            policy.setdefault("etag", _b64e(os.urandom(8)))
+            meta["iamPolicy"] = policy
+            store.put_key(name, meta, store.get_material(name))
+            store.persist()
+            return _json(200, policy)
         if verb:
             return _err(400, "INVALID_ARGUMENT", f"Unknown method :{verb}")
         if method == "GET":
@@ -313,20 +368,64 @@ def dispatch(store: KeyStore, method: str, path: str,
             return _json(200, _crypto_key_view(store, name))
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on cryptoKey")
 
-    # ── cryptoKeyVersions: .../cryptoKeys/{k}/cryptoKeyVersions[/{v}] ───────
+    # ── cryptoKeyVersions: .../cryptoKeys/{k}/cryptoKeyVersions[/{v}[:verb]] ─
     if len(segs) >= 9 and segs[8] == "cryptoKeyVersions":
         key_name = "/".join(segs[:8])
         if not store.key_exists(key_name):
             return _err(404, "NOT_FOUND", f"CryptoKey {key_name} not found.")
         meta = store.get_key(key_name) or {}
         versions = meta.get("versions", {})
+
+        def _save() -> None:
+            meta["versions"] = versions
+            store.put_key(key_name, meta, store.get_material(key_name))
+            store.persist()
+
         if len(segs) == 9 and method == "GET":       # list versions
             items = [_version_view(key_name, v, versions[v]) for v in sorted(versions)]
             return _json(200, {"cryptoKeyVersions": items})
-        if len(segs) == 10 and method == "GET":      # get one version
+        if len(segs) == 9 and method == "POST":      # create a new (disabled) version
+            next_id = str(max((int(v) for v in versions), default=0) + 1)
+            versions[next_id] = {"state": "ENABLED", "createTime": _now()}
+            _save()
+            return _json(200, _version_view(key_name, next_id, versions[next_id]))
+        if len(segs) == 10 and method == "GET" and not verb:      # get one version
             ver = segs[9]
             if ver not in versions:
                 return _err(404, "NOT_FOUND", f"CryptoKeyVersion {ver} not found.")
+            return _json(200, _version_view(key_name, ver, versions[ver]))
+        if len(segs) == 10 and method == "PATCH" and not verb:    # enable / disable
+            ver = segs[9]
+            if ver not in versions:
+                return _err(404, "NOT_FOUND", f"CryptoKeyVersion {ver} not found.")
+            state = payload.get("state")
+            if state not in ("ENABLED", "DISABLED"):
+                return _err(400, "INVALID_ARGUMENT", "state must be ENABLED or DISABLED.")
+            if versions[ver].get("state") not in ("ENABLED", "DISABLED"):
+                return _err(400, "FAILED_PRECONDITION",
+                            f"CryptoKeyVersion {ver} is in state {versions[ver].get('state')} and cannot be updated.")
+            versions[ver]["state"] = state
+            _save()
+            return _json(200, _version_view(key_name, ver, versions[ver]))
+        if len(segs) == 10 and verb == "destroy":
+            ver = segs[9]
+            if ver not in versions:
+                return _err(404, "NOT_FOUND", f"CryptoKeyVersion {ver} not found.")
+            if versions[ver].get("state") in ("DESTROYED", "DESTROY_SCHEDULED"):
+                return _err(400, "FAILED_PRECONDITION", f"CryptoKeyVersion {ver} is already scheduled for destruction.")
+            versions[ver]["state"] = "DESTROY_SCHEDULED"
+            versions[ver]["destroyTime"] = _future(_duration_seconds(meta.get("destroyScheduledDuration")))
+            _save()
+            return _json(200, _version_view(key_name, ver, versions[ver]))
+        if len(segs) == 10 and verb == "restore":
+            ver = segs[9]
+            if ver not in versions:
+                return _err(404, "NOT_FOUND", f"CryptoKeyVersion {ver} not found.")
+            if versions[ver].get("state") != "DESTROY_SCHEDULED":
+                return _err(400, "FAILED_PRECONDITION", f"CryptoKeyVersion {ver} is not scheduled for destruction.")
+            versions[ver]["state"] = "DISABLED"
+            versions[ver].pop("destroyTime", None)
+            _save()
             return _json(200, _version_view(key_name, ver, versions[ver]))
         return _err(400, "INVALID_ARGUMENT", f"Unsupported request on cryptoKeyVersions")
 
@@ -337,6 +436,11 @@ def dispatch(store: KeyStore, method: str, path: str,
 def _encrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
     if not store.key_exists(name):
         return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+    meta = store.get_key(name) or {}
+    primary = str(meta.get("primary", "1"))
+    if meta.get("versions", {}).get(primary, {}).get("state", "ENABLED") != "ENABLED":
+        return _err(400, "FAILED_PRECONDITION",
+                    f"CryptoKeyVersion {name}/cryptoKeyVersions/{primary} is not enabled.")
     try:
         plaintext = base64.b64decode(payload.get("plaintext", "") or "")
     except Exception:
