@@ -45,6 +45,7 @@ from core.gcp_compute_instances_core import ComputeStore as ComputeVmStore
 from core.gcp_resourcemanager_core import ResourceManagerStore
 from core.gcp_pam_core import PamStore
 from core.gcp_logging_core import LoggingStore
+from core.scheduler_core import SchedulerStore
 from core.gcp_run_core import RunStore
 from core.azure_arm_core import AzureArm
 
@@ -96,6 +97,7 @@ def get() -> dict:
             "gcp_iam": InMemoryIamStore(),
             "gcp_sql": InMemorySqlStore(),
             "gcp_ar":  ArtifactRegistryStore(),   # Artifact Registry repositories/packages
+            "sched": SchedulerStore(),   # EventBridge Scheduler: schedules + schedule groups
             "gcp_logging": LoggingStore(),   # Cloud Logging: entries, sinks, metrics, buckets, views
             "gcp_rm": ResourceManagerStore(),   # Resource Manager: project, tags, contacts, org policies
             "gcp_pam": PamStore(),   # Privileged Access Manager entitlements
