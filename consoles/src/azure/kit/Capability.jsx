@@ -10,6 +10,7 @@
 import { Badge, Popover, PopoverSurface, PopoverTrigger } from "@fluentui/react-components";
 import { NotSimulatedContainer } from "./common.jsx";
 import cap_acr from "../../../../core/capabilities/azure/acr.json";
+import cap_aks from "../../../../core/capabilities/azure/aks.json";
 import cap_apim from "../../../../core/capabilities/azure/apim.json";
 import cap_appservices from "../../../../core/capabilities/azure/appservices.json";
 import cap_cost from "../../../../core/capabilities/azure/cost.json";
@@ -19,7 +20,7 @@ import cap_keyvaults from "../../../../core/capabilities/azure/keyvaults.json";
 import cap_resourcegroups from "../../../../core/capabilities/azure/resourcegroups.json";
 import cap_servicebus from "../../../../core/capabilities/azure/servicebus.json";
 
-const REGISTRY = { ...cap_acr, ...cap_apim, ...cap_appservices, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_resourcegroups, ...cap_servicebus };
+const REGISTRY = { ...cap_acr, ...cap_aks, ...cap_apim, ...cap_appservices, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_resourcegroups, ...cap_servicebus };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

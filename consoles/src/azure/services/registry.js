@@ -19,7 +19,7 @@ export const SERVICES = [
   { id: "nsgs", title: "Network security groups", type: "Microsoft.Network/networkSecurityGroups", category: "Networking", icon: "nsgs" },
   { id: "resourcegroups", title: "Resource groups", type: "Microsoft.Resources/resourceGroups", category: "Management and governance", icon: "resourcegroups", load: () => import("./resourcegroups/index.jsx") },
   { id: "acr", title: "Container registries", type: "Microsoft.ContainerRegistry/registries", category: "Containers", icon: "acr", load: () => import("./acr/index.jsx") },
-  { id: "aks", title: "Kubernetes services", type: "Microsoft.ContainerService/managedClusters", category: "Containers", icon: "aks" },
+  { id: "aks", title: "Kubernetes services", type: "Microsoft.ContainerService/managedClusters", category: "Containers", icon: "aks", load: () => import("./aks/index.jsx") },
   { id: "apim", title: "API Management services", type: "Microsoft.ApiManagement/service", category: "Integration", icon: "apim", load: () => import("./apim/index.jsx") },
   { id: "eventgrid", title: "Event Grid", type: "Microsoft.EventGrid/topics", category: "Integration", icon: "eventgrid", load: () => import("./eventgrid/index.jsx") },
   { id: "monitor", title: "Monitor", type: "Microsoft.Insights", category: "Management and governance", icon: "monitor" },

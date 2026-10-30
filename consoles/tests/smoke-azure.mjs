@@ -34,6 +34,9 @@ const RGWIRE = `vyrgwire${n}`;     // resource group created over the wire (CLI 
 const RGLOCK = `vyrglock${n}`;     // resource-group-scoped lock created through the UI
 const APIM = `vyapim${n}`;         // API Management service created through the UI
 const APIM2 = `vyapimwire${n}`;    // API Management service created over the wire
+const AKS = `vysmokeaks${n}`;      // AKS cluster created through the UI
+const AKS2 = `vywireaks${n}`;      // AKS cluster created over the wire
+const POOL = `pool${n}`;           // node pool created through the UI (AKS pool names are short: <=12 chars)
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -47,6 +50,8 @@ const wire = (path, init = {}) => page.evaluate(async ([u, i]) => {
 const arm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2023-05-01`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const armWeb = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2023-12-01`,
+  { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+const armAks = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-09-02-preview`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const blobHdr = (acct) => ({ "x-ms-version": "2021-12-02", authorization: `SharedKey ${acct}:c21va2U=` });
 const blob = (method, acct, path, { query = "", headers = {}, body } = {}) => wire(`/${acct}${path}${query}`, { method, headers: { ...blobHdr(acct), ...headers }, body });
@@ -722,6 +727,94 @@ try {
   await page.getByRole("link", { name: SBQ, exact: true }).waitFor({ state: "detached", timeout: 10000 });
   const sbQGone = await arm("GET", `${sbArm}/queues/${SBQ}`);
   check("UI delete queue → ARM GET 404", sbQGone.status === 404, `HTTP ${sbQGone.status}`);
+  // ── Kubernetes service created through the wizard → visible over native ARM ───────────
+  await page.goto(UI + "#/aks/create");
+  await page.getByLabel("Kubernetes cluster name", { exact: true }).fill(AKS);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await page.getByLabel("Region", { exact: true }).selectOption("eastus");
+  await shot("23-aks-create-basics");
+  for (const t of ["Node pools", "Networking", "Integrations", "Monitoring", "Security", "Advanced", "Tags"]) {
+    await page.getByRole("tab", { name: t, exact: true }).click();
+    await page.waitForTimeout(200);
+  }
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await shot("24-aks-create-review");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: AKS, exact: true }).waitFor({ timeout: 10000 });
+  const aksGet = await armAks("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}`);
+  const aksCluster = aksGet.status === 200 ? JSON.parse(aksGet.text) : {};
+  check("UI create kubernetes service → visible over native ARM", aksGet.status === 200, `HTTP ${aksGet.status}`);
+  check("wizard's default node pool reached ARM as a real node pool", aksCluster.properties?.kubernetesVersion, JSON.stringify(aksCluster.properties?.kubernetesVersion));
+  await shot("25-aks-blade-overview");
+  const poolsGet = await armAks("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}/agentPools`);
+  const pools = poolsGet.status === 200 ? JSON.parse(poolsGet.text).value : [];
+  check("create wizard's node pool visible over native ARM (nested resource)", pools.some((p) => p.name === "nodepool1"), JSON.stringify(pools.map((p) => p.name)));
+
+  // ── Node pools: add one through the UI → visible over the nested ARM resource ──────────
+  await openPanel("Node pools");
+  await page.getByRole("button", { name: "Add node pool", exact: true }).click();
+  await page.getByLabel("Node pool name", { exact: true }).fill(POOL);
+  await page.getByRole("dialog").getByRole("button", { name: "Add" }).click();
+  await page.getByRole("cell", { name: POOL, exact: true }).waitFor({ timeout: 10000 });
+  const poolGet = await armAks("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}/agentPools/${POOL}`);
+  check("UI add node pool → visible over native ARM (nested resource)", poolGet.status === 200, `HTTP ${poolGet.status}`);
+  await shot("26-aks-node-pools");
+
+  // ── Run command: real round-trip, honestly labelled (no live kubelet) ──────────────────
+  await openPanel("Run command");
+  await page.getByLabel("Command", { exact: true }).fill("kubectl get pods -A");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  const outBox = page.getByLabel("Output", { exact: true });
+  await outBox.waitFor({ timeout: 10000 });
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="Output"]')?.value?.length > 0, null, { timeout: 10000 });
+  const runOut = await outBox.inputValue();
+  check("Run command executes the real (honestly simulated) round-trip", runOut.includes("Vyomi does not run a real kubelet"), runOut.slice(0, 80));
+  await shot("27-aks-run-command");
+
+  // ── Namespaces: create through the UI → visible over native ARM ───────────────────────
+  await openPanel("Namespaces");
+  const NS = `smoke-ns-${n}`;
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Create" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(NS);
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByRole("cell", { name: NS, exact: true }).waitFor({ timeout: 10000 });
+  const nsGet = await armAks("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}`);
+  const nsCluster = JSON.parse(nsGet.text);
+  check("UI create namespace → visible over native ARM (properties.namespaces)",
+    (nsCluster.properties?.namespaces || []).some((x) => x.name === NS), JSON.stringify(nsCluster.properties?.namespaces));
+  await shot("28-aks-namespaces");
+
+  // ── Lock created in the UI → visible over the native ARM wire ─────────────────────────
+  await openPanel("Locks");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const AKSLOCK = `smoke-akslock-${n}`;
+  await page.getByLabel("Lock name", { exact: true }).fill(AKSLOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByText(AKSLOCK, { exact: true }).waitFor({ timeout: 10000 });
+  const aksLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}/providers/Microsoft.Authorization/locks/${AKSLOCK}?api-version=2020-05-01`);
+  check("UI create lock → visible over native ARM (extension resource)", aksLockGet.status === 200, `HTTP ${aksLockGet.status}`);
+  await shot("29-aks-locks");
+
+  // ── Kubernetes service created over the wire → visible in the UI (CLI → UI) ───────────
+  const aksPut = await armAks("PUT", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS2}`, { location: "eastus" });
+  check("ARM PUT kubernetes service over wire", aksPut.status === 200 || aksPut.status === 201, `HTTP ${aksPut.status}`);
+  await page.goto(UI + "#/aks");
+  await page.getByRole("link", { name: AKS2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created kubernetes service shown in browse grid", true);
+  await shot("30-aks-browse");
+
+  // ── Delete through the Overview command bar → gone over ARM (cluster + its node pool) ──
+  await page.goto(UI + `#/aks/${RG}/${AKS}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(AKS);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "Kubernetes services" }).waitFor({ timeout: 10000 });
+  const aksGone = await armAks("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}`);
+  check("UI delete kubernetes service → ARM GET 404", aksGone.status === 404, `HTTP ${aksGone.status}`);
+  const poolGone = await armAks("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}/agentPools/${POOL}`);
+  check("node pool cascade-deleted with the cluster", poolGone.status === 404, `HTTP ${poolGone.status}`);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});

@@ -1,0 +1,142 @@
+{
+ "$doc": "Vyomi capability registry — Azure Kubernetes Service (AKS). See aws/s3.json for the contract.",
+ "azure.aks.cluster.crud": {
+  "title": "Managed clusters (create, get, list, delete) over ARM",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_aks_core.py"
+  ]
+ },
+ "azure.aks.cluster.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_aks_core.py"
+  ]
+ },
+ "azure.aks.cluster.power": {
+  "title": "Start / Stop cluster",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Start/Stop update the cluster's logical powerState only — there are no real node VMs in-browser to deallocate or boot, so no compute cost changes and no API server downtime are actually simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_aks_core.py"
+  ]
+ },
+ "azure.aks.node_pools.crud": {
+  "title": "Node pools (agentPools): add, list, scale, update image, delete",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Scaling, image updates and the autoscaler only change the pool's recorded properties (count, nodeImageVersion, min/max count) — no node VMs are actually provisioned, so the \"Nodes\" tab is a deterministic rollup of those properties rather than live kubelet-reported node objects."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_aks_core.py"
+  ]
+ },
+ "azure.aks.cluster_configuration": {
+  "title": "Cluster configuration (Kubernetes version upgrade, automatic upgrade channel, authentication and authorization mode)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A Kubernetes version \"upgrade\" updates properties.kubernetesVersion directly (no node-by-node drain/cordon/rolling upgrade is simulated)."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_aks_core.py"
+  ]
+ },
+ "azure.aks.run_command": {
+  "title": "Run command (az aks command invoke)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi does not run a real kubelet or API server, so runCommand accepts and echoes the submitted command in its response but never actually executes it against a live cluster."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_aks_core.py"
+  ]
+ },
+ "azure.aks.connect_credentials": {
+  "title": "listClusterUserCredential / listClusterAdminCredential (kubeconfig)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The returned kubeconfig is shaped like the real response (cluster/user/context pointing at the cluster's fqdn) but its certificate and token material is a fixed placeholder, and the server address accepts no real kubectl connections."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_aks_core.py"
+  ]
+ },
+ "azure.aks.namespaces": {
+  "title": "Kubernetes namespaces (create, list, delete)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Namespaces are modelled as a stateful list on the cluster resource (seeded with the real default/kube-system/kube-public/kube-node-lease set a fresh cluster ships with) — Vyomi stores and returns them exactly as written, but nothing is scheduled into a namespace because there is no live Kubernetes API server behind it."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_aks_core.py"
+  ]
+ },
+ "azure.aks.kubernetes_objects": {
+  "title": "Live Kubernetes objects (Workloads, Services and ingresses, Storage, Configuration, Custom resources, Events)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "These panels proxy kubectl/the Kubernetes API server of the cluster itself (not ARM) — Vyomi does not run a kubelet or API server in-browser, so pods, deployments, services and other live cluster objects are not simulated."
+  ]
+ },
+ "azure.aks.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this cluster",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this cluster); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.aks.activity_log": {
+  "title": "Activity log",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "api": [
+   "ActivityLogs_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ }
+}
