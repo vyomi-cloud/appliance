@@ -21,7 +21,7 @@ export const SERVICES = [
   { id: "acr", title: "Container registries", type: "Microsoft.ContainerRegistry/registries", category: "Containers", icon: "acr" },
   { id: "aks", title: "Kubernetes services", type: "Microsoft.ContainerService/managedClusters", category: "Containers", icon: "aks" },
   { id: "apim", title: "API Management services", type: "Microsoft.ApiManagement/service", category: "Integration", icon: "apim" },
-  { id: "eventgrid", title: "Event Grid", type: "Microsoft.EventGrid/topics", category: "Integration", icon: "eventgrid" },
+  { id: "eventgrid", title: "Event Grid", type: "Microsoft.EventGrid/topics", category: "Integration", icon: "eventgrid", load: () => import("./eventgrid/index.jsx") },
   { id: "monitor", title: "Monitor", type: "Microsoft.Insights", category: "Management and governance", icon: "monitor" },
   { id: "entra", title: "Microsoft Entra ID", type: "Identity", category: "Identity", icon: "entra" },
   { id: "subscriptions", title: "Subscriptions", type: "Microsoft.Resources/subscriptions", category: "Management and governance", icon: "subscriptions" },
