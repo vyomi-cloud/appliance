@@ -80,13 +80,7 @@ export default function Permissions({ bucket }) {
       <PublicAccess bucket={bucket} state={pab} />
       <Policy bucket={bucket} state={pol} />
       <Ownership bucket={bucket} state={own} />
-      <CapabilityContainer id="s3.bucket.acl" title="Access control list (ACL)" description="Grant basic read/write permissions to other AWS accounts.">
-        <Loading state={acl}>{(d) => (
-          <Table variant="embedded" items={d.grants || []}
-            columnDefinitions={[{ id: "g", header: "Grantee", cell: (g) => g.grantee }, { id: "t", header: "Type", cell: (g) => g.type }, { id: "p", header: "Permission", cell: (g) => g.permission }]}
-            empty={<Box textAlign="center">No grants</Box>} />
-        )}</Loading>
-      </CapabilityContainer>
+      <Acl bucket={bucket} state={acl} />
       <Cors bucket={bucket} state={cors} />
     </SpaceBetween>
   );
@@ -181,6 +175,32 @@ function Ownership({ bucket, state }) {
       <Editor visible={!!edit} title="Edit Object Ownership" onDismiss={() => setEdit(null)} saving={s.saving} error={s.error}
         onSave={() => s.save(() => api.putOwnership(bucket, edit), "Object Ownership", () => setEdit(null))}>
         <Tiles value={edit} onChange={({ detail }) => setEdit(detail.value)} items={OWNERSHIP} columns={1} />
+      </Editor>
+    </CapabilityContainer>
+  );
+}
+
+const CANNED_ACLS = [
+  { value: "private", label: "Private" },
+  { value: "public-read", label: "Public read" },
+  { value: "public-read-write", label: "Public read/write" },
+  { value: "authenticated-read", label: "Authenticated read" },
+];
+
+function Acl({ bucket, state }) {
+  const [edit, setEdit] = useState(null);
+  const s = useSaver("s3.bucket.acl", state.reload);
+  return (
+    <CapabilityContainer id="s3.bucket.acl" title="Access control list (ACL)" description="Grant basic read/write permissions to other AWS accounts."
+      actions={<Button onClick={() => { s.reset(); setEdit("private"); }}>Edit</Button>}>
+      <Loading state={state}>{(d) => (
+        <Table variant="embedded" items={d.grants || []}
+          columnDefinitions={[{ id: "g", header: "Grantee", cell: (g) => g.grantee }, { id: "t", header: "Type", cell: (g) => g.type }, { id: "p", header: "Permission", cell: (g) => g.permission }]}
+          empty={<Box textAlign="center">No grants</Box>} />
+      )}</Loading>
+      <Editor visible={!!edit} title="Edit access control list (ACL)" onDismiss={() => setEdit(null)} saving={s.saving} error={s.error}
+        onSave={() => s.save(() => api.putAcl(bucket, edit), "access control list (ACL)", () => setEdit(null))}>
+        <Tiles value={edit} onChange={({ detail }) => setEdit(detail.value)} items={CANNED_ACLS} columns={1} />
       </Editor>
     </CapabilityContainer>
   );

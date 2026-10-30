@@ -9,6 +9,10 @@ import Container from "@cloudscape-design/components/container";
 import Table from "@cloudscape-design/components/table";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import ContentLayout from "@cloudscape-design/components/content-layout";
+import Modal from "@cloudscape-design/components/modal";
+import FormField from "@cloudscape-design/components/form-field";
+import Input from "@cloudscape-design/components/input";
+import RadioGroup from "@cloudscape-design/components/radio-group";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href } from "../../../common/router.js";
@@ -17,7 +21,7 @@ import DeleteModal from "../../kit/DeleteModal.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import * as api from "./api.js";
 import Permissions from "./Permissions.jsx";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
 
 const arn = (b) => `arn:aws:s3:::${b}`;
 
@@ -137,23 +141,73 @@ function Properties({ bucket }) {
             empty={<Box textAlign="center" color="inherit"><b>No tags</b><Box variant="p" color="inherit">There are no tags associated with this resource.</Box></Box>} />
         </Container>
       )} />
-      <SubSetting title="Default encryption" state={enc} render={(d) => (
-        <KeyValue title="Default encryption" items={[
-          ["Encryption type", d.absent ? "Server-side encryption with Amazon S3 managed keys (SSE-S3)" : { AES256: "Server-side encryption with Amazon S3 managed keys (SSE-S3)", "aws:kms": "Server-side encryption with AWS Key Management Service keys (SSE-KMS)", "aws:kms:dsse": "Dual-layer server-side encryption with AWS Key Management Service keys (DSSE-KMS)" }[d.algorithm] || d.algorithm],
-          ["Bucket Key", d.bucketKey ? "Enabled" : "Disabled"],
-          ...(d.kmsKey ? [["Encryption key ARN", d.kmsKey]] : []),
-        ]} />
-      )} />
+      <Encryption bucket={bucket} state={enc} />
       <CapabilityContainer id="s3.bucket.intelligent-tiering" title="Intelligent-Tiering Archive configurations" />
       <CapabilityContainer id="s3.bucket.logging" title="Server access logging" />
       <NotSimulatedContainer title="AWS CloudTrail data events" />
       <CapabilityContainer id="s3.bucket.notification" title="Event notifications" />
       <NotSimulatedContainer title="Amazon EventBridge" />
       <CapabilityContainer id="s3.bucket.accelerate" title="Transfer acceleration" />
-      <CapabilityContainer id="s3.bucket.object-lock" title="Object Lock" />
+      <ObjectLockSection bucket={bucket} />
       <CapabilityContainer id="s3.bucket.request-payment" title="Requester pays" />
       <CapabilityContainer id="s3.bucket.website" title="Static website hosting" />
     </SpaceBetween>
+  );
+}
+
+const ENC_TYPES = [
+  { value: "AES256", label: "Server-side encryption with Amazon S3 managed keys (SSE-S3)" },
+  { value: "aws:kms", label: "Server-side encryption with AWS Key Management Service keys (SSE-KMS)" },
+  { value: "aws:kms:dsse", label: "Dual-layer server-side encryption with AWS Key Management Service keys (DSSE-KMS)" },
+];
+
+function Encryption({ bucket, state }) {
+  const notify = useNotify();
+  const [edit, setEdit] = useState(null);
+  const [saving, setSaving] = useState(false);
+  return (
+    <CapabilityContainer id="s3.bucket.encryption" title="Default encryption"
+      actions={<Button onClick={() => setEdit({ algorithm: state.data?.algorithm || "AES256", kmsKey: state.data?.kmsKey || "", bucketKey: !!state.data?.bucketKey })}>Edit</Button>}>
+      {state.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
+        : state.error ? <ErrorAlert error={state.error} />
+        : <SpaceBetween size="s">
+            <div><Box variant="awsui-key-label">Encryption type</Box><div>{ENC_TYPES.find((t) => t.value === (state.data.absent ? "AES256" : state.data.algorithm))?.label || state.data.algorithm}</div></div>
+            <div><Box variant="awsui-key-label">Bucket Key</Box><div>{state.data.bucketKey ? "Enabled" : "Disabled"}</div></div>
+            {state.data.kmsKey && <div><Box variant="awsui-key-label">Encryption key ARN</Box><div>{state.data.kmsKey}</div></div>}
+          </SpaceBetween>}
+      <Modal visible={!!edit} onDismiss={() => setEdit(null)} header="Edit default encryption"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setEdit(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={async () => {
+            setSaving(true);
+            try {
+              await api.putEncryption(bucket, edit.algorithm, edit.algorithm === "AES256" ? null : edit.kmsKey, edit.algorithm !== "AES256" && edit.bucketKey);
+              notify.success(`Successfully edited Default encryption.${saveNotice("s3.bucket.encryption")}`);
+              setEdit(null); state.reload();
+            } catch (e) { notify.error(e); } finally { setSaving(false); }
+          }}>Save changes</Button>
+        </SpaceBetween></Box>}>
+        {edit && <SpaceBetween size="m">
+          <FormField label="Encryption type">
+            <RadioGroup value={edit.algorithm} onChange={({ detail }) => setEdit({ ...edit, algorithm: detail.value })}
+              items={ENC_TYPES.map(({ value, label }) => ({ value, label }))} />
+          </FormField>
+          {edit.algorithm !== "AES256" && <FormField label="AWS KMS key ARN"><Input value={edit.kmsKey} onChange={({ detail }) => setEdit({ ...edit, kmsKey: detail.value })} /></FormField>}
+        </SpaceBetween>}
+      </Modal>
+    </CapabilityContainer>
+  );
+}
+
+function ObjectLockSection({ bucket }) {
+  const lock = useAsync(() => api.getObjectLock(bucket), [bucket]);
+  return (
+    <CapabilityContainer id="s3.bucket.object-lock" title="Object Lock"
+      description="Object Lock can only be enabled when a bucket is created; it permanently allows objects in this bucket to be locked.">
+      {lock.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
+        : lock.error ? <ErrorAlert error={lock.error} />
+        : <div><Box variant="awsui-key-label">Object Lock</Box><div>{lock.data?.enabled ? "Enabled" : "Disabled"}</div></div>}
+    </CapabilityContainer>
   );
 }
 
@@ -170,16 +224,62 @@ function Metrics() {
 }
 
 function Management({ bucket }) {
+  const notify = useNotify();
   const lc = useAsync(() => api.getLifecycle(bucket), [bucket]);
+  const [sel, setSel] = useState([]);
+  const [create, setCreate] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const rules = lc.data?.rules || [];
   return (
     <SpaceBetween size="l">
       <SubSetting title="Lifecycle rules" state={lc} render={(d) => (
-        <Table variant="container" header={<Header variant="h2" counter={`(${d.rules.length})`} description="Use lifecycle rules to define actions you want Amazon S3 to take during an object's lifetime.">Lifecycle rules</Header>}
-          items={d.rules} columnDefinitions={[{ id: "id", header: "Lifecycle rule name", cell: (r) => r.id }, { id: "status", header: "Status", cell: (r) => r.status }, { id: "scope", header: "Scope", cell: (r) => r.prefix ? `Prefix ${r.prefix}` : "Entire bucket" }]}
+        <Table variant="container"
+          header={<Header variant="h2" counter={`(${d.rules.length})`} description="Use lifecycle rules to define actions you want Amazon S3 to take during an object's lifetime."
+            actions={<SpaceBetween direction="horizontal" size="xs">
+              <Button disabled={!sel.length} onClick={async () => {
+                try { await api.putLifecycleRules(bucket, rules.filter((r) => !sel.includes(r))); notify.success("Successfully deleted lifecycle rule."); setSel([]); lc.reload(); }
+                catch (e) { notify.error(e); }
+              }}>Delete</Button>
+              <Button onClick={() => setCreate({ id: "", prefix: "", mode: "days", expirationDays: "30", expirationDate: "" })}>Create lifecycle rule</Button>
+            </SpaceBetween>}>Lifecycle rules</Header>}
+          items={d.rules} selectionType="single" selectedItems={sel} onSelectionChange={({ detail }) => setSel(detail.selectedItems)}
+          trackBy="id"
+          columnDefinitions={[{ id: "id", header: "Lifecycle rule name", cell: (r) => r.id }, { id: "status", header: "Status", cell: (r) => r.status }, { id: "scope", header: "Scope", cell: (r) => r.prefix ? `Prefix ${r.prefix}` : "Entire bucket" }]}
           empty={<Box textAlign="center" color="inherit"><b>No lifecycle rules</b><Box variant="p" color="inherit">There are no lifecycle rules for this bucket.</Box></Box>} />
       )} />
       <CapabilityContainer id="s3.bucket.replication" title="Replication rules" />
       <CapabilityContainer id="s3.bucket.inventory" title="Inventory configurations" />
+      <Modal visible={!!create} onDismiss={() => setCreate(null)} header="Create lifecycle rule"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setCreate(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={async () => {
+            setSaving(true);
+            try {
+              const rule = { id: create.id || `rule-${Date.now()}`, status: "Enabled", prefix: create.prefix,
+                expirationDays: create.mode === "days" ? Number(create.expirationDays) || null : null,
+                expirationDate: create.mode === "date" ? create.expirationDate : null };
+              await api.putLifecycleRules(bucket, [...rules, rule]);
+              notify.success("Successfully created lifecycle rule.");
+              setCreate(null); lc.reload();
+            } catch (e) { notify.error(e); } finally { setSaving(false); }
+          }}>Create rule</Button>
+        </SpaceBetween></Box>}>
+        {create && <SpaceBetween size="m">
+          <FormField label="Lifecycle rule name"><Input value={create.id} onChange={({ detail }) => setCreate({ ...create, id: detail.value })} /></FormField>
+          <FormField label="Prefix" description="Limit the scope of this rule to keys starting with this prefix. Leave blank to apply to the entire bucket.">
+            <Input value={create.prefix} onChange={({ detail }) => setCreate({ ...create, prefix: detail.value })} />
+          </FormField>
+          <FormField label="Expire current version of objects">
+            <RadioGroup value={create.mode} onChange={({ detail }) => setCreate({ ...create, mode: detail.value })}
+              items={[{ value: "days", label: "Days after object creation" }, { value: "date", label: "On a specific date" }]} />
+          </FormField>
+          {create.mode === "days"
+            ? <FormField label="Days after creation"><Input type="number" value={create.expirationDays} onChange={({ detail }) => setCreate({ ...create, expirationDays: detail.value })} /></FormField>
+            : <FormField label="Expiration date" description="ISO 8601, e.g. 2026-12-31T00:00:00.000Z">
+                <Input value={create.expirationDate} onChange={({ detail }) => setCreate({ ...create, expirationDate: detail.value })} placeholder="2026-12-31T00:00:00.000Z" />
+              </FormField>}
+        </SpaceBetween>}
+      </Modal>
     </SpaceBetween>
   );
 }

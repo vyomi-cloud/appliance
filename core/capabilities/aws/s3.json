@@ -1,5 +1,5 @@
 {
- "$doc": "Vyomi capability registry \u2014 S3. One entry per console feature; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py \u2014 a claim the backend does not honour fails CI.",
+ "$doc": "Vyomi capability registry — S3. One entry per console feature; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
  "s3.bucket.crud": {
   "title": "Buckets (create, list, delete)",
   "level": {
@@ -95,11 +95,11 @@
  "s3.bucket.encryption": {
   "title": "Default encryption",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Stored and returned exactly as configured; objects are not encrypted at rest and responses do not carry x-amz-server-side-encryption yet."
+   "Every PutObject/GetObject/HeadObject/CopyObject/CompleteMultipartUpload response carries x-amz-server-side-encryption (and the KMS key id / bucket-key header when configured) reflecting the bucket's default-encryption setting — AES256 by default, matching S3's own always-on default — but objects are not actually encrypted at rest."
   ],
   "api": [
    "PutBucketEncryption",
@@ -108,16 +108,19 @@
   "probe": {
    "s3_roundtrip": "encryption",
    "doc": "<ServerSideEncryptionConfiguration><Rule><ApplyServerSideEncryptionByDefault><SSEAlgorithm>AES256</SSEAlgorithm></ApplyServerSideEncryptionByDefault></Rule></ServerSideEncryptionConfiguration>"
-  }
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py"
+  ]
  },
  "s3.bucket.public-access-block": {
   "title": "Block public access (bucket settings)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Stored and returned; public bucket policies and ACLs are not rejected yet, and Vyomi does not authenticate requests, so anonymous access is not modelled."
+   "PutBucketAcl/PutObjectAcl with a public canned ACL (public-read, public-read-write, authenticated-read) is rejected with AccessDenied when BlockPublicAcls is on, and PutBucketPolicy is rejected when the policy is public (Principal \"*\", Effect Allow) and BlockPublicPolicy is on. Existing grants/policies already stored before the block was enabled are not retroactively revoked, and Vyomi does not authenticate requests, so there is no per-request anonymous-access check."
   ],
   "api": [
    "PutPublicAccessBlock",
@@ -127,16 +130,19 @@
   "probe": {
    "s3_roundtrip": "publicAccessBlock",
    "doc": "<PublicAccessBlockConfiguration><BlockPublicAcls>true</BlockPublicAcls><IgnorePublicAcls>true</IgnorePublicAcls><BlockPublicPolicy>true</BlockPublicPolicy><RestrictPublicBuckets>true</RestrictPublicBuckets></PublicAccessBlockConfiguration>"
-  }
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py"
+  ]
  },
  "s3.bucket.policy": {
   "title": "Bucket policy",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Stored and returned; the policy is not evaluated for authorization."
+   "PutBucketPolicy validates the document is well-formed JSON and is rejected (see Block Public Access) when it is public and blocked; otherwise the policy is stored and returned verbatim and is not evaluated for request authorization — Vyomi has no IAM principal/condition evaluator."
   ],
   "api": [
    "PutBucketPolicy",
@@ -146,16 +152,19 @@
   "probe": {
    "s3_roundtrip": "policy",
    "doc": "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
-  }
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py"
+  ]
  },
  "s3.bucket.lifecycle": {
   "title": "Lifecycle rules",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Rules are stored and returned; expiration and transitions are not applied yet."
+   "Expiration rules are enforced, evaluated lazily on list/get/head: Date-based rules fire deterministically once the date has passed; Days-based rules use the real elapsed wall-clock (not accelerated), as in real S3. In a versioned bucket, expiration inserts a delete marker rather than destroying history. NoncurrentVersionExpiration, storage-class Transition actions and AbortIncompleteMultipartUpload are stored and returned but not yet enforced."
   ],
   "api": [
    "PutBucketLifecycleConfiguration",
@@ -165,16 +174,19 @@
   "probe": {
    "s3_roundtrip": "lifecycle",
    "doc": "<LifecycleConfiguration><Rule><ID>r1</ID><Status>Enabled</Status><Filter><Prefix>logs/</Prefix></Filter><Expiration><Days>30</Days></Expiration></Rule></LifecycleConfiguration>"
-  }
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py"
+  ]
  },
  "s3.bucket.cors": {
   "title": "Cross-origin resource sharing (CORS)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Stored and returned; CORS headers are not applied to browser requests yet."
+   "OPTIONS preflight and the Access-Control-* response headers are enforced on actual GET/HEAD/PUT/DELETE requests whose Origin and method match a configured rule; this is wire-level header emulation of CORS, not a real browser's same-origin/CORS enforcement engine."
   ],
   "api": [
    "PutBucketCors",
@@ -184,16 +196,19 @@
   "probe": {
    "s3_roundtrip": "cors",
    "doc": "<CORSConfiguration><CORSRule><AllowedMethod>GET</AllowedMethod><AllowedOrigin>*</AllowedOrigin></CORSRule></CORSConfiguration>"
-  }
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py"
+  ]
  },
  "s3.bucket.ownership": {
   "title": "Object Ownership",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Stored and returned; object ownership is not enforced."
+   "BucketOwnerEnforced is enforced: every PutBucketAcl/PutObjectAcl call on the bucket is rejected (InvalidBucketAclWithObjectOwnership), matching real S3's \"ACLs disabled\" behaviour. BucketOwnerPreferred/ObjectWriter are stored and returned but have no further effect, since Vyomi has no per-request uploader identity to attribute ownership to."
   ],
   "api": [
    "PutBucketOwnershipControls",
@@ -202,7 +217,10 @@
   "probe": {
    "s3_roundtrip": "ownershipControls",
    "doc": "<OwnershipControls><Rule><ObjectOwnership>BucketOwnerEnforced</ObjectOwnership></Rule></OwnershipControls>"
-  }
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py"
+  ]
  },
  "s3.bucket.acl": {
   "title": "Access control list (ACL)",
@@ -211,7 +229,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Bucket and object ACLs are stored and returned (Get/PutBucketAcl, Get/PutObjectAcl); grants are not evaluated for authorization."
+   "Bucket and object ACLs are stored and returned (Get/PutBucketAcl, Get/PutObjectAcl); a canned ACL (private, public-read, public-read-write, authenticated-read) now produces the real grant list GetAcl returns. Writes are rejected under Block Public Access / BucketOwnerEnforced (see those capabilities), but grants are not evaluated for request authorization — Vyomi does not authenticate requests."
   ],
   "api": [
    "GetBucketAcl"
@@ -220,23 +238,30 @@
    "s3_get": "acl"
   },
   "tests": [
-   "tests/conformance/test_c0_legacy_parity_core.py"
+   "tests/conformance/test_c0_legacy_parity_core.py",
+   "tests/conformance/test_s3_depth_core.py"
   ]
  },
  "s3.bucket.object-lock": {
   "title": "Object Lock",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
-  "limitations": [],
+  "limitations": [
+   "Object Lock can only be enabled at bucket creation (as in real S3) — PutObjectLockConfiguration on a bucket created without it returns InvalidBucketState. Legal hold (Put/GetObjectLegalHold) and retention (Put/GetObjectRetention, GOVERNANCE/COMPLIANCE) are enforced: DeleteObject for a held/retained version id is rejected, GOVERNANCE can be overridden with x-amz-bypass-governance-retention, COMPLIANCE cannot. A bucket-level default-retention rule is not yet stored."
+  ],
   "api": [
    "PutObjectLockConfiguration",
-   "GetObjectLockConfiguration"
+   "GetObjectLockConfiguration",
+   "PutObjectLegalHold",
+   "GetObjectLegalHold",
+   "PutObjectRetention",
+   "GetObjectRetention"
   ],
-  "probe": {
-   "s3_unsupported": "object-lock"
-  }
+  "tests": [
+   "tests/conformance/test_s3_depth_core.py"
+  ]
  },
  "s3.bucket.website": {
   "title": "Static website hosting",
@@ -244,7 +269,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
-  "limitations": [],
+  "limitations": [
+   "Static website hosting serves GET/HEAD over a separate bucket-name.s3-website-<region>.amazonaws.com HTTP origin with index/error-document routing; Vyomi's native wire is a single S3 control+data endpoint and does not run a per-bucket website origin."
+  ],
   "probe": {
    "s3_unsupported": "website"
   }
@@ -255,7 +282,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
-  "limitations": [],
+  "limitations": [
+   "Server access logging periodically writes delivery-log objects (one per time window) into a target bucket from S3's internal request-logging pipeline; Vyomi has no request-log writer producing those objects."
+  ],
   "probe": {
    "s3_unsupported": "logging"
   }
@@ -288,7 +317,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
-  "limitations": [],
+  "limitations": [
+   "Cross-/same-region replication asynchronously copies objects to a destination bucket (often cross-account/cross-region) via a background replication engine; Vyomi has no background replication worker."
+  ],
   "probe": {
    "s3_unsupported": "replication"
   }
@@ -299,7 +330,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
-  "limitations": [],
+  "limitations": [
+   "Transfer acceleration only changes the network path (ingest via a CloudFront edge location) to the same S3 API — there is no behavioural difference for a client to observe, so there is nothing for a single-endpoint simulator to enforce or differentiate."
+  ],
   "probe": {
    "s3_unsupported": "accelerate"
   }
@@ -310,7 +343,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
-  "limitations": [],
+  "limitations": [
+   "Requester Pays changes who is billed for data transfer and requests; Vyomi has no request-identity or billing model, so there is no payer to attribute cost to."
+  ],
   "probe": {
    "s3_unsupported": "requestPayment"
   }
@@ -321,7 +356,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
-  "limitations": [],
+  "limitations": [
+   "Intelligent-Tiering archive configurations move objects between access tiers automatically based on 30/90+ day access-pattern windows; Vyomi does not run a long-horizon storage-class scheduler."
+  ],
   "probe": {
    "s3_unsupported": "intelligent-tiering"
   }
@@ -332,7 +369,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
-  "limitations": [],
+  "limitations": [
+   "Inventory configurations run on a daily/weekly schedule and write a CSV/ORC/Parquet manifest of bucket contents to a destination bucket; Vyomi has no scheduler producing those exports."
+  ],
   "probe": {
    "s3_unsupported": "inventory"
   }
@@ -343,7 +382,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
-  "limitations": [],
+  "limitations": [
+   "Request/storage filter metrics publish to CloudWatch on a recurring schedule; Vyomi does not run a CloudWatch metrics pipeline for S3."
+  ],
   "probe": {
    "s3_unsupported": "metrics"
   }
