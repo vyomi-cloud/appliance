@@ -21,13 +21,14 @@ export default function GetStarted() {
   const create = async (preset) => {
     setBusy(true); setError(null);
     try {
-      const inst = await api.insertInstance({
-        name: name || `${preset.toLowerCase()}-${Math.random().toString(36).slice(2, 7)}`,
+      const id = name || `${preset.toLowerCase()}-${Math.random().toString(36).slice(2, 7)}`;
+      await api.insertInstance({   // native API returns an Operation — route by the requested ID
+        name: id,
         databaseVersion: ENGINE_VERSION[engine], region,
         settings: { tier: "db-f1-micro", userLabels: { preset: preset.toLowerCase() } },
       });
-      notify.success(`Created instance "${inst.name}"`);
-      location.hash = `#/sql/instances/${encodeURIComponent(inst.name)}/overview`;
+      notify.success(`Created instance "${id}"`);
+      location.hash = `#/sql/instances/${encodeURIComponent(id)}/overview`;
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
 

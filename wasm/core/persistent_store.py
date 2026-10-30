@@ -209,7 +209,7 @@ class PersistentFirestoreStore(_PersistentMixin, FirestoreStore):
     backup schedules, backups, operations, security rules). The core calls persist()
     after every mutating request; put/delete also save for direct callers."""
     _STATE_ATTRS = ("documents", "databases", "indexes", "fields", "backup_schedules",
-                    "backups", "operations", "security_rules")
+                    "backups", "operations", "security_rules", "backup_snapshots", "history", "usage")
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "firestore"):
         FirestoreStore.__init__(self)

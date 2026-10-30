@@ -40,11 +40,16 @@ PROJ = "/sql/v1beta4/projects/demo-proj/instances"
 def run() -> int:
     st = InMemorySqlStore()
 
-    # 1. insert instance -> 200 sql#instance, RUNNABLE, databaseVersion echoed
+    # 1. insert instance -> 200 sql#operation; get -> sql#instance, RUNNABLE, databaseVersion echoed
     r = csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
                       json.dumps({"name": "appdb", "databaseVersion": "POSTGRES_15",
                                   "settings": {"tier": "db-custom-1-3840"}}).encode())
     _check("insert instance 200", r.status == 200)
+    op = _jbody(r)   # native instances.insert returns an Operation, not the instance
+    _check("insert returns sql#operation", op["kind"] == "sql#operation")
+    _check("insert operation DONE/CREATE", op["status"] == "DONE" and op["operationType"] == "CREATE")
+    _check("insert operation targetId", op["targetId"] == "appdb")
+    r = csql.dispatch(st, "GET", f"{PROJ}/appdb", {}, {}, b"")
     inst = _jbody(r)
     _check("insert instance kind", inst["kind"] == "sql#instance")
     _check("insert instance name", inst["name"] == "appdb")
@@ -201,7 +206,8 @@ def run() -> int:
     rep = csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
                         json.dumps({"name": "shopdb-replica", "masterInstanceName": "shopdb"}).encode())
     _check("insert replica 200", rep.status == 200)
-    rep_body = _jbody(rep)
+    _check("insert replica operation CREATE_REPLICA", _jbody(rep)["operationType"] == "CREATE_REPLICA")
+    rep_body = _jbody(csql.dispatch(st, "GET", PROJ + "/shopdb-replica", {}, {}, b""))
     _check("replica instanceType", rep_body["instanceType"] == "READ_REPLICA_INSTANCE")
     _check("replica masterInstanceName", rep_body["masterInstanceName"] == "shopdb")
     rep_missing_master = csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},

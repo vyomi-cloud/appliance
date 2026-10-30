@@ -205,10 +205,10 @@ def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlRespo
     if master:
         rec["masterInstanceName"] = master
         rec["instanceType"] = "READ_REPLICA_INSTANCE"
-    _log_op(rec, "CREATE_REPLICA" if master else "CREATE")
+    op = _log_op(rec, "CREATE_REPLICA" if master else "CREATE")
     store.put_instance(_key(project, name), rec)
     store.persist()
-    return _json(200, _instance_view(rec))
+    return _json(200, _operation_view(op, project, name))   # native instances.insert → Operation
 
 
 def _DEEP_MERGE(dst: dict, src: dict) -> dict:

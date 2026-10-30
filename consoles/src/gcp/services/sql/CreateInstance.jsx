@@ -84,9 +84,9 @@ export default function CreateInstance({ query }) {
       },
     };
     try {
-      const inst = await api.insertInstance(body);
-      notify.success(`Created instance "${inst.name}"`);
-      location.hash = `#/sql/instances/${encodeURIComponent(inst.name)}/overview`;
+      await api.insertInstance(body);   // native API returns an Operation — route by the requested ID
+      notify.success(`Created instance "${name}"`);
+      location.hash = `#/sql/instances/${encodeURIComponent(name)}/overview`;
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
 

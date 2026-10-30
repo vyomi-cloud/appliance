@@ -658,7 +658,8 @@ class AppStateFirestoreStore(_SlotStore, FirestoreStore):
     """gcp_firestore_core store over the appliance's space-scoped GCP state."""
 
     _KEYS = {"documents": dict, "databases": dict, "indexes": dict, "fields": dict,
-             "backup_schedules": dict, "backups": dict, "operations": dict, "security_rules": dict}
+             "backup_schedules": dict, "backups": dict, "operations": dict, "security_rules": dict,
+             "backup_snapshots": dict, "history": dict, "usage": dict}
 
     def __init__(self, proxy):
         self._bind(proxy)          # NB: no FirestoreStore.__init__ — the dicts are the slot's
@@ -671,6 +672,9 @@ class AppStateFirestoreStore(_SlotStore, FirestoreStore):
     backups = _slot_attr("backups")
     operations = _slot_attr("operations")
     security_rules = _slot_attr("security_rules")
+    backup_snapshots = _slot_attr("backup_snapshots")   # PITR / restore payloads
+    history = _slot_attr("history")                     # per-document versions (point-in-time reads)
+    usage = _slot_attr("usage")                         # per-database read/write/delete counters
 
     def adopt(self, project: str) -> None:
         """Import (once per space) what the pre-v4 handlers kept: the databases and
