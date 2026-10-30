@@ -53,6 +53,7 @@ CORES = [
     "azure_cosmos_core.py",                         # Azure: Cosmos DB SQL/Core API (native azure-cosmos)
     "azure_keyvault_secrets_core.py",               # Azure: Key Vault secrets (native azure-keyvault-secrets)
     "azure_keyvault_keys_core.py",                  # Azure: Key Vault keys (native azure-keyvault-keys)
+    "azure_keyvault_certificates_core.py",          # Azure: Key Vault certificates (native azure-keyvault-certificates)
     "azure_queue_core.py",                          # Azure: Storage Queue (native azure-storage-queue)
     "azure_servicebus_core.py",                     # v2.5.0 Azure: Service Bus topics (pub/sub fan-out — SNS/Pub-Sub peer)
     "azure_sql_core.py",                            # v2.6.0 Azure: SQL data plane on the SqlStore seam (RDS/Cloud SQL peer)

@@ -1,0 +1,141 @@
+{
+ "$doc": "Vyomi capability registry — Azure Key vaults. See aws/s3.json for the contract.",
+ "azure.keyvaults.vault.crud": {
+  "title": "Vaults (create, get, list, delete) over ARM",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.vault.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.access_configuration": {
+  "title": "Access configuration (RBAC vs vault access policy, resource access flags)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "enableRbacAuthorization and the resource-access flags are stored and returned exactly as written, but Vyomi does not enforce them — data-plane calls to keys/secrets are never denied based on the permission model."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.access_policies": {
+  "title": "Vault access policies (properties.accessPolicies)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Access policy entries round-trip through ARM exactly as written, but Vyomi never evaluates them — every data-plane key/secret call succeeds regardless of the configured permissions."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.networking": {
+  "title": "Networking (public network access / firewall default action)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "publicNetworkAccess and networkAcls round-trip through ARM, but the Key Vault Keys/Secrets REST data planes never enforce them — a call from a 'denied' network still succeeds."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.keys.crud": {
+  "title": "Keys (create, get, list, delete) over the Key Vault Keys REST API",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_keyvault_keys_core.py"
+  ]
+ },
+ "azure.keyvaults.keys.crypto": {
+  "title": "Key encrypt/decrypt/wrap/unwrap/sign/verify",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "The RSA public numbers (n/e) advertised on a key are cosmetic (deterministically derived from the private material); the actual cipher behind encrypt/decrypt/wrap/unwrap is a symmetric authenticated envelope, and sign/verify is HMAC-based rather than native RSA/ECDSA. Round-trips (encrypt→decrypt, sign→verify, tamper/cross-key rejection) are real."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_kv_crypto_core.py"
+  ]
+ },
+ "azure.keyvaults.secrets.crud": {
+  "title": "Secrets (set, get, list, list versions, delete) over the Key Vault Secrets REST API",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_keyvault_secrets_core.py"
+  ]
+ },
+ "azure.keyvaults.certificates": {
+  "title": "Certificates (generate self-signed, get, list, delete) over the Key Vault Certificates REST API",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Certificate creation completes synchronously (no pending CertificateOperation to poll) and only issues self-signed certificates — CA-issued and imported (PFX/PEM) certificates are not simulated. The `cer`/`x5t` fields are deterministic cosmetic bytes, not real X.509 DER."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_keyvault_certificates_core.py"
+  ]
+ },
+ "azure.keyvaults.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this vault",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this vault); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.activity_log": {
+  "title": "Activity log",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "api": [
+   "ActivityLogs_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ }
+}

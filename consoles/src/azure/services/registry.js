@@ -11,7 +11,7 @@ export const SERVICES = [
   { id: "vms", title: "Virtual machines", type: "Microsoft.Compute/virtualMachines", category: "Compute", icon: "vms" },
   { id: "sql", title: "SQL databases", type: "Microsoft.Sql/servers/databases", category: "Databases", icon: "sql" },
   { id: "cosmos", title: "Azure Cosmos DB", type: "Microsoft.DocumentDB/databaseAccounts", category: "Databases", icon: "cosmos" },
-  { id: "keyvaults", title: "Key vaults", type: "Microsoft.KeyVault/vaults", category: "Security", icon: "keyvaults" },
+  { id: "keyvaults", title: "Key vaults", type: "Microsoft.KeyVault/vaults", category: "Security", icon: "keyvaults", load: () => import("./keyvaults/index.jsx") },
   { id: "servicebus", title: "Service Bus", type: "Microsoft.ServiceBus/namespaces", category: "Integration", icon: "servicebus" },
   { id: "functionapp", title: "Function App", type: "Microsoft.Web/sites (functionapp)", category: "Compute", icon: "functionapp", load: () => import("./functionapp/index.jsx") },
   { id: "appservices", title: "App Services", type: "Microsoft.Web/sites", category: "Compute", icon: "appservices" },

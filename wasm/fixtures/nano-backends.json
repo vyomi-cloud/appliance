@@ -185,6 +185,11 @@
   "category": "azure"
  },
  {
+  "name": "az_kvcerts",
+  "label": "az_kvcerts \u00b7 InMemoryKvStore",
+  "category": "azure"
+ },
+ {
   "name": "az_queue",
   "label": "az_queue \u00b7 AzureQueueStore",
   "category": "azure"
