@@ -37,7 +37,7 @@ export const PRODUCTS = [
   { id: "iam-admin", title: "IAM & Admin", description: "Resource access control", category: "Management", icon: IamIcon, classic: "iam" },
   { id: "artifacts", title: "Artifact Registry", description: "Store, manage and secure container images and packages", category: "CI/CD", icon: ArtifactIcon, classic: "artifactregistry" },
   { id: "monitoring", title: "Monitoring", description: "Metrics, dashboards, alerting, uptime checks", category: "Observability", icon: ChartIcon, classic: "monitoring" },
-  { id: "logs", title: "Logging", description: "Logs Explorer, routing and storage", category: "Observability", icon: LogIcon, classic: "logging" },
+  { id: "logs", title: "Logging", description: "Logs Explorer, routing and storage", category: "Observability", icon: LogIcon, load: () => import("./logs/index.jsx") },
 ];
 
 export const byId = Object.fromEntries(PRODUCTS.map((p) => [p.id, p]));

@@ -1,0 +1,139 @@
+{
+ "$doc": "Vyomi capability registry — GCP Cloud Logging. See aws/s3.json for the contract. GCP/Azure probes are not wired into test_capabilities.py's probe() yet, so every claim here leans on `tests` (run for real) rather than `probe`.",
+ "gcp.logs.explorer": {
+  "title": "Logs Explorer (query by resource, severity, log name, free text)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "entries.write",
+   "entries.list"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_logging_core.py"
+  ]
+ },
+ "gcp.logs.analytics": {
+  "title": "Observability Analytics (query builder + a SQL subset over log entries)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "SQL mode supports a subset of BigQuery SQL (SELECT/WHERE/ORDER BY/LIMIT over one bucket's entries) — no joins, subqueries or real BigQuery billing/slots."
+  ],
+  "api": [
+   "entries.list"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_logging_core.py"
+  ]
+ },
+ "gcp.logs.metrics.crud": {
+  "title": "Log-based metrics (create, list, update, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "projects.metrics.create",
+   "projects.metrics.list",
+   "projects.metrics.update",
+   "projects.metrics.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_logging_core.py"
+  ]
+ },
+ "gcp.logs.metrics.usage": {
+  "title": "Previous/month-to-date usage counters on the metrics list",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Usage is the live count of stored log entries matching the metric's filter in the current/previous calendar month, not GCP's billed-bytes accounting."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_logging_core.py"
+  ]
+ },
+ "gcp.logs.router.crud": {
+  "title": "Log Router sinks (create, list, update, delete; Cloud Storage/BigQuery/Pub/Sub/Logging bucket destinations)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "sinks.create",
+   "sinks.list",
+   "sinks.patch",
+   "sinks.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_logging_core.py"
+  ]
+ },
+ "gcp.logs.router.volume": {
+  "title": "Router volume + volume by destination type",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Volume is the live count/bytes of entries each enabled sink's filter matched as they were written, not a historical GCP billing export."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_logging_core.py"
+  ]
+ },
+ "gcp.logs.storage.crud": {
+  "title": "Log buckets (create, list, update, delete; retention, Observability Analytics / BigQuery link)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "The _Default and _Required buckets are seeded automatically like real Cloud Logging projects, but cannot be deleted, matching the real API."
+  ],
+  "api": [
+   "projects.locations.buckets.create",
+   "projects.locations.buckets.list",
+   "projects.locations.buckets.patch",
+   "projects.locations.buckets.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_logging_core.py"
+  ]
+ },
+ "gcp.logs.storage.views": {
+  "title": "Log views on a bucket (create, list, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "projects.locations.buckets.views.create",
+   "projects.locations.buckets.views.list",
+   "projects.locations.buckets.views.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_logging_core.py"
+  ]
+ },
+ "gcp.logs.storage.usage_alerts": {
+  "title": "Create usage alert / View usage data (Monitoring-backed storage alerting)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Storage usage alerting hands off to Cloud Monitoring alert policies, which Vyomi's Logging lens does not model; the console shows this honestly rather than faking an alert that never fires."
+  ]
+ }
+}
