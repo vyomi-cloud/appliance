@@ -17,12 +17,13 @@ import { NotSimulatedContainer } from "./common.jsx";
 import cap_apigateway from "../../../../core/capabilities/aws/apigateway.json";
 import cap_dynamodb from "../../../../core/capabilities/aws/dynamodb.json";
 import cap_kms from "../../../../core/capabilities/aws/kms.json";
+import cap_lambda from "../../../../core/capabilities/aws/lambda.json";
 import cap_s3 from "../../../../core/capabilities/aws/s3.json";
 import cap_secretsmanager from "../../../../core/capabilities/aws/secretsmanager.json";
 import cap_sns from "../../../../core/capabilities/aws/sns.json";
 import cap_sqs from "../../../../core/capabilities/aws/sqs.json";
 
-const REGISTRY = { ...cap_apigateway, ...cap_dynamodb, ...cap_kms, ...cap_s3, ...cap_secretsmanager, ...cap_sns, ...cap_sqs };
+const REGISTRY = { ...cap_apigateway, ...cap_dynamodb, ...cap_kms, ...cap_lambda, ...cap_s3, ...cap_secretsmanager, ...cap_sns, ...cap_sqs };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

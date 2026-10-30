@@ -420,7 +420,8 @@ class AwsWireRouter:
             return az
         if self._servicebus_service(method, path, lheaders):
             return "az-servicebus"
-        if "/2015-03-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
+        if any(path.startswith(p) for p in (  # Lambda REST (native boto3 lambda wire + sub-resources)
+                "/2015-03-31/functions", "/2015-03-31/layers", "/2015-03-31/event-source-mappings")):
             return "lambda"
         if path.startswith("/v2/") and path[4:].split("/", 1)[0] in (   # API Gateway V2 control plane
                 "apis", "domainnames", "vpclinks", "tags", "portals", "portalproducts", "domainnameaccessassociations"):
