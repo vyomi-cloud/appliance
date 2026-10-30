@@ -13,5 +13,6 @@
   "Capability feature ids MUST start with 'azure.' (e.g. 'azure.vnets.<section>') — ids share one namespace with the AWS registry",
   "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
  ],
- "attempt": 1
+ "attempt": 2,
+ "note": "RESUME: first `git fetch origin v4/ui-azure-vnets-41102108538 && git merge --no-edit origin/v4/ui-azure-vnets-41102108538` (previous: 97.2% fidelity / 87.8% real). Fix ONLY the gate failure: 'vnet-connected-devices' needs a \"live\" check + fixture — create a uniquely named network interface (Microsoft.Network/networkInterfaces, catalog key 'nic') over ARM with ipConfigurations[].subnet.id in the VNet, and the page must list it from ARM state. Keep Capability.jsx as on base, list the service ONCE in registry.js, register NEW cores in build_cores.py + nano-boot.js (own line) + nano_registry.py + nano_persist.py, plain-text 'Vyomi', commit your source, rebuild after merging."
 }
