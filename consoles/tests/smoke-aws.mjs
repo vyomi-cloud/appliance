@@ -119,6 +119,8 @@ try {
 
   // Bucket list shows it
   await page.goto(UI + "#/s3");
+  // The list paginates (as the native console does), so find it the way a user would.
+  await page.getByPlaceholder("Find buckets by name").fill(B);
   await page.getByRole("link", { name: B }).waitFor({ timeout: 10000 });
   await shot("06-s3-buckets");
   check("S3 bucket list shows new bucket", true);
@@ -129,6 +131,7 @@ try {
   await page.getByRole("textbox", { name: "Partition key", exact: true }).fill("pk");
   await shot("07-ddb-create-filled");
   await page.getByRole("button", { name: "Create table" }).last().click();
+  await page.getByPlaceholder("Find tables by table name").fill(T);   // the list paginates
   await page.getByRole("link", { name: T }).waitFor({ timeout: 10000 });
   const tables = await ddb("ListTables", {});
   check("DynamoDB create table → visible over native wire", (tables.TableNames || []).includes(T));
@@ -209,6 +212,7 @@ try {
   const S2 = `v4smoke-secret2-${Date.now() % 100000}`;
   await sm("CreateSecret", { Name: S2, SecretString: "v4-smoke-wire" });
   await page.goto(UI + "#/secretsmanager/listsecrets");
+  await page.getByPlaceholder(/^Filter secrets by name/).fill(S2);   // the list paginates
   await page.getByText(S2).first().waitFor({ timeout: 10000 });
   check("Secrets Manager CreateSecret over wire → shown in Secrets list", true);
   await shot("16-secretsmanager-list");
