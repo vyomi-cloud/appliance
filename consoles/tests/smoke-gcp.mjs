@@ -385,7 +385,7 @@ try {
   await shot("12-monitoring-create-uptime");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: "Uptime checks" }).waitFor({ timeout: 10000 });
-  await page.getByText(UC).waitFor({ timeout: 10000 });
+  await page.getByText(UC).first().waitFor({ timeout: 10000 });
   const checks = await wjson(`/v3/projects/vyomi-project/uptimeCheckConfigs`);
   check("create uptime check via UI wizard → visible over native wire", (checks.uptimeCheckConfigs || []).some((c) => c.displayName === UC && c.httpCheck?.path === "/"));
 
