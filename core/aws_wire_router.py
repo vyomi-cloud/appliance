@@ -450,8 +450,11 @@ class AwsWireRouter:
         self.kinesis = s.get("kinesis") or kinesis.KinesisStore()   # Kinesis Data Streams
         self.apigwv2 = s.get("apigwv2") or apigw2.ApiGwV2Store()   # API Gateway V2 (HTTP/WebSocket APIs)
         self.cw = s.get("cw") or cw.CloudWatchStore()          # CloudWatch metrics / alarms / dashboards
+        self.cw.msg_store, self.cw.lam_store = self.msg, self.lam   # real SNS / Lambda alarm actions
         self.vpc = s.get("vpc") or s.get("vpc_net") or _types.SimpleNamespace()   # EC2/VPC network model
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
+        self.logs.lam_store, self.logs.kinesis_store = self.lam, self.kinesis   # real subscription-filter delivery
+        self.cw.logs_store = self.logs            # real log-based Contributor Insights rules
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
         self.cfn = s.get("cfn") or cfn.CloudFormationStore()   # CloudFormation (stacks, change sets, stack sets)

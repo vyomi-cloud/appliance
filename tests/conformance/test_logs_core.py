@@ -4,12 +4,18 @@ Log groups/streams, PutLogEvents/GetLogEvents/FilterLogEvents, retention, tags,
 metric + subscription filters, resource policies and Logs Insights queries,
 against the native `Logs_20140328.*` JSON protocol with botocore error codes.
 """
+import base64
+import gzip
 import json
 
 try:
     from core import logs_core as lg
+    from core import lambda_core as lam
+    from core import kinesis_core as kin
 except ImportError:  # pragma: no cover - Pyodide flat layout
     import logs_core as lg  # type: ignore
+    import lambda_core as lam  # type: ignore
+    import kinesis_core as kin  # type: ignore
 
 T = "Logs_20140328."
 
@@ -97,6 +103,56 @@ def run(store=None):
     qc = call("StartQuery", {"logGroupName": "/app/web", "startTime": now // 1000 - 60, "endTime": now // 1000 + 60, "queryString": "stats count(*) as n"}).body["queryId"]
     _check("insights stats", call("GetQueryResults", {"queryId": qc}).body["results"][0][0] == {"field": "n", "value": "4"})
 
+    qp = call("StartQuery", {"logGroupName": "/app/web", "startTime": now // 1000 - 60, "endTime": now // 1000 + 60, "queryString": "pattern @message"}).body["queryId"]
+    pr = [dict((c["field"], c["value"]) for c in row) for row in call("GetQueryResults", {"queryId": qp}).body["results"]]
+    _check("pattern mining masks numbers into distinct templates", len(pr) == 4 and sum(int(r["@sampleCount"]) for r in pr) == 4
+           and all("<*>" in r["@pattern"] for r in pr))
+    _check("pattern severity flags error lines", {r["@severityLabel"] for r in pr if "ERROR" in r["@pattern"] or "error" in r["@pattern"]} == {"ERROR"})
+
+    qb = call("StartQuery", {"logGroupName": "/app/web", "startTime": now // 1000 - 60, "endTime": now // 1000 + 60, "queryString": "stats count(*) by bin(60s)"}).body["queryId"]
+    br = [dict((c["field"], c["value"]) for c in row) for row in call("GetQueryResults", {"queryId": qb}).body["results"]]
+    _check("bin() buckets by time", len(br) == 1 and br[0]["count(*)"] == "4" and br[0]["bin(60s)"])
+
+    _check("no data protection policy yet", err("GetDataProtectionPolicy", {"logGroupName": "/app/web"}, "ResourceNotFoundException"))
+    policy = json.dumps({"Name": "p", "Version": "2021-06-01", "Statement": [
+        {"Sid": "audit", "DataIdentifier": ["arn:aws:dataprotection::aws:data-identifier/EmailAddress"], "Operation": {"Audit": {"FindingsDestination": {}}}},
+        {"Sid": "redact", "DataIdentifier": ["arn:aws:dataprotection::aws:data-identifier/EmailAddress"], "Operation": {"Deidentify": {"MaskConfig": {}}}},
+    ]})
+    _check("put data protection policy", call("PutDataProtectionPolicy", {"logGroupIdentifier": "/app/web", "policyDocument": policy}).status == 200
+           and call("GetDataProtectionPolicy", {"logGroupName": "/app/web"}).body["policyDocument"] == policy)
+    call("CreateLogStream", {"logGroupName": "/app/web", "logStreamName": "k"})
+    call("PutLogEvents", {"logGroupName": "/app/web", "logStreamName": "k",
+                          "logEvents": [{"timestamp": now, "message": "contact alice@example.com for access"}]})
+    masked = call("GetLogEvents", {"logGroupName": "/app/web", "logStreamName": "k"}).body["events"][0]["message"]
+    _check("email masked at ingestion", masked == "contact ***************** for access")
+    _check("findings counted on the log group", call("DescribeLogGroups", {"logGroupNamePrefix": "/app/web"}).body["logGroups"][0]["dataProtectionFindings"] == 1)
+    _check("delete data protection policy", call("DeleteDataProtectionPolicy", {"logGroupName": "/app/web"}).status == 200
+           and err("GetDataProtectionPolicy", {"logGroupName": "/app/web"}, "ResourceNotFoundException"))
+    call("DeleteLogStream", {"logGroupName": "/app/web", "logStreamName": "k"})
+
+    _check("no field index policy yet", err("GetIndexPolicy", {"logGroupName": "/app/web"}, "ResourceNotFoundException"))
+    idx_doc = json.dumps({"fields": ["requestId", "statusCode"]})
+    _check("put index policy", call("PutIndexPolicy", {"logGroupIdentifier": "/app/web", "policyDocument": idx_doc}).status == 200)
+    _check("get index policy", call("GetIndexPolicy", {"logGroupName": "/app/web"}).body["indexPolicyDocument"]["policyDocument"] == idx_doc)
+    _check("bad field name rejected", err("PutIndexPolicy", {"logGroupIdentifier": "/app/web", "policyDocument": json.dumps({"fields": ["bad field!"]})}, "InvalidParameterException"))
+    _check("describe index policies", call("DescribeIndexPolicies", {"logGroupIdentifiers": ["/app/web", "/does/not/exist"]}).body["indexPolicies"][0]["policyDocument"] == idx_doc)
+    _check("delete index policy", call("DeleteIndexPolicy", {"logGroupName": "/app/web"}).status == 200
+           and err("GetIndexPolicy", {"logGroupName": "/app/web"}, "ResourceNotFoundException"))
+
+    _check("no transformer yet", err("GetTransformer", {"logGroupName": "/app/web"}, "ResourceNotFoundException"))
+    _check("bad processor rejected", err("PutTransformer", {"logGroupIdentifier": "/app/web", "transformerConfig": [{"grok": {}}]}, "InvalidParameterException"))
+    tcfg = [{"parseJSON": {"source": "@message"}}, {"addKeys": {"entries": [{"key": "env", "value": "prod"}]}}, {"deleteKeys": {"withKeys": ["ms"]}}, {"renameKeys": {"entries": [{"key": "level", "renameTo": "severity"}]}}]
+    _check("put transformer", call("PutTransformer", {"logGroupIdentifier": "/app/web", "transformerConfig": tcfg}).status == 200
+           and call("GetTransformer", {"logGroupName": "/app/web"}).body["transformerConfig"] == tcfg)
+    call("CreateLogStream", {"logGroupName": "/app/web", "logStreamName": "t"})
+    call("PutLogEvents", {"logGroupName": "/app/web", "logStreamName": "t",
+                          "logEvents": [{"timestamp": now, "message": json.dumps({"level": "error", "ms": 900})}]})
+    transformed = json.loads(call("GetLogEvents", {"logGroupName": "/app/web", "logStreamName": "t"}).body["events"][0]["message"])
+    _check("transformer parses, adds, deletes and renames keys", transformed == {"severity": "error", "env": "prod"})
+    _check("delete transformer", call("DeleteTransformer", {"logGroupName": "/app/web"}).status == 200
+           and err("GetTransformer", {"logGroupName": "/app/web"}, "ResourceNotFoundException"))
+    call("DeleteLogStream", {"logGroupName": "/app/web", "logStreamName": "t"})
+
     _check("deletion protection create", call("CreateLogGroup", {"logGroupName": "/app/protected", "deletionProtectionEnabled": True}).status == 200
            and call("DescribeLogGroups", {"logGroupNamePrefix": "/app/protected"}).body["logGroups"][0]["deletionProtectionEnabled"] is True)
     _check("deletion protection blocks delete", err("DeleteLogGroup", {"logGroupName": "/app/protected"}, "OperationAbortedException"))
@@ -114,5 +170,42 @@ def test_logs_core():
     run()
 
 
+def test_subscription_filter_really_delivers_to_lambda_and_kinesis():
+    import types
+    s = lg.LogsStore()
+    s.lam_store = types.SimpleNamespace()
+    s.kinesis_store = kin.KinesisStore()
+
+    lam.dispatch(s.lam_store, "POST", "/2015-03-31/functions", {}, {}, json.dumps({
+        "FunctionName": "sub-fn", "Code": {"Source": "def handler(event, context):\n    return event"},
+    }).encode())
+    fn_arn = "arn:aws:lambda:us-east-1:123456789012:function:sub-fn"
+    kin.create_stream(s.kinesis_store, {"StreamName": "sub-stream", "ShardCount": 1})
+    stream_arn = kin.describe_stream_summary(s.kinesis_store, {"StreamName": "sub-stream"})["StreamDescriptionSummary"]["StreamARN"]
+
+    def call(a, b=None):
+        return lg.dispatch(s, T + a, b or {})
+
+    call("CreateLogGroup", {"logGroupName": "/sub"})
+    call("CreateLogStream", {"logGroupName": "/sub", "logStreamName": "i-1"})
+    call("PutSubscriptionFilter", {"logGroupName": "/sub", "filterName": "to-lambda", "filterPattern": "", "destinationArn": fn_arn})
+    call("PutSubscriptionFilter", {"logGroupName": "/sub", "filterName": "to-kinesis", "filterPattern": "", "destinationArn": stream_arn})
+    now = s.now_ms()
+    call("PutLogEvents", {"logGroupName": "/sub", "logStreamName": "i-1", "logEvents": [{"timestamp": now, "message": "hello"}]})
+
+    assert len(s.lam_store._lambda_functions["sub-fn"]["invocations"]) == 1
+    fs = call("DescribeSubscriptionFilters", {"logGroupName": "/sub"}).body["subscriptionFilters"]
+    assert all(f["filterName"] for f in fs)   # deliveredEvents is excluded from the wire shape, but delivery itself must have worked:
+
+    shard_id = kin.list_shards(s.kinesis_store, {"StreamName": "sub-stream"})["Shards"][0]["ShardId"]
+    it = kin.get_shard_iterator(s.kinesis_store, {"StreamName": "sub-stream", "ShardId": shard_id, "ShardIteratorType": "TRIM_HORIZON"})["ShardIterator"]
+    recs = kin.get_records(s.kinesis_store, {"ShardIterator": it})["Records"]
+    assert len(recs) == 1
+    doc = json.loads(gzip.decompress(base64.b64decode(recs[0]["Data"])))
+    assert doc["logEvents"][0]["message"] == "hello" and doc["logGroup"] == "/sub"
+
+
 if __name__ == "__main__":
     run()
+    test_subscription_filter_really_delivers_to_lambda_and_kinesis()
+    print("  ok  subscription filter really delivers to lambda and kinesis")

@@ -18,8 +18,8 @@
    "offline": "limited"
   },
   "limitations": [
-   "Static threshold alarms are evaluated live; anomaly-detection-band alarms are stored but never transition out of the initial state (no trained model).",
-   "Alarm actions (SNS/Lambda/Auto Scaling/EC2) are recorded in history as executed when the alarm transitions, but Vyomi does not actually publish to SNS or invoke the target — no notification is delivered."
+   "Static threshold alarms and anomaly-detection-band alarms (see aws.cloudwatch.anomaly-detection) are both evaluated live.",
+   "SNS and Lambda alarm actions really fire (see aws.cloudwatch.alarms.actions.lambda); Auto Scaling and EC2 actions are not offered — see aws.cloudwatch.alarms.actions.compute."
   ],
   "tests": [
    "tests/conformance/test_cloudwatch_core.py"
@@ -48,23 +48,40 @@
   ]
  },
  "aws.cloudwatch.alarms.actions.compute": {
-  "title": "Lambda / Auto Scaling / EC2 alarm actions",
+  "title": "Auto Scaling / EC2 alarm actions",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "Only an SNS topic ARN notification action can be configured. Lambda, Auto Scaling and EC2 actions are not offered."
+   "Auto Scaling and EC2 alarm actions are not offered — Vyomi has no Auto Scaling group or EC2 instance lifecycle to act on. SNS (aws.cloudwatch.alarms.metric) and Lambda (aws.cloudwatch.alarms.actions.lambda) actions are real."
+  ]
+ },
+ "aws.cloudwatch.alarms.actions.lambda": {
+  "title": "Lambda alarm action",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The invocation is fire-and-forget, the same as a real CloudWatch alarm action: Vyomi does not surface the function's return value or errors back onto the alarm's history."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
   ]
  },
  "aws.cloudwatch.anomaly-detection": {
   "title": "Anomaly detection bands",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "No anomaly model is trained; detectors stay PENDING_TRAINING and anomaly-threshold alarms never evaluate."
+   "The band is a simple mean ± N standard-deviations model trained from the metric's own history (not AWS's ML model), so it won't learn seasonality or periodic spikes.",
+   "A SINGLE_METRIC detector trains (PENDING_TRAINING → TRAINED) once it has seen 10 datapoints; METRIC_MATH detectors stay PENDING_TRAINING."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
   ]
  },
  "aws.cloudwatch.dashboards": {
@@ -149,7 +166,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "A subscription filter is stored and matched against incoming events, but delivery to the destination (Lambda/Kinesis/Firehose) is kept as a counter — there is no cross-service fan-out."
+   "Lambda and Kinesis destinations really receive the gzip+base64 `awslogs` envelope (a real invoke / PutRecord); a Firehose destination has no backing core and is kept as a delivery counter only."
   ],
   "tests": [
    "tests/conformance/test_logs_core.py"
@@ -162,7 +179,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Supported: fields/display, filter (=, !=, >, <, >=, <=, like), sort, limit, stats count(*) [by field]. OpenSearch PPL and OpenSearch SQL query languages are not offered; Patterns and Visualization tabs are not computed."
+   "Supported: fields/display, filter (=, !=, >, <, >=, <=, like), sort, limit, pattern, stats count(*) [by field | by bin(duration)]. Only count() aggregation and OpenSearch PPL/SQL query languages are not offered."
   ],
   "tests": [
    "tests/conformance/test_logs_core.py"
@@ -171,11 +188,15 @@
  "aws.cloudwatch.logs.patterns-visualization": {
   "title": "Logs Insights Patterns and Visualization tabs",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Pattern mining and chart aggregation over query results are not computed."
+   "Patterns are mined with a simple tokenizer (numbers/hex/UUIDs masked to <*>, grouped, counted) — AWS's own clustering model may group lines differently.",
+   "Visualization only renders the result of a stats-by-bin() query (a bar list), not the full Logs Insights chart types (line/stacked area/pie)."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
   ]
  },
  "aws.cloudwatch.logs.live-tail": {
@@ -212,33 +233,56 @@
  "aws.cloudwatch.logs.data-protection": {
   "title": "Log group data protection (sensitive data masking)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
-  "limitations": []
+  "limitations": [
+   "Only 4 managed data identifiers are recognized (EmailAddress, CreditCardNumber, Ssn-US, AwsSecretKey) — AWS's full managed identifier catalog (100+, with locale variants) is not offered.",
+   "Masking is enforced at ingestion (PutLogEvents permanently replaces the match with asterisks, as AWS does); Audit-only findings are counted on the log group but not forwarded to a findings destination (CloudTrail/Security Hub/S3)."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
  },
  "aws.cloudwatch.logs.field-indexes": {
   "title": "Log group field indexes",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "full",
+   "offline": "full"
   },
-  "limitations": []
+  "limitations": [
+   "A field index is stored and returned exactly as AWS defines it (a cost/performance hint, not a correctness filter) — Vyomi's Logs Insights already scans every field, so indexing a field doesn't change query results or make the query faster, just like on AWS it doesn't change results, only cost."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
  },
  "aws.cloudwatch.logs.transformer": {
   "title": "Log group transformer",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
-  "limitations": []
+  "limitations": [
+   "4 processors are run for real at ingestion (parseJSON, addKeys, deleteKeys, renameKeys), restructuring the stored event exactly as AWS does. AWS's other processors (grok, csv, splitString, substituteString, dateTimeConverter, type converters, …) are rejected by PutTransformer — not silently accepted."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
  },
  "aws.cloudwatch.logs.contributor-insights": {
   "title": "Log group Contributor Insights rules",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
-  "limitations": []
+  "limitations": [
+   "Only LogFormat JSON is scanned; CLF/W3C log formats are accepted and stored by PutInsightRule but GetInsightRuleReport finds no contributors for them.",
+   "Filters only support the In / NotIn operators (exact-value membership); AWS's other operators (IsPresent, StartsWith, …) are not evaluated.",
+   "The report is computed over the whole requested window as one bucket, not broken down per-Period like AWS's time series."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
  }
 }

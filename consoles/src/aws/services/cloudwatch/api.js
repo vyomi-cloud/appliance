@@ -29,6 +29,13 @@ export const setAlarmState = (name, state, reason) => CW("SetAlarmState", { Alar
 export const enableAlarmActions = (names) => CW("EnableAlarmActions", { AlarmNames: names });
 export const disableAlarmActions = (names) => CW("DisableAlarmActions", { AlarmNames: names });
 export const describeAlarmHistory = (params) => CW("DescribeAlarmHistory", params).then((r) => r.AlarmHistoryItems || []);
+export const putAnomalyDetector = (params) => CW("PutAnomalyDetector", params);
+export const describeAnomalyDetectors = (params = {}) => CW("DescribeAnomalyDetectors", params).then((r) => r.AnomalyDetectors || []);
+export const putInsightRule = (ruleName, ruleDefinition) => CW("PutInsightRule", { RuleName: ruleName, RuleDefinition: JSON.stringify(ruleDefinition) });
+export const describeInsightRules = (params = {}) => CW("DescribeInsightRules", params).then((r) => r.InsightRules || []);
+export const deleteInsightRules = (ruleNames) => CW("DeleteInsightRules", { RuleNames: ruleNames });
+export const getInsightRuleReport = (ruleName, startTime, endTime, maxContributorCount = 10) =>
+  CW("GetInsightRuleReport", { RuleName: ruleName, StartTime: startTime, EndTime: endTime, MaxContributorCount: maxContributorCount });
 
 // ── Dashboards ───────────────────────────────────────────────────────────────────────
 export const putDashboard = (name, body) => CW("PutDashboard", { DashboardName: name, DashboardBody: JSON.stringify(body) });
@@ -50,6 +57,15 @@ export const deleteRetentionPolicy = (name) => LG("DeleteRetentionPolicy", { log
 export const associateKmsKey = (name, kmsKeyId) => LG("AssociateKmsKey", { logGroupName: name, kmsKeyId });
 export const disassociateKmsKey = (name) => LG("DisassociateKmsKey", { logGroupName: name });
 export const updateLogGroupDeletionProtection = (name, enabled) => LG("UpdateLogGroupDeletionProtection", { logGroupName: name, deletionProtectionEnabled: enabled });
+export const putDataProtectionPolicy = (name, policyDocument) => LG("PutDataProtectionPolicy", { logGroupIdentifier: name, policyDocument: JSON.stringify(policyDocument) });
+export const getDataProtectionPolicy = (name) => LG("GetDataProtectionPolicy", { logGroupIdentifier: name }).then((r) => ({ ...r, policyDocument: r.policyDocument ? JSON.parse(r.policyDocument) : null }));
+export const deleteDataProtectionPolicy = (name) => LG("DeleteDataProtectionPolicy", { logGroupIdentifier: name });
+export const putIndexPolicy = (name, fields) => LG("PutIndexPolicy", { logGroupIdentifier: name, policyDocument: JSON.stringify({ fields }) });
+export const getIndexPolicy = (name) => LG("GetIndexPolicy", { logGroupIdentifier: name }).then((r) => JSON.parse(r.indexPolicyDocument.policyDocument).fields);
+export const deleteIndexPolicy = (name) => LG("DeleteIndexPolicy", { logGroupIdentifier: name });
+export const putTransformer = (name, transformerConfig) => LG("PutTransformer", { logGroupIdentifier: name, transformerConfig });
+export const getTransformer = (name) => LG("GetTransformer", { logGroupIdentifier: name }).then((r) => r.transformerConfig);
+export const deleteTransformer = (name) => LG("DeleteTransformer", { logGroupIdentifier: name });
 export const tagLogGroup = (name, tags) => LG("TagLogGroup", { logGroupName: name, tags });
 export const untagLogGroup = (name, tagKeys) => LG("UntagLogGroup", { logGroupName: name, tags: tagKeys });
 export const listTagsLogGroup = (name) => LG("ListTagsLogGroup", { logGroupName: name }).then((r) => r.tags || {});

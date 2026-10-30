@@ -1,8 +1,13 @@
 """CloudWatch core — CBOR / JSON / Query wire on the shared router, alarms, metric math, persistence."""
 import json
+import math
+import re
 import time
 
 from core import cloudwatch_core as cw
+from core import lambda_core as lam
+from core import sns_core as sns
+from core import sqs_core as sqs
 from core.aws_wire_router import AwsWireRouter
 from core.persistent_store import PersistentCloudWatchStore, SqliteStateBackend
 
@@ -123,3 +128,75 @@ def test_console_helpers_fill_every_column():
     row = cw.console_list(st)["items"][0]
     assert all(str(row[k]).strip() not in ("", "-") for k in ("name", "state", "metric", "condition", "period", "actions", "updated"))
     assert cw.console_delete(st, "my-alarm")["ok"] and not cw.console_list(st)["items"]
+
+
+def test_alarm_actions_really_deliver_to_sns_and_lambda():
+    r = AwsWireRouter()
+    # An SNS topic subscribed by an SQS queue, so delivery is externally observable.
+    topic_xml = sns.dispatch(r.msg, {"Action": "CreateTopic", "Name": "cw-topic"}).body
+    topic_arn = re.search(r"<TopicArn>([^<]+)</TopicArn>", topic_xml).group(1)
+    qurl = sqs.dispatch(r.msg, "AmazonSQS.CreateQueue", {"QueueName": "cw-q"}).body["QueueUrl"]
+    qarn = sqs.dispatch(r.msg, "AmazonSQS.GetQueueAttributes", {"QueueUrl": qurl}).body["Attributes"]["QueueArn"]
+    sns.dispatch(r.msg, {"Action": "Subscribe", "TopicArn": topic_arn, "Protocol": "sqs", "Endpoint": qarn})
+    # A real Lambda function.
+    lam.dispatch(r.lam, "POST", "/2015-03-31/functions", {}, {}, json.dumps({
+        "FunctionName": "cw-fn", "Code": {"Source": "def handler(event, context):\n    return event"},
+    }).encode())
+    fn_arn = "arn:aws:lambda:us-east-1:123456789012:function:cw-fn"
+
+    cbor(r, "PutMetricAlarm", AlarmName="act1", Namespace="App", MetricName="Err", Statistic="Sum", Period=60,
+         EvaluationPeriods=1, Threshold=1.0, ComparisonOperator="GreaterThanThreshold",
+         AlarmActions=[topic_arn, fn_arn])
+    cbor(r, "PutMetricData", Namespace="App", MetricData=[{"MetricName": "Err", "Value": 5.0}])
+
+    hist = cbor(r, "DescribeAlarmHistory", AlarmName="act1")[1]["AlarmHistoryItems"]
+    actions = [h for h in hist if h["HistoryItemType"] == "Action"]
+    assert len(actions) == 2 and all("Successfully executed" in h["HistorySummary"] for h in actions)
+    recv = sqs.dispatch(r.msg, "AmazonSQS.ReceiveMessage", {"QueueUrl": qurl, "MaxNumberOfMessages": 10}).body.get("Messages", [])
+    assert len(recv) == 1 and "act1" in recv[0]["Body"]
+    assert len(r.lam._lambda_functions["cw-fn"]["invocations"]) == 1
+
+    # An action ARN Vyomi doesn't back (no Auto Scaling/EC2 action core) is honestly recorded as failed.
+    cbor(r, "PutMetricAlarm", AlarmName="act2", Namespace="App", MetricName="Err", Statistic="Sum", Period=60,
+         EvaluationPeriods=1, Threshold=1.0, ComparisonOperator="GreaterThanThreshold",
+         AlarmActions=["arn:aws:automate:us-east-1:ec2:stop"])
+    cbor(r, "PutMetricData", Namespace="App", MetricData=[{"MetricName": "Err", "Value": 5.0}])
+    hist2 = [h for h in cbor(r, "DescribeAlarmHistory", AlarmName="act2")[1]["AlarmHistoryItems"] if h["HistoryItemType"] == "Action"]
+    assert hist2 and "Failed to execute action" in hist2[0]["HistorySummary"]
+
+
+def _band_alarm(name, metric):
+    return {
+        "AlarmName": name, "ComparisonOperator": "LessThanLowerOrGreaterThanUpperThreshold",
+        "EvaluationPeriods": 1, "ThresholdMetricId": "ad1",
+        "Metrics": [
+            {"Id": "m1", "MetricStat": {"Metric": {"Namespace": "App", "MetricName": metric}, "Period": 60, "Stat": "Average"}, "ReturnData": False},
+            {"Id": "ad1", "Expression": "ANOMALY_DETECTION_BAND(m1, 2)", "ReturnData": True},
+        ],
+    }
+
+
+def test_anomaly_detector_trains_and_band_alarm_evaluates():
+    st = cw.CloudWatchStore()
+    end0 = math.ceil((now() + 1e-3) / 60) * 60   # the 60s bucket boundary _evaluate_alarm will compute "now" as
+
+    cw.op_put_anomaly_detector(st, {"Namespace": "App", "MetricName": "Lat", "Stat": "Average"})
+    assert cw.op_describe_anomaly_detectors(st, {"Namespace": "App", "MetricName": "Lat"})["AnomalyDetectors"][0]["StateValue"] == "PENDING_TRAINING"
+
+    cw.op_put_metric_alarm(st, _band_alarm("band_ok", "Lat"))
+    assert st.alarms["band_ok"]["StateValue"] == "INSUFFICIENT_DATA"   # not enough history to train yet
+
+    for k in range(2, 13):   # 11 steady historical datapoints, well before the current bucket
+        cw.op_put_metric_data(st, {"Namespace": "App", "MetricData": [{"MetricName": "Lat", "Value": 10.0, "Timestamp": cw.Ts(end0 - 60 * k)}]})
+    # The current-bucket datapoint is also steady, so it should land inside its own trained band.
+    cw.op_put_metric_data(st, {"Namespace": "App", "MetricData": [{"MetricName": "Lat", "Value": 10.0, "Timestamp": cw.Ts(end0 - 30)}]})
+    assert cw.op_describe_anomaly_detectors(st, {"Namespace": "App", "MetricName": "Lat"})["AnomalyDetectors"][0]["StateValue"] == "TRAINED"
+    assert st.alarms["band_ok"]["StateValue"] == "OK"
+
+    # A second, independently-trained metric whose only current-bucket point is a huge spike.
+    cw.op_put_metric_alarm(st, _band_alarm("band_alarm", "LatSpike"))
+    for k in range(2, 13):
+        cw.op_put_metric_data(st, {"Namespace": "App", "MetricData": [{"MetricName": "LatSpike", "Value": 10.0, "Timestamp": cw.Ts(end0 - 60 * k)}]})
+    cw.op_put_metric_data(st, {"Namespace": "App", "MetricData": [{"MetricName": "LatSpike", "Value": 10000.0, "Timestamp": cw.Ts(end0 - 30)}]})
+    assert st.alarms["band_alarm"]["StateValue"] == "ALARM"
+    assert "outside the expected band" in st.alarms["band_alarm"]["StateReason"]

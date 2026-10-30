@@ -80,6 +80,8 @@ export default function CreateAlarm({ query }) {
   const [period, setPeriod] = useState("300");
   const [thresholdType, setThresholdType] = useState("Static");
   const [comparison, setComparison] = useState("GreaterThanThreshold");
+  const [anomalyComparison, setAnomalyComparison] = useState("LessThanLowerOrGreaterThanUpperThreshold");
+  const [anomalyStdDevs, setAnomalyStdDevs] = useState("2");
   const [threshold, setThreshold] = useState("");
   const [evalPeriods, setEvalPeriods] = useState(1);
   const [datapointsToAlarm, setDatapointsToAlarm] = useState(1);
@@ -91,6 +93,7 @@ export default function CreateAlarm({ query }) {
 
   const [stateTrigger, setStateTrigger] = useState("In alarm");
   const [snsArn, setSnsArn] = useState("");
+  const [lambdaArn, setLambdaArn] = useState("");
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -112,13 +115,27 @@ export default function CreateAlarm({ query }) {
         setCompositeAlarms([...new Set(rec.AlarmRule.match(/"([^"]+)"/g) || [])].map((s) => s.replace(/"/g, "")));
         setCompositeOp(rec.AlarmRule.includes(" AND ") ? "AND" : "OR");
       } else {
-        setNamespace(rec.Namespace); setMetricName(rec.MetricName);
-        setStatistic(rec.Statistic || rec.ExtendedStatistic); setPeriod(String(rec.Period));
-        setComparison(rec.ComparisonOperator); setThreshold(String(rec.Threshold));
+        const band = rec.Metrics?.find((m) => /^ANOMALY_DETECTION_BAND\(/i.test(m.Expression || ""));
+        const bandMetric = band && rec.Metrics.find((m) => m.Id === band.Expression.match(/\(\s*(\w+)/)[1]);
+        if (band && bandMetric?.MetricStat) {
+          setThresholdType("Anomaly detection");
+          setNamespace(bandMetric.MetricStat.Metric.Namespace); setMetricName(bandMetric.MetricStat.Metric.MetricName);
+          setStatistic(bandMetric.MetricStat.Stat); setPeriod(String(bandMetric.MetricStat.Period));
+          setAnomalyComparison(rec.ComparisonOperator);
+          setAnomalyStdDevs(String((band.Expression.match(/,\s*([\d.]+)\s*\)/) || [, "2"])[1]));
+        } else {
+          setNamespace(rec.Namespace); setMetricName(rec.MetricName);
+          setStatistic(rec.Statistic || rec.ExtendedStatistic); setPeriod(String(rec.Period));
+          setComparison(rec.ComparisonOperator); setThreshold(String(rec.Threshold));
+        }
         setEvalPeriods(rec.EvaluationPeriods); setDatapointsToAlarm(rec.DatapointsToAlarm);
         setMissingData(rec.TreatMissingData || "missing");
-        const arn = rec.AlarmActions?.[0] || rec.OKActions?.[0] || rec.InsufficientDataActions?.[0];
-        if (arn) { setSnsArn(arn); setStateTrigger(rec.AlarmActions?.length ? "In alarm" : rec.OKActions?.length ? "OK" : "Insufficient data"); }
+        const actions = [...(rec.AlarmActions || []), ...(rec.OKActions || []), ...(rec.InsufficientDataActions || [])];
+        const sns = actions.find((a) => a.includes(":sns:"));
+        const lambda = actions.find((a) => a.includes(":lambda:"));
+        if (sns) setSnsArn(sns);
+        if (lambda) setLambdaArn(lambda);
+        if (actions.length) setStateTrigger(rec.AlarmActions?.length ? "In alarm" : rec.OKActions?.length ? "OK" : "Insufficient data");
       }
       const t = await api.listTagsForResource(rec.AlarmArn);
       setTags(t.map((x) => ({ key: x.Key, value: x.Value })));
@@ -127,7 +144,8 @@ export default function CreateAlarm({ query }) {
   }, [editingName]);
 
   const thresholdNum = Number(threshold);
-  const canSubmit = !!name && (dataSource === "Alarms" ? compositeAlarms.length > 0 : !!namespace && !!metricName && threshold !== "" && thresholdType === "Static");
+  const canSubmit = !!name && (dataSource === "Alarms" ? compositeAlarms.length > 0
+    : !!namespace && !!metricName && (thresholdType === "Static" ? threshold !== "" : Number(anomalyStdDevs) > 0));
 
   const alarmOptions = [...(alarmsList.data?.MetricAlarms || []), ...(alarmsList.data?.CompositeAlarms || [])]
     .filter((a) => a.AlarmName !== name).map((a) => ({ label: a.AlarmName, value: a.AlarmName }));
@@ -141,15 +159,30 @@ export default function CreateAlarm({ query }) {
         const rule = compositeAlarms.map((n) => `ALARM("${n}")`).join(` ${compositeOp} `);
         await api.putCompositeAlarm({ AlarmName: name, AlarmDescription: description || undefined, AlarmRule: rule, Tags: tagList });
       } else {
-        await api.putMetricAlarm({
-          AlarmName: name, AlarmDescription: description || undefined, Namespace: namespace, MetricName: metricName,
-          Statistic: statistic, Period: Number(period), ComparisonOperator: comparison, Threshold: thresholdNum,
+        const actionArns = [snsArn, lambdaArn].filter(Boolean);
+        const common = {
+          AlarmName: name, AlarmDescription: description || undefined,
           EvaluationPeriods: Number(evalPeriods), DatapointsToAlarm: Number(datapointsToAlarm), TreatMissingData: missingData,
-          AlarmActions: stateTrigger === "In alarm" && snsArn ? [snsArn] : [],
-          OKActions: stateTrigger === "OK" && snsArn ? [snsArn] : [],
-          InsufficientDataActions: stateTrigger === "Insufficient data" && snsArn ? [snsArn] : [],
+          AlarmActions: stateTrigger === "In alarm" ? actionArns : [],
+          OKActions: stateTrigger === "OK" ? actionArns : [],
+          InsufficientDataActions: stateTrigger === "Insufficient data" ? actionArns : [],
           Tags: tagList,
-        });
+        };
+        if (thresholdType === "Anomaly detection") {
+          await api.putAnomalyDetector({ Namespace: namespace, MetricName: metricName, Stat: statistic });
+          await api.putMetricAlarm({
+            ...common, ComparisonOperator: anomalyComparison, ThresholdMetricId: "ad1",
+            Metrics: [
+              { Id: "m1", MetricStat: { Metric: { Namespace: namespace, MetricName: metricName }, Period: Number(period), Stat: statistic }, ReturnData: false },
+              { Id: "ad1", Expression: `ANOMALY_DETECTION_BAND(m1, ${Number(anomalyStdDevs)})`, ReturnData: true },
+            ],
+          });
+        } else {
+          await api.putMetricAlarm({
+            ...common, Namespace: namespace, MetricName: metricName, Statistic: statistic,
+            Period: Number(period), ComparisonOperator: comparison, Threshold: thresholdNum,
+          });
+        }
       }
       notify.success(`Alarm ${name} was created.`);
       navigate("cloudwatch", "alarms", name);
@@ -199,7 +232,28 @@ export default function CreateAlarm({ query }) {
                             items={[{ value: "Static", label: "Static" }, { value: "Anomaly detection", label: "Anomaly detection" }]} ariaLabel="Threshold type" />
                         </FormField>
                         {thresholdType === "Anomaly detection" ? (
-                          <CapabilityContainer id="aws.cloudwatch.anomaly-detection" title="Anomaly detection" />
+                          <CapabilityContainer id="aws.cloudwatch.anomaly-detection" title="Anomaly detection">
+                            <SpaceBetween size="l">
+                              <FormField label={`Whenever ${metricName || "CPUUtilization"} is...`}>
+                                <RadioGroup value={anomalyComparison} onChange={({ detail }) => setAnomalyComparison(detail.value)}
+                                  items={[
+                                    { value: "LessThanLowerOrGreaterThanUpperThreshold", label: "Outside of the band" },
+                                    { value: "GreaterThanUpperThreshold", label: "Greater than the band" },
+                                    { value: "LessThanLowerThreshold", label: "Lower than the band" },
+                                  ]} ariaLabel="Anomaly comparison operator" />
+                              </FormField>
+                              <FormField label="Anomaly detection threshold" description="Number of standard deviations the band spans around the metric's trained mean.">
+                                <Input type="number" value={anomalyStdDevs} onChange={({ detail }) => setAnomalyStdDevs(detail.value)} ariaLabel="Anomaly detection threshold" />
+                              </FormField>
+                              <FormField label="Datapoints to alarm" description="M out of N datapoints must fall outside the band.">
+                                <SpaceBetween direction="horizontal" size="xs" alignItems="center">
+                                  <Input type="number" value={String(datapointsToAlarm)} onChange={({ detail }) => setDatapointsToAlarm(Math.max(1, Number(detail.value) || 1))} ariaLabel="Datapoints to alarm" />
+                                  <Box>out of</Box>
+                                  <Input type="number" value={String(evalPeriods)} onChange={({ detail }) => setEvalPeriods(Math.max(1, Number(detail.value) || 1))} ariaLabel="Evaluation periods" />
+                                </SpaceBetween>
+                              </FormField>
+                            </SpaceBetween>
+                          </CapabilityContainer>
                         ) : (
                           <>
                             <FormField label={`Whenever ${metricName || "CPUUtilization"} is...`}>
@@ -237,12 +291,16 @@ export default function CreateAlarm({ query }) {
                     <FormField label="Send a notification to the following SNS topic">
                       <RadioGroup value="arn" items={[{ value: "existing", label: "Select an existing SNS topic", disabled: true }, { value: "new", label: "Create new topic", disabled: true }, { value: "arn", label: "Use topic ARN" }]} ariaLabel="Send a notification to the following SNS topic" />
                     </FormField>
-                    <FormField label="SNS topic ARN" description="Vyomi records this action and shows it in the alarm's history and Actions tab, but does not deliver a real SNS message.">
+                    <FormField label="SNS topic ARN" description="Vyomi really publishes to this topic when the alarm transitions, through the same SNS engine the console's SNS pages use.">
                       <Input value={snsArn} onChange={({ detail }) => setSnsArn(detail.value)} placeholder="arn:aws:sns:us-east-1:123456789012:my-topic" ariaLabel="SNS topic ARN" />
                     </FormField>
                   </SpaceBetween>
                 </Container>
-                <CapabilityContainer id="aws.cloudwatch.alarms.actions.compute" title="Lambda action" />
+                <CapabilityContainer id="aws.cloudwatch.alarms.actions.lambda" title="Lambda action">
+                  <FormField label="Lambda function ARN" description="Vyomi really invokes this function when the alarm transitions, through the same Lambda engine the console's Lambda pages use.">
+                    <Input value={lambdaArn} onChange={({ detail }) => setLambdaArn(detail.value)} placeholder="arn:aws:lambda:us-east-1:123456789012:function:my-function" ariaLabel="Lambda function ARN" />
+                  </FormField>
+                </CapabilityContainer>
                 <CapabilityContainer id="aws.cloudwatch.alarms.actions.compute" title="Auto Scaling action" />
                 <CapabilityContainer id="aws.cloudwatch.alarms.actions.compute" title="EC2 action" />
               </SpaceBetween>

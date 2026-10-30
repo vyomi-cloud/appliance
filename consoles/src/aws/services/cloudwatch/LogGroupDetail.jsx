@@ -2,6 +2,7 @@ import { useState } from "react";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
+import Checkbox from "@cloudscape-design/components/checkbox";
 import Container from "@cloudscape-design/components/container";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import FormField from "@cloudscape-design/components/form-field";
@@ -9,6 +10,7 @@ import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import Link from "@cloudscape-design/components/link";
 import Modal from "@cloudscape-design/components/modal";
+import RadioGroup from "@cloudscape-design/components/radio-group";
 import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
@@ -23,6 +25,9 @@ import { ErrorAlert, fmtBytes, fmtDate, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import * as api from "./api.js";
+
+const DATA_IDENTIFIERS = ["EmailAddress", "CreditCardNumber", "Ssn-US", "AwsSecretKey"];
+const dataIdentifierArn = (id) => `arn:aws:dataprotection::aws:data-identifier/${id}`;
 
 const TAG_I18N = {
   keyHeader: "Key", valueHeader: "Value", addButton: "Add new tag", removeButton: "Remove", undoButton: "Undo",
@@ -164,10 +169,208 @@ function SubscriptionFiltersTab({ group }) {
         <SpaceBetween size="l">
           <FormField label="Filter name"><Input value={name} onChange={({ detail }) => setName(detail.value)} ariaLabel="Filter name" /></FormField>
           <FormField label="Filter pattern"><Input value={pattern} onChange={({ detail }) => setPattern(detail.value)} ariaLabel="Filter pattern" /></FormField>
-          <FormField label="Destination ARN"><Textarea value={destinationArn} onChange={({ detail }) => setDestinationArn(detail.value)} ariaLabel="Destination ARN" /></FormField>
+          <FormField label="Destination ARN" description="A Lambda function or Kinesis stream destination really receives matched events; a Firehose destination is only counted.">
+            <Textarea value={destinationArn} onChange={({ detail }) => setDestinationArn(detail.value)} ariaLabel="Destination ARN" />
+          </FormField>
         </SpaceBetween>
       </Modal>
     </Container>
+  );
+}
+
+function DataProtectionTab({ group, onChanged }) {
+  const notify = useNotify();
+  const t = useAsync(() => api.getDataProtectionPolicy(group).catch((e) => (e.code === "ResourceNotFoundException" ? null : Promise.reject(e))), [group]);
+  const current = t.data?.policyDocument;
+  const currentIds = new Set((current?.Statement || []).flatMap((s) => s.DataIdentifier || []).map((a) => a.split("/").pop()));
+  const masking = (current?.Statement || []).some((s) => s.Operation?.Deidentify);
+  const [ids, setIds] = useState(null);
+  const [mode, setMode] = useState(null);
+  const selectedIds = ids ?? [...currentIds];
+  const selectedMode = mode ?? (masking ? "mask" : "audit");
+
+  const save = async () => {
+    if (!selectedIds.length) return;
+    const dataIdentifiers = selectedIds.map(dataIdentifierArn);
+    const statements = [{ Sid: "audit-policy", DataIdentifier: dataIdentifiers, Operation: { Audit: { FindingsDestination: {} } } }];
+    if (selectedMode === "mask") statements.push({ Sid: "redact-policy", DataIdentifier: dataIdentifiers, Operation: { Deidentify: { MaskConfig: {} } } });
+    await api.putDataProtectionPolicy(group, { Name: "data-protection-policy", Version: "2021-06-01", Statement: statements });
+    notify.success("Data protection policy saved.");
+    setIds(null); setMode(null); t.reload(); onChanged?.();
+  };
+
+  const remove = async () => {
+    await api.deleteDataProtectionPolicy(group);
+    notify.success("Data protection policy removed.");
+    setIds(null); setMode(null); t.reload(); onChanged?.();
+  };
+
+  return (
+    <CapabilityContainer id="aws.cloudwatch.logs.data-protection" title="Data protection"
+      actions={current && <Button onClick={remove}>Deactivate</Button>}>
+      {t.loading ? <Spinner /> : (
+        <SpaceBetween size="l">
+          <FormField label="Data identifiers to find" description="Matched against @message when events are ingested.">
+            <SpaceBetween size="xs">
+              {DATA_IDENTIFIERS.map((id) => (
+                <Checkbox key={id} checked={selectedIds.includes(id)}
+                  onChange={({ detail }) => setIds((detail.checked ? [...selectedIds, id] : selectedIds.filter((x) => x !== id)))}>
+                  {id}
+                </Checkbox>
+              ))}
+            </SpaceBetween>
+          </FormField>
+          <FormField label="Action">
+            <RadioGroup value={selectedMode} onChange={({ detail }) => setMode(detail.value)}
+              items={[{ value: "audit", label: "Audit — count findings, don't change the data" }, { value: "mask", label: "Audit and mask — findings are replaced with asterisks as they're ingested" }]}
+              ariaLabel="Data protection action" />
+          </FormField>
+          <Button variant="primary" onClick={save} disabled={!selectedIds.length}>Activate data protection</Button>
+        </SpaceBetween>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+function FieldIndexesTab({ group }) {
+  const notify = useNotify();
+  const t = useAsync(() => api.getIndexPolicy(group).catch((e) => (e.code === "ResourceNotFoundException" ? [] : Promise.reject(e))), [group]);
+  const [text, setText] = useState(null);
+  const current = (t.data || []).join(", ");
+
+  const save = async () => {
+    const fields = (text ?? current).split(",").map((f) => f.trim()).filter(Boolean);
+    await api.putIndexPolicy(group, fields);
+    notify.success("Field index policy saved.");
+    setText(null); t.reload();
+  };
+
+  const remove = async () => {
+    await api.deleteIndexPolicy(group);
+    notify.success("Field index policy removed.");
+    setText(null); t.reload();
+  };
+
+  return (
+    <CapabilityContainer id="aws.cloudwatch.logs.field-indexes" title="Field indexes"
+      actions={(t.data || []).length > 0 && <Button onClick={remove}>Delete policy</Button>}>
+      {t.loading ? <Spinner /> : (
+        <SpaceBetween size="l">
+          <FormField label="Indexed fields" description="Comma-separated Logs Insights field names, e.g. requestId, statusCode.">
+            <Input value={text ?? current} onChange={({ detail }) => setText(detail.value)} ariaLabel="Indexed fields" />
+          </FormField>
+          <Button variant="primary" onClick={save} disabled={!(text ?? current).trim()}>Save field index policy</Button>
+        </SpaceBetween>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+const TRANSFORMER_EXAMPLE = JSON.stringify([{ parseJSON: { source: "@message" } }, { addKeys: { entries: [{ key: "env", value: "prod" }] } }], null, 1);
+
+function TransformerTab({ group }) {
+  const notify = useNotify();
+  const t = useAsync(() => api.getTransformer(group).catch((e) => (e.code === "ResourceNotFoundException" ? null : Promise.reject(e))), [group]);
+  const [text, setText] = useState(null);
+  const [jsonErr, setJsonErr] = useState(null);
+  const current = text ?? (t.data ? JSON.stringify(t.data, null, 1) : TRANSFORMER_EXAMPLE);
+
+  const save = async () => {
+    let cfg;
+    try { cfg = JSON.parse(current); } catch (e) { setJsonErr(`Not valid JSON: ${e.message}`); return; }
+    setJsonErr(null);
+    await api.putTransformer(group, cfg);
+    notify.success("Transformer saved.");
+    setText(null); t.reload();
+  };
+
+  const remove = async () => {
+    await api.deleteTransformer(group);
+    notify.success("Transformer removed.");
+    setText(null); t.reload();
+  };
+
+  return (
+    <CapabilityContainer id="aws.cloudwatch.logs.transformer" title="Transformer" actions={t.data && <Button onClick={remove}>Delete transformer</Button>}>
+      {t.loading ? <Spinner /> : (
+        <SpaceBetween size="l">
+          {jsonErr && <ErrorAlert error={new Error(jsonErr)} />}
+          <FormField label="Transformer config" description="A JSON array of processors (parseJSON, addKeys, deleteKeys, renameKeys), run in order on every PutLogEvents.">
+            <Textarea value={current} onChange={({ detail }) => setText(detail.value)} rows={8} ariaLabel="Transformer config" />
+          </FormField>
+          <Button variant="primary" onClick={save}>Save transformer</Button>
+        </SpaceBetween>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+function ContributorInsightsTab({ group }) {
+  const notify = useNotify();
+  const t = useAsync(() => api.describeInsightRules({}), []);
+  const rules = (t.data || []).filter((r) => { try { return JSON.parse(r.Definition).LogGroupNames?.includes(group); } catch { return false; } });
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [keys, setKeys] = useState("$.ip");
+  const [valueOf, setValueOf] = useState("");
+  const [report, setReport] = useState(null);
+  const [reportFor, setReportFor] = useState(null);
+
+  const create = async () => {
+    const definition = {
+      Schema: { Name: "CloudWatchLogRule", Version: 1 }, LogGroupNames: [group], LogFormat: "JSON",
+      Contribution: { Keys: keys.split(",").map((k) => k.trim()).filter(Boolean), ...(valueOf ? { ValueOf: valueOf } : {}) },
+      AggregateOn: valueOf ? "Sum" : "Count",
+    };
+    await api.putInsightRule(name, definition);
+    notify.success(`Contributor Insights rule ${name} created.`);
+    setAdding(false); setName(""); t.reload();
+  };
+
+  const runReport = async (ruleName) => {
+    const now = Math.floor(Date.now() / 1000);
+    const r = await api.getInsightRuleReport(ruleName, now - 3600, now);
+    setReportFor(ruleName); setReport(r);
+  };
+
+  return (
+    <CapabilityContainer id="aws.cloudwatch.logs.contributor-insights" title="Contributor Insights" actions={<Button onClick={() => setAdding(true)}>Create rule</Button>}>
+      <SpaceBetween size="l">
+        <Table
+          variant="embedded"
+          items={rules}
+          loading={t.loading}
+          trackBy="Name"
+          columnDefinitions={[
+            { id: "name", header: "Rule name", cell: (r) => r.Name },
+            { id: "state", header: "State", cell: (r) => r.State },
+            { id: "report", header: "", cell: (r) => <Button variant="inline-link" onClick={() => runReport(r.Name)}>Run report (last hour)</Button> },
+            { id: "del", header: "", cell: (r) => <Button variant="icon" iconName="remove" ariaLabel={`Delete ${r.Name}`} onClick={async () => { await api.deleteInsightRules([r.Name]); t.reload(); }} /> },
+          ]}
+          empty={<Box textAlign="center" color="inherit">No Contributor Insights rules for this log group.</Box>}
+        />
+        {reportFor && (
+          <Table
+            variant="embedded"
+            items={(report?.Contributors || []).map((c, i) => ({ id: i, keys: c.Keys.join(", "), value: c.ApproximateAggregateValue }))}
+            columnDefinitions={[{ id: "keys", header: report?.KeyLabels?.join(", ") || "Keys", cell: (r) => r.keys }, { id: "value", header: report?.AggregationStatistic || "Value", cell: (r) => r.value }]}
+            empty={<Box textAlign="center" color="inherit">No contributors in the last hour.</Box>}
+            header={<Header variant="h3">{reportFor} — top contributors</Header>}
+          />
+        )}
+      </SpaceBetween>
+      <Modal visible={adding} onDismiss={() => setAdding(false)} header="Create Contributor Insights rule" footer={<Box float="right"><Button variant="primary" disabled={!name || !keys} onClick={create}>Create rule</Button></Box>}>
+        <SpaceBetween size="l">
+          <FormField label="Rule name"><Input value={name} onChange={({ detail }) => setName(detail.value)} ariaLabel="Rule name" /></FormField>
+          <FormField label="Contribution keys" description="Comma-separated JSONPath into each log event, e.g. $.ip, $.userAgent.">
+            <Input value={keys} onChange={({ detail }) => setKeys(detail.value)} ariaLabel="Contribution keys" />
+          </FormField>
+          <FormField label="Value of (optional)" description="JSONPath to sum instead of counting occurrences.">
+            <Input value={valueOf} onChange={({ detail }) => setValueOf(detail.value)} ariaLabel="Value of" />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+    </CapabilityContainer>
   );
 }
 
@@ -207,10 +410,10 @@ export default function LogGroupDetail({ params }) {
           { id: "anomaly", label: "Anomaly detection", content: <CapabilityContainer id="aws.cloudwatch.logs.anomaly-detection" title="Anomaly detection" /> },
           { id: "metricfilters", label: "Metric filters", content: <MetricFiltersTab group={name} /> },
           { id: "subfilters", label: "Subscription filters", content: <SubscriptionFiltersTab group={name} /> },
-          { id: "ci", label: "Contributor Insights", content: <CapabilityContainer id="aws.cloudwatch.logs.contributor-insights" title="Contributor Insights" /> },
-          { id: "dataprotection", label: "Data protection", content: <CapabilityContainer id="aws.cloudwatch.logs.data-protection" title="Data protection" /> },
-          { id: "fieldindexes", label: "Field indexes", content: <CapabilityContainer id="aws.cloudwatch.logs.field-indexes" title="Field indexes" /> },
-          { id: "transformer", label: "Transformer", content: <CapabilityContainer id="aws.cloudwatch.logs.transformer" title="Transformer" /> },
+          { id: "ci", label: "Contributor Insights", content: <ContributorInsightsTab group={name} /> },
+          { id: "dataprotection", label: "Data protection", content: <DataProtectionTab group={name} onChanged={t.reload} /> },
+          { id: "fieldindexes", label: "Field indexes", content: <FieldIndexesTab group={name} /> },
+          { id: "transformer", label: "Transformer", content: <TransformerTab group={name} /> },
         ]} />
       </SpaceBetween>
       <DeleteModal visible={deleting} onDismiss={() => setDeleting(false)} resourceType="log group" names={[name]}
