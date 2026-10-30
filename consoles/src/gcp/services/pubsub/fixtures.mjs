@@ -29,6 +29,19 @@ export default {
     await wire("PUT", subPath(uniq), { svc: null, body: { topic: topicName("uic-topic") } });
     return uniq;
   },
+  // topic-details shows this page's subscriptions in its default "Subscriptions" tab.
+  "live-topic-detail": async (wire, uniq) => {
+    await wire("PUT", topicPath("uic-topic"), { svc: null, body: {} }).catch(() => {});
+    await wire("PUT", subPath(uniq), { svc: null, body: { topic: topicName("uic-topic") } });
+    return uniq;
+  },
+  // subscription-details shows this subscription's snapshots in its "Snapshots" tab.
+  "live-subscription-detail": async (wire, uniq) => {
+    await wire("PUT", topicPath("uic-topic"), { svc: null, body: {} }).catch(() => {});
+    await wire("PUT", subPath("uic-sub"), { svc: null, body: { topic: topicName("uic-topic") } }).catch(() => {});
+    await wire("PUT", snapPath(uniq), { svc: null, body: { subscription: subName("uic-sub") } });
+    return uniq;
+  },
   "live-snapshot": async (wire, uniq) => {
     await wire("PUT", topicPath("uic-topic"), { svc: null, body: {} }).catch(() => {});
     await wire("PUT", subPath(uniq), { svc: null, body: { topic: topicName("uic-topic") } }).catch(() => {});
