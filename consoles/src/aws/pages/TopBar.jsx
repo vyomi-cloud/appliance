@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "@cloudscape-design/components/icon";
 import { SERVICES } from "../services/registry.js";
+import ServiceIcon from "../../common/icons/ServiceIcon.jsx";
 import { LOGO } from "./logo.js";
 import { classicHref } from "../services/registry.js";
 
@@ -54,9 +55,12 @@ function Search() {
       <Pop open={open && !!t} onClose={() => setOpen(false)} style={{ left: 0, right: "auto", width: "100%", top: 34 }}>
         <div style={{ padding: "4px 16px 8px", fontWeight: 700 }}>Services</div>
         {hits.length ? hits.map((s) => (
-          <button key={s.id} style={{ ...ITEM, padding: "8px 16px" }} onClick={() => go(s)}>
-            <div style={{ fontWeight: 700, color: "#539fe5" }}>{s.title}</div>
-            <div style={{ fontSize: 12, color: "#b6bec9", marginTop: 2 }}>{s.description}</div>
+          <button key={s.id} style={{ ...ITEM, padding: "8px 16px", display: "flex", alignItems: "flex-start", gap: 12 }} onClick={() => go(s)}>
+            <ServiceIcon cloud="aws" id={s.icon || s.id} category={s.category} size={32} />
+            <span style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, color: "#539fe5" }}>{s.title}</div>
+              <div style={{ fontSize: 12, color: "#b6bec9", marginTop: 2 }}>{s.description}</div>
+            </span>
           </button>
         )) : <div style={{ padding: "6px 16px", color: "#b6bec9" }}>No services match "{q}"</div>}
       </Pop>

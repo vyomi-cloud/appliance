@@ -97,7 +97,7 @@ export default function Home() {
       <div className="vy-tiles">
         <a className="vy-tile vy-link" href="#/allservices"><Add24Regular style={{ width: 32, height: 32 }} />Create a resource</a>
         {HOME_TILES.map((id) => byId[id]).map((s) => (
-          <a key={s.id} className="vy-tile" href={`#/${s.id}`}><Glyph text={s.glyph[0]} color={s.glyph[1]} />{s.title}</a>
+          <a key={s.id} className="vy-tile" href={`#/${s.id}`}><Glyph id={s.icon} />{s.title}</a>
         ))}
         <a className="vy-tile vy-link" href="#/allservices"><ArrowRight24Regular style={{ width: 32, height: 32 }} />More services</a>
       </div>

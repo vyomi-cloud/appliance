@@ -17,7 +17,7 @@ export default function StorageAccounts() {
   const subName = sub.displayName || sub.id;
   return (
     <>
-      <TitleRow title="Storage accounts" subtitle="Vyomi simulator (default directory)" glyph={<Glyph text="SA" color="#0b7a75" />} closeHref="#/" />
+      <TitleRow title="Storage accounts" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="storage" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
           resourceName="storage account"

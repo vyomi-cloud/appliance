@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import Icon from "@cloudscape-design/components/icon";
 import { CATEGORIES, SERVICES, byId } from "../services/registry.js";
+import ServiceIcon from "../../common/icons/ServiceIcon.jsx";
 
 const read = (k, d) => { try { return JSON.parse(localStorage.getItem(`vyomi.v4.${k}`)) ?? d; } catch { return d; } };
 const write = (k, v) => { try { localStorage.setItem(`vyomi.v4.${k}`, JSON.stringify(v)); } catch {} };
@@ -48,7 +49,8 @@ export default function ServicesMenu({ onClose }) {
           </div>
           {list.length ? list.map((s) => (
             <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 20px" }}>
-              <button onClick={() => go(s)} style={{ flex: 1, textAlign: "left", background: "none", border: 0, cursor: "pointer", color: "#fff", padding: 0 }}>
+              <ServiceIcon cloud="aws" id={s.icon || s.id} category={s.category} size={32} style={{ marginTop: 1 }} />
+              <button onClick={() => go(s)} style={{ flex: 1, textAlign: "left", background: "none", border: 0, cursor: "pointer", color: "#fff", padding: 0, marginLeft: 4 }}>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{s.title}</div>
                 <div style={{ fontSize: 12, color: "#b6bec9", marginTop: 3, lineHeight: 1.35 }}>{s.description}{!s.load ? " · classic console" : ""}</div>
               </button>

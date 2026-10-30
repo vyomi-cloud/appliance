@@ -7,7 +7,7 @@ import { classicHref } from "../services/registry.js";
 export default function ServiceNotSimulated({ svc }) {
   return (
     <>
-      <TitleRow title={svc.title} subtitle="Vyomi simulator (default directory)" glyph={<Glyph text={svc.glyph[0]} color={svc.glyph[1]} />} closeHref="#/" />
+      <TitleRow title={svc.title} subtitle="Vyomi simulator (default directory)" glyph={<Glyph id={svc.icon} />} closeHref="#/" />
       <div className="vy-page">
         <NotSimulated feature={`The v4 ${svc.title} blade`}
           note={<>Vyomi simulates {svc.title} ({svc.type}); its page has not moved to the v4 portal lens yet. Use the classic console meanwhile.</>} />

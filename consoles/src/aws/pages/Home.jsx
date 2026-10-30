@@ -16,6 +16,15 @@ import Modal from "@cloudscape-design/components/modal";
 import Checkbox from "@cloudscape-design/components/checkbox";
 import Table from "@cloudscape-design/components/table";
 import { byId, SERVICES } from "../services/registry.js";
+import ServiceIcon from "../../common/icons/ServiceIcon.jsx";
+
+/** A service's icon followed by its console link (Console Home lists, All services). */
+const SvcLink = ({ s, size = 20, fontSize }) => (
+  <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+    <ServiceIcon cloud="aws" id={s.icon || s.id} category={s.category} size={size} />
+    <Link href={`#/${s.id}`} onFollow={follow} fontSize={fontSize}>{s.title}</Link>
+  </span>
+);
 import { follow } from "../../common/router.js";
 import { awsJson, awsQuery, asList, getRegion, s3, WIRE_BASE } from "../../common/wire.js";
 import { useAsync } from "../../common/useAsync.js";
@@ -78,7 +87,7 @@ function RecentWidget() {
     <Widget title="Recently visited" actions={<Button href="#/services" onFollow={follow}>All services</Button>}>
       {recent.length ? (
         <ColumnLayout columns={2} variant="text-grid">
-          {recent.map((s) => <Link key={s.id} href={`#/${s.id}`} onFollow={follow}>{s.title}</Link>)}
+          {recent.map((s) => <SvcLink key={s.id} s={s} />)}
         </ColumnLayout>
       ) : <Box color="text-body-secondary">No recently visited services. Explore one of the services below to get started.</Box>}
     </Widget>
@@ -120,7 +129,7 @@ function ResourcesWidget({ probes }) {
     <Widget title="Resources" actions={<Button iconName="refresh" ariaLabel="Refresh" onClick={probes.reload} />}>
       <Table variant="embedded" loading={probes.loading} items={(probes.data || []).filter((r) => r.ok)}
         columnDefinitions={[
-          { id: "svc", header: "Service", cell: (r) => <Link href={`#/${r.id}`} onFollow={follow}>{byId[r.id]?.title || r.id}</Link> },
+          { id: "svc", header: "Service", cell: (r) => byId[r.id] ? <SvcLink s={byId[r.id]} size={16} /> : <Link href={`#/${r.id}`} onFollow={follow}>{r.id}</Link> },
           { id: "n", header: "Resources", cell: (r) => `${r.count} ${RESOURCE_NOUN[r.id]}` },
           { id: "ms", header: "Latency", cell: (r) => `${r.ms} ms` },
         ]}
@@ -376,8 +385,8 @@ export function AllServices() {
             <ColumnLayout columns={3} variant="text-grid">
               {SERVICES.filter((s) => s.category === cat).map((s) => (
                 <div key={s.id}>
-                  <Link href={`#/${s.id}`} onFollow={follow} fontSize="heading-s">{s.title}</Link>
-                  <Box variant="small" display="block" color="text-body-secondary" margin={{ top: "xxxs" }}>{s.description}{!s.load ? " · classic console" : ""}</Box>
+                  <SvcLink s={s} size={32} fontSize="heading-s" />
+                  <Box variant="small" display="block" color="text-body-secondary" margin={{ top: "xxxs", left: "xxxl" }}>{s.description}{!s.load ? " · classic console" : ""}</Box>
                 </div>
               ))}
             </ColumnLayout>

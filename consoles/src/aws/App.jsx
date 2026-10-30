@@ -2,6 +2,7 @@
  * service's side navigation, breadcrumbs, notifications and the help panel. */
 import { Suspense, useEffect, useState } from "react";
 import AppLayout from "@cloudscape-design/components/app-layout";
+import { iconDataUri } from "../common/icons/ServiceIcon.jsx";
 import SideNavigation from "@cloudscape-design/components/side-navigation";
 import BreadcrumbGroup from "@cloudscape-design/components/breadcrumb-group";
 import Flashbar from "@cloudscape-design/components/flashbar";
@@ -97,7 +98,7 @@ export default function App() {
         onNavigationChange={({ detail }) => setNavOpen(detail.open)}
         navigation={nav && (
           <SideNavigation
-            header={{ text: svc.title, href: `#/${svc.id}` }}
+            header={{ text: svc.title, href: `#/${svc.id}`, logo: { src: iconDataUri("aws", svc.icon || svc.id, svc.category), alt: "" } }}
             activeHref={"#" + route.path}
             items={nav}
             onFollow={follow}
