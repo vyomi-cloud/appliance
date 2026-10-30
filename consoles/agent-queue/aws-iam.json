@@ -1,0 +1,17 @@
+{
+ "cloud": "aws",
+ "service": "iam",
+ "goal": "P2: native-fidelity console on real backends \u2014 fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Users, User groups, Roles, Policies (customer + AWS managed), Identity providers, Account settings, Credential report: list/detail/create/edit/delete",
+  "User detail: Permissions (attach/detach managed, inline policies), Groups, Tags, Security credentials (access keys create/deactivate/delete, console password = limited, MFA = not_simulated)",
+  "Roles: trust policy edit, permissions, max session; Policies: JSON editor, versions (create/set default/delete), entities attached",
+  "Backend: everything stored + returned natively; policies validated as JSON but authorization not evaluated (limited); Access Analyzer = not_simulated"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/aws/<service>.json: one entry per console section with honest level + probe; tests/conformance/test_capabilities.py must pass",
+  "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
+  "Registry 'offline' level = 'nano' level for now; the offline appliance is verified separately (CAP_BASE)"
+ ]
+}

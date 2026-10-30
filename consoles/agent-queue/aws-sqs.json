@@ -1,0 +1,17 @@
+{
+ "cloud": "aws",
+ "service": "sqs",
+ "goal": "P2: native-fidelity console on real backends \u2014 fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Queues list/detail (Details, Monitoring, SNS subscriptions, Lambda triggers, EventBridge Pipes, Dead-letter queue, Tagging, Encryption, Dead-letter queue redrive tasks)",
+  "Create/Edit queue: all attributes (standard + FIFO, visibility, retention, delay, max size, wait time, SSE, access policy, redrive policy/DLQ, redrive allow policy, tags) via SetQueueAttributes/GetQueueAttributes",
+  "Send and receive messages page (SendMessage with attributes/group/dedup id, ReceiveMessage poll, DeleteMessage), Purge, Delete",
+  "Backend: redrive to DLQ after maxReceiveCount must really happen in the core; StartMessageMoveTask may stay not_simulated"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/aws/<service>.json: one entry per console section with honest level + probe; tests/conformance/test_capabilities.py must pass",
+  "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
+  "Registry 'offline' level = 'nano' level for now; the offline appliance is verified separately (CAP_BASE)"
+ ]
+}

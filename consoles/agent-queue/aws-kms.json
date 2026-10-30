@@ -1,0 +1,15 @@
+{
+ "cloud": "aws",
+ "service": "kms",
+ "goal": "P2: native-fidelity console on real backends \u2014 fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "AWS managed + customer managed keys lists/detail (General config, Key policy, Cryptographic configuration, Tags, Key rotation, Aliases), Create key wizard (symmetric/asymmetric/HMAC, usage, aliases, admins/users, policy review), Enable/Disable, Schedule/Cancel deletion",
+  "Backend: Encrypt/Decrypt/GenerateDataKey/Sign/Verify/GenerateMac real in the core; key policy stored (not evaluated = limited); automatic rotation flag + rotation history; aliases CRUD; custom key stores = not_simulated"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/aws/<service>.json: one entry per console section with honest level + probe; tests/conformance/test_capabilities.py must pass",
+  "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
+  "Registry 'offline' level = 'nano' level for now; the offline appliance is verified separately (CAP_BASE)"
+ ]
+}

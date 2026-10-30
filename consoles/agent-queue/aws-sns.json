@@ -1,0 +1,16 @@
+{
+ "cloud": "aws",
+ "service": "sns",
+ "goal": "P2: native-fidelity console on real backends \u2014 fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Topics list/detail (Subscriptions, Access policy, Data protection, Delivery policy, Delivery status logging, Encryption, Tags, Integrations), Create topic (standard/FIFO), Publish message (attributes, structured per-protocol)",
+  "Subscriptions list/detail/create with filter policy (attributes + payload scope), raw delivery, redrive policy",
+  "Backend: Publish must really fan out to subscribed SQS queues in the same router, honouring filter policies; email/SMS/HTTP endpoints = limited (recorded, not delivered)"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/aws/<service>.json: one entry per console section with honest level + probe; tests/conformance/test_capabilities.py must pass",
+  "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
+  "Registry 'offline' level = 'nano' level for now; the offline appliance is verified separately (CAP_BASE)"
+ ]
+}
