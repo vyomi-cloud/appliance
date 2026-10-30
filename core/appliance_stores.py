@@ -1098,6 +1098,13 @@ class AppStateMessagingStore(MessagingStore):
         (server.py's registry, which the classic console and `/2015-03-31/functions`
         create into) — else the net-new lambda_core router's functions."""
         name = str(arn).split(":function:", 1)[-1].split(":", 1)[0]
+        if _unified("lambda"):   # C0f: the appliance's functions ARE the lambda_core store
+            try:
+                from routes import aws_lambda_unified as _lu
+                return _lu.deliver(arn, event)
+            except Exception as exc:
+                _log.warning("eventbridge: lambda target %s not invoked: %s", name, exc)
+                return False
         try:
             import server as _srv
             if _srv._lambda_find_function(name):
@@ -1579,3 +1586,409 @@ def gcp_compute_vm_store() -> AppStateComputeVmStore:
     if _GVM is None:
         _GVM = AppStateComputeVmStore(_proxy("gcp_compute_vm", dict, None))
     return _GVM
+
+
+# ── v4 C0f: AWS Lambda, Azure Key Vault, Azure Container Registry ─────────────────────
+#
+#   Lambda          functions / layers / event-source mappings / … (core/lambda_core.py shapes)
+#                                            -> service_states["lambda"]{functions,layers,esms,…}
+#                   (the pre-v4 snake_case records in "functions" / "layers" are converted IN
+#                    PLACE once per space, so every v3 consumer of that slot — inventory, cost,
+#                    the space summary — keeps counting the same functions). Invoke runs the
+#                    code in the appliance's REAL runtime (a separate Python process with the
+#                    function's environment / timeout / layers), installed by
+#                    routes/aws_lambda_unified.py as the store's `run_function` hook.
+#   Key Vault       secrets / certificates / keys + material
+#                                            -> service_states["azure_azure_keyvault"]
+#                   {secrets,certificates,keys,material,aliases,rings,meta}
+#                   (pre-v4: Vault KV / RSA keys under `{vault}__{name}`, adopted once per space)
+#   ACR             repositories / tags / manifests
+#                                            -> service_states["azure_azure_acr"]{repos}
+
+_LAMBDA_KEYS = ("functions", "layers", "esms", "capacity_providers", "code_signing_configs",
+                "network_connectors", "microvm_images", "microvms", "applications")
+_LAMBDA_RUNNER = None   # set by routes/aws_lambda_unified.py: (fn, event, context) -> dict
+
+
+def set_lambda_runner(fn) -> None:
+    global _LAMBDA_RUNNER
+    _LAMBDA_RUNNER = fn
+
+
+def _lam_attr(key: str):
+    def _get(self):
+        return self._slot()[key]
+
+    def _set(self, value):
+        self._slot()[key] = value
+    return property(_get, _set)
+
+
+class AppStateLambdaStore:
+    """lambda_core store over the active space's `lambda` slot. lambda_core reaches its
+    collections through `_lambda_*` attributes (and reassigns `_lambda_esms`), so each one is
+    a read/write property onto the persisted slot. Other attributes (API Gateway v1's, which
+    shares this store on the router exactly as on Nano) stay process-local, as before."""
+
+    def _slot(self) -> dict:
+        from core import app_context as ctx
+        slot = ctx.lambda_state._target()
+        for k in _LAMBDA_KEYS:
+            if not isinstance(slot.get(k), dict):
+                slot[k] = {}
+        if not isinstance(slot.get("engine"), dict):
+            slot["engine"] = {}
+        return slot
+
+    _lambda_functions = _lam_attr("functions")
+    _lambda_layers = _lam_attr("layers")
+    _lambda_esms = _lam_attr("esms")
+    _lambda_capacity_providers = _lam_attr("capacity_providers")
+    _lambda_code_signing_configs = _lam_attr("code_signing_configs")
+    _lambda_network_connectors = _lam_attr("network_connectors")
+    _lambda_microvm_images = _lam_attr("microvm_images")
+    _lambda_microvms = _lam_attr("microvms")
+    _lambda_applications = _lam_attr("applications")
+
+    @property
+    def run_function(self):
+        return _LAMBDA_RUNNER
+
+    def persist(self) -> None:
+        """No-op: the tier middleware persists the kernel state after every mutating request."""
+
+    def adopt(self) -> None:
+        """Convert the pre-v4 records of this space in place, once (marker in slot["engine"])."""
+        slot = self._slot()
+        if slot["engine"].get("adopted"):
+            return
+        slot["engine"]["adopted"] = _http_date()
+        n = adopt_legacy_lambda(slot)
+        if n:
+            _log.info("lambda: adopted %d pre-v4 functions/layers", n)
+
+
+def _lambda_ts(ts) -> str:
+    import datetime as _dt
+    return _dt.datetime.fromtimestamp(_iso_epoch(ts), _dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+
+
+def _is_legacy_function(rec) -> bool:
+    return isinstance(rec, dict) and "source" not in rec and ("code" in rec or "function_arn" in rec)
+
+
+def _legacy_tags(tags) -> dict:
+    if isinstance(tags, dict):
+        return {str(k): str(v) for k, v in tags.items()}
+    out = {}
+    for t in tags or []:
+        if isinstance(t, dict) and (t.get("Key") or t.get("key")):
+            out[str(t.get("Key") or t.get("key"))] = str(t.get("Value") or t.get("value") or "")
+    return out
+
+
+def adopt_legacy_function(name: str, rec: dict) -> dict:
+    """A pre-v4 (server.py / routes/aws_lambda.py) function record → the lambda_core shape."""
+    import base64 as _b64
+    from core import lambda_core as lc
+    source = str(rec.get("code") or "")
+    sha = rec.get("code_sha256") or _b64.b64encode(hashlib.sha256(source.encode()).digest()).decode()
+    stmts = {}
+    for p in rec.get("permissions") or []:
+        if not isinstance(p, dict) or not p.get("statement_id"):
+            continue
+        principal = str(p.get("principal") or "*")
+        st = {"Sid": p["statement_id"], "Effect": "Allow", "Action": p.get("action") or "lambda:InvokeFunction",
+              "Principal": "*" if principal == "*" else ({"AWS": principal} if principal.startswith("arn:") else {"Service": principal}),
+              "Resource": lc._fn_arn(name)}
+        cond = {}
+        if p.get("source_arn"):
+            cond.setdefault("ArnLike", {})["AWS:SourceArn"] = p["source_arn"]
+        if p.get("source_account"):
+            cond.setdefault("StringEquals", {})["AWS:SourceAccount"] = p["source_account"]
+        if cond:
+            st["Condition"] = cond
+        stmts[p["statement_id"]] = st
+    versions, top = {}, 0
+    for v in rec.get("versions") or []:
+        ver = str((v or {}).get("version", ""))
+        if ver.isdigit():
+            top = max(top, int(ver))
+            versions[ver] = {"source": source, "code_sha256": v.get("code_sha256") or sha,
+                             "runtime": v.get("runtime") or rec.get("runtime", "python3.12"),
+                             "handler": v.get("handler") or rec.get("handler", "lambda_function.lambda_handler"),
+                             "memory_size": int(rec.get("memory_size") or 128), "timeout": int(rec.get("timeout") or 3),
+                             "env": dict(rec.get("environment") or {}),
+                             "description": v.get("description", ""), "last_modified": _lambda_ts(v.get("created"))}
+    invocations = []
+    for i in sorted([x for x in rec.get("invocations") or [] if isinstance(x, dict)],
+                    key=lambda x: str(x.get("at", "")), reverse=True)[:lc.RECENT_INVOCATIONS_KEPT]:
+        row = {"Timestamp": _lambda_ts(i.get("at")), "RequestId": str(i.get("id") or uuid.uuid4().hex),
+               "LogStream": "", "DurationInMS": 0, "BilledDurationInMS": 1,
+               "MemorySetInMB": int(rec.get("memory_size") or 128), "MemoryUsedInMB": 16,
+               "Error": i.get("status") == "error"}
+        logs = (i.get("stdout") or "") + (i.get("stderr") or "")
+        if logs:
+            row["LogTail"] = logs[-4096:]
+        if i.get("error"):
+            row["ErrorMessage"] = str(i["error"])[:1024]
+        invocations.append(row)
+    env = rec.get("environment") or {}
+    if isinstance(env, dict) and isinstance(env.get("Variables"), dict):
+        env = env["Variables"]
+    return {
+        "name": name, "arn": lc._fn_arn(name), "runtime": rec.get("runtime") or "python3.12",
+        "handler": rec.get("handler") or "lambda_function.lambda_handler", "source": source,
+        "code_sha256": sha, "env": {str(k): str(v) for k, v in (env or {}).items()},
+        "memory_size": int(rec.get("memory_size") or 128), "timeout": int(rec.get("timeout") or 3),
+        "role": rec.get("role") or "", "description": rec.get("description") or "",
+        "architectures": ["x86_64"], "ephemeral_storage_mb": 512, "snap_start": "None",
+        "tags": _legacy_tags(rec.get("tags")), "layers": list(rec.get("layers") or []),
+        "vpc_config": None, "dead_letter_config": None, "file_systems": [],
+        "recursive_loop": "Terminate", "tracing_mode": "PassThrough", "log_format": "Text",
+        "reserved_concurrency": None, "function_url": None, "event_invoke_config": None,
+        "policy_statements": stmts, "aliases": {}, "versions": versions, "next_version": top + 1,
+        "invocations": invocations, "created": rec.get("created", ""),
+        "last_modified": _lambda_ts(rec.get("last_modified") or rec.get("created")),
+        "revision_id": uuid.uuid4().hex,
+    }
+
+
+def adopt_legacy_lambda(slot: dict) -> int:
+    """Convert a space's pre-v4 Lambda functions + console layers (in place). Returns the count."""
+    n = 0
+    fns = slot.get("functions") or {}
+    for name, rec in list(fns.items()):
+        if _is_legacy_function(rec):
+            fns[name] = adopt_legacy_function(str(rec.get("function_name") or name), rec)
+            n += 1
+    layers = slot.get("layers") or {}
+    for name, rec in list(layers.items()):
+        if isinstance(rec, dict) and "versions" not in rec and ("layer_name" in rec or "code" in rec):
+            ver = int(rec.get("latest_version") or 1)
+            code = str(rec.get("code") or "")
+            layers[name] = {"versions": {ver: {
+                "Description": rec.get("description", ""), "CreatedDate": _lambda_ts(rec.get("created")),
+                "CompatibleRuntimes": [rec["runtime"]] if rec.get("runtime") else [],
+                "CompatibleArchitectures": [], "LicenseInfo": rec.get("license_info") or "",
+                "CodeSize": len(code), "Source": code}}, "next_version": ver + 1}
+            n += 1
+    return n
+
+
+# ── Azure Key Vault ────────────────────────────────────────────────────────────────────
+_KV_FACTORY = lambda: {"secrets": {}, "certificates": {}, "keys": {}, "material": {},   # noqa: E731
+                       "aliases": {}, "rings": {}, "meta": {}}
+
+
+def _kv_slot() -> dict:
+    slot = _proxy("azure_keyvault", _KV_FACTORY, None)._target()
+    for k, v in _KV_FACTORY().items():
+        if not isinstance(slot.get(k), dict):
+            slot[k] = v
+    return slot
+
+
+class AppStateAzureKvStore(KvStore):
+    """azure_keyvault_secrets_core / _certificates_core store over the space's Key Vault slot."""
+
+    def __init__(self, kind: str):
+        self._kind = kind          # "secrets" | "certificates"
+        self.account_id = ""
+
+    secrets = property(lambda self: _kv_slot()[self._kind])
+
+
+class AppStateAzureKeyStore(AppStateKeyStore):
+    """azure_keyvault_keys_core store over the space's Key Vault slot (material persisted)."""
+
+    def __init__(self):
+        # NB: AppStateKeyStore.__init__ binds fixed dicts; these resolve per access instead.
+        self.engine = InMemoryKmsEngine()
+        self.account_id = ""
+        self._adopted: set = set()
+
+    keys = property(lambda self: _kv_slot()["keys"])
+    material = property(lambda self: _kv_slot()["material"])
+    aliases = property(lambda self: _kv_slot()["aliases"])
+    gcp_key_rings = property(lambda self: _kv_slot()["rings"])
+
+    @property
+    def _k(self):
+        return self.keys
+
+    @property
+    def _m(self):
+        return self.material
+
+    def adopt(self, *_a) -> None:
+        """Pre-v4 Key Vault data (Vault KV + RSA keys) → this slot, once per space."""
+        slot = _kv_slot()
+        if slot["meta"].get("adopted"):
+            return
+        slot["meta"]["adopted"] = _http_date()
+        try:
+            from core import vault_client as vc
+            if not vc.available():
+                return
+            n = adopt_legacy_keyvault(slot, _active_space_id(), _azure_vault_names(), vc)
+            if n:
+                _log.info("key vault: adopted %d pre-v4 secrets/keys", n)
+        except Exception as exc:
+            _log.warning("key vault: pre-v4 adoption skipped: %s", exc)
+
+
+def _azure_vault_names() -> list:
+    """The Key Vault names of this space (ARM Microsoft.KeyVault/vaults records)."""
+    try:
+        from core import app_context as ctx
+        tok = ctx.REQUEST_PROVIDER.set("azure")
+        try:
+            recs = list(ctx.azure_arm_state.values())
+        finally:
+            ctx.REQUEST_PROVIDER.reset(tok)
+        return sorted({str(r.get("name")) for r in recs if isinstance(r, dict)
+                       and str(r.get("_type") or r.get("type") or "").lower() == "microsoft.keyvault/vaults"})
+    except Exception:
+        return []
+
+
+def adopt_legacy_keyvault(slot: dict, space_id: str, vaults: list, vc) -> int:
+    """Copy the pre-v4 Vault-backed Key Vault state of `vaults` into the core slot. The core
+    model is one Key Vault namespace per space (as on Nano), so a name present in two vaults
+    keeps the first vault's (sorted) value. Returns the number of secrets + keys adopted."""
+    import base64 as _b64
+    from core import azure_keyvault_keys_core as kk
+
+    def _idx(vault, kind):
+        got = vc.kv_get("azure", space_id, f"__idx__{vault}__{kind}")
+        raw = ((got or {}).get("data") or {}).get("value", "[]") if got else "[]"
+        try:
+            return json.loads(raw) if isinstance(raw, str) else list(raw)
+        except Exception:
+            return []
+
+    n = 0
+    now = int(time.time())
+    for vault in vaults:
+        for name in _idx(vault, "secrets"):
+            if name in slot["secrets"]:
+                continue
+            got = vc.kv_get("azure", space_id, f"{vault}__{name}")
+            if not got:
+                continue
+            data = got.get("data") or {}
+            value = data.get("value") if "value" in data else json.dumps(data)
+            ver = uuid.uuid4().hex
+            slot["secrets"][name] = {"name": name, "current": ver, "deleted": False, "deletedDate": None,
+                                     "versions": {ver: {"value": value, "contentType": None, "tags": None,
+                                                        "attributes": {"enabled": True, "created": now, "updated": now,
+                                                                       "recoveryLevel": "Recoverable+Purgeable"}}}}
+            n += 1
+        for name in _idx(vault, "keys"):
+            if any(isinstance(m, dict) and m.get("name") == name for m in slot["keys"].values()):
+                continue
+            got = vc.kv_get("azure", space_id, f"{vault}__{name}__rsapriv")
+            pem = ((got or {}).get("data") or {}).get("value") if got else None
+            if not pem:
+                continue
+            try:
+                from cryptography.hazmat.primitives import serialization
+                priv = serialization.load_pem_private_key(pem.encode(), password=None)
+                der = priv.private_bytes(serialization.Encoding.DER, serialization.PrivateFormat.PKCS8,
+                                         serialization.NoEncryption())
+                nums = priv.public_key().public_numbers()
+            except Exception:
+                continue
+            ver = uuid.uuid4().hex
+            meta = {"name": name, "version": ver, "kty": "RSA", "key_size": priv.key_size,
+                    "key_ops": ["encrypt", "decrypt", "wrapKey", "unwrapKey", "sign", "verify"],
+                    "n": kk._b64url_encode(nums.n.to_bytes((nums.n.bit_length() + 7) // 8, "big")),
+                    "e": kk._b64url_encode(nums.e.to_bytes(3, "big")), "rsa": True,
+                    "enabled": True, "created": now, "updated": now,
+                    "seq": 1 + max([m.get("seq", 0) for m in slot["keys"].values() if isinstance(m, dict)] or [0])}
+            slot["keys"][f"{name}/{ver}"] = meta
+            slot["material"][f"{name}/{ver}"] = der
+            n += 1
+    _ = _b64
+    return n
+
+
+# ── Azure Container Registry ──────────────────────────────────────────────────────────
+class AppStateAcrStore:
+    """azure_acr_core store over the space's ACR slot (manifest bytes inline, persisted)."""
+
+    @property
+    def repos(self) -> dict:
+        return _proxy("azure_acr", lambda: {"repos": {}}, "repos")._target()
+
+
+_LAM = _AZKVSEC = _AZKVCERT = _AZKVKEY = _ACR = None
+
+
+def lambda_store() -> AppStateLambdaStore:
+    global _LAM
+    if _LAM is None:
+        _LAM = AppStateLambdaStore()
+    return _LAM
+
+
+def az_kv_secrets_store() -> AppStateAzureKvStore:
+    global _AZKVSEC
+    if _AZKVSEC is None:
+        _AZKVSEC = AppStateAzureKvStore("secrets")
+    return _AZKVSEC
+
+
+def az_kv_certs_store() -> AppStateAzureKvStore:
+    global _AZKVCERT
+    if _AZKVCERT is None:
+        _AZKVCERT = AppStateAzureKvStore("certificates")
+    return _AZKVCERT
+
+
+def az_kv_keys_store() -> AppStateAzureKeyStore:
+    global _AZKVKEY
+    if _AZKVKEY is None:
+        _AZKVKEY = AppStateAzureKeyStore()
+    return _AZKVKEY
+
+
+def acr_store() -> AppStateAcrStore:
+    global _ACR
+    if _ACR is None:
+        _ACR = AppStateAcrStore()
+    return _ACR
+
+
+# ── Azure Service Bus (data plane: entities + message backlogs) ───────────────────────
+from core.messaging_store import MessagingStore as _MessagingStore   # noqa: E402
+
+
+class AppStateServiceBusStore(_MessagingStore):
+    """azure_servicebus_core store over service_states["azure_azure_servicebus"]{topics}
+    (queues and topics are both "entities" there; message bodies inline, persisted)."""
+
+    def __init__(self):
+        # NB: no super().__init__() — `topics` is the space's persisted slot.
+        self.account_id = ""
+        self._clock = None
+        self.queues: dict = {}
+        self.sns: dict = {}
+
+    @property
+    def topics(self) -> dict:
+        return _proxy("azure_servicebus", lambda: {"topics": {}}, "topics")._target()
+
+    def persist(self) -> None:
+        """No-op: the tier middleware persists the kernel state after every mutating request."""
+
+
+_AZSB = None
+
+
+def az_servicebus_store() -> AppStateServiceBusStore:
+    global _AZSB
+    if _AZSB is None:
+        _AZSB = AppStateServiceBusStore()
+    return _AZSB

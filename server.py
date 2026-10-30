@@ -174,6 +174,19 @@ try:
     _amu_unified.register(app)
 except Exception as _e:   # never let this break appliance boot — legacy stays
     print(f"[wire_ingress] SQS/SNS/EventBridge core mount skipped: {_e}")
+# v4 C0f — ONE engine: AWS Lambda (native REST + classic console REST, real runtime for
+# Invoke) and the Azure Key Vault / Container Registry data planes on the shared cores.
+# Registered BEFORE vault_routes (pre-v4 /azure-data/keyvault/*) and the provider routes.
+try:
+    from routes import aws_lambda_unified as _lam_unified
+    _lam_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] Lambda core mount skipped: {_e}")
+try:
+    from routes import azure_dataplane_unified as _azdp_unified
+    _azdp_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] Key Vault / ACR / Service Bus core mount skipped: {_e}")
 try:
     from core import vault_routes as _vault_routes
     _vault_routes.register(app, aws_dispatchers=_aws_xamz_dispatchers)
@@ -3635,7 +3648,23 @@ def _lambda_default_code(function_name: str = "my-function") -> str:
     ).strip() + "\n"
 
 
+def _lambda_unified():
+    """routes/aws_lambda_unified while "lambda" is on the shared engine (v4 C0f), else None."""
+    try:
+        from core import wire_ingress as _wi_l
+        if _wi_l.is_unified("lambda"):
+            from routes import aws_lambda_unified as _lu
+            return _lu
+    except Exception:
+        pass
+    return None
+
+
 def _lambda_find_function(function_name: str) -> dict | None:
+    _lu = _lambda_unified()
+    if _lu is not None:
+        _fn = _lu._find(function_name)
+        return _lu.legacy_view(_fn) if _fn else None
     key = _lambda_function_key(function_name)
     if not key:
         return None
@@ -3669,6 +3698,9 @@ def _lambda_set_function(function: dict) -> dict:
 
 
 def _lambda_list_functions() -> list[dict]:
+    _lu = _lambda_unified()
+    if _lu is not None:
+        return [_lu.legacy_view(f) for f in _lu._fns().values()]
     functions = list(_lambda_state().setdefault("functions", {}).values())
     functions.sort(key=lambda item: (item.get("created", ""), item.get("function_name", "")))
     return functions
@@ -4153,6 +4185,10 @@ def _lambda_record_invocation(function: dict, invocation_type: str, event_payloa
 
 
 def _lambda_invoke_function(function_name: str, event_payload: Any, invocation_type: str = "RequestResponse", source: str = "", source_principal: str = "", source_arn: str = "", source_account: str = "") -> dict:
+    _lu = _lambda_unified()
+    if _lu is not None:   # v4 C0f: the shared engine + the real runtime
+        return _lu.invoke(function_name, event_payload, invocation_type=invocation_type, source=source,
+                          source_principal=source_principal, source_arn=source_arn, source_account=source_account)
     function = _lambda_find_function(function_name)
     if not function:
         raise HTTPException(404, detail="ResourceNotFoundException")

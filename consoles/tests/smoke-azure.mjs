@@ -597,13 +597,6 @@ try {
   const ACR2 = `vywireacr${n}`;
   await page.goto(UI + "#/acr/create");
   await page.getByLabel("Registry name", { exact: true }).fill(ACR);
-  // ── Service Bus: namespace created through the UI → visible over native ARM ────────────
-  const SBNS = `vysbns${n}`;
-  const SBQ = `vysbq${n}`;
-  const SBT2 = `vysbtwire${n}`;
-  const sbArm = `/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${SBNS}`;
-  await page.goto(UI + "#/servicebus/create");
-  await page.getByLabel("Namespace name", { exact: true }).fill(SBNS);
   await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
   await page.getByLabel("New resource group name").fill(RG);
   await page.getByRole("button", { name: "Review + create" }).click();
@@ -682,6 +675,17 @@ try {
     acrGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR2}`);
   }
   check("UI delete container registry → ARM GET 404", acrGone.status === 404, `HTTP ${acrGone.status}`);
+  // ── Service Bus: namespace created through the UI → visible over native ARM ────────────
+  const SBNS = `vysbns${n}`;
+  const SBQ = `vysbq${n}`;
+  const SBT2 = `vysbtwire${n}`;
+  const sbArm = `/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${SBNS}`;
+  await page.goto(UI + "#/servicebus/create");
+  await page.getByLabel("Namespace name", { exact: true }).fill(SBNS);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: SBNS, exact: true }).waitFor({ timeout: 10000 });
   const gotSbNs = await arm("GET", sbArm);
@@ -785,36 +789,6 @@ try {
   check("UI create namespace → visible over native ARM (properties.namespaces)",
     (nsCluster.properties?.namespaces || []).some((x) => x.name === NS), JSON.stringify(nsCluster.properties?.namespaces));
   await shot("28-aks-namespaces");
-  // ── Network security group created through the wizard → visible over native ARM ──────
-  const NSG = `vysmokensg${n}`;
-  const NSG2 = `vywirensg${n}`;
-  const RULE = `allow-smoke-${n}`;
-  const NSGLOCK = `vynsglock${n}`;
-  await page.goto(UI + "#/nsgs/create");
-  await page.getByLabel("Name", { exact: true }).fill(NSG);
-  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
-  await page.getByLabel("New resource group name").fill(RG);
-  await shot("23-nsg-create-basics");
-  await page.getByRole("button", { name: "Review + create" }).click();
-  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
-  await page.getByRole("button", { name: "Create", exact: true }).click();
-  await page.getByRole("heading", { name: NSG, exact: true }).waitFor({ timeout: 10000 });
-  const nsgGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}`);
-  check("UI create NSG → visible over native ARM", nsgGet.status === 200, `HTTP ${nsgGet.status}`);
-  await shot("24-nsg-overview");
-
-  // ── Inbound security rule added in the UI → visible as a native ARM child resource ────
-  await openPanel("Inbound security rules");
-  await page.getByRole("toolbar", { name: "Inbound security rules commands" }).getByRole("button", { name: "Add" }).click();
-  await page.getByLabel("Name", { exact: true }).fill(RULE);
-  await page.getByLabel("Priority", { exact: true }).fill("150");
-  await page.getByRole("dialog").getByRole("button", { name: "Add" }).click();
-  await page.getByRole("cell", { name: RULE, exact: true }).waitFor({ timeout: 10000 });
-  const ruleGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}/securityRules/${RULE}`);
-  check("UI add inbound rule → visible over native ARM (nested child resource)",
-    ruleGet.status === 200 && JSON.parse(ruleGet.text).properties?.direction === "Inbound", `HTTP ${ruleGet.status}`);
-  await shot("25-nsg-inbound-rules");
-
   // ── Lock created in the UI → visible over the native ARM wire ─────────────────────────
   await openPanel("Locks");
   await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -881,7 +855,8 @@ try {
   await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(ALERT);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
-  await page.getByText(ALERT, { exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  // the deleted row's own checkbox (the name text also appears in the delete notification)
+  await page.getByRole("checkbox", { name: `Select /subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}` }).waitFor({ state: "detached", timeout: 10000 });
   const alertGone = await armMonitor("GET", `/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}`);
   check("UI delete alert rule → ARM GET 404", alertGone.status === 404, `HTTP ${alertGone.status}`);
   // ── SQL: server + database created through the wizard → visible over native ARM ───────
@@ -960,6 +935,39 @@ try {
   await page.getByRole("heading", { name: "SQL databases", exact: true }).waitFor({ timeout: 10000 });
   const dbGone = await sqlArm("GET", `/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SRV}/databases/${DB}`);
   check("UI delete SQL database → ARM GET 404", dbGone.status === 404, `HTTP ${dbGone.status}`);
+  // ── Network security group created through the wizard → visible over native ARM ──────
+  const NSG = `vysmokensg${n}`;
+  const NSG2 = `vywirensg${n}`;
+  const RULE = `allow-smoke-${n}`;
+  const NSGLOCK = `vynsglock${n}`;
+  await page.goto(UI + "#/nsgs/create");
+  await page.getByLabel("Name", { exact: true }).fill(NSG);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await shot("23-nsg-create-basics");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: NSG, exact: true }).waitFor({ timeout: 10000 });
+  const nsgGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}`);
+  check("UI create NSG → visible over native ARM", nsgGet.status === 200, `HTTP ${nsgGet.status}`);
+  await shot("24-nsg-overview");
+
+  // ── Inbound security rule added in the UI → visible as a native ARM child resource ────
+  await openPanel("Inbound security rules");
+  await page.getByRole("toolbar", { name: "Inbound security rules commands" }).getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(RULE);
+  await page.getByLabel("Priority", { exact: true }).fill("150");
+  await page.getByRole("dialog").getByRole("button", { name: "Add" }).click();
+  await page.getByRole("cell", { name: RULE, exact: true }).waitFor({ timeout: 10000 });
+  const ruleGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}/securityRules/${RULE}`);
+  check("UI add inbound rule → visible over native ARM (nested child resource)",
+    ruleGet.status === 200 && JSON.parse(ruleGet.text).properties?.direction === "Inbound", `HTTP ${ruleGet.status}`);
+  await shot("25-nsg-inbound-rules");
+
+  // ── Lock created in the UI on the NSG → visible over native ARM ──────────────────────
+  await openPanel("Locks");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   await page.getByLabel("Lock name", { exact: true }).fill(NSGLOCK);
   await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
   await page.getByText(NSGLOCK, { exact: true }).waitFor({ timeout: 10000 });
