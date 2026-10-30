@@ -1,0 +1,296 @@
+{
+ "$doc": "Vyomi capability registry — RDS. See s3.json for the contract.",
+ "rds.instance.crud": {
+  "title": "DB instances (create, describe, modify, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_rds_core.py"
+  ]
+ },
+ "rds.instance.lifecycle": {
+  "title": "DB instance lifecycle (start, stop, reboot)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_rds_core.py"
+  ]
+ },
+ "rds.instance.deletion-protection": {
+  "title": "Deletion protection",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "ModifyDBInstance applies a fixed subset of fields (class, storage, engine version, backup retention, master password); other settings are stored and returned but not individually validated."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.instance.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.snapshot.crud": {
+  "title": "Manual snapshots (create, describe, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_rds_core.py",
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.snapshot.restore": {
+  "title": "Restore DB instance from snapshot",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.data-api": {
+  "title": "SQL execution (Query editor / RDS Data API)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The data plane is a real engine (sqlite3 by default, PGlite real Postgres on Nano) reached only through the RDS Data API (ExecuteStatement/BatchExecuteStatement) — Vyomi does not expose the Postgres/MySQL wire protocol directly, so an unmodified psycopg2/mysqlclient TCP connection cannot reach it.",
+   "Transactions are accepted (BeginTransaction/CommitTransaction/RollbackTransaction) for SDK compatibility, but each statement autocommits — there is no cross-call rollback yet."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_data_core.py",
+   "tests/conformance/test_rds_pglite_core.py"
+  ]
+ },
+ "rds.subnet-groups": {
+  "title": "DB subnet groups",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Subnet IDs and the VPC are stored and returned exactly as given; Vyomi does not validate that they exist in a real VPC (it does not model EC2/VPC in depth for RDS)."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.parameter-groups": {
+  "title": "DB parameter groups and parameters",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Parameters are stored and returned exactly as modified (ModifyDBParameterGroup round-trips through DescribeDBParameters), but Vyomi does not apply them to the SQL engine — the data plane's real behaviour (e.g. max_connections) is unaffected."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.events": {
+  "title": "Events (DescribeEvents)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Vyomi logs its own control-plane actions (create/modify/delete/lifecycle/snapshot); it does not generate the full category list AWS produces (e.g. failover, low-storage)."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.proxy": {
+  "title": "RDS Proxy",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Creating, listing and deleting a DB proxy record is real and stateful; Vyomi does not actually proxy connections through it — apps still connect straight to the instance's own endpoint."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.option-groups": {
+  "title": "Option groups",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Option group metadata CRUD is real; adding/removing individual options within a group is not modeled — Vyomi has no engine-specific option catalogue (e.g. Oracle APEX, SQL Server TDE)."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.event-subscriptions": {
+  "title": "Event subscriptions",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Subscription metadata CRUD is real; Vyomi never actually publishes a notification to the SNS topic when a matching event occurs."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.automated-backups": {
+  "title": "Automated backups",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The current-region automated backup window is derived from the live instance's retention setting (DescribeDBInstanceAutomatedBackups); cross-region replication of backups and backups retained after instance deletion are not modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.monitoring": {
+  "title": "CloudWatch metrics on the DB instance detail page",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi does not emit CPUUtilization/DatabaseConnections/IOPS metrics for RDS instances, so the Monitoring tab has nothing real to chart."
+  ]
+ },
+ "rds.logs": {
+  "title": "DB log files",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "The sqlite3 / PGlite data plane does not produce real engine log files (error log, slow query log) for Vyomi to list or tail."
+  ]
+ },
+ "rds.replication": {
+  "title": "Read replicas, Multi-AZ failover, connected compute resources, security group rules",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi does not model a second physical replica, EC2 instances, or VPC security group rule evaluation for RDS; MultiAZ/compute-resource fields are stored and returned but have no runtime effect."
+  ]
+ },
+ "rds.reserved-instances": {
+  "title": "Reserved instances (purchase)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "PurchaseReservedDBInstancesOffering records a real, stateful reservation (DescribeReservedDBInstances lists it); Vyomi has no billing system and no reserved-instance-offering catalogue, so the console's purchase wizard (pricing, terms, offering ids) is not built — call the action directly with a reservation id."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.capacity-reservations": {
+  "title": "Capacity reservations",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Capacity reservations are a capacity-market/billing construct Vyomi does not model."
+  ]
+ },
+ "rds.zero-etl": {
+  "title": "Zero-ETL integrations",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "CreateIntegration/DeleteIntegration/DescribeIntegrations is real, stateful metadata CRUD; Vyomi does not run the actual cross-service replication pipeline into Redshift, so the console's create wizard (picking a real Redshift target) is not built — call the action directly with source/target ARNs."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.custom-engine-versions": {
+  "title": "RDS Custom engine versions",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "CreateCustomDBEngineVersion/DeleteCustomDBEngineVersion/DescribeDBEngineVersions registers real, stateful install-media metadata; RDS Custom itself (the customer-managed EC2 instance the engine actually runs on) is out of Vyomi's scope entirely — the console's create wizard is not built."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.recommendations": {
+  "title": "RDS recommendations",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "DescribeDBRecommendations derives real advisories from each instance's own live configuration (no Multi-AZ, an outdated CA certificate); Vyomi has no general analysis engine, so it does not generate the full category of recommendations AWS's own monitoring produces (e.g. storage autoscaling, parameter tuning)."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.exports-to-s3": {
+  "title": "Exports to Amazon S3",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "StartExportTask/CancelExportTask/DescribeExportTasks is real, stateful metadata CRUD; Nano has no provisioning lag so a started export completes immediately, and no bytes are actually written to the named S3 bucket."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ },
+ "rds.certificate-rotation": {
+  "title": "Certificate authority rotation",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "CACertificateIdentifier is a real, settable field (CreateDBInstance/ModifyDBInstance); any instance whose CA differs from the current default (rds-ca-rsa2048-g1) is flagged on the certificate-update page. Vyomi does not model real CA expiry dates or actually rotate the certificate a connection presents."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
+  ]
+ }
+}

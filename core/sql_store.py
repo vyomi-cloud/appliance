@@ -36,6 +36,17 @@ class SqlStore:
     def __init__(self, account_id: str = DEFAULT_ACCOUNT_ID) -> None:
         self.db_instances: dict[str, dict[str, Any]] = {}
         self.snapshots: dict[str, dict[str, Any]] = {}
+        self.subnet_groups: dict[str, dict[str, Any]] = {}
+        self.parameter_groups: dict[str, dict[str, Any]] = {}
+        self.proxies: dict[str, dict[str, Any]] = {}
+        self.option_groups: dict[str, dict[str, Any]] = {}
+        self.event_subscriptions: dict[str, dict[str, Any]] = {}
+        self.reserved_instances: dict[str, dict[str, Any]] = {}
+        self.export_tasks: dict[str, dict[str, Any]] = {}
+        self.integrations: dict[str, dict[str, Any]] = {}
+        self.custom_engine_versions: dict[str, dict[str, Any]] = {}
+        self.events: list[dict[str, Any]] = []       # append-only event log (DescribeEvents)
+        self.tags: dict[str, dict[str, str]] = {}     # resource ARN -> {key: value}
         self.account_id = account_id
         self._conns: dict[str, Any] = {}  # instance_id -> live DB connection
 
@@ -65,8 +76,148 @@ class SqlStore:
         v = self.snapshots.get(snap_id)
         return v if isinstance(v, dict) else None
 
+    def drop_snapshot(self, snap_id: str) -> None:
+        self.snapshots.pop(snap_id, None)
+
     def snapshot_ids(self) -> list[str]:
         return sorted(self.snapshots)
+
+    # ── DB subnet group accessors ──────────────────────────────────────
+    def put_subnet_group(self, name: str, record: dict) -> None:
+        self.subnet_groups[name] = record
+
+    def get_subnet_group(self, name: str) -> dict | None:
+        v = self.subnet_groups.get(name)
+        return v if isinstance(v, dict) else None
+
+    def drop_subnet_group(self, name: str) -> None:
+        self.subnet_groups.pop(name, None)
+
+    def subnet_group_names(self) -> list[str]:
+        return sorted(self.subnet_groups)
+
+    # ── DB parameter group accessors ───────────────────────────────────
+    def put_parameter_group(self, name: str, record: dict) -> None:
+        self.parameter_groups[name] = record
+
+    def get_parameter_group(self, name: str) -> dict | None:
+        v = self.parameter_groups.get(name)
+        return v if isinstance(v, dict) else None
+
+    def drop_parameter_group(self, name: str) -> None:
+        self.parameter_groups.pop(name, None)
+
+    def parameter_group_names(self) -> list[str]:
+        return sorted(self.parameter_groups)
+
+    # ── DB proxy accessors ──────────────────────────────────────────────
+    def put_proxy(self, name: str, record: dict) -> None:
+        self.proxies[name] = record
+
+    def get_proxy(self, name: str) -> dict | None:
+        v = self.proxies.get(name)
+        return v if isinstance(v, dict) else None
+
+    def drop_proxy(self, name: str) -> None:
+        self.proxies.pop(name, None)
+
+    def proxy_names(self) -> list[str]:
+        return sorted(self.proxies)
+
+    # ── option group accessors ──────────────────────────────────────────
+    def put_option_group(self, name: str, record: dict) -> None:
+        self.option_groups[name] = record
+
+    def get_option_group(self, name: str) -> dict | None:
+        v = self.option_groups.get(name)
+        return v if isinstance(v, dict) else None
+
+    def drop_option_group(self, name: str) -> None:
+        self.option_groups.pop(name, None)
+
+    def option_group_names(self) -> list[str]:
+        return sorted(self.option_groups)
+
+    # ── reserved DB instance accessors ──────────────────────────────────
+    def put_reserved_instance(self, reservation_id: str, record: dict) -> None:
+        self.reserved_instances[reservation_id] = record
+
+    def get_reserved_instance(self, reservation_id: str) -> dict | None:
+        v = self.reserved_instances.get(reservation_id)
+        return v if isinstance(v, dict) else None
+
+    def reserved_instance_ids(self) -> list[str]:
+        return sorted(self.reserved_instances)
+
+    # ── export task accessors ───────────────────────────────────────────
+    def put_export_task(self, task_id: str, record: dict) -> None:
+        self.export_tasks[task_id] = record
+
+    def get_export_task(self, task_id: str) -> dict | None:
+        v = self.export_tasks.get(task_id)
+        return v if isinstance(v, dict) else None
+
+    def drop_export_task(self, task_id: str) -> None:
+        self.export_tasks.pop(task_id, None)
+
+    def export_task_ids(self) -> list[str]:
+        return sorted(self.export_tasks)
+
+    # ── zero-ETL integration accessors ──────────────────────────────────
+    def put_integration(self, name: str, record: dict) -> None:
+        self.integrations[name] = record
+
+    def get_integration(self, name: str) -> dict | None:
+        v = self.integrations.get(name)
+        return v if isinstance(v, dict) else None
+
+    def drop_integration(self, name: str) -> None:
+        self.integrations.pop(name, None)
+
+    def integration_names(self) -> list[str]:
+        return sorted(self.integrations)
+
+    # ── custom DB engine version accessors ──────────────────────────────
+    def put_custom_engine_version(self, cev_id: str, record: dict) -> None:
+        self.custom_engine_versions[cev_id] = record
+
+    def get_custom_engine_version(self, cev_id: str) -> dict | None:
+        v = self.custom_engine_versions.get(cev_id)
+        return v if isinstance(v, dict) else None
+
+    def drop_custom_engine_version(self, cev_id: str) -> None:
+        self.custom_engine_versions.pop(cev_id, None)
+
+    def custom_engine_version_ids(self) -> list[str]:
+        return sorted(self.custom_engine_versions)
+
+    # ── event subscription accessors ─────────────────────────────────────
+    def put_event_subscription(self, name: str, record: dict) -> None:
+        self.event_subscriptions[name] = record
+
+    def get_event_subscription(self, name: str) -> dict | None:
+        v = self.event_subscriptions.get(name)
+        return v if isinstance(v, dict) else None
+
+    def drop_event_subscription(self, name: str) -> None:
+        self.event_subscriptions.pop(name, None)
+
+    def event_subscription_names(self) -> list[str]:
+        return sorted(self.event_subscriptions)
+
+    # ── event log (DescribeEvents) ───────────────────────────────────────
+    def add_event(self, record: dict) -> None:
+        self.events.append(record)
+
+    def list_events(self) -> list[dict]:
+        return list(self.events)
+
+    # ── tags (by resource ARN) ───────────────────────────────────────────
+    def get_tags(self, arn: str) -> dict[str, str]:
+        return dict(self.tags.get(arn) or {})
+
+    def set_tags(self, arn: str, tags: dict[str, str]) -> None:
+        self.tags[arn] = dict(tags or {})
 
     # ── dialect: bind-parameter placeholder style ─────────────────────
     def param_placeholder(self, index: int) -> str:
