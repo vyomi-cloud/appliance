@@ -35,8 +35,10 @@ page.on("console", (m) => m.type() === "error" && !/status of 40[34]/.test(m.tex
 const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true });
 
 try {
-  await page.goto(UI, { waitUntil: "networkidle" });
-  if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 180000, polling: 500 });
+  // Nano keeps fetching its in-browser runtime after load, so "networkidle" can take minutes
+  // there; wait for the page, then (below) for the backend to be ready.
+  await page.goto(UI, { waitUntil: process.env.NANO ? "domcontentloaded" : "networkidle" });
+  if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller && window.__vyomiNanoReady, null, { timeout: 240000, polling: 500 });
   await page.getByRole("heading", { name: "Welcome" }).waitFor({ timeout: 120000 });
   check("home renders", await page.getByRole("button", { name: /Project picker: / }).isVisible());
   await shot("01-home");

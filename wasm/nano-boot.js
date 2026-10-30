@@ -96,7 +96,8 @@ const CORES = [
   "azure_operationalinsights_core.py",   // Azure Log Analytics engine (Microsoft.OperationalInsights) — loaded before azure_arm_core which delegates to it
   "azure_appconfiguration_core.py",   // Azure App Configuration engine — loaded before azure_arm_core which delegates to it
   "azure_app_core.py",   // Azure Container Apps engine (Microsoft.App) — loaded before azure_arm_core which delegates to it
-  "azure_cost_core.py",   // Azure Cost Management + Consumption engine — loaded before azure_arm_core which delegates to it, "azure_webapp_core.py"
+  "azure_cost_core.py",   // Azure Cost Management + Consumption engine — loaded before azure_arm_core which delegates to it
+  "azure_webapp_core.py",   // Azure Function App engine (Microsoft.Web/sites) — loaded before azure_arm_core which delegates to it
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
   "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
@@ -322,6 +323,9 @@ import builtins; builtins._disp = _disp
   const reg = await navigator.serviceWorker.ready;
   (reg.active || navigator.serviceWorker.controller).postMessage({ type: "pyodide-ready" });
   K.ready((CONSOLE_PROVIDER ? CONSOLE_PROVIDER.toUpperCase() + " console" : "console") + " ready: running entirely in your browser");
+  // Public readiness signal (tests, embedding pages): the in-browser backend now answers.
+  window.__vyomiNanoReady = true;
+  try { dispatchEvent(new Event("vyomi-nano-ready")); } catch (_) {}
   banner("Nano: in-browser backend ready — this console runs with no server.");
   setTimeout(() => { const b = document.getElementById("nano-banner"); if (b) b.style.display = "none"; }, 4000);
 
