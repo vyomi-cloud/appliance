@@ -8,6 +8,7 @@ import { armType, getSubscription, parseId } from "../../kit/arm.js";
 
 export const ARM = armType("Microsoft.Network", "virtualNetworks", "2023-11-01");
 const NSG_ARM = armType("Microsoft.Network", "networkSecurityGroups", "2023-11-01");
+const NIC_ARM = armType("Microsoft.Network", "networkInterfaces", "2023-11-01");
 const CHILD_API_VERSION = "2023-11-01";
 
 const shape = (v) => ({ ...v, resourceGroup: parseId(v.id).resourceGroup });
@@ -86,6 +87,17 @@ export const listActivityLog = async (rg, name) => {
 
 // ── Network security groups — for the Subnets "Network security group" picker ──────────
 export const listNsgs = async () => (await NSG_ARM.list()).map(shape);
+
+// ── Connected devices — any Microsoft.Network/networkInterfaces resource in the
+// subscription whose ipConfigurations[].subnet.id points at one of this vnet's subnets
+// (a subscription-wide scan, same mechanic as the NSG lens's association tabs: no dedicated
+// "network interface" console in this lens yet to create/attach a NIC from, but one created
+// over ARM/CLI/another tool shows up here). ────────────────────────────────────────────────
+export const listConnectedDevices = async (rg, name) => {
+  const prefix = `${ARM.path(rg, name)}/subnets/`.toLowerCase();
+  const nics = await NIC_ARM.list();
+  return nics.filter((n) => (n.properties?.ipConfigurations || []).some((c) => (c.properties?.subnet?.id || "").toLowerCase().startsWith(prefix)));
+};
 
 // ── create-vnet form model → ARM body ───────────────────────────────────────────────────
 export function toArmBody(f) {

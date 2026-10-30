@@ -100,8 +100,11 @@
  },
  "azure.vnets.connected_devices": {
   "title": "Connected devices",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Listing devices on the network requires live DHCP lease / ARP-table discovery Vyomi doesn't model."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The list is a real ARM read (every Microsoft.Network/networkInterfaces resource in the subscription whose ipConfigurations[].subnet.id points at one of this vnet's subnets), so a NIC attached via ARM/the CLI/another tool shows up here. Device Type is always reported as 'Network interface' — Vyomi has no DHCP lease / ARP table to discover non-NIC clients (VMs/devices that never registered a network interface resource)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.vnets.ip_address_management": {
   "title": "IP address pools (Allocate using IP address pools) and advertised address prefixes (BGP)",

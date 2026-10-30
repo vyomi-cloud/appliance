@@ -400,6 +400,19 @@ def run() -> int:
     _check("subnet carries its NSG association and address prefix",
            subnet_rec["properties"]["networkSecurityGroup"]["id"].lower() == nsg3.lower() and subnet_rec["properties"]["addressPrefix"] == "10.0.1.0/24")
 
+    # 22b. A network interface's ipConfigurations[].subnet.id — the same mechanic the console's
+    # vnet "Connected devices" list filters on (any NIC whose ipConfigurations[] points at one
+    # of this vnet's subnets shows up there, a subscription-wide scan same as the NSG association
+    # tabs above).
+    nic2 = _p(RG, "Microsoft.Network", "networkInterfaces", "nic2")
+    r = arm.handle("PUT", nic2, {"api-version": "2023-11-01"},
+                   {"location": "eastus", "properties": {"ipConfigurations": [{"name": "ipconfig1", "properties": {"subnet": {"id": subnet}}}]}})
+    _check("network interface put with subnet association 200", r["status"] == 200)
+    r = arm.handle("GET", nic_collection, {"api-version": "2023-11-01"})
+    nic2_rec = next(x for x in r["body"]["value"] if x["name"] == "nic2")
+    _check("network interface carries its subnet association (Connected devices wiring)",
+           nic2_rec["properties"]["ipConfigurations"][0]["properties"]["subnet"]["id"].lower() == subnet.lower())
+
     # 23. Virtual network peerings — another nested, same-namespace child resource
     # (Microsoft.Network/virtualNetworks/{vnet}/virtualNetworkPeerings/{peering}), the real
     # ARM shape `az network vnet peering create` uses. The portal's "Add" blade provisions a

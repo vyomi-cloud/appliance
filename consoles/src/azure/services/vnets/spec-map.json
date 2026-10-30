@@ -10,7 +10,7 @@
   "vnet-diagnose-and-solve-problems": { "route": "#/vnets/uic-rg/uicvnet/diagnose", "fixtures": ["az-vnet"], "vars": { "resource-name": "uicvnet" } },
   "vnet-resource-visualizer": { "route": "#/vnets/uic-rg/uicvnet/resourcevisualizer", "fixtures": ["az-vnet"], "vars": { "resource-name": "uicvnet" } },
   "vnet-address-space": { "route": "#/vnets/uic-rg/uicvnet/addressspace", "fixtures": ["az-vnet"], "vars": { "resource-name": "uicvnet" } },
-  "vnet-connected-devices": { "route": "#/vnets/uic-rg/uicvnet/connecteddevices", "fixtures": ["az-vnet"], "vars": { "resource-name": "uicvnet" } },
+  "vnet-connected-devices": { "route": "#/vnets/uic-rg/uicvnet/connecteddevices", "fixtures": ["az-vnet"], "vars": { "resource-name": "uicvnet" }, "live": "live-nic" },
   "vnet-subnets": { "route": "#/vnets/uic-rg/uicvnet/subnets", "fixtures": ["az-vnet"], "vars": { "resource-name": "uicvnet" }, "live": "live-subnet" },
   "vnet-bastion": { "route": "#/vnets/uic-rg/uicvnet/bastion", "fixtures": ["az-vnet"], "vars": { "resource-name": "uicvnet" } },
   "vnet-ddos-protection": { "route": "#/vnets/uic-rg/uicvnet/ddosprotection", "fixtures": ["az-vnet"], "vars": { "resource-name": "uicvnet" } },

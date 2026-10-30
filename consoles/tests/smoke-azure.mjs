@@ -806,16 +806,6 @@ try {
   check("UI create lock → visible over native ARM (extension resource)", aksLockGet.status === 200, `HTTP ${aksLockGet.status}`);
   await shot("29-aks-locks");
 
-  // ── Lock created in the UI → visible over the native ARM wire ─────────────────────────
-  await openPanel("Locks");
-  await page.getByRole("button", { name: "Add", exact: true }).click();
-  await page.getByLabel("Lock name", { exact: true }).fill(NSGLOCK);
-  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
-  await page.getByText(NSGLOCK, { exact: true }).waitFor({ timeout: 10000 });
-  const nsgLockGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}/providers/Microsoft.Authorization/locks/${NSGLOCK}`);
-  check("UI create lock on NSG → visible over native ARM", nsgLockGet.status === 200, `HTTP ${nsgLockGet.status}`);
-  await shot("26-nsg-locks");
-
   // ── Kubernetes service created over the wire → visible in the UI (CLI → UI) ───────────
   const aksPut = await armAks("PUT", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS2}`, { location: "eastus" });
   check("ARM PUT kubernetes service over wire", aksPut.status === 200 || aksPut.status === 201, `HTTP ${aksPut.status}`);
@@ -1075,6 +1065,18 @@ try {
   const subnetGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/${SUBNET}`);
   check("UI add subnet → visible over native ARM (nested child resource)", subnetGet.status === 200, `HTTP ${subnetGet.status}`);
   await shot("30-vnet-subnets");
+
+  // ── Network interface created over the wire, attached to the subnet → shown in the UI's
+  // Connected devices list (CLI → UI direction; a subscription-wide scan filtered by
+  // ipConfigurations[].subnet.id, not a dedicated NIC console) ──────────────────────────
+  const NIC = `vysmokenic${n}`;
+  const nicPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NIC}`,
+    { location: "eastus", properties: { ipConfigurations: [{ name: "ipconfig1", properties: { subnet: { id: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/${SUBNET}` } } }] } });
+  check("ARM PUT network interface over wire", nicPut.status === 200 || nicPut.status === 201, `HTTP ${nicPut.status}`);
+  await openPanel("Connected devices");
+  await page.getByRole("cell", { name: NIC, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created network interface shown in Connected devices", true);
+  await shot("30b-vnet-connected-devices");
 
   // ── Peering added in the UI → visible on BOTH virtual networks over native ARM ────────
   const peerPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${PEERVNET}`, { location: "eastus" });

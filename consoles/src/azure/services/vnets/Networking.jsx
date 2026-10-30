@@ -8,7 +8,9 @@ import { Add20Regular } from "@fluentui/react-icons";
 import { useNotify } from "../../../common/notify.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { NotSimulatedContainer } from "../../kit/common.jsx";
+import { parseId } from "../../kit/arm.js";
 import * as api from "./api.js";
 
 const SIZES = ["/24 (256 addresses)", "/23 (512 addresses)", "/22 (1024 addresses)", "/26 (64 addresses)", "/27 (32 addresses)", "/28 (16 addresses)", "/29 (8 addresses)"];
@@ -330,11 +332,25 @@ function AddServiceEndpointDialog({ a, subnets, onClose, onCreated }) {
   );
 }
 
-// ── Connected devices (honest gap — needs live DHCP/ARP discovery) ─────────────────────
+// ── Connected devices — any network interface attached to one of this vnet's subnets
+// (a real ARM read; see api.listConnectedDevices). Honest gap: the real portal also
+// discovers non-NIC clients (live DHCP leases, ARP entries) Vyomi has no table for. ───────
 export function ConnectedDevicesPanel({ a }) {
+  const { data, loading, error, reload } = useAsync(() => api.listConnectedDevices(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const rows = data || [];
   return (
-    <NotSimulatedContainer title={`${a.name} | Connected devices`}
-      feature="Connected devices"
-      note="The real portal lists Device, Type, IP address and Subnet for every live client, with a 'Search connected devices' filter — Vyomi has no DHCP lease / ARP table to read this from." />
+    <CapabilityContainer id="azure.vnets.connected_devices" title={`${a.name} | Connected devices`}>
+      <BrowseGrid
+        resourceName="device" rowKey={(r) => r.id} filterPlaceholder="Search connected devices"
+        items={rows} loading={loading} error={error} onRefresh={reload}
+        csvName="connected-devices.csv"
+        columns={[
+          { key: "device", label: "Device", value: (r) => r.name },
+          { key: "type", label: "Type", value: () => "Network interface" },
+          { key: "ip", label: "IP address", value: (r) => r.properties?.ipConfigurations?.[0]?.properties?.privateIPAddress || "--" },
+          { key: "subnet", label: "Subnet", value: (r) => parseId(r.properties?.ipConfigurations?.[0]?.properties?.subnet?.id || "").name || "--" },
+        ]}
+      />
+    </CapabilityContainer>
   );
 }
