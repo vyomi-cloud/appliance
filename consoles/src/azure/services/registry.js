@@ -24,7 +24,7 @@ export const SERVICES = [
   { id: "eventgrid", title: "Event Grid", type: "Microsoft.EventGrid/topics", category: "Integration", icon: "eventgrid", load: () => import("./eventgrid/index.jsx") },
   { id: "monitor", title: "Monitor", type: "Microsoft.Insights", category: "Management and governance", icon: "monitor", load: () => import("./monitor/index.jsx") },
   { id: "entra", title: "Microsoft Entra ID", type: "Identity", category: "Identity", icon: "entra" },
-  { id: "subscriptions", title: "Subscriptions", type: "Microsoft.Resources/subscriptions", category: "Management and governance", icon: "subscriptions" },
+  { id: "subscriptions", title: "Subscriptions", type: "Microsoft.Resources/subscriptions", category: "Management and governance", icon: "subscriptions", load: () => import("./subscriptions/index.jsx") },
   { id: "cost", title: "Cost Management", type: "Microsoft.CostManagement", category: "Management and governance", icon: "cost", load: () => import("./cost/index.jsx") },
 ];
 
