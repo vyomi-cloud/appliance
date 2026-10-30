@@ -78,6 +78,7 @@ CORES = [
     "gcp_logging_core.py",                         # GCP: Cloud Logging REST v2 (entries, sinks, log-based metrics, log buckets/views)
     "gcp_run_core.py",                             # GCP: Cloud Run Admin API v2 (services, jobs, worker pools, domain mappings) — backs /functions
     "stepfunctions_core.py",                       # AWS: Step Functions (ASL interpreter, executions, activities)
+    "cloudformation_core.py",                      # AWS: CloudFormation (stacks, change sets, stack sets — provisions through s3/ddb/sns/sqs/iam)
     "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)
     "logs_core.py",                                # expansion AWS: CloudWatch Logs (log groups/streams/events/insights) — vendored VERBATIM

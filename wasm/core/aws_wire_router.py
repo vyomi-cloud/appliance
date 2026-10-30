@@ -51,6 +51,7 @@ from core.messaging_store import InMemoryMessagingStore
 from core import sqs_core as sqs
 from core import sns_core as sns
 from core import elbv2_core as elbv2
+from core import cloudformation_core as cfn
 from core import rds_data_core as rds_data
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
 from core import gcp_firestore_core as gcp_fs
@@ -262,6 +263,7 @@ _SIGNING = {
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
+    "cloudformation": "cloudformation",
     "ssm": "ssm", "scheduler": "scheduler",
     "apigateway": "apigateway",   # v1 REST control plane paths with no "/restapis" segment (apikeys, usageplans, clientcertificates, account)
 }
@@ -331,6 +333,22 @@ _QUERY_ACTION = {
     "GetEbsEncryptionByDefault": "vpc", "EnableEbsEncryptionByDefault": "vpc",
     "DisableEbsEncryptionByDefault": "vpc", "GetEbsDefaultKmsKeyId": "vpc",
     "ModifyEbsDefaultKmsKeyId": "vpc", "ResetEbsDefaultKmsKeyId": "vpc",
+    # CloudFormation
+    "CreateStack": "cloudformation", "UpdateStack": "cloudformation", "DeleteStack": "cloudformation",
+    "DescribeStacks": "cloudformation", "ListStacks": "cloudformation",
+    "ContinueUpdateRollback": "cloudformation", "UpdateTerminationProtection": "cloudformation",
+    "GetTemplate": "cloudformation", "DescribeStackEvents": "cloudformation",
+    "DescribeStackResources": "cloudformation", "DescribeStackResource": "cloudformation",
+    "ListStackResources": "cloudformation", "ListExports": "cloudformation",
+    "ValidateTemplate": "cloudformation",
+    "CreateChangeSet": "cloudformation", "DescribeChangeSet": "cloudformation",
+    "ExecuteChangeSet": "cloudformation", "DeleteChangeSet": "cloudformation",
+    "ListChangeSets": "cloudformation",
+    "DetectStackDrift": "cloudformation", "DescribeStackDriftDetectionStatus": "cloudformation",
+    "DescribeStackResourceDrifts": "cloudformation",
+    "CreateStackSet": "cloudformation", "DescribeStackSet": "cloudformation",
+    "ListStackSets": "cloudformation", "DeleteStackSet": "cloudformation",
+    "ListStackInstances": "cloudformation", "ListStackRefactors": "cloudformation",
 }
 
 
@@ -423,6 +441,7 @@ class AwsWireRouter:
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
+        self.cfn = s.get("cfn") or cfn.CloudFormationStore()   # CloudFormation (stacks, change sets, stack sets)
 
     def _iamc_resolve(self, ident):
         """IAM Credentials: service-account email / uniqueId -> email, or None if unknown
@@ -735,6 +754,9 @@ class AwsWireRouter:
             r = vpc.dispatch(self.vpc, params)
         elif svc == "elbv2":
             r = elbv2.dispatch(self.elbv2, params)
+        elif svc == "cloudformation":
+            r = cfn.dispatch(self.cfn, params, s3_store=self.s3, ddb_store=self.ddb,
+                              iam_store=self.iam, msg_store=self.msg)
         else:  # sns
             r = sns.dispatch(self.msg, params)
         hdrs = dict(r.headers or {})

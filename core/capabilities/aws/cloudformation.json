@@ -1,0 +1,185 @@
+{
+ "$doc": "Vyomi capability registry — CloudFormation. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
+ "aws.cloudformation.stack.crud": {
+  "title": "Stacks (create, describe, list, update, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": ["CreateStack", "DescribeStacks", "ListStacks", "UpdateStack", "DeleteStack"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.resource-provisioning": {
+  "title": "Template resources provisioned through the real S3 / DynamoDB / SNS / SQS / IAM engines",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only AWS::S3::Bucket, AWS::DynamoDB::Table, AWS::SNS::Topic, AWS::SQS::Queue, AWS::IAM::Role and the no-infrastructure AWS::CloudFormation::WaitCondition[Handle] are provisioned.",
+   "A template with any other resource type fails CreateStack/UpdateStack honestly (rolled back, never a silent success) — the same way a real account without the matching service permissions would fail."
+  ],
+  "api": ["CreateStack", "UpdateStack", "DeleteStack"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.events": {
+  "title": "Stack events",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": ["DescribeStackEvents"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.resources": {
+  "title": "Stack resources",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": ["DescribeStackResources", "DescribeStackResource", "ListStackResources"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.outputs-exports": {
+  "title": "Outputs and cross-stack exports (global export-name uniqueness enforced)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": ["ListExports"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.template": {
+  "title": "Template body, JSON and a YAML subset (short-form !Ref/!GetAtt/!Sub/!Join/!If/…, long-form Fn:: mappings), intrinsic function resolution",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The YAML parser covers block mappings/sequences and single-line short-form tags; multi-line short-form tag arguments are not supported (use the JSON or long-form Fn:: syntax instead)."
+  ],
+  "api": ["GetTemplate", "ValidateTemplate"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.changesets": {
+  "title": "Change sets (create, describe with Add/Remove/Modify diff, execute, delete, list)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": ["CreateChangeSet", "DescribeChangeSet", "ExecuteChangeSet", "DeleteChangeSet", "ListChangeSets"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.drift": {
+  "title": "Drift detection",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Drift is detected by checking whether each resource still exists in its owning service's store — a resource deleted independently (e.g. through the S3 console) shows as DELETED. Property-level drift (a resource edited, not deleted, outside the stack) is not detected."
+  ],
+  "api": ["DetectStackDrift", "DescribeStackDriftDetectionStatus", "DescribeStackResourceDrifts"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack.rollback-protection": {
+  "title": "Rollback on failure, ContinueUpdateRollback, termination protection",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": ["ContinueUpdateRollback", "UpdateTerminationProtection"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stacksets": {
+  "title": "StackSets (create, describe, list, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Control plane only — a StackSet's own template/parameters are stored, but Vyomi does not deploy stack instances across accounts or Regions (ListStackInstances always returns empty)."
+  ],
+  "api": ["CreateStackSet", "DescribeStackSet", "ListStackSets", "DeleteStackSet", "ListStackInstances"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.stack-refactors": {
+  "title": "Stack refactors",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "ListStackRefactors is real (empty until a refactor exists); starting a refactor (moving resources between stacks) is not simulated."
+  ],
+  "api": ["ListStackRefactors"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.registry.activated-extensions": {
+  "title": "Activated extensions (the resource types this CloudFormation engine actually supports)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.registry.public-extensions-publisher": {
+  "title": "Public extensions registry and publisher registration",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "The third-party extension marketplace and publisher workflow are out of Vyomi's scope."
+  ]
+ },
+ "aws.cloudformation.hooks": {
+  "title": "Hooks (overview, invocation summary, hooks list)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "CloudFormation Hooks are out of Vyomi's scope."
+  ]
+ },
+ "aws.cloudformation.iac-generator": {
+  "title": "IaC generator (scan an account's existing resources into a template)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Scanning existing account resources into a generated template is out of Vyomi's scope."
+  ]
+ },
+ "aws.cloudformation.template-studio": {
+  "title": "Template studio editor (YAML/JSON, Validate)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The template + text editing and Validate action are real; the visual resource Canvas view is not simulated."
+  ],
+  "api": ["ValidateTemplate"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
+ },
+ "aws.cloudformation.spotlight": {
+  "title": "CloudFormation Spotlight (editorial content)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Spotlight is an editorial content feed, not an API surface — out of Vyomi's scope."
+  ]
+ }
+}

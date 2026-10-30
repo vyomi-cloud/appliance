@@ -70,6 +70,11 @@
   "category": "aws"
  },
  {
+  "name": "cfn",
+  "label": "cfn \u00b7 CloudFormationStore",
+  "category": "aws"
+ },
+ {
   "name": "gcs",
   "label": "gcs \u00b7 InMemoryObjectStore",
   "category": "gcp"
