@@ -36,6 +36,14 @@ export const putExport = (name, body, rg) => restJson("PUT", `${scope(rg)}/provi
 export const deleteExport = (name, rg) => restJson("DELETE", `${scope(rg)}/providers/Microsoft.CostManagement/exports/${encodeURIComponent(name)}`, { query: q });
 export const runExport = (name, rg) => restJson("POST", `${scope(rg)}/providers/Microsoft.CostManagement/exports/${encodeURIComponent(name)}/run`, { query: q, body: {} });
 
+// ── savings plans (Microsoft.BillingBenefits/savingsPlanOrders) ─────────────────────
+export const listSavingsPlans = async () => (await restJson("GET", `${scope()}/providers/Microsoft.BillingBenefits/savingsPlanOrders`, { query: q })).value || [];
+export const putSavingsPlan = (name, body) => restJson("PUT", `${scope()}/providers/Microsoft.BillingBenefits/savingsPlanOrders/${encodeURIComponent(name)}`, { query: q, body });
+export const deleteSavingsPlan = (name) => restJson("DELETE", `${scope()}/providers/Microsoft.BillingBenefits/savingsPlanOrders/${encodeURIComponent(name)}`, { query: q });
+export const SAVINGSPLAN_TERMS = ["P1Y", "P3Y"];
+export const SAVINGSPLAN_TERM_LABEL = { P1Y: "1 year", P3Y: "3 years" };
+export const SAVINGSPLAN_SCOPES = ["Shared", "Single subscription"];
+
 // ── form helpers ─────────────────────────────────────────────────────────────────────
 export const RESET_PERIODS = ["Monthly", "Quarterly", "Annually", "BillingMonth", "BillingQuarter", "BillingAnnual"];
 export const RESET_PERIOD_LABEL = { Monthly: "Monthly", Quarterly: "Quarterly", Annually: "Annually", BillingMonth: "Billing month", BillingQuarter: "Billing quarter", BillingAnnual: "Billing year" };

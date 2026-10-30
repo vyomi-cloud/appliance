@@ -10,7 +10,7 @@
   "cost-budgets": { "route": "#/cost/budgets", "live": "az-cost-budget" },
   "cost-advisor-recommendations": { "route": "#/cost/advisor", "live": "az-cost-resource" },
   "cost-reservations-hybrid-benefit": { "route": "#/cost/reservations" },
-  "cost-savings-plans": { "route": "#/cost/savingsplans" },
+  "cost-savings-plans": { "route": "#/cost/savingsplans", "live": "az-cost-savingsplan" },
   "cost-cost-allocation": { "route": "#/cost/allocation" },
   "cost-configuration": { "route": "#/cost/configuration" },
   "cost-preview-features": { "route": "#/cost/previewfeatures" },

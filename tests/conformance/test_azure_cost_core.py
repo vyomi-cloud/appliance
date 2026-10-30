@@ -88,9 +88,28 @@ check("export remembers its last run cost", r["body"]["properties"]["lastRunCost
 check("delete export → 200, then 204", cost.dispatch_costmanagement(ST, "DELETE", SUB, None, ["exports", "weekly-export"], {}, {})["status"] == 200
       and cost.dispatch_costmanagement(ST, "DELETE", SUB, None, ["exports", "weekly-export"], {}, {})["status"] == 204)
 
+# ── Microsoft.BillingBenefits/savingsPlanOrders ─────────────────────────────────
+r = cost.dispatch_billingbenefits(ST, "PUT", SUB, ["savingsPlanOrders", "sp1"],
+                                   {"properties": {"commitment": {"amount": 0.0001, "currency": "USD", "grain": "Hourly"}}}, {})
+check("create savings plan → 201 with utilization", r["status"] == 201 and "utilization" in r["body"]["properties"], r["body"])
+check("tiny commitment vs real VM spend → ~100% utilized", r["body"]["properties"]["utilization"] == 100.0, r["body"])
+check("defaults filled in (term/scope/renew/expiry)", r["body"]["properties"]["term"] == "P1Y"
+      and r["body"]["properties"]["appliedScopeType"] == "Shared" and r["body"]["properties"]["renew"] is False
+      and r["body"]["properties"]["expiryDateTime"], r["body"])
+r = cost.dispatch_billingbenefits(ST, "PUT", SUB, ["savingsPlanOrders", "sp2"],
+                                   {"properties": {"commitment": {"amount": 1000000, "currency": "USD", "grain": "Hourly"}}}, {})
+check("huge commitment vs real VM spend → ~0% utilized", r["body"]["properties"]["utilization"] == 0.0, r["body"])
+check("list savings plans", len(cost.dispatch_billingbenefits(ST, "GET", SUB, ["savingsPlanOrders"], {}, {})["body"]["value"]) == 2)
+check("get missing savings plan → 404", cost.dispatch_billingbenefits(ST, "GET", SUB, ["savingsPlanOrders", "none"], {}, {})["status"] == 404)
+check("create requires commitment.amount", cost.dispatch_billingbenefits(ST, "PUT", SUB, ["savingsPlanOrders", "bad"], {"properties": {}}, {})["status"] == 400)
+check("unsupported BillingBenefits type → 404", cost.dispatch_billingbenefits(ST, "GET", SUB, ["bogus"], {}, {})["status"] == 404)
+check("delete savings plan → 200, then 204", cost.dispatch_billingbenefits(ST, "DELETE", SUB, ["savingsPlanOrders", "sp2"], {}, {})["status"] == 200
+      and cost.dispatch_billingbenefits(ST, "DELETE", SUB, ["savingsPlanOrders", "sp2"], {}, {})["status"] == 204)
+
 # ── through the Nano ARM wire end to end ────────────────────────────────────────
 CM = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/providers/Microsoft.CostManagement"
 CO = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/providers/Microsoft.Consumption"
+BB = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/providers/Microsoft.BillingBenefits"
 r = arm.handle("PUT", f"{CO}/budgets/nano-budget", {}, {"properties": {"amount": 500}})
 check("Nano ARM: budget create", r["status"] == 201, r)
 r = arm.handle("POST", f"{CM}/query", {}, {"dataset": {}})
@@ -99,6 +118,10 @@ r = arm.handle("GET", f"{CO}/budgets", {}, None)
 check("Nano ARM: list budgets", r["status"] == 200 and len(r["body"]["value"]) == 1, r)
 r = arm.handle("DELETE", f"{CO}/budgets/nano-budget", {}, None)
 check("Nano ARM: delete budget", r["status"] == 200, r)
+r = arm.handle("PUT", f"{BB}/savingsPlanOrders/nano-sp", {}, {"properties": {"commitment": {"amount": 1, "currency": "USD", "grain": "Hourly"}}})
+check("Nano ARM: savings plan create", r["status"] == 201, r)
+r = arm.handle("GET", f"{BB}/savingsPlanOrders", {}, None)
+check("Nano ARM: list savings plans", r["status"] == 200 and any(v["name"] == "nano-sp" for v in r["body"]["value"]), r)
 
 print(f"{PASS} passed, {FAIL} failed")
 assert FAIL == 0

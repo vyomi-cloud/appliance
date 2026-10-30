@@ -21,7 +21,16 @@ async function createBudget(wire, uniq) {
   return name;
 }
 
+async function createSavingsPlan(wire, uniq) {
+  const name = `uic-sp-${uniq}`;
+  await wire("PUT", `/subscriptions/${SUB}/providers/Microsoft.BillingBenefits/savingsPlanOrders/${name}`, {
+    svc: null, body: { properties: { term: "P1Y", appliedScopeType: "Shared", commitment: { amount: 0.1, currency: "USD", grain: "Hourly" } } },
+  });
+  return name;
+}
+
 export default {
   "az-cost-resource": createResource,
   "az-cost-budget": createBudget,
+  "az-cost-savingsplan": createSavingsPlan,
 };

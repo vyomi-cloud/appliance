@@ -154,13 +154,23 @@
     ]
   },
   "azure.cost.savings_plans": {
-    "title": "Savings plans (purchase a commitment)",
+    "title": "Savings plans (list, create, delete, real utilization)",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Purchasing a real financial commitment against a payment method is out of scope for a simulator."
+      "The \"Purchase\" checkout (payment method, hourly commitment slider) is not modelled; a plan is created directly with a commitment amount instead.",
+      "Utilization compares the committed hourly amount to real compute spend only — Azure's own usage-pattern heuristics are not reproduced."
+    ],
+    "api": [
+      "SavingsPlanOrder.CreateOrUpdate",
+      "SavingsPlanOrder.Get",
+      "SavingsPlanOrder.List",
+      "SavingsPlanOrder.Delete"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cost_core.py"
     ]
   },
   "azure.cost.invoices": {

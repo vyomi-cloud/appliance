@@ -15,12 +15,15 @@ ARM REST modelled (azure-rest-api-specs ``specification/cost-management`` /
     POST {scope}/providers/Microsoft.CostManagement/alerts/{name}/dismiss|reactivate
     GET/PUT/DELETE/POST(run) {scope}/providers/Microsoft.CostManagement/exports[/{name}[/run]]
     GET/PUT/PATCH/DELETE {scope}/providers/Microsoft.Consumption/budgets[/{name}]
+    GET/PUT/PATCH/DELETE {scope}/providers/Microsoft.BillingBenefits/savingsPlanOrders[/{name}]
 
-Budgets and exports persist in the SAME flat ``state`` dict as every other ARM resource (keyed
-by their lower-cased id), so they survive with the rest of ARM. Alerts are not stored directly —
-they are derived live from budgets vs. real spend every call; only their dismissed/reactivated
-status is persisted (keyed by the alert's own synthetic id), exactly like a real alert's mutable
-state layered over immutable budget-threshold definitions.
+Budgets, exports and savings plan orders persist in the SAME flat ``state`` dict as every other
+ARM resource (keyed by their lower-cased id), so they survive with the rest of ARM. Alerts are
+not stored directly — they are derived live from budgets vs. real spend every call; only their
+dismissed/reactivated status is persisted (keyed by the alert's own synthetic id), exactly like a
+real alert's mutable state layered over immutable budget-threshold definitions. A savings plan
+order's utilization is likewise derived live, from real compute spend vs. its committed hourly
+rate — the order record itself (term, scope, commitment) is the only thing persisted.
 
 ``dispatch_costmanagement``/``dispatch_consumption`` return ``{"status","headers","body"}``,
 the same shape ``AzureArm._arm`` already returns for its generic CRUD branch.
@@ -38,8 +41,11 @@ except ImportError:                               # Pyodide: cores are flat on s
 
 COST_NS = "Microsoft.CostManagement"
 CONSUMPTION_NS = "Microsoft.Consumption"
+BENEFITS_NS = "Microsoft.BillingBenefits"
 BUDGET_TYPE = "budgets"
+SAVINGSPLAN_TYPE = "savingsPlanOrders"
 QUERY_API_VERSION = "2023-11-01"
+_TERM_MONTHS = {"P1Y": 12, "P3Y": 36}
 
 
 class _E(Exception):
@@ -397,6 +403,92 @@ def dispatch_exports(state, method, sub, rg, rest, payload, query, now=None):
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
 
+# ═══════════════════ savings plan orders (Microsoft.BillingBenefits) ═════════════
+# A savings plan commits an hourly spend amount for a term in exchange for a discount;
+# modelled here as a persisted order record (same flat ``state`` dict as every other ARM
+# resource) whose utilization is derived live from real compute spend vs. the committed
+# hourly rate — exactly like a budget's spend is derived live from real inventory.
+def _savingsplan_rid(sub, name):
+    return f"/subscriptions/{sub}/providers/{BENEFITS_NS}/{SAVINGSPLAN_TYPE}/{name}"
+
+
+def _savingsplans_for(state, sub):
+    ft = f"{BENEFITS_NS}/{SAVINGSPLAN_TYPE}".lower()
+    return [r for r in state.values() if str(r.get("_type", "")).lower() == ft and r.get("_sub") == sub]
+
+
+def savingsplan_utilization(state, rec, now=None):
+    """% of the committed hourly amount actually covered by real compute spend (capped at 100%)."""
+    props = rec.get("properties") or {}
+    hourly_commitment = float((props.get("commitment") or {}).get("amount") or 0)
+    if hourly_commitment <= 0:
+        return 0.0
+    rows = _collect_resource_rows(state, rec["_sub"])
+    hourly_compute = sum(r["monthly_usd"] for r in rows if r["full_type"] == "microsoft.compute/virtualmachines") / (24 * 30)
+    return round(min(100.0, (hourly_compute / hourly_commitment) * 100), 1)
+
+
+def _savingsplan_view(state, rec, now=None):
+    out = _view(rec)
+    props = dict(rec["properties"])
+    props["utilization"] = savingsplan_utilization(state, rec, now)
+    out["properties"] = props
+    return out
+
+
+def dispatch_billingbenefits(state, method, sub, chain, payload, query, base=""):
+    method = (method or "GET").upper()
+    payload = payload if isinstance(payload, dict) else {}
+    now = datetime.now(timezone.utc)
+    if not chain or chain[0].lower() != SAVINGSPLAN_TYPE.lower():
+        return _err(404, "ResourceTypeNotSupported", f"'{BENEFITS_NS}/{chain[0] if chain else ''}' is not supported. Supported: {SAVINGSPLAN_TYPE}.")
+    rest = chain[1:]
+    if not rest:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        items = sorted(_savingsplans_for(state, sub), key=lambda r: r["name"].lower())
+        return _ok({"value": [_savingsplan_view(state, r, now) for r in items]})
+    name = rest[0]
+    rid = _savingsplan_rid(sub, name)
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        if not rec:
+            return _err(404, "ResourceNotFound", f"The savings plan order '{name}' could not be found.")
+        return _ok(_savingsplan_view(state, rec, now))
+    if method in ("PUT", "PATCH"):
+        existed = key in state
+        if method == "PATCH" and not existed:
+            return _err(404, "ResourceNotFound", f"The savings plan order '{name}' could not be found.")
+        props = payload.get("properties") or {}
+        commitment = props.get("commitment") or {}
+        if method == "PUT" and not commitment.get("amount"):
+            return _err(400, "BadRequest", "properties.commitment.amount is required.")
+        rec = state.get(key) or {"id": rid, "name": name, "type": f"{BENEFITS_NS}/{SAVINGSPLAN_TYPE}",
+                                  "_type": f"{BENEFITS_NS}/{SAVINGSPLAN_TYPE}", "_sub": sub, "_rg": None,
+                                  "properties": {}, "_created": now.isoformat()}
+        merged = dict(rec["properties"])
+        merged.update(props)
+        merged.setdefault("term", "P1Y")
+        merged.setdefault("appliedScopeType", "Shared")
+        merged.setdefault("provisioningState", "Succeeded")
+        merged.setdefault("renew", False)
+        merged.setdefault("commitment", {"amount": 0, "currency": "USD", "grain": "Hourly"})
+        merged.setdefault("benefitStartTime", now.isoformat())
+        months = _TERM_MONTHS.get(merged["term"], 12)
+        start = datetime.fromisoformat(merged["benefitStartTime"].replace("Z", "+00:00"))
+        expiry_year, expiry_month = start.year + (start.month - 1 + months) // 12, (start.month - 1 + months) % 12 + 1
+        merged.setdefault("expiryDateTime", start.replace(year=expiry_year, month=expiry_month).isoformat())
+        rec["properties"] = merged
+        rec["eTag"] = str(uuid.uuid4())
+        state[key] = rec
+        return _ok(_savingsplan_view(state, rec, now), status=200 if existed else 201)
+    if method == "DELETE":
+        existed = state.pop(key, None) is not None
+        return _ok(None, status=200 if existed else 204)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
 # ═══════════════════════════ dispatch ═════════════════════════════════════════════
 def dispatch_costmanagement(state, method, sub, rg, chain, payload, query, base=""):
     """Handle one ``Microsoft.CostManagement`` request (``chain`` = tokens after the namespace)."""
@@ -420,4 +512,4 @@ def dispatch_costmanagement(state, method, sub, rg, chain, payload, query, base=
 
 
 def handles(namespace):
-    return namespace.lower() in (COST_NS.lower(), CONSUMPTION_NS.lower())
+    return namespace.lower() in (COST_NS.lower(), CONSUMPTION_NS.lower(), BENEFITS_NS.lower())

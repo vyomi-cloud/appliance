@@ -809,6 +809,8 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         return await _handle_costmanagement(request, method, sub, rg, chain, base)
     if namespace.lower() == "microsoft.consumption":
         return await _handle_consumption(request, method, sub, rg, chain, base)
+    if namespace.lower() == "microsoft.billingbenefits":
+        return await _handle_billingbenefits(request, method, sub, chain, base)
 
     top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
     if top is None:
@@ -1014,6 +1016,15 @@ async def _handle_consumption(request: Request, method: str, sub: str, rg: str |
     from core import azure_cost_core as _cm
     payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
     r = _cm.dispatch_consumption(_state, method, sub, rg, chain, payload, dict(request.query_params), base=base)
+    return JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+
+
+async def _handle_billingbenefits(request: Request, method: str, sub: str,
+                                  chain: list[str], base: str) -> JSONResponse:
+    from core import azure_cost_core as _cm
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _cm.dispatch_billingbenefits(_state, method, sub, chain, payload, dict(request.query_params), base=base)
     return JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
         else Response(status_code=r["status"])
 
