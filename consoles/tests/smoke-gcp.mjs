@@ -190,6 +190,12 @@ try {
 
   // Settings: toggle redirection → native projectSettings round-trip
   await page.goto(UI + "#/artifacts/settings");
+  // State persists across runs on a real appliance — start from "disabled".
+  const disable = page.getByRole("button", { name: "Disable redirection" });
+  if (await disable.waitFor({ timeout: 3000 }).then(() => true, () => false)) {
+    await disable.click();
+    await page.getByRole("button", { name: "Enable redirection" }).waitFor({ timeout: 10000 });
+  }
   await page.getByRole("button", { name: "Enable redirection" }).click();
   await page.getByText("Redirection is enabled for this project.").waitFor({ timeout: 10000 });
   const settings = await wjson("/v1/projects/vyomi-project/projectSettings");
@@ -307,8 +313,13 @@ try {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ fields: { k: { stringValue: "v" } } }),
   });
+  // Nano saves to IndexedDB ~400 ms after a write (debounced); a reload inside that window
+  // loses the write (known Nano limitation, tracked) — give the save time to land.
+  await page.waitForTimeout(1500);
   await page.reload({ waitUntil: "networkidle" });
-  check("document created over wire → collection shown in Studio UI", await page.getByText("wire-coll", { exact: true }).isVisible());
+  // On Nano a reload re-boots the in-tab engine before the list can load — wait, don't sample.
+  const wireColl = await page.getByText("wire-coll", { exact: true }).waitFor({ timeout: 20000 }).then(() => true, () => false);
+  check("document created over wire → collection shown in Studio UI", wireColl);
 
   await page.goto(UI + "#/firestore/databases");
   await page.getByRole("link", { name: FSDB }).waitFor({ timeout: 10000 });
