@@ -248,6 +248,34 @@ try {
   const afterPoll = await sqs("GetQueueAttributes", { QueueUrl: qUrl, AttributeNames: ["All"] });
   check("SQS SendMessage over wire → received via UI poll (now in-flight)", afterPoll.Attributes?.ApproximateNumberOfMessagesNotVisible === "1", JSON.stringify(afterPoll.Attributes));
   await shot("16-sqs-send-receive");
+
+  // SQS: dead-letter a message onto a DLQ over the wire (maxReceiveCount redrive), then
+  // redrive it back to its source queue through the console's "Dead-letter queue redrive
+  // tasks" tab (StartMessageMoveTask) — verify the move really happened over the native wire.
+  const RDLQ = `v4smoke-redrive-dlq-${Date.now() % 100000}`;
+  const RMAIN = `v4smoke-redrive-main-${Date.now() % 100000}`;
+  const rdlqUrl = (await sqs("CreateQueue", { QueueName: RDLQ })).QueueUrl;
+  const rdlqArn = (await sqs("GetQueueAttributes", { QueueUrl: rdlqUrl, AttributeNames: ["QueueArn"] })).Attributes.QueueArn;
+  const rmainUrl = (await sqs("CreateQueue", { QueueName: RMAIN, Attributes: {
+    VisibilityTimeout: "1", RedrivePolicy: JSON.stringify({ deadLetterTargetArn: rdlqArn, maxReceiveCount: 1 }) } })).QueueUrl;
+  await sqs("SendMessage", { QueueUrl: rmainUrl, MessageBody: "poison-for-redrive" });
+  await sqs("ReceiveMessage", { QueueUrl: rmainUrl, MaxNumberOfMessages: 1 });
+  await page.waitForTimeout(1500);   // let the 1s visibility timeout lapse
+  await sqs("ReceiveMessage", { QueueUrl: rmainUrl, MaxNumberOfMessages: 1 });   // triggers the redrive
+  const beforeRedrive = await sqs("GetQueueAttributes", { QueueUrl: rdlqUrl, AttributeNames: ["ApproximateNumberOfMessages"] });
+  check("SQS poison message landed on the DLQ after maxReceiveCount", beforeRedrive.Attributes?.ApproximateNumberOfMessages === "1", JSON.stringify(beforeRedrive.Attributes));
+
+  await page.goto(UI + `#/sqs/queues/${RDLQ}?tab=redrive-tasks`);
+  await page.getByRole("tabpanel").getByRole("button", { name: "Start DLQ redrive" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Start DLQ redrive" }).click();
+  await page.waitForTimeout(800);
+  const afterRedrive = await sqs("GetQueueAttributes", { QueueUrl: rdlqUrl, AttributeNames: ["ApproximateNumberOfMessages"] });
+  const backOnMain = await sqs("ReceiveMessage", { QueueUrl: rmainUrl, MaxNumberOfMessages: 1 });
+  check("SQS Start DLQ redrive (UI) → DLQ emptied and message moved back to its source queue over native wire",
+    afterRedrive.Attributes?.ApproximateNumberOfMessages === "0" && (backOnMain.Messages || [])[0]?.Body === "poison-for-redrive",
+    JSON.stringify({ afterRedrive: afterRedrive.Attributes, backOnMain }));
+  await shot("17-sqs-dlq-redrive");
+
   // SNS: create a topic through the UI, subscribe an SQS queue through the UI, publish
   // through the UI — then verify the queue really received the fanned-out notification
   // over the native wire (the P2 queue's mandatory real SNS→SQS fan-out).

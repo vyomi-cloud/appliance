@@ -199,6 +199,8 @@ def _create_queue(store, body):
     if not store.queue_exists(name):
         attrs = dict(body.get("Attributes") or {})
         is_fifo = name.endswith(".fifo") or str(attrs.get("FifoQueue", "")).lower() == "true"
+        if attrs.get("RedrivePolicy"):
+            _check_redrive_allowed(store, _queue_arn(store, name), attrs["RedrivePolicy"])
         store.put_queue(name, {
             "queue_name": name,
             "queue_url": _queue_url(store, name),
@@ -227,6 +229,46 @@ def _redrive_policy(q: dict) -> dict | None:
         return json.loads(raw) if isinstance(raw, str) else raw
     except Exception:
         return None
+
+
+def _redrive_allow_policy(q: dict) -> dict | None:
+    raw = q.get("attributes", {}).get("RedriveAllowPolicy")
+    if not raw:
+        return None
+    try:
+        return json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return None
+
+
+def _check_redrive_allowed(store, source_arn: str, redrive_policy_json) -> None:
+    """A queue may only name another queue as its dead-letter target if that target's
+    RedriveAllowPolicy permits it (allowAll/unset = anyone, byQueue = listed ARNs only,
+    denyAll = no one) — enforced at the same point real SQS enforces it: when the SOURCE
+    queue's RedrivePolicy is set."""
+    try:
+        pol = json.loads(redrive_policy_json) if isinstance(redrive_policy_json, str) else redrive_policy_json
+    except Exception:
+        return
+    if not pol:
+        return
+    dlq = store.get_queue_by_arn(str(pol.get("deadLetterTargetArn", "")))
+    if dlq is None:
+        return
+    allow = _redrive_allow_policy(dlq)
+    if not allow:
+        return
+    perm = str(allow.get("redrivePermission", "allowAll"))
+    if perm == "denyAll":
+        raise SqsError("com.amazonaws.sqs#InvalidParameterValue",
+                       "Value for parameter RedrivePolicy is invalid. Reason: the dead-letter "
+                       "queue's redrive allow policy denies all source queues.", 400)
+    if perm == "byQueue":
+        allowed = {str(a) for a in (allow.get("sourceQueueArns") or [])}
+        if source_arn not in allowed:
+            raise SqsError("com.amazonaws.sqs#InvalidParameterValue",
+                           "Value for parameter RedrivePolicy is invalid. Reason: the dead-letter "
+                           "queue's redrive allow policy does not list this queue as an allowed source.", 400)
 
 
 def _get_queue_url(store, body):
@@ -281,6 +323,8 @@ def _get_queue_attributes(store, body):
 def _set_queue_attributes(store, body):
     q = _require_queue(store, body.get("QueueUrl", ""))
     incoming = dict(body.get("Attributes") or {})
+    if incoming.get("RedrivePolicy"):
+        _check_redrive_allowed(store, q["queue_arn"], incoming["RedrivePolicy"])
     q.setdefault("attributes", {}).update(incoming)
     if "VisibilityTimeout" in incoming:
         q["visibility_timeout"] = int(incoming["VisibilityTimeout"])

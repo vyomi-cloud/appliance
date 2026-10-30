@@ -46,6 +46,15 @@ export function redriveAllowPolicy(attrs) {
   try { return attrs.RedriveAllowPolicy ? JSON.parse(attrs.RedriveAllowPolicy) : null; } catch { return null; }
 }
 
+// ── dead-letter queue redrive tasks (StartMessageMoveTask et al.) ────────────────────────
+export const listDeadLetterSourceQueueUrls = (dlqUrl) => call("ListDeadLetterSourceQueues", { QueueUrl: dlqUrl }).then((r) => r.queueUrls || []);
+export async function listDeadLetterSources(dlqUrl) {
+  const urls = await listDeadLetterSourceQueueUrls(dlqUrl);
+  return Promise.all(urls.map(async (url) => ({ url, name: nameFromUrl(url), attrs: await getQueueAttributes(url) })));
+}
+export const startMessageMoveTask = (sourceArn, destinationArn) => call("StartMessageMoveTask", { SourceArn: sourceArn, ...(destinationArn ? { DestinationArn: destinationArn } : {}) }).then((r) => r.TaskHandle);
+export const listMessageMoveTasks = (sourceArn) => call("ListMessageMoveTasks", { SourceArn: sourceArn, MaxResults: 10 }).then((r) => r.Results || []);
+
 // ── SNS (native Query wire) — real cross-service calls the SQS console itself makes ──────
 export const listTopics = async () => asList((await snsCall("ListTopics", {})).ListTopicsResponse?.ListTopicsResult?.Topics?.member).map((m) => (typeof m === "string" ? m : m.TopicArn));
 

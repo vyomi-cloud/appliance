@@ -66,7 +66,7 @@ export default function Queues() {
                 else if (detail.id === "purge") navigate("sqs", "queues", one.name, "purge");
                 else if (detail.id === "delete") navigate("sqs", "queues", one.name, "delete");
                 else if (detail.id === "subscribe-sns") setSubModal(true);
-                else if (detail.id === "dlq-redrive") notify.info("Dead-letter queue redrive tasks aren't simulated by Vyomi — receive and re-send messages directly from Send and receive messages.", "Start DLQ redrive");
+                else if (detail.id === "dlq-redrive") { location.hash = href("sqs", "queues", one.name).slice(1) + "?tab=redrive-tasks"; }
                 else if (detail.id === "lambda-trigger") notify.info("Lambda event source mappings aren't simulated by Vyomi.", "Configure Lambda function trigger");
               }}
             >Actions</ButtonDropdown>

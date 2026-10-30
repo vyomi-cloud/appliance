@@ -16,6 +16,7 @@ import Button from "@cloudscape-design/components/button";
 import Grid from "@cloudscape-design/components/grid";
 import Box from "@cloudscape-design/components/box";
 import TagEditor from "@cloudscape-design/components/tag-editor";
+import Multiselect from "@cloudscape-design/components/multiselect";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import Spinner from "@cloudscape-design/components/spinner";
 import { useAsync } from "../../../common/useAsync.js";
@@ -96,6 +97,7 @@ function QueueForm({ isEdit, initialName, existing }) {
   const allowPolicy = (() => { try { return a.RedriveAllowPolicy ? JSON.parse(a.RedriveAllowPolicy) : null; } catch { return null; } })();
   const [allowEnabled, setAllowEnabled] = useState(!!allowPolicy);
   const [allowPermission, setAllowPermission] = useState(allowPolicy?.redrivePermission === "byQueue" ? "By queue" : allowPolicy?.redrivePermission === "denyAll" ? "Deny all" : "Allow all");
+  const [allowSourceArns, setAllowSourceArns] = useState(allowPolicy?.redrivePermission === "byQueue" ? (allowPolicy.sourceQueueArns || []) : []);
 
   const redrive = (() => { try { return a.RedrivePolicy ? JSON.parse(a.RedrivePolicy) : null; } catch { return null; } })();
   const [dlqEnabled, setDlqEnabled] = useState(!!redrive);
@@ -130,7 +132,10 @@ function QueueForm({ isEdit, initialName, existing }) {
       SqsManagedSseEnabled: String(sse === "Enabled" && keyType !== "AWS Key Management Service key (SSE-KMS)"),
       ...(sse === "Enabled" && keyType === "AWS Key Management Service key (SSE-KMS)" ? { KmsMasterKeyId: cmk, KmsDataKeyReusePeriodSeconds: String(toSeconds(reuseVal, reuseUnit)) } : {}),
       ...(policy ? { Policy: policy } : {}),
-      ...(allowEnabled ? { RedriveAllowPolicy: JSON.stringify({ redrivePermission: allowPermission === "By queue" ? "byQueue" : allowPermission === "Deny all" ? "denyAll" : "allowAll" }) } : {}),
+      ...(allowEnabled ? { RedriveAllowPolicy: JSON.stringify({
+        redrivePermission: allowPermission === "By queue" ? "byQueue" : allowPermission === "Deny all" ? "denyAll" : "allowAll",
+        ...(allowPermission === "By queue" ? { sourceQueueArns: allowSourceArns } : {}),
+      }) } : {}),
       ...(dlqEnabled && dlqArn ? { RedrivePolicy: JSON.stringify({ deadLetterTargetArn: dlqArn, maxReceiveCount: Number(maxReceives) }) } : {}),
     };
     const finalTags = Object.fromEntries(tags.filter((t) => !t.markedForRemoval && t.key).map((t) => [t.key, t.value || ""]));
@@ -242,6 +247,15 @@ function QueueForm({ isEdit, initialName, existing }) {
                 {allowEnabled && (
                   <FormField label="Redrive permission">
                     <RadioGroup value={allowPermission} onChange={({ detail }) => setAllowPermission(detail.value)} items={[{ value: "Allow all", label: "Allow all" }, { value: "By queue", label: "By queue" }, { value: "Deny all", label: "Deny all" }]} />
+                  </FormField>
+                )}
+                {allowEnabled && allowPermission === "By queue" && (
+                  <FormField label="Source queues" description="Select which queues can use this queue as the dead-letter queue.">
+                    <Multiselect
+                      selectedOptions={allowSourceArns.map((arn) => ({ value: arn, label: (otherQueues.data || []).find((q) => q.attrs.QueueArn === arn)?.name || arn }))}
+                      onChange={({ detail }) => setAllowSourceArns(detail.selectedOptions.map((o) => o.value))}
+                      options={(otherQueues.data || []).filter((q) => q.name !== name).map((q) => ({ value: q.attrs.QueueArn, label: q.name }))}
+                      placeholder="Choose source queues" ariaLabel="Source queues" />
                   </FormField>
                 )}
               </SpaceBetween>
