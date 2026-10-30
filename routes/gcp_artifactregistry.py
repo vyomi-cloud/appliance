@@ -42,11 +42,11 @@ class SpaceArStore(ar.ArtifactRegistryStore):
     """ArtifactRegistryStore whose dicts are the active space's persisted slot."""
 
     def __init__(self) -> None:           # no super().__init__: the dicts are properties
-        self._fallback = {"repositories": {}, "operations": {}, "iam": {}}
+        self._fallback = {"repositories": {}, "operations": {}, "iam": {}, "settings": {}}
 
     def _s(self) -> dict:
         s = _slot() or self._fallback
-        for k in ("repositories", "operations", "iam"):
+        for k in ("repositories", "operations", "iam", "settings"):
             s.setdefault(k, {})
         return s
 
@@ -61,6 +61,10 @@ class SpaceArStore(ar.ArtifactRegistryStore):
     @property
     def iam(self) -> dict:
         return self._s()["iam"]
+
+    @property
+    def settings(self) -> dict:          # per-project settings (legacy GCR redirection)
+        return self._s()["settings"]
 
     def persist(self) -> None:
         if _slot() is not None:
@@ -145,6 +149,7 @@ def register(app: FastAPI) -> None:
     app.add_route("/v1/projects/{project}/locations/{loc}/repositories", _wire, methods=methods)
     app.add_route("/v1/projects/{project}/locations/{loc}/repositories/{rest:path}", _wire, methods=methods)
     app.add_route("/v1/projects/{project}/locations/{loc}/operations/{op}", _wire, methods=["GET"])
+    app.add_route("/v1/projects/{project}/projectSettings", _wire, methods=["GET", "PATCH"])   # legacy GCR redirection
 
     async def _json(request: Request) -> dict:
         try:

@@ -1,0 +1,160 @@
+{
+ "$doc": "Vyomi capability registry — GCP Artifact Registry. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
+ "gcp.artifacts.repository.crud": {
+  "title": "Repositories (create, list, get, edit, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "repositories.create",
+   "repositories.get",
+   "repositories.list",
+   "repositories.patch",
+   "repositories.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.packages-versions-tags": {
+  "title": "Packages, versions and tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "packages.list",
+   "packages.get",
+   "packages.delete",
+   "versions.list",
+   "versions.get",
+   "versions.delete",
+   "versions.batchDelete",
+   "tags.list",
+   "tags.create",
+   "tags.get",
+   "tags.patch",
+   "tags.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.push-sample": {
+  "title": "Push sample image/package",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Vyomi has no Docker/Maven/npm/pip daemon, so repositories can't be populated by a real `docker push` et al.; this console action creates a sample package/version directly so the console has real data to show."
+  ],
+  "api": [
+   "repositories.pushSample (Vyomi-only convenience; not a real Artifact Registry method)"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.iam": {
+  "title": "Permissions (IAM policy)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "getIamPolicy/setIamPolicy/testIamPermissions store and return the policy exactly as configured; Vyomi does not authenticate requests or enforce the bindings."
+  ],
+  "api": [
+   "repositories.getIamPolicy",
+   "repositories.setIamPolicy",
+   "repositories.testIamPermissions"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.encryption": {
+  "title": "Encryption (customer-managed key)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "A customer-managed key resource name is stored on the repository and returned by the API; Vyomi does not verify the key exists or encrypt stored data with it."
+  ],
+  "api": [
+   "repositories.create (kmsKeyName)",
+   "repositories.get"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.repository-mode": {
+  "title": "Repository mode (remote / virtual)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Remote and virtual repository configuration is stored and returned; Vyomi does not proxy a remote upstream or aggregate a virtual repository's member repositories."
+  ],
+  "api": [
+   "repositories.create (mode, remoteRepositoryConfig, virtualRepositoryConfig)"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.cleanup-policies": {
+  "title": "Cleanup policies",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Cleanup policies (and dry-run mode) are stored on the repository and returned by the API; Vyomi does not run them against packages and versions."
+  ],
+  "api": [
+   "repositories.patch (cleanupPolicies, cleanupPolicyDryRun)"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.vulnerability-scanning": {
+  "title": "Vulnerability scanning (Artifact Analysis)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "The vulnerability-scanning setting is stored on the repository and returned by the API; Vyomi does not scan images or report findings."
+  ],
+  "api": [
+   "repositories.patch (vulnerabilityScanningConfig)"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ },
+ "gcp.artifacts.project-settings": {
+  "title": "Settings (gcr.io redirection)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "projects.getProjectSettings",
+   "projects.updateProjectSettings"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_artifactregistry_core.py"
+  ]
+ }
+}

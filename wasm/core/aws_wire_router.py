@@ -88,6 +88,8 @@ def _gcp_service(path):
             return "gcp-cloudscheduler"
         if "/locations/" in path and ("/repositories" in path or "/operations/" in path):
             return "gcp-artifactregistry"
+        if re.search(r"^/v1/projects/[^/]+/projectSettings$", path):
+            return "gcp-artifactregistry"
         if "/databases/" in path and "/documents" in path:
             return "gcp-firestore"
         if "/keyRings" in path:

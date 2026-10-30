@@ -1,5 +1,9 @@
-"""GCP Artifact Registry core — native v1 REST behaviour (shared with Nano)."""
+"""GCP Artifact Registry core — native v1 REST behaviour (shared with Nano).
+
+Run:  PYTHONPATH=. python3 tests/conformance/test_gcp_artifactregistry_core.py
+"""
 import json
+import sys
 
 from core import gcp_artifactregistry_core as ar
 from core.aws_wire_router import AwsWireRouter
@@ -69,3 +73,49 @@ def test_wire_router_routes_artifactregistry():
                         json.dumps({"format": "MAVEN"}).encode())
     assert out["status"] == 200 and json.loads(out["body"])["done"]
     assert router.handle("GET", B + "/w1", {}, {}, b"")["status"] == 200
+
+
+def test_list_across_locations():
+    st = ar.ArtifactRegistryStore()
+    call(st, "POST", "/v1/projects/p/locations/us-central1/repositories", {"repositoryId": "r1"}, {"format": "DOCKER"})
+    call(st, "POST", "/v1/projects/p/locations/europe-west1/repositories", {"repositoryId": "r2"}, {"format": "NPM"})
+    code, page = call(st, "GET", "/v1/projects/p/locations/-/repositories")
+    names = {r["name"].rsplit("/", 1)[-1] for r in page["repositories"]}
+    assert code == 200 and names == {"r1", "r2"}
+
+
+def test_project_settings():
+    st = ar.ArtifactRegistryStore()
+    code, s = call(st, "GET", "/v1/projects/p/projectSettings")
+    assert code == 200 and s["name"] == "projects/p/projectSettings" and s["legacyRedirectionState"] == "REDIRECTION_FROM_GCR_IO_UNSPECIFIED"
+    code, s = call(st, "PATCH", "/v1/projects/p/projectSettings", None, {"legacyRedirectionState": "REDIRECTION_FROM_GCR_IO_ENABLED"})
+    assert code == 200 and s["legacyRedirectionState"] == "REDIRECTION_FROM_GCR_IO_ENABLED"
+    assert call(st, "GET", "/v1/projects/p/projectSettings")[1]["legacyRedirectionState"] == "REDIRECTION_FROM_GCR_IO_ENABLED"
+    assert call(st, "PATCH", "/v1/projects/p/projectSettings", None, {"legacyRedirectionState": "BOGUS"})[0] == 400
+
+
+def test_push_sample_verb_and_cleanup_vuln_config():
+    st = ar.ArtifactRegistryStore()
+    call(st, "POST", B, {"repositoryId": "r1"}, {"format": "DOCKER"})
+    code, out = call(st, "POST", B + "/r1:pushSample", None, {"image": "demo-app", "tag": "v1"})
+    assert code == 200 and out["version"].endswith("/versions/" + out["version"].rsplit("/", 1)[-1])
+    imgs = call(st, "GET", B + "/r1/dockerImages")[1]["dockerImages"]
+    assert imgs and imgs[0]["tags"] == ["v1"]
+    assert call(st, "POST", B + "/bogus:pushSample", None, {})[0] == 404
+    code, repo = call(st, "PATCH", B + "/r1", {"updateMask": "cleanupPolicyDryRun,vulnerabilityScanningConfig"},
+                      {"cleanupPolicyDryRun": True, "vulnerabilityScanningConfig": {"enablementConfig": "DISABLED"}})
+    assert code == 200 and repo["cleanupPolicyDryRun"] is True and repo["vulnerabilityScanningConfig"]["enablementConfig"] == "DISABLED"
+
+
+if __name__ == "__main__":
+    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
+    failed = []
+    for t in tests:
+        try:
+            t()
+            print(f"PASS {t.__name__}")
+        except Exception as e:
+            failed.append(t.__name__)
+            print(f"FAIL {t.__name__}: {e!r}")
+    print(f"\n{len(tests) - len(failed)}/{len(tests)} passed")
+    sys.exit(1 if failed else 0)
