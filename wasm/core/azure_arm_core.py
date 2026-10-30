@@ -37,6 +37,11 @@ try:                                              # Container Apps engine (Micro
 except ImportError:
     import azure_app_core as app_engine            # type: ignore
 
+try:                                              # Web Apps / Function Apps engine (Microsoft.Web)
+    from core import azure_webapp_core as web_engine
+except ImportError:
+    import azure_webapp_core as web_engine          # type: ignore
+
 try:                                              # App Configuration engine (Microsoft.AppConfiguration)
     from core import azure_appconfiguration_core as appconfig_engine
 except ImportError:
@@ -303,6 +308,11 @@ class AzureArm:
         if namespace.lower() == "microsoft.app":
             return self._app(method, sub, rg, chain, payload, query)
 
+        # Microsoft.Web (Function Apps): the substrate-free engine owns the semantics; this
+        # class's flat store is its resource map (so it persists with the rest of ARM).
+        if namespace.lower() == "microsoft.web":
+            return self._web(method, sub, rg, chain, payload, query)
+
         # POST action verbs (listKeys / start / powerOff / …)
         if method == "POST" and is_collection and len(type_chain) >= 3 and names:
             parent_rid = _canonical_id(sub, rg, type_chain[:-1], names)
@@ -394,6 +404,17 @@ class AzureArm:
             result = r["body"] if r["verb"] == "start" and chain[0].lower() == "jobs" else None
             op_id = self._make_operation(r["rid"], method, result)
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or app.API_VERSION}"
+            resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        return resp
+
+    def _web(self, method, sub, rg, chain, payload, query):
+        web = web_engine
+        r = web.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        resp = {"status": r["status"], "headers": {}, "body": r["body"]}
+        if r["lro"] and r["status"] < 300:
+            resp["status"] = 200 if r["status"] == 201 else r["status"]
+            op_id = self._make_operation(r["rid"], method)
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or web.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
 

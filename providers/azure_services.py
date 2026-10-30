@@ -813,6 +813,11 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if namespace.lower() == "microsoft.app":
         return await _handle_app(request, method, sub, rg, chain, names, base)
 
+    # Microsoft.Web (Function Apps): a dedicated engine (core/azure_webapp_core.py) owns the
+    # site/function/config/keys semantics; the ARM store below is its resource map.
+    if namespace.lower() == "microsoft.web":
+        return await _handle_webapp(request, method, sub, rg, chain, names, base)
+
     # POST action verbs (listKeys, regenerateKey, listConnectionStrings, …):
     # the trailing type segment is the action, names[-1] the target resource.
     if method == "POST" and is_collection and len(type_chain) >= 3 and names:
@@ -1025,6 +1030,24 @@ async def _handle_app(request: Request, method: str, sub: str, rg: str | None, c
             resp.headers[hk] = hv
     if r["status"] < 300 and r["verb"] in ("put", "patch", "delete", "start", "stop") and r["rid"]:
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.App/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
+                                             "resource_id": r["rid"]})
+    return resp
+
+
+async def _handle_webapp(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
+                         names: list[str], base: str) -> JSONResponse:
+    from core import azure_webapp_core as _web
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _web.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params))
+    api_version = request.query_params.get("api-version") or _web.API_VERSION
+    resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+    if r["lro"] and r["status"] < 300:
+        resp.status_code = 200 if r["status"] == 201 else r["status"]
+        for hk, hv in _lro_headers(base, _make_operation(r["rid"], method), api_version).items():
+            resp.headers[hk] = hv
+    if r["status"] < 300 and r["verb"] in ("put", "patch", "delete") and r["rid"] and len(chain) == 2:
+        _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Web/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
     return resp
 
