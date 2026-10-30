@@ -524,6 +524,62 @@ def run() -> int:
     _check("subscription-wide resources list excludes resource groups themselves",
            not any(x["type"].lower() == "microsoft.resources/resourcegroups" for x in r["body"]["value"]))
 
+    # 27. Microsoft.Insights/diagnosticSettings — a resource-scoped extension resource (the
+    # same re-entrant-"providers" shape as locks, generic over any resource type) that routes
+    # a resource's logs/metrics to a destination; wired by AzureArm._diagnostic_settings.
+    diagkv = _p(RG, "Microsoft.KeyVault", "vaults", "uicdiagkv")
+    arm.handle("PUT", diagkv, {"api-version": "2023-07-01"}, {"location": "eastus"})
+    diag = diagkv + "/providers/Microsoft.Insights/diagnosticSettings/toLogAnalytics"
+    r = arm.handle("GET", diagkv + "/providers/Microsoft.Insights/diagnosticSettings", {"api-version": "2021-05-01-preview"})
+    _check("diagnostic settings empty before create", r["status"] == 200 and r["body"]["value"] == [])
+    r = arm.handle("PUT", diag, {"api-version": "2021-05-01-preview"}, {"properties": {
+        "workspaceId": f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.OperationalInsights/workspaces/uicdiagws",
+        "logs": [{"categoryGroup": "audit", "enabled": True}], "metrics": [{"category": "AllMetrics", "enabled": False}]}})
+    _check("diagnostic setting put 201", r["status"] == 201 and r["body"]["name"] == "toLogAnalytics")
+    _check("diagnostic setting id canonical", r["body"]["id"].lower() == diag.lower())
+    r = arm.handle("PUT", diag, {"api-version": "2021-05-01-preview"}, {"properties": {
+        "workspaceId": f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.OperationalInsights/workspaces/uicdiagws",
+        "logs": [], "metrics": [{"category": "AllMetrics", "enabled": False}]}})
+    _check("diagnostic setting needs at least one enabled category", r["status"] == 400)
+    r = arm.handle("PUT", diagkv + "/providers/Microsoft.Insights/diagnosticSettings/nodest",
+                   {"api-version": "2021-05-01-preview"}, {"properties": {"logs": [{"category": "AuditEvent", "enabled": True}]}})
+    _check("diagnostic setting needs a destination", r["status"] == 400)
+    r = arm.handle("GET", diagkv + "/providers/Microsoft.Insights/diagnosticSettings", {"api-version": "2021-05-01-preview"})
+    _check("diagnostic settings list has item", [x["name"] for x in r["body"]["value"]] == ["toLogAnalytics"])
+    diagkv2 = _p(RG, "Microsoft.KeyVault", "vaults", "uicotherdiagkv")
+    arm.handle("PUT", diagkv2, {"api-version": "2023-07-01"}, {"location": "eastus"})
+    r = arm.handle("GET", diagkv2 + "/providers/Microsoft.Insights/diagnosticSettings", {"api-version": "2021-05-01-preview"})
+    _check("diagnostic settings scoped per resource", r["body"]["value"] == [])
+    r = arm.handle("DELETE", diag, {"api-version": "2021-05-01-preview"})
+    _check("diagnostic setting delete 200", r["status"] == 200)
+    r = arm.handle("GET", diag, {"api-version": "2021-05-01-preview"})
+    _check("diagnostic setting gone after delete", r["status"] == 404)
+    # deleting the scoped resource cascades to its diagnostic settings
+    arm.handle("PUT", diag, {"api-version": "2021-05-01-preview"}, {"properties": {
+        "storageAccountId": f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Storage/storageAccounts/uicdiagsa",
+        "logs": [{"categoryGroup": "audit", "enabled": True}]}})
+    arm.handle("DELETE", diagkv, {"api-version": "2023-07-01"})
+    r = arm.handle("GET", diagkv + "/providers/Microsoft.Insights/diagnosticSettings", {"api-version": "2021-05-01-preview"})
+    _check("diagnostic settings cascade-deleted with resource", r["body"]["value"] == [])
+
+    # 28. Microsoft.Insights/dataCollectionEndpoints + privateLinkScopes — plain RG-scoped
+    # catalog CRUD through the monitor engine (same _BY_TYPE-free path as actionGroups etc.).
+    dce = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Insights/dataCollectionEndpoints/uicdce"
+    r = arm.handle("PUT", dce, {"api-version": "2023-03-11"}, {"location": "eastus", "properties": {}})
+    _check("DCE put 201 with generated ingestion endpoints", r["status"] == 201
+           and r["body"]["properties"]["logsIngestion"]["endpoint"].startswith("https://uicdce-"))
+    endpoint1 = r["body"]["properties"]["logsIngestion"]["endpoint"]
+    r = arm.handle("PATCH", dce, {"api-version": "2023-03-11"}, {"properties": {"description": "prod"}})
+    _check("DCE update keeps the same generated endpoints", r["body"]["properties"]["logsIngestion"]["endpoint"] == endpoint1
+           and r["body"]["properties"]["description"] == "prod")
+
+    pls = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Insights/privateLinkScopes/uicpls"
+    r = arm.handle("PUT", pls, {"api-version": "2021-07-01-preview"}, {"location": "global", "properties": {}})
+    _check("private link scope put 201, defaults to Open access", r["status"] == 201
+           and r["body"]["properties"]["accessModeSettings"]["queryAccessMode"] == "Open")
+    r = arm.handle("GET", f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Insights/privateLinkScopes", {"api-version": "2021-07-01-preview"})
+    _check("private link scopes list has it", "uicpls" in [x["name"] for x in r["body"]["value"]])
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 

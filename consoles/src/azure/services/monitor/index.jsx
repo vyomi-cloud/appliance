@@ -19,8 +19,14 @@ import Workbooks from "./Workbooks.jsx";
 import CreateWorkbook from "./CreateWorkbook.jsx";
 import DataCollectionRules from "./DataCollectionRules.jsx";
 import CreateDataCollectionRule from "./CreateDataCollectionRule.jsx";
+import DataCollectionEndpoints from "./DataCollectionEndpoints.jsx";
+import CreateDataCollectionEndpoint from "./CreateDataCollectionEndpoint.jsx";
+import PrivateLinkScopes from "./PrivateLinkScopes.jsx";
+import CreatePrivateLinkScope from "./CreatePrivateLinkScope.jsx";
+import DiagnosticSettings from "./DiagnosticSettings.jsx";
+import DiagnosticSettingsResource from "./DiagnosticSettingsResource.jsx";
 import { RESOURCE_TYPES } from "./api.js";
-import { gapRoutes, DashboardsWithGrafana, DiagnosticSettings, ManagedPrometheus } from "./StaticPages.jsx";
+import { gapRoutes, DashboardsWithGrafana, ManagedPrometheus } from "./StaticPages.jsx";
 
 const crumb = (text, href) => [{ text, href: `#/monitor/${href}` }];
 const rt = (provider, type) => RESOURCE_TYPES.find((r) => r.provider === provider && r.type === type);
@@ -57,12 +63,17 @@ export default {
     { pattern: "/monitor/insightshub", component: InsightsHub, crumbs: () => crumb("Insights Hub", "insightshub") },
     { pattern: "/monitor/changeanalysis", component: ChangeAnalysis, crumbs: () => crumb("Change Analysis", "changeanalysis") },
     { pattern: "/monitor/managedprometheus", component: ManagedPrometheus, crumbs: () => crumb("Managed Prometheus", "managedprometheus") },
-    { pattern: "/monitor/diagnosticsettings", component: DiagnosticSettings, crumbs: () => crumb("Diagnostic settings", "diagnosticsettings") },
     { pattern: "/monitor/workbooks", component: Workbooks, crumbs: () => crumb("Gallery", "workbooks") },
     { pattern: "/monitor/createworkbook", component: CreateWorkbook, crumbs: () => crumb("New workbook", "createworkbook") },
     { pattern: "/monitor/grafanadashboards", component: DashboardsWithGrafana, crumbs: () => crumb("Dashboards with Grafana", "grafanadashboards") },
     { pattern: "/monitor/datacollectionrules", component: DataCollectionRules, crumbs: () => crumb("Data Collection Rules", "datacollectionrules") },
     { pattern: "/monitor/createdatacollectionrule", component: CreateDataCollectionRule, crumbs: () => crumb("Create a data collection rule", "createdatacollectionrule") },
+    { pattern: "/monitor/datacollectionendpoints", component: DataCollectionEndpoints, crumbs: () => crumb("Data Collection Endpoints", "datacollectionendpoints") },
+    { pattern: "/monitor/createdatacollectionendpoint", component: CreateDataCollectionEndpoint, crumbs: () => crumb("Create data collection endpoint", "createdatacollectionendpoint") },
+    { pattern: "/monitor/privatelinkscopes", component: PrivateLinkScopes, crumbs: () => crumb("Private Link Scopes", "privatelinkscopes") },
+    { pattern: "/monitor/createprivatelinkscope", component: CreatePrivateLinkScope, crumbs: () => crumb("Create Azure Monitor Private Link Scope", "createprivatelinkscope") },
+    { pattern: "/monitor/diagnosticsettings", component: DiagnosticSettings, crumbs: () => crumb("Diagnostic settings", "diagnosticsettings") },
+    { pattern: "/monitor/diagnosticsettingsresource", component: DiagnosticSettingsResource, crumbs: () => crumb("Diagnostic settings", "diagnosticsettings") },
     ...INSIGHTS_RESOURCE_PAGES.map(([id, label, provider, type, createHref, withFilters]) => ({
       pattern: `/monitor/${id}`,
       component: () => <ResourceInsights active={id} pageTitle={label} resourceType={rt(provider, type)} createHref={createHref} withFilters={withFilters} />,

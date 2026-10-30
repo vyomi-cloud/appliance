@@ -18,16 +18,26 @@ so ``azure-mgmt-monitor`` / ``armmonitor`` / ``com.azure.resourcemanager.monitor
                                                          subscription-scoped, ``$filter=resourceUri eq '{id}'``)
     Microsoft.Insights/workbooks             2022-04-01  CreateOrUpdate / Update / Delete / Get / ListBy*
     Microsoft.Insights/dataCollectionRules   2023-03-11  CreateOrUpdate / Update / Delete / Get / ListBy*
+    Microsoft.Insights/dataCollectionEndpoints 2023-03-11  CreateOrUpdate / Update / Delete / Get / ListBy*
+    Microsoft.Insights/privateLinkScopes  2021-07-01-preview  CreateOrUpdate / Update / Delete / Get / ListBy*
+    Microsoft.Insights/diagnosticSettings 2021-05-01-preview  a real ARM EXTENSION resource scoped to any
+                                                         other resource's own id (chain re-enters "providers",
+                                                         same shape as Microsoft.Authorization/locks —
+                                                         core/azure_locks_core.py); see find_diagnostic_marker /
+                                                         list_diagnostic_settings / get_diagnostic_setting /
+                                                         upsert_diagnostic_setting / remove_diagnostic_setting,
+                                                         wired by core/azure_arm_core.AzureArm._diagnostic_settings.
 
 Resources live in the shared ARM state map (offline ``azure_services._state``; Nano ``az_arm``), keyed by the
 lower-cased resource id, so they are space-scoped and persisted by the same seams as the rest of ARM. Activity
 Log entries are written directly into that same map by the resource providers that generate them (e.g.
 core/azure_webapp_core.py's ``_record_event``) as ``Microsoft.Insights/eventtypes`` records; this module only
 reads them back for the feed.
-Not modelled: diagnostic settings, metric definitions / metrics and scheduled query rules (resource-scoped
-extension APIs), data collection endpoints/pipelines, Azure Managed Grafana (``Microsoft.Dashboard``) and
-Azure Monitor workspaces for managed Prometheus (``Microsoft.Monitor``) — different resource providers this
-module does not own — and conditional headers (If-Match / If-None-Match).
+Not modelled: metric definitions / metrics and scheduled query rules (resource-scoped extension APIs),
+Azure Monitor pipelines, Azure Managed Grafana (``Microsoft.Dashboard``) and Azure Monitor workspaces for
+managed Prometheus (``Microsoft.Monitor``) — different resource providers this module does not own — and
+conditional headers (If-Match / If-None-Match). Diagnostic settings never actually deliver logs/metrics to
+their destination (no agent/telemetry pipeline); private link scopes carry no real private networking.
 
 ``dispatch`` returns ``{"status","headers","body","lro","rid","verb"}`` (``body`` is a JSON-able object or ``None``).
 """
@@ -49,13 +59,17 @@ TYPES = {
     "autoscalesettings": ("autoscaleSettings", "2022-10-01"),
     "workbooks": ("workbooks", "2022-04-01"),
     "datacollectionrules": ("dataCollectionRules", "2023-03-11"),
+    "datacollectionendpoints": ("dataCollectionEndpoints", "2023-03-11"),
+    "privatelinkscopes": ("privateLinkScopes", "2021-07-01-preview"),
 }
 # ARM echoes these type strings back (autoscale is lower-cased in the real service)
 TYPE_STRINGS = {"actiongroups": "Microsoft.Insights/actionGroups", "metricalerts": "Microsoft.Insights/metricAlerts",
                 "activitylogalerts": "Microsoft.Insights/activityLogAlerts",
                 "autoscalesettings": "Microsoft.Insights/autoscaleSettings",
                 "workbooks": "Microsoft.Insights/workbooks",
-                "datacollectionrules": "Microsoft.Insights/dataCollectionRules"}
+                "datacollectionrules": "Microsoft.Insights/dataCollectionRules",
+                "datacollectionendpoints": "Microsoft.Insights/dataCollectionEndpoints",
+                "privatelinkscopes": "Microsoft.Insights/privateLinkScopes"}
 
 EVAL_FREQUENCIES = ("PT1M", "PT5M", "PT15M", "PT30M", "PT1H")
 WINDOW_SIZES = ("PT1M", "PT5M", "PT15M", "PT30M", "PT1H", "PT6H", "PT12H", "P1D")
@@ -470,12 +484,142 @@ def _dcr_props(props, old=None):
     return out
 
 
+# ═══════════════════════════ data collection endpoints ═══════════════════════════
+def _dce_props(props, old=None, name=""):
+    p = dict(old or {})
+    p.update(props)
+    out = {"description": str(p.get("description") or ""), "provisioningState": "Succeeded"}
+    if old and old.get("immutableId"):
+        for f in ("immutableId", "configurationAccess", "logsIngestion", "metricsIngestion"):
+            out[f] = old[f]
+    else:
+        token = uuid.uuid4().hex[:12]
+        out["immutableId"] = f"dce-{token}"
+        out["configurationAccess"] = {"endpoint": f"https://{name}-{token}.control.monitor.azure.com"}
+        out["logsIngestion"] = {"endpoint": f"https://{name}-{token}.ingest.monitor.azure.com"}
+        out["metricsIngestion"] = {"endpoint": f"https://{name}-{token}.metrics.ingest.monitor.azure.com"}
+    nacls = p.get("networkAcls")
+    pna = nacls.get("publicNetworkAccess") if isinstance(nacls, dict) else None
+    out["networkAcls"] = {"publicNetworkAccess": _enum(pna, "networkAcls.publicNetworkAccess", ("Enabled", "Disabled")) if pna else "Enabled"}
+    return out
+
+
+# ═══════════════════════════ private link scopes ═════════════════════════════════
+def _plscope_props(props, old=None):
+    p = dict(old or {})
+    p.update(props)
+    ams = p.get("accessModeSettings") if isinstance(p.get("accessModeSettings"), dict) else {}
+    def _mode(v, what):
+        return _enum(v, what, ("Open", "PrivateOnly")) if v else "Open"
+    return {"accessModeSettings": {"queryAccessMode": _mode(ams.get("queryAccessMode"), "accessModeSettings.queryAccessMode"),
+                                    "ingestionAccessMode": _mode(ams.get("ingestionAccessMode"), "accessModeSettings.ingestionAccessMode")},
+            "provisioningState": "Succeeded"}
+
+
 _BUILDERS = {"actiongroups": lambda pr, old, nm: _action_group_props(pr, old),
              "metricalerts": lambda pr, old, nm: _metric_alert_props(pr, old),
              "activitylogalerts": lambda pr, old, nm: _activity_props(pr, old),
              "autoscalesettings": _autoscale_props,
              "workbooks": lambda pr, old, nm: _workbook_props(pr, old),
-             "datacollectionrules": lambda pr, old, nm: _dcr_props(pr, old)}
+             "datacollectionrules": lambda pr, old, nm: _dcr_props(pr, old),
+             "datacollectionendpoints": _dce_props,
+             "privatelinkscopes": lambda pr, old, nm: _plscope_props(pr, old)}
+
+
+# ═══════════════════════════ diagnostic settings (ARM extension resource) ════════
+# Microsoft.Insights/diagnosticSettings is scoped to ANY other resource's own id (the chain
+# re-enters "providers"), the same shape azure_locks_core.find_marker handles for
+# Microsoft.Authorization/locks — so it lives outside the TYPES/_BUILDERS CRUD above and is
+# wired directly by core/azure_arm_core.AzureArm._diagnostic_settings (see find_diagnostic_marker).
+DIAG_API_VERSION = "2021-05-01-preview"
+_DIAG_TYPE = f"{NAMESPACE}/diagnosticSettings"
+
+
+def find_diagnostic_marker(chain):
+    """Index of the ['providers','Microsoft.Insights','diagnosticSettings'] marker in `chain`
+    (AzureArm._arm's split of everything after the FIRST namespace token), or None."""
+    for i in range(len(chain) - 2):
+        if (chain[i].lower() == "providers" and chain[i + 1].lower() == "microsoft.insights"
+                and chain[i + 2].lower() == "diagnosticsettings"):
+            return i
+    return None
+
+
+def _diag_base(scope_rid):
+    return f"{scope_rid}/providers/{NAMESPACE}/diagnosticSettings"
+
+
+def _diag_category(c, what):
+    if not isinstance(c, dict):
+        raise _bad(f"Each '{what}' entry must be an object.")
+    c = dict(c)
+    if not c.get("category") and not c.get("categoryGroup"):
+        raise _bad(f"Each '{what}' entry needs a 'category' or 'categoryGroup'.")
+    c["enabled"] = _bool(c.get("enabled"), f"{what}.enabled", default=False)
+    return c
+
+
+def _diag_props(props, old=None):
+    p = dict(old or {})
+    p.update(props)
+    out = {}
+    for f in ("workspaceId", "storageAccountId", "eventHubAuthorizationRuleId", "marketplacePartnerId"):
+        if p.get(f):
+            out[f] = str(p[f])
+    if not out:
+        raise _bad("A diagnostic setting needs at least one destination: workspaceId, storageAccountId, "
+                    "eventHubAuthorizationRuleId or marketplacePartnerId.")
+    logs_in, metrics_in = p.get("logs"), p.get("metrics")
+    if logs_in is not None and not isinstance(logs_in, list):
+        raise _bad("The property 'logs' must be an array.")
+    if metrics_in is not None and not isinstance(metrics_in, list):
+        raise _bad("The property 'metrics' must be an array.")
+    out["logs"] = [_diag_category(c, "logs") for c in (logs_in or [])]
+    out["metrics"] = [_diag_category(c, "metrics") for c in (metrics_in or [])]
+    if not any(c["enabled"] for c in out["logs"] + out["metrics"]):
+        raise _bad("At least one log or metric category must be enabled.")
+    if p.get("eventHubName"):
+        out["eventHubName"] = str(p["eventHubName"])
+    if p.get("logAnalyticsDestinationType"):
+        out["logAnalyticsDestinationType"] = _enum(p["logAnalyticsDestinationType"], "logAnalyticsDestinationType",
+                                                    ("Dedicated", "AzureDiagnostics"))
+    return out
+
+
+def list_diagnostic_settings(state, scope_rid):
+    items = [r for r in state.values() if r.get("_diag_scope") == scope_rid.lower()]
+    items.sort(key=lambda r: r["name"].lower())
+    return _ok({"value": [_view(r) for r in items]})
+
+
+def get_diagnostic_setting(state, scope_rid, name):
+    rec = state.get(f"{_diag_base(scope_rid)}/{name}".lower())
+    if rec is None:
+        return _err(404, "ResourceNotFound", f"The diagnostic setting '{name}' was not found.")
+    return _ok(_view(rec))
+
+
+def upsert_diagnostic_setting(state, scope_rid, name, payload):
+    prob = _name_problem(name)
+    if prob:
+        return _err(400, "BadRequest", prob)
+    rid = f"{_diag_base(scope_rid)}/{name}"
+    key = rid.lower()
+    rec = state.get(key)
+    existed = rec is not None
+    try:
+        props = _diag_props((payload or {}).get("properties") or {}, rec["properties"] if rec else None)
+    except _E as e:
+        return _err(e.status, e.code, e.message)
+    rec = {"id": rid, "name": name, "type": _DIAG_TYPE, "properties": props,
+           "_type": _DIAG_TYPE.lower(), "_diag_scope": scope_rid.lower()}
+    state[key] = rec
+    return _ok(_view(rec), 201 if not existed else 200, rid=rid, verb="put")
+
+
+def remove_diagnostic_setting(state, scope_rid, name):
+    rec = state.pop(f"{_diag_base(scope_rid)}/{name}".lower(), None)
+    return _ok(None, 200 if rec is not None else 204)
 
 
 # ═══════════════════════════ CRUD ════════════════════════════════════════════════

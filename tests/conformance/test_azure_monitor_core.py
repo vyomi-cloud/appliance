@@ -89,6 +89,43 @@ r = cp(st, "PUT", ["dataCollectionRules", "dcr1"], dcr)
 check("create data collection rule → 201", r["status"] == 201 and r["body"]["properties"]["destinations"]["logAnalytics"][0]["name"] == "dest1", r["body"])
 check("DCR missing dataFlows → 400", cp(st, "PUT", ["dataCollectionRules", "dcr2"], {"properties": {"destinations": dcr["properties"]["destinations"]}})["status"] == 400)
 
+dce = {"location": "eastus", "properties": {}}
+r = cp(st, "PUT", ["dataCollectionEndpoints", "dce1"], dce)
+check("create DCE → 201 with generated ingestion endpoints", r["status"] == 201
+      and r["body"]["properties"]["logsIngestion"]["endpoint"] and r["body"]["properties"]["networkAcls"]["publicNetworkAccess"] == "Enabled", r["body"])
+immutable1 = r["body"]["properties"]["immutableId"]
+r = cp(st, "PATCH", ["dataCollectionEndpoints", "dce1"], {"properties": {"description": "prod"}})
+check("update DCE keeps the same immutableId/endpoints", r["body"]["properties"]["immutableId"] == immutable1 and r["body"]["properties"]["description"] == "prod")
+
+pls = {"location": "global", "properties": {"accessModeSettings": {"queryAccessMode": "PrivateOnly", "ingestionAccessMode": "Open"}}}
+r = cp(st, "PUT", ["privateLinkScopes", "pls1"], pls)
+check("create private link scope → 201, access modes honored", r["status"] == 201
+      and r["body"]["properties"]["accessModeSettings"]["queryAccessMode"] == "PrivateOnly"
+      and r["body"]["properties"]["accessModeSettings"]["ingestionAccessMode"] == "Open", r["body"])
+check("bad access mode → 400", cp(st, "PUT", ["privateLinkScopes", "pls2"],
+      {"properties": {"accessModeSettings": {"queryAccessMode": "Nope"}}})["status"] == 400)
+
+# diagnostic settings (ARM extension resource, scoped to any resource's own id) exercised
+# directly against the module functions — AzureArm._diagnostic_settings covers the wiring.
+VM2 = "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Compute/virtualMachines/vm2"
+check("diagnostic marker finds the re-entrant providers token",
+      mo.find_diagnostic_marker(["virtualMachines", "vm2", "providers", "Microsoft.Insights", "diagnosticSettings", "d1"]) == 2)
+check("no marker on a plain chain", mo.find_diagnostic_marker(["actionGroups", "ops"]) is None)
+r = mo.upsert_diagnostic_setting(st, VM2, "toLA", {"properties": {
+    "workspaceId": "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/ws1",
+    "logs": [{"categoryGroup": "allLogs", "enabled": True}]}})
+check("diagnostic setting create → 201", r["status"] == 201 and r["body"]["properties"]["logs"][0]["enabled"] is True, r["body"])
+r = mo.upsert_diagnostic_setting(st, VM2, "nodest", {"properties": {"logs": [{"category": "x", "enabled": True}]}})
+check("diagnostic setting needs a destination → 400", r["status"] == 400)
+r = mo.upsert_diagnostic_setting(st, VM2, "noneenabled", {"properties": {
+    "storageAccountId": "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Storage/storageAccounts/sa1",
+    "logs": [{"category": "x", "enabled": False}]}})
+check("diagnostic setting needs an enabled category → 400", r["status"] == 400)
+check("list diagnostic settings scoped to VM2", [x["name"] for x in mo.list_diagnostic_settings(st, VM2)["body"]["value"]] == ["toLA"])
+check("get missing diagnostic setting → 404", mo.get_diagnostic_setting(st, VM2, "none")["status"] == 404)
+r = mo.remove_diagnostic_setting(st, VM2, "toLA")
+check("delete diagnostic setting → 200 then 204", r["status"] == 200 and mo.remove_diagnostic_setting(st, VM2, "toLA")["status"] == 204)
+
 check("delete → 200 then 204", cp(st, "DELETE", ["metricAlerts", "cpu"])["status"] == 200 and cp(st, "DELETE", ["metricAlerts", "cpu"])["status"] == 204)
 
 arm = AzureArm()
