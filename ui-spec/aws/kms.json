@@ -3,12 +3,9 @@
   "cloud": "aws",
   "service": "kms",
   "console_path": "/kms/",
-  "status": "draft",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
   "nav": [
-    {
-      "label": "Key Management Service (KMS)",
-      "page_id": "key-management-service-kms"
-    },
     {
       "label": "AWS managed keys",
       "page_id": "aws-managed-keys"
@@ -19,6 +16,7 @@
     },
     {
       "label": "Custom key stores",
+      "expandable": true,
       "children": [
         {
           "label": "AWS CloudHSM key stores",
@@ -35,28 +33,50 @@
     {
       "id": "landing",
       "kind": "other",
-      "title": "Key Management Service",
+      "title": "AWS Key Management Service",
       "route": "/kms/home",
       "captures": [
-        "A-kms/001-L1-landing"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "key-management-service-kms",
-      "kind": "other",
-      "title": "Key Management Service",
-      "route": "/kms/home#/kms/home",
-      "captures": [
+        "A-kms/001-L1-landing",
         "A-kms/002-L2-key-management-service-kms"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create a key"
+      ],
+      "notes": "Service landing page, shown while the account has no customer managed keys.",
+      "sections": [
+        {
+          "title": "Get started now",
+          "actions": [
+            "Create a key"
+          ]
+        },
+        {
+          "title": "How it works"
+        },
+        {
+          "title": "Benefits and features"
+        },
+        {
+          "title": "Related tools and services"
+        },
+        {
+          "title": "Pricing"
+        },
+        {
+          "title": "Getting started"
+        },
+        {
+          "title": "More resources"
+        }
+      ]
     },
     {
       "id": "aws-managed-keys",
       "kind": "list",
       "title": "AWS managed keys",
-      "route": "/kms/home#/kms/{resource-name}Keys",
+      "route": "/kms/home#/kms/defaultKeys",
       "breadcrumbs": [
         "KMS",
         "AWS managed keys"
@@ -65,16 +85,129 @@
         "A-kms/003-L2-aws-managed-keys"
       ],
       "provenance": "capture",
+      "confidence": "high",
+      "notes": "Read-only list: no selection, no header buttons. Rows are aws/<service> aliases.",
       "table": {
         "resource_label": "AWS managed keys",
+        "counter": true,
+        "selection": "none",
         "columns": [
           "Aliases",
           "Key ID",
           "Status"
         ],
-        "header_actions": [],
-        "confidence": "medium"
+        "filter_placeholder": "Filter keys by properties or tags",
+        "pagination": true,
+        "preferences": true,
+        "empty_state": "No resources to display",
+        "confidence": "high"
       }
+    },
+    {
+      "id": "aws-managed-key-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/kms/home#/kms/defaultKeys/{resource-name}",
+      "breadcrumbs": [
+        "KMS",
+        "AWS managed keys",
+        "Key ID: {resource-name}"
+      ],
+      "captures": [
+        "A-kms/009-L3-*",
+        "A-kms/009-L3-*--tab-02-cryptographic-configuration",
+        "A-kms/011-L3-*",
+        "A-kms/011-L3-*--tab-02-cryptographic-configuration"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Title is the key ID. Info banner says AWS managed keys are read-only. No header actions.",
+      "sections": [
+        {
+          "title": "General configuration",
+          "fields": [
+            {
+              "label": "Alias",
+              "type": "readonly"
+            },
+            {
+              "label": "ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "Current key material ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Status",
+              "type": "readonly"
+            },
+            {
+              "label": "Description",
+              "type": "readonly"
+            },
+            {
+              "label": "Creation date",
+              "type": "readonly"
+            },
+            {
+              "label": "Last used",
+              "type": "readonly"
+            },
+            {
+              "label": "Regionality",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Key policy",
+        "Cryptographic configuration"
+      ],
+      "tab_panels": [
+        {
+          "label": "Key policy",
+          "sections": [
+            {
+              "title": "Key policy",
+              "fields": [
+                {
+                  "label": "Key policy",
+                  "type": "textarea",
+                  "help": "Read-only JSON policy document with line numbers"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Cryptographic configuration",
+          "sections": [
+            {
+              "title": "Cryptographic configuration",
+              "fields": [
+                {
+                  "label": "Key Type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Origin",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Key Spec",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Key Usage",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "customer-managed-keys",
@@ -89,8 +222,15 @@
         "A-kms/004-L2-customer-managed-keys"
       ],
       "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Key actions",
+        "Create key"
+      ],
       "table": {
         "resource_label": "Customer managed keys",
+        "counter": true,
+        "selection": "multi",
         "columns": [
           "Aliases",
           "Key ID",
@@ -103,12 +243,568 @@
           "Key actions",
           "Create key"
         ],
-        "confidence": "medium"
+        "actions": [
+          "Enable",
+          "Disable",
+          "Schedule key deletion",
+          "Cancel key deletion",
+          "Add to alias"
+        ],
+        "filter_placeholder": "Filter keys by properties or tags",
+        "pagination": true,
+        "preferences": true,
+        "empty_state": "No resources to display",
+        "confidence": "high"
       }
     },
     {
+      "id": "customer-managed-key-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/kms/home#/kms/keys/{resource-name}",
+      "breadcrumbs": [
+        "KMS",
+        "Customer managed keys",
+        "Key ID: {resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Not crawled (account had no customer managed keys). From the current console; re-verify on next capture.",
+      "header_actions": [
+        "Key actions"
+      ],
+      "sections": [
+        {
+          "title": "General configuration",
+          "provenance": "reference",
+          "fields": [
+            {
+              "label": "Alias",
+              "type": "readonly"
+            },
+            {
+              "label": "ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "Current key material ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Status",
+              "type": "readonly"
+            },
+            {
+              "label": "Description",
+              "type": "readonly"
+            },
+            {
+              "label": "Creation date",
+              "type": "readonly"
+            },
+            {
+              "label": "Last used",
+              "type": "readonly"
+            },
+            {
+              "label": "Regionality",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Key policy",
+        "Cryptographic configuration",
+        "Tags",
+        "Key rotation",
+        "Aliases"
+      ],
+      "tab_panels": [
+        {
+          "label": "Key policy",
+          "provenance": "reference",
+          "sections": [
+            {
+              "title": "Key policy",
+              "actions": [
+                "Switch to policy view",
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Key administrators",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Path",
+                    "Type"
+                  ],
+                  "actions": [
+                    "Add",
+                    "Remove"
+                  ]
+                },
+                {
+                  "label": "Allow key administrators to delete this key",
+                  "type": "checkbox",
+                  "default": true
+                },
+                {
+                  "label": "Key users",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Path",
+                    "Type"
+                  ],
+                  "actions": [
+                    "Add",
+                    "Remove"
+                  ]
+                },
+                {
+                  "label": "Other AWS accounts",
+                  "type": "table",
+                  "actions": [
+                    "Add other AWS accounts"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Cryptographic configuration",
+          "provenance": "reference",
+          "sections": [
+            {
+              "title": "Cryptographic configuration",
+              "fields": [
+                {
+                  "label": "Key Type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Origin",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Key Spec",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Key Usage",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "provenance": "reference",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Tag key",
+                  "Tag value"
+                ],
+                "header_actions": [
+                  "Edit"
+                ],
+                "empty_state": "No tags"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Key rotation",
+          "provenance": "reference",
+          "sections": [
+            {
+              "title": "Automatic key rotation",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Automatic key rotation",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Rotation period (in days)",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Next rotation date",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "On-demand rotation",
+              "actions": [
+                "Rotate now"
+              ]
+            },
+            {
+              "title": "Key rotations",
+              "table": {
+                "columns": [
+                  "Key material ID",
+                  "Rotation date",
+                  "Rotation type"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Aliases",
+          "provenance": "reference",
+          "sections": [
+            {
+              "title": "Aliases",
+              "table": {
+                "resource_label": "Aliases",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Delete",
+                  "Create alias"
+                ],
+                "columns": [
+                  "Alias name",
+                  "Alias ARN"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-key",
+      "kind": "create",
+      "title": "Configure key",
+      "route": "/kms/home#/kms/keys/create",
+      "breadcrumbs": [
+        "KMS",
+        "Customer managed keys",
+        "Create key"
+      ],
+      "captures": [
+        "A-kms/007-L2-create-a-key"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "6-step wizard; step 1 captured, steps 2-6 and Key actions items from the current console.",
+      "submit": "Finish",
+      "steps": [
+        {
+          "title": "Configure key",
+          "sections": [
+            {
+              "title": "Key type",
+              "fields": [
+                {
+                  "label": "Key type",
+                  "type": "radio",
+                  "required": true,
+                  "default": "Symmetric",
+                  "options": [
+                    "Symmetric",
+                    "Asymmetric"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Key usage",
+              "fields": [
+                {
+                  "label": "Key usage",
+                  "type": "radio",
+                  "required": true,
+                  "default": "Encrypt and decrypt",
+                  "options": [
+                    "Encrypt and decrypt",
+                    "Generate and verify MAC"
+                  ],
+                  "visible_when": "Key type = Symmetric"
+                },
+                {
+                  "label": "Key usage",
+                  "type": "radio",
+                  "required": true,
+                  "options": [
+                    "Encrypt and decrypt",
+                    "Sign and verify",
+                    "Key agreement"
+                  ],
+                  "visible_when": "Key type = Asymmetric",
+                  "provenance": "reference"
+                }
+              ]
+            },
+            {
+              "title": "Key spec",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Key spec",
+                  "type": "radio",
+                  "required": true,
+                  "options": [
+                    "RSA_2048",
+                    "RSA_3072",
+                    "RSA_4096",
+                    "ECC_NIST_P256",
+                    "ECC_NIST_P384",
+                    "ECC_NIST_P521",
+                    "ECC_SECG_P256K1",
+                    "ML_DSA_44",
+                    "ML_DSA_65",
+                    "ML_DSA_87"
+                  ],
+                  "visible_when": "Key type = Asymmetric or Key usage = Generate and verify MAC",
+                  "confidence": "medium"
+                }
+              ]
+            },
+            {
+              "title": "Advanced options",
+              "expandable": true,
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Key material origin",
+                  "type": "radio",
+                  "default": "KMS - recommended",
+                  "options": [
+                    "KMS - recommended",
+                    "External (Import Key material)",
+                    "AWS CloudHSM key store",
+                    "External key store"
+                  ]
+                },
+                {
+                  "label": "Regionality",
+                  "type": "radio",
+                  "default": "Single-Region key",
+                  "options": [
+                    "Single-Region key",
+                    "Multi-Region key"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Add labels",
+          "sections": [
+            {
+              "title": "Alias",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Alias",
+                  "type": "text",
+                  "required": true,
+                  "placeholder": "Enter alias",
+                  "constraints": "Letters, numbers, '/', '_', '-'; cannot begin with aws/"
+                }
+              ]
+            },
+            {
+              "title": "Description - optional",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Description",
+                  "type": "textarea",
+                  "required": false,
+                  "placeholder": "Description of the key"
+                }
+              ]
+            },
+            {
+              "title": "Tags - optional",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "tags",
+                  "required": false,
+                  "actions": [
+                    "Add tag",
+                    "Remove"
+                  ],
+                  "help": "Up to 50 tags"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Define key administrative permissions",
+          "optional": true,
+          "sections": [
+            {
+              "title": "Key administrators",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Key administrators",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Path",
+                    "Type"
+                  ],
+                  "help": "Select IAM users and roles who can administer this key"
+                }
+              ]
+            },
+            {
+              "title": "Key deletion",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Allow key administrators to delete this key",
+                  "type": "checkbox",
+                  "default": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Define key usage permissions",
+          "optional": true,
+          "sections": [
+            {
+              "title": "This account",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Key users",
+                  "type": "table",
+                  "columns": [
+                    "Name",
+                    "Path",
+                    "Type"
+                  ],
+                  "help": "Select IAM users and roles who can use this key"
+                }
+              ]
+            },
+            {
+              "title": "Other AWS accounts",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Other AWS accounts",
+                  "type": "table",
+                  "actions": [
+                    "Add another AWS account"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Edit key policy",
+          "optional": true,
+          "sections": [
+            {
+              "title": "Key policy",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Key policy",
+                  "type": "textarea",
+                  "help": "JSON policy editor"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review",
+          "sections": [
+            {
+              "title": "Key configuration",
+              "provenance": "reference",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Key type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Key spec",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Key usage",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Origin",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Regionality",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Alias and description",
+              "provenance": "reference",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Alias",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Description",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Tags",
+              "provenance": "reference",
+              "actions": [
+                "Edit"
+              ]
+            },
+            {
+              "title": "Key policy",
+              "provenance": "reference",
+              "actions": [
+                "Edit"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "aws-cloudhsm-key-stores",
-      "kind": "other",
+      "kind": "list",
       "title": "AWS CloudHSM key stores",
       "route": "/kms/home#/kms/custom-key-stores/cloudhsm",
       "breadcrumbs": [
@@ -118,7 +814,20 @@
       "captures": [
         "A-kms/005-L2-aws-cloudhsm-key-stores"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "medium",
+      "notes": "With no key stores and no CloudHSM cluster, page shows only the empty message. Out of Vyomi scope.",
+      "table": {
+        "columns": [
+          "Custom key store name",
+          "Custom key store ID",
+          "AWS CloudHSM cluster ID",
+          "Connection state"
+        ],
+        "empty_state": "You don't have any custom key stores in your account.",
+        "provenance": "reference",
+        "confidence": "low"
+      }
     },
     {
       "id": "external-key-stores",
@@ -133,132 +842,26 @@
         "A-kms/006-L2-external-key-stores"
       ],
       "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of Vyomi scope.",
       "table": {
         "resource_label": "External key stores",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Key store actions",
+          "Create external key store"
+        ],
         "columns": [
           "Custom key store name",
           "Custom key store ID",
           "Proxy connectivity",
           "Connection state"
         ],
-        "header_actions": [
-          "Key store actions",
-          "Create external key store"
-        ],
         "empty_state": "No external key stores",
-        "confidence": "medium"
+        "empty_state_action": "Create external key store",
+        "confidence": "high"
       }
-    },
-    {
-      "id": "create-a-key",
-      "kind": "create",
-      "title": "Step 1",
-      "route": "/kms/home#/kms/keys/create",
-      "breadcrumbs": [
-        "KMS",
-        "Customer managed keys",
-        "Create key"
-      ],
-      "captures": [
-        "A-kms/007-L2-create-a-key"
-      ],
-      "provenance": "capture",
-      "steps": [
-        {
-          "title": "Configure key",
-          "optional": false,
-          "sections": [
-            {
-              "title": "(form)",
-              "fields": [
-                {
-                  "label": "Step 3",
-                  "type": "select",
-                  "default": "Define key administrative permissions",
-                  "required": false,
-                  "confidence": "low"
-                },
-                {
-                  "label": "Step 4",
-                  "type": "select",
-                  "default": "Define key usage permissions",
-                  "required": false,
-                  "confidence": "low"
-                },
-                {
-                  "label": "Step 5",
-                  "type": "radio",
-                  "options": [
-                    "Edit key policy",
-                    "Step 6",
-                    "Review",
-                    "Configure key",
-                    "Key typeHelp me choose",
-                    "Symmetric",
-                    "Asymmetric",
-                    "Key usageHelp me choose"
-                  ],
-                  "default": "Edit key policy",
-                  "required": false,
-                  "confidence": "low"
-                },
-                {
-                  "label": "Encrypt and decrypt",
-                  "type": "radio",
-                  "options": [
-                    "Generate and verify MAC",
-                    "Advanced options"
-                  ],
-                  "default": "Generate and verify MAC",
-                  "required": true,
-                  "help": "Use the key only to encrypt and decrypt data.",
-                  "confidence": "low"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "title": "Add labels",
-          "optional": false
-        },
-        {
-          "title": "Define key administrative permissions",
-          "optional": true
-        },
-        {
-          "title": "Define key usage permissions",
-          "optional": true
-        },
-        {
-          "title": "Edit key policy",
-          "optional": true
-        },
-        {
-          "title": "Review",
-          "optional": false
-        }
-      ]
-    },
-    {
-      "id": "aws-ebs",
-      "kind": "other",
-      "title": "{resource-name}",
-      "breadcrumbs": [
-        "KMS",
-        "AWS managed keys"
-      ],
-      "captures": [
-        "A-kms/009-L3-*",
-        "A-kms/009-L3-*--tab-02-cryptographic-configuration",
-        "A-kms/011-L3-*",
-        "A-kms/011-L3-*--tab-02-cryptographic-configuration"
-      ],
-      "provenance": "capture",
-      "tabs": [
-        "Key policy",
-        "Cryptographic configuration"
-      ]
     },
     {
       "id": "create-external-key-store",
@@ -274,16 +877,18 @@
         "A-kms/014-L3-create-external-key-store"
       ],
       "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create external key store",
+      "notes": "Out of Vyomi scope.",
       "sections": [
         {
-          "title": "(form)",
+          "title": "Custom key store name",
           "fields": [
             {
               "label": "Key store name",
               "type": "text",
               "required": true,
-              "help": "Key store name must be unique in your AWS account and Region.",
-              "confidence": "low"
+              "constraints": "Must be unique in your AWS account and Region"
             }
           ]
         },
@@ -291,51 +896,59 @@
           "title": "Proxy connectivity",
           "fields": [
             {
-              "label": "Public endpoint",
+              "label": "Proxy connectivity",
               "type": "radio",
-              "options": [
-                "VPC endpoint service",
-                "Proxy URI endpoint"
-              ],
-              "default": "VPC endpoint service",
               "required": true,
-              "help": "Select this option to use a public endpoint to communicate with the external key store proxy.",
-              "confidence": "low"
+              "default": "Public endpoint",
+              "options": [
+                "Public endpoint",
+                "VPC endpoint service"
+              ]
+            },
+            {
+              "label": "Proxy URI endpoint",
+              "type": "text",
+              "required": true,
+              "constraints": "10-128 characters; a valid domain starting with https://"
             }
           ]
         },
         {
-          "title": "Upload configuration file",
+          "title": "Proxy configuration",
           "fields": [
             {
-              "label": "Proxy URI path prefix",
+              "label": "Upload configuration file",
+              "type": "file",
+              "required": false
+            },
+            {
+              "label": "Proxy URI path prefix - optional",
               "type": "text",
               "required": false,
-              "confidence": "low"
-            }
-          ]
-        },
-        {
-          "title": "/kms/xks/v1",
-          "fields": [
+              "placeholder": "/kms/xks/v1",
+              "constraints": "9-117 characters; a-z, A-Z, 0-9, /, -, _"
+            },
             {
               "label": "Proxy credential: Access key ID",
               "type": "text",
               "required": true,
-              "help": "The ID of the secret access key in the authentication credential established on your external key store proxy.",
-              "confidence": "low"
+              "constraints": "20-30 characters; uppercase A-Z and 2-7"
             },
             {
               "label": "Proxy credential: Secret access key",
               "type": "text",
               "required": true,
-              "help": "The secret access key in the authentication credential established on your external key store proxy.",
-              "confidence": "low"
+              "constraints": "43-64 characters; a-z, A-Z, 0-9, /, +, ="
+            },
+            {
+              "label": "Show secret access key",
+              "type": "checkbox",
+              "default": false
             }
           ]
         }
       ]
     }
   ],
-  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+  "gaps_note": "Captured: landing, both key lists, AWS managed key detail (both tabs), create-key step 1, key-store lists, create external key store. Reference (re-verify): customer managed key detail (crawl account had none), create-key steps 2-6 and Advanced options/Key spec, Key actions dropdown items, CloudHSM key store table columns."
 }

@@ -3,10 +3,16 @@
   "cloud": "aws",
   "service": "iam",
   "console_path": "/iam/",
-  "status": "draft",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
   "nav": [
     {
+      "label": "Dashboard",
+      "page_id": "dashboard"
+    },
+    {
       "label": "Access Management",
+      "expandable": true,
       "children": [
         {
           "label": "Roles",
@@ -18,11 +24,11 @@
         },
         {
           "label": "IAM users",
-          "page_id": "iam-users"
+          "page_id": "users"
         },
         {
           "label": "IAM user groups",
-          "page_id": "iam-user-groups"
+          "page_id": "user-groups"
         },
         {
           "label": "Identity providers",
@@ -41,98 +47,184 @@
           "page_id": "temporary-delegation-requests"
         }
       ]
+    },
+    {
+      "label": "Access reports",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Access Analyzer",
+          "page_id": "access-analyzer",
+          "children": [
+            {
+              "label": "Resource analysis",
+              "page_id": "resource-analysis"
+            },
+            {
+              "label": "Unused access",
+              "page_id": "unused-access"
+            },
+            {
+              "label": "Analyzer settings",
+              "page_id": "analyzer-settings"
+            }
+          ]
+        },
+        {
+          "label": "Policy simulator",
+          "page_id": "policy-simulator"
+        },
+        {
+          "label": "Credential report",
+          "page_id": "credential-report"
+        }
+      ]
+    },
+    {
+      "label": "Multi-account access",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Account access manager",
+          "page_id": "account-access-manager"
+        },
+        {
+          "label": "Organization activity",
+          "page_id": "organization-activity"
+        },
+        {
+          "label": "Service control policies",
+          "page_id": "service-control-policies"
+        },
+        {
+          "label": "Resource control policies",
+          "page_id": "resource-control-policies"
+        }
+      ]
+    },
+    {
+      "label": "Related consoles",
+      "expandable": true,
+      "children": [
+        {
+          "label": "IAM Identity Center",
+          "external": true
+        },
+        {
+          "label": "AWS Organizations",
+          "external": true
+        }
+      ]
     }
   ],
   "pages": [
     {
-      "id": "landing",
-      "kind": "other",
-      "title": "Dashboard",
-      "route": "/iam/home",
-      "breadcrumbs": [
-        "IAM",
-        "Dashboard"
-      ],
-      "captures": [
-        "A-iam/001-L1-landing"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "iam",
-      "kind": "other",
-      "title": "Dashboard",
+      "id": "dashboard",
+      "kind": "dashboard",
+      "title": "IAM Dashboard",
       "route": "/iam/home#/home",
       "breadcrumbs": [
         "IAM",
         "Dashboard"
       ],
       "captures": [
+        "A-iam/001-L1-landing",
         "A-iam/002-L2-iam"
       ],
-      "provenance": "capture"
-    },
-    {
-      "id": "roles",
-      "kind": "list",
-      "title": "Roles",
-      "route": "/iam/home#/roles",
-      "breadcrumbs": [
-        "IAM",
-        "Roles"
-      ],
-      "captures": [
-        "A-iam/006-L2-roles"
-      ],
       "provenance": "capture",
-      "table": {
-        "resource_label": "Roles",
-        "columns": [
-          "Role name",
-          "Trusted entities",
-          "Last activity"
-        ],
-        "header_actions": [
-          "Delete",
-          "Create role"
-        ],
-        "confidence": "medium"
-      }
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Security recommendations",
+          "fields": [
+            {
+              "label": "Root user has MFA",
+              "type": "readonly"
+            },
+            {
+              "label": "Deactivate or delete access keys for root user",
+              "type": "readonly",
+              "actions": [
+                "Manage access keys"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "IAM resources",
+          "fields": [
+            {
+              "label": "User groups",
+              "type": "readonly"
+            },
+            {
+              "label": "Users",
+              "type": "readonly"
+            },
+            {
+              "label": "Roles",
+              "type": "readonly"
+            },
+            {
+              "label": "Policies",
+              "type": "readonly"
+            },
+            {
+              "label": "Identity providers",
+              "type": "readonly"
+            }
+          ],
+          "actions": []
+        },
+        {
+          "title": "What's new",
+          "actions": [
+            "View all"
+          ]
+        },
+        {
+          "title": "AWS Account",
+          "fields": [
+            {
+              "label": "Account ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Account Alias",
+              "type": "readonly",
+              "actions": [
+                "Create"
+              ]
+            },
+            {
+              "label": "Sign-in URL for IAM users in this account",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Quick Links",
+          "fields": [
+            {
+              "label": "My security credentials",
+              "type": "button",
+              "help": "Manage your access keys, multi-factor authentication (MFA) and other credentials."
+            }
+          ]
+        },
+        {
+          "title": "Tools",
+          "fields": [
+            {
+              "label": "Policy simulator",
+              "type": "button"
+            }
+          ]
+        }
+      ]
     },
     {
-      "id": "policies",
-      "kind": "list",
-      "title": "Policies",
-      "route": "/iam/home#/policies",
-      "breadcrumbs": [
-        "IAM",
-        "Policies"
-      ],
-      "captures": [
-        "A-iam/007-L2-policies"
-      ],
-      "provenance": "capture",
-      "table": {
-        "resource_label": "Policies",
-        "columns": [
-          "Select data for",
-          "Policy name",
-          "Type",
-          "Used as",
-          "Description"
-        ],
-        "header_actions": [
-          "Actions",
-          "Delete",
-          "Create policy",
-          "All types"
-        ],
-        "filter_placeholder": "Filter by Type",
-        "confidence": "medium"
-      }
-    },
-    {
-      "id": "iam-users",
+      "id": "users",
       "kind": "list",
       "title": "IAM users",
       "route": "/iam/home#/users",
@@ -144,8 +236,22 @@
         "A-iam/008-L2-iam-users"
       ],
       "provenance": "capture",
+      "confidence": "high",
+      "notes": "Dismissible 'Go to Identity Center' banner above the table.",
       "table": {
         "resource_label": "IAM users",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Delete user",
+          "Create user"
+        ],
+        "filter_placeholder": "Search",
+        "pagination": true,
+        "preferences": true,
+        "empty_state": "No resources to display",
+        "confidence": "high",
         "columns": [
           "User name",
           "Path",
@@ -161,16 +267,557 @@
           "Creation time",
           "Console access",
           "Signing certs"
-        ],
-        "header_actions": [
-          "Delete user",
-          "Create user"
-        ],
-        "confidence": "medium"
+        ]
       }
     },
     {
-      "id": "iam-user-groups",
+      "id": "user-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/iam/home#/users/details/{resource-name}",
+      "breadcrumbs": [
+        "IAM",
+        "IAM users",
+        "{resource-name}"
+      ],
+      "captures": [
+        "A-iam/031-L3-*",
+        "A-iam/031-L3-*--tab-02-groups",
+        "A-iam/031-L3-*--tab-03-tags-1",
+        "A-iam/031-L3-*--tab-04-security-credentials",
+        "A-iam/031-L3-*--tab-05-last-accessed"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Delete"
+      ],
+      "sections": [
+        {
+          "title": "Summary",
+          "fields": [
+            {
+              "label": "ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "Console access",
+              "type": "readonly"
+            },
+            {
+              "label": "Access key 1",
+              "type": "readonly"
+            },
+            {
+              "label": "Created",
+              "type": "readonly"
+            },
+            {
+              "label": "Last console sign-in",
+              "type": "readonly"
+            },
+            {
+              "label": "Access key 2",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Permissions",
+        "Groups",
+        "Tags",
+        "Security credentials",
+        "Last Accessed"
+      ],
+      "tab_panels": [
+        {
+          "label": "Permissions",
+          "sections": [
+            {
+              "title": "Permissions policies",
+              "table": {
+                "resource_label": "Permissions policies",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Refresh",
+                  "Simulate",
+                  "Remove",
+                  "Add permissions"
+                ],
+                "actions": [
+                  "Add permissions",
+                  "Create inline policy"
+                ],
+                "filter_placeholder": "Search",
+                "filters": [
+                  "Filter by Type"
+                ],
+                "pagination": true,
+                "preferences": true,
+                "columns": [
+                  "Policy name",
+                  "Type",
+                  "Attached via"
+                ]
+              }
+            },
+            {
+              "title": "Permissions boundary",
+              "expandable": true,
+              "actions": [
+                "Set permissions boundary"
+              ]
+            },
+            {
+              "title": "Generate policy based on CloudTrail events",
+              "expandable": true,
+              "actions": [
+                "Generate policy"
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Groups",
+          "sections": [
+            {
+              "title": "User groups membership",
+              "table": {
+                "resource_label": "User groups membership",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Remove",
+                  "Add user to groups"
+                ],
+                "empty_state": "This user does not belong to any groups.",
+                "columns": [
+                  "Group name",
+                  "Attached policies"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "actions": [
+                "Manage tags"
+              ],
+              "table": {
+                "resource_label": "Tags",
+                "counter": true,
+                "selection": "none",
+                "columns": [
+                  "Key",
+                  "Value"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Security credentials",
+          "sections": [
+            {
+              "title": "Console sign-in",
+              "actions": [
+                "Enable console access"
+              ],
+              "fields": [
+                {
+                  "label": "Console sign-in link",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Console password",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Multi-factor authentication (MFA)",
+              "table": {
+                "resource_label": "Multi-factor authentication (MFA)",
+                "counter": true,
+                "selection": "single",
+                "header_actions": [
+                  "Remove",
+                  "Resync",
+                  "Assign MFA device"
+                ],
+                "empty_state": "No MFA devices. Assign an MFA device to improve the security of your AWS environment",
+                "empty_state_action": "Assign MFA device",
+                "columns": [
+                  "Type",
+                  "Identifier",
+                  "Certifications",
+                  "Created on"
+                ]
+              }
+            },
+            {
+              "title": "Access keys",
+              "actions": [
+                "Create access key"
+              ],
+              "fields": [
+                {
+                  "label": "Access key",
+                  "type": "other",
+                  "help": "One card per key (max two); title is the access key ID",
+                  "actions": [
+                    "Activate",
+                    "Deactivate",
+                    "Delete"
+                  ],
+                  "children": [
+                    {
+                      "label": "Description",
+                      "type": "readonly"
+                    },
+                    {
+                      "label": "Status",
+                      "type": "readonly"
+                    },
+                    {
+                      "label": "Last used",
+                      "type": "readonly"
+                    },
+                    {
+                      "label": "Created",
+                      "type": "readonly"
+                    },
+                    {
+                      "label": "Last used region",
+                      "type": "readonly"
+                    },
+                    {
+                      "label": "Last used service",
+                      "type": "readonly"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "API keys",
+              "actions": [
+                "Actions",
+                "Generate API Key"
+              ],
+              "table": {
+                "resource_label": "API keys",
+                "counter": true,
+                "filters": [
+                  "Service",
+                  "Status"
+                ],
+                "empty_state": "No API keys",
+                "empty_state_action": "Generate API Key",
+                "columns": [
+                  "Service",
+                  "API key name",
+                  "Created",
+                  "Expires",
+                  "Status"
+                ]
+              }
+            },
+            {
+              "title": "SSH public keys for AWS CodeCommit",
+              "actions": [
+                "Actions",
+                "Upload SSH public key"
+              ],
+              "table": {
+                "resource_label": "SSH public keys for AWS CodeCommit",
+                "counter": true,
+                "selection": "single",
+                "empty_state": "No SSH public keys",
+                "empty_state_action": "Upload SSH public key",
+                "columns": [
+                  "SSH Key ID",
+                  "Uploaded",
+                  "Status"
+                ]
+              }
+            },
+            {
+              "title": "HTTPS Git credentials for AWS CodeCommit",
+              "actions": [
+                "Actions",
+                "Generate credentials"
+              ],
+              "table": {
+                "resource_label": "HTTPS Git credentials for AWS CodeCommit",
+                "counter": true,
+                "selection": "single",
+                "empty_state": "No credentials",
+                "empty_state_action": "Generate credentials",
+                "columns": [
+                  "User name",
+                  "Created",
+                  "Status"
+                ]
+              }
+            },
+            {
+              "title": "Credentials for Amazon Keyspaces (for Apache Cassandra)",
+              "actions": [
+                "Actions",
+                "Generate credentials"
+              ],
+              "table": {
+                "resource_label": "Credentials for Amazon Keyspaces (for Apache Cassandra)",
+                "counter": true,
+                "selection": "single",
+                "empty_state": "No credentials",
+                "empty_state_action": "Generate credentials",
+                "columns": [
+                  "User name",
+                  "Created",
+                  "Status"
+                ]
+              }
+            },
+            {
+              "title": "X.509 Signing certificates",
+              "actions": [
+                "Actions",
+                "Upload",
+                "Create X.509 certificate"
+              ],
+              "table": {
+                "resource_label": "X.509 Signing certificates",
+                "counter": true,
+                "selection": "single",
+                "empty_state": "No X.509 certificates",
+                "empty_state_action": "Create X.509 certificate",
+                "columns": [
+                  "Creation time",
+                  "Thumbprint",
+                  "Status"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Last Accessed",
+          "sections": [
+            {
+              "title": "Last accessed",
+              "table": {
+                "provenance": "reference",
+                "confidence": "medium",
+                "columns": [
+                  "Service",
+                  "Policies granting permissions",
+                  "Last accessed"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-user",
+      "kind": "create",
+      "title": "Create user",
+      "route": "/iam/home#/users/create",
+      "breadcrumbs": [
+        "IAM",
+        "IAM users",
+        "Create user"
+      ],
+      "captures": [
+        "C-iam/01-create/step-1",
+        "C-iam/01-create/step-1-expanded",
+        "C-iam/01-create/step-2",
+        "C-iam/01-create/step-3"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create user",
+      "notes": "Wizard footer: Cancel / Previous / Next; last step submit 'Create user'.",
+      "steps": [
+        {
+          "title": "Specify user details",
+          "sections": [
+            {
+              "title": "User details",
+              "fields": [
+                {
+                  "label": "User name",
+                  "type": "text",
+                  "required": true,
+                  "constraints": "Up to 64 characters. Valid characters: A-Z, a-z, 0-9, and + = , . @ _ - (hyphen)"
+                },
+                {
+                  "label": "Provide user access to the AWS Management Console - optional",
+                  "type": "checkbox",
+                  "default": false,
+                  "children": [
+                    {
+                      "label": "Are you providing console access to a person?",
+                      "type": "radio",
+                      "options": [
+                        "Specify a user in Identity Center - Recommended",
+                        "I want to create an IAM user"
+                      ],
+                      "provenance": "reference",
+                      "confidence": "medium"
+                    },
+                    {
+                      "label": "Console password",
+                      "type": "radio",
+                      "options": [
+                        "Autogenerated password",
+                        "Custom password"
+                      ],
+                      "default": "Autogenerated password",
+                      "provenance": "reference",
+                      "confidence": "medium"
+                    },
+                    {
+                      "label": "Users must create a new password at next sign-in - Recommended",
+                      "type": "checkbox",
+                      "default": true,
+                      "provenance": "reference",
+                      "confidence": "medium"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Set permissions",
+          "sections": [
+            {
+              "title": "Permissions options",
+              "fields": [
+                {
+                  "label": "Permissions options",
+                  "type": "radio",
+                  "required": true,
+                  "default": "Add user to group",
+                  "options": [
+                    "Add user to group",
+                    "Copy permissions",
+                    "Attach policies directly"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Get started with groups",
+              "actions": [
+                "Create group"
+              ],
+              "fields": [
+                {
+                  "label": "User groups",
+                  "type": "table",
+                  "columns": [
+                    "Group name",
+                    "Users",
+                    "Attached policies",
+                    "Created"
+                  ],
+                  "visible_when": "Permissions options = Add user to group (when groups exist)",
+                  "provenance": "reference",
+                  "confidence": "medium"
+                },
+                {
+                  "label": "Permissions policies",
+                  "type": "table",
+                  "columns": [
+                    "Policy name",
+                    "Type",
+                    "Attached entities"
+                  ],
+                  "visible_when": "Permissions options = Attach policies directly",
+                  "provenance": "reference",
+                  "confidence": "medium"
+                }
+              ]
+            },
+            {
+              "title": "Set permissions boundary - optional",
+              "expandable": true,
+              "fields": [
+                {
+                  "label": "Use a permissions boundary to control the maximum permissions",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review and create",
+          "sections": [
+            {
+              "title": "User details",
+              "fields": [
+                {
+                  "label": "User name",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Console password type",
+                  "type": "readonly",
+                  "default": "None"
+                },
+                {
+                  "label": "Require password reset",
+                  "type": "readonly",
+                  "default": "No"
+                }
+              ]
+            },
+            {
+              "title": "Permissions summary",
+              "table": {
+                "empty_state": "No resources",
+                "columns": [
+                  "Name",
+                  "Type",
+                  "Used as"
+                ]
+              }
+            },
+            {
+              "title": "Tags - optional",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "tags",
+                  "required": false,
+                  "help": "You can add up to 50 more tags.",
+                  "actions": [
+                    "Add new tag",
+                    "Remove"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "user-groups",
       "kind": "list",
       "title": "IAM user groups",
       "route": "/iam/home#/groups",
@@ -182,119 +829,1260 @@
         "A-iam/009-L2-iam-user-groups"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "IAM user groups",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Delete",
+          "Create group"
+        ],
+        "filter_placeholder": "Search",
+        "pagination": true,
+        "preferences": true,
+        "empty_state": "No resources to display",
+        "confidence": "high",
         "columns": [
           "Group name",
           "Users",
           "Permissions",
           "Creation time"
-        ],
-        "header_actions": [
-          "Delete",
-          "Create group"
-        ],
-        "confidence": "medium"
+        ]
       }
+    },
+    {
+      "id": "group-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/iam/home#/groups/details/{resource-name}",
+      "breadcrumbs": [
+        "IAM",
+        "IAM user groups",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Not crawled (account had no groups); from the current console.",
+      "header_actions": [
+        "Delete"
+      ],
+      "sections": [
+        {
+          "title": "Summary",
+          "actions": [
+            "Edit"
+          ],
+          "fields": [
+            {
+              "label": "User group name",
+              "type": "readonly"
+            },
+            {
+              "label": "Creation time",
+              "type": "readonly"
+            },
+            {
+              "label": "ARN",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Users",
+        "Permissions",
+        "Access Advisor"
+      ],
+      "tab_panels": [
+        {
+          "label": "Users",
+          "sections": [
+            {
+              "title": "Users in this group",
+              "table": {
+                "resource_label": "Users in this group",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Refresh",
+                  "Remove",
+                  "Add users"
+                ],
+                "filter_placeholder": "Search",
+                "columns": [
+                  "User name",
+                  "Groups",
+                  "Last activity",
+                  "Creation time"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Permissions",
+          "sections": [
+            {
+              "title": "Permissions policies",
+              "table": {
+                "resource_label": "Permissions policies",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Refresh",
+                  "Simulate",
+                  "Remove",
+                  "Add permissions"
+                ],
+                "actions": [
+                  "Attach policies",
+                  "Create inline policy"
+                ],
+                "filter_placeholder": "Search",
+                "columns": [
+                  "Policy name",
+                  "Type",
+                  "Description"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Access Advisor",
+          "sections": [
+            {
+              "title": "Last accessed",
+              "table": {
+                "columns": [
+                  "Service",
+                  "Policies granting permissions",
+                  "Last accessed"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-user-group",
+      "kind": "create",
+      "title": "Create user group",
+      "route": "/iam/home#/groups/create",
+      "breadcrumbs": [
+        "IAM",
+        "IAM user groups",
+        "Create user group"
+      ],
+      "captures": [
+        "C-iam/04-create/step-1",
+        "C-iam/04-create/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create user group",
+      "notes": "Single-page form; footer Cancel / Create user group.",
+      "sections": [
+        {
+          "title": "Name the group",
+          "fields": [
+            {
+              "label": "User group name",
+              "type": "text",
+              "required": true,
+              "help": "Enter a meaningful name to identify this group.",
+              "constraints": "Maximum 128 characters. Use alphanumeric and '+=,.@-_' characters."
+            }
+          ]
+        },
+        {
+          "title": "Add users to the group - Optional",
+          "table": {
+            "resource_label": "Add users to the group - Optional",
+            "counter": true,
+            "selection": "multi",
+            "header_actions": [
+              "Refresh"
+            ],
+            "filter_placeholder": "Search",
+            "pagination": true,
+            "preferences": true,
+            "columns": [
+              "User name",
+              "Groups",
+              "Last activity",
+              "Creation time"
+            ]
+          }
+        },
+        {
+          "title": "Attach permissions policies - Optional",
+          "table": {
+            "resource_label": "Attach permissions policies - Optional",
+            "counter": true,
+            "selection": "multi",
+            "header_actions": [
+              "Refresh"
+            ],
+            "filter_placeholder": "Search",
+            "filters": [
+              "Filter by Type"
+            ],
+            "pagination": true,
+            "preferences": true,
+            "columns": [
+              "Policy name",
+              "Type",
+              "Used as",
+              "Description"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "roles",
+      "kind": "list",
+      "title": "Roles",
+      "route": "/iam/home#/roles",
+      "breadcrumbs": [
+        "IAM",
+        "Roles"
+      ],
+      "captures": [
+        "A-iam/006-L2-roles"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Roles",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Delete",
+          "Create role"
+        ],
+        "filter_placeholder": "Search",
+        "pagination": true,
+        "preferences": true,
+        "empty_state": "No resources to display",
+        "confidence": "high",
+        "columns": [
+          "Role name",
+          "Trusted entities",
+          "Last activity"
+        ]
+      },
+      "sections": [
+        {
+          "title": "Roles Anywhere",
+          "actions": [
+            "Manage"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "role-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/iam/home#/roles/details/{resource-name}",
+      "breadcrumbs": [
+        "IAM",
+        "Roles",
+        "{resource-name}"
+      ],
+      "captures": [
+        "A-iam/023-L3-*",
+        "A-iam/023-L3-*--tab-02-trust-relationships",
+        "A-iam/023-L3-*--tab-03-tags",
+        "A-iam/023-L3-*--tab-04-last-accessed",
+        "A-iam/024-L3-*",
+        "A-iam/025-L3-*",
+        "A-iam/026-L3-*"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Delete"
+      ],
+      "notes": "Captured roles are service-linked (read-only permissions/trust); edit buttons for normal roles are reference.",
+      "sections": [
+        {
+          "title": "Summary",
+          "actions": [
+            "Edit"
+          ],
+          "fields": [
+            {
+              "label": "Creation date",
+              "type": "readonly"
+            },
+            {
+              "label": "ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "Last activity",
+              "type": "readonly"
+            },
+            {
+              "label": "Maximum session duration",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Permissions",
+        "Trust relationships",
+        "Tags",
+        "Last Accessed"
+      ],
+      "tab_panels": [
+        {
+          "label": "Permissions",
+          "sections": [
+            {
+              "title": "Permissions policies",
+              "table": {
+                "resource_label": "Permissions policies",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Refresh"
+                ],
+                "filter_placeholder": "Search",
+                "filters": [
+                  "Filter by Type"
+                ],
+                "pagination": true,
+                "preferences": true,
+                "columns": [
+                  "Policy name",
+                  "Type",
+                  "Attached entities"
+                ]
+              }
+            },
+            {
+              "title": "Permissions policies (customer role actions)",
+              "provenance": "reference",
+              "confidence": "medium",
+              "actions": [
+                "Simulate",
+                "Remove",
+                "Add permissions"
+              ],
+              "fields": [
+                {
+                  "label": "Add permissions",
+                  "type": "select",
+                  "options": [
+                    "Attach policies",
+                    "Create inline policy"
+                  ],
+                  "provenance": "reference",
+                  "confidence": "medium"
+                }
+              ]
+            },
+            {
+              "title": "Permissions boundary",
+              "expandable": true,
+              "provenance": "reference",
+              "confidence": "medium",
+              "actions": [
+                "Set permissions boundary"
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Trust relationships",
+          "sections": [
+            {
+              "title": "Trusted entities",
+              "actions": [
+                "Edit trust policy"
+              ],
+              "fields": [
+                {
+                  "label": "Trust policy",
+                  "type": "textarea",
+                  "help": "JSON trust policy document (read-only view)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "resource_label": "Tags",
+                "empty_state": "No tags associated with the resource",
+                "empty_state_action": "Add new tag",
+                "columns": [
+                  "Key",
+                  "Value"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Last Accessed",
+          "sections": [
+            {
+              "title": "Last accessed",
+              "table": {
+                "provenance": "reference",
+                "confidence": "medium",
+                "columns": [
+                  "Service",
+                  "Policies granting permissions",
+                  "Last accessed"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-role",
+      "kind": "create",
+      "title": "Create role",
+      "route": "/iam/home#/roles/create",
+      "breadcrumbs": [
+        "IAM",
+        "Roles",
+        "Create role"
+      ],
+      "captures": [
+        "C-iam/02-create/step-1",
+        "C-iam/02-create/step-1-expanded",
+        "C-iam/02-create/step-2",
+        "C-iam/02-create/step-3"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create role",
+      "notes": "Crawl stopped at step 1 (Service or use case is required); steps 2-3 are reference.",
+      "steps": [
+        {
+          "title": "Select trusted entity",
+          "sections": [
+            {
+              "title": "Trusted entity type",
+              "fields": [
+                {
+                  "label": "Trusted entity type",
+                  "type": "radio",
+                  "required": true,
+                  "default": "AWS service",
+                  "options": [
+                    "AWS service",
+                    "AWS account",
+                    "Web identity",
+                    "SAML 2.0 federation",
+                    "Custom trust policy"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Use case",
+              "fields": [
+                {
+                  "label": "Service or use case",
+                  "type": "select",
+                  "required": true,
+                  "placeholder": "Choose a service or use case",
+                  "constraints": "Service or use case is required.",
+                  "visible_when": "Trusted entity type = AWS service"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Add permissions",
+          "sections": [
+            {
+              "title": "Permissions policies",
+              "provenance": "reference",
+              "confidence": "medium",
+              "table": {
+                "resource_label": "Permissions policies",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Refresh",
+                  "Create policy"
+                ],
+                "filter_placeholder": "Search",
+                "filters": [
+                  "Filter by Type"
+                ],
+                "pagination": true,
+                "columns": [
+                  "Policy name",
+                  "Type",
+                  "Description"
+                ]
+              }
+            },
+            {
+              "title": "Set permissions boundary - optional",
+              "expandable": true,
+              "provenance": "reference",
+              "confidence": "medium",
+              "fields": [
+                {
+                  "label": "Use a permissions boundary to control the maximum role permissions",
+                  "type": "checkbox",
+                  "default": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Name, review, and create",
+          "sections": [
+            {
+              "title": "Role details",
+              "provenance": "reference",
+              "confidence": "medium",
+              "fields": [
+                {
+                  "label": "Role name",
+                  "type": "text",
+                  "required": true,
+                  "constraints": "Maximum 64 characters. Use alphanumeric and '+=,.@-_' characters."
+                },
+                {
+                  "label": "Description",
+                  "type": "textarea",
+                  "constraints": "Maximum 1000 characters."
+                }
+              ]
+            },
+            {
+              "title": "Step 1: Select trusted entities",
+              "provenance": "reference",
+              "confidence": "medium",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Trust policy",
+                  "type": "textarea"
+                }
+              ]
+            },
+            {
+              "title": "Step 2: Add permissions",
+              "provenance": "reference",
+              "confidence": "medium",
+              "actions": [
+                "Edit"
+              ],
+              "table": {
+                "columns": [
+                  "Policy name",
+                  "Type",
+                  "Attached as"
+                ]
+              }
+            },
+            {
+              "title": "Add tags - optional",
+              "provenance": "reference",
+              "confidence": "medium",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "tags",
+                  "required": false,
+                  "actions": [
+                    "Add new tag",
+                    "Remove"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "policies",
+      "kind": "list",
+      "title": "Policies",
+      "route": "/iam/home#/policies",
+      "breadcrumbs": [
+        "IAM",
+        "Policies"
+      ],
+      "captures": [
+        "A-iam/007-L2-policies"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Policies",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Delete",
+          "Create policy"
+        ],
+        "actions": [
+          "Attach",
+          "Detach",
+          "Set as permissions boundary"
+        ],
+        "filter_placeholder": "Search",
+        "filters": [
+          "Filter by Type"
+        ],
+        "pagination": true,
+        "preferences": true,
+        "confidence": "high",
+        "columns": [
+          "Policy name",
+          "Type",
+          "Used as",
+          "Description"
+        ]
+      },
+      "notes": "Filter by Type default 'All types'; rows expand (+) to show the policy JSON. Actions dropdown items are reference."
+    },
+    {
+      "id": "policy-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/iam/home#/policies/details/{resource-name}",
+      "breadcrumbs": [
+        "IAM",
+        "Policies",
+        "{resource-name}"
+      ],
+      "captures": [
+        "A-iam/027-L3-*",
+        "A-iam/027-L3-*--tab-02-entities-attached",
+        "A-iam/027-L3-*--tab-03-policy-versions-23",
+        "A-iam/027-L3-*--tab-04-last-accessed",
+        "A-iam/028-L3-*",
+        "A-iam/029-L3-*",
+        "A-iam/030-L3-*",
+        "A-iam/030-L3-*--tab-02-entities-attached",
+        "A-iam/030-L3-*--tab-03-policy-versions-1",
+        "A-iam/030-L3-*--tab-04-last-accessed"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Captured policies are AWS managed; customer managed policies add header Delete and Edit on Permissions (reference).",
+      "sections": [
+        {
+          "title": "Policy details",
+          "fields": [
+            {
+              "label": "Type",
+              "type": "readonly"
+            },
+            {
+              "label": "Creation time",
+              "type": "readonly"
+            },
+            {
+              "label": "Edited time",
+              "type": "readonly"
+            },
+            {
+              "label": "ARN",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Permissions",
+        "Entities attached",
+        "Policy versions",
+        "Last Accessed"
+      ],
+      "tab_panels": [
+        {
+          "label": "Permissions",
+          "sections": [
+            {
+              "title": "Permissions defined in this policy",
+              "fields": [
+                {
+                  "label": "View",
+                  "type": "radio",
+                  "default": "Summary",
+                  "options": [
+                    "Summary",
+                    "JSON"
+                  ]
+                },
+                {
+                  "label": "Show remaining services",
+                  "type": "toggle",
+                  "default": false
+                },
+                {
+                  "label": "Allow",
+                  "type": "table",
+                  "columns": [
+                    "Service",
+                    "Access level",
+                    "Resource",
+                    "Request condition"
+                  ],
+                  "help": "Header 'Allow (N of M services)'; search box above"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Entities attached",
+          "sections": [
+            {
+              "title": "Attached as a permissions policy",
+              "table": {
+                "resource_label": "Attached as a permissions policy",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Attach",
+                  "Detach"
+                ],
+                "filter_placeholder": "Search",
+                "filters": [
+                  "Filter by Entity type"
+                ],
+                "empty_state": "Policy not attached to any entity.",
+                "empty_state_action": "Attach",
+                "columns": [
+                  "Entity name",
+                  "Entity type"
+                ]
+              }
+            },
+            {
+              "title": "Attached as a permissions boundary",
+              "table": {
+                "resource_label": "Attached as a permissions boundary",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Remove boundary",
+                  "Set boundary",
+                  "Change"
+                ],
+                "filters": [
+                  "Filter by Entity type"
+                ],
+                "empty_state": "Policy not set as a permissions boundary for any entity.",
+                "empty_state_action": "Set this policy as a permissions boundary",
+                "columns": [
+                  "Entity name",
+                  "Entity type"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Policy versions",
+          "sections": [
+            {
+              "title": "Versions of this policy",
+              "table": {
+                "resource_label": "Versions of this policy",
+                "counter": true,
+                "pagination": true,
+                "columns": [
+                  "Policy version",
+                  "Creation time"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Last Accessed",
+          "sections": [
+            {
+              "title": "Last accessed",
+              "table": {
+                "provenance": "reference",
+                "confidence": "low",
+                "columns": [
+                  "Service",
+                  "Last accessed"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-policy",
+      "kind": "create",
+      "title": "Create policy",
+      "route": "/iam/home#/policies/create",
+      "breadcrumbs": [
+        "IAM",
+        "Policies",
+        "Create policy"
+      ],
+      "captures": [
+        "C-iam/03-create/step-1",
+        "C-iam/03-create/step-1-expanded",
+        "C-iam/03-create/step-2",
+        "C-iam/03-create/step-3"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create policy",
+      "notes": "Crawl stopped at step 1 ('No actions specified'); step 2 is reference.",
+      "steps": [
+        {
+          "title": "Specify permissions",
+          "sections": [
+            {
+              "title": "Policy editor",
+              "fields": [
+                {
+                  "label": "Policy editor",
+                  "type": "radio",
+                  "default": "Visual",
+                  "options": [
+                    "Visual",
+                    "JSON"
+                  ]
+                },
+                {
+                  "label": "Service",
+                  "type": "select",
+                  "required": true,
+                  "placeholder": "Choose a service",
+                  "help": "Visual editor: Select a service, then actions, resources and conditions"
+                },
+                {
+                  "label": "Policy document",
+                  "type": "textarea",
+                  "visible_when": "Policy editor = JSON",
+                  "provenance": "reference",
+                  "confidence": "medium"
+                },
+                {
+                  "label": "Add more permissions",
+                  "type": "button"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review and create",
+          "sections": [
+            {
+              "title": "Policy details",
+              "provenance": "reference",
+              "confidence": "medium",
+              "fields": [
+                {
+                  "label": "Policy name",
+                  "type": "text",
+                  "required": true,
+                  "constraints": "Maximum 128 characters. Use alphanumeric and '+=,.@-_' characters."
+                },
+                {
+                  "label": "Description - optional",
+                  "type": "textarea",
+                  "constraints": "Maximum 1,000 characters."
+                }
+              ]
+            },
+            {
+              "title": "Permissions defined in this policy",
+              "provenance": "reference",
+              "confidence": "medium",
+              "actions": [
+                "Edit"
+              ],
+              "table": {
+                "columns": [
+                  "Service",
+                  "Access level",
+                  "Resource",
+                  "Request condition"
+                ]
+              }
+            },
+            {
+              "title": "Add tags - optional",
+              "provenance": "reference",
+              "confidence": "medium",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "tags",
+                  "required": false,
+                  "actions": [
+                    "Add new tag",
+                    "Remove"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-access-key",
+      "kind": "create",
+      "title": "Create access key",
+      "route": "/iam/home#/users/details/{resource-name}/create-access-key",
+      "breadcrumbs": [
+        "IAM",
+        "Users",
+        "{resource-name}",
+        "Create access key"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create access key",
+      "notes": "Launched from user Security credentials > Create access key; not crawled.",
+      "steps": [
+        {
+          "title": "Access key best practices & alternatives",
+          "sections": [
+            {
+              "title": "Use case",
+              "fields": [
+                {
+                  "label": "Use case",
+                  "type": "radio",
+                  "required": true,
+                  "options": [
+                    "Command Line Interface (CLI)",
+                    "Local code",
+                    "Application running on an AWS compute service",
+                    "Third-party service",
+                    "Application running outside AWS",
+                    "Other"
+                  ]
+                },
+                {
+                  "label": "I understand the above recommendation and want to proceed to create an access key.",
+                  "type": "checkbox",
+                  "required": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Set description tag - optional",
+          "optional": true,
+          "sections": [
+            {
+              "title": "Description tag value",
+              "fields": [
+                {
+                  "label": "Description tag value",
+                  "type": "text",
+                  "constraints": "Maximum 256 characters."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Retrieve access keys",
+          "sections": [
+            {
+              "title": "Access key",
+              "fields": [
+                {
+                  "label": "Access key",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Secret access key",
+                  "type": "readonly",
+                  "help": "Shown once; Show toggle"
+                },
+                {
+                  "label": "Download .csv file",
+                  "type": "button"
+                },
+                {
+                  "label": "Done",
+                  "type": "button"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "security-credentials",
+      "kind": "other",
+      "title": "My security credentials",
+      "route": "/iam/home#/security_credentials",
+      "breadcrumbs": [
+        "IAM",
+        "My security credentials"
+      ],
+      "captures": [
+        "A-iam/019-L3-manage-access-keys"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Root user view (reached from Dashboard 'Manage access keys').",
+      "sections": [
+        {
+          "title": "Account details",
+          "actions": [
+            "Actions"
+          ],
+          "fields": [
+            {
+              "label": "Account name",
+              "type": "readonly"
+            },
+            {
+              "label": "Email address",
+              "type": "readonly"
+            },
+            {
+              "label": "AWS account ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Canonical user ID",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Multi-factor authentication (MFA)",
+          "table": {
+            "resource_label": "Multi-factor authentication (MFA)",
+            "counter": true,
+            "selection": "single",
+            "header_actions": [
+              "Remove",
+              "Resync",
+              "Assign MFA device"
+            ],
+            "columns": [
+              "Type",
+              "Identifier",
+              "Certifications",
+              "Created on"
+            ]
+          }
+        },
+        {
+          "title": "Access keys",
+          "table": {
+            "resource_label": "Access keys",
+            "counter": true,
+            "selection": "single",
+            "header_actions": [
+              "Actions",
+              "Create access key"
+            ],
+            "actions": [
+              "Activate",
+              "Deactivate",
+              "Delete"
+            ],
+            "columns": [
+              "Access key ID",
+              "Created on",
+              "Access key last used",
+              "Region last used",
+              "Service last used",
+              "Status"
+            ]
+          }
+        },
+        {
+          "title": "CloudFront key pairs",
+          "table": {
+            "resource_label": "CloudFront key pairs",
+            "counter": true,
+            "selection": "single",
+            "header_actions": [
+              "Actions",
+              "Upload",
+              "Create CloudFront key pair"
+            ],
+            "empty_state": "No CloudFront key pairs",
+            "columns": [
+              "Creation time",
+              "CloudFront key ID",
+              "Status"
+            ]
+          }
+        },
+        {
+          "title": "X.509 Signing certificates",
+          "table": {
+            "resource_label": "X.509 Signing certificates",
+            "counter": true,
+            "selection": "single",
+            "header_actions": [
+              "Actions",
+              "Upload",
+              "Create X.509 certificate"
+            ],
+            "empty_state": "No X.509 certificates",
+            "columns": [
+              "Creation time",
+              "Thumbprint",
+              "Status"
+            ]
+          }
+        }
+      ]
     },
     {
       "id": "identity-providers",
       "kind": "list",
-      "title": "Identity Providers",
+      "title": "Identity providers",
       "route": "/iam/home#/identity_providers",
       "breadcrumbs": [
         "IAM",
-        "Identity Providers"
+        "Identity providers"
       ],
       "captures": [
         "A-iam/010-L2-identity-providers"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Identity providers",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Delete",
+          "Add provider"
+        ],
+        "filter_placeholder": "Search",
+        "filters": [
+          "Filter by Type"
+        ],
+        "pagination": true,
+        "preferences": true,
+        "empty_state": "No resources to display",
         "columns": [
-          "Select data for",
           "Provider name",
           "Type",
           "Creation time"
-        ],
-        "header_actions": [
-          "Delete",
-          "Add provider",
-          "All Types"
-        ],
-        "filter_placeholder": "Filter by Type",
-        "confidence": "medium"
+        ]
       }
     },
     {
       "id": "account-settings",
       "kind": "settings",
-      "title": "{resource-name} Settings",
+      "title": "Account settings",
       "route": "/iam/home#/account_settings",
       "breadcrumbs": [
         "IAM",
-        "{resource-name} Settings"
+        "Account settings"
       ],
       "captures": [
         "A-iam/011-L2-account-settings"
       ],
       "provenance": "capture",
-      "table": {
-        "columns": [
-          "Region name",
-          "Endpoint",
-          "STS status"
-        ],
-        "header_actions": [],
-        "confidence": "medium"
-      },
+      "confidence": "high",
       "sections": [
         {
-          "title": "Password strength",
+          "title": "Password policy",
+          "actions": [
+            "Edit"
+          ],
           "fields": [
             {
-              "label": "Never expire password",
-              "type": "radio",
-              "options": [
-                "Role manager",
-                "Enable",
-                "Disabled"
-              ],
-              "default": "Role manager",
-              "required": true,
-              "help": "Must not be identical to your AWS account name or email address",
-              "confidence": "low"
+              "label": "Password minimum length",
+              "type": "readonly"
+            },
+            {
+              "label": "Password strength",
+              "type": "readonly"
+            },
+            {
+              "label": "Other requirements",
+              "type": "readonly"
             }
           ]
         },
         {
-          "title": "Disable",
+          "title": "Role manager",
+          "actions": [
+            "Enable"
+          ],
+          "fields": [
+            {
+              "label": "Status",
+              "type": "readonly",
+              "default": "Disabled"
+            }
+          ]
+        },
+        {
+          "title": "Centralized root access for member accounts",
+          "actions": [
+            "Disable"
+          ],
           "fields": [
             {
               "label": "Root credentials management",
-              "type": "radio",
-              "options": [
-                "Enabled",
+              "type": "readonly",
+              "actions": [
                 "Disable"
-              ],
-              "default": "Enabled",
-              "required": true,
-              "confidence": "low"
+              ]
             },
             {
               "label": "Privileged root actions in member accounts",
-              "type": "radio",
-              "options": [
-                "Enabled",
-                "Disable",
-                "Delegated administrator for centralized root access",
+              "type": "readonly",
+              "actions": [
+                "Disable"
+              ]
+            },
+            {
+              "label": "Delegated administrator for centralized root access",
+              "type": "readonly",
+              "actions": [
                 "Assign"
-              ],
-              "default": "Enabled",
-              "required": true,
-              "help": "You can take certain root actions in member accounts like deleting misconfigured policies in Amazon SQS or Amazon S3.",
-              "confidence": "low"
+              ]
             }
           ]
         },
@@ -303,22 +2091,126 @@
           "fields": [
             {
               "label": "Session Tokens from the STS endpoints",
-              "type": "radio",
+              "type": "readonly",
               "options": [
                 "Global endpoint",
-                "Valid only in AWS Regions enabled by {resource-name}",
-                "|",
-                "Change",
-                "Regional endpoints",
-                "Valid in all AWS Regions",
-                "Outbound Identity Federation",
-                "Status",
-                "Disabled",
-                "Enable"
+                "Regional endpoints"
               ],
-              "default": "Global endpoint",
+              "actions": [
+                "Change"
+              ]
+            },
+            {
+              "label": "Outbound Identity Federation",
+              "type": "readonly",
+              "default": "Disabled",
+              "actions": [
+                "Enable"
+              ]
+            }
+          ],
+          "table": {
+            "resource_label": "Endpoints",
+            "counter": true,
+            "columns": [
+              "Region name",
+              "Endpoint",
+              "STS status"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "edit-password-policy",
+      "kind": "settings",
+      "title": "Edit password policy",
+      "route": "/iam/home#/account_settings/edit_password",
+      "breadcrumbs": [
+        "IAM",
+        "Account Settings",
+        "Edit password policy"
+      ],
+      "captures": [
+        "A-iam/033-L3-edit"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Save changes",
+      "sections": [
+        {
+          "title": "Password policy",
+          "fields": [
+            {
+              "label": "Password policy",
+              "type": "radio",
+              "default": "IAM default",
+              "options": [
+                "IAM default",
+                "Custom"
+              ]
+            },
+            {
+              "label": "Password minimum length",
+              "type": "number",
+              "default": 8,
+              "visible_when": "Password policy = Custom"
+            },
+            {
+              "label": "Password strength",
+              "type": "checkbox",
+              "options": [
+                "Require at least one uppercase letter",
+                "Require at least one lowercase letter",
+                "Require at least one number",
+                "Require at least one non-alphanumeric character"
+              ],
+              "visible_when": "Password policy = Custom",
+              "provenance": "reference",
+              "confidence": "medium"
+            },
+            {
+              "label": "Other requirements",
+              "type": "checkbox",
+              "options": [
+                "Turn on password expiration",
+                "Password expiration requires administrator reset",
+                "Allow users to change their own password",
+                "Prevent password reuse"
+              ],
+              "visible_when": "Password policy = Custom",
+              "provenance": "reference",
+              "confidence": "medium"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "assign-delegated-administrator",
+      "kind": "other",
+      "title": "Assign delegated administrator for centralized root access",
+      "route": "/iam/home#/account_settings/delegated-administrator/assign",
+      "breadcrumbs": [
+        "IAM",
+        "Account Settings",
+        "Assign delegated administrator for centralized root access"
+      ],
+      "captures": [
+        "A-iam/035-L3-assign"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Assign",
+      "sections": [
+        {
+          "title": "Assign delegated administrator for centralized root access",
+          "fields": [
+            {
+              "label": "AWS account ID",
+              "type": "text",
               "required": true,
-              "confidence": "low"
+              "constraints": "Must be a member account in the organization."
             }
           ]
         }
@@ -336,7 +2228,12 @@
       "captures": [
         "A-iam/012-L2-root-access-management"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Organization tree (Hierarchy / List) of accounts; out of scope for Vyomi.",
+      "header_actions": [
+        "Take privileged action"
+      ]
     },
     {
       "id": "temporary-delegation-requests",
@@ -351,8 +2248,15 @@
         "A-iam/013-L2-temporary-delegation-requests"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Temporary delegation requests",
+        "counter": true,
+        "filters": [
+          "Initiated by me"
+        ],
+        "pagination": true,
+        "empty_state": "No requests",
         "columns": [
           "Request Id",
           "Status",
@@ -360,17 +2264,20 @@
           "Initiated by",
           "Request created",
           "Request expires"
-        ],
-        "header_actions": [
-          "Initiated by me"
-        ],
-        "empty_state": "No requests",
-        "confidence": "medium"
-      }
+        ]
+      },
+      "sections": [
+        {
+          "title": "Configure request notifications",
+          "actions": [
+            "Configure notifications"
+          ]
+        }
+      ]
     },
     {
       "id": "policy-simulator",
-      "kind": "list",
+      "kind": "other",
       "title": "Policy simulator",
       "route": "/iam/home#/policysim",
       "breadcrumbs": [
@@ -381,38 +2288,81 @@
         "A-iam/014-L2-policy-simulator"
       ],
       "provenance": "capture",
-      "table": {
-        "resource_label": "Simulation results",
-        "columns": [
-          "Service",
-          "Action",
-          "Resource type",
-          "Resource",
-          "Conditions",
-          "Result",
-          "Result details"
-        ],
-        "header_actions": [
-          "Actions",
-          "Remove all",
-          "Add actions"
-        ],
-        "confidence": "medium"
-      }
+      "confidence": "high",
+      "header_actions": [
+        "Clear conditions",
+        "Simulate"
+      ],
+      "notes": "Banner links to 'Legacy Policy Simulator'.",
+      "sections": [
+        {
+          "title": "Principal",
+          "fields": [
+            {
+              "label": "Principal",
+              "type": "select",
+              "default": "Custom"
+            },
+            {
+              "label": "Identities",
+              "type": "button",
+              "default": "Add identity",
+              "help": "Select an identity to simulate"
+            }
+          ]
+        },
+        {
+          "title": "Global request conditions",
+          "expandable": true
+        },
+        {
+          "title": "Simulation results",
+          "table": {
+            "resource_label": "Simulation results",
+            "counter": true,
+            "header_actions": [
+              "Actions",
+              "Remove all",
+              "Add actions"
+            ],
+            "pagination": true,
+            "empty_state": "Add an identity to start",
+            "empty_state_action": "Add actions",
+            "columns": [
+              "Service",
+              "Action",
+              "Resource type",
+              "Resource",
+              "Conditions",
+              "Result",
+              "Result details"
+            ]
+          }
+        }
+      ]
     },
     {
       "id": "credential-report",
       "kind": "other",
-      "title": "Credential Report",
+      "title": "Credentials report of IAM users in this account",
       "route": "/iam/home#/credential_report",
       "breadcrumbs": [
         "IAM",
-        "Credential Report"
+        "Credential report"
       ],
       "captures": [
         "A-iam/015-L2-credential-report"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Credentials report",
+          "actions": [
+            "Download credentials report"
+          ]
+        }
+      ]
     },
     {
       "id": "organization-activity",
@@ -426,524 +2376,167 @@
       "captures": [
         "A-iam/016-L2-organization-activity"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Organization structure tree (Hierarchy / List); out of scope."
     },
     {
       "id": "service-control-policies",
       "kind": "list",
-      "title": "AWS {resource-name}: Service control policies (SCPs)",
+      "title": "Service control policies (SCPs)",
       "route": "/iam/home#/organizations/ServiceControlPolicies",
       "breadcrumbs": [
         "IAM",
-        "AWS {resource-name}: Service control policies (SCPs)"
+        "AWS Organizations: Service control policies (SCPs)"
       ],
       "captures": [
         "A-iam/017-L2-service-control-policies"
       ],
       "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Edit in AWS Organizations"
+      ],
       "table": {
-        "resource_label": "Edit in AWS {resource-name}",
+        "selection": "single",
+        "pagination": true,
         "columns": [
-          "Select",
           "Policy name",
           "Attached to entities"
-        ],
-        "header_actions": [],
-        "confidence": "low"
+        ]
       }
+    },
+    {
+      "id": "service-control-policy-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/iam/home#/organizations/ServiceControlPolicies/{resource-name}/details",
+      "breadcrumbs": [
+        "IAM",
+        "AWS Organizations: Service control policies (SCPs)",
+        "{resource-name}"
+      ],
+      "captures": [
+        "A-iam/036-L3-*"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Edit in AWS Organizations"
+      ],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "SCP ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Description",
+              "type": "readonly"
+            },
+            {
+              "label": "Attached to number of entities",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Service access report",
+          "table": {
+            "pagination": true,
+            "columns": [
+              "Service",
+              "Last accessed",
+              "Last accessed by account"
+            ]
+          }
+        },
+        {
+          "title": "Policy JSON",
+          "actions": [
+            "Copy"
+          ]
+        }
+      ]
     },
     {
       "id": "resource-control-policies",
       "kind": "list",
-      "title": "AWS {resource-name}: Resource control policies (RCPs)",
+      "title": "Resource control policies (RCPs)",
       "route": "/iam/home#/organizations/ResourceControlPolicies",
       "breadcrumbs": [
         "IAM",
-        "AWS {resource-name}: Resource control policies (RCPs)"
+        "AWS Organizations: Resource control policies (RCPs)"
       ],
       "captures": [
         "A-iam/018-L2-resource-control-policies"
       ],
       "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Edit in AWS Organizations"
+      ],
       "table": {
-        "resource_label": "Edit in AWS {resource-name}",
+        "selection": "single",
+        "pagination": true,
+        "empty_state": "No resources to display.",
         "columns": [
-          "Select",
           "Policy name",
           "Attached to entities"
-        ],
-        "header_actions": [],
-        "confidence": "low"
+        ]
       }
     },
     {
-      "id": "manage-access-keys",
-      "kind": "list",
-      "title": "Security credentials",
-      "route": "/iam/home#/security_credentials",
-      "breadcrumbs": [
-        "IAM",
-        "Security credentials"
-      ],
-      "captures": [
-        "A-iam/019-L3-manage-access-keys"
-      ],
-      "provenance": "capture",
-      "table": {
-        "resource_label": "Multi-factor authentication (MFA)",
-        "columns": [
-          "Type",
-          "Identifier",
-          "Certifications",
-          "Created on"
-        ],
-        "header_actions": [
-          "Remove",
-          "Resync",
-          "Assign MFA device"
-        ],
-        "confidence": "medium"
-      },
-      "extra_tables": [
-        {
-          "resource_label": "Access keys",
-          "columns": [
-            "Access key ID",
-            "Created on",
-            "Access key last used",
-            "Region last used",
-            "Service last used",
-            "Status"
-          ],
-          "header_actions": [
-            "Actions",
-            "Create access key"
-          ],
-          "confidence": "medium"
-        },
-        {
-          "resource_label": "CloudFront key pairs",
-          "columns": [
-            "Creation time",
-            "CloudFront key ID",
-            "Status"
-          ],
-          "header_actions": [
-            "Actions",
-            "Upload",
-            "Create CloudFront key pair"
-          ],
-          "empty_state": "No CloudFront key pairs",
-          "confidence": "medium"
-        },
-        {
-          "resource_label": "X.509 Signing certificates",
-          "columns": [
-            "Creation time",
-            "Thumbprint",
-            "Status"
-          ],
-          "header_actions": [
-            "Actions",
-            "Upload",
-            "Create X.509 certificate"
-          ],
-          "empty_state": "No X.509 certificates",
-          "confidence": "medium"
-        }
-      ]
-    },
-    {
-      "id": "roles-detail",
-      "kind": "detail",
-      "title": "{resource-name}",
-      "route": "/iam/home#/roles/details/{resource-name}",
-      "breadcrumbs": [
-        "IAM",
-        "Roles",
-        "{resource-name}"
-      ],
-      "captures": [
-        "A-iam/023-L3-*",
-        "A-iam/023-L3-*--tab-02-trust-relationships",
-        "A-iam/023-L3-*--tab-03-tags",
-        "A-iam/023-L3-*--tab-04-last-accessed",
-        "A-iam/024-L3-*",
-        "A-iam/024-L3-*--tab-02-trust-relationships",
-        "A-iam/024-L3-*--tab-03-tags",
-        "A-iam/024-L3-*--tab-04-last-accessed",
-        "A-iam/025-L3-*",
-        "A-iam/025-L3-*--tab-02-trust-relationships",
-        "A-iam/025-L3-*--tab-03-tags",
-        "A-iam/025-L3-*--tab-04-last-accessed",
-        "A-iam/026-L3-*",
-        "A-iam/026-L3-*--tab-02-trust-relationships",
-        "A-iam/026-L3-*--tab-03-tags",
-        "A-iam/026-L3-*--tab-04-last-accessed"
-      ],
-      "provenance": "capture",
-      "table": {
-        "resource_label": "Permissions policies",
-        "columns": [
-          "Policy name",
-          "Type",
-          "Attached entities"
-        ],
-        "header_actions": [
-          "All types"
-        ],
-        "filter_placeholder": "Filter by Type",
-        "confidence": "medium"
-      },
-      "tabs": [
-        "Permissions",
-        "Trust relationships",
-        "Tags",
-        "Last Accessed"
-      ]
-    },
-    {
-      "id": "policies-detail",
-      "kind": "detail",
-      "title": "{resource-name}",
-      "route": "/iam/home#/policies/details/arn%3Aaws%3Aiam%3A%3Aaws%3Apolicy%2Faws-service-role%2F{resource-name}",
-      "breadcrumbs": [
-        "IAM",
-        "Policies",
-        "{resource-name}"
-      ],
-      "captures": [
-        "A-iam/027-L3-*",
-        "A-iam/027-L3-*--tab-02-entities-attached",
-        "A-iam/027-L3-*--tab-03-policy-versions-23",
-        "A-iam/027-L3-*--tab-04-last-accessed",
-        "A-iam/028-L3-*",
-        "A-iam/028-L3-*--tab-02-entities-attached",
-        "A-iam/028-L3-*--tab-03-policy-versions-1",
-        "A-iam/028-L3-*--tab-04-last-accessed",
-        "A-iam/029-L3-*",
-        "A-iam/029-L3-*--tab-02-entities-attached",
-        "A-iam/029-L3-*--tab-03-policy-versions-5",
-        "A-iam/029-L3-*--tab-04-last-accessed",
-        "A-iam/030-L3-*",
-        "A-iam/030-L3-*--tab-02-entities-attached",
-        "A-iam/030-L3-*--tab-03-policy-versions-1",
-        "A-iam/030-L3-*--tab-04-last-accessed"
-      ],
-      "provenance": "capture",
-      "tabs": [
-        "Permissions",
-        "Entities attached",
-        "Policy versions",
-        "Last Accessed"
-      ]
-    },
-    {
-      "id": "iam-users-detail",
-      "kind": "detail",
-      "title": "{resource-name}",
-      "route": "/iam/home#/users/details/{resource-name}",
-      "breadcrumbs": [
-        "IAM",
-        "IAM users",
-        "{resource-name}"
-      ],
-      "captures": [
-        "A-iam/031-L3-*",
-        "A-iam/031-L3-*--tab-02-groups",
-        "A-iam/031-L3-*--tab-03-tags-1",
-        "A-iam/031-L3-*--tab-04-security-credentials",
-        "A-iam/031-L3-*--tab-05-last-accessed"
-      ],
-      "provenance": "capture",
-      "table": {
-        "resource_label": "Permissions policies",
-        "columns": [
-          "Policy name",
-          "Type",
-          "Attached via"
-        ],
-        "header_actions": [
-          "Remove",
-          "Add permissions",
-          "All types"
-        ],
-        "filter_placeholder": "Filter by Type",
-        "confidence": "medium"
-      },
-      "tabs": [
-        "Permissions",
-        "Groups",
-        "Tags",
-        "Security credentials",
-        "Last Accessed"
-      ]
-    },
-    {
-      "id": "edit",
-      "kind": "settings",
-      "title": "Edit password policy",
-      "route": "/iam/home#/account_settings/edit_password",
-      "breadcrumbs": [
-        "IAM",
-        "{resource-name} Settings",
-        "Edit password policy"
-      ],
-      "captures": [
-        "A-iam/033-L3-edit"
-      ],
-      "provenance": "capture",
-      "sections": [
-        {
-          "title": "Edit password policy",
-          "fields": [
-            {
-              "label": "IAM {resource-name}",
-              "type": "radio",
-              "options": [
-                "Custom",
-                "Password minimum length",
-                "8 characters",
-                "Password strength"
-              ],
-              "default": "Custom",
-              "required": true,
-              "help": "Apply {resource-name} password requirements.",
-              "confidence": "low"
-            },
-            {
-              "label": "Never expire password",
-              "type": "text",
-              "required": true,
-              "help": "Must not be identical to your AWS account name or email address",
-              "confidence": "low"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "assign",
+      "id": "access-analyzer",
       "kind": "other",
-      "title": "Assign delegated administrator for centralized root access",
-      "route": "/iam/home#/account_settings/delegated-administrator/assign",
-      "breadcrumbs": [
-        "IAM",
-        "{resource-name} Settings",
-        "Assign delegated administrator for centralized root access"
-      ],
-      "captures": [
-        "A-iam/035-L3-assign"
-      ],
-      "provenance": "capture"
+      "title": "Access Analyzer",
+      "route": "/access-analyzer/home",
+      "provenance": "reference",
+      "confidence": "low",
+      "notes": "Nav entry not crawled; out of Vyomi scope (title only)."
     },
     {
-      "id": "service-control-policies-detail",
-      "kind": "detail",
-      "title": "{resource-name}",
-      "route": "/iam/home#/organizations/ServiceControlPolicies/p-{resource-name}/details",
-      "captures": [
-        "A-iam/036-L3-*"
-      ],
-      "provenance": "capture",
-      "table": {
-        "resource_label": "Service access report",
-        "columns": [
-          "Service",
-          "Last accessed",
-          "Last accessed by account"
-        ],
-        "header_actions": [],
-        "confidence": "low"
-      }
+      "id": "resource-analysis",
+      "kind": "other",
+      "title": "Resource analysis",
+      "route": "/access-analyzer/home#/findings",
+      "provenance": "reference",
+      "confidence": "low",
+      "notes": "Nav entry not crawled; out of Vyomi scope (title only)."
     },
     {
-      "id": "create",
-      "kind": "create",
-      "title": "Create user",
-      "route": "/iam/home#/users/create",
-      "breadcrumbs": [
-        "IAM",
-        "IAM users",
-        "Create user"
-      ],
-      "captures": [
-        "C-iam/01-create/step-1",
-        "C-iam/01-create/step-1-expanded",
-        "C-iam/01-create/step-2",
-        "C-iam/01-create/step-3"
-      ],
-      "provenance": "capture",
-      "steps": [
-        {
-          "title": "Specify user details",
-          "optional": false,
-          "sections": [
-            {
-              "title": "(form)",
-              "fields": [
-                {
-                  "label": "User name",
-                  "type": "text",
-                  "required": true,
-                  "help": "The user name can have up to 64 characters. Valid characters: A-Z, a-z, 0-9, and + = , . @ _ - (hyphen)",
-                  "confidence": "low"
-                },
-                {
-                  "label": "Provide user access to the AWS Management Console",
-                  "type": "text",
-                  "required": false,
-                  "confidence": "low"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "title": "Set permissions",
-          "optional": false
-        },
-        {
-          "title": "Review and create",
-          "optional": false
-        }
-      ]
+      "id": "unused-access",
+      "kind": "other",
+      "title": "Unused access",
+      "route": "/access-analyzer/home#/unused-access",
+      "provenance": "reference",
+      "confidence": "low",
+      "notes": "Nav entry not crawled; out of Vyomi scope (title only)."
     },
     {
-      "id": "create-2",
-      "kind": "create",
-      "title": "Create role",
-      "route": "/iam/home#/roles/create",
-      "breadcrumbs": [
-        "IAM",
-        "Roles",
-        "Create role"
-      ],
-      "captures": [
-        "C-iam/02-create/step-1",
-        "C-iam/02-create/step-1-expanded",
-        "C-iam/02-create/step-2",
-        "C-iam/02-create/step-3"
-      ],
-      "provenance": "capture",
-      "steps": [
-        {
-          "title": "Select trusted entity",
-          "optional": false,
-          "sections": [
-            {
-              "title": "Select trusted entity",
-              "fields": [
-                {
-                  "label": "AWS service",
-                  "type": "radio",
-                  "options": [
-                    "AWS account",
-                    "Web identity",
-                    "SAML 2.0 federation",
-                    "Custom trust policy",
-                    "Use case"
-                  ],
-                  "default": "AWS account",
-                  "required": true,
-                  "help": "Allow AWS services like EC2, Lambda, or others to perform actions in this account.",
-                  "confidence": "low"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "title": "Add permissions",
-          "optional": false
-        },
-        {
-          "title": "{resource-name}, review, and create",
-          "optional": false
-        }
-      ]
+      "id": "analyzer-settings",
+      "kind": "other",
+      "title": "Analyzer settings",
+      "route": "/access-analyzer/home#/analyzers",
+      "provenance": "reference",
+      "confidence": "low",
+      "notes": "Nav entry not crawled; out of Vyomi scope (title only)."
     },
     {
-      "id": "create-3",
-      "kind": "create",
-      "title": "Create policy",
-      "route": "/iam/home#/policies/create",
-      "breadcrumbs": [
-        "IAM",
-        "Policies",
-        "Create policy"
-      ],
-      "captures": [
-        "C-iam/03-create/step-1",
-        "C-iam/03-create/step-1-expanded",
-        "C-iam/03-create/step-2",
-        "C-iam/03-create/step-3"
-      ],
-      "provenance": "capture",
-      "steps": [
-        {
-          "title": "Specify permissions",
-          "optional": false
-        },
-        {
-          "title": "Review and create",
-          "optional": false
-        }
-      ]
-    },
-    {
-      "id": "create-4",
-      "kind": "create",
-      "title": "Create user group",
-      "route": "/iam/home#/groups/create",
-      "captures": [
-        "C-iam/04-create/step-1",
-        "C-iam/04-create/step-1-expanded"
-      ],
-      "provenance": "capture",
-      "table": {
-        "resource_label": "Add users to the group - Optional",
-        "columns": [
-          "User name",
-          "Groups",
-          "Last activity",
-          "Creation time"
-        ],
-        "header_actions": [],
-        "confidence": "medium"
-      },
-      "extra_tables": [
-        {
-          "resource_label": "Attach permissions policies - Optional",
-          "columns": [
-            "62",
-            "Policy name",
-            "Type",
-            "Used as",
-            "Description"
-          ],
-          "header_actions": [
-            "All types"
-          ],
-          "filter_placeholder": "Filter by Type",
-          "confidence": "medium"
-        }
-      ],
-      "sections": [
-        {
-          "title": "(form)",
-          "fields": [
-            {
-              "label": "User group name",
-              "type": "text",
-              "required": true,
-              "help": "Enter a meaningful name to identify this group.",
-              "confidence": "low"
-            }
-          ]
-        }
-      ]
+      "id": "account-access-manager",
+      "kind": "other",
+      "title": "Account access manager",
+      "route": "/iam/home#/account-access-manager",
+      "provenance": "reference",
+      "confidence": "low",
+      "notes": "Nav entry not crawled; out of Vyomi scope (title only)."
     }
   ],
-  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+  "gaps_note": "Side-nav header 'Identity and Access Management (IAM)' with 'Search IAM' box. Captured: all list pages, user/role/policy/SCP detail, create user/group, role & policy wizard step 1. Reference: group detail, create-access-key wizard, role/policy wizard later steps, console-access sub-fields, customer-managed edit actions, Last Accessed tables, Access Analyzer/Account access manager (not crawled)."
 }

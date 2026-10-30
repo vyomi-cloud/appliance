@@ -3,399 +3,386 @@
   "cloud": "aws",
   "service": "sns",
   "console_path": "/sns/",
-  "status": "draft",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
   "nav": [
-    {
-      "label": "Amazon SNS",
-      "page_id": "amazon-sns"
-    },
-    {
-      "label": "Dashboard",
-      "page_id": "dashboard"
-    },
-    {
-      "label": "Topics",
-      "page_id": "topics"
-    },
-    {
-      "label": "Subscriptions",
-      "page_id": "subscriptions"
-    },
-    {
-      "label": "Mobile",
-      "children": [
-        {
-          "label": "Push notifications",
-          "page_id": "push-notifications"
-        },
-        {
-          "label": "Text messaging (SMS)",
-          "page_id": "text-messaging-sms"
-        }
-      ]
-    }
+    {"label": "Dashboard", "page_id": "dashboard"},
+    {"label": "Topics", "page_id": "topics"},
+    {"label": "Subscriptions", "page_id": "subscriptions"},
+    {"label": "Mobile", "expandable": true, "children": [
+      {"label": "Push notifications", "page_id": "push-notifications"},
+      {"label": "Text messaging (SMS)", "page_id": "text-messaging-sms"}
+    ]}
   ],
   "pages": [
     {
       "id": "landing",
       "kind": "other",
-      "title": "Simple Notification Service",
-      "route": "/sns/v3/home",
-      "captures": [
-        "A-sns/001-L1-landing"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "amazon-sns",
-      "kind": "other",
-      "title": "Simple Notification Service",
+      "title": "Amazon Simple Notification Service",
       "route": "/sns/v3/home#/homepage",
-      "captures": [
-        "A-sns/002-L2-amazon-sns"
-      ],
-      "provenance": "capture"
+      "captures": ["A-sns/001-L1-landing", "A-sns/002-L2-amazon-sns"],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Service home (no side nav). Create-topic quick start card; 'Next step' opens Create topic with the name prefilled.",
+      "sections": [
+        {
+          "title": "Create topic",
+          "fields": [
+            {"label": "Topic name", "type": "text", "required": true, "placeholder": "MyTopic"},
+            {"label": "Next step", "type": "button"}
+          ]
+        }
+      ]
     },
     {
       "id": "dashboard",
       "kind": "dashboard",
       "title": "Dashboard",
       "route": "/sns/v3/home#/dashboard",
-      "breadcrumbs": [
-        "Amazon SNS",
-        "Dashboard"
-      ],
-      "captures": [
-        "A-sns/003-L2-dashboard"
-      ],
-      "provenance": "capture"
+      "breadcrumbs": ["Amazon SNS", "Dashboard"],
+      "captures": ["A-sns/003-L2-dashboard"],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Resources for {region}",
+          "fields": [
+            {"label": "Topics", "type": "readonly", "default": "0"},
+            {"label": "Platform applications", "type": "readonly", "default": "0"},
+            {"label": "Subscriptions", "type": "readonly", "default": "0"}
+          ]
+        },
+        {
+          "title": "Overview of Amazon SNS",
+          "fields": [
+            {"label": "Application-to-application (A2A)", "type": "readonly"},
+            {"label": "Application-to-person (A2P)", "type": "readonly"}
+          ]
+        }
+      ]
     },
     {
       "id": "topics",
       "kind": "list",
       "title": "Topics",
       "route": "/sns/v3/home#/topics",
-      "breadcrumbs": [
-        "Amazon SNS",
-        "Topics"
-      ],
-      "captures": [
-        "A-sns/004-L2-topics"
-      ],
+      "breadcrumbs": ["Amazon SNS", "Topics"],
+      "captures": ["A-sns/004-L2-topics"],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Topics",
-        "columns": [
-          "Type",
-          "ARN"
-        ],
-        "header_actions": [
-          "Edit",
-          "Delete",
-          "Publish message",
-          "Create topic"
-        ],
-        "confidence": "medium"
+        "counter": true,
+        "selection": "single",
+        "columns": ["Name", "Type", "ARN"],
+        "header_actions": ["Edit", "Delete", "Publish message", "Create topic"],
+        "filter_placeholder": "Search",
+        "empty_state": "No topics",
+        "empty_state_action": "Create topic",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "high"
       }
-    },
-    {
-      "id": "subscriptions",
-      "kind": "list",
-      "title": "Subscriptions",
-      "route": "/sns/v3/home#/subscriptions",
-      "breadcrumbs": [
-        "Amazon SNS",
-        "Subscriptions"
-      ],
-      "captures": [
-        "A-sns/005-L2-subscriptions"
-      ],
-      "provenance": "capture",
-      "table": {
-        "resource_label": "Subscriptions",
-        "columns": [
-          "ID",
-          "Endpoint",
-          "Status",
-          "Protocol",
-          "Topic"
-        ],
-        "header_actions": [
-          "Edit",
-          "Delete",
-          "Request confirmation",
-          "Confirm subscription",
-          "Create subscription"
-        ],
-        "confidence": "medium"
-      }
-    },
-    {
-      "id": "push-notifications",
-      "kind": "list",
-      "title": "Mobile: Push notifications",
-      "route": "/sns/v3/home#/mobile/push-notifications",
-      "breadcrumbs": [
-        "Amazon SNS",
-        "Mobile: Push notifications"
-      ],
-      "captures": [
-        "A-sns/006-L2-push-notifications"
-      ],
-      "provenance": "capture",
-      "table": {
-        "resource_label": "Platform applications",
-        "columns": [
-          "Platform",
-          "ARN",
-          "Status"
-        ],
-        "header_actions": [
-          "Edit",
-          "Delete",
-          "Create platform application"
-        ],
-        "empty_state": "No platform applications",
-        "confidence": "medium"
-      }
-    },
-    {
-      "id": "text-messaging-sms",
-      "kind": "list",
-      "title": "Text messaging (SMS)",
-      "route": "/sns/v3/home#/mobile/text-messaging",
-      "captures": [
-        "A-sns/007-L2-text-messaging-sms"
-      ],
-      "provenance": "capture",
-      "table": {
-        "resource_label": "Sandbox destination phone numbers",
-        "columns": [
-          "Verified phone number",
-          "Verification status"
-        ],
-        "header_actions": [
-          "Verify phone number",
-          "Delete phone number",
-          "Add phone number"
-        ],
-        "empty_state": "No phone numbers added",
-        "confidence": "medium"
-      },
-      "extra_tables": [
-        {
-          "resource_label": "Delivery statistics by country",
-          "columns": [
-            "Country",
-            "Sent",
-            "Failed",
-            "Delivery rate"
-          ],
-          "header_actions": [],
-          "confidence": "medium"
-        },
-        {
-          "resource_label": "Opted-out phone numbers",
-          "columns": [
-            "Number"
-          ],
-          "header_actions": [
-            "Opt in"
-          ],
-          "empty_state": "No numbers have been opted out.",
-          "confidence": "medium"
-        }
-      ]
     },
     {
       "id": "create-topic",
       "kind": "create",
       "title": "Create topic",
       "route": "/sns/v3/home#/create-topic",
-      "captures": [
-        "C-sns/01-create-topic/step-1",
-        "C-sns/01-create-topic/step-1-expanded"
-      ],
+      "breadcrumbs": ["Amazon SNS", "Topics", "Create topic"],
+      "captures": ["C-sns/01-create-topic/step-1", "C-sns/01-create-topic/step-1-expanded"],
       "provenance": "capture",
+      "confidence": "high",
+      "notes": "Single page; sections after Details collapsed by default. Fields shown for Type = FIFO (captured default).",
+      "header_actions": ["Cancel", "Create topic"],
+      "submit": "Create topic",
       "sections": [
         {
-          "title": "(form)",
+          "title": "Details",
           "fields": [
-            {
-              "label": "New Feature",
-              "type": "radio",
-              "options": [
-                "Create topic",
-                "Details"
-              ],
-              "default": "Create topic",
-              "required": true,
-              "confidence": "low"
-            },
-            {
-              "label": "Type",
-              "type": "radio",
-              "options": [
-                "Topic type cannot be modified after topic is created",
-                "FIFO (first-in, first-out)",
-                "Strictly-preserved message ordering",
-                "Exactly-once message delivery",
-                "Subscription protocols: SQS",
-                "Standard",
-                "Best-effort message ordering",
-                "At-least once message delivery",
-                ".fifo"
-              ],
-              "default": "Topic type cannot be modified after topic is created",
-              "required": true,
-              "confidence": "low"
-            },
-            {
-              "label": "High throughput",
-              "type": "select",
-              "default": "Message group scope (Recommended for highest throughput)",
-              "required": true,
-              "help": "Configure your FIFO topic for maximum throughput. Once enabled, this configuration cannot be modified.",
-              "confidence": "low"
-            },
-            {
-              "label": "Topic scope",
-              "type": "text",
-              "required": true,
-              "help": "Throughput: 3000 message per second and a bandwidth of 20MB per second.",
-              "confidence": "low"
-            },
-            {
-              "label": "Display name",
-              "type": "text",
-              "required": false,
-              "confidence": "low"
-            },
-            {
-              "label": "Maximum message size",
-              "type": "select",
-              "default": "KiB",
-              "required": true,
-              "help": "The largest message size this topic accepts.",
-              "confidence": "low"
-            },
-            {
-              "label": "Content-based message deduplication",
-              "type": "select",
-              "default": "Turn on message deduplication",
-              "required": true,
-              "confidence": "low"
-            }
+            {"label": "Type", "type": "radio", "required": true, "default": "FIFO (first-in, first-out)", "options": ["FIFO (first-in, first-out)", "Standard"], "help": "Topic type cannot be modified after topic is created"},
+            {"label": "Name", "type": "text", "required": true, "placeholder": "MyTopic", "help": "Suffix '.fifo' shown after the input when Type = FIFO", "constraints": "Maximum 256 characters. Alphanumerics, hyphens (-) and underscores (_). FIFO names must end with \".fifo\"."},
+            {"label": "High throughput", "type": "radio", "default": "Message group scope (Recommended for highest throughput)", "options": ["Message group scope (Recommended for highest throughput)", "Topic scope"], "visible_when": "Type = FIFO (first-in, first-out)", "help": "Once enabled, this configuration cannot be modified."},
+            {"label": "Display name - optional", "type": "text", "required": false, "placeholder": "My Topic", "help": "Only the first 10 characters are displayed in an SMS message.", "constraints": "Maximum 100 characters."},
+            {"label": "Maximum message size", "type": "number", "default": "256", "help": "Unit: KiB. The largest message size this topic accepts.", "constraints": "Should be between 1 KiB and 1024 KiB."},
+            {"label": "Content-based message deduplication", "type": "checkbox", "default": false, "visible_when": "Type = FIFO (first-in, first-out)", "children": [
+              {"label": "Turn on message deduplication", "type": "checkbox", "default": false}
+            ]}
           ]
         },
         {
           "title": "Encryption - optional",
+          "expandable": true,
           "fields": [
-            {
-              "label": "EncryptionLearn more",
-              "type": "text",
-              "required": true,
-              "confidence": "low"
-            }
+            {"label": "Encryption", "type": "toggle", "default": false, "help": "Adds at-rest (server-side) encryption to your topic."},
+            {"label": "AWS KMS key", "type": "select", "default": "(Default) alias/aws/sns", "visible_when": "Encryption = on", "provenance": "reference", "confidence": "medium"}
           ]
         },
         {
           "title": "Access policy - optional",
+          "expandable": true,
           "fields": [
-            {
-              "label": "Basic",
-              "type": "radio",
-              "options": [
-                "Advanced",
-                "Publishers",
-                "Only the topic owner",
-                "Only the owner of the topic can publish to the topic"
-              ],
-              "default": "Advanced",
-              "required": true,
-              "help": "Use simple criteria to define a basic access policy.",
-              "confidence": "low"
-            },
-            {
-              "label": "Subscribers",
-              "type": "radio",
-              "options": [
-                "Only the topic owner",
-                "Only the owner of the topic can subscribe to the topic",
-                "JSON preview",
-                "{"
-              ],
-              "default": "Only the topic owner",
-              "required": true,
-              "help": "Specify who can subscribe to this topic.",
-              "confidence": "low"
-            }
+            {"label": "Choose method", "type": "radio", "default": "Basic", "options": ["Basic", "Advanced"]},
+            {"label": "Publishers", "type": "select", "default": "Only the topic owner", "options": ["Only the topic owner", "Everyone", "Only the specified AWS accounts"], "visible_when": "Choose method = Basic", "help": "Specify who can publish messages to the topic."},
+            {"label": "Subscribers", "type": "select", "default": "Only the topic owner", "options": ["Only the topic owner", "Everyone", "Only the specified AWS accounts", "Only requesters with certain endpoints"], "visible_when": "Choose method = Basic", "help": "Specify who can subscribe to this topic."},
+            {"label": "JSON preview", "type": "readonly", "help": "Generated policy JSON; editable JSON editor when Choose method = Advanced"}
           ]
         },
         {
           "title": "Archive policy - new, optional",
+          "expandable": true,
           "fields": [
-            {
-              "label": "Archive policy",
-              "type": "text",
-              "required": true,
-              "help": "Activate archive policy and select the desired retention period. Archive policy has additional pricing",
-              "confidence": "low"
-            }
+            {"label": "Archive policy", "type": "toggle", "default": false, "help": "Activate archive policy and select the desired retention period."}
+          ]
+        },
+        {
+          "title": "Message delivery status logging - optional",
+          "expandable": true,
+          "fields": [
+            {"label": "Choose protocols for log delivery status", "type": "checkbox", "options": ["Amazon SQS"], "help": "Standard topics also list AWS Lambda, HTTP/S, Data Firehose, Platform application endpoint"}
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "expandable": true,
+          "fields": [
+            {"label": "Tags", "type": "tags", "required": false, "help": "No tags associated with the resource. You can add up to 50 tags.", "actions": ["Add new tag", "Remove"]}
           ]
         },
         {
           "title": "Active tracing - optional",
+          "expandable": true,
           "fields": [
-            {
-              "label": "Use active tracingLearn more",
-              "type": "select",
-              "default": "Don't use active tracing",
-              "required": true,
-              "confidence": "low"
-            }
+            {"label": "Active tracing", "type": "radio", "default": "Don't use active tracing", "options": ["Use active tracing", "Don't use active tracing"]}
           ]
         }
       ]
+    },
+    {
+      "id": "topic-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/sns/v3/home#/topic/{topic-arn}",
+      "breadcrumbs": ["Amazon SNS", "Topics", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Not yet crawled (account had no topics). Re-verify on next capture.",
+      "header_actions": ["Edit", "Delete", "Publish message"],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {"label": "Name", "type": "readonly"},
+            {"label": "ARN", "type": "readonly"},
+            {"label": "Type", "type": "readonly"},
+            {"label": "Display name", "type": "readonly"},
+            {"label": "Topic owner", "type": "readonly"},
+            {"label": "Content-based message deduplication", "type": "readonly", "visible_when": "Type = FIFO"}
+          ]
+        }
+      ],
+      "tabs": ["Subscriptions", "Access policy", "Data protection policy", "Delivery policy (HTTP/S)", "Delivery status logging", "Encryption", "Tags", "Integrations"],
+      "tab_panels": [
+        {"label": "Subscriptions", "sections": [{"title": "Subscriptions", "table": {"resource_label": "Subscriptions", "counter": true, "selection": "single", "columns": ["ID", "Endpoint", "Status", "Protocol"], "header_actions": ["Edit", "Delete", "Request confirmation", "Confirm subscription", "Create subscription"], "filter_placeholder": "Search", "empty_state": "No subscriptions found", "empty_state_action": "Create subscription", "pagination": true}}]},
+        {"label": "Access policy", "sections": [{"title": "Access policy", "fields": [{"label": "Access policy", "type": "readonly", "help": "JSON policy document"}]}]},
+        {"label": "Data protection policy", "sections": [{"title": "Data protection policy", "fields": [{"label": "Data protection policy", "type": "readonly"}]}]},
+        {"label": "Delivery policy (HTTP/S)", "sections": [{"title": "Delivery policy (HTTP/S)", "fields": [{"label": "Delivery policy", "type": "readonly", "help": "Retry policy JSON for HTTP/S endpoints"}]}]},
+        {"label": "Delivery status logging", "sections": [{"title": "Delivery status logging", "fields": [{"label": "Logged protocols", "type": "readonly"}]}]},
+        {"label": "Encryption", "sections": [{"title": "Encryption", "fields": [{"label": "Encryption", "type": "readonly", "options": ["Configured", "Not configured"]}, {"label": "AWS KMS key", "type": "readonly"}]}]},
+        {"label": "Tags", "sections": [{"title": "Tags", "table": {"resource_label": "Tags", "counter": true, "columns": ["Key", "Value"], "header_actions": ["Manage tags"], "empty_state": "No tags"}}]},
+        {"label": "Integrations", "sections": [{"title": "Integrations"}]}
+      ]
+    },
+    {
+      "id": "edit-topic",
+      "kind": "create",
+      "title": "Edit {resource-name}",
+      "route": "/sns/v3/home#/edit-topic/{topic-arn}",
+      "breadcrumbs": ["Amazon SNS", "Topics", "{resource-name}", "Edit"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Same sections as Create topic; Type and Name are read-only.",
+      "submit": "Save changes",
+      "header_actions": ["Cancel", "Save changes"]
+    },
+    {
+      "id": "publish-message",
+      "kind": "create",
+      "title": "Publish message to topic",
+      "route": "/sns/v3/home#/publish/{topic-arn}",
+      "breadcrumbs": ["Amazon SNS", "Topics", "{resource-name}", "Publish message"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Publish message",
+      "header_actions": ["Cancel", "Publish message"],
+      "sections": [
+        {
+          "title": "Message details",
+          "fields": [
+            {"label": "Topic ARN", "type": "readonly"},
+            {"label": "Subject - optional", "type": "text", "required": false, "placeholder": "Enter the message subject"},
+            {"label": "Time to Live (TTL) - optional", "type": "number", "required": false},
+            {"label": "Message group ID", "type": "text", "required": true, "visible_when": "Topic type = FIFO"},
+            {"label": "Message deduplication ID - optional", "type": "text", "visible_when": "Topic type = FIFO"}
+          ]
+        },
+        {
+          "title": "Message body",
+          "fields": [
+            {"label": "Message structure", "type": "radio", "default": "Identical payload for all delivery protocols.", "options": ["Identical payload for all delivery protocols.", "Custom payload for each delivery protocol."]},
+            {"label": "Message body to send to the endpoint", "type": "textarea", "required": true}
+          ]
+        },
+        {
+          "title": "Message attributes",
+          "fields": [
+            {"label": "Message attributes", "type": "table", "columns": ["Type", "Name", "Value"], "actions": ["Add another attribute", "Remove"]}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subscriptions",
+      "kind": "list",
+      "title": "Subscriptions",
+      "route": "/sns/v3/home#/subscriptions",
+      "breadcrumbs": ["Amazon SNS", "Subscriptions"],
+      "captures": ["A-sns/005-L2-subscriptions"],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Subscriptions",
+        "counter": true,
+        "selection": "single",
+        "columns": ["ID", "Endpoint", "Status", "Protocol", "Topic"],
+        "header_actions": ["Edit", "Delete", "Request confirmation", "Confirm subscription", "Create subscription"],
+        "filter_placeholder": "Search",
+        "empty_state": "No subscriptions found",
+        "empty_state_action": "Create subscription",
+        "pagination": true,
+        "preferences": true,
+        "confidence": "high"
+      }
     },
     {
       "id": "create-subscription",
       "kind": "create",
       "title": "Create subscription",
       "route": "/sns/v3/home#/create-subscription",
-      "breadcrumbs": [
-        "Amazon SNS",
-        "Subscriptions",
-        "Create subscription"
-      ],
-      "captures": [
-        "C-sns/02-create-subscription/step-1",
-        "C-sns/02-create-subscription/step-1-expanded"
-      ],
+      "breadcrumbs": ["Amazon SNS", "Subscriptions", "Create subscription"],
+      "captures": ["C-sns/02-create-subscription/step-1", "C-sns/02-create-subscription/step-1-expanded"],
       "provenance": "capture",
+      "confidence": "high",
+      "header_actions": ["Cancel", "Create subscription"],
+      "submit": "Create subscription",
       "sections": [
         {
-          "title": "(form)",
+          "title": "Details",
           "fields": [
-            {
-              "label": "New Feature",
-              "type": "radio",
-              "options": [
-                "Create subscription",
-                "Details",
-                "Topic ARN",
-                "Protocol",
-                "The type of endpoint to subscribe",
-                "Select protocol"
-              ],
-              "default": "Create subscription",
-              "required": true,
-              "confidence": "low"
-            }
+            {"label": "Topic ARN", "type": "select", "required": true, "placeholder": "MyTopic", "help": "Searchable autosuggest of topic ARNs"},
+            {"label": "Protocol", "type": "select", "required": true, "placeholder": "Select protocol", "help": "The type of endpoint to subscribe", "options": ["Amazon Data Firehose", "Amazon SQS", "AWS Lambda", "Email", "Email-JSON", "HTTP", "HTTPS", "Platform application endpoint", "SMS"], "confidence": "medium"},
+            {"label": "Endpoint", "type": "text", "required": true, "visible_when": "Protocol selected", "help": "Select for SQS/Lambda/Firehose; text for email, HTTP/S, SMS", "provenance": "reference", "confidence": "medium"},
+            {"label": "Enable raw message delivery", "type": "checkbox", "default": false, "visible_when": "Protocol = Amazon SQS, HTTP/S or Amazon Data Firehose", "provenance": "reference", "confidence": "medium"}
+          ]
+        },
+        {
+          "title": "Subscription filter policy - optional",
+          "expandable": true,
+          "fields": [
+            {"label": "Subscription filter policy", "type": "toggle", "default": false, "help": "This policy filters the messages that a subscriber receives."},
+            {"label": "Filter policy scope", "type": "radio", "options": ["Message attributes", "Message body"], "default": "Message attributes", "visible_when": "Subscription filter policy = on", "provenance": "reference", "confidence": "medium"},
+            {"label": "JSON editor", "type": "textarea", "visible_when": "Subscription filter policy = on", "provenance": "reference", "confidence": "medium"}
+          ]
+        },
+        {
+          "title": "Redrive policy (dead-letter queue) - optional",
+          "expandable": true,
+          "fields": [
+            {"label": "Redrive policy (dead-letter queue)", "type": "toggle", "default": false, "help": "Send undeliverable messages to a dead-letter queue."},
+            {"label": "Dead-letter queue", "type": "select", "visible_when": "Redrive policy (dead-letter queue) = on", "provenance": "reference", "confidence": "medium"}
           ]
         }
       ]
+    },
+    {
+      "id": "subscription-detail",
+      "kind": "detail",
+      "title": "Subscription: {resource-name}",
+      "route": "/sns/v3/home#/subscription/{subscription-arn}",
+      "breadcrumbs": ["Amazon SNS", "Subscriptions", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Not yet crawled. Title shows the subscription ID.",
+      "header_actions": ["Edit", "Delete"],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {"label": "ARN", "type": "readonly"},
+            {"label": "Endpoint", "type": "readonly"},
+            {"label": "Topic", "type": "readonly"},
+            {"label": "Subscription Principal", "type": "readonly"},
+            {"label": "Status", "type": "readonly", "options": ["Confirmed", "Pending confirmation"]},
+            {"label": "Protocol", "type": "readonly"}
+          ]
+        }
+      ],
+      "tabs": ["Subscription filter policy", "Redrive policy (dead-letter queue)"],
+      "tab_panels": [
+        {"label": "Subscription filter policy", "sections": [{"title": "Subscription filter policy", "fields": [{"label": "Subscription filter policy", "type": "readonly"}]}]},
+        {"label": "Redrive policy (dead-letter queue)", "sections": [{"title": "Redrive policy (dead-letter queue)", "fields": [{"label": "Redrive policy", "type": "readonly"}]}]}
+      ]
+    },
+    {
+      "id": "push-notifications",
+      "kind": "list",
+      "title": "Mobile push notifications",
+      "route": "/sns/v3/home#/mobile/push-notifications",
+      "breadcrumbs": ["Amazon SNS", "Mobile: Push notifications"],
+      "captures": ["A-sns/006-L2-push-notifications"],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of Vyomi scope (mobile push); declare honestly.",
+      "table": {
+        "resource_label": "Platform applications",
+        "counter": true,
+        "selection": "single",
+        "columns": ["Name", "Platform", "ARN", "Status"],
+        "header_actions": ["Edit", "Delete", "Create platform application"],
+        "empty_state": "No platform applications",
+        "empty_state_action": "Create platform application",
+        "confidence": "high"
+      }
+    },
+    {
+      "id": "text-messaging-sms",
+      "kind": "other",
+      "title": "Mobile text messaging (SMS)",
+      "route": "/sns/v3/home#/mobile/text-messaging",
+      "breadcrumbs": ["Amazon SNS", "Text messaging (SMS)"],
+      "captures": ["A-sns/007-L2-text-messaging-sms"],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Out of Vyomi scope (SMS delivery); declare honestly.",
+      "header_actions": ["Origination IDs", "Subscribe number to topic", "Publish text message"],
+      "sections": [
+        {"title": "Account information", "actions": ["Exit SMS Sandbox"], "fields": [{"label": "Status", "type": "readonly"}]},
+        {"title": "Delivery statistics (UTC)", "fields": [{"label": "Promotional text message delivery rate", "type": "readonly"}, {"label": "Transactional text message delivery rate", "type": "readonly"}]},
+        {"title": "Text messaging preferences", "actions": ["Edit"], "fields": [
+          {"label": "Default message type", "type": "readonly"},
+          {"label": "Account spend limit", "type": "readonly"},
+          {"label": "Success sample rate", "type": "readonly"},
+          {"label": "IAM role for logging delivery status in CloudWatch Logs", "type": "readonly"},
+          {"label": "Amazon S3 bucket name for usage reports", "type": "readonly"},
+          {"label": "Default sender ID", "type": "readonly"}
+        ]}
+      ],
+      "extra_tables": [
+        {"resource_label": "Sandbox destination phone numbers", "counter": true, "selection": "single", "columns": ["Verified phone number", "Verification status"], "header_actions": ["Verify phone number", "Delete phone number", "Add phone number"], "empty_state": "No phone numbers added", "empty_state_action": "Add phone number"},
+        {"resource_label": "Delivery statistics by country", "counter": true, "columns": ["Country", "Sent", "Failed", "Delivery rate"], "empty_state": "There were no SMS deliveries in the period."},
+        {"resource_label": "Opted-out phone numbers", "counter": true, "selection": "single", "columns": ["Number"], "header_actions": ["Opt in"], "empty_state": "No numbers have been opted out."}
+      ]
     }
   ],
-  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+  "gaps_note": "Topic detail, Edit topic, Publish message and Subscription detail are provenance=reference (account had no topics/subscriptions). Create-subscription Endpoint/raw-delivery/filter-scope/DLQ fields only appear after choices and were not captured. Protocol option list is from the current console (medium). Captured Create topic default Type was FIFO. 'Amazon SNS' is the side-nav header; landing has no nav."
 }

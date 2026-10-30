@@ -3,216 +3,218 @@
   "cloud": "aws",
   "service": "sqs",
   "console_path": "/sqs/",
-  "status": "draft",
-  "nav": [],
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {"label": "Queues", "page_id": "queues"}
+  ],
   "pages": [
-    {
-      "id": "landing",
-      "kind": "other",
-      "title": "Simple Queue Service",
-      "route": "/sqs/v3/home",
-      "captures": [
-        "A-sqs/001-L1-landing"
-      ],
-      "provenance": "capture"
-    },
     {
       "id": "amazon-sqs",
       "kind": "other",
-      "title": "Simple Queue Service",
+      "title": "Amazon SQS",
       "route": "/sqs/v3/home#/homepage",
-      "captures": [
-        "A-sqs/002-L2-amazon-sqs"
-      ],
-      "provenance": "capture"
+      "captures": ["A-sqs/001-L1-landing", "A-sqs/002-L2-amazon-sqs"],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": ["Create queue"],
+      "notes": "Service home: hero 'A message queuing service', Get started card with Create queue, How it works, Benefits and features"
     },
     {
       "id": "queues",
       "kind": "list",
       "title": "Queues",
       "route": "/sqs/v3/home#/queues",
-      "breadcrumbs": [
-        "Amazon SQS",
-        "Queues"
-      ],
-      "captures": [
-        "A-sqs/003-L2-queues"
-      ],
+      "breadcrumbs": ["Amazon SQS", "Queues"],
+      "captures": ["A-sqs/003-L2-queues"],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Queues",
-        "columns": [
-          "Type",
-          "Created",
-          "Messages available",
-          "Messages in flight",
-          "Encryption",
-          "Content-based deduplication"
-        ],
-        "header_actions": [
-          "Queues table is refreshed",
-          "Edit",
-          "Delete",
-          "Send and receive messages",
-          "Actions",
-          "Create queue"
-        ],
+        "counter": true,
+        "selection": "single",
+        "header_actions": ["Refresh", "Edit", "Delete", "Send and receive messages", "Actions", "Create queue"],
+        "actions": ["View/Edit", "Send and receive messages", "Purge", "Delete", "Start DLQ redrive", "Subscribe to Amazon SNS topic", "Configure Lambda function trigger"],
+        "filter_placeholder": "Search queues by prefix",
+        "pagination": true,
+        "preferences": true,
         "empty_state": "No queues",
-        "confidence": "medium"
-      }
+        "empty_state_action": "Create queue",
+        "columns": ["Name", "Type", "Created", "Messages available", "Messages in flight", "Encryption", "Content-based deduplication"],
+        "confidence": "high"
+      },
+      "notes": "Actions dropdown items are reference (menu not opened in capture)"
     },
     {
       "id": "create-queue",
       "kind": "create",
       "title": "Create queue",
       "route": "/sqs/v3/home#/create-queue",
-      "breadcrumbs": [
-        "Amazon SQS",
-        "Queues",
-        "Create queue"
-      ],
-      "captures": [
-        "A-sqs/004-L2-create-queue"
-      ],
+      "breadcrumbs": ["Amazon SQS", "Queues", "Create queue"],
+      "captures": ["A-sqs/004-L2-create-queue"],
       "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create queue",
+      "header_actions": ["Cancel", "Create queue"],
+      "notes": "Single-page form; Cancel / Create queue at the bottom",
       "sections": [
         {
-          "title": "(form)",
+          "title": "Details",
           "fields": [
-            {
-              "label": "Type",
-              "type": "radio",
-              "options": [
-                "Standard Info",
-                "At-least-once delivery, message ordering isn't preserved",
-                "At-least once delivery",
-                "Best-effort ordering",
-                "FIFO Info",
-                "First-in-first-out delivery, message ordering is preserved",
-                "First-in-first-out delivery"
-              ],
-              "default": "Standard Info",
-              "required": true,
-              "help": "Choose the queue type for your application or cloud infrastructure.",
-              "confidence": "low"
-            },
-            {
-              "label": "Exactly-once processing",
-              "type": "select",
-              "required": true,
-              "help": "You can't change the queue type after you create a queue.",
-              "confidence": "low"
-            }
+            {"label": "Type", "type": "radio", "required": true, "default": "Standard", "options": ["Standard", "FIFO"], "help": "Choose the queue type for your application or cloud infrastructure."},
+            {"label": "Name", "type": "text", "required": true, "placeholder": "MyQueue", "constraints": "Case-sensitive, up to 80 characters: alphanumeric, hyphens (-), underscores (_)"},
+            {"label": "Name", "type": "text", "required": true, "visible_when": "Type = FIFO", "constraints": "FIFO queue name must end with the .fifo suffix", "provenance": "reference", "confidence": "medium"}
           ]
         },
         {
           "title": "Configuration",
           "fields": [
-            {
-              "label": "Visibility timeout",
-              "type": "select",
-              "default": "Seconds",
-              "required": true,
-              "confidence": "low"
-            },
-            {
-              "label": "Message retention period",
-              "type": "select",
-              "default": "Days",
-              "required": true,
-              "confidence": "low"
-            },
-            {
-              "label": "Delivery delay",
-              "type": "select",
-              "default": "Seconds",
-              "required": true,
-              "confidence": "low"
-            },
-            {
-              "label": "Maximum message size",
-              "type": "select",
-              "default": "KiB",
-              "required": true,
-              "confidence": "low"
-            },
-            {
-              "label": "Receive message wait time",
-              "type": "select",
-              "default": "Seconds",
-              "required": true,
-              "confidence": "low"
-            }
+            {"label": "Visibility timeout", "type": "number", "required": true, "default": 30, "help": "Unit select: Seconds / Minutes / Hours", "constraints": "Should be between 0 seconds and 12 hours."},
+            {"label": "Message retention period", "type": "number", "required": true, "default": 4, "help": "Unit select: Minutes / Hours / Days", "constraints": "Should be between 1 minute and 14 days."},
+            {"label": "Delivery delay", "type": "number", "required": true, "default": 0, "help": "Unit select: Seconds / Minutes", "constraints": "Should be between 0 seconds and 15 minutes."},
+            {"label": "Maximum message size", "type": "number", "required": true, "default": 1024, "help": "Unit: KiB", "constraints": "Should be between 1 KiB and 1024 KiB."},
+            {"label": "Receive message wait time", "type": "number", "required": true, "default": 0, "help": "Unit: Seconds", "constraints": "Should be between 0 and 20 seconds."},
+            {"label": "Content-based deduplication", "type": "toggle", "default": false, "visible_when": "Type = FIFO", "provenance": "reference", "confidence": "medium"},
+            {"label": "High throughput FIFO queue", "type": "toggle", "default": false, "visible_when": "Type = FIFO", "provenance": "reference", "confidence": "medium"}
           ]
         },
         {
           "title": "Encryption",
           "fields": [
-            {
-              "label": "Amazon SQS key (SSE-SQS)",
-              "type": "select",
-              "default": "AWS Key Management Service key (SSE-KMS)",
-              "required": true,
-              "help": "An encryption key that Amazon SQS creates, manages, and uses for you.",
-              "confidence": "low"
-            }
+            {"label": "Server-side encryption", "type": "radio", "default": "Enabled", "options": ["Disabled", "Enabled"]},
+            {"label": "Encryption key type", "type": "radio", "default": "Amazon SQS key (SSE-SQS)", "options": ["Amazon SQS key (SSE-SQS)", "AWS Key Management Service key (SSE-KMS)"], "visible_when": "Server-side encryption = Enabled"},
+            {"label": "Customer master key", "type": "select", "default": "(Default) alias/aws/sqs", "visible_when": "Encryption key type = AWS Key Management Service key (SSE-KMS)", "provenance": "reference", "confidence": "medium"},
+            {"label": "Data key reuse period", "type": "number", "default": 5, "help": "Unit select: Minutes / Hours", "visible_when": "Encryption key type = AWS Key Management Service key (SSE-KMS)", "provenance": "reference", "confidence": "medium"}
           ]
         },
         {
           "title": "Access policy",
           "fields": [
-            {
-              "label": "Basic",
-              "type": "radio",
-              "options": [
-                "Advanced",
-                "Define who can send messages to the queue"
-              ],
-              "default": "Advanced",
-              "required": true,
-              "help": "Use simple criteria to define a basic access policy.",
-              "confidence": "low"
-            },
-            {
-              "label": "Only the queue owner",
-              "type": "radio",
-              "options": [
-                "Only the specified AWS accounts, IAM users and roles",
-                "Define who can receive messages from the queue"
-              ],
-              "default": "Only the specified AWS accounts, IAM users and roles",
-              "required": true,
-              "help": "Only the owner of the queue can send messages to the queue.",
-              "confidence": "low"
-            },
-            {
-              "label": "Only the queue owner",
-              "type": "radio",
-              "options": [
-                "Only the specified AWS accounts, IAM users and roles",
-                "JSON (read-only)",
-                "{"
-              ],
-              "default": "Only the specified AWS accounts, IAM users and roles",
-              "required": true,
-              "help": "Only the owner of the queue can receive messages from the queue.",
-              "confidence": "low"
-            }
+            {"label": "Choose method", "type": "radio", "default": "Basic", "options": ["Basic", "Advanced"]},
+            {"label": "Define who can send messages to the queue", "type": "radio", "default": "Only the queue owner", "options": ["Only the queue owner", "Only the specified AWS accounts, IAM users and roles"], "visible_when": "Choose method = Basic"},
+            {"label": "Define who can receive messages from the queue", "type": "radio", "default": "Only the queue owner", "options": ["Only the queue owner", "Only the specified AWS accounts, IAM users and roles"], "visible_when": "Choose method = Basic"},
+            {"label": "JSON (read-only)", "type": "readonly", "help": "Generated policy JSON; editable textarea when Choose method = Advanced"}
+          ]
+        },
+        {
+          "title": "Redrive allow policy - Optional",
+          "fields": [
+            {"label": "Select which source queues can use this queue as the dead-letter queue.", "type": "radio", "default": "Disabled", "options": ["Disabled", "Enabled"]},
+            {"label": "Redrive permission", "type": "radio", "options": ["Allow all", "By queue", "Deny all"], "visible_when": "Redrive allow policy = Enabled", "provenance": "reference", "confidence": "medium"}
+          ]
+        },
+        {
+          "title": "Dead-letter queue - Optional",
+          "fields": [
+            {"label": "Set this queue to receive undeliverable messages.", "type": "radio", "default": "Disabled", "options": ["Disabled", "Enabled"]},
+            {"label": "Choose queue", "type": "select", "visible_when": "Dead-letter queue = Enabled", "provenance": "reference", "confidence": "medium"},
+            {"label": "Maximum receives", "type": "number", "default": 10, "constraints": "Should be between 1 and 1000.", "visible_when": "Dead-letter queue = Enabled", "provenance": "reference", "confidence": "medium"}
           ]
         },
         {
           "title": "Tags - Optional",
           "fields": [
-            {
-              "label": "Value",
-              "type": "text",
-              "required": false,
-              "confidence": "low"
-            }
+            {"label": "Tags", "type": "tags", "required": false, "columns": ["Key", "Value - optional"], "actions": ["Add new tag", "Remove"], "help": "You can add 49 more tags."}
           ]
         }
       ]
+    },
+    {
+      "id": "queue-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/sqs/v3/home#/queues/{queue-url}",
+      "breadcrumbs": ["Amazon SQS", "Queues", "{resource-name}"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Not crawled (account had no queues). Re-verify on next capture.",
+      "header_actions": ["Edit", "Delete", "Purge", "Send and receive messages", "Start DLQ redrive"],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {"label": "Name", "type": "readonly"},
+            {"label": "Type", "type": "readonly"},
+            {"label": "ARN", "type": "readonly"},
+            {"label": "Encryption", "type": "readonly"},
+            {"label": "URL", "type": "readonly"},
+            {"label": "Dead-letter queue", "type": "readonly"}
+          ]
+        }
+      ],
+      "tabs": ["SNS subscriptions", "Lambda triggers", "EventBridge Pipes", "Dead-letter queue", "Monitoring", "Tagging", "Access policy", "Encryption", "Dead-letter queue redrive tasks"],
+      "tab_panels": [
+        {"label": "SNS subscriptions", "sections": [{"title": "SNS subscriptions", "table": {"resource_label": "SNS subscriptions", "counter": true, "header_actions": ["Subscribe to Amazon SNS topic"], "columns": ["Subscription ARN", "Topic ARN"], "empty_state": "No subscriptions"}}]},
+        {"label": "Lambda triggers", "sections": [{"title": "Lambda triggers", "table": {"resource_label": "Lambda triggers", "counter": true, "header_actions": ["Configure Lambda function trigger"], "columns": ["UUID", "ARN", "Status", "Last modified"], "empty_state": "No triggers"}}]},
+        {"label": "EventBridge Pipes", "sections": [{"title": "EventBridge Pipes", "table": {"resource_label": "EventBridge Pipes", "counter": true, "header_actions": ["Connect queue to pipe"], "columns": ["Pipe name", "Status", "Target"]}}]},
+        {"label": "Dead-letter queue", "sections": [{"title": "Dead-letter queue", "actions": ["Edit"], "fields": [{"label": "Dead-letter queue", "type": "readonly"}, {"label": "Maximum receives", "type": "readonly"}]}]},
+        {"label": "Monitoring", "sections": [{"title": "CloudWatch metrics", "fields": [{"label": "Approximate number of messages visible", "type": "other"}, {"label": "Approximate number of messages not visible", "type": "other"}, {"label": "Number of messages sent", "type": "other"}, {"label": "Number of messages received", "type": "other"}, {"label": "Number of messages deleted", "type": "other"}, {"label": "Approximate age of oldest message", "type": "other"}]}]},
+        {"label": "Tagging", "sections": [{"title": "Tags", "actions": ["Edit"], "table": {"columns": ["Key", "Value"], "empty_state": "No tags"}}]},
+        {"label": "Access policy", "sections": [{"title": "Access policy (Permissions)", "actions": ["Edit"], "fields": [{"label": "Policy", "type": "readonly"}]}]},
+        {"label": "Encryption", "sections": [{"title": "Encryption", "actions": ["Edit"], "fields": [{"label": "Server-side encryption", "type": "readonly"}, {"label": "Encryption key type", "type": "readonly"}]}]},
+        {"label": "Dead-letter queue redrive tasks", "sections": [{"title": "Dead-letter queue redrive tasks", "table": {"columns": ["Task ID", "Status", "Destination", "Messages moved", "Start time"]}}]}
+      ]
+    },
+    {
+      "id": "edit-queue",
+      "kind": "create",
+      "title": "Edit {resource-name}",
+      "route": "/sqs/v3/home#/queues/{queue-url}/edit",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Save",
+      "notes": "Same sections as Create queue minus Type; Name is read-only."
+    },
+    {
+      "id": "send-receive-messages",
+      "kind": "other",
+      "title": "Send and receive messages",
+      "route": "/sqs/v3/home#/queues/{queue-url}/send-receive",
+      "breadcrumbs": ["Amazon SQS", "Queues", "{resource-name}", "Send and receive messages"],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": ["Purge"],
+      "sections": [
+        {
+          "title": "Send message",
+          "actions": ["Clear content", "Send message"],
+          "fields": [
+            {"label": "Message body", "type": "textarea", "required": true},
+            {"label": "Delivery delay", "type": "number", "default": 0, "help": "Unit select: Seconds / Minutes"},
+            {"label": "Message group ID", "type": "text", "required": true, "visible_when": "Queue type = FIFO"},
+            {"label": "Message deduplication ID", "type": "text", "visible_when": "Queue type = FIFO"},
+            {"label": "Message attributes", "type": "table", "columns": ["Name", "Type", "Value"], "actions": ["Add new attribute", "Remove"]}
+          ]
+        },
+        {
+          "title": "Receive messages",
+          "actions": ["Edit poll settings", "Stop polling", "Poll for messages"],
+          "fields": [
+            {"label": "Messages available", "type": "readonly"},
+            {"label": "Polling duration", "type": "readonly", "default": 20},
+            {"label": "Maximum message count", "type": "readonly", "default": 10},
+            {"label": "Polling progress", "type": "readonly"}
+          ],
+          "table": {"resource_label": "Messages", "counter": true, "selection": "multi", "header_actions": ["View details", "Delete"], "filter_placeholder": "Search messages", "columns": ["ID", "Sent", "Size", "Receive count"], "empty_state": "No messages"}
+        }
+      ]
+    },
+    {
+      "id": "purge-queue",
+      "kind": "other",
+      "title": "Purge queue",
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Confirmation modal: type 'purge' to confirm; Cancel / Purge"
+    },
+    {
+      "id": "delete-queue",
+      "kind": "other",
+      "title": "Delete queue",
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Confirmation modal: type 'delete' to confirm; Cancel / Delete"
     }
   ],
-  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+  "gaps_note": "Nav, home, Queues list and Create queue are from captures (Create queue Standard path, defaults verified on screenshot). FIFO-only, SSE-KMS, DLQ/redrive sub-fields, Actions dropdown, queue detail, edit, send/receive and purge/delete modals are provenance=reference: the account had no queues and the crawler did not toggle options. SQS console has no left nav beyond Queues."
 }
