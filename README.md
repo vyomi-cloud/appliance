@@ -1,120 +1,120 @@
 # Vyomi Conformance — hourly report
 
-Run **2026-10-30T21:13:04+00:00** · commit `bba91808710a` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
+Run **2026-10-30T23:27:06+00:00** · commit `e78d24e63f47` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
 
 | Suites green | Checks passing | Checks failing | Nano UI clean | Offline UI clean | Open UI findings | API routes with tests |
 |---|---|---|---|---|---|---|
-| 209/220 | 5161 | 37 | 59/63 | 49/58 | 28 | 49.5% (191/386) |
+| 200/225 | 4943 | 188 | 60/63 | 53/58 | 20 | 49.5% (191/386) |
 
 ## By cloud
 
 | Cloud | Suites green | Checks ✓ | Checks ✗ | Nano UI clean | Offline UI clean | Open findings |
 |---|---|---|---|---|---|---|
-| [AWS](#aws) | 90/96 | 2186 | 8 | 17/20 | 16/20 | 22 |
-| [GCP](#gcp) | 57/59 | 889 | 8 | 18/18 | 14/18 | 4 |
-| [Azure](#azure) | 57/58 | 1238 | 8 | 24/25 | 19/20 | 2 |
+| [AWS](#aws) | 94/96 | 2187 | 3 | 17/20 | 16/20 | 14 |
+| [GCP](#gcp) | 42/60 | 638 | 174 | 18/18 | 17/18 | 6 |
+| [Azure](#azure) | 60/62 | 1268 | 2 | 25/25 | 20/20 | 0 |
 
 <a id="aws"></a>
 ## AWS
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-aws-ec2-row` | nano | ui | 5 | 1 | 15.1 |
-| ❌ | `nano-ui-aws-stepfunctions` | nano | ui | 21 | 1 | 21.5 |
-| ❌ | `offline-api-aws-detail-tabs` | offline | api | 199 | 1 | 293.1 |
-| ❌ | `offline-ui-aws-real-tabs` | offline | ui | 54 | 3 | 268.0 |
-| ❌ | `offline-ui-aws-sns` | offline | ui | 35 | 1 | 57.6 |
-| ❌ | `offline-ui-aws-stepfunctions` | offline | ui | 21 | 1 | 22.7 |
+| ❌ | `offline-api-aws-detail-tabs` | offline | api | 199 | 1 | 216.0 |
+| ❌ | `offline-ui-aws-real-tabs` | offline | ui | 57 | 2 | 257.6 |
 | ✅ | `nano-aws-ec2-launch` | nano | core | 13 | 0 | 0.1 |
-| ✅ | `nano-aws-iam-detail` | nano | core | 8 | 0 | 0.3 |
+| ✅ | `nano-aws-iam-detail` | nano | core | 8 | 0 | 0.4 |
 | ✅ | `nano-core-aws-detail-tabs` | nano | core | 104 | 0 | 0.1 |
-| ✅ | `nano-ui-aws-api` | nano | ui | 6 | 0 | 2.9 |
-| ✅ | `nano-ui-aws-apigatewayv2` | nano | ui | 21 | 0 | 21.6 |
-| ✅ | `nano-ui-aws-apigw-row` | nano | ui | 6 | 0 | 15.1 |
-| ✅ | `nano-ui-aws-cloudwatch` | nano | ui | 21 | 0 | 15.0 |
-| ✅ | `nano-ui-aws-compute-reload` | nano | ui | 4 | 0 | 6.9 |
-| ✅ | `nano-ui-aws-compute-savings` | nano | ui | 6 | 0 | 8.7 |
-| ✅ | `nano-ui-aws-detail-tabs` | nano | ui | 6 | 0 | 21.6 |
-| ✅ | `nano-ui-aws-ec2-detail-tabs` | nano | ui | 5 | 0 | 11.1 |
-| ✅ | `nano-ui-aws-elbv2` | nano | ui | 24 | 0 | 23.3 |
-| ✅ | `nano-ui-aws-eventbridge-row` | nano | ui | 4 | 0 | 15.1 |
-| ✅ | `nano-ui-aws-iam-detail` | nano | ui | 4 | 0 | 2.8 |
-| ✅ | `nano-ui-aws-kinesis` | nano | ui | 19 | 0 | 40.2 |
-| ✅ | `nano-ui-aws-lambda-row` | nano | ui | 4 | 0 | 15.1 |
-| ✅ | `nano-ui-aws-logs` | nano | ui | 33 | 0 | 49.0 |
-| ✅ | `nano-ui-aws-metrics` | nano | ui | 10 | 0 | 11.8 |
-| ✅ | `nano-ui-aws-rds-connectivity-tabs` | nano | ui | 3 | 0 | 9.8 |
-| ✅ | `nano-ui-aws-real-tabs` | nano | ui | 59 | 0 | 248.0 |
-| ✅ | `nano-ui-aws-secrets-created` | nano | ui | 3 | 0 | 2.8 |
-| ✅ | `nano-ui-aws-settings-tabs` | nano | ui | 10 | 0 | 10.3 |
-| ✅ | `nano-ui-aws-sns` | nano | ui | 36 | 0 | 29.9 |
-| ✅ | `nano-ui-aws-sqs-dlq-tab` | nano | ui | 2 | 0 | 8.2 |
-| ✅ | `nano-ui-aws-ssm` | nano | ui | 19 | 0 | 19.8 |
-| ✅ | `nano-ui-aws-tabs` | nano | ui | 16 | 0 | 14.3 |
-| ✅ | `nano-ui-aws-vpc-apigw-lists` | nano | ui | 5 | 0 | 2.8 |
-| ✅ | `nano-ui-aws-vpc-details-tab` | nano | ui | 2 | 0 | 9.7 |
-| ✅ | `nano-ui-aws-vpc-row` | nano | ui | 7 | 0 | 15.1 |
-| ✅ | `nano-ui-aws-vpc-sg-iam-cells` | nano | ui | 3 | 0 | 8.3 |
-| ✅ | `offline-api-aws-console-savings` | offline | api | 12 | 0 | 7.4 |
-| ✅ | `offline-api-aws-eventbridge-rule-defaults` | offline | api | 14 | 0 | 2.3 |
-| ✅ | `offline-api-aws-provider-connect` | offline | api | 11 | 0 | 0.1 |
-| ✅ | `offline-api-aws-sdk-info-extras-config` | offline | api | 11 | 0 | 1.7 |
-| ✅ | `offline-api-aws-sdk-info-routes` | offline | api | 8 | 0 | 0.1 |
-| ✅ | `offline-api-aws-wire-routes` | offline | api | 7 | 0 | 1.4 |
-| ✅ | `offline-api-cost-savings-extras` | offline | api | 12 | 0 | 5.8 |
-| ✅ | `offline-api-ec2-capacity-manager-scores` | offline | api | 6 | 0 | 0.1 |
+| ✅ | `nano-ui-aws-api` | nano | ui | 6 | 0 | 4.5 |
+| ✅ | `nano-ui-aws-apigatewayv2` | nano | ui | 21 | 0 | 22.0 |
+| ✅ | `nano-ui-aws-apigw-row` | nano | ui | 6 | 0 | 16.8 |
+| ✅ | `nano-ui-aws-cloudwatch` | nano | ui | 21 | 0 | 16.8 |
+| ✅ | `nano-ui-aws-compute-reload` | nano | ui | 4 | 0 | 9.8 |
+| ✅ | `nano-ui-aws-compute-savings` | nano | ui | 6 | 0 | 10.4 |
+| ✅ | `nano-ui-aws-detail-tabs` | nano | ui | 6 | 0 | 22.7 |
+| ✅ | `nano-ui-aws-ec2-detail-tabs` | nano | ui | 5 | 0 | 12.8 |
+| ✅ | `nano-ui-aws-ec2-row` | nano | ui | 6 | 0 | 15.3 |
+| ✅ | `nano-ui-aws-elbv2` | nano | ui | 24 | 0 | 25.9 |
+| ✅ | `nano-ui-aws-eventbridge-row` | nano | ui | 4 | 0 | 16.5 |
+| ✅ | `nano-ui-aws-iam-detail` | nano | ui | 4 | 0 | 4.8 |
+| ✅ | `nano-ui-aws-kinesis` | nano | ui | 19 | 0 | 40.6 |
+| ✅ | `nano-ui-aws-lambda-row` | nano | ui | 4 | 0 | 16.6 |
+| ✅ | `nano-ui-aws-logs` | nano | ui | 33 | 0 | 50.8 |
+| ✅ | `nano-ui-aws-metrics` | nano | ui | 10 | 0 | 13.6 |
+| ✅ | `nano-ui-aws-rds-connectivity-tabs` | nano | ui | 3 | 0 | 11.5 |
+| ✅ | `nano-ui-aws-real-tabs` | nano | ui | 59 | 0 | 272.7 |
+| ✅ | `nano-ui-aws-secrets-created` | nano | ui | 3 | 0 | 4.3 |
+| ✅ | `nano-ui-aws-settings-tabs` | nano | ui | 10 | 0 | 12.6 |
+| ✅ | `nano-ui-aws-sns` | nano | ui | 36 | 0 | 32.1 |
+| ✅ | `nano-ui-aws-sqs-dlq-tab` | nano | ui | 2 | 0 | 9.9 |
+| ✅ | `nano-ui-aws-ssm` | nano | ui | 19 | 0 | 21.6 |
+| ✅ | `nano-ui-aws-stepfunctions` | nano | ui | 22 | 0 | 22.1 |
+| ✅ | `nano-ui-aws-tabs` | nano | ui | 16 | 0 | 15.8 |
+| ✅ | `nano-ui-aws-vpc-apigw-lists` | nano | ui | 5 | 0 | 4.5 |
+| ✅ | `nano-ui-aws-vpc-details-tab` | nano | ui | 2 | 0 | 11.5 |
+| ✅ | `nano-ui-aws-vpc-row` | nano | ui | 7 | 0 | 16.7 |
+| ✅ | `nano-ui-aws-vpc-sg-iam-cells` | nano | ui | 3 | 0 | 10.2 |
+| ✅ | `offline-api-aws-console-savings` | offline | api | 12 | 0 | 5.4 |
+| ✅ | `offline-api-aws-eventbridge-rule-defaults` | offline | api | 14 | 0 | 2.1 |
+| ✅ | `offline-api-aws-provider-connect` | offline | api | 11 | 0 | 0.2 |
+| ✅ | `offline-api-aws-sdk-info-extras-config` | offline | api | 11 | 0 | 1.1 |
+| ✅ | `offline-api-aws-sdk-info-routes` | offline | api | 8 | 0 | 0.2 |
+| ✅ | `offline-api-aws-wire-routes` | offline | api | 7 | 0 | 1.9 |
+| ✅ | `offline-api-cost-savings-extras` | offline | api | 12 | 0 | 4.6 |
+| ✅ | `offline-api-ec2-capacity-manager-scores` | offline | api | 6 | 0 | 0.2 |
 | ✅ | `offline-api-ec2-capacity-reservation-fleet` | offline | api | 9 | 0 | 0.2 |
-| ✅ | `offline-api-ec2-default-public-ip` | offline | api | 3 | 0 | 0.3 |
-| ✅ | `offline-api-ec2-get-image-findings` | offline | api | 4 | 0 | 0.1 |
-| ✅ | `offline-api-ec2-instance-detail` | offline | api | 3 | 0 | 0.2 |
-| ✅ | `offline-api-s3-bucket-creation-date` | offline | api | 3 | 0 | 0.3 |
-| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 19.6 |
-| ✅ | `offline-cli-aws-apigatewayv2` | offline | cli | 40 | 0 | 31.5 |
-| ✅ | `offline-cli-aws-cloudwatch` | offline | cli | 31 | 0 | 27.2 |
-| ✅ | `offline-cli-aws-elbv2` | offline | cli | 27 | 0 | 46.8 |
-| ✅ | `offline-cli-aws-kinesis` | offline | cli | 20 | 0 | 22.8 |
-| ✅ | `offline-cli-aws-logs` | offline | cli | 19 | 0 | 33.6 |
-| ✅ | `offline-cli-aws-sns` | offline | cli | 76 | 0 | 163.9 |
-| ✅ | `offline-cli-aws-ssm` | offline | cli | 34 | 0 | 29.7 |
-| ✅ | `offline-cli-aws-stepfunctions` | offline | cli | 26 | 0 | 17.0 |
-| ✅ | `offline-request-metrics` | offline | core | 4 | 0 | 0.2 |
-| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 34.6 |
-| ✅ | `offline-sdk-go-aws-apigatewayv2` | offline | sdk-go | 39 | 0 | 5.4 |
-| ✅ | `offline-sdk-go-aws-cloudwatch` | offline | sdk-go | 37 | 0 | 18.1 |
-| ✅ | `offline-sdk-go-aws-elbv2` | offline | sdk-go | 60 | 0 | 48.2 |
-| ✅ | `offline-sdk-go-aws-kinesis` | offline | sdk-go | 26 | 0 | 17.1 |
-| ✅ | `offline-sdk-go-aws-logs` | offline | sdk-go | 29 | 0 | 35.2 |
-| ✅ | `offline-sdk-go-aws-sns` | offline | sdk-go | 71 | 0 | 72.3 |
-| ✅ | `offline-sdk-go-aws-ssm` | offline | sdk-go | 38 | 0 | 18.5 |
-| ✅ | `offline-sdk-go-aws-stepfunctions` | offline | sdk-go | 39 | 0 | 7.2 |
-| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 29 | 0 | 10.5 |
-| ✅ | `offline-sdk-java-aws-apigatewayv2` | offline | sdk-java | 46 | 0 | 6.8 |
-| ✅ | `offline-sdk-java-aws-cloudwatch` | offline | sdk-java | 26 | 0 | 16.4 |
-| ✅ | `offline-sdk-java-aws-elbv2` | offline | sdk-java | 41 | 0 | 38.2 |
-| ✅ | `offline-sdk-java-aws-kinesis` | offline | sdk-java | 34 | 0 | 30.0 |
-| ✅ | `offline-sdk-java-aws-logs` | offline | sdk-java | 16 | 0 | 25.1 |
-| ✅ | `offline-sdk-java-aws-sns` | offline | sdk-java | 73 | 0 | 73.7 |
-| ✅ | `offline-sdk-java-aws-ssm` | offline | sdk-java | 33 | 0 | 17.6 |
-| ✅ | `offline-sdk-java-aws-stepfunctions` | offline | sdk-java | 41 | 0 | 7.6 |
-| ✅ | `offline-sdk-python-aws` | offline | sdk-python | 85 | 0 | 2.9 |
-| ✅ | `offline-sdk-python-aws-kms-kem` | offline | sdk-python | 6 | 0 | 0.4 |
-| ✅ | `offline-sdk-python-aws-ops` | offline | sdk-python | 12 | 0 | 1.7 |
-| ✅ | `offline-sdk-python-aws-ops2` | offline | sdk-python | 20 | 0 | 1.0 |
-| ✅ | `offline-ui-aws-apigatewayv2` | offline | ui | 21 | 0 | 22.8 |
-| ✅ | `offline-ui-aws-apigw-tabs` | offline | ui | 4 | 0 | 11.2 |
-| ✅ | `offline-ui-aws-cloudwatch` | offline | ui | 23 | 0 | 17.4 |
-| ✅ | `offline-ui-aws-detail-name` | offline | ui | 4 | 0 | 16.8 |
-| ✅ | `offline-ui-aws-detail-tabs` | offline | ui | 6 | 0 | 22.6 |
-| ✅ | `offline-ui-aws-ec2-detail-tabs` | offline | ui | 5 | 0 | 11.5 |
-| ✅ | `offline-ui-aws-elbv2` | offline | ui | 24 | 0 | 31.8 |
-| ✅ | `offline-ui-aws-kinesis` | offline | ui | 19 | 0 | 46.2 |
-| ✅ | `offline-ui-aws-logs` | offline | ui | 33 | 0 | 60.0 |
-| ✅ | `offline-ui-aws-metrics` | offline | ui | 10 | 0 | 17.5 |
-| ✅ | `offline-ui-aws-rds-connectivity-tabs` | offline | ui | 3 | 0 | 9.7 |
-| ✅ | `offline-ui-aws-sqs-dlq-tab` | offline | ui | 2 | 0 | 9.4 |
-| ✅ | `offline-ui-aws-ssm` | offline | ui | 19 | 0 | 23.0 |
-| ✅ | `offline-ui-aws-vpc-details-tab` | offline | ui | 2 | 0 | 9.5 |
-| ✅ | `offline-ui-aws-vpc-sg-iam-cells` | offline | ui | 3 | 0 | 10.3 |
+| ✅ | `offline-api-ec2-default-public-ip` | offline | api | 3 | 0 | 0.4 |
+| ✅ | `offline-api-ec2-get-image-findings` | offline | api | 4 | 0 | 0.2 |
+| ✅ | `offline-api-ec2-instance-detail` | offline | api | 3 | 0 | 0.3 |
+| ✅ | `offline-api-s3-bucket-creation-date` | offline | api | 3 | 0 | 0.4 |
+| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 20.8 |
+| ✅ | `offline-cli-aws-apigatewayv2` | offline | cli | 40 | 0 | 34.7 |
+| ✅ | `offline-cli-aws-cloudwatch` | offline | cli | 31 | 0 | 29.9 |
+| ✅ | `offline-cli-aws-elbv2` | offline | cli | 27 | 0 | 40.7 |
+| ✅ | `offline-cli-aws-kinesis` | offline | cli | 20 | 0 | 22.9 |
+| ✅ | `offline-cli-aws-logs` | offline | cli | 19 | 0 | 27.9 |
+| ✅ | `offline-cli-aws-sns` | offline | cli | 76 | 0 | 138.8 |
+| ✅ | `offline-cli-aws-ssm` | offline | cli | 34 | 0 | 34.1 |
+| ✅ | `offline-cli-aws-stepfunctions` | offline | cli | 26 | 0 | 20.8 |
+| ✅ | `offline-request-metrics` | offline | core | 4 | 0 | 0.3 |
+| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 42.7 |
+| ✅ | `offline-sdk-go-aws-apigatewayv2` | offline | sdk-go | 39 | 0 | 8.0 |
+| ✅ | `offline-sdk-go-aws-cloudwatch` | offline | sdk-go | 37 | 0 | 20.3 |
+| ✅ | `offline-sdk-go-aws-elbv2` | offline | sdk-go | 60 | 0 | 39.5 |
+| ✅ | `offline-sdk-go-aws-kinesis` | offline | sdk-go | 26 | 0 | 15.9 |
+| ✅ | `offline-sdk-go-aws-logs` | offline | sdk-go | 29 | 0 | 30.4 |
+| ✅ | `offline-sdk-go-aws-sns` | offline | sdk-go | 71 | 0 | 60.3 |
+| ✅ | `offline-sdk-go-aws-ssm` | offline | sdk-go | 38 | 0 | 20.1 |
+| ✅ | `offline-sdk-go-aws-stepfunctions` | offline | sdk-go | 39 | 0 | 9.6 |
+| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 29 | 0 | 12.5 |
+| ✅ | `offline-sdk-java-aws-apigatewayv2` | offline | sdk-java | 46 | 0 | 9.7 |
+| ✅ | `offline-sdk-java-aws-cloudwatch` | offline | sdk-java | 26 | 0 | 20.2 |
+| ✅ | `offline-sdk-java-aws-elbv2` | offline | sdk-java | 41 | 0 | 34.3 |
+| ✅ | `offline-sdk-java-aws-kinesis` | offline | sdk-java | 34 | 0 | 30.5 |
+| ✅ | `offline-sdk-java-aws-logs` | offline | sdk-java | 16 | 0 | 21.2 |
+| ✅ | `offline-sdk-java-aws-sns` | offline | sdk-java | 73 | 0 | 62.5 |
+| ✅ | `offline-sdk-java-aws-ssm` | offline | sdk-java | 33 | 0 | 18.1 |
+| ✅ | `offline-sdk-java-aws-stepfunctions` | offline | sdk-java | 41 | 0 | 11.5 |
+| ✅ | `offline-sdk-python-aws` | offline | sdk-python | 79 | 0 | 2.9 |
+| ✅ | `offline-sdk-python-aws-kms-kem` | offline | sdk-python | 6 | 0 | 0.6 |
+| ✅ | `offline-sdk-python-aws-ops` | offline | sdk-python | 12 | 0 | 1.9 |
+| ✅ | `offline-sdk-python-aws-ops2` | offline | sdk-python | 20 | 0 | 1.3 |
+| ✅ | `offline-ui-aws-apigatewayv2` | offline | ui | 21 | 0 | 22.4 |
+| ✅ | `offline-ui-aws-apigw-tabs` | offline | ui | 4 | 0 | 10.9 |
+| ✅ | `offline-ui-aws-cloudwatch` | offline | ui | 23 | 0 | 17.1 |
+| ✅ | `offline-ui-aws-detail-name` | offline | ui | 4 | 0 | 15.1 |
+| ✅ | `offline-ui-aws-detail-tabs` | offline | ui | 6 | 0 | 22.0 |
+| ✅ | `offline-ui-aws-ec2-detail-tabs` | offline | ui | 5 | 0 | 11.4 |
+| ✅ | `offline-ui-aws-elbv2` | offline | ui | 24 | 0 | 28.7 |
+| ✅ | `offline-ui-aws-kinesis` | offline | ui | 19 | 0 | 44.1 |
+| ✅ | `offline-ui-aws-logs` | offline | ui | 33 | 0 | 56.4 |
+| ✅ | `offline-ui-aws-metrics` | offline | ui | 10 | 0 | 15.4 |
+| ✅ | `offline-ui-aws-rds-connectivity-tabs` | offline | ui | 3 | 0 | 9.1 |
+| ✅ | `offline-ui-aws-sns` | offline | ui | 36 | 0 | 46.8 |
+| ✅ | `offline-ui-aws-sqs-dlq-tab` | offline | ui | 2 | 0 | 8.6 |
+| ✅ | `offline-ui-aws-ssm` | offline | ui | 19 | 0 | 21.7 |
+| ✅ | `offline-ui-aws-stepfunctions` | offline | ui | 22 | 0 | 22.4 |
+| ✅ | `offline-ui-aws-vpc-details-tab` | offline | ui | 2 | 0 | 9.1 |
+| ✅ | `offline-ui-aws-vpc-sg-iam-cells` | offline | ui | 3 | 0 | 9.3 |
 
 <details><summary>❌ <code>offline-api-aws-detail-tabs</code> log</summary>
 
@@ -156,20 +156,20 @@ Run **2026-10-30T21:13:04+00:00** · commit `bba91808710a` · Nano (in-browser) 
 <details><summary>❌ <code>offline-ui-aws-real-tabs</code> log</summary>
 
 ```
-[FAIL] apigateway Deployments: deployment made in the tab is listed api-87f9a1235f78
+[FAIL] apigateway Deployments: deployment made in the tab is listed api-b92cfd161f4f
 AWS/ApiGateway · us-east-1 · 123456789012
 delete
 Delete
 info
 API Gateway summary
 API ID
-api-87f9a1235f78
+api-b92cfd161f4f
 NAME
-rt-api-mvvg7q2m
+rt-api-mvvl1ukw
 ENDPOINT TYPE
 REGIONAL
 CREATED
-2026-10-30T20:52:28.000Z
+2026-10-30T23:07:52.000Z
 Overview
 Activity
 Tags
@@ -190,150 +190,26 @@ Dashb
 
 </details>
 
-<details><summary>❌ <code>offline-ui-aws-stepfunctions</code> log</summary>
+**UI findings: 14**
 
-```
-[PASS] Step Functions is on the AWS console rail
-[PASS] create form has a realistic default name
-[PASS] create with defaults returns 2xx
-[PASS] new state machine appears in the list
-[PASS] every grid column is filled
-[PASS] cost-savings metrics include the new state machine (aws.stepfunctions priced)
-[PASS] detail view shows its tabs
-[PASS] tab "Overview" renders
-[PASS] tab "Activity" renders
-[PASS] tab "Tags" renders
-[PASS] tab "Executions" renders
-[PASS] tab "Definition" renders
-[PASS] tab "Versions" renders
-[PASS] tab "Aliases" renders
-[PASS] tab "Properties" renders
-[PASS] tab "Monitoring" renders
-[PASS] starting an execution runs the default definition to SUCCEEDED
-[PASS] Executions tab lists the SUCCEEDED run
-[FAIL] Definition tab shows the Amazon States Language
-[PASS] delete removes the state machine from the list
-[PASS] deleted state machine is gone from the backend
-[PASS] no API errors / page errors during the flow
-1 check(s) failed
-```
-
-</details>
-
-<details><summary>❌ <code>nano-ui-aws-stepfunctions</code> log</summary>
-
-```
-[PASS] Step Functions is on the Nano AWS console rail
-[PASS] create form has a realistic default name
-[PASS] create with defaults returns 2xx
-[PASS] new state machine appears in the list
-[PASS] every grid column is filled
-[PASS] cost-savings metrics updated by the create
-[PASS] detail view shows its tabs
-[PASS] tab "Overview" renders
-[PASS] tab "Activity" renders
-[PASS] tab "Tags" renders
-[PASS] tab "Executions" renders
-[PASS] tab "Definition" renders
-[PASS] tab "Versions" renders
-[PASS] tab "Aliases" renders
-[PASS] tab "Properties" renders
-[PASS] tab "Monitoring" renders
-[PASS] starting an execution runs the default definition to SUCCEEDED
-[PASS] Executions tab lists the SUCCEEDED run
-[FAIL] Definition tab shows the Amazon States Language
-[PASS] delete removes the state machine from the list
-[PASS] deleted state machine is gone from the backend
-[PASS] no API errors / page errors during the flow
-1 check(s) failed
-```
-
-</details>
-
-<details><summary>❌ <code>nano-ui-aws-ec2-row</code> log</summary>
-
-```
-[PASS] launched instance is listed with an i-… id [["","Instance ID","Name","Instance type","State","Public IPv4","Private IPv4"],["","i-6859447aa16cb3fd5","my-ec2-instance","t3.micro","running","54.175.93.49","172.31.12.166"]]
-[PASS] no placeholder cells in the row ["","i-6859447aa16cb3fd5","my-ec2-instance","t3.micro","running","54.175.93.49","172.31.12.166"]
-[PASS] state is running ["","i-6859447aa16cb3fd5","my-ec2-instance","t3.micro","running","54.175.93.49","172.31.12.166"]
-[PASS] instance detail by its i-… id answers 200 with the same id status 200
-[FAIL] instance carries its default security group 
-[PASS] instance survives a console reload [{"tags":{},"name":"my-ec2-instance","image_id":"ami-amzn2023-x86_64","architecture":"x86_64","instance_type":"t3.micro","create_security_group":{"requested":true,"name":"launch-wizard-1","description
-```
-
-</details>
-
-<details><summary>❌ <code>offline-ui-aws-sns</code> log</summary>
-
-```
-[PASS] topics grid: every column filled
-[PASS] topic is a Standard topic
-[PASS] creating a topic moves the space's cost-savings metrics
-[PASS] detail page has tabs
-[PASS] detail tab "Overview" renders
-[PASS] detail tab "Activity" renders
-[PASS] detail tab "Tags" renders
-[PASS] detail tab "Subscriptions" renders
-[PASS] detail tab "Publish message" renders
-[PASS] detail tab "Access policy" renders
-[PASS] detail tab "Properties" renders
-[PASS] detail summary shows the topic's real values
-[FAIL] Publish message from the tab returns 200 :: HTTP null
-[PASS] create subscriptions entry
-[PASS] Subscriptions grid lists the new entry
-[PASS] Subscriptions: every column filled
-[PASS] create mobile push applications entry
-[PASS] Mobile push applications grid lists the new entry
-[PASS] Mobile push applications: every column filled
-[PASS] create sms sandbox entry
-[PASS] SMS sandbox grid lists the new entry
-[PASS] SMS sandbox: every column filled
-[PASS] confirm the pending email subscription
-[PASS] publish to the confirmed subscription
-[PASS] Message log lists the subscription confirmation
-[PASS] Message log lists the published notification
-[PASS] Message log: every column filled
-[PASS] topic is gone after Delete
-[PASS] no API 5xx during the flow
-sns ui (offline): FAILED
-```
-
-</details>
-
-**UI findings: 22**
-
-<details><summary><b>EC2</b> (nano) — 6 finding(s)</summary>
+<details><summary><b>VPC</b> (offline) — 4 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` | Details | tab Details: column "IAM ROLE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Details | tab Details: column "KEY PAIR ASSIGNED AT LAUNCH" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Details | tab Details: column "STATE TRANSITION REASON" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "Description" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Security | tab Security: column "Description" shows "-"/blank in 2 row(s) |
-| `PLACEHOLDER_CELL` | Security | tab Security: column "IAM ROLE" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | list: column "Name" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Name" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Subnets | tab Subnets: column "Name" shows "-"/blank in 6 row(s) |
+| `PLACEHOLDER_CELL` | Route tables | tab Route tables: column "Name" shows "-"/blank in 1 row(s) |
 
 </details>
 
-<details><summary><b>EC2</b> (offline) — 6 finding(s)</summary>
+<details><summary><b>API Gateway</b> (nano) — 3 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` | Details | tab Details: column "IAM ROLE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Details | tab Details: column "KEY PAIR ASSIGNED AT LAUNCH" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Details | tab Details: column "STATE TRANSITION REASON" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "Description" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Security | tab Security: column "Description" shows "-"/blank in 2 row(s) |
-| `PLACEHOLDER_CELL` | Security | tab Security: column "IAM ROLE" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>Lambda</b> (nano) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | Configuration | tab Configuration: column "DESCRIPTION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Versions | tab Versions: column "Description" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Stages | tab Stages: column "Description" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Deployments | tab Deployments: column "Description" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Settings | tab Settings: column "DESCRIPTION" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -346,15 +222,6 @@ sns ui (offline): FAILED
 
 </details>
 
-<details><summary><b>Lambda</b> (offline) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | Configuration | tab Configuration: column "DESCRIPTION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Versions | tab Versions: column "Description" shows "-"/blank in 1 row(s) |
-
-</details>
-
 <details><summary><b>DynamoDB</b> (offline) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
@@ -364,12 +231,27 @@ sns ui (offline): FAILED
 
 </details>
 
-<details><summary><b>VPC</b> (offline) — 2 finding(s)</summary>
+<details><summary><b>EventBridge</b> (nano) — 1 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` |  | list: column "Name" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | after create: column "Name" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` | Rule details | tab Rule details: column "DESCRIPTION" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>API Gateway</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` | Settings | tab Settings: column "DESCRIPTION" shows "-"/blank in 1 row(s) |
+
+</details>
+
+<details><summary><b>EventBridge</b> (offline) — 1 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `PLACEHOLDER_CELL` | Rule details | tab Rule details: column "DESCRIPTION" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -378,87 +260,457 @@ sns ui (offline): FAILED
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-gcp-tabs` | nano | ui | 4 | 2 | 3.2 |
-| ❌ | `offline-ui-gcp-artifactregistry` | offline | ui | 1 | 6 | 23.2 |
-| ✅ | `nano-ui-gcp-activity-detail` | nano | ui | 2 | 0 | 3.2 |
-| ✅ | `nano-ui-gcp-artifactregistry` | nano | ui | 15 | 0 | 17.6 |
-| ✅ | `nano-ui-gcp-cloudscheduler` | nano | ui | 23 | 0 | 25.2 |
-| ✅ | `nano-ui-gcp-container` | nano | ui | 21 | 0 | 22.3 |
-| ✅ | `nano-ui-gcp-create-defaults` | nano | ui | 36 | 0 | 67.0 |
-| ✅ | `nano-ui-gcp-firestore-usage` | nano | ui | 2 | 0 | 3.2 |
-| ✅ | `nano-ui-gcp-grid-defaults` | nano | ui | 39 | 0 | 3.2 |
-| ✅ | `nano-ui-gcp-iamcredentials` | nano | ui | 21 | 0 | 19.5 |
-| ✅ | `nano-ui-gcp-metrics-counts` | nano | ui | 3 | 0 | 3.3 |
-| ✅ | `nano-ui-gcp-monitoring` | nano | ui | 23 | 0 | 23.8 |
-| ✅ | `nano-ui-gcp-pubsub-grid` | nano | ui | 3 | 0 | 5.7 |
-| ✅ | `nano-ui-gcp-pubsub-subscriptions` | nano | ui | 3 | 0 | 3.2 |
-| ✅ | `nano-ui-gcp-redis` | nano | ui | 22 | 0 | 23.0 |
+| ❌ | `offline-api-gcp-grid-columns` | offline | api | 0 | 6 | 0.2 |
+| ❌ | `offline-sdk-go-gcp` | offline | sdk-go | 0 | 5 | 25.8 |
+| ❌ | `offline-sdk-go-gcp-admin` | offline | sdk-go | 0 | 13 | 15.0 |
+| ❌ | `offline-sdk-go-gcp-artifactregistry` | offline | sdk-go | 0 | 1 | 12.3 |
+| ❌ | `offline-sdk-go-gcp-cloudscheduler` | offline | sdk-go | 0 | 13 | 10.8 |
+| ❌ | `offline-sdk-go-gcp-container` | offline | sdk-go | 0 | 15 | 2.0 |
+| ❌ | `offline-sdk-go-gcp-iamcredentials` | offline | sdk-go | 2 | 14 | 1.0 |
+| ❌ | `offline-sdk-go-gcp-monitoring` | offline | sdk-go | 0 | 2 | 1.2 |
+| ❌ | `offline-sdk-go-gcp-redis` | offline | sdk-go | 0 | 16 | 1.3 |
+| ❌ | `offline-sdk-java-gcp` | offline | sdk-java | 0 | 6 | 11.0 |
+| ❌ | `offline-sdk-java-gcp-artifactregistry` | offline | sdk-java | 0 | 1 | 4.4 |
+| ❌ | `offline-sdk-java-gcp-cloudscheduler` | offline | sdk-java | 0 | 12 | 4.6 |
+| ❌ | `offline-sdk-java-gcp-container` | offline | sdk-java | 0 | 14 | 4.7 |
+| ❌ | `offline-sdk-java-gcp-iamcredentials` | offline | sdk-java | 1 | 10 | 5.1 |
+| ❌ | `offline-sdk-java-gcp-monitoring` | offline | sdk-java | 0 | 24 | 4.3 |
+| ❌ | `offline-sdk-java-gcp-redis` | offline | sdk-java | 1 | 14 | 4.3 |
+| ❌ | `offline-ui-gcp-artifactregistry` | offline | ui | 1 | 6 | 24.5 |
+| ❌ | `offline-ui-gcp-cloudscheduler` | offline | ui | 22 | 2 | 24.2 |
+| ✅ | `nano-ui-gcp-activity-detail` | nano | ui | 2 | 0 | 2.7 |
+| ✅ | `nano-ui-gcp-artifactregistry` | nano | ui | 15 | 0 | 18.8 |
+| ✅ | `nano-ui-gcp-cloudscheduler` | nano | ui | 23 | 0 | 25.0 |
+| ✅ | `nano-ui-gcp-container` | nano | ui | 21 | 0 | 21.9 |
+| ✅ | `nano-ui-gcp-create-defaults` | nano | ui | 36 | 0 | 65.9 |
+| ✅ | `nano-ui-gcp-firestore-usage` | nano | ui | 2 | 0 | 2.8 |
+| ✅ | `nano-ui-gcp-grid-defaults` | nano | ui | 39 | 0 | 2.9 |
+| ✅ | `nano-ui-gcp-iamcredentials` | nano | ui | 21 | 0 | 19.1 |
+| ✅ | `nano-ui-gcp-metrics-counts` | nano | ui | 3 | 0 | 2.9 |
+| ✅ | `nano-ui-gcp-monitoring` | nano | ui | 23 | 0 | 23.7 |
+| ✅ | `nano-ui-gcp-pubsub-grid` | nano | ui | 3 | 0 | 5.3 |
+| ✅ | `nano-ui-gcp-pubsub-subscriptions` | nano | ui | 3 | 0 | 2.9 |
+| ✅ | `nano-ui-gcp-redis` | nano | ui | 22 | 0 | 22.5 |
+| ✅ | `nano-ui-gcp-tabs` | nano | ui | 6 | 0 | 2.9 |
 | ✅ | `offline-api-gcp-apigateway-savings` | offline | api | 5 | 0 | 0.5 |
 | ✅ | `offline-api-gcp-cloudscheduler-http` | offline | api | 10 | 0 | 0.8 |
-| ✅ | `offline-api-gcp-cloudscheduler-pubsub` | offline | api | 7 | 0 | 0.4 |
-| ✅ | `offline-api-gcp-cloudscheduler-timer` | offline | api | 9 | 0 | 32.8 |
+| ✅ | `offline-api-gcp-cloudscheduler-pubsub` | offline | api | 7 | 0 | 0.7 |
+| ✅ | `offline-api-gcp-cloudscheduler-timer` | offline | api | 9 | 0 | 8.8 |
 | ✅ | `offline-api-gcp-console-next` | offline | api | 28 | 0 | 0.3 |
 | ✅ | `offline-api-gcp-console-pubsub-lens` | offline | api | 16 | 0 | 0.3 |
 | ✅ | `offline-api-gcp-console-savings` | offline | api | 12 | 0 | 0.7 |
-| ✅ | `offline-api-gcp-console-vault-lens` | offline | api | 15 | 0 | 0.3 |
+| ✅ | `offline-api-gcp-console-vault-lens` | offline | api | 15 | 0 | 0.2 |
 | ✅ | `offline-api-gcp-eventarc-trigger-defaults` | offline | api | 6 | 0 | 0.2 |
-| ✅ | `offline-api-gcp-grid-columns` | offline | api | 19 | 0 | 0.2 |
-| ✅ | `offline-api-gcp-pubsub-savings` | offline | api | 11 | 0 | 0.7 |
+| ✅ | `offline-api-gcp-pubsub-savings` | offline | api | 11 | 0 | 0.6 |
 | ✅ | `offline-api-gcp-vault-console-secrets` | offline | api | 9 | 0 | 0.3 |
-| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 11.8 |
-| ✅ | `offline-cli-gcp-artifactregistry` | offline | cli | 11 | 0 | 8.1 |
-| ✅ | `offline-cli-gcp-cloudscheduler` | offline | cli | 13 | 0 | 8.3 |
-| ✅ | `offline-cli-gcp-container` | offline | cli | 14 | 0 | 11.1 |
-| ✅ | `offline-cli-gcp-iamcredentials` | offline | cli | 9 | 0 | 1.7 |
-| ✅ | `offline-cli-gcp-monitoring` | offline | cli | 15 | 0 | 7.3 |
-| ✅ | `offline-cli-gcp-redis` | offline | cli | 20 | 0 | 10.0 |
-| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 27.8 |
-| ✅ | `offline-sdk-go-gcp-admin` | offline | sdk-go | 26 | 0 | 15.0 |
-| ✅ | `offline-sdk-go-gcp-artifactregistry` | offline | sdk-go | 21 | 0 | 13.3 |
-| ✅ | `offline-sdk-go-gcp-cloudscheduler` | offline | sdk-go | 13 | 0 | 17.7 |
-| ✅ | `offline-sdk-go-gcp-container` | offline | sdk-go | 15 | 0 | 2.4 |
-| ✅ | `offline-sdk-go-gcp-iamcredentials` | offline | sdk-go | 17 | 0 | 1.9 |
-| ✅ | `offline-sdk-go-gcp-monitoring` | offline | sdk-go | 34 | 0 | 1.6 |
-| ✅ | `offline-sdk-go-gcp-redis` | offline | sdk-go | 16 | 0 | 1.8 |
-| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 8.4 |
-| ✅ | `offline-sdk-java-gcp-artifactregistry` | offline | sdk-java | 13 | 0 | 5.4 |
-| ✅ | `offline-sdk-java-gcp-cloudscheduler` | offline | sdk-java | 12 | 0 | 4.9 |
-| ✅ | `offline-sdk-java-gcp-container` | offline | sdk-java | 14 | 0 | 4.9 |
-| ✅ | `offline-sdk-java-gcp-iamcredentials` | offline | sdk-java | 11 | 0 | 5.1 |
-| ✅ | `offline-sdk-java-gcp-monitoring` | offline | sdk-java | 24 | 0 | 4.5 |
-| ✅ | `offline-sdk-java-gcp-redis` | offline | sdk-java | 15 | 0 | 5.0 |
+| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 14.6 |
+| ✅ | `offline-cli-gcp-artifactregistry` | offline | cli | 11 | 0 | 8.5 |
+| ✅ | `offline-cli-gcp-cloudscheduler` | offline | cli | 13 | 0 | 8.9 |
+| ✅ | `offline-cli-gcp-container` | offline | cli | 14 | 0 | 11.8 |
+| ✅ | `offline-cli-gcp-iamcredentials` | offline | cli | 9 | 0 | 2.1 |
+| ✅ | `offline-cli-gcp-monitoring` | offline | cli | 15 | 0 | 8.4 |
+| ✅ | `offline-cli-gcp-redis` | offline | cli | 20 | 0 | 10.8 |
 | ✅ | `offline-ui-gcp-activity-detail` | offline | ui | 2 | 0 | 0.8 |
-| ✅ | `offline-ui-gcp-cloudscheduler` | offline | ui | 24 | 0 | 24.2 |
 | ✅ | `offline-ui-gcp-container` | offline | ui | 21 | 0 | 21.0 |
-| ✅ | `offline-ui-gcp-create-defaults` | offline | ui | 36 | 0 | 66.1 |
-| ✅ | `offline-ui-gcp-grid-defaults` | offline | ui | 39 | 0 | 0.9 |
-| ✅ | `offline-ui-gcp-iamcredentials` | offline | ui | 21 | 0 | 20.1 |
-| ✅ | `offline-ui-gcp-monitoring` | offline | ui | 23 | 0 | 22.5 |
+| ✅ | `offline-ui-gcp-create-defaults` | offline | ui | 36 | 0 | 66.2 |
+| ✅ | `offline-ui-gcp-grid-defaults` | offline | ui | 39 | 0 | 0.8 |
+| ✅ | `offline-ui-gcp-iamcredentials` | offline | ui | 21 | 0 | 18.3 |
+| ✅ | `offline-ui-gcp-metrics-tab` | offline | ui | 6 | 0 | 6.9 |
+| ✅ | `offline-ui-gcp-monitoring` | offline | ui | 23 | 0 | 22.7 |
 | ✅ | `offline-ui-gcp-pubsub-grid` | offline | ui | 3 | 0 | 3.2 |
 | ✅ | `offline-ui-gcp-pubsub-subscriptions` | offline | ui | 3 | 0 | 0.8 |
 | ✅ | `offline-ui-gcp-redis` | offline | ui | 22 | 0 | 21.6 |
 
-<details><summary>❌ <code>nano-ui-gcp-tabs</code> log</summary>
+<details><summary>❌ <code>offline-sdk-go-gcp</code> log</summary>
 
 ```
-RESULT boot_errors = []
-RESULT createInstance = 200
-RESULT createUser = 400
-RESULT listUsers = ["postgres"]
-RESULT deleteUser = 404
-RESULT listUsersAfterDelete = 1
-RESULT createDb = 200
-RESULT listDatabases = ["appdb"]
-RESULT createBackup = 200
-RESULT listBackups = 1
-RESULT eventsOk = true
-RESULT eventActions = ["CreateBackup","DeleteUser","CreateUser","Create"]
-[PASS] Cloud SQL instance created
-[FAIL] user created and listed
-[FAIL] user deleted
-[PASS] database created and listed
-[PASS] backup created and listed
-[PASS] activity log records the create
+go: downloading github.com/googleapis/gax-go/v2 v2.12.5
+go: downloading golang.org/x/oauth2 v0.21.0
+go: downloading google.golang.org/api v0.187.0
+go: downloading google.golang.org/genproto v0.0.0-20240624140628-dc46fd24d27d
+go: downloading google.golang.org/grpc v1.64.0
+go: downloading google.golang.org/protobuf v1.34.2
+go: downloading go.opencensus.io v0.24.0
+go: downloading go.opentelemetry.io/otel v1.24.0
+go: downloading go.opentelemetry.io/otel/trace v1.24.0
+go: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d
+go: downloading google.golang.org/genproto/googleapis/api v0.0.0-20240617180043-68d350f18fd4
+go: downloading cloud.google.com/go/auth v0.6.1
+go: downloading cloud.google.com/go/auth/oauth2adapt v0.2.2
+go: downloading go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0
+go: downloading golang.org/x/net v0.26.0
+go: downloading github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
+go: downloading github.com/go-logr/logr v1.4.1
+go: downloading go.opentelemetry.io/otel/metric v1.24.0
+go: downloading go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0
+go: downloading golang.org/x/time v0.5.0
+go: downloading github.com/google/s2a-go v0.1.7
+go: downloading github.com/googleapis/enterprise-certificate-proxy v0.3.2
+go: downloading golang.org/x/sys v0.21.0
+go: downloading github.com/felixge/httpsnoop v1.0.4
+go: downloading github.com/go-logr/stdr v1.2.2
+go: downloading github.com/golang/protobuf v1.5.4
+go: downloading golang.org/x/text v0.16.0
+go: downloading golang.org/x/sync v0.7.0
+go: downloading golang.org/x/crypto v0.24.0
+exit status 1
+```
+
+</details>
+
+<details><summary>❌ <code>offline-sdk-go-gcp-admin</code> log</summary>
+
+```
+[
+  {
+    "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+    "domain": "googleapis.com",
+    "metadata": {
+      "consumer": "projects/gcp-dev"
+    },
+    "reason": "CONSUMER_INVALID"
+  }
+]
+FAIL secretmanager secrets.create :: googleapi: Error 403: Permission 'secretmanager.secrets.create' denied for resource 'projects/gcp-dev' (or it may not exist).
+FAIL pubsub topics.create :: googleapi: Error 404: Requested project not found or user does not have access to it (project=gcp-dev). Make sure to specify the unique project identifier and not the Google Cloud Console display name.
+FAIL pubsub subscriptions.create :: googleapi: Error 404: Requested project not found or user does not have access to it (project=gcp-dev). Make sure to specify the unique project identifier and not the Google Cloud Console display name.
+FAIL pubsub subscriptions.get (GetSubscription) :: googleapi: Error 404: Requested project not found or user does not have access to it (project=gcp-dev). Make sure to specify the unique project identifier and not the Google Cloud Console display name.
+FAIL pubsub subscriptions.delete :: googleapi: Error 404: Requested project not found or user does not have access to it (project=gcp-dev). Make sure to specify the unique project identifier and not the Google Cloud Console display name.
+FAIL pubsub topics.delete :: googleapi: Error 404: Requested project not found or user does not have access to it (project=gcp-dev). Make sure to specify the unique project identifier and not the Google Cloud Console display name.
+RESULT pass=0 fail=13
+go: downloading google.golang.org/api v0.190.0
+go: downloading cloud.google.com/go/auth v0.7.3
+go: downloading google.golang.org/grpc v1.64.1
+go: downloading cloud.google.com/go/auth/oauth2adapt v0.2.3
+go: downloading cloud.google.com/go/compute/metadata v0.5.0
+go: downloading github.com/google/s2a-go v0.1.8
+go: downloading github.com/googleapis/gax-go/v2 v2.13.0
+go: downloading golang.org/x/net v0.27.0
+go: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20240730163845-b1a4ccb954bf
+go: downloading github.com/go-logr/logr v1.4.2
+go: downloading golang.org/x/sys v0.22.0
+go: downloading golang.org/x/crypto v0.25.0
+exit status 1
+```
+
+</details>
+
+<details><summary>❌ <code>offline-sdk-java-gcp</code> log</summary>
+
+```
+== google-cloud-storage (Java) against http://localhost:9000 project=gcp-dev ==
+FAIL buckets.insert :: com.google.cloud.storage.StorageException: The caller does not have storage.buckets.list access to the Google Cloud project. Permission 'storage.buckets.list' denied on resource (or it may not exist).
+FAIL buckets.list :: com.google.cloud.storage.StorageException: The caller does not have storage.buckets.list access to the Google Cloud project. Permission 'storage.buckets.list' denied on resource (or it may not exist).
+FAIL objects.insert :: com.google.cloud.storage.StorageException: 404 Not Found
+POST http://localhost:9000/upload/storage/v1/b/java-sdk-test-1793400198152/o?projection=full&uploadType=multipart
+FAIL objects.get :: com.google.cloud.storage.StorageException: 404 Not Found
+GET http://localhost:9000/download/storage/v1/b/java-sdk-test-1793400198152/o/greeting.txt?alt=media
+FAIL objects.delete :: false
+FAIL buckets.delete :: false
+RESULT pass=0 fail=6
+```
+
+</details>
+
+<details><summary>❌ <code>offline-api-gcp-grid-columns</code> log</summary>
+
+```
+[FAIL] create VPC network {"error":{"code":404,"message":"The resource 'projects/cloudlearn' was not found","errors":[{"message":"The resource 'pr
+[FAIL] create Firestore database {"error":{"code":403,"status":"PERMISSION_DENIED","message":"Permission denied on resource project cloudlearn.","details
+[FAIL] create Cloud Function {"error":{"code":403,"status":"PERMISSION_DENIED","message":"Permission denied on resource project cloudlearn.","details
+[FAIL] vpc: created resource gridnet-6111e6 is listed 
+[FAIL] firestore: created resource griddb-6111e6 is listed 
+[FAIL] functions: created resource gridfn-6111e6 is listed
+```
+
+</details>
+
+<details><summary>❌ <code>offline-sdk-java-gcp-cloudscheduler</code> log</summary>
+
+```
+== google-cloud-scheduler (Java) against http://localhost:9000 project=java-sched-proj ==
+[FAIL] CreateJob (http target) :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] CreateJob duplicate -> ALREADY_EXISTS :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] CreateJob bad schedule -> INVALID_ARGUMENT :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] GetJob :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] GetJob missing -> NOT_FOUND :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] ListJobs :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] UpdateJob (patch schedule+description) :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] PauseJob :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] RunJob on paused job -> FAILED_PRECONDITION :: PERMISSION_DENIED
+[FAIL] ResumeJob :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] RunJob stamps lastAttemptTime :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] DeleteJob :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+RESULT pass=0 fail=12
+```
+
+</details>
+
+<details><summary>❌ <code>offline-sdk-go-gcp-cloudscheduler</code> log</summary>
+
+```
+[FAIL] ResumeJob :: googleapi: Error 403: Permission denied on resource project go-sched-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-sched-proj]
+[FAIL] RunJob stamps lastAttemptTime :: googleapi: Error 403: Permission denied on resource project go-sched-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-sched-proj]
+[FAIL] DeleteJob :: googleapi: Error 403: Permission denied on resource project go-sched-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-sched-proj] / googleapi: Error 403: Permission denied on resource project go-sched-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-sched-proj]
+RESULT pass=0 fail=13
+go: downloading cloud.google.com/go/scheduler v1.11.0
+go: downloading google.golang.org/api v0.196.0
+go: downloading google.golang.org/genproto v0.0.0-20240903143218-8af14fe29dc1
+go: downloading google.golang.org/grpc v1.66.0
+go: downloading google.golang.org/genproto/googleapis/api v0.0.0-20240827150818-7e3bb234dfed
+go: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1
+go: downloading cloud.google.com/go/auth v0.9.3
+go: downloading cloud.google.com/go/auth/oauth2adapt v0.2.4
+go: downloading go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.54.0
+go: downloading golang.org/x/oauth2 v0.22.0
+go: downloading golang.org/x/time v0.6.0
+go: downloading go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.54.0
+go: downloading golang.org/x/net v0.28.0
+go: downloading go.opentelemetry.io/otel v1.29.0
+go: downloading go.opentelemetry.io/otel/metric v1.29.0
+go: downloading go.opentelemetry.io/otel/trace v1.29.0
+go: downloading github.com/googleapis/enterprise-certificate-proxy v0.3.3
+go: downloading golang.org/x/sys v0.24.0
+go: downloading golang.org/x/text v0.17.0
+go: downloading golang.org/x/sync v0.8.0
+go: downloading golang.org/x/crypto v0.26.0
+exit status 1
+```
+
+</details>
+
+<details><summary>❌ <code>offline-ui-gcp-cloudscheduler</code> log</summary>
+
+```
+[PASS] Cloud Scheduler is on the GCP console rail
+[PASS] create form has a realistic default name
+[PASS] create with defaults returns 2xx
+[PASS] new job appears in the list
+[PASS] every grid column is filled
+[PASS] cost-savings metrics include the new job (gcp.cloudscheduler priced)
+[PASS] detail view shows its tabs
+[PASS] tab "Overview" renders
+[PASS] tab "Last execution" renders
+[PASS] tab "Target" renders
+[PASS] tab "Retry policy" renders
+[PASS] tab "Schedule" renders
+[PASS] tab "Properties" renders
+[PASS] tab "JSON" renders
+[PASS] tab "Metrics" renders
+[PASS] Schedule tab shows the cron frequency
+[PASS] Target tab shows the HTTP target
+[PASS] Pause → job state PAUSED
+[PASS] Resume → job state ENABLED
+[FAIL] job target repointed at a reachable listener :: HTTP 403
+[FAIL] Force run → last execution result Success
+[PASS] delete removes the job from the list
+[PASS] deleted job is gone from the backend
+[PASS] no API errors / page errors during the flow
+2 check(s) failed
+```
+
+</details>
+
+<details><summary>❌ <code>offline-sdk-java-gcp-container</code> log</summary>
+
+```
+== google-cloud-container (Java) against http://localhost:9000 project=java-gke-proj ==
+[FAIL] CreateCluster -> CREATE_CLUSTER operation, DONE :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] CreateCluster duplicate -> ALREADY_EXISTS :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] CreateCluster bad name -> INVALID_ARGUMENT :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] GetCluster (RUNNING, endpoint, version, pool) :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] GetCluster missing -> NOT_FOUND :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] ListClusters contains the cluster :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] CreateNodePool + GetNodePool :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] SetNodePoolSize persisted :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] ListNodePools (2 pools) :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] SetLabels persisted :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] UpdateCluster (upgrade master) :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] ListOperations + GetOperation :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] GetServerConfig :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] DeleteNodePool + DeleteCluster :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+RESULT pass=0 fail=14
+```
+
+</details>
+
+<details><summary>❌ <code>offline-sdk-go-gcp-container</code> log</summary>
+
+```
+.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-gke-proj]
+[FAIL] CreateNodePool + GetNodePool (autoscaling) :: googleapi: Error 403: Permission denied on resource project go-gke-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-gke-proj] googleapi: Error 403: Permission denied on resource project go-gke-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-gke-proj] <nil>
+[FAIL] SetNodePoolSize persisted :: googleapi: Error 403: Permission denied on resource project go-gke-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-gke-proj] <nil>
+[FAIL] ListNodePools (2 pools) :: googleapi: Error 403: Permission denied on resource project go-gke-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-gke-proj]
+[FAIL] SetLabels persisted :: googleapi: Error 403: Permission denied on resource project go-gke-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-gke-proj] map[]
+[FAIL] SetLabels stale fingerprint -> 409 :: googleapi: Error 403: Permission denied on resource project go-gke-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-gke-proj]
+[FAIL] UpdateCluster (upgrade master) :: googleapi: Error 403: Permission denied on resource project go-gke-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-gke-proj] 
+[FAIL] ListOperations + GetOperation :: googleapi: Error 403: Permission denied on resource project go-gke-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-gke-proj]
+[FAIL] GetServerConfig :: googleapi: Error 403: Permission denied on resource project go-gke-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-gke-proj]
+[FAIL] DeleteNodePool + DeleteCluster :: googleapi: Error 403: Permission denied on resource project go-gke-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-gke-proj] / googleapi: Error 403: Permission denied on resource project go-gke-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-gke-proj] / googleapi: Error 403: Permission denied on resource project go-gke-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-gke-proj]
+RESULT pass=0 fail=15
+go: downloading cloud.google.com/go/container v1.39.0
+exit status 1
+```
+
+</details>
+
+<details><summary>❌ <code>offline-sdk-java-gcp-iamcredentials</code> log</summary>
+
+```
+== google-cloud-iamcredentials (Java) against http://localhost:9000 project=java-iamc-proj ==
+[FAIL] IAM: create service account java-sa-323363 :: 403 {"error":{"code":403,"status":"PERMISSION_DENIED","message":"Permission denied on resource project java-iamc-proj.","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"CONSUMER_INVALID","domain":"googleapis.com","metadata":{"consumer":"projects/java-iamc-proj"}}]}}
+[FAIL] IAM: create service account java-del-323363 :: 403 {"error":{"code":403,"status":"PERMISSION_DENIED","message":"Permission denied on resource project java-iamc-proj.","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"CONSUMER_INVALID","domain":"googleapis.com","metadata":{"consumer":"projects/java-iamc-proj"}}]}}
+[FAIL] generateAccessToken :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] generateAccessToken with delegate chain :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] generateAccessToken without scope -> 400 :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[PASS] unknown service account -> 403
+[FAIL] generateIdToken :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] signBlob :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] signJwt :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] signJwt non-JSON payload -> 400 :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] console lists the issued credentials (no secrets) :: 200 {"items":[{"id":"cred-d255a6871098","type":"Access token","method":"generateAccessToken","serviceAccount":"vyomi-sa@
+RESULT pass=1 fail=10
+```
+
+</details>
+
+<details><summary>❌ <code>offline-sdk-go-gcp-iamcredentials</code> log</summary>
+
+```
+== cloud.google.com/go/iam/credentials (Go) against http://localhost:9000 project=go-iamc-proj ==
+[FAIL] IAM: create service account go-sa-400325 :: 403
+[FAIL] IAM: create service account go-del-400325 :: 403
+[FAIL] GenerateAccessToken :: googleapi: Error 403: Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist).
+[FAIL] GenerateAccessToken with lifetime :: googleapi: Error 403: Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist).
+[FAIL] GenerateAccessToken with delegate chain :: googleapi: Error 403: Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist).
+[FAIL] GenerateAccessToken without scope -> 400 :: googleapi: Error 403: Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist).
+[FAIL] GenerateAccessToken lifetime > 12h -> 400 :: googleapi: Error 403: Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist).
+[PASS] unknown service account -> 403 PERMISSION_DENIED
+[FAIL] project other than '-' -> 400 :: googleapi: Error 403: Permission denied on resource project go-iamc-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-iamc-proj]
+[PASS] unknown delegate -> 403
+[FAIL] GenerateIdToken :: googleapi: Error 403: Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist).
+[FAIL] GenerateIdToken without audience -> 400 :: googleapi: Error 403: Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist).
+[FAIL] SignBlob :: googleapi: Error 403: Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist).
+[FAIL] SignJwt :: googleapi: Error 403: Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist).
+[FAIL] SignJwt with a non-JSON payload -> 400 :: googleapi: Error 403: Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist).
+[FAIL] console lists the issued credentials (no secrets) :: 200
+RESULT pass=2 fail=14
+go: downloading cloud.google.com/go/iam v1.1.13
+go: downloading google.golang.org/genproto/googleapis/api v0.0.0-20240725223205-93522f1f2a9f
+exit status 1
+```
+
+</details>
+
+<details><summary>❌ <code>offline-sdk-java-gcp-redis</code> log</summary>
+
+```
+== google-cloud-redis (Java) against http://localhost:9000 project=java-redis-proj ==
+[FAIL] CreateInstance (LRO) -> Instance READY with host/port :: java.util.concurrent.ExecutionException: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] CreateInstance duplicate -> ALREADY_EXISTS :: java.util.concurrent.ExecutionException: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] CreateInstance bad id -> INVALID_ARGUMENT :: java.util.concurrent.ExecutionException: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] GetInstance (READY, 2 GB, BASIC, version, labels, node) :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] GetInstance missing -> NOT_FOUND :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] ListInstances contains the instance :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] UpdateInstance (memory + labels) persisted :: java.util.concurrent.ExecutionException: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] FailoverInstance on BASIC -> FAILED_PRECONDITION :: java.util.concurrent.ExecutionException: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] CreateInstance STANDARD_HA (alt zone, 2 nodes, AUTH) :: java.util.concurrent.ExecutionException: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] FailoverInstance swaps the primary zone :: java.util.concurrent.ExecutionException: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] UpgradeInstance -> REDIS_7_2 :: java.util.concurrent.ExecutionException: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] GetInstanceAuthString :: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[PASS] GetInstanceAuthString without AUTH -> error
+[FAIL] ExportInstance + ImportInstance (gs:// URIs) :: java.util.concurrent.ExecutionException: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+[FAIL] DeleteInstance (LRO) removes the instance :: java.util.concurrent.ExecutionException: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+RESULT pass=1 fail=14
+```
+
+</details>
+
+<details><summary>❌ <code>offline-sdk-go-gcp-redis</code> log</summary>
+
+```
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-redis-proj]
+[FAIL] FailoverInstance on BASIC -> 400 FAILED_PRECONDITION :: googleapi: Error 403: Permission denied on resource project go-redis-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-redis-proj]
+[FAIL] CreateInstance STANDARD_HA (alt zone, 2 nodes, AUTH) :: googleapi: Error 403: Permission denied on resource project go-redis-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-redis-proj] <nil>
+[FAIL] FailoverInstance swaps the primary zone :: googleapi: Error 403: Permission denied on resource project go-redis-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-redis-proj] <nil>
+[FAIL] UpgradeInstance -> REDIS_7_2 :: googleapi: Error 403: Permission denied on resource project go-redis-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-redis-proj] <nil>
+[FAIL] GetInstanceAuthString :: googleapi: Error 403: Permission denied on resource project go-redis-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-redis-proj]
+[FAIL] GetInstanceAuthString without AUTH -> 400 :: googleapi: Error 403: Permission denied on resource project go-redis-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-redis-proj]
+[FAIL] ExportInstance + ImportInstance (gs:// URIs) :: googleapi: Error 403: Permission denied on resource project go-redis-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-redis-proj] / googleapi: Error 403: Permission denied on resource project go-redis-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-redis-proj]
+[FAIL] DeleteInstance (LRO) removes the instance :: googleapi: Error 403: Permission denied on resource project go-redis-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-redis-proj] / googleapi: Error 403: Permission denied on resource project go-redis-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-redis-proj] / googleapi: Error 403: Permission denied on resource project go-redis-proj.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/go-redis-proj]
+RESULT pass=0 fail=16
+go: downloading cloud.google.com/go/redis v1.17.0
+go: downloading cloud.google.com/go v0.115.1
+go: downloading cloud.google.com/go/longrunning v0.6.0
+exit status 1
+```
+
+</details>
+
+<details><summary>❌ <code>offline-sdk-java-gcp-artifactregistry</code> log</summary>
+
+```
+[FAIL] CreateRepository completes with the repository :: java.util.concurrent.ExecutionException: com.google.api.gax.rpc.PermissionDeniedException: Forbidden
+```
+
+</details>
+
+<details><summary>❌ <code>offline-sdk-go-gcp-artifactregistry</code> log</summary>
+
+```
+[FAIL] CreateRepository returns an operation :: googleapi: Error 403: Permission denied on resource project gcp-dev.
+error details: name = ErrorInfo reason = CONSUMER_INVALID domain = googleapis.com metadata = map[consumer:projects/gcp-dev]
+go: downloading cloud.google.com/go/artifactregistry v1.16.0
+go: downloading google.golang.org/api v0.214.0
+go: downloading google.golang.org/genproto v0.0.0-20241015192408-796eee8c2d53
+go: downloading google.golang.org/protobuf v1.35.2
+go: downloading cloud.google.com/go/iam v1.2.1
+go: downloading cloud.google.com/go/longrunning v0.6.1
+go: downloading github.com/googleapis/gax-go/v2 v2.14.0
+go: downloading google.golang.org/grpc v1.67.1
+go: downloading google.golang.org/genproto/googleapis/api v0.0.0-20241104194629-dd2ea8efbc28
+go: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20241209162323-e6fa225c2576
+go: downloading cloud.google.com/go/auth v0.13.0
+go: downloading cloud.google.com/go/auth/oauth2adapt v0.2.6
+go: downloading cloud.google.com/go/compute/metadata v0.6.0
+go: downloading golang.org/x/oauth2 v0.24.0
+go: downloading golang.org/x/time v0.8.0
+go: downloading golang.org/x/net v0.33.0
+go: downloading github.com/googleapis/enterprise-certificate-proxy v0.3.4
+go: downloading golang.org/x/sys v0.28.0
+go: downloading golang.org/x/sync v0.10.0
+go: downloading golang.org/x/text v0.21.0
+go: downloading golang.org/x/crypto v0.31.0
+exit status 1
 ```
 
 </details>
@@ -478,37 +730,92 @@ RESULT eventActions = ["CreateBackup","DeleteUser","CreateUser","Create"]
 
 </details>
 
-**UI findings: 4**
+<details><summary>❌ <code>offline-sdk-java-gcp-monitoring</code> log</summary>
 
-<details><summary><b>Cloud Functions</b> (offline) — 1 finding(s)</summary>
+```
+      "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+      "reason": "CONSUMER_INVALID",
+      "domain": "googleapis.com",
+      "metadata": {
+        "consumer": "projects/java-mon-proj"
+      }
+    }
+  ],
+  "message": "Permission denied on resource project java-mon-proj.",
+  "status": "PERMISSION_DENIED"
+}
+[FAIL] groups create/update/delete :: com.google.api.client.googleapis.json.GoogleJsonResponseException: 403 Forbidden
+POST http://localhost:9000/v3/projects/java-mon-proj/groups
+{
+  "code": 403,
+  "details": [
+    {
+      "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+      "reason": "CONSUMER_INVALID",
+      "domain": "googleapis.com",
+      "metadata": {
+        "consumer": "projects/java-mon-proj"
+      }
+    }
+  ],
+  "message": "Permission denied on resource project java-mon-proj.",
+  "status": "PERMISSION_DENIED"
+}
 
-| Problem | Tab | Detail |
-|---|---|---|
-| `STATIC_TAB` | Metrics | tab 'Metrics' shows no backend data and nothing about this resource |
+0 passed, 24 failed
+```
 
 </details>
 
-<details><summary><b>Cloud Storage</b> (offline) — 1 finding(s)</summary>
+<details><summary>❌ <code>offline-sdk-go-gcp-monitoring</code> log</summary>
 
-| Problem | Tab | Detail |
-|---|---|---|
-| `STATIC_TAB` | Metrics | tab 'Metrics' shows no backend data and nothing about this resource |
+```
+Details:
+[
+  {
+    "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+    "domain": "googleapis.com",
+    "metadata": {
+      "consumer": "projects/go-mon-proj"
+    },
+    "reason": "CONSUMER_INVALID"
+  }
+] <nil>
+[FAIL] NotificationChannels.Create missing label → 400 :: googleapi: Error 403: Permission denied on resource project go-mon-proj.
+Details:
+[
+  {
+    "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+    "domain": "googleapis.com",
+    "metadata": {
+      "consumer": "projects/go-mon-proj"
+    },
+    "reason": "CONSUMER_INVALID"
+  }
+]
+panic: runtime error: invalid memory address or nil pointer dereference
+[signal SIGSEGV: segmentation violation code=0x1 addr=0x50 pc=0x9b3430]
+
+goroutine 1 [running]:
+main.main()
+	/home/runner/work/appliance/appliance/tests/conformance/gcp-sdk-go-monitoring/main.go:69 +0x890
+exit status 2
+```
 
 </details>
 
-<details><summary><b>VPC Network</b> (offline) — 1 finding(s)</summary>
+**UI findings: 6**
+
+<details><summary><b>Pub/Sub</b> (offline) — 6 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `STATIC_TAB` | Network metrics | tab 'Network metrics' shows no backend data and nothing about this resource |
-
-</details>
-
-<details><summary><b>Cloud KMS</b> (offline) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `STATIC_TAB` | Metrics | tab 'Metrics' shows no backend data and nothing about this resource |
+| `HTTP_404` | Labels | /api/gcp/sub/pubsub/getLabels/my-topic → 404 |
+| `HTTP_404` | Subscriptions | /api/gcp/sub/pubsub/listSubscriptions/my-topic → 404 |
+| `HTTP_404` | Schema | /api/gcp/sub/pubsub/getSchema/my-topic → 404 |
+| `HTTP_404` | Messages | /api/gcp/sub/pubsub/listPullSubscriptions/my-topic → 404 |
+| `HTTP_404` | Encryption | /api/gcp/sub/pubsub/getEncryption/my-topic → 404 |
+| `STATIC_TAB` | Properties | tab 'Properties' shows no backend data and nothing about this resource |
 
 </details>
 
@@ -517,123 +824,196 @@ RESULT eventActions = ["CreateBackup","DeleteUser","CreateUser","Create"]
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-azure-savings` | nano | ui | 0 | 8 | 94.4 |
-| ✅ | `nano-ui-azure-app` | nano | ui | 29 | 0 | 21.9 |
-| ✅ | `nano-ui-azure-appconfiguration` | nano | ui | 28 | 0 | 23.7 |
-| ✅ | `nano-ui-azure-cognitiveservices` | nano | ui | 29 | 0 | 24.4 |
-| ✅ | `nano-ui-azure-dns` | nano | ui | 28 | 0 | 24.1 |
-| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 9.9 |
-| ✅ | `nano-ui-azure-dp-detail` | nano | ui | 12 | 0 | 27.0 |
-| ✅ | `nano-ui-azure-flat-create` | nano | ui | 8 | 0 | 18.0 |
-| ✅ | `nano-ui-azure-home` | nano | ui | 7 | 0 | 4.0 |
-| ✅ | `nano-ui-azure-keyvault-tabs` | nano | ui | 9 | 0 | 4.1 |
-| ✅ | `nano-ui-azure-metrics` | nano | ui | 12 | 0 | 13.3 |
-| ✅ | `nano-ui-azure-monitor` | nano | ui | 29 | 0 | 28.8 |
-| ✅ | `nano-ui-azure-nsg-roledef-create` | nano | ui | 7 | 0 | 11.2 |
-| ✅ | `nano-ui-azure-nsg-rules` | nano | ui | 8 | 0 | 10.7 |
-| ✅ | `nano-ui-azure-operationalinsights` | nano | ui | 33 | 0 | 28.2 |
-| ✅ | `nano-ui-azure-rail-last` | nano | ui | 3 | 0 | 2.6 |
-| ✅ | `nano-ui-azure-rg-nav` | nano | ui | 3 | 0 | 5.3 |
-| ✅ | `nano-ui-azure-storage-console` | nano | ui | 12 | 0 | 9.2 |
-| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 18.2 |
-| ✅ | `nano-ui-azure-tags-tab` | nano | ui | 36 | 0 | 47.6 |
-| ✅ | `nano-ui-reload-backend` | nano | ui | 3 | 0 | 11.2 |
+| ❌ | `nano-ui-azure-dns` | nano | ui | 27 | 1 | 23.1 |
+| ❌ | `nano-ui-azure-operationalinsights` | nano | ui | 32 | 1 | 27.3 |
+| ✅ | `nano-ui-azure-apim-appinsights` | nano | ui | 6 | 0 | 14.9 |
+| ✅ | `nano-ui-azure-app` | nano | ui | 29 | 0 | 20.9 |
+| ✅ | `nano-ui-azure-appconfiguration` | nano | ui | 28 | 0 | 22.6 |
+| ✅ | `nano-ui-azure-cognitiveservices` | nano | ui | 29 | 0 | 23.4 |
+| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 10.1 |
+| ✅ | `nano-ui-azure-dp-detail` | nano | ui | 12 | 0 | 27.5 |
+| ✅ | `nano-ui-azure-flat-create` | nano | ui | 8 | 0 | 18.4 |
+| ✅ | `nano-ui-azure-home` | nano | ui | 7 | 0 | 4.6 |
+| ✅ | `nano-ui-azure-keyvault-tabs` | nano | ui | 9 | 0 | 4.6 |
+| ✅ | `nano-ui-azure-metrics` | nano | ui | 12 | 0 | 13.7 |
+| ✅ | `nano-ui-azure-monitor` | nano | ui | 29 | 0 | 27.4 |
+| ✅ | `nano-ui-azure-nsg-roledef-create` | nano | ui | 7 | 0 | 10.2 |
+| ✅ | `nano-ui-azure-nsg-rules` | nano | ui | 8 | 0 | 11.2 |
+| ✅ | `nano-ui-azure-rail-last` | nano | ui | 3 | 0 | 4.3 |
+| ✅ | `nano-ui-azure-resource-group-detail` | nano | ui | 6 | 0 | 5.0 |
+| ✅ | `nano-ui-azure-rg-nav` | nano | ui | 3 | 0 | 5.5 |
+| ✅ | `nano-ui-azure-savings` | nano | ui | 8 | 0 | 9.0 |
+| ✅ | `nano-ui-azure-storage-console` | nano | ui | 12 | 0 | 10.5 |
+| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 18.5 |
+| ✅ | `nano-ui-azure-tags-tab` | nano | ui | 36 | 0 | 49.6 |
+| ✅ | `nano-ui-reload-backend` | nano | ui | 3 | 0 | 12.3 |
 | ✅ | `offline-api-azure-console-data-planes` | offline | api | 36 | 0 | 0.4 |
 | ✅ | `offline-api-azure-console-lens` | offline | api | 33 | 0 | 0.5 |
 | ✅ | `offline-api-azure-console-routes` | offline | api | 35 | 0 | 0.4 |
-| ✅ | `offline-cli-azure` | offline | cli | 6 | 0 | 8.7 |
-| ✅ | `offline-cli-azure-app` | offline | cli | 23 | 0 | 7.8 |
-| ✅ | `offline-cli-azure-appconfiguration` | offline | cli | 32 | 0 | 13.5 |
-| ✅ | `offline-cli-azure-cognitiveservices` | offline | cli | 20 | 0 | 6.5 |
-| ✅ | `offline-cli-azure-dns` | offline | cli | 24 | 0 | 7.0 |
-| ✅ | `offline-cli-azure-monitor` | offline | cli | 21 | 0 | 7.9 |
-| ✅ | `offline-cli-azure-operationalinsights` | offline | cli | 20 | 0 | 6.8 |
-| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 20.8 |
-| ✅ | `offline-sdk-go-azure-app` | offline | sdk-go | 29 | 0 | 3.0 |
+| ✅ | `offline-cli-azure` | offline | cli | 6 | 0 | 9.4 |
+| ✅ | `offline-cli-azure-app` | offline | cli | 23 | 0 | 7.9 |
+| ✅ | `offline-cli-azure-appconfiguration` | offline | cli | 32 | 0 | 13.7 |
+| ✅ | `offline-cli-azure-cognitiveservices` | offline | cli | 20 | 0 | 6.6 |
+| ✅ | `offline-cli-azure-dns` | offline | cli | 24 | 0 | 7.1 |
+| ✅ | `offline-cli-azure-monitor` | offline | cli | 21 | 0 | 8.3 |
+| ✅ | `offline-cli-azure-operationalinsights` | offline | cli | 20 | 0 | 6.9 |
+| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 21.5 |
+| ✅ | `offline-sdk-go-azure-app` | offline | sdk-go | 29 | 0 | 3.2 |
 | ✅ | `offline-sdk-go-azure-appconfiguration` | offline | sdk-go | 34 | 0 | 1.9 |
-| ✅ | `offline-sdk-go-azure-cognitiveservices` | offline | sdk-go | 39 | 0 | 2.8 |
-| ✅ | `offline-sdk-go-azure-dns` | offline | sdk-go | 31 | 0 | 1.0 |
-| ✅ | `offline-sdk-go-azure-monitor` | offline | sdk-go | 30 | 0 | 3.0 |
-| ✅ | `offline-sdk-go-azure-operationalinsights` | offline | sdk-go | 33 | 0 | 20.2 |
-| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 28.1 |
-| ✅ | `offline-sdk-java-azure-app` | offline | sdk-java | 15 | 0 | 20.0 |
-| ✅ | `offline-sdk-java-azure-appconfiguration` | offline | sdk-java | 28 | 0 | 6.7 |
-| ✅ | `offline-sdk-java-azure-cognitiveservices` | offline | sdk-java | 28 | 0 | 5.3 |
-| ✅ | `offline-sdk-java-azure-dns` | offline | sdk-java | 20 | 0 | 20.1 |
-| ✅ | `offline-sdk-java-azure-monitor` | offline | sdk-java | 20 | 0 | 5.4 |
-| ✅ | `offline-sdk-java-azure-operationalinsights` | offline | sdk-java | 23 | 0 | 20.0 |
-| ✅ | `offline-sdk-python-azure-ops` | offline | sdk-python | 8 | 0 | 1.0 |
-| ✅ | `offline-ui-azure-app` | offline | ui | 29 | 0 | 19.6 |
-| ✅ | `offline-ui-azure-appconfiguration` | offline | ui | 31 | 0 | 22.8 |
+| ✅ | `offline-sdk-go-azure-cognitiveservices` | offline | sdk-go | 39 | 0 | 2.5 |
+| ✅ | `offline-sdk-go-azure-dns` | offline | sdk-go | 31 | 0 | 1.1 |
+| ✅ | `offline-sdk-go-azure-monitor` | offline | sdk-go | 30 | 0 | 3.4 |
+| ✅ | `offline-sdk-go-azure-operationalinsights` | offline | sdk-go | 33 | 0 | 20.5 |
+| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 26.4 |
+| ✅ | `offline-sdk-java-azure-app` | offline | sdk-java | 15 | 0 | 20.3 |
+| ✅ | `offline-sdk-java-azure-appconfiguration` | offline | sdk-java | 28 | 0 | 7.1 |
+| ✅ | `offline-sdk-java-azure-cognitiveservices` | offline | sdk-java | 28 | 0 | 5.1 |
+| ✅ | `offline-sdk-java-azure-dns` | offline | sdk-java | 20 | 0 | 20.3 |
+| ✅ | `offline-sdk-java-azure-monitor` | offline | sdk-java | 20 | 0 | 5.7 |
+| ✅ | `offline-sdk-java-azure-operationalinsights` | offline | sdk-java | 23 | 0 | 20.4 |
+| ✅ | `offline-sdk-python-azure-ops` | offline | sdk-python | 8 | 0 | 1.1 |
+| ✅ | `offline-ui-azure-apim-appinsights` | offline | ui | 6 | 0 | 7.7 |
+| ✅ | `offline-ui-azure-app` | offline | ui | 29 | 0 | 19.7 |
+| ✅ | `offline-ui-azure-appconfiguration` | offline | ui | 31 | 0 | 22.9 |
 | ✅ | `offline-ui-azure-cognitiveservices` | offline | ui | 31 | 0 | 23.6 |
-| ✅ | `offline-ui-azure-dns` | offline | ui | 30 | 0 | 23.4 |
+| ✅ | `offline-ui-azure-dns` | offline | ui | 30 | 0 | 23.5 |
 | ✅ | `offline-ui-azure-flat-create` | offline | ui | 8 | 0 | 17.2 |
 | ✅ | `offline-ui-azure-metrics` | offline | ui | 12 | 0 | 9.8 |
-| ✅ | `offline-ui-azure-monitor` | offline | ui | 30 | 0 | 27.9 |
-| ✅ | `offline-ui-azure-nsg-roledef-create` | offline | ui | 7 | 0 | 10.6 |
+| ✅ | `offline-ui-azure-monitor` | offline | ui | 30 | 0 | 28.2 |
+| ✅ | `offline-ui-azure-nsg-roledef-create` | offline | ui | 7 | 0 | 10.7 |
 | ✅ | `offline-ui-azure-nsg-rules` | offline | ui | 8 | 0 | 8.8 |
-| ✅ | `offline-ui-azure-operationalinsights` | offline | ui | 34 | 0 | 27.3 |
+| ✅ | `offline-ui-azure-operationalinsights` | offline | ui | 34 | 0 | 27.4 |
+| ✅ | `offline-ui-azure-resource-group-detail` | offline | ui | 6 | 0 | 1.4 |
 | ✅ | `offline-ui-azure-rg-nav` | offline | ui | 3 | 0 | 4.7 |
-| ✅ | `offline-ui-azure-tags-tab` | offline | ui | 36 | 0 | 49.7 |
+| ✅ | `offline-ui-azure-tags-tab` | offline | ui | 36 | 0 | 49.8 |
 
-<details><summary>❌ <code>nano-ui-azure-savings</code> log</summary>
+<details><summary>❌ <code>nano-ui-azure-dns</code> log</summary>
 
 ```
-[FAIL] Storage account: ARM PUT ok 404
-[FAIL] Storage account: resource_count rises 0 → 0
-[FAIL] Storage account: azure savings rise 0 → 0
-[FAIL] Key vault: ARM PUT ok 404
-[FAIL] Key vault: resource_count rises 0 → 0
-[FAIL] Key vault: azure savings rise 0 → 0
-[FAIL] Virtual network: ARM PUT ok 404
-[FAIL] Virtual network: resource_count rises 0 → 0
+[PASS] DNS zones is on the Nano Azure console rail
+[FAIL] service page explains what the service does
+[PASS] create form has a realistic default zone name
+[PASS] create with defaults returns 2xx
+[PASS] new zone appears in the list
+[PASS] every grid column is filled
+[PASS] grid shows the name servers and the SOA+NS record-set count
+[PASS] cost-savings metrics updated by the create
+[PASS] detail view shows its tabs
+[PASS] tab "Overview" renders
+[PASS] tab "Activity log" renders
+[PASS] tab "Access control (IAM)" renders
+[PASS] tab "Tags" renders
+[PASS] tab "Diagnose and solve problems" renders
+[PASS] tab "Recordsets" renders
+[PASS] tab "Name servers" renders
+[PASS] tab "Test query" renders
+[PASS] tab "Properties" renders
+[PASS] tab "Locks" renders
+[PASS] tab "Metrics" renders
+[PASS] Name servers lists the four delegation servers
+[PASS] Recordsets lists the SOA and NS record sets
+[PASS] record set added in the blade is listed
+[PASS] …and readable over ARM
+[PASS] Test query answers from the zone
+[PASS] delete removes the zone from the list
+[PASS] deleted zone is gone from the ARM API
+[PASS] no API errors / page errors during the flow
+1 check(s) failed
 ```
 
 </details>
 
-**UI findings: 2**
+<details><summary>❌ <code>nano-ui-azure-operationalinsights</code> log</summary>
 
-<details><summary><b>Resource groups</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `STATIC_DETAIL` |  | resource detail shows no backend data and nothing about this resource |
+```
+[PASS] new workspace appears in the list
+[PASS] every grid column is filled
+[PASS] grid shows the pricing tier, retention and provisioning state
+[PASS] cost-savings metrics updated by the create
+[PASS] detail view shows its tabs
+[PASS] tab "Overview" renders
+[PASS] tab "Activity log" renders
+[PASS] tab "Access control (IAM)" renders
+[PASS] tab "Tags" renders
+[PASS] tab "Diagnose and solve problems" renders
+[PASS] tab "Saved searches" renders
+[PASS] tab "Tables" renders
+[PASS] tab "Data sources" renders
+[PASS] tab "Agents (keys)" renders
+[PASS] tab "Usage and quota" renders
+[PASS] tab "Properties" renders
+[PASS] tab "Locks" renders
+[PASS] tab "Metrics" renders
+[PASS] Tables lists the built-in tables with their plan
+[PASS] Agents tab shows the workspace ID and shared keys
+[PASS] Usage tab lists the data-analysed quota
+[PASS] saved search added in the blade is listed
+[PASS] …and readable over ARM
+[PASS] custom table added in the blade is listed
+[PASS] …and readable over ARM
+[PASS] data source added in the blade is listed
+[PASS] delete removes the workspace from the list
+[PASS] deleted workspace is gone from the ARM API
+[PASS] no API errors / page errors during the flow
+1 check(s) failed
+```
 
 </details>
 
-<details><summary><b>API Management</b> (offline) — 1 finding(s)</summary>
+**UI findings: 0**
 
-| Problem | Tab | Detail |
-|---|---|---|
-| `STATIC_TAB` | Metrics | tab 'Metrics' shows no backend data and nothing about this resource |
-
-</details>
+No open UI findings.
 
 <a id="all"></a>
 ## Cross-cloud
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-crawl` | nano | ui | 59 | 4 | 1129.9 |
-| ❌ | `offline-ui-crawl` | offline | ui | 49 | 9 | 1101.2 |
-| ✅ | `nano-cores` | nano | core | 344 | 0 | 3.5 |
-| ✅ | `nano-ui-budget-savings` | nano | ui | 5 | 0 | 4.2 |
-| ✅ | `offline-console-actions` | offline | api | 371 | 0 | 14.4 |
-| ✅ | `offline-cost-savings` | offline | api | 11 | 0 | 23.2 |
-| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 24.4 |
+| ❌ | `nano-ui-crawl` | nano | ui | 60 | 3 | 1202.6 |
+| ❌ | `offline-cost-savings` | offline | api | 8 | 1 | 14.6 |
+| ❌ | `offline-ui-crawl` | offline | ui | 53 | 5 | 1120.4 |
+| ✅ | `nano-cores` | nano | core | 344 | 0 | 5.0 |
+| ✅ | `nano-ui-budget-savings` | nano | ui | 5 | 0 | 5.8 |
+| ✅ | `offline-console-actions` | offline | api | 371 | 0 | 18.8 |
+| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 22.3 |
 
 <details><summary>❌ <code>offline-ui-crawl</code> log</summary>
 
 ```
 [offline/aws] 20 services crawled, 4 with findings
 UI crawl offline: 16/20 services clean → tests/conformance/hourly/out/ui-offline-aws.json
-Console surfaces offline: {"static":57,"live":192,"partial":10,"unimplemented":12}
-[offline/azure] 20 services crawled, 1 with findings
-UI crawl offline: 19/20 services clean → tests/conformance/hourly/out/ui-offline-azure.json
-Console surfaces offline: {"live":268,"unimplemented":29,"static":18}
-[offline/gcp] 18 services crawled, 4 with findings
-UI crawl offline: 14/18 services clean → tests/conformance/hourly/out/ui-offline-gcp.json
-Console surfaces offline: {"live":209,"static":20}
+Console surfaces offline: {"static":48,"live":208,"partial":14}
+[offline/azure] 20 services crawled, 0 with findings
+UI crawl offline: 20/20 services clean → tests/conformance/hourly/out/ui-offline-azure.json
+Console surfaces offline: {"live":289,"unimplemented":18,"static":8}
+[offline/gcp] 18 services crawled, 1 with findings
+UI crawl offline: 17/18 services clean → tests/conformance/hourly/out/ui-offline-gcp.json
+Console surfaces offline: {"live":217,"static":6,"unimplemented":5}
+```
+
+</details>
+
+<details><summary>❌ <code>offline-cost-savings</code> log</summary>
+
+```
+== aws: S3 bucket ==
+PASS: aws: creating a S3 bucket raises the space resource_count
+PASS: aws: creating a S3 bucket raises aws savings
+PASS: aws: using the S3 bucket (5 × 2 MB uploads) raises savings
+
+== gcp: Cloud Storage bucket ==
+FAIL: gcp: savings check ran :: <HTTPError 403: 'Forbidden'>
+
+== azure: Storage account ==
+PASS: azure: creating a Storage account raises the space resource_count
+PASS: azure: creating a Storage account raises azure savings
+PASS: azure: using the Storage account (5 × 2 MB uploads) raises savings
+
+== azure: Virtual machine (Standard_B1s) ==
+PASS: azure: creating a VM raises the space resource_count
+PASS: azure: a Standard_B1s VM adds its 730 h list price ($7.59) to Azure savings
+
+RESULT fail=1
 ```
 
 </details>
@@ -643,13 +1023,13 @@ Console surfaces offline: {"live":209,"static":20}
 ```
 [nano/aws] 20 services crawled, 3 with findings
 UI crawl nano: 17/20 services clean → tests/conformance/hourly/out/ui-nano-aws.json
-Console surfaces nano: {"live":221,"static":38,"partial":9,"unimplemented":3}
-[nano/azure] 25 services crawled, 1 with findings
-UI crawl nano: 24/25 services clean → tests/conformance/hourly/out/ui-nano-azure.json
-Console surfaces nano: {"live":279,"static":45,"unimplemented":6}
+Console surfaces nano: {"live":227,"static":31,"partial":12}
+[nano/azure] 25 services crawled, 0 with findings
+UI crawl nano: 25/25 services clean → tests/conformance/hourly/out/ui-nano-azure.json
+Console surfaces nano: {"live":299,"static":27,"unimplemented":3}
 [nano/gcp] 18 services crawled, 0 with findings
 UI crawl nano: 18/18 services clean → tests/conformance/hourly/out/ui-nano-gcp.json
-Console surfaces nano: {"live":200,"static":29}
+Console surfaces nano: {"live":225,"static":3}
 ```
 
 </details>
@@ -658,89 +1038,16 @@ Console surfaces nano: {"live":200,"static":29}
 
 | Target | Cloud | Service | Kind | Feature | SDK test |
 |---|---|---|---|---|---|
-| offline | GCP | Cloud KMS | tab | Rotation | — |
-| offline | Azure | azure_arm_ext_core | operation | RestorePoints | ✅ |
-| offline | Azure | azure_arm_ext_core | operation | RunCommandAction | ❌ |
-| offline | Azure | azure_arm_ext_core | operation | RunCommands | ✅ |
-| offline | Azure | azure_arm_ext_core | operation | SetBackrefList | ❌ |
-| offline | GCP | gcp_cloudsql_core | operation | PatchInstance | ❌ |
-| offline | GCP | gcp_cloudsql_core | operation | PatchSettings | ❌ |
-| offline | GCP | gcp_kms_core | operation | ImportJobCreate | ❌ |
-| offline | GCP | gcp_kms_core | operation | ImportJobList | ❌ |
-| offline | GCP | gcp_kms_core | operation | ImportJobRoute | ❌ |
-| offline | GCP | gcp_kms_core | operation | ImportJobView | ❌ |
-| offline | GCP | gcp_kms_core | operation | ImportJobs | ❌ |
-| offline | GCP | gcp_kms_core | operation | PurgeDestroyed | ❌ |
-| offline | GCP | gcp_kms_core | operation | SetPrimary | ✅ |
-| offline | GCP | gcp_kms_core | operation | SetVersionState | ✅ |
-| nano | GCP | Cloud KMS | tab | Rotation | — |
-| nano | Azure | azure_arm_ext_core | operation | RestorePoints | ✅ |
-| nano | Azure | azure_arm_ext_core | operation | RunCommandAction | ❌ |
-| nano | Azure | azure_arm_ext_core | operation | RunCommands | ✅ |
-| nano | Azure | azure_arm_ext_core | operation | SetBackrefList | ❌ |
-| nano | GCP | gcp_cloudsql_core | operation | PatchInstance | ❌ |
-| nano | GCP | gcp_cloudsql_core | operation | PatchSettings | ❌ |
-| nano | GCP | gcp_kms_core | operation | ImportJobCreate | ❌ |
-| nano | GCP | gcp_kms_core | operation | ImportJobList | ❌ |
-| nano | GCP | gcp_kms_core | operation | ImportJobRoute | ❌ |
-| nano | GCP | gcp_kms_core | operation | ImportJobView | ❌ |
-| nano | GCP | gcp_kms_core | operation | ImportJobs | ❌ |
-| nano | GCP | gcp_kms_core | operation | PurgeDestroyed | ❌ |
-| nano | GCP | gcp_kms_core | operation | SetPrimary | ✅ |
-| nano | GCP | gcp_kms_core | operation | SetVersionState | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/ec2/instances/{instance_id}/details | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PUT /api/ec2/instances/{instance_id}/attributes | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/ec2/instances/{instance_id}/network-interfaces | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/ec2/instances/{instance_id}/security | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/ec2/instances/{instance_id}/storage | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/ec2/instances/{instance_id}/user-data | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PUT /api/ec2/instances/{instance_id}/user-data | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/ec2/instances/{instance_id}/iam-instance-profile | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PUT /api/ec2/instances/{instance_id}/iam-instance-profile | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | DELETE /api/ec2/instances/{instance_id}/iam-instance-profile | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/ec2/instances/{instance_id}/console-output | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/ec2/serial-console-access | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PUT /api/ec2/serial-console-access | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/s3/buckets/{name} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PATCH /api/s3/buckets/{name} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/s3/buckets/{name}/config/{kind} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PUT /api/s3/buckets/{name}/config/{kind} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | DELETE /api/s3/buckets/{name}/config/{kind} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/rds/databases/{db_id}/connectivity | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/rds/databases/{db_id}/subnet-group | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/rds/databases/{db_id}/pending-maintenance | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/rds/databases/{db_id}/performance-insights | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/rds/databases/{db_id}/configuration | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PUT /api/rds/databases/{db_id}/configuration | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/rds/databases/{db_id}/events | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | DELETE /api/rds/databases/{db_id} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/dynamodb/tables/{name}/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PUT /api/dynamodb/tables/{name}/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | DELETE /api/dynamodb/tables/{name} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/lambda/functions/{name}/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PUT /api/lambda/functions/{name}/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/iam/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PUT /api/iam/detail/{section} | ✅ |
-| offline | Cross-cloud | routes/aws_console_detail.py | route | GET /api/vpc/vpcs/{vpc_id}/detail/{section} | ✅ |
-| offline | Cross-cloud | routes/aws_console_detail.py | route | PUT /api/vpc/vpcs/{vpc_id}/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/sqs/queues/{name}/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PUT /api/sqs/queues/{name}/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/aws/secrets/{name}/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PUT /api/aws/secrets/{name}/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/aws/kms/keys/{key_id}/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PUT /api/aws/kms/keys/{key_id}/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/aws/extras/eventbridge/rules/{name}/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | PUT /api/aws/extras/eventbridge/rules/{name}/detail/{section} | ✅ |
-| offline | Cross-cloud | routes/aws_console_detail.py | route | GET /api/apigateway/apis/{api_id}/detail/{section} | ✅ |
-| offline | Cross-cloud | routes/aws_console_detail.py | route | PUT /api/apigateway/apis/{api_id}/detail/{section} | ✅ |
-| offline | AWS | routes/aws_console_detail.py | route | GET /api/aws/resource-access | ✅ |
+| offline | Azure | azure_arm_core | operation | ListGroupResources | ✅ |
+| nano | Azure | azure_arm_core | operation | ListGroupResources | ✅ |
 
 ## Upstream changes (AWS / GCP / Azure backlog)
 
-60 open `upstream-drift` issue(s) — real cloud changes the agent is working through. [All](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) · [watcher log](https://github.com/vyomi-cloud/appliance/tree/upstream-state)
+61 open `upstream-drift` issue(s) — real cloud changes the agent is working through. [All](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) · [watcher log](https://github.com/vyomi-cloud/appliance/tree/upstream-state)
 
 | Issue | Cloud | Kind | Change | Opened |
 |---|---|---|---|---|
+| #340 | Azure | spec-commit | Azure compute: WorkloadManager: correct 2026-11-01-preview resource contract (#47558) | 2026-10-30 |
 | #252 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed | 2026-10-29 |
 | #250 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed | 2026-10-29 |
 | #251 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed | 2026-10-29 |
@@ -780,7 +1087,6 @@ Console surfaces nano: {"live":200,"static":29}
 | #170 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed | 2026-10-28 |
 | #168 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed | 2026-10-28 |
 | #167 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed | 2026-10-28 |
-| #165 | GCP | operation-changed | GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed | 2026-10-28 |
 
 ## Nano ↔ offline parity gaps
 
@@ -794,7 +1100,7 @@ Console surfaces nano: {"live":200,"static":29}
 - Azure service **Key Vault secrets** (Key Vault secrets): only in nano
 - Azure service **Storage queues** (Storage queues): only in nano
 
-## SDK operations without a test (226 of 1244)
+## SDK operations without a test (226 of 1246)
 
 <details><summary>AWS · <code>apigatewayv2_core</code> (nano) — 6</summary>
 
@@ -931,6 +1237,7 @@ CreateChannel, CreateDescriptor, CreateUptime, DeleteChannel, DeleteDescriptor, 
 
 | Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |
 |---|---|---|---|---|---|---|
+| 2026-10-30T23:27:06+00:00 | 200/225 | 4943 | 188 | 20 | 49.5% |  |
 | 2026-10-30T21:13:04+00:00 | 209/220 | 5161 | 37 | 28 | 49.5% |  |
 | 2026-10-30T19:00:40+00:00 | 229/237 | 4886 | 93 | 105 | 43.3% |  |
 | 2026-10-30T17:07:13+00:00 | 229/237 | 4872 | 107 | 117 | 43.3% |  |
@@ -954,6 +1261,5 @@ CreateChannel, CreateDescriptor, CreateUptime, DeleteChannel, DeleteDescriptor, 
 | 2026-10-29T01:35:23+00:00 | 93/105 | 2464 | 85 | 81 | 14.3% |  |
 |  | 0/0 | 0 | 0 | 79 | 14.3% |  |
 |  | 0/0 | 0 | 0 | 98 | 14.3% |  |
-|  | 0/0 | 0 | 0 | 86 | 14.3% |  |
 
 Raw data in this branch: `results.json`, `ui-findings.json`, `history.json`.
