@@ -208,11 +208,14 @@
  "rds.reserved-instances": {
   "title": "Reserved instances (purchase)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "DescribeReservedDBInstances honestly reports zero — Vyomi has no billing/reservation system, so PurchaseReservedDBInstancesOffering is not implemented."
+   "PurchaseReservedDBInstancesOffering records a real, stateful reservation (DescribeReservedDBInstances lists it); Vyomi has no billing system and no reserved-instance-offering catalogue, so the console's purchase wizard (pricing, terms, offering ids) is not built — call the action directly with a reservation id."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
   ]
  },
  "rds.capacity-reservations": {
@@ -228,51 +231,66 @@
  "rds.zero-etl": {
   "title": "Zero-ETL integrations",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "DescribeIntegrations honestly reports zero — a zero-ETL integration requires a real cross-service pipeline into Redshift that Vyomi does not run."
+   "CreateIntegration/DeleteIntegration/DescribeIntegrations is real, stateful metadata CRUD; Vyomi does not run the actual cross-service replication pipeline into Redshift, so the console's create wizard (picking a real Redshift target) is not built — call the action directly with source/target ARNs."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
   ]
  },
  "rds.custom-engine-versions": {
   "title": "RDS Custom engine versions",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "RDS Custom (a separate product running on a customer-managed EC2 instance) is out of Vyomi's scope entirely."
+   "CreateCustomDBEngineVersion/DeleteCustomDBEngineVersion/DescribeDBEngineVersions registers real, stateful install-media metadata; RDS Custom itself (the customer-managed EC2 instance the engine actually runs on) is out of Vyomi's scope entirely — the console's create wizard is not built."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
   ]
  },
  "rds.recommendations": {
   "title": "RDS recommendations",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "DescribeDBRecommendations honestly reports zero — Vyomi has no analysis engine generating recommendations."
+   "DescribeDBRecommendations derives real advisories from each instance's own live configuration (no Multi-AZ, an outdated CA certificate); Vyomi has no general analysis engine, so it does not generate the full category of recommendations AWS's own monitoring produces (e.g. storage autoscaling, parameter tuning)."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
   ]
  },
  "rds.exports-to-s3": {
   "title": "Exports to Amazon S3",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "DescribeExportTasks honestly reports zero — exporting a snapshot to S3 (StartExportTask) is not implemented."
+   "StartExportTask/CancelExportTask/DescribeExportTasks is real, stateful metadata CRUD; Nano has no provisioning lag so a started export completes immediately, and no bytes are actually written to the named S3 bucket."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
   ]
  },
  "rds.certificate-rotation": {
   "title": "Certificate authority rotation",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi does not model CA certificate expiry for RDS instances, so no instance is ever flagged as requiring a certificate update."
+   "CACertificateIdentifier is a real, settable field (CreateDBInstance/ModifyDBInstance); any instance whose CA differs from the current default (rds-ca-rsa2048-g1) is flagged on the certificate-update page. Vyomi does not model real CA expiry dates or actually rotate the certificate a connection presents."
+  ],
+  "tests": [
+   "tests/conformance/test_rds_console_v4_core.py"
   ]
  }
 }

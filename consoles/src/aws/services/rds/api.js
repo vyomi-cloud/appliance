@@ -171,7 +171,7 @@ export async function describeEventSubscriptions() {
 }
 export const deleteEventSubscription = (name) => call("DeleteEventSubscription", { SubscriptionName: name });
 
-// ── Honestly-empty describes ─────────────────────────────────────────────────
+// ── Reserved instances, automated backups, exports, integrations, recommendations ─
 export async function describeReservedDBInstances() {
   const r = await call("DescribeReservedDBInstances", {});
   return asList(r.ReservedDBInstances?.ReservedDBInstance);
@@ -184,6 +184,7 @@ export async function describeExportTasks() {
   const r = await call("DescribeExportTasks", {});
   return asList(r.ExportTasks?.ExportTask);
 }
+export const cancelExportTask = (taskId) => call("CancelExportTask", { ExportTaskIdentifier: taskId });
 export async function describeIntegrations() {
   const r = await call("DescribeIntegrations", {});
   return asList(r.Integrations?.Integration);
@@ -191,6 +192,10 @@ export async function describeIntegrations() {
 export async function describeDBRecommendations() {
   const r = await call("DescribeDBRecommendations", {});
   return asList(r.DBRecommendations?.DBRecommendation);
+}
+export async function describeDBEngineVersions() {
+  const r = await call("DescribeDBEngineVersions", {});
+  return asList(r.DBEngineVersions?.DBEngineVersion);
 }
 
 // ── RDS Data API (Query editor) — REST-JSON, routed by path alone ──────────

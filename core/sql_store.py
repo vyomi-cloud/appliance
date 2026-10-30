@@ -41,6 +41,10 @@ class SqlStore:
         self.proxies: dict[str, dict[str, Any]] = {}
         self.option_groups: dict[str, dict[str, Any]] = {}
         self.event_subscriptions: dict[str, dict[str, Any]] = {}
+        self.reserved_instances: dict[str, dict[str, Any]] = {}
+        self.export_tasks: dict[str, dict[str, Any]] = {}
+        self.integrations: dict[str, dict[str, Any]] = {}
+        self.custom_engine_versions: dict[str, dict[str, Any]] = {}
         self.events: list[dict[str, Any]] = []       # append-only event log (DescribeEvents)
         self.tags: dict[str, dict[str, str]] = {}     # resource ARN -> {key: value}
         self.account_id = account_id
@@ -133,6 +137,59 @@ class SqlStore:
 
     def option_group_names(self) -> list[str]:
         return sorted(self.option_groups)
+
+    # ── reserved DB instance accessors ──────────────────────────────────
+    def put_reserved_instance(self, reservation_id: str, record: dict) -> None:
+        self.reserved_instances[reservation_id] = record
+
+    def get_reserved_instance(self, reservation_id: str) -> dict | None:
+        v = self.reserved_instances.get(reservation_id)
+        return v if isinstance(v, dict) else None
+
+    def reserved_instance_ids(self) -> list[str]:
+        return sorted(self.reserved_instances)
+
+    # ── export task accessors ───────────────────────────────────────────
+    def put_export_task(self, task_id: str, record: dict) -> None:
+        self.export_tasks[task_id] = record
+
+    def get_export_task(self, task_id: str) -> dict | None:
+        v = self.export_tasks.get(task_id)
+        return v if isinstance(v, dict) else None
+
+    def drop_export_task(self, task_id: str) -> None:
+        self.export_tasks.pop(task_id, None)
+
+    def export_task_ids(self) -> list[str]:
+        return sorted(self.export_tasks)
+
+    # ── zero-ETL integration accessors ──────────────────────────────────
+    def put_integration(self, name: str, record: dict) -> None:
+        self.integrations[name] = record
+
+    def get_integration(self, name: str) -> dict | None:
+        v = self.integrations.get(name)
+        return v if isinstance(v, dict) else None
+
+    def drop_integration(self, name: str) -> None:
+        self.integrations.pop(name, None)
+
+    def integration_names(self) -> list[str]:
+        return sorted(self.integrations)
+
+    # ── custom DB engine version accessors ──────────────────────────────
+    def put_custom_engine_version(self, cev_id: str, record: dict) -> None:
+        self.custom_engine_versions[cev_id] = record
+
+    def get_custom_engine_version(self, cev_id: str) -> dict | None:
+        v = self.custom_engine_versions.get(cev_id)
+        return v if isinstance(v, dict) else None
+
+    def drop_custom_engine_version(self, cev_id: str) -> None:
+        self.custom_engine_versions.pop(cev_id, None)
+
+    def custom_engine_version_ids(self) -> list[str]:
+        return sorted(self.custom_engine_versions)
 
     # ── event subscription accessors ─────────────────────────────────────
     def put_event_subscription(self, name: str, record: dict) -> None:

@@ -89,6 +89,13 @@ def _event_subscription_arn(store: SqlStore, name: str) -> str:
     return f"arn:aws:rds:us-east-1:{store.account_id}:es:{name}"
 
 
+def _integration_arn(store: SqlStore, name: str) -> str:
+    return f"arn:aws:rds:us-east-1:{store.account_id}:integration:{name}"
+
+
+DEFAULT_CA = "rds-ca-rsa2048-g1"  # the current (non-expiring) CA; anything else needs updating
+
+
 def _engine_port(engine: str) -> int:
     return _ENGINE_PORT.get(engine.lower(), 5432)
 
@@ -175,6 +182,7 @@ def _db_instance_xml(db: dict) -> str:
         _el("BackupRetentionPeriod", db.get("backup_retention_period", 7)),
         _el("DeletionProtection", str(db.get("deletion_protection", False)).lower()),
         _el("LatestRestorableTime", db.get("updated", db.get("created", ""))),
+        _el("CACertificateIdentifier", db.get("ca_certificate_identifier", DEFAULT_CA)),
         "<Endpoint>",
         _el("Address", db.get("endpoint_address", "")),
         _el("Port", db.get("endpoint_port", 5432)),
@@ -327,6 +335,87 @@ def _automated_backup_xml(db: dict) -> str:
     ])
 
 
+def _reserved_instance_xml(ri: dict) -> str:
+    return "".join([
+        "<ReservedDBInstance>",
+        _el("ReservedDBInstanceId", ri["reserved_db_instance_id"]),
+        _el("LeaseId", ri.get("lease_id", "")),
+        _el("ReservedDBInstancesOfferingId", ri.get("offering_id", "")),
+        _el("ProductDescription", ri.get("product_description", "")),
+        _el("DBInstanceClass", ri.get("db_instance_class", "db.t3.micro")),
+        _el("OfferingType", ri.get("offering_type", "No Upfront")),
+        _el("State", ri.get("state", "active")),
+        _el("MultiAZ", str(ri.get("multi_az", False)).lower()),
+        _el("StartTime", ri.get("start_time", "")),
+        _el("Duration", ri.get("duration", 31536000)),
+        _el("DBInstanceCount", ri.get("db_instance_count", 1)),
+        _el("CurrencyCode", "USD"),
+        "</ReservedDBInstance>",
+    ])
+
+
+def _export_task_xml(et: dict) -> str:
+    return "".join([
+        "<ExportTask>",
+        _el("ExportTaskIdentifier", et["export_task_identifier"]),
+        _el("SourceArn", et.get("source_arn", "")),
+        _el("SourceType", et.get("source_type", "SNAPSHOT")),
+        _el("S3Bucket", et.get("s3_bucket", "")),
+        _el("S3Prefix", et.get("s3_prefix", "")),
+        _el("IamRoleArn", et.get("iam_role_arn", "")),
+        _el("KmsKeyId", et.get("kms_key_id", "")),
+        _el("Status", et.get("status", "COMPLETE")),
+        _el("PercentProgress", et.get("percent_progress", 100)),
+        _el("SnapshotTime", et.get("created", "")),
+        _el("TaskStartTime", et.get("created", "")),
+        _el("TaskEndTime", et.get("task_end_time", "")),
+        "</ExportTask>",
+    ])
+
+
+def _custom_engine_version_xml(cev: dict) -> str:
+    return "".join([
+        "<DBEngineVersion>",
+        _el("Engine", cev.get("engine", "")),
+        _el("EngineVersion", cev.get("engine_version", "")),
+        _el("DBEngineVersionDescription", cev.get("description", "")),
+        _el("DBEngineDescription", cev.get("engine", "")),
+        _el("Status", cev.get("status", "available")),
+        _el("CreateTime", cev.get("created", "")),
+        "</DBEngineVersion>",
+    ])
+
+
+def _integration_xml(ig: dict) -> str:
+    return "".join([
+        "<Integration>",
+        _el("IntegrationName", ig["integration_name"]),
+        _el("IntegrationArn", ig.get("integration_arn", "")),
+        _el("SourceArn", ig.get("source_arn", "")),
+        _el("TargetArn", ig.get("target_arn", "")),
+        _el("Status", ig.get("status", "active")),
+        _el("CreateTime", ig.get("created", "")),
+        "</Integration>",
+    ])
+
+
+def _db_recommendation_xml(rec: dict) -> str:
+    return "".join([
+        "<DBRecommendation>",
+        _el("RecommendationId", rec["recommendation_id"]),
+        _el("Severity", rec.get("severity", "medium")),
+        _el("Status", "active"),
+        _el("Detection", rec.get("detection", "")),
+        _el("Recommendation", rec.get("recommendation", "")),
+        _el("Impact", rec.get("impact", "")),
+        _el("Category", rec.get("category", "")),
+        _el("CreatedTime", rec.get("created", "")),
+        _el("UpdatedTime", rec.get("created", "")),
+        _el("ResourceArn", rec.get("resource_arn", "")),
+        "</DBRecommendation>",
+    ])
+
+
 # ── helpers ────────────────────────────────────────────────────────────────
 def _require_instance(store: SqlStore, db_id: str) -> dict:
     db = store.get_instance(db_id)
@@ -371,6 +460,7 @@ def _create_db_instance(store: SqlStore, params: dict) -> RdsResponse:
         "db_parameter_group_name": str(params.get("DBParameterGroupName", "default")),
         "vpc_security_group_ids": _members(params, "VpcSecurityGroupIds") or ["sg-default"],
         "deletion_protection": str(params.get("DeletionProtection", "false")).lower() == "true",
+        "ca_certificate_identifier": str(params.get("CACertificateIdentifier", DEFAULT_CA)),
         "created": _now(),
         "updated": _now(),
         "runtime_backend": "sqlite",  # Nano data-plane engine
@@ -407,6 +497,7 @@ def _modify_db_instance(store: SqlStore, params: dict) -> RdsResponse:
         ("EngineVersion", "engine_version", str),
         ("BackupRetentionPeriod", "backup_retention_period", int),
         ("MasterUserPassword", "master_user_password", str),
+        ("CACertificateIdentifier", "ca_certificate_identifier", str),
     ):
         if params.get(param) is not None:
             try:
@@ -844,9 +935,44 @@ def _delete_event_subscription(store: SqlStore, params: dict) -> RdsResponse:
     return _success("DeleteEventSubscription", _event_subscription_xml(es))
 
 
-# ── honestly-empty describes (AWS features Vyomi does not generate data for) ─
+# ── reserved DB instances (a purchase is just a commitment record — no real
+# billing system is needed to track that one exists; the offering catalog and
+# actual payment are genuinely out of Vyomi's scope) ────────────────────────
+def _purchase_reserved_db_instance(store: SqlStore, params: dict) -> RdsResponse:
+    reservation_id = str(params.get("ReservedDBInstanceId") or f"ri-{uuid.uuid4().hex[:12]}")
+    if store.get_reserved_instance(reservation_id):
+        raise RdsError("ReservedDBInstanceAlreadyExistsFault",
+                       f"Reserved DB instance {reservation_id} already exists.", 400)
+    record = {
+        "reserved_db_instance_id": reservation_id,
+        "lease_id": str(uuid.uuid4()),
+        "offering_id": str(params.get("ReservedDBInstancesOfferingId", "")),
+        "product_description": str(params.get("ProductDescription", "rds")),
+        "db_instance_class": str(params.get("DBInstanceClass", "db.t3.micro")),
+        "offering_type": str(params.get("OfferingType", "No Upfront")),
+        "state": "active",
+        "multi_az": str(params.get("MultiAZ", "false")).lower() == "true",
+        "db_instance_count": _int(params, "DBInstanceCount", 1),
+        "start_time": _now(),
+    }
+    store.put_reserved_instance(reservation_id, record)
+    store.persist()
+    return _success("PurchaseReservedDBInstancesOffering", _reserved_instance_xml(record))
+
+
 def _describe_reserved_db_instances(store: SqlStore, params: dict) -> RdsResponse:
-    return _success("DescribeReservedDBInstances", "<ReservedDBInstances></ReservedDBInstances>")
+    reservation_id = str(params.get("ReservedDBInstanceId", "")).strip()
+    if reservation_id:
+        ri = store.get_reserved_instance(reservation_id)
+        if not ri:
+            raise RdsError("ReservedDBInstanceNotFoundFault",
+                           f"Reserved DB instance {reservation_id} not found.", 404)
+        ids = [reservation_id]
+    else:
+        ids = store.reserved_instance_ids()
+    inner = ("<ReservedDBInstances>" + "".join(_reserved_instance_xml(store.get_reserved_instance(i)) for i in ids)
+             + "</ReservedDBInstances>")
+    return _success("DescribeReservedDBInstances", inner)
 
 
 def _describe_db_instance_automated_backups(store: SqlStore, params: dict) -> RdsResponse:
@@ -859,16 +985,174 @@ def _describe_db_instance_automated_backups(store: SqlStore, params: dict) -> Rd
     return _success("DescribeDBInstanceAutomatedBackups", inner)
 
 
+# ── exports to S3 (a snapshot export is a status record; Nano has no
+# provisioning lag so it completes immediately) ─────────────────────────────
+def _start_export_task(store: SqlStore, params: dict) -> RdsResponse:
+    task_id = str(params.get("ExportTaskIdentifier", "")).strip()
+    if not task_id:
+        raise RdsError("InvalidParameterValue", "ExportTaskIdentifier is required.", 400)
+    if store.get_export_task(task_id):
+        raise RdsError("ExportTaskAlreadyExistsFault", f"Export task {task_id} already exists.", 400)
+    source_arn = str(params.get("SourceArn", ""))
+    record = {
+        "export_task_identifier": task_id,
+        "source_arn": source_arn,
+        "source_type": "CLUSTER_SNAPSHOT" if ":cluster-snapshot:" in source_arn else "SNAPSHOT",
+        "s3_bucket": str(params.get("S3BucketName", "")),
+        "s3_prefix": str(params.get("S3Prefix", "")),
+        "iam_role_arn": str(params.get("IamRoleArn", "")),
+        "kms_key_id": str(params.get("KmsKeyId", "")),
+        "status": "COMPLETE",
+        "percent_progress": 100,
+        "created": _now(),
+        "task_end_time": _now(),
+    }
+    store.put_export_task(task_id, record)
+    store.persist()
+    return _success("StartExportTask", _export_task_xml(record))
+
+
+def _cancel_export_task(store: SqlStore, params: dict) -> RdsResponse:
+    task_id = str(params.get("ExportTaskIdentifier", "")).strip()
+    task = store.get_export_task(task_id)
+    if not task:
+        raise RdsError("ExportTaskNotFoundFault", f"Export task {task_id} not found.", 404)
+    task = dict(task)
+    task["status"] = "CANCELED"
+    store.drop_export_task(task_id)
+    store.persist()
+    return _success("CancelExportTask", _export_task_xml(task))
+
+
 def _describe_export_tasks(store: SqlStore, params: dict) -> RdsResponse:
-    return _success("DescribeExportTasks", "<ExportTasks></ExportTasks>")
+    task_id = str(params.get("ExportTaskIdentifier", "")).strip()
+    if task_id:
+        task = store.get_export_task(task_id)
+        if not task:
+            raise RdsError("ExportTaskNotFoundFault", f"Export task {task_id} not found.", 404)
+        ids = [task_id]
+    else:
+        ids = store.export_task_ids()
+    inner = "<ExportTasks>" + "".join(_export_task_xml(store.get_export_task(i)) for i in ids) + "</ExportTasks>"
+    return _success("DescribeExportTasks", inner)
+
+
+# ── zero-ETL integrations (the integration's existence/status is a metadata
+# record; the real cross-service Redshift data pipe is out of Vyomi's scope) ─
+def _create_integration(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("IntegrationName", "")).strip()
+    if not name:
+        raise RdsError("InvalidParameterValue", "IntegrationName is required.", 400)
+    if store.get_integration(name):
+        raise RdsError("IntegrationConflictOperationFault", f"Integration {name} already exists.", 400)
+    record = {
+        "integration_name": name,
+        "integration_arn": _integration_arn(store, name),
+        "source_arn": str(params.get("SourceArn", "")),
+        "target_arn": str(params.get("TargetArn", "")),
+        "status": "active",
+        "created": _now(),
+    }
+    store.put_integration(name, record)
+    store.persist()
+    return _success("CreateIntegration", _integration_xml(record))
+
+
+def _delete_integration(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("IntegrationName", "")).strip()
+    ig = store.get_integration(name)
+    if not ig:
+        raise RdsError("IntegrationNotFoundFault", f"Integration {name} not found.", 404)
+    store.drop_integration(name)
+    store.persist()
+    return _success("DeleteIntegration", _integration_xml(ig))
 
 
 def _describe_integrations(store: SqlStore, params: dict) -> RdsResponse:
-    return _success("DescribeIntegrations", "<Integrations></Integrations>")
+    name = str(params.get("IntegrationName", "")).strip()
+    if name:
+        if not store.get_integration(name):
+            raise RdsError("IntegrationNotFoundFault", f"Integration {name} not found.", 404)
+        names = [name]
+    else:
+        names = store.integration_names()
+    inner = "<Integrations>" + "".join(_integration_xml(store.get_integration(n)) for n in names) + "</Integrations>"
+    return _success("DescribeIntegrations", inner)
+
+
+# ── RDS Custom engine versions (registering install media is a metadata
+# record; the customer-managed EC2 instance RDS Custom actually runs on is
+# out of Vyomi's scope) ──────────────────────────────────────────────────
+def _create_custom_db_engine_version(store: SqlStore, params: dict) -> RdsResponse:
+    engine = str(params.get("Engine", "")).strip()
+    engine_version = str(params.get("EngineVersion", "")).strip()
+    if not engine or not engine_version:
+        raise RdsError("InvalidParameterValue", "Engine and EngineVersion are required.", 400)
+    cev_id = f"{engine}-{engine_version}"
+    if store.get_custom_engine_version(cev_id):
+        raise RdsError("CustomDBEngineVersionAlreadyExistsFault",
+                       f"Custom engine version {cev_id} already exists.", 400)
+    record = {
+        "engine": engine, "engine_version": engine_version,
+        "description": str(params.get("Description", "")),
+        "status": "available", "created": _now(),
+    }
+    store.put_custom_engine_version(cev_id, record)
+    store.persist()
+    return _success("CreateCustomDBEngineVersion", _custom_engine_version_xml(record))
+
+
+def _delete_custom_db_engine_version(store: SqlStore, params: dict) -> RdsResponse:
+    cev_id = f"{params.get('Engine', '')}-{params.get('EngineVersion', '')}"
+    cev = store.get_custom_engine_version(cev_id)
+    if not cev:
+        raise RdsError("CustomDBEngineVersionNotFoundFault", f"Custom engine version {cev_id} not found.", 404)
+    store.drop_custom_engine_version(cev_id)
+    store.persist()
+    return _success("DeleteCustomDBEngineVersion", _custom_engine_version_xml(cev))
+
+
+def _describe_db_engine_versions(store: SqlStore, params: dict) -> RdsResponse:
+    # Scope: only the custom engine versions Vyomi itself registered — the full
+    # standard-engine catalogue (every postgres/mysql/... version AWS ships) is
+    # not modeled.
+    ids = store.custom_engine_version_ids()
+    inner = ("<DBEngineVersions>" + "".join(_custom_engine_version_xml(store.get_custom_engine_version(i)) for i in ids)
+             + "</DBEngineVersions>")
+    return _success("DescribeDBEngineVersions", inner)
+
+
+# ── DB recommendations (real RDS generates these from its own monitoring;
+# Vyomi has no such engine, so it derives the same two advisories AWS gives
+# from the instance's own live configuration — a real check, not canned data) ─
+def _recommendations_for(store: SqlStore) -> list[dict]:
+    recs = []
+    for db_id in store.instance_ids():
+        db = store.get_instance(db_id)
+        arn = db.get("db_instance_arn", _instance_arn(store, db_id))
+        if not db.get("multi_az"):
+            recs.append({
+                "recommendation_id": f"rec-multiaz-{db_id}",
+                "severity": "medium", "category": "availability",
+                "detection": "Single-AZ deployment",
+                "recommendation": "Enable Multi-AZ deployment for high availability.",
+                "impact": "Availability", "resource_arn": arn, "created": db.get("created", ""),
+            })
+        if db.get("ca_certificate_identifier", DEFAULT_CA) != DEFAULT_CA:
+            recs.append({
+                "recommendation_id": f"rec-cacert-{db_id}",
+                "severity": "high", "category": "security",
+                "detection": "CA certificate nearing expiration",
+                "recommendation": f"Update the CA certificate (currently {db.get('ca_certificate_identifier')}).",
+                "impact": "Security", "resource_arn": arn, "created": db.get("created", ""),
+            })
+    return recs
 
 
 def _describe_db_recommendations(store: SqlStore, params: dict) -> RdsResponse:
-    return _success("DescribeDBRecommendations", "<DBRecommendations></DBRecommendations>")
+    inner = ("<DBRecommendations>" + "".join(_db_recommendation_xml(r) for r in _recommendations_for(store))
+             + "</DBRecommendations>")
+    return _success("DescribeDBRecommendations", inner)
 
 
 # ── native-wire dispatcher (Query-protocol Action → operation) ─────────────
@@ -945,14 +1229,30 @@ def dispatch(store: SqlStore, params: dict | None = None) -> RdsResponse:
             return _describe_event_subscriptions(store, params)
         if action == "DeleteEventSubscription":
             return _delete_event_subscription(store, params)
+        if action == "PurchaseReservedDBInstancesOffering":
+            return _purchase_reserved_db_instance(store, params)
         if action == "DescribeReservedDBInstances":
             return _describe_reserved_db_instances(store, params)
         if action == "DescribeDBInstanceAutomatedBackups":
             return _describe_db_instance_automated_backups(store, params)
+        if action == "StartExportTask":
+            return _start_export_task(store, params)
+        if action == "CancelExportTask":
+            return _cancel_export_task(store, params)
         if action == "DescribeExportTasks":
             return _describe_export_tasks(store, params)
+        if action == "CreateIntegration":
+            return _create_integration(store, params)
+        if action == "DeleteIntegration":
+            return _delete_integration(store, params)
         if action == "DescribeIntegrations":
             return _describe_integrations(store, params)
+        if action == "CreateCustomDBEngineVersion":
+            return _create_custom_db_engine_version(store, params)
+        if action == "DeleteCustomDBEngineVersion":
+            return _delete_custom_db_engine_version(store, params)
+        if action == "DescribeDBEngineVersions":
+            return _describe_db_engine_versions(store, params)
         if action == "DescribeDBRecommendations":
             return _describe_db_recommendations(store, params)
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)

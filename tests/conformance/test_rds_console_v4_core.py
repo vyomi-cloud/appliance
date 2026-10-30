@@ -1,8 +1,9 @@
 """RDS v4-console conformance — the additions made for the v4 RDS console:
 snapshot delete/restore, DB subnet groups, DB parameter groups + parameters,
-tags, the event log, RDS Proxy, option groups, event subscriptions, and the
-honestly-empty describes (reserved instances, automated backups, export
-tasks, zero-ETL integrations, recommendations).
+tags, the event log, RDS Proxy, option groups, event subscriptions,
+automated backups (derived from live instance state), reserved DB instance
+purchases, S3 export tasks, zero-ETL integrations, and DB recommendations
+(derived from live instance configuration: Multi-AZ, CA certificate).
 
 Run on host:    PYTHONPATH=. python3 tests/conformance/test_rds_console_v4_core.py
 Run in Pyodide: loaded by the wasm/ harness (same file).
@@ -137,13 +138,54 @@ def run() -> int:
     bk = rds.dispatch(st, {"Action": "DescribeDBInstanceAutomatedBackups", "DBInstanceIdentifier": "v4db"})
     _check("automated backup reflects the live instance (default retention 7)", "v4db" in bk.body)
 
-    # 11. Honestly-empty describes: real shape, genuinely zero items.
-    for action, tag in (("DescribeReservedDBInstances", "ReservedDBInstances"),
-                        ("DescribeExportTasks", "ExportTasks"),
-                        ("DescribeIntegrations", "Integrations"),
-                        ("DescribeDBRecommendations", "DBRecommendations")):
-        r = rds.dispatch(st, {"Action": action})
-        _check(f"{action} 200 empty {tag}", r.status == 200 and f"<{tag}></{tag}>" in r.body)
+    # 11. Reserved DB instances: purchase is a real commitment record (no billing
+    # system needed — the unmodeled part is AWS's offering catalog, not the record).
+    buy = rds.dispatch(st, {"Action": "PurchaseReservedDBInstancesOffering", "ReservedDBInstanceId": "v4-ri"})
+    _check("purchase reserved instance 200", buy.status == 200 and "<State>active</State>" in buy.body)
+    dup_ri = rds.dispatch(st, {"Action": "PurchaseReservedDBInstancesOffering", "ReservedDBInstanceId": "v4-ri"})
+    _check("duplicate reservation rejected", dup_ri.status == 400)
+    list_ri = rds.dispatch(st, {"Action": "DescribeReservedDBInstances"})
+    _check("describe lists the purchased reservation", "v4-ri" in list_ri.body)
+
+    # 12. S3 export tasks: start + cancel round-trip.
+    exp = rds.dispatch(st, {"Action": "StartExportTask", "ExportTaskIdentifier": "v4-export",
+                            "SourceArn": f"arn:aws:rds:us-east-1:{st.account_id}:snapshot:v4db-snap",
+                            "S3BucketName": "v4-exports"})
+    _check("start export task 200", exp.status == 200 and "<Status>COMPLETE</Status>" in exp.body)
+    rds.dispatch(st, {"Action": "CancelExportTask", "ExportTaskIdentifier": "v4-export"})
+    gone_exp = rds.dispatch(st, {"Action": "DescribeExportTasks", "ExportTaskIdentifier": "v4-export"})
+    _check("cancelled export task 404s", gone_exp.status == 404)
+
+    # 12b. Custom DB engine versions: metadata CRUD.
+    cev = rds.dispatch(st, {"Action": "CreateCustomDBEngineVersion", "Engine": "custom-oracle-ee",
+                            "EngineVersion": "19.v4"})
+    _check("create custom engine version 200", cev.status == 200 and "<Status>available</Status>" in cev.body)
+    list_cev = rds.dispatch(st, {"Action": "DescribeDBEngineVersions"})
+    _check("describe lists it", "19.v4" in list_cev.body)
+    rds.dispatch(st, {"Action": "DeleteCustomDBEngineVersion", "Engine": "custom-oracle-ee", "EngineVersion": "19.v4"})
+    gone_cev = rds.dispatch(st, {"Action": "DeleteCustomDBEngineVersion", "Engine": "custom-oracle-ee", "EngineVersion": "19.v4"})
+    _check("deleted custom engine version 404s on redelete", gone_cev.status == 404)
+
+    # 13. Zero-ETL integrations metadata CRUD.
+    ig = rds.dispatch(st, {"Action": "CreateIntegration", "IntegrationName": "v4-integration",
+                           "SourceArn": f"arn:aws:rds:us-east-1:{st.account_id}:db:v4db",
+                           "TargetArn": "arn:aws:redshift-serverless:us-east-1:123456789012:namespace/v4"})
+    _check("create integration 200", ig.status == 200 and "<Status>active</Status>" in ig.body)
+    rds.dispatch(st, {"Action": "DeleteIntegration", "IntegrationName": "v4-integration"})
+    gone_ig = rds.dispatch(st, {"Action": "DescribeIntegrations", "IntegrationName": "v4-integration"})
+    _check("deleted integration 404s", gone_ig.status == 404)
+
+    # 14. DB recommendations derive from live instance state: Multi-AZ and CA certificate.
+    rds.dispatch(st, {"Action": "CreateDBInstance", "DBInstanceIdentifier": "v4-singleaz", "Engine": "postgres"})
+    rds.dispatch(st, {"Action": "CreateDBInstance", "DBInstanceIdentifier": "v4-multiaz", "Engine": "postgres",
+                      "MultiAZ": "true"})
+    recs = rds.dispatch(st, {"Action": "DescribeDBRecommendations"})
+    _check("single-AZ instance gets a Multi-AZ recommendation", "rec-multiaz-v4-singleaz" in recs.body)
+    _check("multi-AZ instance gets none", "rec-multiaz-v4-multiaz" not in recs.body)
+    rds.dispatch(st, {"Action": "CreateDBInstance", "DBInstanceIdentifier": "v4-oldca", "Engine": "postgres",
+                      "CACertificateIdentifier": "rds-ca-2019"})
+    recs2 = rds.dispatch(st, {"Action": "DescribeDBRecommendations"})
+    _check("outdated CA cert gets a certificate-update recommendation", "rec-cacert-v4-oldca" in recs2.body)
 
     print("\nRESULT: PASS — RDS v4-console additions conform (native Query-protocol wire) on this substrate.")
     return 0

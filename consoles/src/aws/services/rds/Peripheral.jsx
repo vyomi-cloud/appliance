@@ -1,12 +1,12 @@
-/* Smaller nav destinations that are genuinely out of Vyomi's scope (purchasing,
- * capacity markets, RDS Custom, zero-ETL, AI recommendations, CA rotation).
- * Lists are REAL (backed by a native describe call) and honestly empty — nothing
- * fakes a resource that was never created. Only the unsupported CREATE flows
- * render as a plain "Not simulated" page (title + note, per consoles/AGENT-UI.md —
- * never a disabled skeleton of the real form). */
+/* Smaller nav destinations, several genuinely out of Vyomi's scope (capacity
+ * markets, RDS Custom, cross-service Redshift pipelines). Lists are REAL
+ * (backed by a native describe call, sometimes derived from live instance
+ * state — recommendations, certificate updates); capacity reservations and
+ * custom engine versions render as a plain "Not simulated" page (title +
+ * note, per consoles/AGENT-UI.md — never a disabled skeleton of the real
+ * form). */
 import { useState } from "react";
 import Button from "@cloudscape-design/components/button";
-import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -29,7 +29,7 @@ export function ReservedInstances() {
       onRefresh={t.reload}
       trackBy="ReservedDBInstanceId"
       empty={{ title: "No reserved instance found" }}
-      actions={<Button variant="primary" onClick={() => notify.info("Reserved instance purchasing isn't simulated in Vyomi — there is no billing system to reserve capacity against.")}>Purchase Reserved DB Instance</Button>}
+      actions={<Button variant="primary" onClick={() => notify.info("Purchasing walks AWS's reserved-instance-offering catalog (pricing, terms, offering ids); Vyomi doesn't model that catalog. Call PurchaseReservedDBInstancesOffering directly to record a reservation.")}>Purchase Reserved DB Instance</Button>}
       columns={[
         { id: "id", header: "Reservation ID", isRowHeader: true, cell: (r) => r.ReservedDBInstanceId },
         { id: "lease", header: "Lease ID", cell: (r) => r.LeaseId || "-" },
@@ -48,33 +48,9 @@ export function ReservedInstances() {
 }
 
 export function CapacityReservations() {
-  const [sel, setSel] = useState([]);
   return (
-    <ResourceTable
-      resourceName="Capacity reservations"
-      items={[]}
-      trackBy="Id"
-      selectionType="single"
-      selectedItems={sel}
-      onSelectionChange={setSel}
-      empty={{ title: "No resources", action: <Button href={href("rds", "create-capacity-reservation")} onFollow={follow}>Create capacity reservation</Button> }}
-      actions={
-        <SpaceBetween direction="horizontal" size="xs">
-          <ButtonDropdown disabled={sel.length !== 1} items={[{ id: "cancel", text: "Cancel" }]}>Actions</ButtonDropdown>
-          <Button variant="primary" href={href("rds", "create-capacity-reservation")} onFollow={follow}>Create capacity reservation</Button>
-        </SpaceBetween>
-      }
-      columns={[
-        { id: "id", header: "ID", isRowHeader: true, cell: (r) => r.Id },
-        { id: "name", header: "Name", cell: (r) => r.Name },
-        { id: "status", header: "Status", cell: (r) => r.Status },
-        { id: "engine", header: "Engine", cell: (r) => r.Engine },
-        { id: "class", header: "DB instance class", cell: (r) => r.DBInstanceClass },
-        { id: "capacity", header: "Reserved capacity per AZ", cell: (r) => r.Capacity },
-        { id: "start", header: "Start date", cell: (r) => r.Start },
-        { id: "end", header: "End date", cell: (r) => r.End },
-      ]}
-    />
+    <NotSimulatedContainer title="Capacity reservations" feature="RDS capacity reservations"
+      note="Capacity reservations are a capacity-market/billing construct; Vyomi has no billing system to reserve capacity against." />
   );
 }
 
@@ -117,18 +93,30 @@ export function CreateZeroEtlIntegration() {
 
 export function CustomEngineVersions() {
   const notify = useNotify();
-  const dismiss = () => notify.info("RDS Custom is a separate product (a customer-managed EC2 instance); it's out of Vyomi's scope entirely.");
+  const t = useAsync(() => api.describeDBEngineVersions());
+  const dismiss = () => notify.info("Registering install media (CreateCustomDBEngineVersion) is real; the customer-managed EC2 instance RDS Custom actually runs on is out of Vyomi's scope entirely.");
   return (
-    <ContentLayout header={
-      <Header variant="h1" actions={
+    <ResourceTable
+      resourceName="Custom engine versions"
+      items={t.data || []}
+      loading={t.loading}
+      error={t.error}
+      onRefresh={t.reload}
+      trackBy="EngineVersion"
+      empty={{ title: "No custom engine versions found", action: <Button onClick={dismiss}>Create custom engine version</Button> }}
+      actions={
         <SpaceBetween direction="horizontal" size="xs">
-          <ButtonDropdown items={[{ id: "x", text: "View details" }]} onItemClick={dismiss}>Actions</ButtonDropdown>
+          <Button onClick={dismiss}>Actions</Button>
           <Button variant="primary" onClick={dismiss}>Create custom engine version</Button>
         </SpaceBetween>
-      }>Custom engine versions</Header>
-    }>
-      <NotSimulatedContainer title="Custom engine versions" feature="RDS Custom" note="RDS Custom (a separate product running on a customer-managed EC2 instance) is out of Vyomi's scope entirely." />
-    </ContentLayout>
+      }
+      columns={[
+        { id: "engine", header: "Engine", isRowHeader: true, cell: (r) => r.Engine },
+        { id: "version", header: "Engine version", cell: (r) => r.EngineVersion },
+        { id: "desc", header: "Description", cell: (r) => r.DBEngineVersionDescription || "-" },
+        { id: "status", header: "Status", cell: (r) => r.Status },
+      ]}
+    />
   );
 }
 
@@ -168,10 +156,12 @@ export function Recommendations() {
   );
 }
 
+const CURRENT_CA = "rds-ca-rsa2048-g1";
+
 export function CertificateUpdate() {
   const [sel, setSel] = useState([]);
   const notify = useNotify();
-  const t = useAsync(async () => (await api.describeDBInstances()).filter((d) => d.CertificateAuthorityExpiring === "true"));
+  const t = useAsync(async () => (await api.describeDBInstances()).filter((d) => d.CACertificateIdentifier !== CURRENT_CA));
   return (
     <ResourceTable
       resourceName="Databases requiring certificate update"
@@ -194,7 +184,7 @@ export function CertificateUpdate() {
       columns={[
         { id: "id", header: "DB identifier", isRowHeader: true, cell: (d) => d.DBInstanceIdentifier },
         { id: "status", header: "Status", cell: (d) => d.DBInstanceStatus },
-        { id: "ca", header: "Certificate authority", cell: () => "rds-ca-rsa2048-g1" },
+        { id: "ca", header: "Certificate authority", cell: (d) => d.CACertificateIdentifier || CURRENT_CA },
         { id: "exp", header: "CA expiration date", cell: () => "-" },
         { id: "role", header: "Role", cell: () => "Instance" },
         { id: "restart", header: "Restart required", cell: () => "No" },

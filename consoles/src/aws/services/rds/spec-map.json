@@ -41,16 +41,16 @@
     "route": "#/rds/take-snapshot"
   },
   "exports-in-amazon-s3": {
-    "route": "#/rds/exports-in-amazon-s3"
+    "route": "#/rds/exports-in-amazon-s3",
+    "live": "live-export-task"
   },
   "automated-backups": {
-    "route": "#/rds/automated-backups"
+    "route": "#/rds/automated-backups",
+    "live": "live-automated-backup"
   },
   "reserved-instances": {
-    "route": "#/rds/reserved-instances"
-  },
-  "capacity-reservations": {
-    "route": "#/rds/capacity-reservations"
+    "route": "#/rds/reserved-instances",
+    "live": "live-reserved-instance"
   },
   "create-capacity-reservation": {
     "route": "#/rds/create-capacity-reservation"
@@ -88,10 +88,12 @@
     "live": "live-option-group"
   },
   "custom-engine-versions": {
-    "route": "#/rds/custom-engine-versions"
+    "route": "#/rds/custom-engine-versions",
+    "live": "live-custom-engine-version"
   },
   "zero-etl-integrations": {
-    "route": "#/rds/zero-etl-integrations"
+    "route": "#/rds/zero-etl-integrations",
+    "live": "live-integration"
   },
   "create-zero-etl-integration": {
     "route": "#/rds/create-zero-etl-integration"
@@ -105,9 +107,11 @@
     "live": "live-event-subscription"
   },
   "recommendations": {
-    "route": "#/rds/recommendations"
+    "route": "#/rds/recommendations",
+    "live": "live-recommendation"
   },
   "certificate-update": {
-    "route": "#/rds/certificate-update"
+    "route": "#/rds/certificate-update",
+    "live": "live-certificate-update"
   }
 }

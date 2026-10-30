@@ -66,4 +66,45 @@ export default {
     await wire("POST", "/", Q("CreateDBInstance", { DBInstanceIdentifier: uniq, Engine: "postgres" }));
     return uniq;
   },
+  "live-automated-backup": async (wire, uniq) => {
+    await wire("POST", "/", Q("CreateDBInstance", { DBInstanceIdentifier: uniq, Engine: "postgres" }));
+    return uniq;
+  },
+  // Not Multi-AZ (the default) is a real recommendation condition — see
+  // core/rds_core.py _recommendations_for; the resource identifier column
+  // shows the instance ARN, which carries this unique id.
+  "live-recommendation": async (wire, uniq) => {
+    await wire("POST", "/", Q("CreateDBInstance", { DBInstanceIdentifier: uniq, Engine: "postgres" }));
+    return uniq;
+  },
+  // Any CA other than the current default is flagged for a certificate update.
+  "live-certificate-update": async (wire, uniq) => {
+    await wire("POST", "/", Q("CreateDBInstance", { DBInstanceIdentifier: uniq, Engine: "postgres", CACertificateIdentifier: "rds-ca-2019" }));
+    return uniq;
+  },
+  "live-reserved-instance": async (wire, uniq) => {
+    await wire("POST", "/", Q("PurchaseReservedDBInstancesOffering", { ReservedDBInstanceId: uniq }));
+    return uniq;
+  },
+  "live-export-task": async (wire, uniq) => {
+    await wire("POST", "/", Q("StartExportTask", {
+      ExportTaskIdentifier: uniq,
+      SourceArn: `arn:aws:rds:us-east-1:123456789012:snapshot:${uniq}-snap`,
+      S3BucketName: `${uniq}-bucket`,
+      IamRoleArn: "arn:aws:iam::123456789012:role/rds-s3-export",
+    }));
+    return uniq;
+  },
+  "live-integration": async (wire, uniq) => {
+    await wire("POST", "/", Q("CreateIntegration", {
+      IntegrationName: uniq,
+      SourceArn: `arn:aws:rds:us-east-1:123456789012:db:${uniq}-source`,
+      TargetArn: "arn:aws:redshift-serverless:us-east-1:123456789012:namespace/v4-smoke",
+    }));
+    return uniq;
+  },
+  "live-custom-engine-version": async (wire, uniq) => {
+    await wire("POST", "/", Q("CreateCustomDBEngineVersion", { Engine: "custom-oracle-ee", EngineVersion: uniq }));
+    return uniq;
+  },
 };
