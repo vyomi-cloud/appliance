@@ -1,9 +1,7 @@
-/* Event Grid hub: the "Event Grid" landing dashboard (nav groups → Create/View) plus the
- * sibling resource-type pages that are out of Vyomi's scope for this release (Namespaces,
- * System topics, Domains, Partner events). Topics — the one in-scope resource type — has its
- * own real browse blade (Topics.jsx). */
+/* Event Grid hub: the "Event Grid" landing dashboard (nav groups → Create/View). The sibling
+ * resource-type pages (Namespaces, System topics, Domains, Partner events) have their own real
+ * browse blade (SimpleList.jsx); Topics has its own (Topics.jsx). */
 import { Link } from "@fluentui/react-components";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { Glyph } from "../../kit/common.jsx";
 import { TitleRow } from "../../kit/ResourceBlade.jsx";
 
@@ -45,15 +43,6 @@ export function Overview() {
           <Tile label="Partner topics" createHref="#/eventgrid/partnertopics" viewHref="#/eventgrid/partnertopics" />
         </Section>
       </div>
-    </>
-  );
-}
-
-export function HonestList({ title, capId }) {
-  return (
-    <>
-      <TitleRow title={title} glyph={<Glyph id="eventgrid" />} closeHref="#/eventgrid" />
-      <div className="vy-page"><CapabilityContainer id={capId} title={title} /></div>
     </>
   );
 }

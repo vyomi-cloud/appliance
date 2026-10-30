@@ -1,13 +1,13 @@
 /* Event Grid topic resource blade: left resource menu + panels. Overview, Tags, Access keys,
- * Event Subscriptions, Networking, Identity, Configuration and Properties are backed by native
- * ARM calls; Activity log, Access control (IAM), Locks and the monitoring/automation/support
+ * Event Subscriptions, Networking, Identity, Configuration, Properties, Activity log and Locks
+ * are backed by native ARM calls; Access control (IAM) and the monitoring/automation/support
  * menu items are honest NotSimulated panels (core/capabilities/azure/eventgrid.json). */
 import { useEffect, useState } from "react";
 import {
   Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
   Radio, RadioGroup, Select, ToolbarButton,
 } from "@fluentui/react-components";
-import { ArrowClockwise20Regular, Copy16Regular, Delete20Regular, Eye16Regular, EyeOff16Regular, ArrowRight20Regular, Save20Regular, Dismiss20Regular } from "@fluentui/react-icons";
+import { ArrowClockwise20Regular, Copy16Regular, Delete20Regular, Eye16Regular, EyeOff16Regular, ArrowRight20Regular, Save20Regular, Dismiss20Regular, Add20Regular } from "@fluentui/react-icons";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
@@ -57,12 +57,10 @@ export default function TopicBlade({ params, query }) {
       configuration: () => <Configuration t={t} reload={reload} />,
       accesskeys: () => <AccessKeys t={t} />,
       properties: () => <Properties t={t} />,
-      activitylog: () => <CapabilityContainer id="azure.eventgrid.topic.activitylog" title={`${name} | Activity log`}
-        note="Columns shown in the real portal: Operation name, Status, Time, Time stamp, Subscription, Event initiated by. Actions: Activity, Edit columns, Export Activity Logs, Download as CSV, Insights, Feedback, Pin current filters, Reset filters." />,
+      activitylog: () => <ActivityLog t={t} name={name} />,
       accesscontrol: () => <CapabilityContainer id="azure.eventgrid.topic.iam" title={`${name} | Access control (IAM)`}
         note="Tabs: Check access, Role assignments, Roles, Deny assignments, Classic administrators. My access and Check access actions (View my access) live on the Check access tab." />,
-      locks: () => <CapabilityContainer id="azure.eventgrid.topic.locks" title={`${name} | Locks`}
-        note="Columns: Lock name, Lock type, Scope, Notes. Actions: Add, Subscription, Resource group, Feedback. Filter: Search to filter items... Add lock fields: Lock name, Lock type, Notes." />,
+      locks: () => <Locks rg={rg} topic={name} />,
       diagnose: () => <CapabilityContainer id="azure.eventgrid.topic.tools" title={`${name} | Diagnose and solve problems`} />,
       tasks: () => <CapabilityContainer id="azure.eventgrid.topic.tools" title={`${name} | Tasks`} />,
       support: () => <CapabilityContainer id="azure.eventgrid.topic.tools" title={`${name} | Support + Troubleshooting`} />,
@@ -373,6 +371,151 @@ function Properties({ t }) {
       <KV label="Provisioning state" value={t.properties?.provisioningState} />
       <KV label="Topic endpoint" value={t.properties?.endpoint} />
       <KV label="Created" value={t._created ? fmtDate(t._created) : undefined} />
+    </>
+  );
+}
+
+// ── Activity log (CapabilityContainer wraps it so the "generic feed, not the real Insights
+// audit trail" limitation still surfaces as a badge; the portal's Edit columns / Export /
+// Insights toolbar is honestly out of scope — a declared gap, not a dead button) ───────────
+function ActivityLog({ t, name }) {
+  const log = useAsync(() => api.listActivityLog(t.id), [t.id]);
+  const [filter, setFilter] = useState("");
+  const [gap, setGap] = useState(null);
+  const f = filter.trim().toLowerCase();
+  const rows = (log.data || []).filter((e) => !f || (e.operationName?.localizedValue || "").toLowerCase().includes(f));
+  return (
+    <CapabilityContainer id="azure.eventgrid.topic.activitylog" title={`${name} | Activity log`}>
+      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
+        <ToolbarButton onClick={() => setGap("Activity")}>Activity</ToolbarButton>
+        <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={log.reload}>Refresh</ToolbarButton>
+        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
+        <ToolbarButton onClick={() => setGap("Download as CSV")}>Download as CSV</ToolbarButton>
+        <ToolbarButton onClick={() => setGap("Insights")}>Insights</ToolbarButton>
+        <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
+        <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
+        <ToolbarButton onClick={() => setGap("Reset filters")}>Reset filters</ToolbarButton>
+      </div>
+      <Input size="small" style={{ width: 260, margin: "8px 0" }} placeholder="Filter by operation..." value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Filter by operation" />
+      <ErrorBar error={log.error} />
+      {log.loading ? <Loading /> : (
+        <table className="vy-grid" style={{ width: "100%" }}>
+          <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
+          <tbody>
+            {rows.map((e) => (
+              <tr key={e.id}>
+                <td>{e.operationName?.localizedValue || e.operationName?.value}</td>
+                <td>{e.status?.value}</td>
+                <td>{e.eventTimestamp ? fmtDate(e.eventTimestamp) : ""}</td>
+                <td>{e.eventTimestamp}</td>
+                <td>{e.subscriptionId}</td>
+                <td>{e.caller}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {!log.loading && !rows.length && <div className="vy-empty"><h3>No events to display</h3></div>}
+      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
+        <DialogSurface aria-label={gap || ""}>
+          <DialogBody><CapabilityContainer id="azure.eventgrid.topic.listactions" title={gap || ""} /></DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+// ── Locks (resource-scoped Microsoft.Authorization/locks) ─────────────────────────────────
+const LOCK_TYPE_LABEL = { CanNotDelete: "Delete", ReadOnly: "Read-only" };
+
+function Locks({ rg, topic }) {
+  const notify = useNotify();
+  const locks = useAsync(() => api.listLocks(rg, topic), [rg, topic]);
+  const [adding, setAdding] = useState(false);
+  const [del, setDel] = useState(null);
+  const [f, setF] = useState({ name: "", type: "Delete", notes: "" });
+  const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState("");
+  const [gap, setGap] = useState(null);
+  const shown = locks.data?.filter((l) => !filter.trim() || l.name.toLowerCase().includes(filter.trim().toLowerCase())) || [];
+
+  const add = async () => {
+    setBusy(true);
+    try {
+      const level = f.type === "Read-only" ? "ReadOnly" : "CanNotDelete";
+      await api.createLock(rg, topic, f.name, { properties: { level, notes: f.notes } });
+      notify.success(`Lock '${f.name}' was created.`, "Add lock succeeded");
+      setAdding(false); setF({ name: "", type: "Delete", notes: "" });
+      locks.reload();
+    } catch (e) { notify.error(e, "Add lock failed"); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <CapabilityContainer id="azure.eventgrid.topic.locks" title={`${topic} | Locks`}>
+        <div className="vy-cmdbar" role="toolbar" aria-label="Locks commands">
+          <ToolbarButton icon={<Add20Regular />} onClick={() => setAdding(true)}>Add</ToolbarButton>
+          <ToolbarButton onClick={() => setGap("Subscription")}>Subscription</ToolbarButton>
+          <ToolbarButton onClick={() => setGap("Resource group")}>Resource group</ToolbarButton>
+          <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={locks.reload}>Refresh</ToolbarButton>
+          <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
+        </div>
+        <Input size="small" style={{ width: 260, margin: "8px 0" }} placeholder="Search to filter items..." value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Search to filter items" />
+        <ErrorBar error={locks.error} />
+        {locks.loading ? <Loading /> : (
+          <table className="vy-grid" style={{ width: "100%" }}>
+            <thead><tr><th>Lock name</th><th>Lock type</th><th>Scope</th><th>Notes</th><th /></tr></thead>
+            <tbody>
+              {shown.map((l) => (
+                <tr key={l.name}>
+                  <td>{l.name}</td>
+                  <td>{LOCK_TYPE_LABEL[l.properties?.level] || l.properties?.level}</td>
+                  <td>{topic}</td>
+                  <td>{l.properties?.notes}</td>
+                  <td><Button appearance="subtle" size="small" icon={<Delete20Regular />} aria-label={`Delete ${l.name}`} onClick={() => setDel(l.name)} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {!locks.loading && !shown.length && <div className="vy-empty"><h3>This resource has no locks.</h3></div>}
+      </CapabilityContainer>
+
+      <Dialog open={adding} onOpenChange={(_, d) => setAdding(d.open)}>
+        <DialogSurface aria-label="Add lock">
+          <DialogBody>
+            <DialogTitle>Add lock</DialogTitle>
+            <DialogContent style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Field label="Lock name" required><Input value={f.name} onChange={(_, d) => setF((x) => ({ ...x, name: d.value }))} aria-label="Lock name" autoFocus /></Field>
+              <Field label="Lock type" required>
+                <Select value={f.type} onChange={(_, d) => setF((x) => ({ ...x, type: d.value }))} aria-label="Lock type">
+                  <option value="Read-only">Read-only</option><option value="Delete">Delete</option>
+                </Select>
+              </Field>
+              <Field label="Notes"><Input value={f.notes} onChange={(_, d) => setF((x) => ({ ...x, notes: d.value }))} aria-label="Notes" /></Field>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" disabled={!f.name.trim() || busy} onClick={add}>OK</Button>
+              <Button onClick={() => setAdding(false)}>Cancel</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      <DeleteDialog open={!!del} onClose={() => setDel(null)} resourceType="lock" names={del ? [del] : []}
+        onConfirm={async () => {
+          await api.deleteLock(rg, topic, del);
+          notify.success(`Lock '${del}' was deleted.`, "Delete succeeded");
+          locks.reload();
+        }} />
+
+      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
+        <DialogSurface aria-label={gap || ""}>
+          <DialogBody><CapabilityContainer id="azure.eventgrid.topic.listactions" title={gap || ""} /></DialogBody>
+        </DialogSurface>
+      </Dialog>
     </>
   );
 }

@@ -26,6 +26,7 @@ const C = `smoke-${n}`;
 const EGT = `vyegtopic${n}`;       // Event Grid topic created through the UI
 const EGT2 = `vyegwire${n}`;       // Event Grid topic created over the wire
 const ES = `vyeges${n}`;           // event subscription created over the wire
+const LOCK = `vyeglock${n}`;       // management lock created through the UI
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -210,9 +211,19 @@ try {
   check("event subscription listed on the topic overview", true);
   await shot("20-eventgrid-event-subscriptions");
 
-  // ── Honest gap: Activity log ────────────────────────────────────────────────────────────
+  // ── Activity log: real, backed by the cloudsim event log recorded on every ARM mutation ──
   await openPanel("Activity log");
-  check("Event Grid activity log is an honest NotSimulated", await page.locator("[data-vyomi-not-simulated]").first().isVisible());
+  await page.getByText(ES).first().waitFor({ timeout: 10000 });
+  check("Event Grid activity log shows the event subscription create", true);
+
+  // ── Locks: real extension resource (Microsoft.Authorization/locks), scoped to the topic ──
+  await openPanel("Locks");
+  await page.getByRole("toolbar", { name: "Locks commands" }).getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Lock name", { exact: true }).fill(LOCK);
+  await page.getByRole("button", { name: "OK" }).click();
+  await page.getByText(LOCK).waitFor({ timeout: 10000 });
+  const lockGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}/providers/Microsoft.Authorization/locks/${LOCK}`);
+  check("UI add lock → visible over native ARM (extension resource)", lockGet.status === 200, `HTTP ${lockGet.status}`);
 
   // ── Resource created over the wire → visible in the UI (CLI → UI) ──────────────────────
   const egput = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT2}`, { location: "eastus" });

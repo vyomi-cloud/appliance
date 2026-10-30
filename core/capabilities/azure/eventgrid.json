@@ -1,5 +1,5 @@
 {
-  "$doc": "Vyomi capability registry — Azure Event Grid. See aws/s3.json for the contract. 'nano' = Nano/dev_server (core/azure_arm_core.py + core/azure_eventgrid_core.py); 'offline' = the appliance (providers/azure_services.py), which has the generic ARM topic catalog but no event-subscription engine yet.",
+  "$doc": "Vyomi capability registry — Azure Event Grid. See aws/s3.json for the contract. 'nano' = Nano/dev_server (core/azure_arm_core.py + core/azure_eventgrid_core.py + core/azure_locks_core.py); 'offline' = the appliance (providers/azure_services.py), which shares the same generic ARM catalog (topics and its siblings) but does not yet port the event-subscription extension-resource engine.",
   "azure.eventgrid.topics.crud": {
     "title": "Topics — create, list, get, update, delete (generic ARM catalog)",
     "level": { "nano": "full", "offline": "full" },
@@ -10,6 +10,11 @@
     "title": "\"Open query\" (Azure Resource Graph Explorer) and \"Assign tags\" bulk action on the Topics list",
     "level": { "nano": "not_simulated", "offline": "not_simulated" },
     "limitations": ["Azure Resource Graph and bulk tag assignment across resources are not modeled."]
+  },
+  "azure.eventgrid.topic.listactions": {
+    "title": "Secondary toolbar actions on a topic's Activity log and Locks panels (Edit columns, Export, Insights, Feedback, pin/reset filters)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Column customization, log export/insights and portal feedback are not modeled."]
   },
   "azure.eventgrid.topics.accesskeys": {
     "title": "Access keys (listKeys / regenerateKey)",
@@ -40,30 +45,55 @@
       "Vyomi stores topics and event subscriptions and returns them over the native ARM wire, but there is no publish/delivery runtime: no event is ever matched against a subscription's filters, pushed to its destination, retried, or dead-lettered."
     ]
   },
-  "azure.eventgrid.hub.namespaces": {
-    "title": "Namespaces (MQTT broker)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Event Grid namespaces and the MQTT broker are out of scope for this release."]
+  "azure.eventgrid.namespaces.crud": {
+    "title": "Namespaces — create, list, delete (generic ARM catalog)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": ["The MQTT broker and client/topic-space configuration on a namespace are not modeled — only the resource itself round-trips."],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
-  "azure.eventgrid.hub.systemtopics": {
-    "title": "System topics (Azure service events)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["System topics for other Azure services' events are out of scope for this release."]
+  "azure.eventgrid.systemtopics.crud": {
+    "title": "System topics — create, list, delete (generic ARM catalog)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": ["The source resource / topic type a system topic listens to is stored as configured but no Azure-service event is ever generated or delivered."],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
-  "azure.eventgrid.hub.domains": {
-    "title": "Domains",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Event Grid domains are out of scope for this release."]
+  "azure.eventgrid.domains.crud": {
+    "title": "Domains — create, list, delete (generic ARM catalog)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": ["Domain topics (the per-topic children of a domain) are not modeled — only the domain resource itself round-trips."],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
-  "azure.eventgrid.hub.partnerevents": {
-    "title": "Partner events (partner configurations, partner topics, partner registrations, partner namespaces)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Partner Events is out of scope for this release."]
+  "azure.eventgrid.partnerconfigurations.crud": {
+    "title": "Partner configurations — create, list, delete (generic ARM catalog)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": ["Partner authorization approval workflows are not modeled — only the configuration resource round-trips."],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.eventgrid.partnertopics.crud": {
+    "title": "Partner topics — create, list, delete (generic ARM catalog)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": ["Partner topic activation by the partner and event delivery from a partner are not modeled."],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.eventgrid.partnerregistrations.crud": {
+    "title": "Partner registrations — create, list, delete (generic ARM catalog)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": ["Becoming a listed Event Grid partner is not modeled — only the registration resource round-trips."],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.eventgrid.partnernamespaces.crud": {
+    "title": "Partner namespaces — create, list, delete (generic ARM catalog)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": ["Partner namespace channels and partner destinations are not modeled — only the namespace resource round-trips."],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
   "azure.eventgrid.topic.activitylog": {
     "title": "Topic activity log",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["The ARM activity log (control-plane audit trail) is not modeled."]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "A simplified, generic ARM activity feed (create/update/delete on this resource), not the real Microsoft.Insights audit trail (callers, correlation ids, full operation metadata)."
+    ],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
   },
   "azure.eventgrid.topic.iam": {
     "title": "Access control (IAM) on a topic",
@@ -72,8 +102,11 @@
   },
   "azure.eventgrid.topic.locks": {
     "title": "Resource locks",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Management locks (CanNotDelete / ReadOnly) are not modeled."]
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "Vyomi stores and returns locks exactly as configured (CanNotDelete / ReadOnly, notes) but never enforces them — writes and deletes on a locked resource are not blocked."
+    ],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
   },
   "azure.eventgrid.topic.monitoring": {
     "title": "Alerts, metrics, diagnostic settings and logs on a topic",

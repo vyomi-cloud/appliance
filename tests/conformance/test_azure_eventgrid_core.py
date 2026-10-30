@@ -105,6 +105,55 @@ def run() -> int:
     r = arm.handle("PUT", sub_path("t2", "new"), {"api-version": ESAV}, {"properties": {}})
     check("subscription create on a deleted topic -> 404", r["status"] == 404, r)
 
+    # ── Sibling resource types: namespaces/system topics/domains/partner* ride the SAME
+    # generic ARM catalog CRUD as topics — just a different (namespace, type) entry ──────
+    def rtype_path(typ, name, rg=RG):
+        return f"/subscriptions/{SUB}/resourceGroups/{rg}/providers/Microsoft.EventGrid/{typ}/{name}"
+
+    for typ, name in (("namespaces", "ns1"), ("systemTopics", "st1"), ("domains", "d1"),
+                       ("partnerConfigurations", "pc1"), ("partnerTopics", "pt1"),
+                       ("partnerRegistrations", "pr1"), ("partnerNamespaces", "pn1")):
+        r = arm.handle("PUT", rtype_path(typ, name), {"api-version": "2022-06-15"}, {"location": "eastus"})
+        check(f"create {typ} -> 2xx", r["status"] in (200, 201), r)
+        check(f"{typ} provisioningState Succeeded", r["body"]["properties"]["provisioningState"] == "Succeeded", r["body"])
+        r = arm.handle("GET", rtype_path(typ, name).rsplit("/", 1)[0], {"api-version": "2022-06-15"})
+        check(f"list {typ} contains {name}", any(x["name"] == name for x in r["body"]["value"]), r["body"])
+        r = arm.handle("DELETE", rtype_path(typ, name), {"api-version": "2022-06-15"})
+        check(f"delete {typ} -> 200", r["status"] == 200, r)
+
+    # ── Management locks: a real ARM extension resource scoped to the topic's own id ───
+    def lock_path(topic, name=None, rg=RG):
+        p = f"{topic_path(topic, rg)}/providers/Microsoft.Authorization/locks"
+        return f"{p}/{name}" if name else p
+
+    r = arm.handle("GET", lock_path("t1"), {"api-version": "2016-09-01"})
+    check("no locks on t1 yet", r["status"] == 200 and r["body"]["value"] == [], r)
+
+    r = arm.handle("PUT", lock_path("t1", "lk1"), {"api-version": "2016-09-01"},
+                    {"properties": {"level": "CanNotDelete", "notes": "protect the demo topic"}})
+    check("create lock -> 201", r["status"] == 201, r)
+    check("lock scoped under the topic id", r["body"]["id"] == lock_path("t1", "lk1"), r["body"])
+    check("lock level + notes round-trip", r["body"]["properties"]["level"] == "CanNotDelete"
+          and r["body"]["properties"]["notes"] == "protect the demo topic", r["body"])
+
+    r = arm.handle("GET", lock_path("t1"), {"api-version": "2016-09-01"})
+    check("list locks on t1 has lk1", [x["name"] for x in r["body"]["value"]] == ["lk1"], r["body"])
+
+    r = arm.handle("GET", lock_path("t2", "lk1"), {"api-version": "2016-09-01"})
+    check("t2 doesn't see t1's lock (scoped, not global)", r["status"] == 404, r)
+
+    r = arm.handle("DELETE", lock_path("t1", "lk1"), {"api-version": "2016-09-01"})
+    check("delete lock -> 200", r["status"] == 200, r)
+    r = arm.handle("GET", lock_path("t1"), {"api-version": "2016-09-01"})
+    check("lock gone after delete", r["body"]["value"] == [], r["body"])
+
+    # ── Activity log: every PUT/DELETE above left a real event behind ──────────────────
+    r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Insights/eventtypes/management/values",
+                    {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{topic_path('t1')}'"})
+    check("activity log 200", r["status"] == 200, r)
+    ops = [e["operationName"]["value"] for e in r["body"]["value"]]
+    check("activity log sees t1's Create", "Create" in ops, ops)
+
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0
 
