@@ -18,9 +18,12 @@ import EditPasswordPolicy from "./EditPasswordPolicy.jsx";
 import SecurityCredentials from "./SecurityCredentials.jsx";
 import PolicySimulator from "./PolicySimulator.jsx";
 import CredentialReport from "./CredentialReport.jsx";
+import TemporaryDelegationRequests from "./TemporaryDelegationRequests.jsx";
+import ServiceControlPolicies from "./ServiceControlPolicies.jsx";
+import ServiceControlPolicyDetail from "./ServiceControlPolicyDetail.jsx";
+import ResourceControlPolicies from "./ResourceControlPolicies.jsx";
 import {
-  AssignDelegatedAdministrator, RootAccessManagement, TemporaryDelegationRequests, OrganizationActivity,
-  ServiceControlPolicies, ServiceControlPolicyDetail, ResourceControlPolicies, AccountAccessManager,
+  AssignDelegatedAdministrator, RootAccessManagement, OrganizationActivity, AccountAccessManager,
   AccessAnalyzer, ResourceAnalysis, UnusedAccess, AnalyzerSettings,
 } from "./HonestPages.jsx";
 

@@ -10,9 +10,8 @@
     "live": "live-user"
   },
   "user-detail": {
-    "route": "#/iam/users/uic-user",
-    "fixtures": ["iam-user"],
-    "vars": { "resource-name": "uic-user" }
+    "route": "#/iam/users/{live}",
+    "live": "live-user"
   },
   "create-user": {
     "route": "#/iam/create-user",
@@ -30,9 +29,8 @@
     "live": "live-group"
   },
   "group-detail": {
-    "route": "#/iam/groups/uic-group",
-    "fixtures": ["iam-group"],
-    "vars": { "resource-name": "uic-group" }
+    "route": "#/iam/groups/{live}",
+    "live": "live-group"
   },
   "create-user-group": {
     "route": "#/iam/create-user-group"
@@ -43,9 +41,8 @@
     "live": "live-role"
   },
   "role-detail": {
-    "route": "#/iam/roles/uic-role",
-    "fixtures": ["iam-role"],
-    "vars": { "resource-name": "uic-role" }
+    "route": "#/iam/roles/{live}",
+    "live": "live-role"
   },
   "create-role": {
     "route": "#/iam/create-role",
@@ -60,9 +57,8 @@
     "live": "live-policy"
   },
   "policy-detail": {
-    "route": "#/iam/policies/uic-policy",
-    "fixtures": ["iam-policy"],
-    "vars": { "resource-name": "uic-policy" }
+    "route": "#/iam/policies/{live}",
+    "live": "live-policy"
   },
   "create-policy": {
     "route": "#/iam/create-policy",
@@ -102,7 +98,8 @@
     "route": "#/iam/root-access-management"
   },
   "temporary-delegation-requests": {
-    "route": "#/iam/temporary-delegation-requests"
+    "route": "#/iam/temporary-delegation-requests",
+    "live": "live-access-request"
   },
   "policy-simulator": {
     "route": "#/iam/policy-simulator",
@@ -116,14 +113,16 @@
     "route": "#/iam/organization-activity"
   },
   "service-control-policies": {
-    "route": "#/iam/service-control-policies"
+    "route": "#/iam/service-control-policies",
+    "live": "live-scp"
   },
   "service-control-policy-detail": {
-    "route": "#/iam/service-control-policies/example",
-    "vars": { "resource-name": "example" }
+    "route": "#/iam/service-control-policies/{live}",
+    "live": "live-scp"
   },
   "resource-control-policies": {
-    "route": "#/iam/resource-control-policies"
+    "route": "#/iam/resource-control-policies",
+    "live": "live-rcp"
   },
   "access-analyzer": {
     "route": "#/iam/access-analyzer"

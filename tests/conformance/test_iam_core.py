@@ -267,6 +267,30 @@ def run() -> int:
     rep = iam.dispatch(st, {"Action": "GetCredentialReport"}).body
     _check("credential report content present", "<Content>" in rep and "<ReportFormat>text/csv</ReportFormat>" in rep)
 
+    # 24. Vyomi-only: Organizations policies (SCP/RCP) + account access requests —
+    # back the IAM console's "Multi-account access" pages without a second service stack.
+    scp = iam.dispatch(st, {"Action": "CreateOrgPolicy", "Name": "deny-root", "Type": "SERVICE_CONTROL_POLICY",
+                            "Content": _policy({"Effect": "Deny", "Action": "*", "Resource": "*"})}).body
+    _check("org policy created", "<Type>SERVICE_CONTROL_POLICY</Type>" in scp and "<Id>p-" in scp)
+    scp_id = scp.split("<Id>")[1].split("</Id>")[0]
+    rcp = iam.dispatch(st, {"Action": "CreateOrgPolicy", "Name": "deny-cross-account", "Type": "RESOURCE_CONTROL_POLICY",
+                            "Content": _policy({"Effect": "Deny", "Action": "*", "Resource": "*"})}).body
+    _check("rcp created", "<Type>RESOURCE_CONTROL_POLICY</Type>" in rcp)
+    bad_type = iam.dispatch(st, {"Action": "CreateOrgPolicy", "Name": "x", "Type": "TAG_POLICY", "Content": "{}"})
+    _check("org policy rejects unsupported type", "<Code>ValidationError</Code>" in bad_type.body)
+    lop = iam.dispatch(st, {"Action": "ListOrgPolicies", "Type": "SERVICE_CONTROL_POLICY"}).body
+    _check("SCP listed, RCP filtered out", "deny-root" in lop and "deny-cross-account" not in lop)
+    dop = iam.dispatch(st, {"Action": "DescribeOrgPolicy", "PolicyId": scp_id}).body
+    _check("org policy described", "deny-root" in dop)
+    iam.dispatch(st, {"Action": "DeleteOrgPolicy", "PolicyId": scp_id})
+    _check("org policy deleted", "deny-root" not in iam.dispatch(st, {"Action": "ListOrgPolicies"}).body)
+    missing = iam.dispatch(st, {"Action": "DescribeOrgPolicy", "PolicyId": "p-missing"})
+    _check("missing org policy -> NoSuchEntity", "<Code>NoSuchEntity</Code>" in missing.body)
+
+    req = iam.dispatch(st, {"Action": "RequestAccountAccess", "RequestorId": "444455556666", "InitiatedBy": "alice"}).body
+    _check("access request created", "<RequestId>ar-" in req and "<RequestorId>444455556666</RequestorId>" in req)
+    _check("access request listed", "444455556666" in iam.dispatch(st, {"Action": "ListAccountAccessRequests"}).body)
+
     print("\nRESULT: PASS — IAM core conforms (native Query-protocol wire + real policy evaluation) on this substrate.")
     return 0
 

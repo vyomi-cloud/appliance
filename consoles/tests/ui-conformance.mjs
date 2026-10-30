@@ -122,10 +122,12 @@ async function checkService(browser, svc) {
   const pages = [];
   for (const sp of spec.pages) {
     const m = map[sp.id];
-    // Spec placeholders like {resource-name} resolve to this page's fixture resource.
-    const els = elements(sp).map((e) => ({ ...e, text: e.text.replace(/\{([\w-]+)\}/g, (x, k) => m?.vars?.[k] ?? x) }));
-    const rec = { id: sp.id, kind: sp.kind, route: m?.route || null, total: els.length, present: [], honest: [], missing: [] };
-    if (!m?.route) { rec.missing = els.map((e) => `${e.kind}: ${e.text}`); rec.unmapped = true; pages.push(rec); continue; }
+    if (!m?.route) {
+      const els = elements(sp).map((e) => ({ ...e, text: e.text.replace(/\{([\w-]+)\}/g, (x, k) => m?.vars?.[k] ?? x) }));
+      pages.push({ id: sp.id, kind: sp.kind, route: null, total: els.length, present: [], honest: [], missing: els.map((e) => `${e.kind}: ${e.text}`), unmapped: true });
+      continue;
+    }
+    const rec = { id: sp.id, kind: sp.kind, route: m.route, present: [], honest: [], missing: [] };
     for (const f of m.fixtures || []) await (svcFx[f] ? svcFx[f](wire, "uic") : FIXTURES[f]?.());
     // Liveness ("no statics"): create a uniquely named resource over the native wire right
     // before loading the page; the page must show that exact name.
@@ -136,6 +138,11 @@ async function checkService(browser, svc) {
     }
     // Detail routes may embed the live resource: "#/s3/object/uic-bucket?key={live}".
     const route = liveText ? m.route.replaceAll("{live}", encodeURIComponent(liveText)) : m.route;
+    // Spec placeholders like {resource-name} resolve to this page's fixture resource —
+    // the freshly created live resource wins over a static var, since that's what actually renders.
+    const vars = { ...m.vars, ...(liveText ? { "resource-name": liveText } : {}) };
+    const els = elements(sp).map((e) => ({ ...e, text: e.text.replace(/\{([\w-]+)\}/g, (x, k) => vars[k] ?? x) }));
+    rec.total = els.length;
     await page.goto(`${UI}${cloud}/${route}`, { waitUntil: "networkidle" }).catch(() => {});
     await page.waitForTimeout(900);
     const snaps = [await snapshot(page)];

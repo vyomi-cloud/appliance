@@ -1094,6 +1094,102 @@ def _simulate_principal_policy(store, params):
     return _envelope("SimulatePrincipalPolicy", f"<EvaluationResults>{''.join(results)}</EvaluationResults>")
 
 
+# ── Organizations policies (SCP/RCP) — Vyomi-only ───────────────────────────
+# Real AWS exposes service/resource control policies through a SEPARATE
+# "organizations" service (JSON protocol, target AWSOrganizationsV20161128.*).
+# The IAM console surfaces them under its own nav ("Multi-account access") for
+# convenience, so Vyomi models them here, on IAM's native Query wire, to back
+# that console without a second service stack — Vyomi simulates a single
+# account, so attachment/enforcement across member accounts is not modeled
+# (see core/capabilities/aws/iam.json: iam.organizations = "limited").
+_ORG_POLICY_TYPES = {"SERVICE_CONTROL_POLICY", "RESOURCE_CONTROL_POLICY"}
+
+
+def _org_policy_xml(p: dict) -> str:
+    return ("<Policy>" + _el("Id", p["id"]) + _el("Arn", p["arn"]) + _el("Name", p["name"])
+            + _el("Description", p.get("description", "")) + _el("Type", p["type"])
+            + _el("AwsManaged", "false") + _el("CreatedTimestamp", p["created"])
+            + f"<Content>{_xml_escape(p['content'])}</Content>" + "</Policy>")
+
+
+def _create_org_policy(store, params):
+    name = str(params.get("Name", "")).strip()
+    ptype = str(params.get("Type", "")).strip().upper()
+    if not name:
+        raise IamError("ValidationError", "Name is required.", 400)
+    if ptype not in _ORG_POLICY_TYPES:
+        raise IamError("ValidationError", f"Type must be one of {sorted(_ORG_POLICY_TYPES)}.", 400)
+    content = str(params.get("Content", "") or "{}")
+    try:
+        json.loads(content)
+    except Exception:
+        raise IamError("MalformedPolicyDocument", "Content is not valid JSON.", 400)
+    pid = "p-" + uuid.uuid4().hex[:8]
+    p = {"id": pid, "arn": f"arn:aws:organizations::{store.account_id}:policy/o-vyomi/{ptype.lower()}/{pid}",
+         "name": name, "description": params.get("Description", ""), "type": ptype,
+         "content": content, "created": _now()}
+    store.org_policies[pid] = p
+    store.persist()
+    return _envelope("CreateOrgPolicy", _org_policy_xml(p))
+
+
+def _list_org_policies(store, params):
+    ptype = str(params.get("Type", "")).strip().upper()
+    items = [p for p in store.org_policies.values() if not ptype or p["type"] == ptype]
+    inner = "<Policies>" + "".join(_org_policy_xml(p) for p in sorted(items, key=lambda p: p["created"])) + "</Policies>"
+    return _envelope("ListOrgPolicies", inner)
+
+
+def _require_org_policy(store, policy_id):
+    p = store.org_policies.get(policy_id)
+    if not p:
+        raise IamError("NoSuchEntity", f"Policy {policy_id} does not exist.", 404)
+    return p
+
+
+def _describe_org_policy(store, params):
+    p = _require_org_policy(store, str(params.get("PolicyId", "")).strip())
+    return _envelope("DescribeOrgPolicy", _org_policy_xml(p))
+
+
+def _delete_org_policy(store, params):
+    pid = str(params.get("PolicyId", "")).strip()
+    _require_org_policy(store, pid)
+    del store.org_policies[pid]
+    store.persist()
+    return _envelope("DeleteOrgPolicy")
+
+
+# ── Account access requests ("Temporary delegation requests") — Vyomi-only ──
+# Centralized root access lets a member account request temporary elevated
+# access from the management account; Vyomi has no member accounts to
+# originate a request, so there is no "Create" action in the console UI
+# itself — this models the record a request would leave behind so the page
+# has real (not static) data when one is simulated over the wire.
+def _access_request_xml(r: dict) -> str:
+    return ("<AccountAccessRequest>" + _el("RequestId", r["id"]) + _el("Status", r["status"])
+            + _el("RequestorId", r["requestor_id"]) + _el("InitiatedBy", r["initiated_by"])
+            + _el("RequestCreated", r["created"]) + _el("RequestExpires", r["expires"])
+            + "</AccountAccessRequest>")
+
+
+def _request_account_access(store, params):
+    requestor = str(params.get("RequestorId", "")).strip() or store.account_id
+    initiated_by = str(params.get("InitiatedBy", "")).strip() or requestor
+    rid = "ar-" + uuid.uuid4().hex[:12]
+    r = {"id": rid, "status": params.get("Status", "Pending"), "requestor_id": requestor,
+         "initiated_by": initiated_by, "created": _now(), "expires": params.get("RequestExpires", _now())}
+    store.access_requests[rid] = r
+    store.persist()
+    return _envelope("RequestAccountAccess", _access_request_xml(r))
+
+
+def _list_account_access_requests(store, params):
+    inner = "<AccountAccessRequests>" + "".join(
+        _access_request_xml(r) for r in sorted(store.access_requests.values(), key=lambda r: r["created"])) + "</AccountAccessRequests>"
+    return _envelope("ListAccountAccessRequests", inner)
+
+
 # ── native-wire dispatcher (Query-protocol Action → operation) ─────────────
 _OPS = {
     "CreateUser": _create_user, "GetUser": _get_user, "ListUsers": _list_users, "DeleteUser": _delete_user,
@@ -1140,6 +1236,11 @@ _OPS = {
     "DeleteAccountAlias": _delete_account_alias,
     "GenerateCredentialReport": _generate_credential_report, "GetCredentialReport": _get_credential_report,
     "SimulatePrincipalPolicy": _simulate_principal_policy,
+    # Vyomi-only (see the functions' docstrings above): SCP/RCP + account access requests.
+    "CreateOrgPolicy": _create_org_policy, "ListOrgPolicies": _list_org_policies,
+    "DescribeOrgPolicy": _describe_org_policy, "DeleteOrgPolicy": _delete_org_policy,
+    "RequestAccountAccess": _request_account_access,
+    "ListAccountAccessRequests": _list_account_access_requests,
 }
 
 

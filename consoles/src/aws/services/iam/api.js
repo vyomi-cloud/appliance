@@ -147,3 +147,13 @@ export const simulatePrincipalPolicy = async (PolicySourceArn, actionNames = [],
     .SimulatePrincipalPolicyResponse.SimulatePrincipalPolicyResult;
   return asList(r.EvaluationResults?.member);
 };
+
+// ── Organizations policies (SCP/RCP) — Vyomi-only, see core/iam_core.py ──
+export const createOrgPolicy = async (params) => (await call("CreateOrgPolicy", params)).CreateOrgPolicyResponse.CreateOrgPolicyResult.Policy;
+export const listOrgPolicies = async (Type) => asList((await call("ListOrgPolicies", Type ? { Type } : {})).ListOrgPoliciesResponse.ListOrgPoliciesResult.Policies?.Policy);
+export const describeOrgPolicy = async (PolicyId) => (await call("DescribeOrgPolicy", { PolicyId })).DescribeOrgPolicyResponse.DescribeOrgPolicyResult.Policy;
+export const deleteOrgPolicy = (PolicyId) => call("DeleteOrgPolicy", { PolicyId });
+
+// ── Account access requests ("Temporary delegation requests") — Vyomi-only ──
+export const requestAccountAccess = async (params) => (await call("RequestAccountAccess", params)).RequestAccountAccessResponse.RequestAccountAccessResult.AccountAccessRequest;
+export const listAccountAccessRequests = async () => asList((await call("ListAccountAccessRequests", {})).ListAccountAccessRequestsResponse.ListAccountAccessRequestsResult.AccountAccessRequests?.AccountAccessRequest);

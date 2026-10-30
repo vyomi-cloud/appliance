@@ -31,6 +31,8 @@ State shapes (record shapes owned by iam_core):
     account_aliases : [alias, ...]        (IAM allows at most one in real AWS; we allow a small list)
     password_policy : dict | None          (GetAccountPasswordPolicy shape, or None = IAM default)
     credential_report : {"generated": iso8601, "content": csv-str} | None
+    org_policies : { policy_id -> SCP/RCP }   (Vyomi-only — see iam_core's CreateOrgPolicy)
+    access_requests : { request_id -> account-access request }  (Vyomi-only — see RequestAccountAccess)
 """
 from __future__ import annotations
 
@@ -156,6 +158,8 @@ class IamStore:
         self.account_aliases: list[str] = []
         self.password_policy: dict[str, Any] | None = None
         self.credential_report: dict[str, Any] | None = None
+        self.org_policies: dict[str, dict[str, Any]] = {}       # keyed by PolicyId (SCP/RCP, Vyomi-only)
+        self.access_requests: dict[str, dict[str, Any]] = {}    # keyed by RequestId (Vyomi-only)
         self.engine: AuthzEngine = engine or NativeIamEvaluator()
         self.account_id = account_id
 

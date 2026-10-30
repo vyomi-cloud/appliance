@@ -171,10 +171,31 @@
   ]
  },
  "iam.organizations": {
-  "title": "AWS Organizations multi-account features (SCPs, RCPs, root access management, organization activity, account access manager, temporary delegation requests)",
+  "title": "AWS Organizations multi-account features (root access management, organization activity, account access manager)",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
    "Vyomi simulates a single AWS account; there is no organization of member accounts for these multi-account features to operate over."
+  ]
+ },
+ "iam.organizations.policies": {
+  "title": "Service control policies (SCPs) and resource control policies (RCPs)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Vyomi stores and returns SCP/RCP documents (create, list, describe, delete) on IAM's native wire — real AWS routes these through a separate Organizations service.",
+   "Vyomi simulates a single AWS account, so attachment to organizational units/accounts and cross-account enforcement are not modeled; policies are validated as JSON but not evaluated."
+  ],
+  "tests": [
+   "tests/conformance/test_iam_core.py"
+  ]
+ },
+ "iam.organizations.access-requests": {
+  "title": "Temporary delegation requests (centralized root access)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Vyomi has no member accounts to originate a real cross-account access request; this stores and lists request records created over the native wire, with no approval workflow."
+  ],
+  "tests": [
+   "tests/conformance/test_iam_core.py"
   ]
  }
 }

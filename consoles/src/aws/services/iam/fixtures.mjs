@@ -40,4 +40,18 @@ export default {
     await wire("POST", "/", Q("CreateAccountAlias", { AccountAlias: alias }));
     return alias;
   },
+
+  // Vyomi-only (core/iam_core.py): Organizations SCP/RCP + account access requests.
+  "live-scp": async (wire, uniq) => {
+    await wire("POST", "/", Q("CreateOrgPolicy", { Name: uniq, Type: "SERVICE_CONTROL_POLICY", Content: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Deny", Action: "*", Resource: "*" }] }) }));
+    return uniq;
+  },
+  "live-rcp": async (wire, uniq) => {
+    await wire("POST", "/", Q("CreateOrgPolicy", { Name: uniq, Type: "RESOURCE_CONTROL_POLICY", Content: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Deny", Action: "*", Resource: "*" }] }) }));
+    return uniq;
+  },
+  "live-access-request": async (wire, uniq) => {
+    await wire("POST", "/", Q("RequestAccountAccess", { RequestorId: uniq, InitiatedBy: uniq }));
+    return uniq;
+  },
 };
