@@ -1089,6 +1089,7 @@ async function renderDetail(main){
     if (t === "logs" || t === "flowlogs" || t === "insights") return renderLogsTab(content, svc, STATE.item, item);
     if (t === "activitylog") return renderActivityTab(content, svc, STATE.item);
     if (t === "iam")      return renderIamTab(content, svc, STATE.item);
+    if (t === "iammembers") return renderIamMembersTab(content, svc, STATE.item);
     // Data-driven fallback: every other tab (type "stub" or unmapped) renders the
     // resource's data relevant to that tab — no sub-screen is left blank.
     return renderGenericTab(content, svc, STATE.item, item);
@@ -1674,6 +1675,22 @@ async function renderIamTab(host, svc, item){
   const tbl = el("table",{class:"gc",style:"width:100%"});
   tbl.append(el("tr",{}, el("th",{}, "Role"), el("th",{}, "Members")));
   bindings.forEach(b => tbl.append(el("tr",{}, el("td",{}, String(b.role)), el("td",{}, (b.members||[]).join(", ")))));
+  host.append(tbl);
+}
+// IAM service account → Members: the roles the project policy grants to this account.
+async function renderIamMembersTab(host, svc, item){
+  const email = String((item && item.email) || "");
+  const r = await api("GET", "/api/gcp/sub/iam/getProjectPolicy/"+encodeURIComponent(PROJECT));
+  if (!r.ok) { host.append(el("div",{class:"empty"}, "Could not load the IAM policy ("+r.status+").")); return; }
+  const mine = ((r.json && r.json.bindings) || []).filter(b => (b.members||[]).includes("serviceAccount:"+email));
+  if (!mine.length) {
+    host.append(el("div",{class:"empty"}, el("span",{class:"ic material-symbols-outlined"}, "group"),
+      el("div",{}, "serviceAccount:" + email + " has no roles on project " + PROJECT + ".")));
+    return;
+  }
+  const tbl = el("table",{class:"gc",style:"width:100%"});
+  tbl.append(el("tr",{}, el("th",{}, "Principal"), el("th",{}, "Role")));
+  mine.forEach(b => tbl.append(el("tr",{}, el("td",{}, "serviceAccount:"+email), el("td",{}, String(b.role)))));
   host.append(tbl);
 }
 // Logs / Query-Insights / Flow-logs tab — a clearly-labelled SIMULATED stream so

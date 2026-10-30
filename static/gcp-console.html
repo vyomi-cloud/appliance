@@ -1017,6 +1017,8 @@ async function renderDetail(main){
     if (t === "objects")  return renderObjectsTab(content, svc, STATE.item);
     if (t === "tags")     return renderLabelsTab(content, svc, STATE.item);
     if (t === "json")     return content.append(el("pre",{style:"background:#202124;color:#d4d4d4;padding:14px;border-radius:6px;font-family:monospace;font-size:12.5px;overflow-x:auto"}, JSON.stringify(STATE.item, null, 2)));
+    if (t === "iammembers") return renderIamMembersTab(content, svc, STATE.item);
+    if (t === "properties" && svc.key === "iam") return renderIamPropertiesTab(content, svc, STATE.item);
     if (t === "properties")return renderOverviewTab(content, svc, STATE.item);
     if (t === "metrics")  return renderMetricsTab(content, svc);
     if (t === "activitylog") return renderActivityTab(content, svc, STATE.item);
@@ -1415,6 +1417,28 @@ async function renderIamTab(host, svc, item){
   tbl.append(el("tr",{}, el("th",{}, "Role"), el("th",{}, "Members")));
   bindings.forEach(b => tbl.append(el("tr",{}, el("td",{}, String(b.role)), el("td",{}, (b.members||[]).join(", ")))));
   host.append(tbl);
+}
+// IAM service account → Members: the roles the project policy grants to this account.
+async function renderIamMembersTab(host, svc, item){
+  const email = String((item && item.email) || "");
+  const r = await api("GET", "/api/gcp/iam/v1/projects/"+encodeURIComponent(PROJECT)+":getIamPolicy");
+  if (!r.ok) { host.append(el("div",{class:"empty"}, "Could not load the IAM policy ("+r.status+").")); return; }
+  const mine = ((r.json && r.json.bindings) || []).filter(b => (b.members||[]).includes("serviceAccount:"+email));
+  if (!mine.length) {
+    host.append(el("div",{class:"empty"}, el("span",{class:"ic material-symbols-outlined"}, "group"),
+      el("div",{}, "serviceAccount:" + email + " has no roles on project " + PROJECT + ".")));
+    return;
+  }
+  const tbl = el("table",{class:"gc",style:"width:100%"});
+  tbl.append(el("tr",{}, el("th",{}, "Principal"), el("th",{}, "Role")));
+  mine.forEach(b => tbl.append(el("tr",{}, el("td",{}, "serviceAccount:"+email), el("td",{}, String(b.role)))));
+  host.append(tbl);
+}
+// IAM service account → Properties: re-read the account from the API.
+async function renderIamPropertiesTab(host, svc, item){
+  const name = String((item && item.email) || "");
+  const r = await api("GET", fillCommon(svc.resource_path, {name}));
+  renderOverviewTab(host, svc, (r.ok && r.json) ? r.json : item);
 }
 const TAB_ALIASES = {
   disks:["disks"], snapshots:["snapshots"], networking:["networkInterfaces"], scheduling:["scheduling"],

@@ -214,8 +214,8 @@ _VPC_SUB = [
 _IAM_SUB = [
     {"key": "overview",   "label": "Overview", "icon": "dashboard", "type": "overview"},
     {"group": "Access", "items": [
-        {"key": "members",     "label": "Members",          "icon": "group",      "type": "stub"},
-        {"key": "permissions", "label": "Permissions",      "icon": "policy",     "type": "stub"},
+        {"key": "members",     "label": "Members",          "icon": "group",      "type": "iammembers"},
+        {"key": "permissions", "label": "Permissions",      "icon": "policy",     "type": "iam"},
         {"key": "keys",        "label": "Keys",             "icon": "vpn_key",    "type": "stub"},
     ]},
     {"group": "Settings", "items": [

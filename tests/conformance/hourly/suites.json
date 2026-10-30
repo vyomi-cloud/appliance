@@ -1665,6 +1665,14 @@
       "timeout": 600
     },
     {
+      "id": "offline-ui-gcp-iam-detail",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-iam-detail.mjs",
+      "timeout": 300
+    },
+    {
       "id": "offline-ui-gcp-labels-tab",
       "target": "offline",
       "cloud": "gcp",
@@ -1813,6 +1821,14 @@
       "kind": "ui",
       "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-sns.mjs",
       "timeout": 600
+    },
+    {
+      "id": "nano-ui-gcp-iam-detail",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-iam-detail.mjs",
+      "timeout": 300
     },
     {
       "id": "nano-ui-gcp-artifactregistry",
