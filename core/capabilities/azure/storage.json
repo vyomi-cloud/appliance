@@ -1,0 +1,262 @@
+{
+ "$doc": "Vyomi capability registry — Azure Storage accounts. See aws/s3.json for the contract. One entry per console section (StorageAccountBlade.jsx MENU id).",
+ "azure.storage.account.crud": {
+  "title": "Storage accounts (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.account.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.containers": {
+  "title": "Containers (create, list, delete) over the Blob REST data plane",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_blob_core.py"]
+ },
+ "azure.storage.blobs": {
+  "title": "Blobs (upload, download, list, delete) over the Blob REST data plane",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Every blob uploaded through the console is a block blob; page/append blobs are not simulated."],
+  "tests": ["tests/conformance/test_azure_blob_core.py"]
+ },
+ "azure.storage.accesskeys": {
+  "title": "Access keys (the ARM listKeys action)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Keys are fixed simulator values, not real random key material, and Vyomi does not verify SharedKey request signatures against them."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.endpoints": {
+  "title": "Endpoints",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Only the Blob service endpoint is a live Vyomi URL; Data Lake Storage, File, Queue and Table endpoints shown are cosmetic (the Queue data plane is reachable at a different, unscoped path — see azure.storage.queues)."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.configuration": {
+  "title": "Configuration (performance, secure transfer, TLS, access tier, replication SKU, …)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["Every field round-trips through ARM exactly as written, but nothing is enforced by the Blob data plane: HTTPS-only, TLS version, Entra-only auth and shared-key-access toggles do not change what a request can do."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.redundancy": {
+  "title": "Redundancy (replication SKU)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["The SKU name round-trips through ARM; Vyomi stores data once, locally — there is no secondary region, no geo-replication and no customer-managed failover."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.networking": {
+  "title": "Networking (public network access / firewall default action / routing preference)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["publicNetworkAccess, networkAcls and routingPreference round-trip through ARM, but the Blob data plane never enforces them — a request from a 'denied' network still succeeds. Virtual network rules, IP firewall rules and private endpoints are not simulated."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.encryption": {
+  "title": "Encryption (key source)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["The encryption.keySource flag round-trips through ARM for display only; every account is encrypted the same way underneath. Customer-managed keys, encryption scopes and infrastructure (double) encryption are not simulated."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.dataprotection": {
+  "title": "Data protection (soft delete, point-in-time restore, versioning, change feed) over the blobServices/default ARM sub-resource",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["deleteRetentionPolicy, containerDeleteRetentionPolicy, restorePolicy, isVersioningEnabled and changeFeed round-trip through ARM exactly as configured, but core/azure_blob_core.py does not enforce any of them: deleted blobs/containers are not recoverable, there are no blob versions, and there is no change feed to read. Operational backup, permanent-delete and file-share soft delete are not simulated."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this storage account",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Locks are only simulated at the resource scope (this account); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.activitylog": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 6-hours/30/90-day timespan picker are not modelled, and 'caller' is a fixed placeholder identity rather than the real signed-in principal."],
+  "api": ["ActivityLogs_List"],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.queues": {
+  "title": "Queues (create, list, delete) and messages (send, receive, peek, delete) over the Azure Storage Queue REST data plane",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["core/azure_queue_core.py keeps one global queue namespace per Nano instance (the same simplification the Key Vault keys/secrets stores make) — queues are not isolated per storage account, so two accounts share the same queue list."],
+  "tests": ["tests/conformance/test_azure_queue_core.py"]
+ },
+ "azure.storage.diagnose": {
+  "title": "Diagnose and solve problems",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["A guided troubleshooting wizard backed by Azure's own telemetry and knowledge base — there is no equivalent diagnostic corpus in Vyomi."],
+  "tests": []
+ },
+ "azure.storage.iam": {
+  "title": "Access control (IAM) scoped to a storage account",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Vyomi's RBAC simulation (core/azure_iam_core.py) is not wired to a per-resource scope check from this console; role assignments, deny assignments and the 'Check access' simulator are not rendered here."],
+  "tests": []
+ },
+ "azure.storage.datamigration": {
+  "title": "Data migration (AzCopy / Data Box / migration tooling)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["A separate migration toolchain and, for Data Box, physical hardware shipped by Microsoft — outside what a local simulator can run."],
+  "tests": []
+ },
+ "azure.storage.events": {
+  "title": "Events (Event Grid subscriptions on storage events)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Storage-account-sourced Event Grid event subscriptions are not wired from this console; core/azure_eventgrid_core.py models Event Grid topics, not storage-account system events."],
+  "tests": []
+ },
+ "azure.storage.storagebrowser": {
+  "title": "Storage browser",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["A separate in-portal blob/queue/table GUI; the console's own Containers/Queues/Tables pages are the Vyomi equivalent."],
+  "tests": []
+ },
+ "azure.storage.storagemover": {
+  "title": "Storage Mover",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["A separate Azure product (Microsoft.StorageMover) for migrating file shares from on-premises servers — not modelled by any Vyomi core."],
+  "tests": []
+ },
+ "azure.storage.partnersolutions": {
+  "title": "Partner solutions",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Third-party marketplace integrations (e.g. Cloudian, DataDynamics) — third-party identity and billing Vyomi cannot run."],
+  "tests": []
+ },
+ "azure.storage.fileshares": {
+  "title": "File shares (Azure Files)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Azure Files is a distinct SMB/NFS data plane (account.file.core.windows.net) with no core in this repo yet — not yet implemented."],
+  "tests": []
+ },
+ "azure.storage.tables": {
+  "title": "Table storage",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["The classic Table service (account.table.core.windows.net) is a distinct OData data plane with no core in this repo yet — not yet implemented (Microsoft.DocumentDB Cosmos DB's Table API, a different product, is already simulated)."],
+  "tests": []
+ },
+ "azure.storage.frontdoorcdn": {
+  "title": "Front Door and CDN",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["A separate edge/CDN product fronting the storage endpoint — outside a local simulator's network topology."],
+  "tests": []
+ },
+ "azure.storage.sas": {
+  "title": "Shared access signature (SAS) generation",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["The form builds a structurally correct SAS query string (sv/ss/srt/sp/st/se/spr/sig) from the selected options and signs it with the account's listKeys value, but core/azure_blob_core.py and core/azure_queue_core.py do not verify any request signature (SharedKey or SAS) — the generated token is not a real, checkable credential."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.defender": {
+  "title": "Microsoft Defender for Cloud",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["A separate security product (threat detection, vulnerability scanning) with its own billing plan — not modelled by any Vyomi core."],
+  "tests": []
+ },
+ "azure.storage.objectreplication": {
+  "title": "Object replication",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Requires a second storage account and cross-account async replication; Vyomi stores each account's blobs independently with nothing to replicate between them."],
+  "tests": []
+ },
+ "azure.storage.inventory": {
+  "title": "Blob inventory",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["A scheduled background job that writes an inventory report blob — Vyomi has no job scheduler wired to the Blob core."],
+  "tests": []
+ },
+ "azure.storage.staticwebsite": {
+  "title": "Static website hosting (properties.staticWebsite on blobServices/default)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": ["enabled/indexDocument/errorDocument404Path round-trip through ARM exactly as configured, but core/azure_blob_core.py does not serve blob content as an HTTP website — there is no $web container or public website front end."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.lifecycle": {
+  "title": "Lifecycle management policies",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Tiering/expiry rules evaluated on a daily schedule against blob age — Vyomi has no background scheduler wired to the Blob core to evaluate and apply rules."],
+  "tests": []
+ },
+ "azure.storage.azureaisearch": {
+  "title": "Azure AI Search (index this storage account)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["A separate Azure product (search indexing + a query engine) — not modelled by any Vyomi core."],
+  "tests": []
+ },
+ "azure.storage.datalakegen2upgrade": {
+  "title": "Data Lake Gen2 upgrade",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["A one-way, backend-run upgrade of the account's namespace flag plus a full-container metadata rewrite — there is no equivalent background migration job in Vyomi."],
+  "tests": []
+ },
+ "azure.storage.cors": {
+  "title": "Resource sharing (CORS) rules",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["core/azure_blob_core.py does not serve CORS preflight (OPTIONS) responses or enforce configured origins, so storing CORS rules here would be cosmetic."],
+  "tests": []
+ },
+ "azure.storage.advisor": {
+  "title": "Advisor recommendations",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Azure Advisor's recommendations come from analysing real usage telemetry and cost data across Microsoft's fleet — there is no equivalent analytics pipeline in Vyomi."],
+  "tests": []
+ },
+ "azure.storage.insights": {
+  "title": "Insights (storage account metrics dashboards)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Azure Monitor metrics (capacity, transactions, latency) are not emitted by core/azure_blob_core.py or core/azure_queue_core.py."],
+  "tests": []
+ },
+ "azure.storage.alerts": {
+  "title": "Alerts",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Alert rules fire against Azure Monitor metrics the storage data planes do not emit."],
+  "tests": []
+ },
+ "azure.storage.metrics": {
+  "title": "Metrics",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Azure Monitor metrics (capacity, transactions, latency, availability) are not emitted by the storage data planes."],
+  "tests": []
+ },
+ "azure.storage.workbooks": {
+  "title": "Workbooks",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Workbooks visualize Azure Monitor log/metric queries the storage data planes do not emit."],
+  "tests": []
+ },
+ "azure.storage.diagnostics": {
+  "title": "Diagnostic settings",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Diagnostic settings forward platform logs/metrics to a Log Analytics workspace or Event Hub — the storage data planes do not emit platform logs to forward."],
+  "tests": []
+ },
+ "azure.storage.logs": {
+  "title": "Logs (Log Analytics queries over storage diagnostics)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Depends on diagnostic settings forwarding to a Log Analytics workspace, which is not simulated (see azure.storage.diagnostics)."],
+  "tests": []
+ },
+ "azure.storage.tasks": {
+  "title": "Tasks (Azure Automation runbooks)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Azure Automation runbook execution is a separate product with its own worker fleet — not modelled by any Vyomi core."],
+  "tests": []
+ },
+ "azure.storage.exporttemplate": {
+  "title": "Export template (ARM/Bicep/Terraform generated client-side from this resource)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Download, Add to library, Deploy and Visualize template are honest 'Not simulated' actions — only template generation from the account's current ARM properties is real."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.storage.support": {
+  "title": "Support + Troubleshooting",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Opens a real Microsoft support ticket workflow — outside what a local simulator can run."],
+  "tests": []
+ }
+}
