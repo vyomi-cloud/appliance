@@ -35,6 +35,7 @@ class ApiGwV2Store:
         self.apis: dict = {}
         self.domains: dict = {}
         self.vpclinks: dict = {}
+        self.domain_associations: dict = {}
 
 
 _SHARED: ApiGwV2Store | None = None
@@ -453,6 +454,32 @@ def _vpclink(store, vid):
     return v
 
 
+# ── DomainNameAccessAssociation (VPC-endpoint access to a private custom domain) ─────
+def _create_domain_association(store, b):
+    _require(b, ["domainNameArn", "accessAssociationSourceType", "accessAssociationSource"])
+    if b["accessAssociationSourceType"] != "VPCE":
+        raise BadRequest(f"Invalid accessAssociationSourceType: {b['accessAssociationSourceType']}")
+    if not any(d["domainNameArn"] == b["domainNameArn"] for d in store.domains.values()):
+        raise NotFound(f"Invalid domain name ARN specified {b['domainNameArn']}")
+    aid = _new_id()
+    a = {"domainNameAccessAssociationArn": f"arn:aws:apigateway:{REGION}::/domainnameaccessassociations/{aid}",
+         "domainNameArn": b["domainNameArn"], "accessAssociationSourceType": "VPCE",
+         "accessAssociationSource": b["accessAssociationSource"], "tags": dict(b.get("tags") or {})}
+    store.domain_associations[aid] = a
+    return _json(201, _out(a))
+
+
+def _domain_association(store, aid):
+    a = store.domain_associations.get(aid)
+    if not a:
+        raise NotFound(f"Invalid domain name access association identifier specified {aid}")
+    return a
+
+
+def _aid_from_arn(arn):
+    return arn.rsplit("/", 1)[-1]
+
+
 # ── tags ─────────────────────────────────────────────────────────────────────
 def _tag_target(store, arn):
     m = re.fullmatch(r"arn:aws:apigateway:[^:]*::/(.+)", arn)
@@ -547,6 +574,16 @@ def _routes():
         lambda s, q, b, v: (_merge(_vpclink(s, v), {"name": b.get("name")} if b.get("name") else {}, {"vpcLinkId"}),
                             _json(200, _out(_vpclink(s, v))))[1])
     add("DELETE", r"vpclinks/([^/]+)", lambda s, q, b, v: (_vpclink(s, v), s.vpclinks.pop(v), _json(202))[2])
+    # domain name access associations
+    add("POST", r"domainnameaccessassociations", lambda s, q, b: _create_domain_association(s, b))
+    add("GET", r"domainnameaccessassociations",
+        lambda s, q, b: _json(200, _page([a for a in s.domain_associations.values()
+                                           if not (q or {}).get("domainNameArn") or a["domainNameArn"] == q["domainNameArn"]], q)))
+    add("GET", r"domainnameaccessassociations/([^/]+)",
+        lambda s, q, b, aid: _json(200, _out(_domain_association(s, _aid_from_arn(unquote(aid))))))
+    add("DELETE", r"domainnameaccessassociations/([^/]+)",
+        lambda s, q, b, aid: (_domain_association(s, _aid_from_arn(unquote(aid))),
+                              s.domain_associations.pop(_aid_from_arn(unquote(aid))), _json(202))[2])
     # tags
     add("GET", r"tags/(.+)", lambda s, q, b, arn: _json(200, {"tags": dict(_tag_target(s, unquote(arn)).get("tags") or {})}))
     add("POST", r"tags/(.+)", lambda s, q, b, arn: _tag(s, unquote(arn), b))

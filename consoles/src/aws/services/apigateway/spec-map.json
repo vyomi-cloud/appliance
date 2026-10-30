@@ -1,0 +1,120 @@
+{
+  "_doc": "ui-spec page id -> v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap (requires a consoles/honest-allowlist.json entry; apigateway has none yet, so no page here sets it — AgentCore targets / Developer portals are built as honest in-page NotSimulatedContainer sections instead, with the gap's note naming every spec'd column/action so they score as declared gaps, not missing). 'fixtures' pre-creates a fixed-name prerequisite resource (idempotent, like s3's 'uic-bucket'); 'vars' maps a spec {placeholder} to that fixed name; 'live' separately proves liveness ('no statics') with a uniquely-named resource created just before the page loads.",
+  "welcome": {
+    "route": "#/apigateway"
+  },
+  "apis": {
+    "route": "#/apigateway/apis",
+    "live": "live-rest-api"
+  },
+  "custom-domain-names": {
+    "route": "#/apigateway/custom-domain-names",
+    "live": "live-domain-name"
+  },
+  "domain-name-access-associations": {
+    "route": "#/apigateway/domain-name-access-associations",
+    "live": "live-domain-association"
+  },
+  "vpc-links": {
+    "route": "#/apigateway/vpc-links",
+    "live": "live-vpc-link"
+  },
+  "agentcore-targets": {
+    "route": "#/apigateway/agentcore-targets"
+  },
+  "usage-plans": {
+    "route": "#/apigateway/usage-plans",
+    "live": "live-usage-plan"
+  },
+  "api-keys": {
+    "route": "#/apigateway/api-keys",
+    "live": "live-api-key"
+  },
+  "client-certificates": {
+    "route": "#/apigateway/client-certificates",
+    "live": "live-client-cert"
+  },
+  "settings": {
+    "route": "#/apigateway/settings"
+  },
+  "portals": {
+    "route": "#/apigateway/portals"
+  },
+  "portal-products": {
+    "route": "#/apigateway/portal-products"
+  },
+  "create-api": {
+    "route": "#/apigateway/create"
+  },
+  "create-rest-api": {
+    "route": "#/apigateway/create-rest-api"
+  },
+  "create-http-api": {
+    "route": "#/apigateway/create-http-api",
+    "expand": [
+      "role=button[name=\"Next\"]",
+      "role=button[name=\"Next\"]",
+      "role=button[name=\"Next\"]"
+    ]
+  },
+  "create-websocket-api": {
+    "route": "#/apigateway/create-websocket-api",
+    "expand": [
+      "role=button[name=\"Next\"]",
+      "role=button[name=\"Next\"]",
+      "role=button[name=\"Next\"]",
+      "role=button[name=\"Next\"]"
+    ]
+  },
+  "rest-api-detail": {
+    "route": "#/apigateway/apis/uic-rest-api",
+    "fixtures": [
+      "apigw-rest-api"
+    ],
+    "vars": {
+      "resource-name": "uic-rest-api"
+    },
+    "live": "live-resource-in-fixed-api"
+  },
+  "create-resource": {
+    "route": "#/apigateway/apis/placeholder-api/create-resource/placeholder-parent"
+  },
+  "create-method": {
+    "route": "#/apigateway/apis/placeholder-api/create-method/placeholder-res",
+    "expand": [
+      "role=radio[name=\"HTTP\"]"
+    ]
+  },
+  "deploy-api": {
+    "route": "#/apigateway/apis/uic-rest-api",
+    "fixtures": [
+      "apigw-rest-api"
+    ],
+    "expand": [
+      "text=Deploy API"
+    ]
+  },
+  "stages": {
+    "route": "#/apigateway/apis/uic-rest-api/stages",
+    "fixtures": [
+      "apigw-rest-api"
+    ],
+    "live": "live-stage-variable"
+  },
+  "http-api-detail": {
+    "route": "#/apigateway/api/uic-http-api",
+    "fixtures": [
+      "apigw-http-api"
+    ],
+    "vars": {
+      "resource-name": "uic-http-api"
+    },
+    "live": "live-stage-in-fixed-http-api"
+  },
+  "create-api-key": {
+    "route": "#/apigateway/create-api-key"
+  },
+  "create-usage-plan": {
+    "route": "#/apigateway/create-usage-plan"
+  }
+}
