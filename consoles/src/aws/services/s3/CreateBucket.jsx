@@ -16,6 +16,8 @@ import ExpandableSection from "@cloudscape-design/components/expandable-section"
 import TagEditor from "@cloudscape-design/components/tag-editor";
 import Alert from "@cloudscape-design/components/alert";
 import ContentLayout from "@cloudscape-design/components/content-layout";
+import Modal from "@cloudscape-design/components/modal";
+import Select from "@cloudscape-design/components/select";
 import { getRegion } from "../../../common/wire.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, navigate } from "../../../common/router.js";
@@ -41,6 +43,7 @@ export default function CreateBucket() {
   const [name, setName] = useState("");
   const [touched, setTouched] = useState(false);
   const [bucketType, setBucketType] = useState("general");
+  const [namespace, setNamespace] = useState("global");
   const [ownership, setOwnership] = useState("enforced");
   const [bpa, setBpa] = useState(Object.fromEntries(BPA.map(([k]) => [k, true])));
   const [versioning, setVersioning] = useState("disabled");
@@ -49,14 +52,40 @@ export default function CreateBucket() {
   const [kmsKey, setKmsKey] = useState("");
   const [bucketKey, setBucketKey] = useState("enabled");
   const [objectLock, setObjectLock] = useState("disabled");
+  const [objectLockAck, setObjectLockAck] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyBuckets, setCopyBuckets] = useState(null);
+  const [copySource, setCopySource] = useState(null);
+  const [copyBusy, setCopyBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const nameErr = touched ? validBucketName(name) : null;
   const allBpa = Object.values(bpa).every(Boolean);
 
+  const openCopySettings = async () => {
+    setCopyOpen(true);
+    if (!copyBuckets) { try { setCopyBuckets(await api.listBuckets()); } catch { setCopyBuckets([]); } }
+  };
+  const applyCopySettings = async () => {
+    if (!copySource) return;
+    setCopyBusy(true);
+    try {
+      const src = copySource.value;
+      const [v, t, e, p] = await Promise.all([api.getVersioning(src), api.getTags(src), api.getEncryption(src), api.getPublicAccessBlock(src)]);
+      if (v.status) setVersioning(v.status === "Enabled" ? "enabled" : "disabled");
+      if (t.tags) setTags(t.tags.map(({ key, value }) => ({ key, value })));
+      if (e.algorithm) { setEncType(e.algorithm); setKmsKey(e.kmsKey || ""); setBucketKey(e.bucketKey ? "enabled" : "disabled"); }
+      if (p.config) setBpa(p.config);
+      notify.success(`Copied settings from "${src}".`);
+      setCopyOpen(false); setCopySource(null);
+    } catch (e) { notify.error(e, "Couldn't copy settings"); }
+    finally { setCopyBusy(false); }
+  };
+
   const submit = async () => {
     setTouched(true);
     if (validBucketName(name)) return;
+    if (objectLock === "enabled" && !objectLockAck) return;
     setBusy(true); setError(null);
     const warnings = [];
     try {
@@ -81,7 +110,7 @@ export default function CreateBucket() {
           actions={
             <SpaceBetween direction="horizontal" size="xs">
               <Button formAction="none" variant="link" href="#/s3" onFollow={follow}>Cancel</Button>
-              <Button variant="primary" loading={busy}>Create bucket</Button>
+              <Button variant="primary" loading={busy} disabled={objectLock === "enabled" && !objectLockAck}>Create bucket</Button>
             </SpaceBetween>
           }
           errorText={error && <ErrorAlert error={error} />}
@@ -96,9 +125,20 @@ export default function CreateBucket() {
                     { value: "directory", label: "Directory", description: "Recommended for low-latency use cases.", disabled: true },
                   ]} />
                 </FormField>
+                {bucketType === "general" && (
+                  <FormField label="Bucket namespace">
+                    <RadioGroup value={namespace} onChange={({ detail }) => setNamespace(detail.value)} items={[
+                      { value: "global", label: "Global namespace" },
+                      { value: "regional", label: "Account Regional namespace (recommended)", disabled: true, description: "Not available in Vyomi yet — buckets use the global namespace." },
+                    ]} />
+                  </FormField>
+                )}
                 <FormField label="Bucket name" errorText={nameErr}
                   constraintText="Bucket names must be 3 to 63 characters and unique within the global namespace. Bucket names must also begin and end with a letter or number. Valid characters are a-z, 0-9, periods (.), and hyphens (-).">
                   <Input value={name} placeholder="myawsbucket" onChange={({ detail }) => setName(detail.value)} onBlur={() => setTouched(true)} ariaLabel="Bucket name" />
+                </FormField>
+                <FormField label="Copy settings from existing bucket" description="Format: s3://bucket/prefix">
+                  <Button onClick={openCopySettings}>Choose bucket</Button>
                 </FormField>
               </SpaceBetween>
             </Container>
@@ -155,15 +195,43 @@ export default function CreateBucket() {
             </Container>
 
             <ExpandableSection headerText="Advanced settings" variant="container">
-              <FormField label="Object Lock" description="Store objects using a write-once-read-many (WORM) model to help you prevent objects from being deleted or overwritten for a fixed amount of time or indefinitely.">
-                <RadioGroup value={objectLock} onChange={({ detail }) => setObjectLock(detail.value)} items={[{ value: "disabled", label: "Disable" }, { value: "enabled", label: "Enable", description: "Permanently allows objects in this bucket to be locked. Enabling Object Lock automatically enables Bucket Versioning." }]} />
-              </FormField>
+              <SpaceBetween size="l">
+                <FormField label="Object Lock" description="Store objects using a write-once-read-many (WORM) model to help you prevent objects from being deleted or overwritten for a fixed amount of time or indefinitely.">
+                  <RadioGroup value={objectLock} onChange={({ detail }) => { setObjectLock(detail.value); if (detail.value === "disabled") setObjectLockAck(false); }} items={[{ value: "disabled", label: "Disable" }, { value: "enabled", label: "Enable", description: "Permanently allows objects in this bucket to be locked. Enabling Object Lock automatically enables Bucket Versioning." }]} />
+                </FormField>
+                {objectLock === "enabled" && (
+                  <Checkbox checked={objectLockAck} onChange={({ detail }) => setObjectLockAck(detail.checked)}>
+                    I acknowledge that enabling Object Lock will permanently allow objects in this bucket to be locked.
+                  </Checkbox>
+                )}
+              </SpaceBetween>
             </ExpandableSection>
 
             <Alert>After creating the bucket, you can upload files and folders to the bucket, and configure additional bucket settings.</Alert>
           </SpaceBetween>
         </Form>
       </form>
+      <Modal
+        visible={copyOpen}
+        onDismiss={() => setCopyOpen(false)}
+        header="Copy settings from existing bucket"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setCopyOpen(false)}>Cancel</Button>
+          <Button variant="primary" loading={copyBusy} disabled={!copySource} onClick={applyCopySettings}>Choose bucket</Button>
+        </SpaceBetween></Box>}
+      >
+        <FormField label="Bucket" description="Versioning, tags, default encryption, and Block Public Access are copied onto this new bucket.">
+          <Select
+            selectedOption={copySource}
+            onChange={({ detail }) => setCopySource(detail.selectedOption)}
+            options={(copyBuckets || []).map((b) => ({ value: b.name, label: b.name }))}
+            loadingText="Loading buckets"
+            statusType={copyBuckets ? "finished" : "loading"}
+            placeholder="Choose a bucket"
+            empty="No buckets to copy settings from"
+          />
+        </FormField>
+      </Modal>
     </ContentLayout>
   );
 }

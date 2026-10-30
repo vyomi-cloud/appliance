@@ -19,10 +19,45 @@
       "resource-name": "uic-bucket"
     }
   },
+  "object-detail": {
+    "route": "#/s3/object/uic-bucket?prefix=uic-object.txt",
+    "fixtures": [
+      "s3-bucket"
+    ],
+    "vars": {
+      "resource-name": "uic-object.txt"
+    }
+  },
   "create-bucket": {
     "route": "#/s3/create",
     "expand": [
-      "text=Advanced settings"
+      "text=Advanced settings",
+      "text=Permanently allows objects in this bucket to be locked",
+      "text=Server-side encryption with AWS Key Management Service keys (SSE-KMS)"
+    ]
+  },
+  "upload": {
+    "route": "#/s3/upload/uic-bucket",
+    "fixtures": [
+      "s3-bucket"
+    ]
+  },
+  "create-folder": {
+    "route": "#/s3/bucket/uic-bucket/create/folder",
+    "fixtures": [
+      "s3-bucket"
+    ]
+  },
+  "empty-bucket": {
+    "route": "#/s3/bucket/uic-bucket/empty",
+    "fixtures": [
+      "s3-bucket"
+    ]
+  },
+  "delete-bucket": {
+    "route": "#/s3/bucket/uic-bucket/delete",
+    "fixtures": [
+      "s3-bucket"
     ]
   },
   "table-buckets": {
@@ -79,6 +114,14 @@
   },
   "create-job": {
     "route": "#/s3/batch-operations",
+    "honest_page": true
+  },
+  "aws-marketplace-for-s3": {
+    "route": "#/s3/marketplace",
+    "honest_page": true
+  },
+  "amazon-s3": {
+    "route": "#/s3/get-started",
     "honest_page": true
   }
 }

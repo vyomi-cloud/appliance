@@ -41,10 +41,18 @@ class Handler(BaseHTTPRequestHandler):
         if isinstance(data, str):
             data = data.encode()
         self.send_response(int(out.get("status", 200)))
+        sent_length = False
         for k, v in (out.get("headers") or {}).items():
-            if k.lower() not in ("content-length", "transfer-encoding", "connection"):
-                self.send_header(k, v)
-        self.send_header("content-length", str(len(data)))
+            if k.lower() in ("transfer-encoding", "connection"):
+                continue
+            if k.lower() == "content-length":
+                sent_length = True
+            self.send_header(k, v)
+        # A HEAD response legitimately has no body but a real Content-Length (e.g. HeadObject
+        # reporting the object's size); only fall back to len(data) when the handler didn't
+        # already say — recomputing it here would silently zero out that value.
+        if not sent_length:
+            self.send_header("content-length", str(len(data)))
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(data)
