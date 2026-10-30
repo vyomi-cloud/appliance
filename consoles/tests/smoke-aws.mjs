@@ -26,6 +26,7 @@ let page;
 const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return r.text(); }, [WIRE + path, init]);
 const ddb = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `DynamoDB_20120810.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/dynamodb/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const kms = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `TrentService.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/kms/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
+const rds = async (action, body = {}) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/rds/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...body }).toString() });
 
 await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch();
@@ -185,6 +186,26 @@ try {
   await page.getByText(`aws/${svc}`).waitFor({ timeout: 10000 });
   check("KMS Encrypt over wire against an unseen aws/ alias → AWS managed key shown in UI", true);
   await shot("14-kms-aws-managed-keys");
+
+  // RDS: create a database through the UI (UI → CLI direction)
+  const R = `v4smoke-db-${Date.now() % 100000}`;
+  await page.goto(UI + "#/rds/create-database");
+  await page.getByRole("radio", { name: "PostgreSQL", exact: true }).check();
+  await page.getByLabel("DB instance identifier").fill(R);
+  await page.getByLabel("Master username").fill("admin");
+  await page.getByRole("button", { name: "Create database" }).last().click();
+  await page.getByRole("heading", { name: R }).waitFor({ timeout: 10000 });
+  const desc = await rds("DescribeDBInstances", { DBInstanceIdentifier: R });
+  check("RDS create database (UI) → visible over native wire", desc.includes(`<DBInstanceIdentifier>${R}</DBInstanceIdentifier>`), desc.slice(0, 160));
+  await shot("15-rds-database-detail");
+
+  // RDS: a snapshot created over the wire shows in the console (CLI → UI direction)
+  const SNAP = `${R}-snap`;
+  await rds("CreateDBSnapshot", { DBInstanceIdentifier: R, DBSnapshotIdentifier: SNAP });
+  await page.goto(UI + "#/rds/snapshots");
+  await page.getByText(SNAP).first().waitFor({ timeout: 10000 });
+  check("RDS snapshot created over wire → shown in Snapshots list", true);
+  await shot("16-rds-snapshots");
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));

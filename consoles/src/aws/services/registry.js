@@ -9,7 +9,7 @@ export const SERVICES = [
   { id: "dynamodb", title: "DynamoDB", description: "Managed NoSQL database", category: "Database", load: () => import("./dynamodb/index.jsx") },
   { id: "ec2", title: "EC2", description: "Virtual servers in the cloud", category: "Compute", classic: "ec2" },
   { id: "lambda", title: "Lambda", description: "Run code without thinking about servers", category: "Compute", classic: "lambda" },
-  { id: "rds", title: "RDS", description: "Managed relational database service", category: "Database", classic: "rds" },
+  { id: "rds", title: "RDS", description: "Managed relational database service", category: "Database", load: () => import("./rds/index.jsx") },
   { id: "vpc", title: "VPC", description: "Isolated cloud resources", category: "Networking & Content Delivery", classic: "vpc" },
   { id: "apigateway", title: "API Gateway", description: "Build, deploy, and manage APIs", category: "Networking & Content Delivery", classic: "apigateway" },
   { id: "iam", title: "IAM", description: "Manage access to AWS resources", category: "Security, Identity, & Compliance", classic: "iam" },
