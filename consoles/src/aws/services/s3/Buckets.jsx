@@ -9,7 +9,6 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href } from "../../../common/router.js";
 import * as api from "./api.js";
-import { vy } from "../../../common/VyomiMark.jsx";
 
 export default function Buckets() {
   const notify = useNotify();
@@ -60,8 +59,8 @@ export default function Buckets() {
           { id: "directory", label: "Directory buckets", content: <NotSimulated feature="Directory buckets (S3 Express One Zone)" /> },
         ]}
       />
-      <NotSimulatedContainer title="Account snapshot" note={vy("Storage/object counts and cost summaries aren't aggregated in Vyomi.")} />
-      <NotSimulatedContainer title="External access summary" note={vy("IAM Access Analyzer findings for S3 aren't modeled in Vyomi.")} />
+      <NotSimulatedContainer title="Account snapshot" note="Storage/object counts and cost summaries aren't aggregated in Vyomi." />
+      <NotSimulatedContainer title="External access summary" note="IAM Access Analyzer findings for S3 aren't modeled in Vyomi." />
     </SpaceBetween>
   );
 }

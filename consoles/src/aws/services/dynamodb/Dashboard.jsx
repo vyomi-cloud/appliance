@@ -13,7 +13,6 @@ import { NotSimulatedContainer } from "../../kit/common.jsx";
 import { statusOf } from "./Tables.jsx";
 import { getFavoriteTables } from "./prefs.js";
 import * as api from "./api.js";
-import { VyomiMark, vy } from "../../../common/VyomiMark.jsx";
 
 export default function Dashboard() {
   const favorites = useAsync(async () => {
@@ -25,7 +24,7 @@ export default function Dashboard() {
     <ContentLayout header={<Header variant="h1">Dashboard</Header>}>
       <SpaceBetween size="l">
         <Grid gridDefinition={[{ colspan: 6 }, { colspan: 6 }]}>
-          <NotSimulatedContainer title="Alarms" feature="CloudWatch alarms" note={vy("No custom alarms are modeled by Vyomi.")} />
+          <NotSimulatedContainer title="Alarms" feature="CloudWatch alarms" note="No custom alarms are modeled by Vyomi." />
           <Container header={<Header variant="h2">Create resources</Header>}>
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="primary" href={href("dynamodb", "create-table")} onFollow={follow}>Create table</Button>
@@ -54,7 +53,7 @@ export default function Dashboard() {
 
         <Container header={<Header variant="h2">What's new</Header>}>
           <SpaceBetween size="s">
-            <Box variant="p">PartiQL editor, on-demand and continuous backups, and Time to Live are now backed by <VyomiMark /> — try them from the navigation on the left.</Box>
+            <Box variant="p">PartiQL editor, on-demand and continuous backups, and Time to Live are now backed by Vyomi — try them from the navigation on the left.</Box>
             <Box variant="p">Star a table from the Tables list to see it under Favorite tables here.</Box>
           </SpaceBetween>
         </Container>

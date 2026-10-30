@@ -11,7 +11,6 @@ import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph, InfoBar, NotSimulatedContainer } from "../../kit/common.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
-import { VyomiMark, vy } from "../../../common/VyomiMark.jsx";
 
 const NAME_RE = /^[a-z0-9]{3,24}$/;
 const RG_RE = /^[-\w._()]{1,90}$/;
@@ -98,7 +97,7 @@ export default function CreateStorageAccount() {
           </Select>
           {geo && <Checkbox checked={f.readAccess} onChange={chk("readAccess")} label="Make read access to data available in the event of regional unavailability." />}
         </FormRow>
-        <InfoBar><VyomiMark /> records the SKU on the account; data is stored once, locally — replication is not simulated.</InfoBar>
+        <InfoBar>Vyomi records the SKU on the account; data is stored once, locally — replication is not simulated.</InfoBar>
       </FormSection>
     </>
   );
@@ -171,7 +170,7 @@ export default function CreateStorageAccount() {
   const dataProtection = (
     <>
       <NotSimulatedContainer title="Recovery" feature="Point-in-time restore and soft delete for blobs, containers and file shares"
-        note={vy("Deleted blobs and containers are removed immediately in Vyomi.")} />
+        note="Deleted blobs and containers are removed immediately in Vyomi." />
       <NotSimulatedContainer title="Tracking" feature="Blob versioning and the blob change feed" />
       <NotSimulatedContainer title="Access control" feature="Version-level immutability support" />
     </>
@@ -217,7 +216,7 @@ export default function CreateStorageAccount() {
         {dl([["Network connectivity", { all: "Public endpoint (all networks)", selected: "Public endpoint (selected networks)", disabled: "Private endpoint" }[f.networkAccess]],
           ["Default routing tier", f.routing === "MicrosoftRouting" ? "Microsoft network routing" : "Internet routing"]])}
         <h3>Data protection</h3>
-        {dl([["Point-in-time restore / soft delete / versioning / change feed", <span data-vyomi-not-simulated="Data protection">Not simulated in <VyomiMark /></span>]])}
+        {dl([["Point-in-time restore / soft delete / versioning / change feed", <span data-vyomi-not-simulated="Data protection">Not simulated in Vyomi</span>]])}
         <h3>Encryption</h3>
         {dl([["Encryption type", "Microsoft-managed keys (MMK)"]])}
         <h3>Tags</h3>

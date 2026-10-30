@@ -7,7 +7,6 @@ import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Box from "@cloudscape-design/components/box";
 import { navigate } from "../../../common/router.js";
-import { vy } from "../../../common/VyomiMark.jsx";
 
 const SECTIONS = [
   ["How it works", "AWS Key Management Service (KMS) lets you create, manage, and control cryptographic keys used to protect your data. Vyomi backs Encrypt, Decrypt, GenerateDataKey, Sign, Verify, and MAC operations with a real, key-separated, tamper-detected engine."],
@@ -29,7 +28,7 @@ export default function Landing() {
           </SpaceBetween>
         </Container>
         {SECTIONS.map(([title, body]) => (
-          <Container key={title} header={<Header variant="h2">{title}</Header>}><Box>{vy(body)}</Box></Container>
+          <Container key={title} header={<Header variant="h2">{title}</Header>}><Box>{body}</Box></Container>
         ))}
       </SpaceBetween>
     </ContentLayout>

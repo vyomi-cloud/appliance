@@ -23,7 +23,6 @@ import { useNotify } from "../../../common/notify.jsx";
 import { follow, navigate } from "../../../common/router.js";
 import { ErrorAlert } from "../../kit/common.jsx";
 import * as api from "./api.js";
-import { vy } from "../../../common/VyomiMark.jsx";
 
 const BPA = [
   ["BlockPublicAcls", "Block public access to buckets and objects granted through new access control lists (ACLs)"],
@@ -130,7 +129,7 @@ export default function CreateBucket() {
                   <FormField label="Bucket namespace">
                     <RadioGroup value={namespace} onChange={({ detail }) => setNamespace(detail.value)} items={[
                       { value: "global", label: "Global namespace" },
-                      { value: "regional", label: "Account Regional namespace (recommended)", disabled: true, description: vy("Not available in Vyomi yet — buckets use the global namespace.") },
+                      { value: "regional", label: "Account Regional namespace (recommended)", disabled: true, description: "Not available in Vyomi yet — buckets use the global namespace." },
                     ]} />
                   </FormField>
                 )}

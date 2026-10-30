@@ -18,7 +18,6 @@ import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulated, NotSimulatedCont
 import * as api from "./api.js";
 import Permissions from "./Permissions.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
-import { vy } from "../../../common/VyomiMark.jsx";
 
 const arn = (b) => `arn:aws:s3:::${b}`;
 
@@ -32,7 +31,7 @@ export default function BucketDetail({ params, query }) {
         onChange={({ detail }) => setTab(detail.activeTabId)}
         tabs={[
           { id: "objects", label: "Objects", content: <Objects bucket={bucket} prefix={query.prefix || ""} /> },
-          { id: "metadata", label: "Metadata", content: <NotSimulatedContainer title="Metadata configuration" note={vy("S3 Metadata (the queryable metadata table for a bucket) isn't modeled in Vyomi.")} /> },
+          { id: "metadata", label: "Metadata", content: <NotSimulatedContainer title="Metadata configuration" note="S3 Metadata (the queryable metadata table for a bucket) isn't modeled in Vyomi." /> },
           { id: "properties", label: "Properties", content: <Properties bucket={bucket} /> },
           { id: "permissions", label: "Permissions", content: <Permissions bucket={bucket} /> },
           { id: "metrics", label: "Metrics", content: <Metrics /> },

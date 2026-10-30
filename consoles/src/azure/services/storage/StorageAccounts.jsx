@@ -9,7 +9,6 @@ import { Glyph } from "../../kit/common.jsx";
 import { TitleRow } from "../../kit/ResourceBlade.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
-import { vy } from "../../../common/VyomiMark.jsx";
 
 export default function StorageAccounts() {
   const notify = useNotify();
@@ -18,7 +17,7 @@ export default function StorageAccounts() {
   const subName = sub.displayName || sub.id;
   return (
     <>
-      <TitleRow title="Storage accounts" subtitle={vy("Vyomi simulator (default directory)")} glyph={<Glyph id="storage" />} closeHref="#/" />
+      <TitleRow title="Storage accounts" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="storage" />} closeHref="#/" />
       <div className="vy-page">
         <BrowseGrid
           resourceName="storage account"

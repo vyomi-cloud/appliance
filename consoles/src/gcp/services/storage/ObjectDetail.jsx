@@ -10,7 +10,6 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulated, PageHeader, Section } from "../../kit/common.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import * as api from "./api.js";
-import { VyomiMark } from "../../../common/VyomiMark.jsx";
 
 export default function ObjectDetail({ params, query }) {
   const notify = useNotify();
@@ -42,7 +41,7 @@ export default function ObjectDetail({ params, query }) {
             <KeyValue items={[
               ["Type", o.contentType], ["Size", fmtBytes(o.size)], ["Created", fmtDate(o.timeCreated)], ["Last modified", fmtDate(o.updated)],
               ["Storage class", api.classLabel(o.storageClass)], ["gsutil URI", `gs://${bucket}/${o.name}`],
-              ["Authenticated URL", <Link key="u" href={api.downloadUrl(bucket, o.name)} target="_blank" rel="noreferrer">Download link (<VyomiMark /> wire)</Link>],
+              ["Authenticated URL", <Link key="u" href={api.downloadUrl(bucket, o.name)} target="_blank" rel="noreferrer">Download link (Vyomi wire)</Link>],
               ["Generation", o.generation], ["Metageneration", o.metageneration],
               ["Hash (CRC32C)", o.crc32c], ["Hash (MD5)", o.md5Hash],
             ]} />

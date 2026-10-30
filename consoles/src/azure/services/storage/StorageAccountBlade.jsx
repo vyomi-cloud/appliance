@@ -19,7 +19,6 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./CreateStorageAccount.jsx";
 import * as api from "./api.js";
-import { VyomiMark, vy } from "../../../common/VyomiMark.jsx";
 
 const ENFORCEMENT = "These settings are stored on the storage account (ARM) and returned to your SDKs and the az CLI. The Vyomi Blob data plane does not enforce them.";
 
@@ -417,7 +416,7 @@ function AccessKeys({ a }) {
     <>
       <div className="vy-panel-title">Access keys</div>
       <p style={{ fontSize: 13 }}>Access keys authenticate your applications' requests to this storage account. Use the connection string with the azure-storage-blob SDK or <span className="vy-mono">az storage</span>.</p>
-      <InfoBar>Keys come from the native <span className="vy-mono">listKeys</span> ARM action. <VyomiMark /> issues fixed simulator keys and does not verify SharedKey signatures.</InfoBar>
+      <InfoBar>Keys come from the native <span className="vy-mono">listKeys</span> ARM action. Vyomi issues fixed simulator keys and does not verify SharedKey signatures.</InfoBar>
       <ErrorBar error={keys.error} />
       {keys.loading ? <Loading /> : (keys.data || []).map((k) => (
         <section className="vy-section" key={k.keyName} style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -505,7 +504,7 @@ function Endpoints({ a }) {
       <div className="vy-panel-title">Endpoints</div>
       <section className="vy-section" style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 10 }}>
         <h3>Blob service</h3>
-        <Field label={vy("Blob service (path-style, this Vyomi)")} hint="Point azure-storage-blob / az storage at this URL; it is the endpoint this portal uses."><Input readOnly value={ep} /></Field>
+        <Field label="Blob service (path-style, this Vyomi)" hint="Point azure-storage-blob / az storage at this URL; it is the endpoint this portal uses."><Input readOnly value={ep} /></Field>
         {p.blob && <Field label="Primary endpoint (from ARM)"><Input readOnly value={p.blob} /></Field>}
         <Field label="Storage account resource ID"><Input readOnly value={a.id} /></Field>
       </section>
@@ -521,7 +520,7 @@ function Redundancy({ a, self }) {
       <KV label="Redundancy" value={api.skuLabel(a.sku?.name)} />
       <KV label="Primary location" value={locationLabel(a.location)} />
       <p style={{ fontSize: 13 }}>Change redundancy in <Link href={`${self}/configuration`}>Configuration</Link>.</p>
-      <NotSimulatedContainer title="Geo-replication" feature="Geo-replication, the secondary region and customer-managed failover" note={vy("Vyomi stores data once, locally.")} />
+      <NotSimulatedContainer title="Geo-replication" feature="Geo-replication, the secondary region and customer-managed failover" note="Vyomi stores data once, locally." />
     </>
   );
 }

@@ -8,7 +8,6 @@ import { SERVICES } from "../services/registry.js";
 import ServiceIcon from "../../common/icons/ServiceIcon.jsx";
 import { LOGO } from "./logo.js";
 import { classicHref } from "../services/registry.js";
-import { VyomiMark } from "../../common/VyomiMark.jsx";
 
 const BAR = { background: "#0f141a", color: "#fff", height: 40, display: "flex", alignItems: "center", gap: 4, padding: "0 8px 0 12px",
   fontFamily: '"Open Sans","Helvetica Neue",Roboto,Arial,sans-serif', fontSize: 14, position: "relative" };
@@ -128,10 +127,10 @@ export default function TopBar({ onServices, region, regions, onRegion, mode, de
         </Pop>
       </div>
       <div style={{ position: "relative" }}>
-        <button style={{ ...ICONBTN, gap: 6, fontSize: 13 }} aria-label="Account" onClick={() => toggle("acct")}><span><VyomiMark /> (local)</span> <Icon name="caret-down-filled" variant="inverted" size="small" /></button>
+        <button style={{ ...ICONBTN, gap: 6, fontSize: 13 }} aria-label="Account" onClick={() => toggle("acct")}>Vyomi (local) <Icon name="caret-down-filled" variant="inverted" size="small" /></button>
         <Pop open={menu === "acct"} onClose={() => setMenu(null)}>
           <div style={{ padding: "4px 16px 8px", color: "#b6bec9", fontSize: 12 }}>Account ID 123456789012 (simulated)</div>
-          <a style={ITEM} href={classicHref("")}>Classic <VyomiMark /> console</a>
+          <a style={ITEM} href={classicHref("")}>Classic Vyomi console</a>
         </Pop>
       </div>
     </div>

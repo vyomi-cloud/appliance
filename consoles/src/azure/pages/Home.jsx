@@ -11,7 +11,6 @@ import { listStorageAccounts, listKeys } from "../services/storage/api.js";
 import { Glyph, NotSimulated } from "../kit/common.jsx";
 import { recent } from "../kit/recent.js";
 import { HOME_TILES, byId } from "../services/registry.js";
-import { vy } from "../../common/VyomiMark.jsx";
 
 const ago = (t) => {
   const s = Math.max(1, Math.round((Date.now() - t) / 1000));
@@ -146,8 +145,8 @@ export default function Home() {
         <ConnectTool />
         <div className="vy-tool-col">
           <ToolLink icon={Pulse24Regular} title="Azure Monitor" text="Monitor your apps and infrastructure" href="#/monitor" />
-          <ToolLink icon={Money24Regular} title="Cost Management" text={vy("Resources in Vyomi are free — cost analysis is not simulated")} href="#/cost" />
-          <ToolLink icon={Book24Regular} title={vy("Vyomi documentation")} text="Guides for every simulated Azure service" href="https://vyomi.cloud" external />
+          <ToolLink icon={Money24Regular} title="Cost Management" text="Resources in Vyomi are free — cost analysis is not simulated" href="#/cost" />
+          <ToolLink icon={Book24Regular} title="Vyomi documentation" text="Guides for every simulated Azure service" href="https://vyomi.cloud" external />
         </div>
       </div>
     </div>

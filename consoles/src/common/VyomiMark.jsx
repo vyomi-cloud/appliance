@@ -1,7 +1,7 @@
-/* The Vyomi logo (static/brand/vyomi-text.png) used in place of the word "Vyomi" in page
- * text. Drawn as a mask filled with currentColor, so it takes the colour of the text around
- * it — body copy, alerts, badges, links, light and dark mode. Screen readers read "Vyomi".
- * Plain-text-only places (tab titles, aria-labels, placeholders, code) keep the word. */
+/* The Vyomi logo (static/brand/vyomi-text.png) inline in a line of text. Used ONLY for the
+ * landing page's welcome line — everywhere else "Vyomi" stays plain text in the page font.
+ * Drawn as a mask filled with currentColor so it matches the text colour (light and dark);
+ * screen readers read "Vyomi". */
 import { Fragment } from "react";
 import { WORDMARK_H, WORDMARK_LIGHT, WORDMARK_W } from "./brand-assets.js";
 

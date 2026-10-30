@@ -7,7 +7,6 @@ import {
 } from "@mui/material";
 import { knownProjects, setProject } from "../project.js";
 import { NotSimulated } from "../kit/common.jsx";
-import { VyomiMark } from "../../common/VyomiMark.jsx";
 
 const VALID = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 
@@ -41,7 +40,7 @@ export default function ProjectPicker({ open, onClose, project }) {
             <Button variant="outlined" disabled={!VALID.test(add)} onClick={() => open_(add)}>Open</Button>
           </Stack>
           <Alert severity="info" variant="outlined">
-            <VyomiMark /> uses the project ID on project-scoped API calls. Bucket names are global, as in Cloud Storage, so buckets created under any project ID are listed here.
+            Vyomi uses the project ID on project-scoped API calls. Bucket names are global, as in Cloud Storage, so buckets created under any project ID are listed here.
           </Alert>
           <NotSimulated compact feature="Creating projects and folders (Resource Manager)" />
         </Stack>

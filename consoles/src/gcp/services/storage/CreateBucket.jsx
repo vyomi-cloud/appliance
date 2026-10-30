@@ -13,7 +13,6 @@ import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
-import { VyomiMark, vy } from "../../../common/VyomiMark.jsx";
 
 const location_ = window.location;   // `location` is the bucket-location state below
 const UNIT_SECS = { seconds: 1, days: 86400, months: 31 * 86400, years: Math.round(365.25 * 86400) };
@@ -125,7 +124,7 @@ export default function CreateBucket() {
             {api.STORAGE_CLASSES.map(([v, l, d]) => <FormControlLabel key={v} value={v} control={<Radio size="small" />} label={<><b>{l}</b> — {d}</>} />)}
           </RadioGroup>
         </Sub>
-        <NotSimulated compact feature="Autoclass" note={vy("Vyomi keeps objects in the bucket's default class; storage classes don't change pricing or retrieval here.")} />
+        <NotSimulated compact feature="Autoclass" note="Vyomi keeps objects in the bucket's default class; storage classes don't change pricing or retrieval here." />
         <NotSimulated compact feature="Hierarchical namespace" />
       </Step>
       <Divider />
@@ -140,7 +139,7 @@ export default function CreateBucket() {
             <FormControlLabel value="fine" control={<Radio size="small" />} label={<><b>Fine-grained</b> — Specify access to individual objects by using object-level permissions (ACLs) in addition to bucket-level permissions (IAM).</>} />
           </RadioGroup>
         </Sub>
-        <Alert severity="info" variant="outlined"><VyomiMark /> records these settings and reports them to SDKs; it does not enforce IAM or ACLs on data access.</Alert>
+        <Alert severity="info" variant="outlined">Vyomi records these settings and reports them to SDKs; it does not enforce IAM or ACLs on data access.</Alert>
       </Step>
       <Divider />
 
@@ -162,7 +161,7 @@ export default function CreateBucket() {
           )}
         </Sub>
         <NotSimulated compact feature="Object retention (per-object retention and holds)" />
-        <NotSimulated compact feature="Data encryption with Cloud KMS keys (CMEK)" note={vy("Vyomi stores object data unencrypted in its local store.")} />
+        <NotSimulated compact feature="Data encryption with Cloud KMS keys (CMEK)" note="Vyomi stores object data unencrypted in its local store." />
       </Step>
       <Divider />
 

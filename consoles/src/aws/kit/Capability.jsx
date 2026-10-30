@@ -18,7 +18,6 @@ import dynamodb from "../../../../core/capabilities/aws/dynamodb.json";
 import sqs from "../../../../core/capabilities/aws/sqs.json";
 import sns from "../../../../core/capabilities/aws/sns.json";
 import { NotSimulatedContainer } from "./common.jsx";
-import { VyomiMark } from "../../common/VyomiMark.jsx";
 
 const REGISTRY = { ...s3, ...dynamodb, ...sqs, ...sns };
 
@@ -53,7 +52,7 @@ export function CapabilityBadge({ id }) {
           <SpaceBetween size="xs">
             <Box variant="p">{DEFAULT_NOTE[c.level]}</Box>
             {c.limitations?.length > 0 && <ul style={{ margin: 0, paddingLeft: 18 }}>{c.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
-            <Box variant="small" color="text-body-secondary">Applies to this <VyomiMark /> environment ({SUBSTRATE}).</Box>
+            <Box variant="small" color="text-body-secondary">Applies to this Vyomi environment ({SUBSTRATE}).</Box>
           </SpaceBetween>
         }
       >

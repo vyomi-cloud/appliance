@@ -20,7 +20,6 @@ import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { ErrorAlert, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import * as api from "./api.js";
-import { vy } from "../../../common/VyomiMark.jsx";
 
 const ASYMMETRIC_SPECS = ["RSA_2048", "RSA_3072", "RSA_4096", "ECC_NIST_P256", "ECC_NIST_P384", "ECC_NIST_P521", "ECC_SECG_P256K1", "ML_DSA_44", "ML_DSA_65", "ML_DSA_87"];
 const HMAC_SPECS = ["HMAC_224", "HMAC_256", "HMAC_384", "HMAC_512"];
@@ -54,17 +53,17 @@ function ConfigureKeyStep({ s, set }) {
         <SpaceBetween size="l">
           <FormField label="Key material origin">
             <Tiles value={s.origin} onChange={({ detail }) => set({ origin: detail.value })} columns={1} items={[
-              { value: "KMS", label: "KMS - recommended", description: vy("Vyomi generates and manages the key material.") },
-              { value: "EXTERNAL", label: "External (Import Key material)", description: vy("Vyomi stores key material you provide.") },
+              { value: "KMS", label: "KMS - recommended", description: "Vyomi generates and manages the key material." },
+              { value: "EXTERNAL", label: "External (Import Key material)", description: "Vyomi stores key material you provide." },
               { value: "CLOUDHSM", label: "AWS CloudHSM key store", disabled: true, description: "Requires a connected custom key store." },
               { value: "XKS", label: "External key store", disabled: true, description: "Requires a connected custom key store." },
             ]} />
-            {(s.origin === "CLOUDHSM" || s.origin === "XKS") && <NotSimulated feature="Custom key stores" note={vy("Connecting a custom key store always fails in Vyomi — there's no real CloudHSM cluster or external XKS proxy to reach.")} />}
+            {(s.origin === "CLOUDHSM" || s.origin === "XKS") && <NotSimulated feature="Custom key stores" note="Connecting a custom key store always fails in Vyomi — there's no real CloudHSM cluster or external XKS proxy to reach." />}
           </FormField>
           <FormField label="Regionality">
             <Tiles value={s.regionality} onChange={({ detail }) => set({ regionality: detail.value })} columns={1} items={[
               { value: "SINGLE", label: "Single-Region key" },
-              { value: "MULTI", label: "Multi-Region key", disabled: true, description: vy("Multi-Region replica keys aren't modeled by Vyomi.") },
+              { value: "MULTI", label: "Multi-Region key", disabled: true, description: "Multi-Region replica keys aren't modeled by Vyomi." },
             ]} />
           </FormField>
         </SpaceBetween>
@@ -118,7 +117,7 @@ function UsagePermissionsStep() {
 function PolicyStep({ s, set }) {
   return (
     <Container header={<Header variant="h2">Key policy</Header>}>
-      <FormField label="Key policy" description={vy("JSON policy editor — stored and returned exactly as written; Vyomi doesn't evaluate it.")}>
+      <FormField label="Key policy" description="JSON policy editor — stored and returned exactly as written; Vyomi doesn't evaluate it.">
         <Textarea rows={16} value={s.policy} onChange={({ detail }) => set({ policy: detail.value })} spellcheck={false} />
       </FormField>
     </Container>

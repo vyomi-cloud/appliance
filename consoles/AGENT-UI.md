@@ -41,8 +41,8 @@ real Vyomi backend through the service's native API. Read first:
   — control plane for every resource type), blob, queue, cosmos, keyvault keys/secrets, sql,
   servicebus, monitor, rbac, app, …
 - Smoke: add your round-trip to `consoles/tests/smoke-gcp.mjs` / `smoke-azure.mjs`.
-- Use the Vyomi logo in page text through `<VyomiMark />` / `vy()` from
-  `consoles/src/common/VyomiMark.jsx`, never the bare word in visible copy.
+- Write "Vyomi" as plain text in page copy. The logo (`VyomiMark`) is reserved for the top-bar
+  brand and the landing page's welcome line — never use it in service pages.
 
 ## What to build
 1. `consoles/src/<cloud>/services/<service>/` — `index.jsx` (nav + routes), pages, `api.js`

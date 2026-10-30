@@ -5,7 +5,6 @@
  * and sits in an element whose class contains "container", so the checker attributes all
  * of the panel's text (title included) to an honest gap — same as the AWS lens. */
 import { Alert, Box, Chip, Divider, Paper, Stack, Typography } from "@mui/material";
-import { VyomiMark, vy } from "../../common/VyomiMark.jsx";
 
 /** A feature the real console has but Vyomi does not back with a real backend. */
 export function NotSimulated({ feature, note, compact }) {
@@ -13,8 +12,8 @@ export function NotSimulated({ feature, note, compact }) {
     <Box className="vyomi-ns-container" data-vyomi-not-simulated={feature}
       sx={{ p: compact ? 1.5 : 3, textAlign: compact ? "left" : "center", color: "text.secondary" }}>
       <Stack spacing={0.75} alignItems={compact ? "flex-start" : "center"}>
-        <Chip size="small" label={vy("Not simulated in Vyomi")} sx={{ fontWeight: 500 }} />
-        <Typography variant="body2" color="inherit">{feature} isn't backed by a <VyomiMark /> backend yet.</Typography>
+        <Chip size="small" label="Not simulated in Vyomi" sx={{ fontWeight: 500 }} />
+        <Typography variant="body2" color="inherit">{feature} isn't backed by a Vyomi backend yet.</Typography>
         {note && <Typography variant="caption" color="inherit">{note}</Typography>}
       </Stack>
     </Box>

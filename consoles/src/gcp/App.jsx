@@ -31,7 +31,6 @@ import ProductMenu, { recordVisit } from "./pages/ProductMenu.jsx";
 import AllProducts from "./pages/AllProducts.jsx";
 import ProjectPicker from "./pages/ProjectPicker.jsx";
 import { Brand } from "./pages/Brand.jsx";
-import { VyomiMark } from "../common/VyomiMark.jsx";
 
 const pref = (k, d) => { try { return localStorage.getItem(`vyomi.v4.${k}`) || d; } catch { return d; } };
 const savePref = (k, v) => { try { localStorage.setItem(`vyomi.v4.${k}`, v); } catch {} };
@@ -74,7 +73,7 @@ export default function App() {
     content = (
       <Box>
         <Typography variant="h1" component="h1" sx={{ mb: 2 }}>{prod.title}</Typography>
-        <NotSimulated feature={`The v4 ${prod.title} console`} note={<a href={classicHref(prod.classic)}>Open {prod.title} in the classic <VyomiMark /> console</a>} />
+        <NotSimulated feature={`The v4 ${prod.title} console`} note={<a href={classicHref(prod.classic)}>Open {prod.title} in the classic Vyomi console</a>} />
       </Box>
     );
   } else if (loadErr) content = <Alert severity="error">Failed to load {prod.title}: {String(loadErr.message || loadErr)}</Alert>;
@@ -172,7 +171,7 @@ function TopBarActions({ mode, onMode }) {
       </Tooltip>
       <Menu anchorEl={more} open={!!more} onClose={() => setMore(null)}>
         <MenuItem onClick={() => { onMode(); setMore(null); }}>{mode === "dark" ? <LightModeIcon fontSize="small" sx={{ mr: 1.5 }} /> : <DarkModeIcon fontSize="small" sx={{ mr: 1.5 }} />}{mode === "dark" ? "Use light theme" : "Use dark theme"}</MenuItem>
-        <MenuItem component="a" href={classicHref("")}><HelpOutlineIcon fontSize="small" sx={{ mr: 1.5 }} /><span>Classic <VyomiMark /> console</span></MenuItem>
+        <MenuItem component="a" href={classicHref("")}><HelpOutlineIcon fontSize="small" sx={{ mr: 1.5 }} />Classic Vyomi console</MenuItem>
       </Menu>
     </>
   );

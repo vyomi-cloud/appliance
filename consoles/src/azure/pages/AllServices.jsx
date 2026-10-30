@@ -4,7 +4,6 @@ import { Badge, SearchBox } from "@fluentui/react-components";
 import { Glyph } from "../kit/common.jsx";
 import { TitleRow } from "../kit/ResourceBlade.jsx";
 import { CATEGORIES, SERVICES } from "../services/registry.js";
-import { vy } from "../../common/VyomiMark.jsx";
 
 export default function AllServices() {
   const [q, setQ] = useState("");
@@ -12,7 +11,7 @@ export default function AllServices() {
   const shown = SERVICES.filter((s) => !f || s.title.toLowerCase().includes(f) || s.category.toLowerCase().includes(f));
   return (
     <>
-      <TitleRow title="All services" subtitle={vy("Services simulated by Vyomi")} closeHref="#/" />
+      <TitleRow title="All services" subtitle="Services simulated by Vyomi" closeHref="#/" />
       <div className="vy-page">
         <SearchBox placeholder="Search all services" value={q} onChange={(_, d) => setQ(d.value)} style={{ width: 320, marginBottom: 16 }} aria-label="Search all services" />
         {CATEGORIES.map((c) => {

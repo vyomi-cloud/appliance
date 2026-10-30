@@ -4,7 +4,6 @@ import { useState } from "react";
 import { MessageBar, MessageBarBody, MessageBarTitle, Link, Spinner } from "@fluentui/react-components";
 import { ChevronDown16Regular, ChevronRight16Regular } from "@fluentui/react-icons";
 import ServiceIcon from "../../common/icons/ServiceIcon.jsx";
-import { VyomiMark } from "../../common/VyomiMark.jsx";
 
 /** A feature the real portal has but Vyomi does not back with a real backend. The
  *  data-vyomi-not-simulated attribute is the UI-conformance contract (same as the AWS lens):
@@ -12,8 +11,8 @@ import { VyomiMark } from "../../common/VyomiMark.jsx";
 export function NotSimulated({ feature, note }) {
   return (
     <div className="vy-ns" data-vyomi-not-simulated={feature} role="note">
-      <span className="vy-ns-badge">Not simulated in <VyomiMark /></span>
-      <div>{feature} isn't backed by a <VyomiMark /> backend yet.</div>
+      <span className="vy-ns-badge">Not simulated in Vyomi</span>
+      <div>{feature} isn't backed by a Vyomi backend yet.</div>
       {note && <div style={{ marginTop: 6, fontSize: 12 }}>{note}</div>}
     </div>
   );
