@@ -214,6 +214,7 @@ def _ddb_refresh_table_metrics(table: dict) -> None:
 
 
 def _ddb_item_record_view(table: dict, key: str, record: dict) -> dict:
+    from core.dynamodb_core import _rec_av
     native = copy.deepcopy(record.get("item", {}))
     pk_name, sk_name = _ddb_table_key_fields(table)
     key_obj = {pk_name: native.get(pk_name)}
@@ -222,7 +223,8 @@ def _ddb_item_record_view(table: dict, key: str, record: dict) -> dict:
     return {
         "key": key_obj,
         "item": native,
-        "item_json": _ddb_native_item_to_json(native),
+        # typed AttributeValues as the native wire stored them (SS vs L, exact numbers, B)
+        "item_json": copy.deepcopy(_rec_av(record)),
         "created": record.get("created", ""),
         "updated": record.get("updated", ""),
         "size_bytes": int(record.get("size_bytes", 0) or 0),

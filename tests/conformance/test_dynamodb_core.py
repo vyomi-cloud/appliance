@@ -128,7 +128,8 @@ def run() -> int:
     u = ddb.dispatch(st, T + "UpdateItem", {"TableName": "Music",
         "Key": {"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Aria"}},
         "UpdateExpression": "SET Plays = :p",
-        "ExpressionAttributeValues": {":p": {"N": "42"}}})
+        "ExpressionAttributeValues": {":p": {"N": "42"}},
+        "ReturnValues": "ALL_NEW"})   # DynamoDB's default is NONE (no Attributes)
     _check("update 200", u.status == 200)
     _check("update SET applied", u.body["Attributes"]["Plays"] == {"N": "42"})
 
@@ -136,7 +137,8 @@ def run() -> int:
     u2 = ddb.dispatch(st, T + "UpdateItem", {"TableName": "Music",
         "Key": {"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Aria"}},
         "AttributeUpdates": {"Mood": {"Action": "PUT", "Value": {"S": "calm"}},
-                             "Plays": {"Action": "DELETE"}}})
+                             "Plays": {"Action": "DELETE"}},
+        "ReturnValues": "ALL_NEW"})
     _check("update PUT added attr", u2.body["Attributes"]["Mood"] == {"S": "calm"})
     _check("update DELETE removed attr", "Plays" not in u2.body["Attributes"])
 
@@ -156,7 +158,7 @@ def run() -> int:
 
     # 11. Operations on a missing table -> ResourceNotFoundException
     nf = ddb.dispatch(st, T + "GetItem", {"TableName": "Ghost", "Key": {"id": {"S": "x"}}})
-    _check("missing table 404", nf.status == 404)
+    _check("missing table 400", nf.status == 400)   # DynamoDB answers ResourceNotFoundException with HTTP 400
     _check("missing table __type", nf.body["__type"] == "ResourceNotFoundException")
 
     # 12. BatchWriteItem (Put + Delete) then BatchGetItem
@@ -202,7 +204,7 @@ def run() -> int:
     dtl = ddb.dispatch(st, T + "DeleteTable", {"TableName": "Tags"})
     _check("delete-table status DELETING", dtl.body["TableDescription"]["TableStatus"] == "DELETING")
     gone = ddb.dispatch(st, T + "DescribeTable", {"TableName": "Tags"})
-    _check("delete-table then describe 404", gone.status == 404)
+    _check("delete-table then describe 400", gone.status == 400 and gone.body["__type"] == "ResourceNotFoundException")
 
     # 16. Unknown action -> UnknownOperationException; missing target -> MissingAction
     unk = ddb.dispatch(st, T + "Frobnicate", {})

@@ -3,10 +3,14 @@
  "dynamodb.table.crud": {
   "title": "Tables (create, describe, list, delete)",
   "level": {
-   "nano": "full",
-   "offline": "full"
+   "nano": "limited",
+   "offline": "limited"
   },
-  "limitations": [],
+  "limitations": [
+   "Table names shorter than 3 characters are accepted (DynamoDB requires 3-255).",
+   "CreateTable with neither BillingMode nor ProvisionedThroughput creates an on-demand table; DynamoDB defaults to PROVISIONED and rejects the request with \"No provisioned throughput specified for the table\".",
+   "New tables and indexes are ACTIVE immediately (no CREATING phase on DescribeTable)."
+  ],
   "api": [
    "CreateTable",
    "DescribeTable",
@@ -26,10 +30,17 @@
  "dynamodb.item.crud": {
   "title": "Items (put, get, update, delete, query, scan, batch, transactions)",
   "level": {
-   "nano": "full",
-   "offline": "full"
+   "nano": "limited",
+   "offline": "limited"
   },
-  "limitations": [],
+  "limitations": [
+   "Differential parity vs DynamoDB Local (tests/parity/ddb_differential.py, report in tests/parity/reports/): 149 of 152 hand-written cases (658 of 661 responses) and 400 of 400 random 30-operation sequences match; the 3 deviating cases are the TTL and CreateTable leniencies documented in this file.",
+   "Scan returns items in key order, not DynamoDB's storage-hash order, so Scan page boundaries and Segment membership differ (the union of all pages/segments is identical).",
+   "The 1 MB page limit is not applied to Query/Scan, and BatchGetItem/BatchWriteItem never return Unprocessed keys/items.",
+   "ConsumedCapacity is not reported (ReturnConsumedCapacity is ignored) and capacity is never throttled.",
+   "TransactWriteItems ClientRequestToken idempotency is not tracked.",
+   "Maximum nesting depth (32) of maps/lists is not enforced."
+  ],
   "probe": {
    "ddb_ok": [
     "Query",
@@ -139,8 +150,8 @@
    "offline": "limited"
   },
   "limitations": [
-   "Supported: SELECT (WHERE on key and attributes, ? parameters), INSERT \u2026 VALUE, UPDATE \u2026 SET \u2026 WHERE, DELETE FROM \u2026 WHERE.",
-   "Not supported: BatchExecuteStatement, ExecuteTransaction, nested paths and functions."
+   "Supported: SELECT (projection, WHERE with = <> < <= > >= BETWEEN IN AND/OR/NOT begins_with contains attribute_type size IS [NOT] MISSING, ? parameters, \"table\".\"index\"), INSERT ... VALUE (maps, lists, <<sets>>), UPDATE ... SET/REMOVE ... WHERE <full key> [AND condition], DELETE FROM ... WHERE <full key>.",
+   "Not supported: BatchExecuteStatement, ExecuteTransaction, NextToken paging, arithmetic in UPDATE SET."
   ],
   "tests": [
    "tests/conformance/test_dynamodb_table_ops_core.py"

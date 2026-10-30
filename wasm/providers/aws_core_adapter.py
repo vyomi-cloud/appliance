@@ -204,6 +204,9 @@ def ddb_create_table(p: dict) -> dict:
     if sk:
         payload["AttributeDefinitions"].append({"AttributeName": sk, "AttributeType": "S"})
         payload["KeySchema"].append({"AttributeName": sk, "KeyType": "RANGE"})
+    if billing.upper() == "PROVISIONED":   # DynamoDB requires throughput for a provisioned table
+        payload["ProvisionedThroughput"] = {"ReadCapacityUnits": int(p.get("read_capacity") or 5),
+                                            "WriteCapacityUnits": int(p.get("write_capacity") or 5)}
     r = ddb.dispatch(DDB, "DynamoDB_20120810.CreateTable", payload)
     if r.status != 200:
         return _ddb_err(r)
