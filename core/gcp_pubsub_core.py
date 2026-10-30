@@ -15,17 +15,28 @@ message out to every subscription attached to that topic. Snapshots and schemas
 Scope: create/get/list/delete/patch topic (labels, CMEK, message retention,
 schema settings), create/get/list/delete/patch subscription (labels, retention
 + retain-acked, expiration policy, message ordering + exactly-once flags, push
-config, dead-letter policy, retry policy), publish (base64 data + attributes +
-ordering key → messageIds), pull (ack-deadline-based redelivery, dead-letter
-forwarding past maxDeliveryAttempts, retention pruning), acknowledge, seek (to a
-snapshot), and snapshot / schema create+get+list+delete. Push delivery is
-recorded but never actually dispatched over the network (see capability
-registry); BigQuery/Cloud Storage subscriptions and the CEL filter language are
-not modeled at all.
+config, dead-letter policy, retry policy, subscription filter), publish (base64
+data + attributes + ordering key → messageIds, validated against an attached
+AVRO/JSON schema), pull (ack-deadline-based redelivery with exponential retry
+backoff, per-ordering-key in-order delivery, dead-letter forwarding past
+maxDeliveryAttempts, retention pruning), acknowledge, seek (to a snapshot OR,
+when the topic has message retention enabled, to a point in time), and
+snapshot / schema create+get+list+delete.
+
+DEPTH pass (this module): topic message retention now actually retains a
+replayable backlog (seek-by-time), AVRO/JSON schema messages are validated on
+publish, a subscription's ordering key is enforced in delivery order, retry
+policy backoff really delays redelivery, and a subset of the subscription
+filter language is evaluated at fan-out. Push delivery is recorded but never
+actually dispatched over the network (no outbound HTTP from the simulator);
+BigQuery/Cloud Storage subscriptions, topic ingestion and message transforms
+are not modeled at all — see core/capabilities/gcp/pubsub.json.
 """
 from __future__ import annotations
 
+import base64
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -73,6 +84,234 @@ class PubsubError(Exception):
         self.message = message
 
 
+def _parse_rfc3339(ts: str) -> float:
+    s = ts.strip()
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    return datetime.fromisoformat(s).timestamp()
+
+
+# ── subscription filter language (a documented subset of Pub/Sub's filter
+# syntax: attribute equality/inequality, hasPrefix, has-attribute, NOT/AND/OR
+# and parens — see core/capabilities/gcp/pubsub.json for what's NOT covered,
+# e.g. the ':' substring operator) ──────────────────────────────────────────
+class _FilterError(Exception):
+    pass
+
+
+_FILTER_TOKEN_RE = re.compile(r'\(|\)|,|!=|=|:|"(?:[^"\\]|\\.)*"|[A-Za-z_][A-Za-z0-9_.]*')
+
+
+def _tokenize_filter(expr: str) -> list[str]:
+    tokens: list[str] = []
+    pos, n = 0, len(expr)
+    while pos < n:
+        if expr[pos].isspace():
+            pos += 1
+            continue
+        m = _FILTER_TOKEN_RE.match(expr, pos)
+        if not m:
+            raise _FilterError(f"unexpected character {expr[pos]!r}")
+        tokens.append(m.group(0))
+        pos = m.end()
+    return tokens
+
+
+def _unquote(tok: str) -> str:
+    if len(tok) >= 2 and tok[0] == '"' and tok[-1] == '"':
+        return tok[1:-1].replace('\\"', '"')
+    return tok
+
+
+class _FilterParser:
+    """Recursive-descent parser: OR < AND < NOT < atom."""
+
+    def __init__(self, tokens: list[str]) -> None:
+        self.toks = tokens
+        self.i = 0
+
+    def peek(self) -> str | None:
+        return self.toks[self.i] if self.i < len(self.toks) else None
+
+    def advance(self) -> str:
+        t = self.peek()
+        if t is None:
+            raise _FilterError("unexpected end of filter")
+        self.i += 1
+        return t
+
+    def parse(self):
+        node = self._or()
+        if self.peek() is not None:
+            raise _FilterError(f"unexpected trailing token {self.peek()!r}")
+        return node
+
+    def _or(self):
+        left = self._and()
+        while self.peek() == "OR":
+            self.advance()
+            left = ("OR", left, self._and())
+        return left
+
+    def _and(self):
+        left = self._not()
+        while self.peek() == "AND":
+            self.advance()
+            left = ("AND", left, self._not())
+        return left
+
+    def _not(self):
+        if self.peek() == "NOT":
+            self.advance()
+            return ("NOT", self._not())
+        return self._atom()
+
+    def _atom(self):
+        t = self.peek()
+        if t == "(":
+            self.advance()
+            node = self._or()
+            if self.advance() != ")":
+                raise _FilterError("expected ')'")
+            return node
+        if t == "hasPrefix":
+            self.advance()
+            if self.advance() != "(":
+                raise _FilterError("expected '(' after hasPrefix")
+            ref = self.advance()
+            if self.advance() != ",":
+                raise _FilterError("expected ',' in hasPrefix(...)")
+            val = _unquote(self.advance())
+            if self.advance() != ")":
+                raise _FilterError("expected ')' in hasPrefix(...)")
+            return ("HASPREFIX", _ref_key(ref), val)
+        ref = self.advance()
+        nxt = self.peek()
+        if nxt == ":":
+            self.advance()
+            return ("HAS", _unquote(self.advance()))
+        if nxt == "=":
+            self.advance()
+            return ("EQ", _ref_key(ref), _unquote(self.advance()))
+        if nxt == "!=":
+            self.advance()
+            return ("NEQ", _ref_key(ref), _unquote(self.advance()))
+        raise _FilterError(f"unsupported expression near {ref!r}")
+
+
+def _ref_key(ref: str) -> str:
+    prefix = "attributes."
+    if not ref.startswith(prefix) or len(ref) <= len(prefix):
+        raise _FilterError(f"unsupported attribute reference {ref!r} (expected attributes.<key>)")
+    return ref[len(prefix):]
+
+
+def _compile_filter(expr: str):
+    if not expr or not expr.strip():
+        return None
+    return _FilterParser(_tokenize_filter(expr)).parse()
+
+
+def _eval_filter(node, attrs: dict) -> bool:
+    op = node[0]
+    if op == "AND":
+        return _eval_filter(node[1], attrs) and _eval_filter(node[2], attrs)
+    if op == "OR":
+        return _eval_filter(node[1], attrs) or _eval_filter(node[2], attrs)
+    if op == "NOT":
+        return not _eval_filter(node[1], attrs)
+    if op == "HAS":
+        return node[1] in attrs
+    if op == "HASPREFIX":
+        val = attrs.get(node[1])
+        return isinstance(val, str) and val.startswith(node[2])
+    if op in ("EQ", "NEQ"):
+        eq = attrs.get(node[1]) == node[2]
+        return eq if op == "EQ" else not eq
+    raise _FilterError(f"unknown filter op {op}")
+
+
+def _message_matches(filter_expr: str | None, attrs: dict | None) -> bool:
+    """A malformed filter (shouldn't happen — validated at create time) never
+    silently drops traffic: it fails open, same as having no filter."""
+    if not filter_expr:
+        return True
+    try:
+        node = _compile_filter(filter_expr)
+        return node is None or _eval_filter(node, attrs or {})
+    except _FilterError:
+        return True
+
+
+# ── AVRO/JSON schema validation (a documented subset: scalars, unions,
+# records/arrays/maps/enums by structural shape — not full Avro semantics) ──
+_AVRO_SCALARS = {
+    "null": type(None), "boolean": bool, "int": int, "long": int,
+    "float": (int, float), "double": (int, float), "string": str, "bytes": str,
+}
+
+
+def _avro_matches(schema_type, value) -> bool:
+    if isinstance(schema_type, list):              # union, e.g. ["null", "string"]
+        return any(_avro_matches(t, value) for t in schema_type)
+    if isinstance(schema_type, str):
+        if schema_type == "record":
+            return isinstance(value, dict)          # named-type reference Vyomi doesn't resolve
+        py = _AVRO_SCALARS.get(schema_type)
+        if py is None:
+            return True
+        if py is bool:
+            return isinstance(value, bool)
+        if py is int:
+            return isinstance(value, int) and not isinstance(value, bool)
+        return isinstance(value, py)
+    if not isinstance(schema_type, dict):
+        return True
+    kind = schema_type.get("type")
+    if kind == "record":
+        if not isinstance(value, dict):
+            return False
+        for f in schema_type.get("fields", []):
+            fname = f.get("name")
+            if fname not in value:
+                ftype = f.get("type")
+                if "default" in f or (isinstance(ftype, list) and "null" in ftype):
+                    continue
+                return False
+            if not _avro_matches(f.get("type"), value[fname]):
+                return False
+        return True
+    if kind == "array":
+        return isinstance(value, list) and all(_avro_matches(schema_type.get("items"), v) for v in value)
+    if kind == "map":
+        return isinstance(value, dict)
+    if kind == "enum":
+        return value in schema_type.get("symbols", [value])
+    return _avro_matches(kind, value)
+
+
+def _validate_schema_message(store, topic: dict, record: dict) -> None:
+    settings = topic.get("schemaSettings")
+    if not settings or not settings.get("schema"):
+        return
+    schema = _schema_store(store).get(settings["schema"])
+    if not schema:
+        return
+    encoding = str(settings.get("encoding") or "JSON").upper()
+    if schema.get("type") != "AVRO" or encoding != "JSON":
+        return  # BINARY-encoded Avro and PROTOCOL_BUFFER payloads aren't decoded in Vyomi
+    try:
+        parsed = json.loads(base64.b64decode(record["data"] or "").decode("utf-8"))
+    except Exception:
+        raise PubsubError(400, "INVALID_ARGUMENT", "Message data is not valid JSON for the topic's AVRO/JSON schema.")
+    try:
+        avro_schema = json.loads(schema.get("definition") or "null")
+    except Exception:
+        avro_schema = None
+    if avro_schema is not None and not _avro_matches(avro_schema, parsed):
+        raise PubsubError(400, "INVALID_ARGUMENT", "Message does not match the topic's schema.")
+
+
 def _snap_store(store) -> dict:
     return store.pubsub.setdefault("snapshots", {})
 
@@ -116,6 +355,8 @@ def _subscription_view(sub: dict) -> dict:
         v["deadLetterPolicy"] = sub["deadLetterPolicy"]
     if sub.get("retryPolicy"):
         v["retryPolicy"] = sub["retryPolicy"]
+    if sub.get("filter"):
+        v["filter"] = sub["filter"]
     return v
 
 
@@ -212,12 +453,28 @@ def _delete_topic(store, name: str) -> PubsubResponse:
 
 
 def _fanout(store, topic: dict, record: dict) -> None:
-    """Deliver a prepared message record into every subscription attached to `topic`."""
+    """Deliver a prepared message record into every subscription attached to `topic`
+    whose filter (if any) matches the message's attributes."""
     for sub_name in topic.get("subscriptions", []):
         sub = store.get_queue(sub_name)
-        if sub is None:
+        if sub is None or not _message_matches(sub.get("filter"), record.get("attributes")):
             continue
         sub.setdefault("messages", []).append({"_id": uuid.uuid4().hex, "_publish_at": store.now(), **record})
+
+
+def _prune_topic_retention(store, topic: dict) -> None:
+    """Topic-level message retention: an independent, replayable backlog used by
+    seek-by-time (unlike subscription retention, this exists even for subscriptions
+    created after the message was published)."""
+    try:
+        retention = int(str(topic.get("messageRetentionDuration", "0s")).rstrip("s"))
+    except ValueError:
+        retention = 0
+    if not retention:
+        topic.pop("_retained", None)
+        return
+    now = store.now()
+    topic["_retained"] = [m for m in topic.get("_retained", []) if now - m.get("_publish_at", now) <= retention]
 
 
 def _publish(store, name: str, body: dict) -> PubsubResponse:
@@ -225,21 +482,30 @@ def _publish(store, name: str, body: dict) -> PubsubResponse:
     messages = body.get("messages") or []
     if not messages:
         raise PubsubError(400, "INVALID_ARGUMENT", "The value for message_count is too small. You passed 0")
-    message_ids: list[str] = []
+    # Validate every message against the topic's schema (if any) BEFORE fanning any of
+    # them out: a schema violation anywhere in the batch fails the whole publish call,
+    # same as the real API — never a partial delivery.
+    prepared: list[dict] = []
     for m in messages:
-        mid = _next_message_id(store)
-        message_ids.append(mid)
         record = {
             "data": m.get("data", ""),            # already base64 on the wire
             "attributes": dict(m.get("attributes") or {}),
-            "messageId": mid,
+            "messageId": _next_message_id(store),
             "publishTime": _now_rfc3339(),
         }
         if m.get("orderingKey"):
             record["orderingKey"] = m["orderingKey"]
+        _validate_schema_message(store, topic, record)
+        prepared.append(record)
+    retain = bool(topic.get("messageRetentionDuration"))
+    for record in prepared:
         _fanout(store, topic, record)
+        if retain:
+            topic.setdefault("_retained", []).append({**record, "_publish_at": store.now()})
+    if retain:
+        _prune_topic_retention(store, topic)
     store.persist()
-    return _json(200, {"messageIds": message_ids})
+    return _json(200, {"messageIds": [r["messageId"] for r in prepared]})
 
 
 # ── subscription operations ───────────────────────────────────────────────
@@ -250,6 +516,12 @@ def _create_subscription(store, name: str, body: dict) -> PubsubResponse:
     if not topic_name:
         raise PubsubError(400, "INVALID_ARGUMENT", "Subscription must specify a topic.")
     topic = _require_topic(store, topic_name)
+    filter_expr = str(body.get("filter", "") or "").strip()
+    if filter_expr:
+        try:
+            _compile_filter(filter_expr)
+        except _FilterError as e:
+            raise PubsubError(400, "INVALID_ARGUMENT", f"Invalid filter: {e}")
     sub = {
         "name": name,
         "topic": topic_name,
@@ -265,6 +537,10 @@ def _create_subscription(store, name: str, body: dict) -> PubsubResponse:
         "enableExactlyOnceDelivery": bool(body.get("enableExactlyOnceDelivery", False)),
         "pushConfig": body.get("pushConfig") or {},
     }
+    if filter_expr:
+        # Immutable after creation, matching the real API: filter is never in
+        # _SUB_PATCHABLE below.
+        sub["filter"] = filter_expr
     if body.get("deadLetterPolicy"):
         sub["deadLetterPolicy"] = body["deadLetterPolicy"]
     if body.get("retryPolicy"):
@@ -330,26 +606,50 @@ def _prune_retention(store, sub: dict) -> None:
     sub["messages"] = [m for m in sub.get("messages", []) if now - m.get("_publish_at", now) <= retention]
 
 
+def _backoff_seconds(retry_policy: dict, attempts: int) -> float:
+    def _secs(v, default):
+        try:
+            return float(str(v).rstrip("s"))
+        except (TypeError, ValueError):
+            return default
+    minimum = _secs(retry_policy.get("minimumBackoff"), 10.0)
+    maximum = _secs(retry_policy.get("maximumBackoff"), 600.0)
+    return min(minimum * (2 ** max(0, attempts - 1)), maximum)
+
+
 def _pull(store, name: str, body: dict) -> PubsubResponse:
     sub = _require_subscription(store, name)
     _prune_retention(store, sub)
     max_messages = int(body.get("maxMessages", 1) or 1)
     deadline = int(sub.get("ackDeadlineSeconds", 10) or 10)
     dlp = sub.get("deadLetterPolicy")
+    retry_policy = sub.get("retryPolicy")
+    ordered = bool(sub.get("enableMessageOrdering"))
     now = store.now()
     kept: list[dict] = []
     received: list[dict] = []
+    blocked_keys: set[str] = set()
     for msg in sub.get("messages", []):
         if msg.get("_acked"):
             kept.append(msg)
             continue
+        key = msg.get("orderingKey") if ordered else None
+        if key:
+            if key in blocked_keys:
+                kept.append(msg)   # an earlier unacked message with this ordering key exists
+                continue
+            blocked_keys.add(key)  # this is the head for the key: block any later one until it's acked
         if msg.get("_pending") and now < msg.get("_pending_until", 0):
             kept.append(msg)   # still out for delivery, within its ack deadline
+            continue
+        attempts_so_far = msg.get("_attempts", 0)
+        if attempts_so_far and retry_policy and now < msg.get("_pending_until", 0) + _backoff_seconds(retry_policy, attempts_so_far):
+            kept.append(msg)   # ack deadline expired, but still inside the retry policy's backoff window
             continue
         if len(received) >= max_messages:
             kept.append(msg)   # eligible, but this pull's quota is already full
             continue
-        attempts = msg.get("_attempts", 0) + 1
+        attempts = attempts_so_far + 1
         if dlp and attempts > int(dlp.get("maxDeliveryAttempts", 5) or 5):
             dlq = store.get_topic(dlp.get("deadLetterTopic", ""))
             if dlq:
@@ -392,17 +692,38 @@ def _acknowledge(store, name: str, body: dict) -> PubsubResponse:
     return _json(200, {})
 
 
+_SEEK_COPY_DROP = ("_pending", "_pending_until", "_acked", "_attempts", "_id")
+
+
 def _seek(store, name: str, body: dict) -> PubsubResponse:
     sub = _require_subscription(store, name)
     snap_name = body.get("snapshot")
+    time_val = body.get("time")
     if snap_name:
         snap = _snap_store(store).get(snap_name)
         if not snap:
             raise PubsubError(404, "NOT_FOUND", f"Snapshot not found: {snap_name}")
-        sub["messages"] = [{k: v for k, v in m.items() if k not in ("_pending", "_pending_until", "_acked")}
+        sub["messages"] = [{**{k: v for k, v in m.items() if k not in _SEEK_COPY_DROP}, "_id": uuid.uuid4().hex}
                            for m in snap.get("_messages", [])]
         sub["ackids"] = {}
-    # body.get("time") (seek to a timestamp) is accepted but not modeled beyond acceptance.
+    elif time_val:
+        # Seek to a point in time: only possible when the topic has message retention
+        # enabled, since that's the only backlog Vyomi keeps independent of any one
+        # subscription's own (shorter-lived) message list.
+        topic = store.get_topic(sub.get("topic", ""))
+        if not topic or not topic.get("messageRetentionDuration"):
+            raise PubsubError(400, "FAILED_PRECONDITION",
+                               "Seeking to a timestamp requires the topic to have message retention enabled.")
+        try:
+            ts = _parse_rfc3339(time_val) if isinstance(time_val, str) else float(time_val)
+        except (ValueError, TypeError):
+            raise PubsubError(400, "INVALID_ARGUMENT", f"Invalid seek time: {time_val!r}")
+        _prune_topic_retention(store, topic)
+        sub["messages"] = [{**{k: v for k, v in m.items() if k not in _SEEK_COPY_DROP}, "_id": uuid.uuid4().hex}
+                           for m in topic.get("_retained", []) if m.get("_publish_at", 0) >= ts]
+        sub["ackids"] = {}
+    else:
+        raise PubsubError(400, "INVALID_ARGUMENT", "Seek requires either a snapshot or a time.")
     store.persist()
     return _json(200, {})
 

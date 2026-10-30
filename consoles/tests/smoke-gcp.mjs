@@ -838,6 +838,36 @@ try {
   check("create schema via UI → visible over native wire (schemas.list)", (psSchemas.schemas || []).some((s) => s.name.endsWith(`/schemas/${PSCHEMA}`)));
   await shot("19-pubsub-schema");
 
+  // Subscription filter (DEPTH): a subscription created in the UI with a filter only
+  // receives messages (published over the native wire) whose attributes match it.
+  const PFTOPIC = `v4-gcp-ps-filter-topic-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/topics/${PFTOPIC}`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
+  await page.goto(UI + "#/pubsub/subscriptions/create");
+  const PFSUB = `v4-gcp-ps-filter-sub-${Date.now() % 100000}`;
+  await page.getByLabel("Subscription ID").fill(PFSUB);
+  await page.getByLabel("Select a Cloud Pub/Sub topic").click();
+  await page.getByRole("option", { name: PFTOPIC }).click();
+  await page.getByLabel("Subscription filter").fill('attributes.kind = "keep"');
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: PFSUB }).waitFor({ timeout: 10000 });
+  const pfSub = await wjson(`/v1/projects/vyomi-project/subscriptions/${PFSUB}`);
+  check("subscription filter set via UI → stored over native wire", pfSub.filter === 'attributes.kind = "keep"');
+
+  await wire(`/v1/projects/vyomi-project/topics/${PFTOPIC}:publish`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ messages: [
+      { data: Buffer.from("keep-this").toString("base64"), attributes: { kind: "keep" } },
+      { data: Buffer.from("drop-this").toString("base64"), attributes: { kind: "drop" } },
+    ] }),
+  });
+  await page.goto(UI + `#/pubsub/subscriptions/${PFSUB}`);
+  await page.getByRole("tab", { name: "Messages" }).click();
+  await page.getByRole("button", { name: "Pull" }).click();
+  await page.getByText("keep-this").waitFor({ timeout: 10000 });
+  check("subscription filter: the matching message arrives in the UI", true);
+  check("subscription filter: the non-matching message never shows", (await page.getByText("drop-this").count()) === 0);
+  await shot("20-pubsub-filter");
+
   // Dark mode
   await page.goto(UI + "#/storage/browser");
   await page.getByRole("button", { name: "More options" }).click();          // ⋮ menu, as in the native top bar

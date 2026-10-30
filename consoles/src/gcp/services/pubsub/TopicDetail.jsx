@@ -15,7 +15,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { ErrorAlert, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
@@ -48,7 +48,7 @@ export default function TopicDetail({ params }) {
         <KeyValue items={[
           ["Topic name", topic.name],
           ["Encryption key", api.encryptionText(topic)],
-          ["Retention", api.durationText(topic.messageRetentionDuration)],
+          ["Retention", api.durationText(topic.messageRetentionDuration), <CapabilityBadge key="ret" id="gcp.pubsub.topics.config" />],
         ]} />
       </Section>
 
@@ -129,8 +129,9 @@ function DetailsTab({ topic }) {
       <KeyValue items={[
         ["Topic name", topic.name],
         ["Encryption key", api.encryptionText(topic)],
-        ["Retention", api.durationText(topic.messageRetentionDuration)],
-        ["Schema", topic.schemaSettings ? `${api.shortId(topic.schemaSettings.schema)} (${topic.schemaSettings.encoding || "JSON"})` : "None"],
+        ["Retention", api.durationText(topic.messageRetentionDuration), <CapabilityBadge key="ret" id="gcp.pubsub.topics.config" />],
+        ["Schema", topic.schemaSettings ? `${api.shortId(topic.schemaSettings.schema)} (${topic.schemaSettings.encoding || "JSON"})` : "None",
+          topic.schemaSettings ? <CapabilityBadge key="sch" id="gcp.pubsub.topics.schema" /> : null],
         ["Labels", api.labelsText(topic.labels)],
       ]} />
     </Section>
