@@ -1,165 +1,16 @@
 # Release checks — v3.0.33
 
-Generated 2026-10-30 04:31 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/41002526259) for tag `v3.0.33`.
+Generated 2026-10-30 04:33 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/41003480646) for tag `v3.0.33`.
 
 | Package / check | Platform | Result |
 |---|---|---|
-| DEB: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | ✅ passed |
-| RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | ✅ passed |
-| Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | ✅ passed |
-| CLI: aws / gcloud / az suites + CLI ↔ console both ways  | Linux, release images | ❌ failure |
+| DEB: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | ❌ cancelled |
+| RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | ❌ cancelled |
+| Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | ❌ cancelled |
+| CLI: aws / gcloud / az suites + CLI ↔ console both ways  | Linux, release images | ❌ cancelled |
 | MSI: install, upgrade, uninstall (+ signing) | Windows (GitHub) | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/40934343357)) |
 | Startup: all services + UI status | Linux, release images | ❌ failure ([run](https://github.com/vyomi-cloud/appliance/actions/runs/40935785259)) |
 | Windows E2E: MSI → vyomi up → services + UI | Windows laptop (private runner) | ❌ failure |
-
-## DEB
-
-#### deb · `vyomi_3.0.33_all.deb` — 17/17 passed
-
-| | Check | Detail |
-|---|---|---|
-| ✅ | install vyomi_3.0.33_all.deb | 5s |
-| ✅ | package manager reports version 3.0.33 | found '3.0.33' |
-| ✅ | bundled VERSION is 3.0.33 | /usr/share/vyomi/packaging/common/VERSION = 3.0.33 |
-| ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
-| ✅ | vyomi help runs | exit 0; vyomi — Vyomi simulator launcher (Max tier: local multi-cloud appliance) |
-| ✅ | vyomi doctor runs | exit 0; cloud-learn root: /usr/lib/cloud-learn |
-| ✅ | vyomi --version reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi · docker substrate) |
-| ✅ | vyomi version reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi · docker substrate) |
-| ✅ | vyomi -V reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi · docker substrate) |
-| ✅ | vyomi --version shows the simulator state |   simulator : not running |
-| ✅ | vyomi help lists update + version |  |
-| ✅ | vyomi status → docker compose ps | exit 0 |
-| ✅ | vyomi logs → docker compose logs | exit 0 |
-| ✅ | vyomi down → docker compose down | exit 0 |
-| ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33; ==> Vyomi 3.0.33 is the latest release. |
-| ✅ | uninstall vyomi | Removing vyomi (3.0.33) ... |
-| ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
-
-#### deb · `vyomi-docker_3.0.33_all.deb` — 19/19 passed
-
-| | Check | Detail |
-|---|---|---|
-| ✅ | install vyomi-docker_3.0.33_all.deb | 2s |
-| ✅ | package manager reports version 3.0.33 | found '3.0.33' |
-| ✅ | ships docker-compose.cloudlite.yml | /usr/share/vyomi-docker/docker-compose.cloudlite.yml |
-| ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
-| ✅ | vyomi help runs | exit 0; vyomi (Docker substrate) — Free/Lite/Pro tiers |
-| ✅ | vyomi doctor runs | exit 0; vyomi (Docker substrate) doctor |
-| ✅ | vyomi --version reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi-docker · Free/Lite/Pro) |
-| ✅ | vyomi version reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi-docker · Free/Lite/Pro) |
-| ✅ | vyomi -V reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi-docker · Free/Lite/Pro) |
-| ✅ | vyomi --version shows the simulator state |   simulator : not running |
-| ✅ | vyomi help lists update + version |  |
-| ✅ | vyomi status → docker compose ps | exit 0 |
-| ✅ | vyomi logs → docker compose logs | exit 0 |
-| ✅ | vyomi down → docker compose down | exit 0 |
-| ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33; ==> Vyomi 3.0.33 is the latest release. |
-| ✅ | vyomi update from v3.0.0 → v3.0.33 (SHA256-checked) | exit 0; cached compose v3.0.33 |
-| ✅ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.33 (/tmp/tmp.L9EOCFmkkF/home/.vyomi/docker-compose.cloudlite.yml) |
-| ✅ | uninstall vyomi-docker | Removing vyomi-docker (3.0.33) ... |
-| ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
-
-
-## RPM
-
-#### rpm · `vyomi-3.0.33-1.noarch.rpm` — 17/17 passed
-
-| | Check | Detail |
-|---|---|---|
-| ✅ | install vyomi-3.0.33-1.noarch.rpm | 1s |
-| ✅ | package manager reports version 3.0.33 | found '3.0.33' |
-| ✅ | bundled VERSION is 3.0.33 | /usr/lib/cloud-learn/VERSION = 3.0.33 |
-| ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
-| ✅ | vyomi help runs | exit 0; vyomi — Vyomi simulator launcher (Max tier: local multi-cloud appliance) |
-| ✅ | vyomi doctor runs | exit 0; cloud-learn root: /usr/lib/cloud-learn |
-| ✅ | vyomi --version reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi · docker substrate) |
-| ✅ | vyomi version reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi · docker substrate) |
-| ✅ | vyomi -V reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi · docker substrate) |
-| ✅ | vyomi --version shows the simulator state |   simulator : not running |
-| ✅ | vyomi help lists update + version |  |
-| ✅ | vyomi status → docker compose ps | exit 0 |
-| ✅ | vyomi logs → docker compose logs | exit 0 |
-| ✅ | vyomi down → docker compose down | exit 0 |
-| ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33; ==> Vyomi 3.0.33 is the latest release. |
-| ✅ | uninstall vyomi | Complete! |
-| ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
-
-#### rpm · `vyomi-docker-3.0.33-1.noarch.rpm` — 19/19 passed
-
-| | Check | Detail |
-|---|---|---|
-| ✅ | install vyomi-docker-3.0.33-1.noarch.rpm | 1s |
-| ✅ | package manager reports version 3.0.33 | found '3.0.33' |
-| ✅ | ships docker-compose.cloudlite.yml | /usr/share/vyomi-docker/docker-compose.cloudlite.yml |
-| ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
-| ✅ | vyomi help runs | exit 0; vyomi (Docker substrate) — Free/Lite/Pro tiers |
-| ✅ | vyomi doctor runs | exit 1; vyomi: Docker is required but was not found on PATH. |
-| ✅ | vyomi --version reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi-docker · Free/Lite/Pro) |
-| ✅ | vyomi version reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi-docker · Free/Lite/Pro) |
-| ✅ | vyomi -V reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi-docker · Free/Lite/Pro) |
-| ✅ | vyomi --version shows the simulator state |   simulator : not running |
-| ✅ | vyomi help lists update + version |  |
-| ✅ | vyomi status → docker compose ps | exit 0 |
-| ✅ | vyomi logs → docker compose logs | exit 0 |
-| ✅ | vyomi down → docker compose down | exit 0 |
-| ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33; ==> Vyomi 3.0.33 is the latest release. |
-| ✅ | vyomi update from v3.0.0 → v3.0.33 (SHA256-checked) | exit 0; cached compose v3.0.33 |
-| ✅ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.33 (/tmp/tmp.XJib1Q4P6U/home/.vyomi/docker-compose.cloudlite.yml) |
-| ✅ | uninstall vyomi-docker | Complete! |
-| ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
-
-
-## BREW
-
-#### brew · `vyomi` — 18/18 passed
-
-| | Check | Detail |
-|---|---|---|
-| ✅ | install vyomi | 17s |
-| ✅ | package manager reports version 3.0.33 | found '3.0.33' |
-| ✅ | bundled VERSION is 3.0.33 | /opt/homebrew/opt/vyomi/libexec/VERSION = 3.0.33 |
-| ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
-| ✅ | vyomi help runs | exit 0; vyomi — Vyomi simulator launcher (Max tier: local multi-cloud appliance) |
-| ✅ | vyomi doctor runs | exit 0; cloud-learn root: /opt/homebrew/Cellar/vyomi/3.0.33/libexec |
-| ✅ | vyomi --version reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi · docker substrate) |
-| ✅ | vyomi version reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi · docker substrate) |
-| ✅ | vyomi -V reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi · docker substrate) |
-| ✅ | vyomi --version shows the simulator state |   simulator : not running |
-| ✅ | vyomi help lists update + version |  |
-| ✅ | vyomi status → docker compose ps | exit 0 |
-| ✅ | vyomi logs → docker compose logs | exit 0 |
-| ✅ | vyomi down → docker compose down | exit 0 |
-| ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33; ==> Vyomi 3.0.33 is the latest release. |
-| ✅ | brew test vyomi | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi/3.0.33/bin/cloud-learn help 2>&1[0m |
-| ✅ | uninstall vyomi | Uninstalling /opt/homebrew/Cellar/socat/1.8.1.3... (16 files, 1.1MB) |
-| ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
-
-#### brew · `vyomi-docker` — 20/20 passed
-
-| | Check | Detail |
-|---|---|---|
-| ✅ | install vyomi-docker | 7s |
-| ✅ | package manager reports version 3.0.33 | found '3.0.33' |
-| ✅ | ships docker-compose.cloudlite.yml | /opt/homebrew/opt/vyomi-docker/share/vyomi-docker/docker-compose.cloudlite.yml |
-| ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
-| ✅ | vyomi help runs | exit 0; vyomi (Docker substrate) — Free/Lite/Pro tiers |
-| ✅ | vyomi doctor runs | exit 1; vyomi: Docker is required but was not found on PATH. |
-| ✅ | vyomi --version reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi-docker · Free/Lite/Pro) |
-| ✅ | vyomi version reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi-docker · Free/Lite/Pro) |
-| ✅ | vyomi -V reports 3.0.33 | exit 0; vyomi 3.0.33 (vyomi-docker · Free/Lite/Pro) |
-| ✅ | vyomi --version shows the simulator state |   simulator : not running |
-| ✅ | vyomi help lists update + version |  |
-| ✅ | vyomi status → docker compose ps | exit 0 |
-| ✅ | vyomi logs → docker compose logs | exit 0 |
-| ✅ | vyomi down → docker compose down | exit 0 |
-| ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33; ==> Vyomi 3.0.33 is the latest release. |
-| ✅ | vyomi update from v3.0.0 → v3.0.33 (SHA256-checked) | exit 0; cached compose v3.0.33 |
-| ✅ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.33 (/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/tmp.mfUIxC0rMt/home/.vyomi/docker-compose.cloudlite.yml) |
-| ✅ | brew test vyomi-docker | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi-docker/3.0.33/bin/vyomi --help[0m |
-| ✅ | uninstall vyomi-docker | Uninstalling /opt/homebrew/Cellar/vyomi-docker/3.0.33... (8 files, 314.8KB) |
-| ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
-
 
 ## Startup (all services + UI)
 
