@@ -2,20 +2,2842 @@
   "$schema": "../schema.json",
   "cloud": "aws",
   "service": "vpc",
-  "console_path": "/vpc/",
-  "status": "draft",
-  "nav": [],
+  "console_path": "/vpcconsole/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "VPC dashboard",
+      "page_id": "dashboard"
+    },
+    {
+      "label": "AWS Global View",
+      "external": true
+    },
+    {
+      "label": "Virtual private cloud",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Your VPCs",
+          "page_id": "vpcs"
+        },
+        {
+          "label": "Subnets",
+          "page_id": "subnets"
+        },
+        {
+          "label": "Route tables",
+          "page_id": "route-tables"
+        },
+        {
+          "label": "Internet gateways",
+          "page_id": "internet-gateways"
+        },
+        {
+          "label": "Egress-only internet gateways",
+          "page_id": "egress-only-internet-gateways"
+        },
+        {
+          "label": "DHCP option sets",
+          "page_id": "dhcp-option-sets"
+        },
+        {
+          "label": "Elastic IPs",
+          "page_id": "elastic-ips"
+        },
+        {
+          "label": "Managed prefix lists",
+          "page_id": "managed-prefix-lists"
+        },
+        {
+          "label": "NAT gateways",
+          "page_id": "nat-gateways"
+        },
+        {
+          "label": "Peering connections",
+          "page_id": "peering-connections"
+        },
+        {
+          "label": "Route servers",
+          "page_id": "route-servers"
+        }
+      ]
+    },
+    {
+      "label": "Security",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Network ACLs",
+          "page_id": "network-acls"
+        },
+        {
+          "label": "Security groups",
+          "page_id": "security-groups"
+        }
+      ]
+    },
+    {
+      "label": "PrivateLink and Lattice",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Getting started",
+          "page_id": "privatelink-getting-started"
+        },
+        {
+          "label": "Endpoints",
+          "page_id": "endpoints"
+        },
+        {
+          "label": "Endpoint services",
+          "page_id": "endpoint-services"
+        },
+        {
+          "label": "Service networks",
+          "page_id": "service-networks"
+        },
+        {
+          "label": "Lattice services",
+          "page_id": "lattice-services"
+        },
+        {
+          "label": "Resource configurations",
+          "page_id": "resource-configurations"
+        },
+        {
+          "label": "Resource gateways",
+          "page_id": "resource-gateways"
+        },
+        {
+          "label": "Target groups",
+          "page_id": "lattice-target-groups"
+        },
+        {
+          "label": "Domain verifications",
+          "page_id": "domain-verifications"
+        }
+      ]
+    },
+    {
+      "label": "DNS firewall",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Rule groups",
+          "page_id": "dns-firewall-rule-groups"
+        },
+        {
+          "label": "Domain lists",
+          "page_id": "dns-firewall-domain-lists"
+        }
+      ]
+    },
+    {
+      "label": "Network Firewall",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Firewalls",
+          "page_id": "firewalls"
+        },
+        {
+          "label": "Firewall policies",
+          "page_id": "firewall-policies"
+        },
+        {
+          "label": "Network Firewall rule groups",
+          "page_id": "network-firewall-rule-groups"
+        },
+        {
+          "label": "TLS inspection configurations",
+          "page_id": "tls-inspection-configurations"
+        },
+        {
+          "label": "Network Firewall resource groups",
+          "page_id": "network-firewall-resource-groups"
+        },
+        {
+          "label": "VPC endpoint associations",
+          "page_id": "vpc-endpoint-associations"
+        },
+        {
+          "label": "Container associations",
+          "page_id": "container-associations"
+        }
+      ]
+    },
+    {
+      "label": "Virtual private network (VPN)",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Customer gateways",
+          "page_id": "customer-gateways"
+        },
+        {
+          "label": "Virtual private gateways",
+          "page_id": "virtual-private-gateways"
+        },
+        {
+          "label": "Site-to-Site VPN Concentrators",
+          "page_id": "vpn-concentrators"
+        },
+        {
+          "label": "Site-to-Site VPN connections",
+          "page_id": "vpn-connections"
+        },
+        {
+          "label": "Client VPN endpoints",
+          "page_id": "client-vpn-endpoints"
+        }
+      ]
+    },
+    {
+      "label": "AWS Verified Access",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Verified Access instances",
+          "page_id": "verified-access-instances"
+        },
+        {
+          "label": "Verified Access trust providers",
+          "page_id": "verified-access-trust-providers"
+        },
+        {
+          "label": "Verified Access groups",
+          "page_id": "verified-access-groups"
+        },
+        {
+          "label": "Verified Access endpoints",
+          "page_id": "verified-access-endpoints"
+        }
+      ]
+    },
+    {
+      "label": "Transit gateways",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Transit gateways",
+          "page_id": "transit-gateways"
+        },
+        {
+          "label": "Transit gateway attachments",
+          "page_id": "transit-gateway-attachments"
+        },
+        {
+          "label": "Transit gateway policy tables",
+          "page_id": "transit-gateway-policy-tables"
+        },
+        {
+          "label": "Transit gateway route tables",
+          "page_id": "transit-gateway-route-tables"
+        },
+        {
+          "label": "Transit gateway multicast",
+          "page_id": "transit-gateway-multicast"
+        },
+        {
+          "label": "Metering policies",
+          "page_id": "metering-policies"
+        }
+      ]
+    },
+    {
+      "label": "Traffic Mirroring",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Mirror sessions",
+          "page_id": "mirror-sessions"
+        },
+        {
+          "label": "Mirror targets",
+          "page_id": "mirror-targets"
+        },
+        {
+          "label": "Mirror filters",
+          "page_id": "mirror-filters"
+        }
+      ]
+    },
+    {
+      "label": "Network Manager",
+      "external": true
+    },
+    {
+      "label": "Cloud WAN",
+      "external": true
+    },
+    {
+      "label": "VPC IP Address Manager",
+      "external": true
+    },
+    {
+      "label": "AWS Firewall Manager",
+      "external": true
+    },
+    {
+      "label": "Settings",
+      "page_id": "settings"
+    }
+  ],
   "pages": [
     {
-      "id": "landing",
-      "kind": "other",
-      "title": "Home",
-      "route": "/vpc/home",
+      "id": "dashboard",
+      "kind": "dashboard",
+      "title": "VPC dashboard",
+      "route": "/vpc/home#Home:",
+      "breadcrumbs": [
+        "VPC dashboard"
+      ],
       "captures": [
         "A-vpc/001-L1-landing"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create VPC",
+        "Launch EC2 Instances"
+      ],
+      "notes": "Side nav has a 'Filter by VPC' select (placeholder 'Choose a VPC') above the tree.",
+      "sections": [
+        {
+          "title": "Resources by Region",
+          "fields": [
+            {
+              "label": "VPCs",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            },
+            {
+              "label": "Subnets",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            },
+            {
+              "label": "Route Tables",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            },
+            {
+              "label": "Internet Gateways",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            },
+            {
+              "label": "Egress-only Internet Gateways",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            },
+            {
+              "label": "DHCP option sets",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            },
+            {
+              "label": "Elastic IPs",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            },
+            {
+              "label": "Endpoint Services",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            },
+            {
+              "label": "NAT Gateways",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            },
+            {
+              "label": "VPC Peering Connections",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            },
+            {
+              "label": "Network ACLs",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            },
+            {
+              "label": "Security Groups",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            },
+            {
+              "label": "Customer Gateways",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            },
+            {
+              "label": "Virtual Private Gateways",
+              "type": "readonly",
+              "help": "Region count + 'See all regions'"
+            }
+          ],
+          "actions": [
+            "Refresh Resources"
+          ]
+        },
+        {
+          "title": "Service Health",
+          "fields": [
+            {
+              "label": "View complete service health details",
+              "type": "button"
+            }
+          ]
+        },
+        {
+          "title": "Settings",
+          "fields": [
+            {
+              "label": "Account-level encryption control",
+              "type": "button"
+            },
+            {
+              "label": "Block Public Access",
+              "type": "button"
+            },
+            {
+              "label": "Zones",
+              "type": "button"
+            },
+            {
+              "label": "Console Experiments",
+              "type": "button"
+            }
+          ]
+        },
+        {
+          "title": "Additional Information",
+          "fields": [
+            {
+              "label": "VPC Documentation",
+              "type": "button"
+            },
+            {
+              "label": "All VPC Resources",
+              "type": "button"
+            },
+            {
+              "label": "Forums",
+              "type": "button"
+            },
+            {
+              "label": "Report an Issue",
+              "type": "button"
+            }
+          ]
+        },
+        {
+          "title": "AWS Network Manager"
+        }
+      ]
+    },
+    {
+      "id": "vpcs",
+      "kind": "list",
+      "title": "Your VPCs",
+      "route": "/vpcconsole/home#vpcs:",
+      "breadcrumbs": [
+        "VPC",
+        "Your VPCs"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "List page not crawled (only dashboard + create forms). The account has a default VPC.",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Create VPC"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "VPC ID",
+          "State",
+          "Block Public Access",
+          "IPv4 CIDR",
+          "IPv6 CIDR",
+          "IPv6 pool",
+          "DHCP option set",
+          "Main route table",
+          "Main network ACL",
+          "Tenancy",
+          "Default VPC",
+          "Owner ID"
+        ],
+        "resource_label": "Your VPCs",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Create VPC"
+        ],
+        "actions": [
+          "Create default VPC",
+          "Create flow log",
+          "Edit VPC settings",
+          "Edit CIDRs",
+          "Manage middlebox routes",
+          "Manage tags",
+          "Delete VPC"
+        ],
+        "filter_placeholder": "Search",
+        "empty_state": "No VPCs found",
+        "empty_state_action": "Create VPC",
+        "pagination": true,
+        "preferences": true
+      },
+      "sections": [
+        {
+          "title": "Select a VPC above"
+        }
+      ]
+    },
+    {
+      "id": "vpc-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/vpcconsole/home#VpcDetails:VpcId={resource-name}",
+      "breadcrumbs": [
+        "VPC",
+        "Your VPCs",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Title is '<vpc-id> / <name>'.",
+      "header_actions": [
+        "Actions"
+      ],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "VPC ID",
+              "type": "readonly"
+            },
+            {
+              "label": "State",
+              "type": "readonly"
+            },
+            {
+              "label": "Block Public Access",
+              "type": "readonly"
+            },
+            {
+              "label": "DNS hostnames",
+              "type": "readonly"
+            },
+            {
+              "label": "DNS resolution",
+              "type": "readonly"
+            },
+            {
+              "label": "Tenancy",
+              "type": "readonly"
+            },
+            {
+              "label": "DHCP option set",
+              "type": "readonly"
+            },
+            {
+              "label": "Main route table",
+              "type": "readonly"
+            },
+            {
+              "label": "Main network ACL",
+              "type": "readonly"
+            },
+            {
+              "label": "Default VPC",
+              "type": "readonly"
+            },
+            {
+              "label": "IPv4 CIDR",
+              "type": "readonly"
+            },
+            {
+              "label": "IPv6 pool",
+              "type": "readonly"
+            },
+            {
+              "label": "IPv6 CIDR (Network border group)",
+              "type": "readonly"
+            },
+            {
+              "label": "Network Address Usage metrics",
+              "type": "readonly"
+            },
+            {
+              "label": "Route 53 Resolver DNS Firewall rule groups",
+              "type": "readonly"
+            },
+            {
+              "label": "Owner ID",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Resource map",
+        "CIDRs",
+        "Flow logs",
+        "Tags",
+        "Integrations"
+      ],
+      "tab_panels": [
+        {
+          "label": "Resource map",
+          "sections": [
+            {
+              "title": "Resource map",
+              "fields": [
+                {
+                  "label": "VPC",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Subnets",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Route tables",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Network connections",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "CIDRs",
+          "sections": [
+            {
+              "title": "IPv4 CIDRs",
+              "table": {
+                "columns": [
+                  "CIDR",
+                  "Status",
+                  "Status reason"
+                ],
+                "header_actions": [
+                  "Edit CIDRs"
+                ]
+              }
+            },
+            {
+              "title": "IPv6 CIDRs",
+              "table": {
+                "columns": [
+                  "CIDR",
+                  "Address pool",
+                  "Network border group",
+                  "Status"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Flow logs",
+          "sections": [
+            {
+              "title": "Flow logs",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Flow log ID",
+                  "Filter",
+                  "Destination type",
+                  "Destination name",
+                  "IAM role ARN",
+                  "Maximum aggregation interval",
+                  "Log line format"
+                ],
+                "header_actions": [
+                  "Actions",
+                  "Create flow log"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ],
+                "header_actions": [
+                  "Manage tags"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Integrations",
+          "confidence": "low",
+          "sections": [
+            {
+              "title": "Integrations"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-vpc",
+      "kind": "create",
+      "title": "Create VPC",
+      "route": "/vpcconsole/home#CreateVpc:",
+      "breadcrumbs": [
+        "VPC",
+        "Your VPCs",
+        "Create VPC"
+      ],
+      "captures": [
+        "C-vpcconsole/01-createvpc/step-1",
+        "C-vpcconsole/01-createvpc/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Captured first viewport only; 'VPC and more' fields (with live Preview diagram) and Tags are reference.",
+      "sections": [
+        {
+          "title": "VPC settings",
+          "fields": [
+            {
+              "label": "Resources to create",
+              "type": "radio",
+              "required": true,
+              "default": "VPC only",
+              "options": [
+                "VPC only",
+                "VPC and more"
+              ],
+              "help": "Create only the VPC resource or the VPC and other networking resources."
+            },
+            {
+              "label": "Name tag - optional",
+              "type": "text",
+              "placeholder": "my-vpc-01",
+              "help": "Creates a tag with a key of 'Name' and a value that you specify.",
+              "visible_when": "Resources to create = VPC only"
+            },
+            {
+              "label": "Name tag auto-generation",
+              "type": "checkbox",
+              "default": true,
+              "options": [
+                "Auto-generate"
+              ],
+              "visible_when": "Resources to create = VPC and more",
+              "provenance": "reference"
+            },
+            {
+              "label": "IPv4 CIDR block",
+              "type": "radio",
+              "default": "IPv4 CIDR manual input",
+              "options": [
+                "IPv4 CIDR manual input",
+                "IPAM-allocated IPv4 CIDR block"
+              ]
+            },
+            {
+              "label": "IPv4 CIDR",
+              "type": "text",
+              "required": true,
+              "placeholder": "10.0.0.0/24",
+              "constraints": "CIDR block size must be between /16 and /28."
+            },
+            {
+              "label": "IPv6 CIDR block",
+              "type": "radio",
+              "default": "No IPv6 CIDR block",
+              "options": [
+                "No IPv6 CIDR block",
+                "IPAM-allocated IPv6 CIDR block",
+                "Amazon-provided IPv6 CIDR block",
+                "IPv6 CIDR owned by me"
+              ]
+            },
+            {
+              "label": "Tenancy",
+              "type": "select",
+              "default": "Default",
+              "options": [
+                "Default",
+                "Dedicated"
+              ]
+            },
+            {
+              "label": "VPC encryption control ($)",
+              "type": "radio",
+              "default": "None",
+              "options": [
+                "None",
+                "Monitor mode",
+                "Enforce mode"
+              ]
+            },
+            {
+              "label": "Number of Availability Zones (AZs)",
+              "type": "radio",
+              "default": "2",
+              "options": [
+                "1",
+                "2",
+                "3"
+              ],
+              "visible_when": "Resources to create = VPC and more",
+              "provenance": "reference"
+            },
+            {
+              "label": "Number of public subnets",
+              "type": "radio",
+              "default": "2",
+              "options": [
+                "0",
+                "2"
+              ],
+              "visible_when": "Resources to create = VPC and more",
+              "provenance": "reference"
+            },
+            {
+              "label": "Number of private subnets",
+              "type": "radio",
+              "default": "2",
+              "options": [
+                "0",
+                "2",
+                "4"
+              ],
+              "visible_when": "Resources to create = VPC and more",
+              "provenance": "reference"
+            },
+            {
+              "label": "NAT gateways ($)",
+              "type": "radio",
+              "default": "None",
+              "visible_when": "Resources to create = VPC and more",
+              "provenance": "reference",
+              "confidence": "low"
+            },
+            {
+              "label": "VPC endpoints",
+              "type": "radio",
+              "default": "S3 Gateway",
+              "options": [
+                "None",
+                "S3 Gateway"
+              ],
+              "visible_when": "Resources to create = VPC and more",
+              "provenance": "reference"
+            },
+            {
+              "label": "DNS options",
+              "type": "checkbox",
+              "options": [
+                "Enable DNS hostnames",
+                "Enable DNS resolution"
+              ],
+              "visible_when": "Resources to create = VPC and more",
+              "provenance": "reference"
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "actions": [
+                "Add new tag"
+              ],
+              "help": "You can add 50 more tags."
+            }
+          ],
+          "provenance": "reference"
+        }
+      ],
+      "submit": "Create VPC"
+    },
+    {
+      "id": "subnets",
+      "kind": "list",
+      "title": "Subnets",
+      "route": "/vpcconsole/home#subnets:",
+      "breadcrumbs": [
+        "VPC",
+        "Subnets"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Create subnet"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Subnet ID",
+          "State",
+          "VPC",
+          "Block Public Access",
+          "IPv4 CIDR",
+          "IPv6 CIDR",
+          "IPv6 CIDR association ID",
+          "Available IPv4 addresses",
+          "Availability Zone",
+          "Availability Zone ID",
+          "Network border group",
+          "Route table",
+          "Network ACL",
+          "Default subnet",
+          "Auto-assign public IPv4 address",
+          "Auto-assign IPv6 address",
+          "Owner ID"
+        ],
+        "resource_label": "Subnets",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Create subnet"
+        ],
+        "actions": [
+          "Edit subnet settings",
+          "Edit IPv6 CIDRs",
+          "Edit network ACL association",
+          "Edit route table association",
+          "Edit CIDR reservations",
+          "Share subnet",
+          "Create flow log",
+          "Manage tags",
+          "Delete subnet"
+        ],
+        "filter_placeholder": "Search",
+        "empty_state": "No subnets found",
+        "pagination": true,
+        "preferences": true
+      },
+      "sections": [
+        {
+          "title": "Select a subnet"
+        }
+      ]
+    },
+    {
+      "id": "subnet-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/vpcconsole/home#SubnetDetails:subnetId={resource-name}",
+      "breadcrumbs": [
+        "VPC",
+        "Subnets",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Actions"
+      ],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "Subnet ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Subnet ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "State",
+              "type": "readonly"
+            },
+            {
+              "label": "Block Public Access",
+              "type": "readonly"
+            },
+            {
+              "label": "IPv4 CIDR",
+              "type": "readonly"
+            },
+            {
+              "label": "Available IPv4 addresses",
+              "type": "readonly"
+            },
+            {
+              "label": "IPv6 CIDR",
+              "type": "readonly"
+            },
+            {
+              "label": "Availability Zone",
+              "type": "readonly"
+            },
+            {
+              "label": "Availability Zone ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Network border group",
+              "type": "readonly"
+            },
+            {
+              "label": "VPC",
+              "type": "readonly"
+            },
+            {
+              "label": "Route table",
+              "type": "readonly"
+            },
+            {
+              "label": "Network ACL",
+              "type": "readonly"
+            },
+            {
+              "label": "Default subnet",
+              "type": "readonly"
+            },
+            {
+              "label": "Auto-assign public IPv4 address",
+              "type": "readonly"
+            },
+            {
+              "label": "Auto-assign IPv6 address",
+              "type": "readonly"
+            },
+            {
+              "label": "Hostname type",
+              "type": "readonly"
+            },
+            {
+              "label": "Owner",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Flow logs",
+        "Route table",
+        "Network ACL",
+        "CIDR reservations",
+        "Sharing",
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Route table",
+          "sections": [
+            {
+              "title": "Route table",
+              "table": {
+                "columns": [
+                  "Destination",
+                  "Target"
+                ],
+                "header_actions": [
+                  "Edit route table association"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Network ACL",
+          "sections": [
+            {
+              "title": "Network ACL",
+              "table": {
+                "columns": [
+                  "Rule number",
+                  "Type",
+                  "Protocol",
+                  "Port range",
+                  "Source",
+                  "Allow/Deny"
+                ],
+                "header_actions": [
+                  "Edit network ACL association"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ],
+                "header_actions": [
+                  "Manage tags"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-subnet",
+      "kind": "create",
+      "title": "Create subnet",
+      "route": "/vpcconsole/home#CreateSubnet:",
+      "breadcrumbs": [
+        "VPC",
+        "Subnets",
+        "Create subnet"
+      ],
+      "captures": [
+        "C-vpcconsole/02-createsubnet/step-1",
+        "C-vpcconsole/02-createsubnet/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Subnet settings render only after a VPC is selected ('Select a VPC first to create new subnets.').",
+      "sections": [
+        {
+          "title": "VPC",
+          "fields": [
+            {
+              "label": "VPC ID",
+              "type": "select",
+              "required": true,
+              "placeholder": "Select a VPC",
+              "help": "Create subnets in this VPC."
+            }
+          ]
+        },
+        {
+          "title": "Subnet settings",
+          "fields": [
+            {
+              "label": "Subnet name",
+              "type": "text",
+              "placeholder": "my-subnet-01",
+              "visible_when": "VPC ID selected",
+              "provenance": "reference"
+            },
+            {
+              "label": "Availability Zone",
+              "type": "select",
+              "default": "No preference",
+              "visible_when": "VPC ID selected",
+              "provenance": "reference"
+            },
+            {
+              "label": "IPv4 VPC CIDR block",
+              "type": "select",
+              "visible_when": "VPC ID selected",
+              "provenance": "reference"
+            },
+            {
+              "label": "IPv4 subnet CIDR block",
+              "type": "text",
+              "required": true,
+              "placeholder": "10.0.0.0/24",
+              "visible_when": "VPC ID selected",
+              "provenance": "reference"
+            },
+            {
+              "label": "Tags - optional",
+              "type": "tags",
+              "actions": [
+                "Add new tag"
+              ],
+              "visible_when": "VPC ID selected",
+              "provenance": "reference"
+            },
+            {
+              "label": "Add new subnet",
+              "type": "button"
+            }
+          ]
+        }
+      ],
+      "submit": "Create subnet"
+    },
+    {
+      "id": "route-tables",
+      "kind": "list",
+      "title": "Route tables",
+      "route": "/vpcconsole/home#RouteTables:",
+      "breadcrumbs": [
+        "VPC",
+        "Route tables"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Create route table"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Route table ID",
+          "Explicit subnet associations",
+          "Edge associations",
+          "Main",
+          "VPC",
+          "Owner ID"
+        ],
+        "resource_label": "Route tables",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Create route table"
+        ],
+        "actions": [
+          "Set main route table",
+          "Edit subnet associations",
+          "Edit edge associations",
+          "Edit route propagation",
+          "Edit routes",
+          "Manage tags",
+          "Delete route table"
+        ],
+        "filter_placeholder": "Search",
+        "empty_state": "No route tables found",
+        "pagination": true,
+        "preferences": true
+      },
+      "sections": [
+        {
+          "title": "Select a route table"
+        }
+      ]
+    },
+    {
+      "id": "route-table-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/vpcconsole/home#RouteTableDetails:RouteTableId={resource-name}",
+      "breadcrumbs": [
+        "VPC",
+        "Route tables",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Actions"
+      ],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "Route table ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Main",
+              "type": "readonly"
+            },
+            {
+              "label": "Explicit subnet associations",
+              "type": "readonly"
+            },
+            {
+              "label": "Edge associations",
+              "type": "readonly"
+            },
+            {
+              "label": "VPC",
+              "type": "readonly"
+            },
+            {
+              "label": "Owner ID",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Routes",
+        "Subnet associations",
+        "Edge associations",
+        "Route propagation",
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Routes",
+          "sections": [
+            {
+              "title": "Routes",
+              "table": {
+                "columns": [
+                  "Destination",
+                  "Target",
+                  "Status",
+                  "Propagated",
+                  "Route Origin"
+                ],
+                "counter": true,
+                "header_actions": [
+                  "Both",
+                  "Edit routes"
+                ],
+                "filter_placeholder": "Filter routes"
+              }
+            }
+          ]
+        },
+        {
+          "label": "Subnet associations",
+          "sections": [
+            {
+              "title": "Explicit subnet associations",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Subnet ID",
+                  "IPv4 CIDR",
+                  "IPv6 CIDR"
+                ],
+                "header_actions": [
+                  "Edit subnet associations"
+                ]
+              }
+            },
+            {
+              "title": "Subnets without explicit associations",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Subnet ID",
+                  "IPv4 CIDR",
+                  "IPv6 CIDR"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Edge associations",
+          "sections": [
+            {
+              "title": "Edge associations",
+              "table": {
+                "columns": [
+                  "ID",
+                  "Name",
+                  "Type"
+                ],
+                "header_actions": [
+                  "Edit edge associations"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Route propagation",
+          "sections": [
+            {
+              "title": "Route propagation",
+              "table": {
+                "columns": [
+                  "Virtual private gateway",
+                  "Propagation"
+                ],
+                "header_actions": [
+                  "Edit route propagation"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ],
+                "header_actions": [
+                  "Manage tags"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edit-routes",
+      "kind": "settings",
+      "title": "Edit routes",
+      "route": "/vpcconsole/home#EditRoutes:routeTableId={resource-name}",
+      "breadcrumbs": [
+        "VPC",
+        "Route tables",
+        "{resource-name}",
+        "Edit routes"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Edit routes",
+          "fields": [
+            {
+              "label": "Routes",
+              "type": "table",
+              "columns": [
+                "Destination",
+                "Target",
+                "Status",
+                "Propagated",
+                "Route Origin"
+              ],
+              "actions": [
+                "Add route",
+                "Remove"
+              ],
+              "help": "Target types: Internet Gateway, NAT Gateway, Instance, Network Interface, local..."
+            }
+          ]
+        }
+      ],
+      "submit": "Save changes"
+    },
+    {
+      "id": "create-route-table",
+      "kind": "create",
+      "title": "Create route table",
+      "route": "/vpcconsole/home#CreateRouteTable:",
+      "breadcrumbs": [
+        "VPC",
+        "Route tables",
+        "Create route table"
+      ],
+      "captures": [
+        "C-vpcconsole/03-createroutetable/step-1",
+        "C-vpcconsole/03-createroutetable/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Route table settings",
+          "fields": [
+            {
+              "label": "Name - optional",
+              "type": "text",
+              "placeholder": "my-route-table-01",
+              "help": "Creates a tag with a key of 'Name' and a value that you specify."
+            },
+            {
+              "label": "VPC",
+              "type": "select",
+              "required": true,
+              "placeholder": "Select a VPC",
+              "help": "The VPC to use for this route table."
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "actions": [
+                "Add new tag"
+              ],
+              "help": "You can add 50 more tags."
+            }
+          ],
+          "provenance": "capture"
+        }
+      ],
+      "submit": "Create route table"
+    },
+    {
+      "id": "internet-gateways",
+      "kind": "list",
+      "title": "Internet gateways",
+      "route": "/vpcconsole/home#igws:",
+      "breadcrumbs": [
+        "VPC",
+        "Internet gateways"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Create internet gateway"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Internet gateway ID",
+          "State",
+          "VPC ID",
+          "Owner"
+        ],
+        "resource_label": "Internet gateways",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Create internet gateway"
+        ],
+        "actions": [
+          "View details",
+          "Attach to VPC",
+          "Detach from VPC",
+          "Manage tags",
+          "Delete internet gateway"
+        ],
+        "filter_placeholder": "Search",
+        "empty_state": "No internet gateways found",
+        "pagination": true,
+        "preferences": true
+      }
+    },
+    {
+      "id": "internet-gateway-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/vpcconsole/home#InternetGateway:internetGatewayId={resource-name}",
+      "breadcrumbs": [
+        "VPC",
+        "Internet gateways",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Actions"
+      ],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "Internet gateway ID",
+              "type": "readonly"
+            },
+            {
+              "label": "State",
+              "type": "readonly"
+            },
+            {
+              "label": "VPC ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Owner",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ],
+                "header_actions": [
+                  "Manage tags"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-internet-gateway",
+      "kind": "create",
+      "title": "Create internet gateway",
+      "route": "/vpcconsole/home#CreateInternetGateway:",
+      "breadcrumbs": [
+        "VPC",
+        "Internet gateways",
+        "Create internet gateway"
+      ],
+      "captures": [
+        "C-vpcconsole/04-createinternetgateway/step-1",
+        "C-vpcconsole/04-createinternetgateway/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "After creation the console offers 'Attach to a VPC' in a success banner.",
+      "sections": [
+        {
+          "title": "Internet gateway settings",
+          "fields": [
+            {
+              "label": "Name tag",
+              "type": "text",
+              "placeholder": "my-internet-gateway",
+              "help": "Creates a tag with a key of 'Name' and a value that you specify."
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "actions": [
+                "Add new tag"
+              ],
+              "help": "You can add 50 more tags."
+            }
+          ],
+          "provenance": "capture"
+        }
+      ],
+      "submit": "Create internet gateway"
+    },
+    {
+      "id": "attach-internet-gateway",
+      "kind": "settings",
+      "title": "Attach to VPC",
+      "route": "/vpcconsole/home#AttachInternetGateway:internetGatewayId={resource-name}",
+      "breadcrumbs": [
+        "VPC",
+        "Internet gateways",
+        "Attach to VPC ({resource-name})"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "VPC",
+          "fields": [
+            {
+              "label": "Available VPCs",
+              "type": "select",
+              "required": true,
+              "placeholder": "Select a VPC"
+            }
+          ]
+        }
+      ],
+      "submit": "Attach internet gateway"
+    },
+    {
+      "id": "nat-gateways",
+      "kind": "list",
+      "title": "NAT gateways",
+      "route": "/vpcconsole/home#NatGateways:",
+      "breadcrumbs": [
+        "VPC",
+        "NAT gateways"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Create NAT gateway"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "NAT gateway ID",
+          "Availability mode",
+          "Connectivity type",
+          "State",
+          "State message",
+          "Primary public IPv4 address",
+          "Primary private IPv4 address",
+          "Primary network interface ID",
+          "VPC",
+          "Subnet",
+          "Created",
+          "Deleted"
+        ],
+        "resource_label": "NAT gateways",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Create NAT gateway"
+        ],
+        "actions": [
+          "Edit secondary IP address associations",
+          "Manage tags",
+          "Delete NAT gateway"
+        ],
+        "filter_placeholder": "Search",
+        "empty_state": "No NAT gateways found",
+        "pagination": true,
+        "preferences": true
+      }
+    },
+    {
+      "id": "nat-gateway-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/vpcconsole/home#NatGatewayDetails:natGatewayId={resource-name}",
+      "breadcrumbs": [
+        "VPC",
+        "NAT gateways",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Actions"
+      ],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "NAT gateway ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Connectivity type",
+              "type": "readonly"
+            },
+            {
+              "label": "State",
+              "type": "readonly"
+            },
+            {
+              "label": "State message",
+              "type": "readonly"
+            },
+            {
+              "label": "NAT gateway ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "Primary public IPv4 address",
+              "type": "readonly"
+            },
+            {
+              "label": "Primary private IPv4 address",
+              "type": "readonly"
+            },
+            {
+              "label": "Primary network interface ID",
+              "type": "readonly"
+            },
+            {
+              "label": "VPC",
+              "type": "readonly"
+            },
+            {
+              "label": "Subnet",
+              "type": "readonly"
+            },
+            {
+              "label": "Created",
+              "type": "readonly"
+            },
+            {
+              "label": "Deleted",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Secondary IPv4 addresses",
+        "Monitoring",
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Secondary IPv4 addresses",
+          "sections": [
+            {
+              "title": "Secondary IPv4 addresses",
+              "table": {
+                "columns": [
+                  "Private IPv4 address",
+                  "Public IPv4 address",
+                  "Allocation ID",
+                  "Association ID",
+                  "Status"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ],
+                "header_actions": [
+                  "Manage tags"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-nat-gateway",
+      "kind": "create",
+      "title": "Create NAT gateway",
+      "route": "/vpcconsole/home#CreateNatGateway:",
+      "breadcrumbs": [
+        "VPC",
+        "NAT gateways",
+        "Create NAT gateway"
+      ],
+      "captures": [
+        "C-vpcconsole/05-createnatgateway/step-1",
+        "C-vpcconsole/05-createnatgateway/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "NAT gateway settings",
+          "fields": [
+            {
+              "label": "Name - optional",
+              "type": "text",
+              "placeholder": "my-nat-gateway-01",
+              "constraints": "The name can be up to 256 characters long."
+            },
+            {
+              "label": "Availability mode",
+              "type": "radio",
+              "default": "Regional - new",
+              "options": [
+                "Regional - new",
+                "Zonal"
+              ],
+              "help": "Choose whether to deploy across all zones in the region or restrict to a single availability zone."
+            },
+            {
+              "label": "VPC",
+              "type": "select",
+              "required": true,
+              "placeholder": "Select a VPC",
+              "help": "Select a VPC in which to create the regional NAT gateway.",
+              "visible_when": "Availability mode = Regional"
+            },
+            {
+              "label": "Subnet",
+              "type": "select",
+              "required": true,
+              "visible_when": "Availability mode = Zonal",
+              "provenance": "reference"
+            },
+            {
+              "label": "Connectivity type",
+              "type": "radio",
+              "default": "Public",
+              "options": [
+                "Public",
+                "Private"
+              ]
+            },
+            {
+              "label": "Method of Elastic IP (EIP) allocation",
+              "type": "radio",
+              "default": "Automatic",
+              "options": [
+                "Automatic",
+                "Manual"
+              ]
+            },
+            {
+              "label": "Elastic IP allocation ID",
+              "type": "select",
+              "actions": [
+                "Allocate Elastic IP"
+              ],
+              "visible_when": "Zonal + Public, or EIP allocation = Manual",
+              "provenance": "reference"
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "actions": [
+                "Add new tag"
+              ],
+              "help": "You can add 50 more tags."
+            }
+          ],
+          "provenance": "capture"
+        }
+      ],
+      "submit": "Create NAT gateway"
+    },
+    {
+      "id": "network-acls",
+      "kind": "list",
+      "title": "Network ACLs",
+      "route": "/vpcconsole/home#acls:",
+      "breadcrumbs": [
+        "VPC",
+        "Network ACLs"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Create network ACL"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Network ACL ID",
+          "Associated with",
+          "Default",
+          "VPC ID",
+          "Inbound rules count",
+          "Outbound rules count",
+          "Owner"
+        ],
+        "resource_label": "Network ACLs",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Create network ACL"
+        ],
+        "actions": [
+          "Edit inbound rules",
+          "Edit outbound rules",
+          "Edit subnet associations",
+          "Manage tags",
+          "Delete network ACLs"
+        ],
+        "filter_placeholder": "Search",
+        "pagination": true,
+        "preferences": true
+      }
+    },
+    {
+      "id": "security-groups",
+      "kind": "list",
+      "title": "Security Groups",
+      "route": "/vpcconsole/home#SecurityGroups:",
+      "breadcrumbs": [
+        "VPC",
+        "Security Groups"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Same component as EC2 > Security Groups (captured there: A-ec2/020-L2-security-groups).",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Export security groups to CSV",
+        "Create security group"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Security group ID",
+          "Security group name",
+          "VPC ID",
+          "Description",
+          "Owner",
+          "Inbound rules count",
+          "Outbound rules count"
+        ],
+        "resource_label": "Security Groups",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Export security groups to CSV",
+          "Create security group"
+        ],
+        "filter_placeholder": "Find security groups by attribute or tag",
+        "pagination": true,
+        "preferences": true
+      }
+    },
+    {
+      "id": "security-group-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/vpcconsole/home#SecurityGroup:groupId={resource-name}",
+      "breadcrumbs": [
+        "VPC",
+        "Security Groups",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Same component as EC2 security group detail (captured there: A-ec2/061-L3-*).",
+      "header_actions": [
+        "Actions"
+      ],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "Security group name",
+              "type": "readonly"
+            },
+            {
+              "label": "Security group ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Description",
+              "type": "readonly"
+            },
+            {
+              "label": "VPC ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Owner",
+              "type": "readonly"
+            },
+            {
+              "label": "Inbound rules count",
+              "type": "readonly"
+            },
+            {
+              "label": "Outbound rules count",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Inbound rules",
+        "Outbound rules",
+        "Sharing",
+        "VPC associations",
+        "Related resources - new",
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Inbound rules",
+          "sections": [
+            {
+              "title": "Inbound rules",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Security group rule ID",
+                  "IP version",
+                  "Type",
+                  "Protocol",
+                  "Port range",
+                  "Source",
+                  "Description"
+                ],
+                "counter": true,
+                "header_actions": [
+                  "Refresh",
+                  "Manage tags",
+                  "Edit inbound rules"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Outbound rules",
+          "sections": [
+            {
+              "title": "Outbound rules",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Security group rule ID",
+                  "IP version",
+                  "Type",
+                  "Protocol",
+                  "Port range",
+                  "Destination",
+                  "Description"
+                ],
+                "counter": true,
+                "header_actions": [
+                  "Refresh",
+                  "Manage tags",
+                  "Edit outbound rules"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ],
+                "header_actions": [
+                  "Manage tags"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-security-group",
+      "kind": "create",
+      "title": "Create security group",
+      "route": "/vpcconsole/home#CreateSecurityGroup:",
+      "breadcrumbs": [
+        "VPC",
+        "Security Groups",
+        "Create security group"
+      ],
+      "captures": [
+        "C-vpcconsole/06-createsecuritygroup/step-1",
+        "C-vpcconsole/06-createsecuritygroup/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Basic details",
+          "fields": [
+            {
+              "label": "Security group name",
+              "type": "text",
+              "required": true,
+              "placeholder": "MyWebServerGroup",
+              "help": "Name cannot be edited after creation."
+            },
+            {
+              "label": "Description",
+              "type": "text",
+              "required": true,
+              "placeholder": "Allows SSH access to developers"
+            },
+            {
+              "label": "VPC",
+              "type": "select",
+              "required": true,
+              "help": "Defaults to the default VPC"
+            }
+          ]
+        },
+        {
+          "title": "Inbound rules",
+          "fields": [
+            {
+              "label": "Inbound rules",
+              "type": "table",
+              "columns": [
+                "Type",
+                "Protocol",
+                "Port range",
+                "Source type",
+                "Source",
+                "Description - optional"
+              ],
+              "actions": [
+                "Add rule",
+                "Delete"
+              ],
+              "help": "This security group has no inbound rules."
+            }
+          ]
+        },
+        {
+          "title": "Outbound rules",
+          "fields": [
+            {
+              "label": "Outbound rules",
+              "type": "table",
+              "columns": [
+                "Type",
+                "Protocol",
+                "Port range",
+                "Destination type",
+                "Destination",
+                "Description - optional"
+              ],
+              "actions": [
+                "Add rule",
+                "Delete"
+              ],
+              "default": "All traffic / All / All / Custom / 0.0.0.0/0"
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "actions": [
+                "Add new tag"
+              ],
+              "help": "You can add 50 more tags."
+            }
+          ],
+          "provenance": "reference"
+        }
+      ],
+      "submit": "Create security group"
+    },
+    {
+      "id": "elastic-ips",
+      "kind": "list",
+      "title": "Elastic IP addresses",
+      "route": "/vpcconsole/home#Addresses:",
+      "breadcrumbs": [
+        "VPC",
+        "Elastic IP addresses"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Same component as EC2 > Elastic IPs (captured there: A-ec2/021-L2-elastic-ips).",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Allocate Elastic IP address"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Allocated IPv4 address",
+          "Type",
+          "Allocation ID",
+          "Reverse DNS record"
+        ],
+        "resource_label": "Elastic IP addresses",
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Allocate Elastic IP address"
+        ],
+        "filter_placeholder": "Find elastic IP addresses by attribute or tag",
+        "empty_state": "No Elastic IP addresses found in this Region",
+        "pagination": true,
+        "preferences": true
+      }
+    },
+    {
+      "id": "egress-only-internet-gateways",
+      "kind": "list",
+      "title": "Egress-only internet gateways",
+      "route": "/vpcconsole/home#EgressOnlyInternetGateways:",
+      "breadcrumbs": [
+        "VPC",
+        "Egress-only internet gateways"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "dhcp-option-sets",
+      "kind": "list",
+      "title": "DHCP option sets",
+      "route": "/vpcconsole/home#dhcpOptions:",
+      "breadcrumbs": [
+        "VPC",
+        "DHCP option sets"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "managed-prefix-lists",
+      "kind": "list",
+      "title": "Managed prefix lists",
+      "route": "/vpcconsole/home#ManagedPrefixLists:",
+      "breadcrumbs": [
+        "VPC",
+        "Managed prefix lists"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "peering-connections",
+      "kind": "list",
+      "title": "Peering connections",
+      "route": "/vpcconsole/home#PeeringConnections:",
+      "breadcrumbs": [
+        "VPC",
+        "Peering connections"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "route-servers",
+      "kind": "list",
+      "title": "Route servers",
+      "route": "/vpcconsole/home#RouteServers:",
+      "breadcrumbs": [
+        "VPC",
+        "Route servers"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "privatelink-getting-started",
+      "kind": "list",
+      "title": "Getting started",
+      "route": "/vpcconsole/home#PrivateLinkGettingStarted:",
+      "breadcrumbs": [
+        "VPC",
+        "Getting started"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "endpoints",
+      "kind": "list",
+      "title": "Endpoints",
+      "route": "/vpcconsole/home#Endpoints:",
+      "breadcrumbs": [
+        "VPC",
+        "Endpoints"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "endpoint-services",
+      "kind": "list",
+      "title": "Endpoint services",
+      "route": "/vpcconsole/home#EndpointServices:",
+      "breadcrumbs": [
+        "VPC",
+        "Endpoint services"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "service-networks",
+      "kind": "list",
+      "title": "Service networks",
+      "route": "/vpcconsole/home#ServiceNetworks:",
+      "breadcrumbs": [
+        "VPC",
+        "Service networks"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "lattice-services",
+      "kind": "list",
+      "title": "Lattice services",
+      "route": "/vpcconsole/home#Services:",
+      "breadcrumbs": [
+        "VPC",
+        "Lattice services"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "resource-configurations",
+      "kind": "list",
+      "title": "Resource configurations",
+      "route": "/vpcconsole/home#ResourceConfigs:",
+      "breadcrumbs": [
+        "VPC",
+        "Resource configurations"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "resource-gateways",
+      "kind": "list",
+      "title": "Resource gateways",
+      "route": "/vpcconsole/home#ResourceGateways:",
+      "breadcrumbs": [
+        "VPC",
+        "Resource gateways"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "lattice-target-groups",
+      "kind": "list",
+      "title": "Target groups",
+      "route": "/vpcconsole/home#TargetGroups:",
+      "breadcrumbs": [
+        "VPC",
+        "Target groups"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "domain-verifications",
+      "kind": "list",
+      "title": "Domain verifications",
+      "route": "/vpcconsole/home#DomainVerifications:",
+      "breadcrumbs": [
+        "VPC",
+        "Domain verifications"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "dns-firewall-rule-groups",
+      "kind": "list",
+      "title": "Rule groups",
+      "route": "/vpcconsole/home#DNSFirewallRuleGroups:",
+      "breadcrumbs": [
+        "VPC",
+        "Rule groups"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "dns-firewall-domain-lists",
+      "kind": "list",
+      "title": "Domain lists",
+      "route": "/vpcconsole/home#DNSFirewallDomainLists:",
+      "breadcrumbs": [
+        "VPC",
+        "Domain lists"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "firewalls",
+      "kind": "list",
+      "title": "Firewalls",
+      "route": "/vpcconsole/home#NetworkFirewalls:",
+      "breadcrumbs": [
+        "VPC",
+        "Firewalls"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "firewall-policies",
+      "kind": "list",
+      "title": "Firewall policies",
+      "route": "/vpcconsole/home#NetworkFirewallPolicies:",
+      "breadcrumbs": [
+        "VPC",
+        "Firewall policies"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "network-firewall-rule-groups",
+      "kind": "list",
+      "title": "Network Firewall rule groups",
+      "route": "/vpcconsole/home#NetworkFirewallRuleGroups:",
+      "breadcrumbs": [
+        "VPC",
+        "Network Firewall rule groups"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "tls-inspection-configurations",
+      "kind": "list",
+      "title": "TLS inspection configurations",
+      "route": "/vpcconsole/home#TLSInspectionConfigurations:",
+      "breadcrumbs": [
+        "VPC",
+        "TLS inspection configurations"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "network-firewall-resource-groups",
+      "kind": "list",
+      "title": "Network Firewall resource groups",
+      "route": "/vpcconsole/home#NetworkFirewallResourceGroups:",
+      "breadcrumbs": [
+        "VPC",
+        "Network Firewall resource groups"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "vpc-endpoint-associations",
+      "kind": "list",
+      "title": "VPC endpoint associations",
+      "route": "/vpcconsole/home#VpcEndpointAssociations:",
+      "breadcrumbs": [
+        "VPC",
+        "VPC endpoint associations"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "container-associations",
+      "kind": "list",
+      "title": "Container associations",
+      "route": "/vpcconsole/home#ContainerAssociations:",
+      "breadcrumbs": [
+        "VPC",
+        "Container associations"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "customer-gateways",
+      "kind": "list",
+      "title": "Customer gateways",
+      "route": "/vpcconsole/home#CustomerGateways:",
+      "breadcrumbs": [
+        "VPC",
+        "Customer gateways"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "virtual-private-gateways",
+      "kind": "list",
+      "title": "Virtual private gateways",
+      "route": "/vpcconsole/home#VpnGateways:",
+      "breadcrumbs": [
+        "VPC",
+        "Virtual private gateways"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "vpn-concentrators",
+      "kind": "list",
+      "title": "Site-to-Site VPN Concentrators",
+      "route": "/vpcconsole/home#VpnConcentrators:",
+      "breadcrumbs": [
+        "VPC",
+        "Site-to-Site VPN Concentrators"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "vpn-connections",
+      "kind": "list",
+      "title": "Site-to-Site VPN connections",
+      "route": "/vpcconsole/home#VpnConnections:",
+      "breadcrumbs": [
+        "VPC",
+        "Site-to-Site VPN connections"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "client-vpn-endpoints",
+      "kind": "list",
+      "title": "Client VPN endpoints",
+      "route": "/vpcconsole/home#ClientVPNEndpoints:",
+      "breadcrumbs": [
+        "VPC",
+        "Client VPN endpoints"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "verified-access-instances",
+      "kind": "list",
+      "title": "Verified Access instances",
+      "route": "/vpcconsole/home#VerifiedAccessInstances:",
+      "breadcrumbs": [
+        "VPC",
+        "Verified Access instances"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "verified-access-trust-providers",
+      "kind": "list",
+      "title": "Verified Access trust providers",
+      "route": "/vpcconsole/home#VerifiedAccessTrustProviders:",
+      "breadcrumbs": [
+        "VPC",
+        "Verified Access trust providers"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "verified-access-groups",
+      "kind": "list",
+      "title": "Verified Access groups",
+      "route": "/vpcconsole/home#VerifiedAccessGroups:",
+      "breadcrumbs": [
+        "VPC",
+        "Verified Access groups"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "verified-access-endpoints",
+      "kind": "list",
+      "title": "Verified Access endpoints",
+      "route": "/vpcconsole/home#VerifiedAccessEndpoints:",
+      "breadcrumbs": [
+        "VPC",
+        "Verified Access endpoints"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "transit-gateways",
+      "kind": "list",
+      "title": "Transit gateways",
+      "route": "/vpcconsole/home#TransitGateways:",
+      "breadcrumbs": [
+        "VPC",
+        "Transit gateways"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "transit-gateway-attachments",
+      "kind": "list",
+      "title": "Transit gateway attachments",
+      "route": "/vpcconsole/home#TransitGatewayAttachments:",
+      "breadcrumbs": [
+        "VPC",
+        "Transit gateway attachments"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "transit-gateway-policy-tables",
+      "kind": "list",
+      "title": "Transit gateway policy tables",
+      "route": "/vpcconsole/home#TransitGatewayPolicyTables:",
+      "breadcrumbs": [
+        "VPC",
+        "Transit gateway policy tables"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "transit-gateway-route-tables",
+      "kind": "list",
+      "title": "Transit gateway route tables",
+      "route": "/vpcconsole/home#TransitGatewayRouteTables:",
+      "breadcrumbs": [
+        "VPC",
+        "Transit gateway route tables"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "transit-gateway-multicast",
+      "kind": "list",
+      "title": "Transit gateway multicast",
+      "route": "/vpcconsole/home#TransitGatewayMulticastDomains:",
+      "breadcrumbs": [
+        "VPC",
+        "Transit gateway multicast"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "metering-policies",
+      "kind": "list",
+      "title": "Metering policies",
+      "route": "/vpcconsole/home#MeteringPolicies:",
+      "breadcrumbs": [
+        "VPC",
+        "Metering policies"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "mirror-sessions",
+      "kind": "list",
+      "title": "Mirror sessions",
+      "route": "/vpcconsole/home#TrafficMirrorSessions:",
+      "breadcrumbs": [
+        "VPC",
+        "Mirror sessions"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "mirror-targets",
+      "kind": "list",
+      "title": "Mirror targets",
+      "route": "/vpcconsole/home#TrafficMirrorTargets:",
+      "breadcrumbs": [
+        "VPC",
+        "Mirror targets"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "mirror-filters",
+      "kind": "list",
+      "title": "Mirror filters",
+      "route": "/vpcconsole/home#TrafficMirrorFilters:",
+      "breadcrumbs": [
+        "VPC",
+        "Mirror filters"
+      ],
+      "provenance": "reference",
+      "notes": "Outside Vyomi's VPC simulation scope; console declares the page only.",
+      "confidence": "low"
+    },
+    {
+      "id": "settings",
+      "kind": "settings",
+      "title": "Settings",
+      "route": "/vpcconsole/home#Settings:",
+      "breadcrumbs": [
+        "VPC",
+        "Settings"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "notes": "'New' badge in nav. Covers encryption control, Block Public Access, Zones, Console Experiments."
     }
   ],
-  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+  "gaps_note": "Crawl reached only the VPC dashboard (/vpc/home, full side nav) and six create forms (/vpcconsole/: VPC, subnet, route table, internet gateway, NAT gateway, security group; first viewport only). All list and detail pages (Your VPCs, Subnets, Route tables, Internet/NAT gateways, Network ACLs, Security groups) are 'reference' — recrawl list pages next. 'VPC and more' create options and NAT gateway option labels are unverified. Out-of-scope nav pages are declared by title; their routes are best-effort (confidence low)."
 }

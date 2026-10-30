@@ -3,64 +3,325 @@
   "cloud": "aws",
   "service": "ec2",
   "console_path": "/ec2/",
-  "status": "draft",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
   "nav": [
-    {
-      "label": "EC2",
-      "page_id": "ec2"
-    },
     {
       "label": "Dashboard",
       "page_id": "dashboard"
     },
     {
       "label": "AWS Global View",
+      "external": true
+    },
+    {
+      "label": "Events",
+      "page_id": "events"
+    },
+    {
+      "label": "Instances",
+      "expandable": true,
       "children": [
-        {
-          "label": "Events",
-          "page_id": "events"
-        },
         {
           "label": "Instances",
           "page_id": "instances"
+        },
+        {
+          "label": "Instance Types",
+          "page_id": "instance-types"
+        },
+        {
+          "label": "Launch Templates",
+          "page_id": "launch-templates"
+        },
+        {
+          "label": "Spot Requests",
+          "page_id": "spot-requests"
+        },
+        {
+          "label": "Savings Plans",
+          "page_id": "savings-plans"
+        },
+        {
+          "label": "Reserved Instances",
+          "page_id": "reserved-instances"
+        },
+        {
+          "label": "Dedicated Hosts",
+          "page_id": "dedicated-hosts"
+        },
+        {
+          "label": "Capacity Reservations",
+          "page_id": "capacity-reservations"
+        },
+        {
+          "label": "UltraServers",
+          "page_id": "ultraservers"
+        },
+        {
+          "label": "Capacity Manager",
+          "page_id": "capacity-manager"
         }
       ]
+    },
+    {
+      "label": "Images",
+      "expandable": true,
+      "children": [
+        {
+          "label": "AMIs",
+          "page_id": "amis"
+        },
+        {
+          "label": "AMI Catalog",
+          "page_id": "ami-catalog"
+        }
+      ]
+    },
+    {
+      "label": "Elastic Block Store",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Volumes",
+          "page_id": "volumes"
+        },
+        {
+          "label": "Snapshots",
+          "page_id": "snapshots"
+        },
+        {
+          "label": "Lifecycle Manager",
+          "page_id": "lifecycle-manager"
+        }
+      ]
+    },
+    {
+      "label": "Network & Security",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Security Groups",
+          "page_id": "security-groups"
+        },
+        {
+          "label": "Elastic IPs",
+          "page_id": "elastic-ips"
+        },
+        {
+          "label": "Placement Groups",
+          "page_id": "placement-groups"
+        },
+        {
+          "label": "Key Pairs",
+          "page_id": "key-pairs"
+        },
+        {
+          "label": "Network Interfaces",
+          "page_id": "network-interfaces"
+        }
+      ]
+    },
+    {
+      "label": "Load Balancing",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Load Balancers",
+          "page_id": "load-balancers"
+        },
+        {
+          "label": "Target Groups",
+          "page_id": "target-groups"
+        },
+        {
+          "label": "Trust Stores",
+          "page_id": "trust-stores"
+        }
+      ]
+    },
+    {
+      "label": "Auto Scaling",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Auto Scaling Groups",
+          "page_id": "auto-scaling-groups"
+        }
+      ]
+    },
+    {
+      "label": "Settings",
+      "page_id": "settings"
     }
   ],
   "pages": [
-    {
-      "id": "landing",
-      "kind": "other",
-      "title": "Dashboard",
-      "route": "/ec2/home",
-      "captures": [
-        "A-ec2/001-L1-landing"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "ec2",
-      "kind": "other",
-      "title": "Home",
-      "route": "/ec2/home#Overview:",
-      "captures": [
-        "A-ec2/002-L2-ec2"
-      ],
-      "provenance": "capture"
-    },
     {
       "id": "dashboard",
       "kind": "dashboard",
       "title": "Dashboard",
       "route": "/ec2/home#Home:",
-      "captures": [
-        "A-ec2/003-L2-dashboard"
+      "breadcrumbs": [
+        "EC2",
+        "Dashboard"
       ],
-      "provenance": "capture"
+      "captures": [
+        "A-ec2/003-L2-dashboard",
+        "A-ec2/001-L1-landing",
+        "A-ec2/002-L2-ec2"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Service landing (/ec2/home) renders the dashboard. Resource tiles link to the list pages.",
+      "sections": [
+        {
+          "title": "Resources",
+          "fields": [
+            {
+              "label": "Instances (running)",
+              "type": "readonly"
+            },
+            {
+              "label": "Auto Scaling Groups",
+              "type": "readonly"
+            },
+            {
+              "label": "Capacity Reservations",
+              "type": "readonly"
+            },
+            {
+              "label": "Dedicated Hosts",
+              "type": "readonly"
+            },
+            {
+              "label": "Elastic IPs",
+              "type": "readonly"
+            },
+            {
+              "label": "Instances",
+              "type": "readonly"
+            },
+            {
+              "label": "Key pairs",
+              "type": "readonly"
+            },
+            {
+              "label": "Load balancers",
+              "type": "readonly"
+            },
+            {
+              "label": "Placement groups",
+              "type": "readonly"
+            },
+            {
+              "label": "Security groups",
+              "type": "readonly"
+            },
+            {
+              "label": "Snapshots",
+              "type": "readonly"
+            },
+            {
+              "label": "Volumes",
+              "type": "readonly"
+            }
+          ],
+          "actions": [
+            "Settings",
+            "Refresh"
+          ]
+        },
+        {
+          "title": "Launch instance",
+          "fields": [
+            {
+              "label": "Launch instance",
+              "type": "button"
+            },
+            {
+              "label": "Migrate a server",
+              "type": "button"
+            }
+          ]
+        },
+        {
+          "title": "Service health",
+          "fields": [
+            {
+              "label": "Region",
+              "type": "readonly"
+            },
+            {
+              "label": "Status",
+              "type": "readonly"
+            }
+          ],
+          "actions": [
+            "AWS Health Dashboard",
+            "Refresh"
+          ]
+        },
+        {
+          "title": "Zones",
+          "table": {
+            "columns": [
+              "Zone name",
+              "Zone ID"
+            ]
+          },
+          "actions": [
+            "Enable additional Zones"
+          ]
+        },
+        {
+          "title": "Instance alarms",
+          "fields": [
+            {
+              "label": "In alarm",
+              "type": "readonly"
+            },
+            {
+              "label": "OK",
+              "type": "readonly"
+            },
+            {
+              "label": "Insufficient data",
+              "type": "readonly"
+            }
+          ],
+          "actions": [
+            "View in CloudWatch"
+          ]
+        },
+        {
+          "title": "EC2 cost",
+          "fields": [
+            {
+              "label": "Date range",
+              "type": "readonly"
+            },
+            {
+              "label": "Region",
+              "type": "readonly"
+            },
+            {
+              "label": "Total cost",
+              "type": "readonly"
+            },
+            {
+              "label": "Regions",
+              "type": "readonly"
+            }
+          ],
+          "actions": [
+            "Analyze your costs in Cost Explorer"
+          ]
+        }
+      ]
     },
     {
       "id": "events",
-      "kind": "other",
+      "kind": "list",
       "title": "Events",
       "route": "/ec2/home#Events:",
       "breadcrumbs": [
@@ -70,11 +331,13 @@
       "captures": [
         "A-ec2/004-L2-events"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "medium",
+      "notes": "Scheduled events list; Vyomi does not simulate scheduled maintenance events."
     },
     {
       "id": "instances",
-      "kind": "other",
+      "kind": "list",
       "title": "Instances",
       "route": "/ec2/home#Instances:",
       "breadcrumbs": [
@@ -82,14 +345,999 @@
         "Instances"
       ],
       "captures": [
-        "A-ec2/005-L2-instances"
+        "A-ec2/005-L2-instances",
+        "A-ec2/033-L3-view-running-instances",
+        "C-ec2/06-createimage/step-1"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Refresh",
+        "Connect",
+        "Instance state",
+        "Actions",
+        "Launch instances"
+      ],
+      "notes": "Columns after 'Public IPv4 DNS' are reference. Instance state menu: Stop/Start/Reboot/Hibernate/Terminate (delete).",
+      "table": {
+        "columns": [
+          "Name",
+          "Instance ID",
+          "Instance state",
+          "Instance type",
+          "Status check",
+          "Availability Zone",
+          "Public IPv4 DNS",
+          "Public IPv4 address",
+          "Elastic IP",
+          "IPv6 IPs",
+          "Monitoring",
+          "Security group name",
+          "Key name",
+          "Launch time",
+          "Platform details"
+        ],
+        "resource_label": "Instances",
+        "counter": false,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Connect",
+          "Instance state",
+          "Actions",
+          "Launch instances"
+        ],
+        "actions": [
+          "Connect",
+          "Manage instance state",
+          "Instance settings",
+          "Networking",
+          "Security",
+          "Image and templates",
+          "Monitor and troubleshoot"
+        ],
+        "filter_placeholder": "Filter Instance by attribute or tag (case-sensitive)",
+        "filters": [
+          "Saved filter sets"
+        ],
+        "empty_state": "No instances",
+        "empty_state_action": "Launch instances",
+        "pagination": true,
+        "preferences": true
+      },
+      "sections": [
+        {
+          "title": "All instances",
+          "fields": [
+            {
+              "label": "Instance alarm states",
+              "type": "readonly"
+            },
+            {
+              "label": "Service health",
+              "type": "readonly"
+            },
+            {
+              "label": "Health events affecting EC2 instances",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "instance-detail",
+      "kind": "detail",
+      "title": "Instance summary for {resource-name}",
+      "route": "/ec2/home#InstanceDetails:instanceId={resource-name}",
+      "breadcrumbs": [
+        "EC2",
+        "Instances",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Not crawled (no instance in the account). Layout from the current console.",
+      "header_actions": [
+        "Refresh",
+        "Connect",
+        "Instance state",
+        "Actions"
+      ],
+      "sections": [
+        {
+          "title": "Instance summary",
+          "fields": [
+            {
+              "label": "Instance ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Public IPv4 address",
+              "type": "readonly"
+            },
+            {
+              "label": "Private IPv4 addresses",
+              "type": "readonly"
+            },
+            {
+              "label": "IPv6 address",
+              "type": "readonly"
+            },
+            {
+              "label": "Instance state",
+              "type": "readonly"
+            },
+            {
+              "label": "Public DNS",
+              "type": "readonly"
+            },
+            {
+              "label": "Hostname type",
+              "type": "readonly"
+            },
+            {
+              "label": "Private IP DNS name (IPv4 only)",
+              "type": "readonly"
+            },
+            {
+              "label": "Instance type",
+              "type": "readonly"
+            },
+            {
+              "label": "Elastic IP addresses",
+              "type": "readonly"
+            },
+            {
+              "label": "Auto-assigned IP address",
+              "type": "readonly"
+            },
+            {
+              "label": "VPC ID",
+              "type": "readonly"
+            },
+            {
+              "label": "IAM Role",
+              "type": "readonly"
+            },
+            {
+              "label": "Subnet ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Instance ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "Managed",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Details",
+        "Status and alarms",
+        "Monitoring",
+        "Security",
+        "Networking",
+        "Storage",
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Details",
+          "sections": [
+            {
+              "title": "Instance details",
+              "fields": [
+                {
+                  "label": "Platform",
+                  "type": "readonly"
+                },
+                {
+                  "label": "AMI ID",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Monitoring",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Platform details",
+                  "type": "readonly"
+                },
+                {
+                  "label": "AMI name",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Termination protection",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Stop protection",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Launch time",
+                  "type": "readonly"
+                },
+                {
+                  "label": "AMI location",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Lifecycle",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Stop-hibernate behavior",
+                  "type": "readonly"
+                },
+                {
+                  "label": "AMI Launch index",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Key pair assigned at launch",
+                  "type": "readonly"
+                },
+                {
+                  "label": "State transition reason",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Credit specification",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Kernel ID",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Usage operation",
+                  "type": "readonly"
+                },
+                {
+                  "label": "RAM disk ID",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Enclaves Support",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Boot mode",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Allowed image",
+                  "type": "readonly"
+                }
+              ],
+              "expandable": true
+            },
+            {
+              "title": "Host and placement group",
+              "fields": [
+                {
+                  "label": "Host ID",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Affinity",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Placement group",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Host resource group name",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Tenancy",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Partition number",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Virtualization type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Number of vCPUs",
+                  "type": "readonly"
+                }
+              ],
+              "expandable": true
+            },
+            {
+              "title": "Capacity reservation",
+              "fields": [
+                {
+                  "label": "Capacity Reservation ID",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Capacity Reservation setting",
+                  "type": "readonly"
+                }
+              ],
+              "expandable": true
+            },
+            {
+              "title": "Instance auto-recovery",
+              "fields": [
+                {
+                  "label": "Auto-recovery behavior",
+                  "type": "readonly"
+                }
+              ],
+              "expandable": true
+            }
+          ]
+        },
+        {
+          "label": "Status and alarms",
+          "sections": [
+            {
+              "title": "Status checks",
+              "fields": [
+                {
+                  "label": "System status checks",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Instance status checks",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Attached EBS status checks",
+                  "type": "readonly"
+                }
+              ],
+              "actions": [
+                "Actions"
+              ]
+            },
+            {
+              "title": "Alarms",
+              "table": {
+                "columns": [
+                  "Name",
+                  "State",
+                  "Last state update",
+                  "Conditions"
+                ],
+                "header_actions": [
+                  "Manage CloudWatch alarms"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Monitoring",
+          "sections": [
+            {
+              "title": "Monitoring",
+              "fields": [
+                {
+                  "label": "CPU utilization (%)",
+                  "type": "other"
+                },
+                {
+                  "label": "Network in (bytes)",
+                  "type": "other"
+                },
+                {
+                  "label": "Network out (bytes)",
+                  "type": "other"
+                },
+                {
+                  "label": "Network packets in (count)",
+                  "type": "other"
+                },
+                {
+                  "label": "Network packets out (count)",
+                  "type": "other"
+                },
+                {
+                  "label": "Status check failed (any) (count)",
+                  "type": "other"
+                },
+                {
+                  "label": "CPU credit usage (count)",
+                  "type": "other"
+                },
+                {
+                  "label": "CPU credit balance (count)",
+                  "type": "other"
+                }
+              ],
+              "actions": [
+                "Manage detailed monitoring",
+                "Add to dashboard"
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Security",
+          "sections": [
+            {
+              "title": "Security details",
+              "fields": [
+                {
+                  "label": "IAM Role",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Owner ID",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Launch time",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Security groups",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Inbound rules",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Security group rule ID",
+                  "Port range",
+                  "Protocol",
+                  "Source",
+                  "Security groups",
+                  "Description"
+                ]
+              }
+            },
+            {
+              "title": "Outbound rules",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Security group rule ID",
+                  "Port range",
+                  "Protocol",
+                  "Destination",
+                  "Security groups",
+                  "Description"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Networking",
+          "sections": [
+            {
+              "title": "Networking details",
+              "fields": [
+                {
+                  "label": "Public IPv4 address",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Private IPv4 addresses",
+                  "type": "readonly"
+                },
+                {
+                  "label": "VPC ID",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Public DNS",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Subnet ID",
+                  "type": "readonly"
+                },
+                {
+                  "label": "IPv6 addresses",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Availability Zone",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Private IP DNS name (IPv4 only)",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Secondary private IPv4 addresses",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Carrier IP addresses (ephemeral)",
+                  "type": "readonly"
+                }
+              ],
+              "expandable": true
+            },
+            {
+              "title": "Network interfaces",
+              "table": {
+                "columns": [
+                  "Interface ID",
+                  "Description",
+                  "IPv4 Prefixes",
+                  "IPv6 Prefixes",
+                  "Public IPv4 address",
+                  "Private IPv4 address",
+                  "Private IPv4 DNS",
+                  "Attachment status"
+                ]
+              },
+              "expandable": true
+            },
+            {
+              "title": "Elastic IP addresses",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Allocated IPv4 address",
+                  "Type",
+                  "Allocation ID"
+                ]
+              },
+              "expandable": true
+            }
+          ]
+        },
+        {
+          "label": "Storage",
+          "sections": [
+            {
+              "title": "Root device details",
+              "fields": [
+                {
+                  "label": "Root device name",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Root device type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "EBS optimization",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Block devices",
+              "table": {
+                "columns": [
+                  "Volume ID",
+                  "Device name",
+                  "Volume size (GiB)",
+                  "Attachment status",
+                  "Attachment time",
+                  "Encrypted",
+                  "KMS key ID",
+                  "Delete on termination"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ],
+                "header_actions": [
+                  "Manage tags"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "launch-instance",
+      "kind": "create",
+      "title": "Launch an instance",
+      "route": "/ec2/home#LaunchInstances:",
+      "breadcrumbs": [
+        "EC2",
+        "Instances",
+        "Launch an instance"
+      ],
+      "captures": [
+        "A-ec2/030-L2-launch-instance",
+        "A-ec2/031-L3-launch-instance"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "notes": "Single scrolling page + right Summary panel; sections from Instance type down are reference.",
+      "sections": [
+        {
+          "title": "Name and tags",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "placeholder": "e.g. My Web Server",
+              "actions": [
+                "Add additional tags"
+              ]
+            }
+          ],
+          "provenance": "capture"
+        },
+        {
+          "title": "Application and OS Images (Amazon Machine Image)",
+          "fields": [
+            {
+              "label": "Search our full catalog including 1000s of application and OS images",
+              "type": "text",
+              "placeholder": "Search our full catalog including 1000s of application and OS images"
+            },
+            {
+              "label": "Quick Start",
+              "type": "radio",
+              "default": "Amazon Linux",
+              "options": [
+                "Amazon Linux",
+                "macOS",
+                "Ubuntu",
+                "Windows",
+                "Red Hat",
+                "SUSE Linux",
+                "Debian"
+              ],
+              "actions": [
+                "Browse more AMIs"
+              ]
+            },
+            {
+              "label": "Amazon Machine Image (AMI)",
+              "type": "select",
+              "required": true,
+              "default": "Amazon Linux 2023 kernel-6.18 AMI",
+              "help": "Free tier eligible"
+            },
+            {
+              "label": "Description",
+              "type": "readonly"
+            },
+            {
+              "label": "Architecture",
+              "type": "select",
+              "default": "64-bit (x86)",
+              "options": [
+                "64-bit (x86)",
+                "64-bit (Arm)"
+              ],
+              "provenance": "reference"
+            },
+            {
+              "label": "AMI ID",
+              "type": "readonly",
+              "provenance": "reference"
+            }
+          ],
+          "expandable": true,
+          "provenance": "capture"
+        },
+        {
+          "title": "Instance type",
+          "fields": [
+            {
+              "label": "Instance type",
+              "type": "select",
+              "required": true,
+              "default": "t3.micro",
+              "actions": [
+                "Compare instance types"
+              ]
+            },
+            {
+              "label": "All generations",
+              "type": "toggle",
+              "default": false
+            }
+          ],
+          "expandable": true,
+          "provenance": "reference"
+        },
+        {
+          "title": "Key pair (login)",
+          "fields": [
+            {
+              "label": "Key pair name",
+              "type": "select",
+              "required": true,
+              "placeholder": "Select",
+              "actions": [
+                "Create new key pair"
+              ],
+              "help": "You can use a key pair to securely connect to your instance."
+            }
+          ],
+          "expandable": true,
+          "provenance": "reference"
+        },
+        {
+          "title": "Network settings",
+          "fields": [
+            {
+              "label": "Network",
+              "type": "readonly",
+              "help": "Default VPC"
+            },
+            {
+              "label": "Subnet",
+              "type": "readonly",
+              "default": "No preference (Default subnet in any availability zone)"
+            },
+            {
+              "label": "Auto-assign public IP",
+              "type": "readonly",
+              "default": "Enable"
+            },
+            {
+              "label": "Firewall (security groups)",
+              "type": "radio",
+              "default": "Create security group",
+              "options": [
+                "Create security group",
+                "Select existing security group"
+              ]
+            },
+            {
+              "label": "Allow SSH traffic from",
+              "type": "checkbox",
+              "default": true,
+              "options": [
+                "Anywhere",
+                "Custom",
+                "My IP"
+              ],
+              "visible_when": "Firewall = Create security group"
+            },
+            {
+              "label": "Allow HTTPS traffic from the internet",
+              "type": "checkbox",
+              "default": false,
+              "visible_when": "Firewall = Create security group"
+            },
+            {
+              "label": "Allow HTTP traffic from the internet",
+              "type": "checkbox",
+              "default": false,
+              "visible_when": "Firewall = Create security group"
+            },
+            {
+              "label": "Common security groups",
+              "type": "select",
+              "visible_when": "Firewall = Select existing security group"
+            }
+          ],
+          "actions": [
+            "Edit"
+          ],
+          "expandable": true,
+          "provenance": "reference"
+        },
+        {
+          "title": "Configure storage",
+          "fields": [
+            {
+              "label": "Root volume",
+              "type": "other",
+              "default": "1x 8 GiB gp3",
+              "help": "Size (GiB), volume type, IOPS, throughput"
+            },
+            {
+              "label": "Add new volume",
+              "type": "button"
+            }
+          ],
+          "actions": [
+            "Advanced"
+          ],
+          "expandable": true,
+          "provenance": "reference"
+        },
+        {
+          "title": "Advanced details",
+          "fields": [
+            {
+              "label": "Purchasing option",
+              "type": "radio",
+              "options": [
+                "None",
+                "Capacity Blocks",
+                "Spot instances"
+              ]
+            },
+            {
+              "label": "IAM instance profile",
+              "type": "select",
+              "actions": [
+                "Create new IAM profile"
+              ]
+            },
+            {
+              "label": "Hostname type",
+              "type": "select",
+              "default": "IP name",
+              "options": [
+                "IP name",
+                "Resource name"
+              ]
+            },
+            {
+              "label": "Instance auto-recovery",
+              "type": "select",
+              "default": "Default",
+              "options": [
+                "Default",
+                "Disable"
+              ]
+            },
+            {
+              "label": "Shutdown behavior",
+              "type": "select",
+              "default": "Stop",
+              "options": [
+                "Stop",
+                "Terminate"
+              ]
+            },
+            {
+              "label": "Stop - Hibernate behavior",
+              "type": "select",
+              "default": "Disable",
+              "options": [
+                "Disable",
+                "Enable"
+              ]
+            },
+            {
+              "label": "Termination protection",
+              "type": "select",
+              "options": [
+                "Disable",
+                "Enable"
+              ]
+            },
+            {
+              "label": "Stop protection",
+              "type": "select",
+              "options": [
+                "Disable",
+                "Enable"
+              ]
+            },
+            {
+              "label": "Detailed CloudWatch monitoring",
+              "type": "select",
+              "options": [
+                "Disable",
+                "Enable"
+              ]
+            },
+            {
+              "label": "Credit specification",
+              "type": "select",
+              "options": [
+                "Standard",
+                "Unlimited"
+              ]
+            },
+            {
+              "label": "Placement group",
+              "type": "select"
+            },
+            {
+              "label": "Tenancy",
+              "type": "select",
+              "default": "Shared - Run a shared hardware instance",
+              "options": [
+                "Shared - Run a shared hardware instance",
+                "Dedicated - Run a dedicated instance",
+                "Dedicated host - Launch this instance on a dedicated host"
+              ]
+            },
+            {
+              "label": "Metadata accessible",
+              "type": "select",
+              "default": "Enabled",
+              "options": [
+                "Enabled",
+                "Disabled"
+              ]
+            },
+            {
+              "label": "Metadata version",
+              "type": "select",
+              "default": "V2 only (token required)",
+              "options": [
+                "V1 and V2 (token optional)",
+                "V2 only (token required)"
+              ]
+            },
+            {
+              "label": "User data - optional",
+              "type": "textarea",
+              "actions": [
+                "Choose file"
+              ]
+            }
+          ],
+          "expandable": true,
+          "provenance": "reference",
+          "confidence": "medium"
+        },
+        {
+          "title": "Summary",
+          "fields": [
+            {
+              "label": "Number of instances",
+              "type": "number",
+              "required": true,
+              "default": 1
+            },
+            {
+              "label": "Software Image (AMI)",
+              "type": "readonly"
+            },
+            {
+              "label": "Virtual server type (instance type)",
+              "type": "readonly"
+            },
+            {
+              "label": "Firewall (security group)",
+              "type": "readonly"
+            },
+            {
+              "label": "Storage (volumes)",
+              "type": "readonly"
+            },
+            {
+              "label": "Cancel",
+              "type": "button"
+            },
+            {
+              "label": "Preview code",
+              "type": "button"
+            }
+          ],
+          "expandable": true,
+          "provenance": "capture"
+        }
+      ],
+      "submit": "Launch instance"
     },
     {
       "id": "instance-types",
-      "kind": "other",
-      "title": "InstanceTypes",
+      "kind": "list",
+      "title": "Instance types",
       "route": "/ec2/home#InstanceTypes:",
       "breadcrumbs": [
         "EC2",
@@ -98,17 +1346,390 @@
       "captures": [
         "A-ec2/006-L2-instance-types"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Refresh",
+        "Instance type finder",
+        "Actions"
+      ],
+      "table": {
+        "columns": [
+          "Instance type",
+          "Free tier eligible",
+          "vCPUs",
+          "Architecture",
+          "Memory (GiB)",
+          "Storage (GB)",
+          "Storage type",
+          "Network performance"
+        ],
+        "resource_label": "Instance types",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Instance type finder",
+          "Actions"
+        ],
+        "filter_placeholder": "Filter instance types by attribute",
+        "pagination": true,
+        "preferences": true
+      },
+      "sections": [
+        {
+          "title": "Select an instance type"
+        }
+      ]
+    },
+    {
+      "id": "instance-type-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/ec2/home#InstanceTypeDetails:instanceType={resource-name}",
+      "breadcrumbs": [
+        "EC2",
+        "Instance types",
+        "{resource-name}"
+      ],
+      "captures": [
+        "A-ec2/039-L3-*",
+        "A-ec2/040-L3-*",
+        "A-ec2/041-L3-*",
+        "A-ec2/042-L3-*"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "tabs": [
+        "Details",
+        "Compute",
+        "Networking",
+        "Storage",
+        "Accelerators",
+        "Pricing"
+      ],
+      "tab_panels": [
+        {
+          "label": "Details",
+          "provenance": "reference",
+          "confidence": "medium",
+          "sections": [
+            {
+              "title": "Instance type details",
+              "fields": [
+                {
+                  "label": "Instance type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Instance family",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Hypervisor",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Free tier eligible",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Current generation",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Bare metal",
+                  "type": "readonly"
+                },
+                {
+                  "label": "On-Demand Linux pricing",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Supported root device types",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "launch-templates",
-      "kind": "other",
+      "kind": "list",
       "title": "Launch templates",
       "route": "/ec2/home#LaunchTemplates:",
+      "breadcrumbs": [
+        "EC2",
+        "Launch templates"
+      ],
       "captures": [
         "A-ec2/007-L2-launch-templates"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Empty account shows a product landing with 'Create launch template'; table (reference) once one exists.",
+      "sections": [
+        {
+          "title": "New launch template",
+          "fields": [
+            {
+              "label": "Create launch template",
+              "type": "button"
+            }
+          ]
+        }
+      ],
+      "table": {
+        "columns": [
+          "Launch template ID",
+          "Launch template name",
+          "Default version",
+          "Latest version",
+          "Create time",
+          "Created by"
+        ],
+        "resource_label": "Launch templates",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Create launch template"
+        ],
+        "filter_placeholder": "Search",
+        "pagination": true,
+        "preferences": true,
+        "provenance": "reference",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-launch-template",
+      "kind": "create",
+      "title": "Create launch template",
+      "route": "/ec2/home#CreateTemplate:",
+      "breadcrumbs": [
+        "EC2",
+        "Launch templates",
+        "Create launch template"
+      ],
+      "captures": [
+        "C-ec2/05-createtemplate/step-1",
+        "C-ec2/05-createtemplate/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "notes": "Capture is scrolled mid-form (Firewall .. Advanced details); top sections are reference.",
+      "sections": [
+        {
+          "title": "Launch template name and description",
+          "fields": [
+            {
+              "label": "Launch template name",
+              "type": "text",
+              "required": true,
+              "placeholder": "MyTemplate",
+              "constraints": "Up to 128 characters; no spaces or '&*@'"
+            },
+            {
+              "label": "Template version description",
+              "type": "textarea",
+              "placeholder": "A prod webserver for MyApp"
+            },
+            {
+              "label": "Auto Scaling guidance",
+              "type": "checkbox",
+              "default": false
+            }
+          ],
+          "provenance": "reference"
+        },
+        {
+          "title": "Template tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "actions": [
+                "Add new tag"
+              ]
+            }
+          ],
+          "expandable": true,
+          "provenance": "reference"
+        },
+        {
+          "title": "Source template",
+          "fields": [
+            {
+              "label": "Source template",
+              "type": "select"
+            }
+          ],
+          "expandable": true,
+          "provenance": "reference"
+        },
+        {
+          "title": "Application and OS Images (Amazon Machine Image)",
+          "fields": [
+            {
+              "label": "Amazon Machine Image (AMI)",
+              "type": "select",
+              "default": "Don't include in launch template"
+            }
+          ],
+          "expandable": true,
+          "provenance": "reference"
+        },
+        {
+          "title": "Instance type",
+          "fields": [
+            {
+              "label": "Instance type",
+              "type": "select",
+              "default": "Don't include in launch template"
+            }
+          ],
+          "expandable": true,
+          "provenance": "reference"
+        },
+        {
+          "title": "Key pair (login)",
+          "fields": [
+            {
+              "label": "Key pair name",
+              "type": "select",
+              "default": "Don't include in launch template",
+              "actions": [
+                "Create new key pair"
+              ]
+            }
+          ],
+          "expandable": true,
+          "provenance": "reference"
+        },
+        {
+          "title": "Network settings",
+          "fields": [
+            {
+              "label": "Subnet",
+              "type": "select",
+              "default": "Don't include in launch template",
+              "provenance": "reference"
+            },
+            {
+              "label": "Firewall (security groups)",
+              "type": "radio",
+              "default": "Select existing security group",
+              "options": [
+                "Select existing security group",
+                "Create security group"
+              ]
+            },
+            {
+              "label": "Security groups",
+              "type": "select",
+              "placeholder": "Select security groups",
+              "actions": [
+                "Compare security group rules"
+              ]
+            },
+            {
+              "label": "Advanced network configuration",
+              "type": "other",
+              "actions": [
+                "Add network interface"
+              ]
+            }
+          ],
+          "expandable": true,
+          "provenance": "capture"
+        },
+        {
+          "title": "Storage (volumes)",
+          "fields": [
+            {
+              "label": "Add new volume",
+              "type": "button"
+            }
+          ],
+          "expandable": true,
+          "provenance": "capture"
+        },
+        {
+          "title": "Resource tags",
+          "fields": [
+            {
+              "label": "Add new tag",
+              "type": "button",
+              "help": "You can add up to 50 more tags."
+            }
+          ],
+          "expandable": true,
+          "provenance": "capture"
+        },
+        {
+          "title": "Advanced details",
+          "fields": [
+            {
+              "label": "IAM instance profile",
+              "type": "select",
+              "default": "Don't include in launch template",
+              "actions": [
+                "Create new IAM profile"
+              ]
+            },
+            {
+              "label": "Shutdown behavior",
+              "type": "select",
+              "default": "Don't include in launch template",
+              "provenance": "reference"
+            },
+            {
+              "label": "Termination protection",
+              "type": "select",
+              "default": "Don't include in launch template",
+              "provenance": "reference"
+            },
+            {
+              "label": "User data",
+              "type": "textarea",
+              "provenance": "reference"
+            }
+          ],
+          "expandable": true,
+          "provenance": "capture"
+        },
+        {
+          "title": "Summary",
+          "fields": [
+            {
+              "label": "Software Image (AMI)",
+              "type": "readonly"
+            },
+            {
+              "label": "Virtual server type (instance type)",
+              "type": "readonly"
+            },
+            {
+              "label": "Firewall (security group)",
+              "type": "readonly"
+            },
+            {
+              "label": "Storage (volumes)",
+              "type": "readonly"
+            },
+            {
+              "label": "Cancel",
+              "type": "button"
+            }
+          ],
+          "provenance": "capture"
+        }
+      ],
+      "submit": "Create launch template"
     },
     {
       "id": "spot-requests",
@@ -122,7 +1743,9 @@
       "captures": [
         "A-ec2/008-L2-spot-requests"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
     },
     {
       "id": "savings-plans",
@@ -136,7 +1759,9 @@
       "captures": [
         "A-ec2/009-L2-savings-plans"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
     },
     {
       "id": "reserved-instances",
@@ -150,7 +1775,9 @@
       "captures": [
         "A-ec2/010-L2-reserved-instances"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
     },
     {
       "id": "dedicated-hosts",
@@ -164,21 +1791,25 @@
       "captures": [
         "A-ec2/011-L2-dedicated-hosts"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
     },
     {
       "id": "capacity-reservations",
       "kind": "other",
-      "title": "Capacity reservations",
-      "route": "/ec2/home#Capacity{resource-name}:",
+      "title": "Capacity Reservations",
+      "route": "/ec2/home#CapacityReservations:",
       "breadcrumbs": [
         "EC2",
-        "Capacity {resource-name}"
+        "Capacity Reservations"
       ],
       "captures": [
         "A-ec2/012-L2-capacity-reservations"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
     },
     {
       "id": "ultraservers",
@@ -192,7 +1823,9 @@
       "captures": [
         "A-ec2/013-L2-ultraservers"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
     },
     {
       "id": "capacity-manager",
@@ -206,12 +1839,14 @@
       "captures": [
         "A-ec2/014-L2-capacity-manager"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
     },
     {
       "id": "amis",
-      "kind": "other",
-      "title": "Images",
+      "kind": "list",
+      "title": "Amazon Machine Images (AMIs)",
       "route": "/ec2/home#Images:",
       "breadcrumbs": [
         "EC2",
@@ -220,11 +1855,302 @@
       "captures": [
         "A-ec2/015-L2-amis"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Refresh",
+        "Recycle Bin",
+        "EC2 Image Builder",
+        "Actions",
+        "Launch instance from AMI"
+      ],
+      "notes": "Columns after 'Owner' are off-screen in the capture (reference).",
+      "table": {
+        "columns": [
+          "Name",
+          "AMI name",
+          "AMI ID",
+          "Source",
+          "Owner",
+          "Visibility",
+          "Status",
+          "Creation date",
+          "Platform",
+          "Root device type",
+          "Block devices",
+          "Virtualization"
+        ],
+        "resource_label": "Amazon Machine Images (AMIs)",
+        "counter": false,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Recycle Bin",
+          "EC2 Image Builder",
+          "Actions",
+          "Launch instance from AMI"
+        ],
+        "actions": [
+          "Edit AMI permissions",
+          "Copy AMI",
+          "Deregister AMI",
+          "Manage tags"
+        ],
+        "filters": [
+          "Owned by me",
+          "Private images",
+          "Public images",
+          "Disabled images"
+        ],
+        "filter_placeholder": "Filter AMI by attribute or tag",
+        "empty_state": "No AMIs in this Region for: Owned by me.",
+        "pagination": true,
+        "preferences": true
+      },
+      "sections": [
+        {
+          "title": "Select an AMI"
+        }
+      ]
+    },
+    {
+      "id": "ami-detail",
+      "kind": "detail",
+      "title": "Image summary for {resource-name}",
+      "route": "/ec2/home#ImageDetails:imageId={resource-name}",
+      "breadcrumbs": [
+        "EC2",
+        "AMIs",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Launch instance from AMI",
+        "Actions"
+      ],
+      "sections": [
+        {
+          "title": "Image summary",
+          "fields": [
+            {
+              "label": "AMI ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Image type",
+              "type": "readonly"
+            },
+            {
+              "label": "Platform details",
+              "type": "readonly"
+            },
+            {
+              "label": "Root device type",
+              "type": "readonly"
+            },
+            {
+              "label": "AMI name",
+              "type": "readonly"
+            },
+            {
+              "label": "Owner account ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Architecture",
+              "type": "readonly"
+            },
+            {
+              "label": "Usage operation",
+              "type": "readonly"
+            },
+            {
+              "label": "Root device name",
+              "type": "readonly"
+            },
+            {
+              "label": "Status",
+              "type": "readonly"
+            },
+            {
+              "label": "Source",
+              "type": "readonly"
+            },
+            {
+              "label": "Virtualization type",
+              "type": "readonly"
+            },
+            {
+              "label": "Boot mode",
+              "type": "readonly"
+            },
+            {
+              "label": "State reason",
+              "type": "readonly"
+            },
+            {
+              "label": "Creation date",
+              "type": "readonly"
+            },
+            {
+              "label": "Kernel ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Description",
+              "type": "readonly"
+            },
+            {
+              "label": "Block devices",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Permissions",
+        "Storage",
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Permissions",
+          "sections": [
+            {
+              "title": "Shared accounts",
+              "table": {
+                "columns": [
+                  "AWS account ID"
+                ],
+                "header_actions": [
+                  "Edit AMI permissions"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Storage",
+          "sections": [
+            {
+              "title": "Block devices",
+              "table": {
+                "columns": [
+                  "Device name",
+                  "Snapshot ID",
+                  "Size",
+                  "Volume type",
+                  "Delete on termination"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ],
+                "header_actions": [
+                  "Manage tags"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-image",
+      "kind": "create",
+      "title": "Create image",
+      "route": "/ec2/home#CreateImage:instanceId={resource-name}",
+      "breadcrumbs": [
+        "EC2",
+        "Instances",
+        "{resource-name}",
+        "Create image"
+      ],
+      "captures": [
+        "C-ec2/06-createimage/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Crawl had no instance (capture shows 'instance ID in the URL is not valid'); form from current console.",
+      "sections": [
+        {
+          "title": "Image settings",
+          "fields": [
+            {
+              "label": "Instance ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Image name",
+              "type": "text",
+              "required": true,
+              "constraints": "Maximum 127 characters. Can't be modified after creation."
+            },
+            {
+              "label": "Image description - optional",
+              "type": "text",
+              "constraints": "Maximum 255 characters"
+            },
+            {
+              "label": "Reboot instance",
+              "type": "checkbox",
+              "default": true
+            },
+            {
+              "label": "Instance volumes",
+              "type": "table",
+              "columns": [
+                "Storage type",
+                "Device",
+                "Snapshot",
+                "Size",
+                "Volume type",
+                "IOPS",
+                "Throughput",
+                "Delete on termination",
+                "Encrypted"
+              ],
+              "actions": [
+                "Add volume"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "radio",
+              "default": "Tag image and snapshots together",
+              "options": [
+                "Tag image and snapshots together",
+                "Tag image and snapshots separately"
+              ]
+            },
+            {
+              "label": "Add new tag",
+              "type": "button"
+            }
+          ]
+        }
+      ],
+      "submit": "Create image"
     },
     {
       "id": "ami-catalog",
-      "kind": "other",
+      "kind": "list",
       "title": "AMI Catalog",
       "route": "/ec2/home#AMICatalog:",
       "breadcrumbs": [
@@ -238,46 +2164,513 @@
         "A-ec2/016-L2-ami-catalog--tab-04-community-amis-500"
       ],
       "provenance": "capture",
+      "confidence": "high",
+      "notes": "Tab labels carry a live '(N)' count, e.g. 'My AMIs (0)'.",
       "tabs": [
+        "Quickstart AMIs",
         "My AMIs",
         "AWS Marketplace AMIs",
         "Community AMIs"
-      ]
+      ],
+      "table": {
+        "columns": [
+          "AMI",
+          "Select"
+        ],
+        "filter_placeholder": "Search for an AMI by entering a search term e.g. \"Windows\"",
+        "provenance": "reference",
+        "confidence": "low"
+      }
     },
     {
       "id": "volumes",
-      "kind": "other",
+      "kind": "list",
       "title": "Volumes",
       "route": "/ec2/home#Volumes:",
+      "breadcrumbs": [
+        "EC2",
+        "Volumes"
+      ],
       "captures": [
         "A-ec2/017-L2-volumes"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Refresh",
+        "Recycle Bin",
+        "Actions",
+        "Create volume"
+      ],
+      "notes": "Header shows 'Last updated' timestamp. Columns after 'Snapshot ID' are reference.",
+      "table": {
+        "columns": [
+          "Name",
+          "Volume ID",
+          "Type",
+          "Size",
+          "IOPS",
+          "Throughput",
+          "Owner ID",
+          "Snapshot ID",
+          "Created",
+          "Availability Zone",
+          "Volume state",
+          "Alarm status",
+          "Attached resources",
+          "Volume status",
+          "Encryption",
+          "KMS key ID",
+          "Multi-Attach enabled"
+        ],
+        "resource_label": "Volumes",
+        "counter": false,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Recycle Bin",
+          "Actions",
+          "Create volume"
+        ],
+        "actions": [
+          "Modify volume",
+          "Create snapshot",
+          "Create snapshot lifecycle policy",
+          "Delete volume",
+          "Attach volume",
+          "Detach volume",
+          "Force detach volume",
+          "Manage tags"
+        ],
+        "filters": [
+          "Saved filter sets"
+        ],
+        "filter_placeholder": "Search",
+        "empty_state": "You currently have no volumes in this region",
+        "pagination": true,
+        "preferences": true
+      },
+      "sections": [
+        {
+          "title": "Fault tolerance for all volumes in this Region",
+          "fields": [
+            {
+              "label": "Volumes backed up in the last 24 hours / Total # volumes",
+              "type": "readonly"
+            },
+            {
+              "label": "Data Lifecycle Manager default policy for EBS Snapshots status",
+              "type": "readonly"
+            }
+          ],
+          "actions": [
+            "Refresh"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "volume-detail",
+      "kind": "detail",
+      "title": "Volume ID: {resource-name}",
+      "route": "/ec2/home#VolumeDetails:volumeId={resource-name}",
+      "breadcrumbs": [
+        "EC2",
+        "Volumes",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Refresh",
+        "Actions"
+      ],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "Volume ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Size",
+              "type": "readonly"
+            },
+            {
+              "label": "Type",
+              "type": "readonly"
+            },
+            {
+              "label": "Volume status",
+              "type": "readonly"
+            },
+            {
+              "label": "AWS Compute Optimizer finding",
+              "type": "readonly"
+            },
+            {
+              "label": "Volume state",
+              "type": "readonly"
+            },
+            {
+              "label": "IOPS",
+              "type": "readonly"
+            },
+            {
+              "label": "Throughput",
+              "type": "readonly"
+            },
+            {
+              "label": "Encryption",
+              "type": "readonly"
+            },
+            {
+              "label": "KMS key ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Snapshot",
+              "type": "readonly"
+            },
+            {
+              "label": "Availability Zone",
+              "type": "readonly"
+            },
+            {
+              "label": "Created",
+              "type": "readonly"
+            },
+            {
+              "label": "Multi-Attach enabled",
+              "type": "readonly"
+            },
+            {
+              "label": "Attached resources",
+              "type": "readonly"
+            },
+            {
+              "label": "Outposts ARN",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Status checks",
+        "Monitoring",
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Status checks",
+          "sections": [
+            {
+              "title": "Status checks",
+              "fields": [
+                {
+                  "label": "Volume status",
+                  "type": "readonly"
+                },
+                {
+                  "label": "I/O status",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Monitoring",
+          "sections": [
+            {
+              "title": "CloudWatch metrics"
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ],
+                "header_actions": [
+                  "Manage tags"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-volume",
+      "kind": "create",
+      "title": "Create volume",
+      "route": "/ec2/home#CreateVolume:",
+      "breadcrumbs": [
+        "EC2",
+        "Volumes",
+        "Create volume"
+      ],
+      "captures": [
+        "C-ec2/04-createvolume/step-1",
+        "C-ec2/04-createvolume/step-1-expanded",
+        "A-ec2/080-L3-create-and-attach-additional-ebs-volumes"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Volume settings",
+          "fields": [
+            {
+              "label": "Volume type",
+              "type": "select",
+              "required": true,
+              "default": "General Purpose SSD (gp3)",
+              "options": [
+                "General Purpose SSD (gp3)",
+                "General Purpose SSD (gp2)",
+                "Provisioned IOPS SSD (io1)",
+                "Provisioned IOPS SSD (io2)",
+                "Cold HDD (sc1)",
+                "Throughput Optimized HDD (st1)",
+                "Magnetic (standard)"
+              ]
+            },
+            {
+              "label": "Size (GiB)",
+              "type": "number",
+              "required": true,
+              "default": 100,
+              "constraints": "Min: 1 GiB, Max: 65536 GiB."
+            },
+            {
+              "label": "IOPS",
+              "type": "number",
+              "default": 3000,
+              "constraints": "Min: 3000 IOPS, Max: 80000 IOPS.",
+              "visible_when": "Volume type = gp3, io1 or io2"
+            },
+            {
+              "label": "Throughput (MiB/s)",
+              "type": "number",
+              "default": 125,
+              "constraints": "Min: 125 MiB, Max: 2000 MiB. Baseline: 125 MiB/s.",
+              "visible_when": "Volume type = gp3"
+            },
+            {
+              "label": "Availability Zone",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "Snapshot ID - optional",
+              "type": "select",
+              "default": "Don't create volume from a snapshot",
+              "actions": [
+                "Refresh"
+              ]
+            },
+            {
+              "label": "Encryption",
+              "type": "checkbox",
+              "default": false,
+              "options": [
+                "Encrypt this volume"
+              ],
+              "help": "Use Amazon EBS encryption as an encryption solution for your EBS resources"
+            },
+            {
+              "label": "KMS key",
+              "type": "select",
+              "visible_when": "Encrypt this volume = checked",
+              "provenance": "reference"
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "actions": [
+                "Add tag"
+              ]
+            }
+          ],
+          "provenance": "reference"
+        },
+        {
+          "title": "Snapshot summary",
+          "provenance": "reference",
+          "confidence": "low"
+        }
+      ],
+      "submit": "Create volume"
     },
     {
       "id": "snapshots",
-      "kind": "other",
+      "kind": "list",
       "title": "Snapshots",
       "route": "/ec2/home#Snapshots:",
+      "breadcrumbs": [
+        "EC2",
+        "Snapshots"
+      ],
       "captures": [
         "A-ec2/018-L2-snapshots"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Refresh",
+        "Recycle Bin",
+        "Actions",
+        "Create snapshot"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Snapshot ID",
+          "Full snapshot size",
+          "Volume size",
+          "Description",
+          "Storage tier",
+          "Snapshot status",
+          "Started",
+          "Progress",
+          "Encryption",
+          "KMS key ID",
+          "Owner ID",
+          "Source"
+        ],
+        "resource_label": "Snapshots",
+        "counter": false,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Recycle Bin",
+          "Actions",
+          "Create snapshot"
+        ],
+        "filters": [
+          "Owned by me",
+          "Private snapshots",
+          "Public snapshots"
+        ],
+        "filter_placeholder": "Search",
+        "empty_state": "You currently have no snapshots in this Region.",
+        "pagination": true,
+        "preferences": true
+      },
+      "sections": [
+        {
+          "title": "Select a snapshot above."
+        }
+      ]
+    },
+    {
+      "id": "create-snapshot",
+      "kind": "create",
+      "title": "Create snapshot",
+      "route": "/ec2/home#CreateSnapshot:",
+      "breadcrumbs": [
+        "EC2",
+        "Snapshots",
+        "Create snapshot"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "Resource type",
+              "type": "radio",
+              "default": "Volume",
+              "options": [
+                "Volume",
+                "Instance"
+              ]
+            },
+            {
+              "label": "Volume ID",
+              "type": "select",
+              "required": true,
+              "visible_when": "Resource type = Volume"
+            },
+            {
+              "label": "Description",
+              "type": "text",
+              "constraints": "Up to 255 characters"
+            },
+            {
+              "label": "Encryption",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "actions": [
+                "Add new tag"
+              ],
+              "help": "You can add up to 50 more tags."
+            }
+          ]
+        }
+      ],
+      "submit": "Create snapshot"
     },
     {
       "id": "lifecycle-manager",
       "kind": "other",
       "title": "Lifecycle Manager",
       "route": "/ec2/home#Lifecycle:",
+      "breadcrumbs": [
+        "EC2",
+        "Lifecycle Manager"
+      ],
       "captures": [
         "A-ec2/019-L2-lifecycle-manager"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
+    },
+    {
+      "id": "create-lifecycle-policy",
+      "kind": "create",
+      "title": "Create default policy",
+      "route": "/ec2/home#CreateDefaultLifecyclePolicy:",
+      "breadcrumbs": [
+        "EC2",
+        "Lifecycle Manager",
+        "Create policy"
+      ],
+      "captures": [
+        "A-ec2/060-L3-create-policy"
+      ],
+      "provenance": "capture",
+      "confidence": "low",
+      "notes": "Out of scope; title only."
     },
     {
       "id": "security-groups",
-      "kind": "other",
-      "title": "Security groups",
+      "kind": "list",
+      "title": "Security Groups",
       "route": "/ec2/home#SecurityGroups:",
       "breadcrumbs": [
         "EC2",
@@ -286,11 +2679,404 @@
       "captures": [
         "A-ec2/020-L2-security-groups"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Export security groups to CSV",
+        "Create security group"
+      ],
+      "notes": "Every account/VPC has a 'default' group. Columns after 'Description' are reference.",
+      "table": {
+        "columns": [
+          "Name",
+          "Security group ID",
+          "Security group name",
+          "VPC ID",
+          "Description",
+          "Owner",
+          "Inbound rules count",
+          "Outbound rules count"
+        ],
+        "resource_label": "Security Groups",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Export security groups to CSV",
+          "Create security group"
+        ],
+        "actions": [
+          "View details",
+          "Edit inbound rules",
+          "Edit outbound rules",
+          "Manage tags",
+          "Copy to new security group",
+          "Delete security groups"
+        ],
+        "filter_placeholder": "Find security groups by attribute or tag",
+        "pagination": true,
+        "preferences": true
+      },
+      "sections": [
+        {
+          "title": "Select a security group"
+        }
+      ]
+    },
+    {
+      "id": "security-group-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/ec2/home#SecurityGroup:groupId={resource-name}",
+      "breadcrumbs": [
+        "EC2",
+        "Security Groups",
+        "{resource-name}"
+      ],
+      "captures": [
+        "A-ec2/061-L3-*",
+        "A-ec2/061-L3-*--tab-02-outbound-rules",
+        "A-ec2/061-L3-*--tab-03-sharing",
+        "A-ec2/061-L3-*--tab-04-vpc-associations",
+        "A-ec2/061-L3-*--tab-05-related-resources-new",
+        "A-ec2/061-L3-*--tab-06-tags"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Title is '<group-id> - <group-name>'. Rule tables: last 2 columns off-screen (reference).",
+      "header_actions": [
+        "Actions"
+      ],
+      "sections": [
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "Security group name",
+              "type": "readonly"
+            },
+            {
+              "label": "Security group ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Description",
+              "type": "readonly"
+            },
+            {
+              "label": "VPC ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Owner",
+              "type": "readonly"
+            },
+            {
+              "label": "Inbound rules count",
+              "type": "readonly"
+            },
+            {
+              "label": "Outbound rules count",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "tabs": [
+        "Inbound rules",
+        "Outbound rules",
+        "Sharing",
+        "VPC associations",
+        "Related resources - new",
+        "Tags"
+      ],
+      "tab_panels": [
+        {
+          "label": "Inbound rules",
+          "sections": [
+            {
+              "title": "Inbound rules",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Security group rule ID",
+                  "IP version",
+                  "Type",
+                  "Protocol",
+                  "Port range",
+                  "Source",
+                  "Description"
+                ],
+                "resource_label": "Inbound rules",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Refresh",
+                  "Manage tags",
+                  "Edit inbound rules"
+                ],
+                "filter_placeholder": "Search",
+                "pagination": true,
+                "preferences": true
+              }
+            }
+          ]
+        },
+        {
+          "label": "Outbound rules",
+          "sections": [
+            {
+              "title": "Outbound rules",
+              "table": {
+                "columns": [
+                  "Name",
+                  "Security group rule ID",
+                  "IP version",
+                  "Type",
+                  "Protocol",
+                  "Port range",
+                  "Destination",
+                  "Description"
+                ],
+                "resource_label": "Outbound rules",
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Refresh",
+                  "Manage tags",
+                  "Edit outbound rules"
+                ],
+                "filter_placeholder": "Search",
+                "pagination": true,
+                "preferences": true
+              }
+            }
+          ]
+        },
+        {
+          "label": "Sharing",
+          "confidence": "medium",
+          "sections": [
+            {
+              "title": "Shared with",
+              "table": {
+                "columns": [
+                  "Resource share name",
+                  "Resource share ID",
+                  "Status",
+                  "Owner"
+                ],
+                "header_actions": [
+                  "Share security group"
+                ]
+              },
+              "provenance": "reference"
+            }
+          ]
+        },
+        {
+          "label": "VPC associations",
+          "confidence": "medium",
+          "sections": [
+            {
+              "title": "VPC associations",
+              "table": {
+                "columns": [
+                  "VPC ID",
+                  "VPC owner",
+                  "State",
+                  "State reason"
+                ],
+                "header_actions": [
+                  "Associate VPC",
+                  "Disassociate VPC"
+                ]
+              },
+              "provenance": "reference"
+            }
+          ]
+        },
+        {
+          "label": "Related resources - new",
+          "confidence": "low",
+          "sections": [
+            {
+              "title": "Related resources",
+              "table": {
+                "columns": [
+                  "Resource type",
+                  "Resource ID",
+                  "Name"
+                ]
+              },
+              "provenance": "reference"
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ],
+                "header_actions": [
+                  "Manage tags"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-security-group",
+      "kind": "create",
+      "title": "Create security group",
+      "route": "/ec2/home#CreateSecurityGroup:",
+      "breadcrumbs": [
+        "EC2",
+        "Security Groups",
+        "Create security group"
+      ],
+      "captures": [
+        "C-ec2/02-createsecuritygroup/step-1",
+        "C-ec2/02-createsecuritygroup/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Basic details",
+          "fields": [
+            {
+              "label": "Security group name",
+              "type": "text",
+              "required": true,
+              "placeholder": "MyWebServerGroup",
+              "help": "Name cannot be edited after creation."
+            },
+            {
+              "label": "Description",
+              "type": "text",
+              "required": true,
+              "placeholder": "Allows SSH access to developers"
+            },
+            {
+              "label": "VPC",
+              "type": "select",
+              "required": true,
+              "help": "Defaults to the default VPC"
+            }
+          ]
+        },
+        {
+          "title": "Inbound rules",
+          "fields": [
+            {
+              "label": "Inbound rules",
+              "type": "table",
+              "columns": [
+                "Type",
+                "Protocol",
+                "Port range",
+                "Source type",
+                "Source",
+                "Description - optional"
+              ],
+              "actions": [
+                "Add rule",
+                "Delete"
+              ],
+              "help": "This security group has no inbound rules."
+            }
+          ]
+        },
+        {
+          "title": "Outbound rules",
+          "fields": [
+            {
+              "label": "Outbound rules",
+              "type": "table",
+              "columns": [
+                "Type",
+                "Protocol",
+                "Port range",
+                "Destination type",
+                "Destination",
+                "Description - optional"
+              ],
+              "actions": [
+                "Add rule",
+                "Delete"
+              ],
+              "default": "All traffic / All / All / Custom / 0.0.0.0/0"
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "actions": [
+                "Add new tag"
+              ]
+            }
+          ],
+          "provenance": "reference"
+        }
+      ],
+      "submit": "Create security group"
+    },
+    {
+      "id": "edit-inbound-rules",
+      "kind": "settings",
+      "title": "Edit inbound rules",
+      "route": "/ec2/home#ModifyInboundSecurityGroupRules:securityGroupId={resource-name}",
+      "breadcrumbs": [
+        "EC2",
+        "Security Groups",
+        "{resource-name}",
+        "Edit inbound rules"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Inbound rules",
+          "fields": [
+            {
+              "label": "Inbound rules",
+              "type": "table",
+              "columns": [
+                "Security group rule ID",
+                "Type",
+                "Protocol",
+                "Port range",
+                "Source",
+                "Description - optional"
+              ],
+              "actions": [
+                "Add rule",
+                "Delete"
+              ]
+            }
+          ]
+        }
+      ],
+      "submit": "Save rules"
     },
     {
       "id": "elastic-ips",
-      "kind": "other",
+      "kind": "list",
       "title": "Elastic IP addresses",
       "route": "/ec2/home#Addresses:",
       "breadcrumbs": [
@@ -300,11 +3086,105 @@
       "captures": [
         "A-ec2/021-L2-elastic-ips"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Allocate Elastic IP address"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Allocated IPv4 address",
+          "Type",
+          "Allocation ID",
+          "Reverse DNS record",
+          "Associated instance ID",
+          "Private IP address",
+          "Association ID",
+          "Network interface owner account ID",
+          "Network border group"
+        ],
+        "resource_label": "Elastic IP addresses",
+        "counter": false,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Allocate Elastic IP address"
+        ],
+        "actions": [
+          "View details",
+          "Release Elastic IP addresses",
+          "Associate Elastic IP address",
+          "Disassociate Elastic IP address",
+          "Update reverse DNS",
+          "Manage tags"
+        ],
+        "filter_placeholder": "Find elastic IP addresses by attribute or tag",
+        "empty_state": "No Elastic IP addresses found in this Region",
+        "pagination": true,
+        "preferences": true
+      },
+      "sections": [
+        {
+          "title": "Select an elastic IP address"
+        }
+      ]
+    },
+    {
+      "id": "allocate-elastic-ip",
+      "kind": "create",
+      "title": "Allocate Elastic IP address",
+      "route": "/ec2/home#AllocateAddress:",
+      "breadcrumbs": [
+        "EC2",
+        "Elastic IP addresses",
+        "Allocate Elastic IP address"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Elastic IP address settings",
+          "fields": [
+            {
+              "label": "Public IPv4 address pool",
+              "type": "radio",
+              "default": "Amazon's pool of IPv4 addresses",
+              "options": [
+                "Amazon's pool of IPv4 addresses",
+                "Public IPv4 address that you bring to your AWS account",
+                "Customer-owned pool of IPv4 addresses",
+                "Allocate using an IPv4 IPAM pool"
+              ]
+            },
+            {
+              "label": "Network border group",
+              "type": "select"
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "actions": [
+                "Add new tag"
+              ],
+              "help": "You can add up to 50 more tags."
+            }
+          ]
+        }
+      ],
+      "submit": "Allocate"
     },
     {
       "id": "placement-groups",
-      "kind": "other",
+      "kind": "list",
       "title": "Placement groups",
       "route": "/ec2/home#PlacementGroups:",
       "breadcrumbs": [
@@ -314,11 +3194,106 @@
       "captures": [
         "A-ec2/022-L2-placement-groups"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Create placement group"
+      ],
+      "table": {
+        "columns": [
+          "Group name",
+          "Group Id",
+          "Strategy",
+          "State",
+          "Partition",
+          "Group ARN",
+          "Parent group ID"
+        ],
+        "resource_label": null,
+        "counter": false,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Create placement group"
+        ],
+        "filter_placeholder": "Filter Placement Group by attribute or tag",
+        "empty_state": "You do not have any placement groups in this region.",
+        "pagination": true,
+        "preferences": true
+      }
+    },
+    {
+      "id": "create-placement-group",
+      "kind": "create",
+      "title": "Create placement group",
+      "route": "/ec2/home#CreatePlacementGroup:",
+      "breadcrumbs": [
+        "EC2",
+        "Placement groups",
+        "Create placement group"
+      ],
+      "captures": [
+        "A-ec2/078-L3-create-new-placement-group"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Placement group settings",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Placement strategy",
+              "type": "select",
+              "required": true,
+              "options": [
+                "Cluster",
+                "Spread",
+                "Partition"
+              ]
+            },
+            {
+              "label": "Spread level",
+              "type": "select",
+              "options": [
+                "Rack",
+                "Host"
+              ],
+              "visible_when": "Placement strategy = Spread"
+            },
+            {
+              "label": "Number of partitions",
+              "type": "select",
+              "visible_when": "Placement strategy = Partition"
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "actions": [
+                "Add new tag"
+              ],
+              "help": "You can add up to 50 more tags."
+            }
+          ]
+        }
+      ],
+      "submit": "Create group"
     },
     {
       "id": "key-pairs",
-      "kind": "other",
+      "kind": "list",
       "title": "Key pairs",
       "route": "/ec2/home#KeyPairs:",
       "breadcrumbs": [
@@ -328,11 +3303,146 @@
       "captures": [
         "A-ec2/023-L2-key-pairs"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Create key pair"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Type",
+          "Created",
+          "Fingerprint",
+          "ID"
+        ],
+        "resource_label": "Key pairs",
+        "counter": false,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Create key pair"
+        ],
+        "actions": [
+          "Import key pair",
+          "Manage tags",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter Key Pair by attribute or tag",
+        "empty_state": "No key pairs to display",
+        "pagination": true,
+        "preferences": true
+      }
+    },
+    {
+      "id": "create-key-pair",
+      "kind": "create",
+      "title": "Create key pair",
+      "route": "/ec2/home#CreateKeyPair:",
+      "breadcrumbs": [
+        "EC2",
+        "Key pairs",
+        "Create key pair"
+      ],
+      "captures": [
+        "C-ec2/03-createkeypair/step-1",
+        "C-ec2/03-createkeypair/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "On submit the browser downloads the private key file.",
+      "sections": [
+        {
+          "title": "Key pair",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true,
+              "placeholder": "Enter key pair name",
+              "constraints": "The name can include up to 255 ASCII characters. It can't include leading or trailing spaces."
+            },
+            {
+              "label": "Key pair type",
+              "type": "radio",
+              "default": "RSA",
+              "options": [
+                "RSA",
+                "ED25519"
+              ]
+            },
+            {
+              "label": "Private key file format",
+              "type": "radio",
+              "default": ".pem",
+              "options": [
+                ".pem",
+                ".ppk"
+              ],
+              "help": ".pem: For use with OpenSSH; .ppk: For use with PuTTY"
+            },
+            {
+              "label": "Tags - optional",
+              "type": "tags",
+              "actions": [
+                "Add new tag"
+              ],
+              "help": "You can add up to 50 more tags."
+            }
+          ]
+        }
+      ],
+      "submit": "Create key pair"
+    },
+    {
+      "id": "import-key-pair",
+      "kind": "create",
+      "title": "Import key pair",
+      "route": "/ec2/home#ImportKeyPair:",
+      "breadcrumbs": [
+        "EC2",
+        "Key pairs",
+        "Import key pair"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Key pair",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Browse",
+              "type": "file",
+              "help": "Public key file (.pem / OpenSSH public key)"
+            },
+            {
+              "label": "Public key contents",
+              "type": "textarea",
+              "required": true
+            },
+            {
+              "label": "Tags - optional",
+              "type": "tags",
+              "actions": [
+                "Add new tag"
+              ]
+            }
+          ]
+        }
+      ],
+      "submit": "Import key pair"
     },
     {
       "id": "network-interfaces",
-      "kind": "other",
+      "kind": "list",
       "title": "Network interfaces",
       "route": "/ec2/home#NIC:",
       "breadcrumbs": [
@@ -342,7 +3452,46 @@
       "captures": [
         "A-ec2/024-L2-network-interfaces"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Refresh",
+        "Actions",
+        "Create network interface"
+      ],
+      "table": {
+        "columns": [
+          "Name",
+          "Network interface ID",
+          "Subnet ID",
+          "VPC ID",
+          "Availability Zone",
+          "Security group names",
+          "Description",
+          "Interface Type",
+          "Status",
+          "Public IPv4 address",
+          "Primary private IPv4 address"
+        ],
+        "resource_label": "Network interfaces",
+        "counter": false,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Create network interface"
+        ],
+        "filter_placeholder": "Search",
+        "empty_state": "No network interfaces",
+        "empty_state_action": "Create network interface",
+        "pagination": true,
+        "preferences": true
+      },
+      "sections": [
+        {
+          "title": "Select a network interface"
+        }
+      ]
     },
     {
       "id": "load-balancers",
@@ -356,7 +3505,9 @@
       "captures": [
         "A-ec2/025-L2-load-balancers"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
     },
     {
       "id": "target-groups",
@@ -370,7 +3521,9 @@
       "captures": [
         "A-ec2/026-L2-target-groups"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
     },
     {
       "id": "trust-stores",
@@ -384,7 +3537,26 @@
       "captures": [
         "A-ec2/027-L2-trust-stores"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
+    },
+    {
+      "id": "create-trust-store",
+      "kind": "create",
+      "title": "Create trust store",
+      "route": "/ec2/home#CreateTrustStore",
+      "breadcrumbs": [
+        "EC2",
+        "Trust stores",
+        "Create trust store"
+      ],
+      "captures": [
+        "A-ec2/069-L3-create-trust-store"
+      ],
+      "provenance": "capture",
+      "confidence": "low",
+      "notes": "Out of scope; title only."
     },
     {
       "id": "auto-scaling-groups",
@@ -398,7 +3570,9 @@
       "captures": [
         "A-ec2/028-L2-auto-scaling-groups"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Outside Vyomi's EC2 simulation scope; console declares the page only."
     },
     {
       "id": "settings",
@@ -420,236 +3594,59 @@
         "A-ec2/029-L2-settings--tab-08-ec2-console-preferences"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "tabs": [
+        "Data protection and security",
         "Allowed AMIs",
         "Managed resources - new",
         "Zones",
-        "{resource-name} credit specification",
+        "Default credit specification",
         "EC2 Serial Console",
         "Auto Scaling groups",
         "EC2 console preferences"
+      ],
+      "tab_panels": [
+        {
+          "label": "Data protection and security",
+          "sections": [
+            {
+              "title": "Automatically backup your data",
+              "fields": [
+                {
+                  "label": "EBS snapshot policy",
+                  "type": "readonly"
+                },
+                {
+                  "label": "EBS-backed AMI policy",
+                  "type": "readonly"
+                }
+              ],
+              "actions": [
+                "Manage in Lifecycle Manager"
+              ]
+            },
+            {
+              "title": "EBS encryption",
+              "fields": [
+                {
+                  "label": "Always encrypt new EBS volumes",
+                  "type": "readonly",
+                  "default": "Disabled"
+                },
+                {
+                  "label": "Default encryption key",
+                  "type": "readonly",
+                  "default": "alias/aws/ebs"
+                }
+              ],
+              "actions": [
+                "Manage"
+              ]
+            }
+          ]
+        }
       ]
-    },
-    {
-      "id": "launch-instance",
-      "kind": "other",
-      "title": "Launch an instance",
-      "route": "/ec2/home#LaunchInstances:",
-      "breadcrumbs": [
-        "EC2",
-        "Instances",
-        "Launch an instance"
-      ],
-      "captures": [
-        "A-ec2/030-L2-launch-instance"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "launch-instance-2",
-      "kind": "other",
-      "title": "Get started",
-      "route": "/ec2/home#GetStarted:",
-      "breadcrumbs": [
-        "EC2",
-        "Getting started"
-      ],
-      "captures": [
-        "A-ec2/031-L3-launch-instance"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "view-running-instances",
-      "kind": "other",
-      "title": "Instances",
-      "route": "/ec2/home#Instances:instanceState=running",
-      "breadcrumbs": [
-        "EC2",
-        "Instances"
-      ],
-      "captures": [
-        "A-ec2/033-L3-view-running-instances"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "instance-types-detail",
-      "kind": "detail",
-      "title": "{resource-name}",
-      "route": "/ec2/home#InstanceTypeDetails:instanceType={resource-name}",
-      "breadcrumbs": [
-        "EC2",
-        "Instance types",
-        "{resource-name}"
-      ],
-      "captures": [
-        "A-ec2/039-L3-*",
-        "A-ec2/040-L3-*",
-        "A-ec2/041-L3-*",
-        "A-ec2/042-L3-*"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "create-policy",
-      "kind": "create",
-      "title": "Create {resource-name} lifecycle policy",
-      "route": "/ec2/home#Create{resource-name}LifecyclePolicy:policyType=EBS_SNAPSHOT_MANAGEMENT",
-      "breadcrumbs": [
-        "EC2",
-        "Lifecycle Manager",
-        "Select policy type",
-        "Create {resource-name} policy for EBS snapshots"
-      ],
-      "captures": [
-        "A-ec2/060-L3-create-policy"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "sg-083d2889674d28ddd",
-      "kind": "other",
-      "title": "SecurityGroup",
-      "breadcrumbs": [
-        "EC2",
-        "Security Groups"
-      ],
-      "captures": [
-        "A-ec2/061-L3-*",
-        "A-ec2/061-L3-*--tab-02-outbound-rules",
-        "A-ec2/061-L3-*--tab-03-sharing",
-        "A-ec2/061-L3-*--tab-04-vpc-associations",
-        "A-ec2/061-L3-*--tab-05-related-resources-new",
-        "A-ec2/061-L3-*--tab-06-tags"
-      ],
-      "provenance": "capture",
-      "tabs": [
-        "Outbound rules",
-        "Sharing",
-        "VPC associations",
-        "Related resources - new",
-        "Tags"
-      ]
-    },
-    {
-      "id": "create-trust-store",
-      "kind": "create",
-      "title": "Create trust store",
-      "route": "/ec2/home#CreateTrustStore",
-      "breadcrumbs": [
-        "EC2",
-        "Trust stores",
-        "Create trust store"
-      ],
-      "captures": [
-        "A-ec2/069-L3-create-trust-store"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "create-new-placement-group",
-      "kind": "create",
-      "title": "Placement groups",
-      "route": "/ec2/home#PlacementGroups",
-      "breadcrumbs": [
-        "EC2",
-        "Placement groups"
-      ],
-      "captures": [
-        "A-ec2/078-L3-create-new-placement-group"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "create-and-attach-additional-ebs-volumes",
-      "kind": "create",
-      "title": "Volumes",
-      "route": "/ec2/home#Volumes",
-      "captures": [
-        "A-ec2/080-L3-create-and-attach-additional-ebs-volumes"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "createsecuritygroup",
-      "kind": "create",
-      "title": "CreateSecurityGroup",
-      "route": "/ec2/home#CreateSecurityGroup:",
-      "breadcrumbs": [
-        "EC2",
-        "Security Groups",
-        "Create security group"
-      ],
-      "captures": [
-        "C-ec2/02-createsecuritygroup/step-1",
-        "C-ec2/02-createsecuritygroup/step-1-expanded"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "createkeypair",
-      "kind": "create",
-      "title": "Create key pair",
-      "route": "/ec2/home#CreateKeyPair:",
-      "breadcrumbs": [
-        "EC2",
-        "Key pairs",
-        "Create key pair"
-      ],
-      "captures": [
-        "C-ec2/03-createkeypair/step-1",
-        "C-ec2/03-createkeypair/step-1-expanded"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "createvolume",
-      "kind": "create",
-      "title": "Create volume",
-      "route": "/ec2/home#CreateVolume:",
-      "breadcrumbs": [
-        "EC2",
-        "Volumes",
-        "Create volume"
-      ],
-      "captures": [
-        "C-ec2/04-createvolume/step-1",
-        "C-ec2/04-createvolume/step-1-expanded"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "createtemplate",
-      "kind": "create",
-      "title": "Create launch template",
-      "route": "/ec2/home#CreateTemplate:",
-      "breadcrumbs": [
-        "EC2",
-        "Launch templates",
-        "Create launch template"
-      ],
-      "captures": [
-        "C-ec2/05-createtemplate/step-1",
-        "C-ec2/05-createtemplate/step-1-expanded"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "createimage",
-      "kind": "create",
-      "title": "Instances",
-      "route": "/ec2/home#CreateImage:",
-      "breadcrumbs": [
-        "EC2",
-        "Instances"
-      ],
-      "captures": [
-        "C-ec2/06-createimage/step-1",
-        "C-ec2/06-createimage/step-1-expanded"
-      ],
-      "provenance": "capture"
     }
   ],
-  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+  "gaps_note": "Crawl account had no instances/volumes/AMIs, so instance, volume and AMI detail pages, the lower half of the Launch instance wizard and Create launch template top sections are 'reference'. Most list captures cut off right-hand columns; trailing columns are reference. Create image capture was blocked (invalid instance ID). Load balancing, Auto Scaling, Spot/RI/Savings Plans/Hosts/Capacity pages are declared by title only."
 }
