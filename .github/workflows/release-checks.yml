@@ -124,9 +124,13 @@ jobs:
           cd /tmp/bundle
           export VYOMI_SIMULATOR_IMAGE="vyomi/appliance:$VER" VYOMI_NO_TELEMETRY=1
           if docker manifest inspect "vyomi/cloudsim:$VER" >/dev/null 2>&1; then export VYOMI_CLOUDSIM_IMAGE="vyomi/cloudsim:$VER"; fi
-          docker compose -f docker-compose.cloudlite.yml -p vyomi pull --quiet
-          docker compose -f docker-compose.cloudlite.yml -p vyomi up -d
-          docker compose -f docker-compose.cloudlite.yml -p vyomi --profile full up -d
+          # Every service is in scope here, not just the Free tier's: lift the
+          # tier gate (CLOUDLEARN_TIER_ENFORCE=0, the documented test switch).
+          printf 'services:\n  simulator:\n    environment:\n      CLOUDLEARN_TIER_ENFORCE: "0"\n' > all-tiers.yml
+          C="-f docker-compose.cloudlite.yml -f all-tiers.yml -p vyomi"
+          docker compose $C pull --quiet
+          docker compose $C up -d
+          docker compose $C --profile full up -d
       - name: CLI versions
         run: aws --version; gcloud --version | head -1; az version -o tsv 2>/dev/null | head -1
       - name: CLI conformance + CLI ↔ console both ways
