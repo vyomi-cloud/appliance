@@ -128,6 +128,49 @@ def run() -> int:
     noact = sm.dispatch(st, "", {})
     _check("missing target MissingAction", noact.body["__type"] == "MissingAction")
 
+    # 16. Tags: set on create, then Tag/UntagResource
+    sm.dispatch(st, T + "CreateSecret", {"Name": "tagged", "SecretString": "v", "Tags": [{"Key": "env", "Value": "prod"}],
+                                          "KmsKeyId": "alias/custom"})
+    dt = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"})
+    _check("create Tags round-trip", dt.body["Tags"] == [{"Key": "env", "Value": "prod"}])
+    _check("create KmsKeyId round-trips", dt.body["KmsKeyId"] == "alias/custom")
+    sm.dispatch(st, T + "TagResource", {"SecretId": "tagged", "Tags": [{"Key": "team", "Value": "sec"}]})
+    tagged = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"}).body["Tags"]
+    _check("TagResource adds a tag", {"Key": "team", "Value": "sec"} in tagged and len(tagged) == 2)
+    sm.dispatch(st, T + "UntagResource", {"SecretId": "tagged", "TagKeys": ["env"]})
+    untagged = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"}).body["Tags"]
+    _check("UntagResource removes a tag", untagged == [{"Key": "team", "Value": "sec"}])
+
+    # 17. UpdateSecret with no value touches metadata only (no new version)
+    before_v = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"}).body["VersionIdsToStages"]
+    sm.dispatch(st, T + "UpdateSecret", {"SecretId": "tagged", "KmsKeyId": "alias/other"})
+    after_v = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"})
+    _check("metadata-only UpdateSecret creates no new version", after_v.body["VersionIdsToStages"] == before_v)
+    _check("metadata-only UpdateSecret still updates KmsKeyId", after_v.body["KmsKeyId"] == "alias/other")
+
+    # 18. RotateSecret flips rotation metadata + stages (same shape ListSecrets/DescribeSecret expose)
+    rot = sm.dispatch(st, T + "RotateSecret", {"SecretId": "tagged", "RotationRules": {"AutomaticallyAfterDays": 30}})
+    _check("rotate returns a VersionId", "VersionId" in rot.body)
+    rdesc = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"}).body
+    _check("rotation enabled reflected", rdesc["RotationEnabled"] is True)
+    _check("rotation rules reflected", rdesc["RotationRules"] == {"AutomaticallyAfterDays": 30})
+    _check("last rotated date set", "LastRotatedDate" in rdesc)
+
+    # 19. GetSecretValue stamps LastAccessedDate (ListSecrets/DescribeSecret column)
+    sm.dispatch(st, T + "GetSecretValue", {"SecretId": "tagged"})
+    _check("last accessed date set", "LastAccessedDate" in sm.dispatch(st, T + "DescribeSecret", {"SecretId": "tagged"}).body)
+
+    # 20. Resource policy: Get (none) -> Put -> Get (round-trips) -> Delete -> Get (gone)
+    rp0 = sm.dispatch(st, T + "GetResourcePolicy", {"SecretId": "tagged"})
+    _check("no resource policy initially", "ResourcePolicy" not in rp0.body)
+    policy = '{"Version":"2012-10-17","Statement":[]}'
+    sm.dispatch(st, T + "PutResourcePolicy", {"SecretId": "tagged", "ResourcePolicy": policy})
+    rp1 = sm.dispatch(st, T + "GetResourcePolicy", {"SecretId": "tagged"})
+    _check("resource policy round-trips", rp1.body["ResourcePolicy"] == policy)
+    sm.dispatch(st, T + "DeleteResourcePolicy", {"SecretId": "tagged"})
+    rp2 = sm.dispatch(st, T + "GetResourcePolicy", {"SecretId": "tagged"})
+    _check("resource policy deleted", "ResourcePolicy" not in rp2.body)
+
     print("\nRESULT: PASS — Secrets Manager core conforms (native wire semantics) on this substrate.")
     return 0
 
