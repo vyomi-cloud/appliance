@@ -1,5 +1,49 @@
 {
   "_doc": "ui-spec page id \u2192 v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "dashboard": {
+    "route": "#/dynamodb/dashboard",
+    "honest_page": true
+  },
+  "partiql-editor": {
+    "route": "#/dynamodb/partiql",
+    "honest_page": true
+  },
+  "backups": {
+    "route": "#/dynamodb/backups",
+    "honest_page": true
+  },
+  "create-backup": {
+    "route": "#/dynamodb/backups",
+    "honest_page": true
+  },
+  "exports-to-s3": {
+    "route": "#/dynamodb/exports",
+    "honest_page": true
+  },
+  "export-to-s3": {
+    "route": "#/dynamodb/exports",
+    "honest_page": true
+  },
+  "imports-from-s3": {
+    "route": "#/dynamodb/imports",
+    "honest_page": true
+  },
+  "import-from-s3": {
+    "route": "#/dynamodb/imports",
+    "honest_page": true
+  },
+  "settings": {
+    "route": "#/dynamodb/settings",
+    "honest_page": true
+  },
+  "edit-layout-settings": {
+    "route": "#/dynamodb/settings",
+    "honest_page": true
+  },
+  "edit-explore-items-settings": {
+    "route": "#/dynamodb/settings",
+    "honest_page": true
+  },
   "tables": {
     "route": "#/dynamodb/tables",
     "fixtures": [
@@ -18,7 +62,8 @@
   "create-table": {
     "route": "#/dynamodb/create-table",
     "expand": [
-      "text=Customize settings"
+      "text=Customize settings",
+      "text=Provisioned"
     ]
   },
   "explore-items": {

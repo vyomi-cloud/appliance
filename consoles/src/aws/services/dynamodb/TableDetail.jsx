@@ -10,7 +10,7 @@ import Spinner from "@cloudscape-design/components/spinner";
 import { useAsync } from "../../../common/useAsync.js";
 import { follow, href } from "../../../common/router.js";
 import { ErrorAlert, fmtDate, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
-import { attrType, capacity, keyOf, statusOf } from "./Tables.jsx";
+import { attrType, capacity, keyOf, statusOf, tableClass } from "./Tables.jsx";
 import * as api from "./api.js";
 
 export default function TableDetail({ params, query }) {
@@ -29,11 +29,21 @@ export default function TableDetail({ params, query }) {
     }>{name}</Header>}>
       <Tabs activeTabId={tab} onChange={({ detail }) => setTab(detail.activeTabId)} tabs={[
         { id: "overview", label: "Overview", content: <Overview d={d} /> },
-        { id: "indexes", label: "Indexes", content: <Indexes d={d} /> },
-        { id: "monitor", label: "Monitor", content: <NotSimulatedContainer title="CloudWatch metrics" feature="DynamoDB CloudWatch metrics" /> },
+        { id: "indexes", label: "Indexes", content: <SpaceBetween size="l">
+            <Indexes d={d} />
+            <NotSimulatedContainer title="Local secondary indexes" feature="DynamoDB local secondary indexes" note="LSIs must be declared at table creation and aren't modeled; this table is always empty." />
+          </SpaceBetween> },
+        { id: "monitor", label: "Monitor", content: <SpaceBetween size="l">
+            <NotSimulatedContainer title="CloudWatch alarms" feature="DynamoDB CloudWatch alarms" />
+            <NotSimulatedContainer title="CloudWatch metrics" feature="DynamoDB CloudWatch metrics" />
+          </SpaceBetween> },
         { id: "global-tables", label: "Global tables", content: <NotSimulatedContainer title="Replicas" feature="Global tables (multi-Region replicas)" /> },
         { id: "backups", label: "Backups", content: <Backups name={name} /> },
-        { id: "exports", label: "Exports and streams", content: <KeyValue title="DynamoDB stream details" columns={2} items={[["Stream status", d.StreamSpecification?.StreamEnabled ? "On" : "Off"], ["View type", d.StreamSpecification?.StreamViewType]]} /> },
+        { id: "exports", label: "Exports and streams", content: <SpaceBetween size="l">
+            <NotSimulatedContainer title="Amazon Kinesis data stream details" feature="DynamoDB Kinesis data streaming" />
+            <KeyValue title="DynamoDB stream details" columns={2} items={[["Stream status", d.StreamSpecification?.StreamEnabled ? "On" : "Off"], ["View type", d.StreamSpecification?.StreamViewType]]} />
+            <NotSimulatedContainer title="Trigger" feature="DynamoDB stream triggers (Lambda)" />
+          </SpaceBetween> },
         { id: "permissions", label: "Permissions", content: <NotSimulatedContainer title="Resource-based policy for table" /> },
         { id: "settings", label: "Additional settings", content: <Settings d={d} /> },
       ]} />
@@ -50,14 +60,14 @@ function Overview({ d }) {
         ["Capacity mode", capacity(d)], ["Table status", statusOf(d.TableStatus)],
         ["Alarms", "No active alarms"], ["Point-in-time recovery (PITR)", "Off"], ["Item count", d.ItemCount ?? 0], ["Table size", `${d.TableSizeBytes ?? 0} bytes`],
         ["Amazon Resource Name (ARN)", d.TableArn], ["Creation date", fmtDate(d.CreationDateTime)], ["Deletion protection", d.DeletionProtectionEnabled ? "On" : "Off"],
-        ["Table class", d.TableClassSummary?.TableClass === "STANDARD_INFREQUENT_ACCESS" ? "DynamoDB Standard-IA" : "DynamoDB Standard"],
+        ["Table class", tableClass(d)],
       ]} />
     </SpaceBetween>
   );
 }
 
 function Indexes({ d }) {
-  const rows = [...(d.GlobalSecondaryIndexes || []).map((i) => ({ ...i, kind: "Global" })), ...(d.LocalSecondaryIndexes || []).map((i) => ({ ...i, kind: "Local" }))];
+  const rows = d.GlobalSecondaryIndexes || [];
   return (
     <Table variant="container" header={<Header variant="h2" counter={`(${rows.length})`}>Global secondary indexes</Header>} items={rows}
       columnDefinitions={[
@@ -66,7 +76,8 @@ function Indexes({ d }) {
         { id: "pk", header: "Partition key", cell: (i) => i.KeySchema?.find((k) => k.KeyType === "HASH")?.AttributeName },
         { id: "sk", header: "Sort key", cell: (i) => i.KeySchema?.find((k) => k.KeyType === "RANGE")?.AttributeName || "-" },
         { id: "p", header: "Projected attributes", cell: (i) => i.Projection?.ProjectionType || "-" },
-        { id: "k", header: "Type", cell: (i) => i.kind },
+        { id: "sz", header: "Size", cell: () => `${d.TableSizeBytes ?? 0} bytes` },
+        { id: "ic", header: "Item count", cell: (i) => i.ItemCount ?? 0 },
       ]}
       empty={<Box textAlign="center" color="inherit"><b>No global secondary indexes</b><Box variant="p" color="inherit">You have not created any global secondary indexes for this table.</Box></Box>} />
   );

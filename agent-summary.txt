@@ -1,0 +1,70 @@
+v4 console-UI agent — aws/dynamodb
+
+Fidelity: 55.1% → 100.0% (gate: ≥90%). Real coverage: 19.0% → 15.4%
+(denominator grew: explore-items and create-table now expose more real,
+checkable fields; several previously-"present-by-coincidence" rows are now
+correctly counted).
+
+What changed
+- spec-map.json: added the 11 pages the baseline reported as "no v4 route"
+  (dashboard, partiql-editor, backups, create-backup, exports-to-s3,
+  export-to-s3, imports-from-s3, import-from-s3, settings,
+  edit-layout-settings, edit-explore-items-settings). Each already had a
+  NotSimulatedContainer route wired up in index.jsx from the original pilot;
+  they were just missing from spec-map.json. Marked honest_page: true,
+  matching the precedent set by the reviewed S3 pilot for the same class of
+  page (DAX, reserved capacity, zero-ETL integrations, account settings —
+  all cross-service or billing features outside a self-contained core).
+- Tables.jsx: added the "Table class" column (reads TableClassSummary).
+- TableDetail.jsx: added the 4 missing section titles — "Local secondary
+  indexes" (honest; LSIs aren't modeled), "CloudWatch alarms" (honest),
+  "Amazon Kinesis data stream details" (honest), "Trigger" (honest). Split
+  the GSI/LSI table into two real sections instead of one merged table.
+- CreateTable.jsx — Customize-settings branch:
+  - Added visible "Partition key type"/"Sort key type" labels (previously
+    aria-label only, which the real console also shows as visible text).
+  - Real: "Table class" radio, "Encryption key management" radio, "Turn on
+    deletion protection" checkbox, and a real "Global indexes" (GSI) builder
+    (modal: name, partition/sort key + type, projection) — all wired into
+    CreateTable's payload and backed by new core fields (see below).
+  - Honest: "Maximum table throughput" (On-demand cap), "Read/Write capacity
+    auto scaling" (Application Auto Scaling), "Warm throughput", "Local
+    indexes" (LSI) — each a disabled control + NotSimulated note, not a
+    control that pretends to work.
+- ExploreItems.jsx: real "Operation" (Scan/Query) radio, "Select a table or
+  index" picker (table + its GSIs, resolves the index's own partition/sort
+  key), "Select attribute projection" (All/Specific — filters the rendered
+  columns), and a "Filters - optional" add-filter builder (client-side
+  post-fetch filtering: =, ≠, contains, begins with).
+- core/dynamodb_core.py: CreateTable now persists TableClass,
+  DeletionProtectionEnabled and SSESpecification; DescribeTable echoes them
+  (TableClassSummary, DeletionProtectionEnabled, SSEDescription) — so the new
+  Create-table controls have a real backend effect instead of being cosmetic.
+  Re-vendored to wasm/core/dynamodb_core.py via wasm/build_cores.py.
+- tests/conformance/test_dynamodb_table_settings_core.py: new conformance
+  test for the above (defaults + explicit values round-trip). All green,
+  alongside the existing test_dynamodb_core.py and test_dynamodb_gsi_core.py.
+
+Honest gaps (declared, not faked)
+DAX (all pages), Reserved capacity, Zero-ETL integrations, Dashboard,
+PartiQL editor, Backups/on-demand backup, Exports to S3, Imports from S3,
+Settings pages, LSIs, CloudWatch alarms/metrics, Kinesis data streaming,
+DynamoDB stream triggers, Global tables (replicas), resource-based policy,
+TTL/PITR/tags when the backend doesn't implement the underlying op (already
+true before this change — DescribeTimeToLive/DescribeContinuousBackups
+aren't modeled, so those panels render NotSimulatedContainer). Auto scaling
+and on-demand throughput caps inside Create table.
+
+Verification
+- consoles && npm ci && node build.mjs — clean.
+- node consoles/tests/ui-conformance.mjs aws dynamodb → 247 elements, 38
+  present, 209 honest, 0 missing, 100.0% fidelity.
+- node consoles/tests/smoke-aws.mjs → 9/9 (includes the existing DynamoDB
+  UI→wire and wire→UI round-trip: create table in the UI is visible over
+  the native wire; PutItem over the wire shows up in Explore items).
+- PYTHONPATH=. python3 tests/conformance/test_dynamodb_core.py,
+  test_dynamodb_gsi_core.py, test_dynamodb_table_settings_core.py — all green.
+- s3's own fidelity (73.8%, untouched) is unaffected; no files outside
+  consoles/src/aws/services/dynamodb, spec-map.json, core/dynamodb_core.py,
+  wasm/core/dynamodb_core.py, static/v4 + wasm/v4 build output, and the new
+  conformance test were modified.

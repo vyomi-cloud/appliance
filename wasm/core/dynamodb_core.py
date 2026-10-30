@@ -190,6 +190,9 @@ def _normalize_table(store: NoSqlStore, table_name: str, table: dict) -> dict:
     table.setdefault("sort_key_type", "S")
     table.setdefault("billing_mode", "PAY_PER_REQUEST")
     table.setdefault("provisioned_throughput", {"ReadCapacityUnits": 5, "WriteCapacityUnits": 5})
+    table.setdefault("table_class", "STANDARD")
+    table.setdefault("deletion_protection_enabled", False)
+    table.setdefault("sse_type", "")
     table.setdefault("tags", {})
     table.setdefault("indexes", [])
     table.setdefault("streams", {"enabled": False, "latest_stream_label": ""})
@@ -240,7 +243,12 @@ def _table_view(store: NoSqlStore, table: dict, include_items: bool = True) -> d
         "CreationDateTime": table.get("created", ""),
         "ItemCount": int(table.get("item_count", 0) or 0),
         "TableSizeBytes": int(table.get("table_size_bytes", 0) or 0),
+        "TableClassSummary": {"TableClass": table.get("table_class", "STANDARD")},
+        "DeletionProtectionEnabled": bool(table.get("deletion_protection_enabled", False)),
     }
+    sse_type = table.get("sse_type", "")
+    if sse_type:
+        view["SSEDescription"] = {"Status": "ENABLED", "SSEType": sse_type}
     indexes = table.get("indexes", [])
     if indexes:
         view["GlobalSecondaryIndexes"] = [{
@@ -283,6 +291,10 @@ def _create_table_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
     sk_type = (attr_type.get(sk_name) or str(payload.get("sort_key_type") or "S")).strip().upper() or "S"
     billing_mode = str(payload.get("BillingMode") or payload.get("billing_mode") or "PAY_PER_REQUEST").strip().upper() or "PAY_PER_REQUEST"
     throughput = payload.get("ProvisionedThroughput") or payload.get("provisioned_throughput") or {}
+    table_class = str(payload.get("TableClass") or payload.get("table_class") or "STANDARD").strip().upper() or "STANDARD"
+    deletion_protection = bool(payload.get("DeletionProtectionEnabled") or payload.get("deletion_protection_enabled") or False)
+    sse_spec = payload.get("SSESpecification") or payload.get("sse_specification") or {}
+    sse_type = str(sse_spec.get("SSEType") or "").strip().upper() if sse_spec.get("Enabled") else ""
     tags = payload.get("Tags") or payload.get("tags") or {}
     if isinstance(tags, list):
         tags = {str(t.get("Key", t.get("key", ""))): str(t.get("Value", t.get("value", "")))
@@ -321,6 +333,9 @@ def _create_table_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
             "ReadCapacityUnits": int(throughput.get("ReadCapacityUnits", 5) or 5),
             "WriteCapacityUnits": int(throughput.get("WriteCapacityUnits", 5) or 5),
         },
+        "table_class": table_class,
+        "deletion_protection_enabled": deletion_protection,
+        "sse_type": sse_type,
         "tags": copy.deepcopy(tags or {}),
         "indexes": indexes,
         "streams": {"enabled": False, "latest_stream_label": ""},
