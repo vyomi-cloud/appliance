@@ -1,0 +1,179 @@
+{
+ "$doc": "Vyomi capability registry — VPC. See s3.json for the contract. Per the aws-vpc queue entry, ids here start with 'aws.vpc.' (the AWS convention predates this; newer AWS services follow the cross-cloud 'cloud.service.feature' namespace).",
+ "aws.vpc.vpcs": {
+  "title": "VPCs (create, describe, delete, DNS attribute settings)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_vpc_core.py"]
+ },
+ "aws.vpc.subnets": {
+  "title": "Subnets (create, describe, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_vpc_core.py"]
+ },
+ "aws.vpc.route-tables": {
+  "title": "Route tables (create, describe, delete, routes, subnet associations, main table)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_vpc_core.py"]
+ },
+ "aws.vpc.internet-gateways": {
+  "title": "Internet gateways (create, attach, detach, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_vpc_core.py"]
+ },
+ "aws.vpc.nat-gateways": {
+  "title": "NAT gateways (create, describe, delete)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "A NAT gateway is modeled as a stateful resource with a synthetic public/private IP — it participates in route tables but Vyomi has no packet-level data plane, so no actual address translation happens."
+  ],
+  "tests": ["tests/conformance/test_vpc_core.py"]
+ },
+ "aws.vpc.network-acls": {
+  "title": "Network ACLs (create, describe, delete, numbered allow/deny entries, subnet associations)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_vpc_core.py"]
+ },
+ "aws.vpc.security-groups": {
+  "title": "Security groups (create, authorize/revoke rules, delete, default-SG protection)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_vpc_core.py"]
+ },
+ "aws.vpc.elastic-ips": {
+  "title": "Elastic IPs (allocate, associate, disassociate, release)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Allocated addresses are synthetic (not real internet-routable IPs)."],
+  "tests": ["tests/conformance/test_vpc_core.py"]
+ },
+ "aws.vpc.egress-only-internet-gateways": {
+  "title": "Egress-only internet gateways (create, describe, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_vpc_core.py"]
+ },
+ "aws.vpc.dhcp-option-sets": {
+  "title": "DHCP option sets (create, describe, delete, associate)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "Vyomi stores and returns DHCP configuration exactly as set, but has no real DHCP server — subnets don't actually receive these options over a simulated network stack."
+  ],
+  "tests": ["tests/conformance/test_vpc_core.py"]
+ },
+ "aws.vpc.managed-prefix-lists": {
+  "title": "Managed prefix lists (create, describe, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_vpc_core.py"]
+ },
+ "aws.vpc.peering-connections": {
+  "title": "VPC peering connections (create, accept, describe, delete)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The connection lifecycle (pending-acceptance / active / deleted) is real, but the reachability analyzer does not yet route traffic across an active peering connection — each VPC's network simulation stays independent."
+  ],
+  "tests": ["tests/conformance/test_vpc_core.py"]
+ },
+ "aws.vpc.route-servers": {
+  "title": "VPC Route Server (create, describe, delete)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Only the resource lifecycle is modeled — no real BGP peering or route exchange."],
+  "tests": ["tests/conformance/test_vpc_core.py"]
+ },
+ "aws.vpc.flow-logs": {
+  "title": "VPC/subnet Flow logs",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Vyomi has no packet-level data plane, so there is no real traffic to capture into a flow log."]
+ },
+ "aws.vpc.integrations": {
+  "title": "VPC console third-party integrations (e.g. Transit Gateway Network Manager tiles)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["No third-party integrations are modeled."]
+ },
+ "aws.vpc.create-vpc-and-more": {
+  "title": "\"VPC and more\" wizard (auto-generated subnets/route tables/NAT gateways/endpoints)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Use \"VPC only\" and then create subnets, route tables, and NAT gateways individually — the guided multi-resource wizard isn't modeled, including its Name tag auto-generation, Number of Availability Zones (AZs), Number of public subnets, Number of private subnets, NAT gateways ($), VPC endpoints, and DNS options fields."
+  ]
+ },
+ "aws.vpc.cidr-reservations": {
+  "title": "Subnet CIDR reservations",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Subnet CIDR reservations aren't modeled."]
+ },
+ "aws.vpc.resource-sharing": {
+  "title": "Subnet sharing (AWS RAM)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Cross-account resource sharing via AWS Resource Access Manager isn't modeled."]
+ },
+ "aws.vpc.edge-associations": {
+  "title": "Route table edge associations (Outposts / Local Gateway)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Edge associations to Outposts or Local Gateways aren't modeled."]
+ },
+ "aws.vpc.route-propagation": {
+  "title": "Route table route propagation (Virtual Private Gateway)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Virtual Private Gateway route propagation isn't modeled — see aws.vpc.vpn."]
+ },
+ "aws.vpc.security-group-sharing": {
+  "title": "Security group sharing (AWS RAM), VPC associations, related resources",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Cross-account sharing via AWS Resource Access Manager isn't modeled; every security group stays scoped to this account."]
+ },
+ "aws.vpc.nat-gateway-monitoring": {
+  "title": "NAT gateway CloudWatch monitoring",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["No CloudWatch metrics pipeline backs NAT gateways."]
+ },
+ "aws.vpc.console-settings": {
+  "title": "VPC console preferences",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Console display preferences aren't modeled; they have no effect in Vyomi."]
+ },
+ "aws.vpc.privatelink": {
+  "title": "PrivateLink (VPC endpoints, endpoint services)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["AWS PrivateLink is a separate, large AWS service surfaced under the VPC nav — not in scope for vpc_core.py's VPC/subnet/route-table/SG/NACL network-simulation model."]
+ },
+ "aws.vpc.lattice": {
+  "title": "VPC Lattice (service networks, services, resource configurations/gateways, target groups, domain verifications)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Amazon VPC Lattice is a separate AWS service surfaced under the VPC nav — not simulated."]
+ },
+ "aws.vpc.dns-firewall": {
+  "title": "Route 53 Resolver DNS Firewall (rule groups, domain lists)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Route 53 Resolver DNS Firewall is a separate AWS service surfaced under the VPC nav — not simulated."]
+ },
+ "aws.vpc.network-firewall": {
+  "title": "AWS Network Firewall (firewalls, policies, rule groups, TLS inspection, resource groups, endpoint/container associations)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["AWS Network Firewall is a separate AWS service surfaced under the VPC nav — not simulated."]
+ },
+ "aws.vpc.vpn": {
+  "title": "Site-to-Site VPN and Client VPN (customer/virtual private gateways, VPN concentrators/connections, client endpoints)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["AWS Site-to-Site VPN and Client VPN aren't simulated — no IPsec/TLS tunnel data plane."]
+ },
+ "aws.vpc.verified-access": {
+  "title": "AWS Verified Access (instances, trust providers, groups, endpoints)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["AWS Verified Access is a separate AWS service surfaced under the VPC nav — not simulated."]
+ },
+ "aws.vpc.transit-gateway": {
+  "title": "Transit Gateway (gateways, attachments, policy/route tables, multicast, metering policies)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["AWS Transit Gateway is a separate AWS service surfaced under the VPC nav — vpc_core.py's docstring lists it as future scope."]
+ },
+ "aws.vpc.traffic-mirroring": {
+  "title": "Traffic Mirroring (mirror sessions, targets, filters)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Traffic Mirroring has no packet-level data plane to mirror in Vyomi."]
+ }
+}

@@ -1,0 +1,86 @@
+{
+  "_doc": "ui-spec page id -> v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap — NOT on consoles/honest-allowlist.json yet (aws.vpc isn't listed); these 36 pages are each a separate, large AWS service (PrivateLink/Lattice, DNS firewall, Network Firewall, Site-to-Site VPN, Verified Access, Transit Gateway, Traffic Mirroring) surfaced under the VPC nav but out of scope for vpc_core.py's VPC/subnet/route-table/SG/NACL model — flagged here for orchestrator allowlist review, per AGENT-UI.md. Unlisted spec pages count as missing.",
+
+  "dashboard": { "route": "#/vpc/dashboard" },
+
+  "vpcs": { "route": "#/vpc/vpcs", "live": "live-vpc" },
+  "vpc-detail": { "route": "#/vpc/vpcs/{live}", "live": "live-vpc" },
+  "create-vpc": { "route": "#/vpc/create-vpc", "expand": ["text=VPC and more"] },
+
+  "subnets": { "route": "#/vpc/subnets", "live": "live-subnet" },
+  "subnet-detail": { "route": "#/vpc/subnets/{live}", "live": "live-subnet" },
+  "create-subnet": { "route": "#/vpc/create-subnet" },
+
+  "route-tables": { "route": "#/vpc/route-tables", "live": "live-route-table" },
+  "route-table-detail": { "route": "#/vpc/route-tables/{live}", "live": "live-route-table" },
+  "edit-routes": { "route": "#/vpc/route-tables/{live}/edit-routes", "live": "live-route-table" },
+  "create-route-table": { "route": "#/vpc/create-route-table" },
+
+  "internet-gateways": { "route": "#/vpc/internet-gateways", "live": "live-igw" },
+  "internet-gateway-detail": { "route": "#/vpc/internet-gateways/{live}", "live": "live-igw" },
+  "create-internet-gateway": { "route": "#/vpc/create-internet-gateway" },
+  "attach-internet-gateway": { "route": "#/vpc/internet-gateways/{live}/attach", "live": "live-igw" },
+
+  "nat-gateways": { "route": "#/vpc/nat-gateways", "live": "live-nat-gateway" },
+  "nat-gateway-detail": { "route": "#/vpc/nat-gateways/{live}", "live": "live-nat-gateway" },
+  "create-nat-gateway": { "route": "#/vpc/create-nat-gateway", "expand": ["text=Manual"] },
+
+  "network-acls": { "route": "#/vpc/network-acls", "live": "live-nacl" },
+
+  "security-groups": { "route": "#/vpc/security-groups", "live": "live-sg" },
+  "security-group-detail": { "route": "#/vpc/security-groups/{live}", "live": "live-sg" },
+  "create-security-group": { "route": "#/vpc/create-security-group" },
+
+  "elastic-ips": { "route": "#/vpc/elastic-ips", "live": "live-eip" },
+
+  "egress-only-internet-gateways": { "route": "#/vpc/egress-only-internet-gateways", "live": "live-egress-only-igw" },
+  "dhcp-option-sets": { "route": "#/vpc/dhcp-option-sets", "live": "live-dhcp-options" },
+  "managed-prefix-lists": { "route": "#/vpc/managed-prefix-lists", "live": "live-prefix-list" },
+  "peering-connections": { "route": "#/vpc/peering-connections", "live": "live-peering-connection" },
+  "route-servers": { "route": "#/vpc/route-servers", "live": "live-route-server" },
+
+  "privatelink-getting-started": { "route": "#/vpc/privatelink-getting-started", "honest_page": true },
+  "endpoints": { "route": "#/vpc/endpoints", "honest_page": true },
+  "endpoint-services": { "route": "#/vpc/endpoint-services", "honest_page": true },
+  "service-networks": { "route": "#/vpc/service-networks", "honest_page": true },
+  "lattice-services": { "route": "#/vpc/lattice-services", "honest_page": true },
+  "resource-configurations": { "route": "#/vpc/resource-configurations", "honest_page": true },
+  "resource-gateways": { "route": "#/vpc/resource-gateways", "honest_page": true },
+  "lattice-target-groups": { "route": "#/vpc/lattice-target-groups", "honest_page": true },
+  "domain-verifications": { "route": "#/vpc/domain-verifications", "honest_page": true },
+
+  "dns-firewall-rule-groups": { "route": "#/vpc/dns-firewall-rule-groups", "honest_page": true },
+  "dns-firewall-domain-lists": { "route": "#/vpc/dns-firewall-domain-lists", "honest_page": true },
+
+  "firewalls": { "route": "#/vpc/firewalls", "honest_page": true },
+  "firewall-policies": { "route": "#/vpc/firewall-policies", "honest_page": true },
+  "network-firewall-rule-groups": { "route": "#/vpc/network-firewall-rule-groups", "honest_page": true },
+  "tls-inspection-configurations": { "route": "#/vpc/tls-inspection-configurations", "honest_page": true },
+  "network-firewall-resource-groups": { "route": "#/vpc/network-firewall-resource-groups", "honest_page": true },
+  "vpc-endpoint-associations": { "route": "#/vpc/vpc-endpoint-associations", "honest_page": true },
+  "container-associations": { "route": "#/vpc/container-associations", "honest_page": true },
+
+  "customer-gateways": { "route": "#/vpc/customer-gateways", "honest_page": true },
+  "virtual-private-gateways": { "route": "#/vpc/virtual-private-gateways", "honest_page": true },
+  "vpn-concentrators": { "route": "#/vpc/vpn-concentrators", "honest_page": true },
+  "vpn-connections": { "route": "#/vpc/vpn-connections", "honest_page": true },
+  "client-vpn-endpoints": { "route": "#/vpc/client-vpn-endpoints", "honest_page": true },
+
+  "verified-access-instances": { "route": "#/vpc/verified-access-instances", "honest_page": true },
+  "verified-access-trust-providers": { "route": "#/vpc/verified-access-trust-providers", "honest_page": true },
+  "verified-access-groups": { "route": "#/vpc/verified-access-groups", "honest_page": true },
+  "verified-access-endpoints": { "route": "#/vpc/verified-access-endpoints", "honest_page": true },
+
+  "transit-gateways": { "route": "#/vpc/transit-gateways", "honest_page": true },
+  "transit-gateway-attachments": { "route": "#/vpc/transit-gateway-attachments", "honest_page": true },
+  "transit-gateway-policy-tables": { "route": "#/vpc/transit-gateway-policy-tables", "honest_page": true },
+  "transit-gateway-route-tables": { "route": "#/vpc/transit-gateway-route-tables", "honest_page": true },
+  "transit-gateway-multicast": { "route": "#/vpc/transit-gateway-multicast", "honest_page": true },
+  "metering-policies": { "route": "#/vpc/metering-policies", "honest_page": true },
+
+  "mirror-sessions": { "route": "#/vpc/mirror-sessions", "honest_page": true },
+  "mirror-targets": { "route": "#/vpc/mirror-targets", "honest_page": true },
+  "mirror-filters": { "route": "#/vpc/mirror-filters", "honest_page": true },
+
+  "settings": { "route": "#/vpc/settings" }
+}

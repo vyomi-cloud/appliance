@@ -451,6 +451,32 @@ try {
   await page.getByText(CWG).first().waitFor({ timeout: 10000 });
   check("CloudWatch Logs log group created over wire → shown in Log management list", true, CWG);
   await shot("19-cloudwatch-log-groups");
+  // VPC: create a VPC through the UI wizard (UI → CLI direction)
+  const VN = `v4-smoke-vpc-${Date.now() % 100000}`;
+  await page.goto(UI + "#/vpc/create-vpc");
+  await page.getByPlaceholder("my-vpc-01").fill(VN);
+  await page.getByRole("button", { name: "Create VPC", exact: true }).click();
+  await page.getByRole("heading", { name: new RegExp(VN) }).waitFor({ timeout: 10000 });
+  const vpcsXml = await ec2("DescribeVpcs", {});
+  check("VPC create VPC (UI wizard) → visible over native wire", vpcsXml.includes(`<value>${VN}</value>`), vpcsXml.slice(0, 200));
+  const vpcIdx = vpcsXml.indexOf(`<value>${VN}</value>`);
+  const vpcBefore = vpcsXml.slice(0, vpcIdx);
+  const vpcId = vpcIdx >= 0 ? xtag(vpcBefore.slice(vpcBefore.lastIndexOf("<vpcId>")), "vpcId") : null;
+  await shot("18-vpc-detail");
+
+  // VPC: create a route table over the wire, verify it shows up in the UI (CLI → UI direction)
+  const RTN = `v4-smoke-rt-${Date.now() % 100000}`;
+  const rtCreated = vpcId ? await ec2("CreateRouteTable", { VpcId: vpcId, "TagSpecification.1.ResourceType": "route-table", "TagSpecification.1.Tag.1.Key": "Name", "TagSpecification.1.Tag.1.Value": RTN }) : "";
+  const rtId = xtag(rtCreated, "routeTableId");
+  await page.goto(UI + "#/vpc/route-tables");
+  await page.getByPlaceholder("Search").last().fill(rtId || RTN);
+  await page.getByText(rtId || RTN).first().waitFor({ timeout: 10000 });
+  check("VPC create route table over wire → visible in UI", true, rtId || RTN);
+  await shot("19-vpc-route-tables");
+
+  // VPC: clean up over the wire.
+  if (rtId) await ec2("DeleteRouteTable", { RouteTableId: rtId });
+  if (vpcId) await ec2("DeleteVpc", { VpcId: vpcId });
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));

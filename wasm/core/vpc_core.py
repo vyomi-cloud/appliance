@@ -58,7 +58,9 @@ def _model(store) -> dict:
     m = getattr(store, "_vpc_model", None)
     if m is None:
         m = {"vpcs": {}, "subnets": {}, "sgs": {}, "route_tables": {},
-             "igws": {}, "nacls": {},
+             "igws": {}, "nacls": {}, "nat_gateways": {}, "eigws": {},
+             "dhcp_options": {}, "prefix_lists": {}, "peering_connections": {},
+             "route_servers": {},
              # EC2 compute/storage/network resources (same account, same Query-protocol
              # wire — boto3's "ec2" client signs ALL of this under one service).
              "instances": {}, "images": {}, "volumes": {}, "snapshots": {},
@@ -140,21 +142,93 @@ def _rule_matches(rule: dict, protocol: str, port: int, source_ip, source_sgs) -
 
 
 # ── control-plane operations ────────────────────────────────────────────────
+def _default_dhcp_options(m: dict) -> str:
+    existing = next((d["id"] for d in m["dhcp_options"].values() if d.get("default")), None)
+    if existing:
+        return existing
+    dopt_id = _rid("dopt")
+    m["dhcp_options"][dopt_id] = {"id": dopt_id, "default": True, "tags": {},
+                                  "options": {"domain-name": "ec2.internal", "domain-name-servers": "AmazonProvidedDNS"}}
+    return dopt_id
+
+
+def _create_default_nacl(m: dict, vpc_id: str) -> str:
+    nacl_id = _rid("acl")
+    m["nacls"][nacl_id] = {"id": nacl_id, "vpc_id": vpc_id, "default": True, "subnets": [], "tags": {},
+                           "entries": [{"rule_number": 32767, "protocol": "-1", "allow": True, "egress": False, "cidr": "0.0.0.0/0", "from_port": None, "to_port": None},
+                                       {"rule_number": 32767, "protocol": "-1", "allow": True, "egress": True, "cidr": "0.0.0.0/0", "from_port": None, "to_port": None}]}
+    return nacl_id
+
+
 def _create_vpc(store, params):
     cidr = str(params.get("CidrBlock", ""))
     try:
         ipaddress.ip_network(cidr, strict=False)
     except ValueError:
         raise VpcError("InvalidParameterValue", f"Invalid CIDR: {cidr}")
+    m = _model(store)
     vpc_id = _rid("vpc")
-    _model(store)["vpcs"][vpc_id] = {"id": vpc_id, "cidr": cidr, "igw": None}
+    nacl_id = _create_default_nacl(m, vpc_id)
+    m["vpcs"][vpc_id] = {"id": vpc_id, "cidr": cidr, "igw": None, "default_nacl": nacl_id,
+                         "tenancy": str(params.get("InstanceTenancy") or "default"),
+                         "dhcp_options_id": _default_dhcp_options(m), "enable_dns_hostnames": False,
+                         "enable_dns_support": True, "tags": _parse_tag_specifications(params).get("vpc", {})}
     # default (main) route table with the implicit local route
     rt_id = _rid("rtb")
-    _model(store)["route_tables"][rt_id] = {"id": rt_id, "vpc_id": vpc_id, "main": True,
-                                            "routes": [{"dest": cidr, "target": "local"}],
-                                            "subnets": []}
+    m["route_tables"][rt_id] = {"id": rt_id, "vpc_id": vpc_id, "main": True,
+                               "routes": [{"dest": cidr, "target": "local"}],
+                               "subnets": [], "tags": {}}
     return _envelope("CreateVpc", f"<vpc><vpcId>{vpc_id}</vpcId><cidrBlock>{cidr}</cidrBlock>"
-                                  f"<state>available</state></vpc>")
+                                  f"<state>available</state><instanceTenancy>{_xml_escape(m['vpcs'][vpc_id]['tenancy'])}</instanceTenancy>"
+                                  f"<dhcpOptionsId>{_xml_escape(m['vpcs'][vpc_id]['dhcp_options_id'])}</dhcpOptionsId>"
+                                  f"<isDefault>false</isDefault></vpc>")
+
+
+def _modify_vpc_attribute(store, params):
+    m = _model(store)
+    vpc_id = str(params.get("VpcId", ""))
+    v = m["vpcs"].get(vpc_id)
+    if v is None:
+        raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
+    if "EnableDnsHostnames.Value" in params:
+        v["enable_dns_hostnames"] = str(params["EnableDnsHostnames.Value"]).lower() == "true"
+    if "EnableDnsSupport.Value" in params:
+        v["enable_dns_support"] = str(params["EnableDnsSupport.Value"]).lower() == "true"
+    return _envelope("ModifyVpcAttribute", "<return>true</return>")
+
+
+def _describe_vpc_attribute(store, params):
+    m = _model(store)
+    vpc_id = str(params.get("VpcId", ""))
+    v = m["vpcs"].get(vpc_id)
+    if v is None:
+        raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
+    attr = str(params.get("Attribute", ""))
+    key = "enable_dns_hostnames" if attr == "enableDnsHostnames" else "enable_dns_support"
+    tag = "enableDnsHostnames" if attr == "enableDnsHostnames" else "enableDnsSupport"
+    return _envelope("DescribeVpcAttribute", f"<vpcId>{_xml_escape(vpc_id)}</vpcId>"
+                                             f"<{tag}><value>{str(v.get(key, False)).lower()}</value></{tag}>")
+
+
+def _delete_vpc(store, params):
+    m = _model(store)
+    vpc_id = str(params.get("VpcId", ""))
+    if vpc_id not in m["vpcs"]:
+        raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
+    if any(s["vpc_id"] == vpc_id for s in m["subnets"].values()):
+        raise VpcError("DependencyViolation", f"The vpc '{vpc_id}' has dependencies and cannot be deleted.")
+    if any(sg.get("vpc_id") == vpc_id and not sg.get("is_default") for sg in m["sgs"].values()):
+        raise VpcError("DependencyViolation", f"The vpc '{vpc_id}' has dependencies and cannot be deleted.")
+    if m["vpcs"][vpc_id].get("igw"):
+        raise VpcError("DependencyViolation", f"The vpc '{vpc_id}' has dependencies and cannot be deleted.")
+    for rt_id in [k for k, rt in m["route_tables"].items() if rt["vpc_id"] == vpc_id]:
+        m["route_tables"].pop(rt_id)
+    for nacl_id in [k for k, n in m["nacls"].items() if n["vpc_id"] == vpc_id]:
+        m["nacls"].pop(nacl_id)
+    for sg_id in [k for k, sg in m["sgs"].items() if sg.get("vpc_id") == vpc_id and sg.get("is_default")]:
+        m["sgs"].pop(sg_id)
+    m["vpcs"].pop(vpc_id)
+    return _envelope("DeleteVpc", "<return>true</return>")
 
 
 def _create_subnet(store, params):
@@ -166,13 +240,37 @@ def _create_subnet(store, params):
     subnet_id = _rid("subnet")
     main_rt = next((rt["id"] for rt in m["route_tables"].values()
                     if rt["vpc_id"] == vpc_id and rt.get("main")), None)
-    m["subnets"][subnet_id] = {"id": subnet_id, "vpc_id": vpc_id, "cidr": cidr,
-                               "route_table": main_rt, "nacl": None}
+    az = str(params.get("AvailabilityZone") or _AZS[len(m["subnets"]) % len(_AZS)])
+    m["subnets"][subnet_id] = {"id": subnet_id, "vpc_id": vpc_id, "cidr": cidr, "az": az,
+                               "route_table": main_rt, "nacl": m["vpcs"][vpc_id].get("default_nacl"),
+                               "map_public_ip": False, "tags": _parse_tag_specifications(params).get("subnet", {})}
     if main_rt:
         m["route_tables"][main_rt]["subnets"].append(subnet_id)
+    nacl_id = m["subnets"][subnet_id]["nacl"]
+    if nacl_id and nacl_id in m["nacls"]:
+        m["nacls"][nacl_id]["subnets"].append(subnet_id)
     return _envelope("CreateSubnet", f"<subnet><subnetId>{subnet_id}</subnetId>"
                                      f"<vpcId>{vpc_id}</vpcId><cidrBlock>{cidr}</cidrBlock>"
+                                     f"<availabilityZone>{_xml_escape(az)}</availabilityZone>"
                                      f"<state>available</state></subnet>")
+
+
+def _delete_subnet(store, params):
+    m = _model(store)
+    subnet_id = str(params.get("SubnetId", ""))
+    sn = m["subnets"].get(subnet_id)
+    if sn is None:
+        raise VpcError("InvalidSubnetID.NotFound", f"The subnet '{subnet_id}' does not exist.")
+    if any(i.get("subnet_id") == subnet_id for i in m["instances"].values()):
+        raise VpcError("DependencyViolation", f"The subnet '{subnet_id}' has dependencies and cannot be deleted.")
+    rt = m["route_tables"].get(sn.get("route_table"))
+    if rt and subnet_id in rt["subnets"]:
+        rt["subnets"].remove(subnet_id)
+    nacl = m["nacls"].get(sn.get("nacl"))
+    if nacl and subnet_id in nacl["subnets"]:
+        nacl["subnets"].remove(subnet_id)
+    m["subnets"].pop(subnet_id)
+    return _envelope("DeleteSubnet", "<return>true</return>")
 
 
 def _create_security_group(store, params):
@@ -215,11 +313,31 @@ def _authorize(store, params, direction):
     return _envelope(action, "<return>true</return>")
 
 
+def _igw_xml(igw: dict) -> str:
+    att = (f"<item><vpcId>{_xml_escape(igw['vpc_id'])}</vpcId><state>available</state></item>"
+           if igw.get("vpc_id") else "")
+    return ("<item>"
+            f"<internetGatewayId>{_xml_escape(igw['id'])}</internetGatewayId>"
+            f"<attachmentSet>{att}</attachmentSet>{_tags_xml(igw.get('tags', {}))}"
+            "</item>")
+
+
 def _create_internet_gateway(store, params):
     igw_id = _rid("igw")
-    _model(store)["igws"][igw_id] = {"id": igw_id, "vpc_id": None}
+    m = _model(store)
+    m["igws"][igw_id] = {"id": igw_id, "vpc_id": None, "tags": _parse_tag_specifications(params).get("internet-gateway", {})}
     return _envelope("CreateInternetGateway",
-                     f"<internetGateway><internetGatewayId>{igw_id}</internetGatewayId></internetGateway>")
+                     f"<internetGateway><internetGatewayId>{igw_id}</internetGatewayId><attachmentSet/>"
+                     f"{_tags_xml(m['igws'][igw_id]['tags'])}</internetGateway>")
+
+
+def _describe_internet_gateways(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("InternetGatewayId.")]
+    rows = list(m["igws"].values())
+    if ids:
+        rows = [g for g in rows if g["id"] in ids]
+    return _envelope("DescribeInternetGateways", f"<internetGatewaySet>{''.join(_igw_xml(g) for g in rows)}</internetGatewaySet>")
 
 
 def _attach_internet_gateway(store, params):
@@ -228,9 +346,88 @@ def _attach_internet_gateway(store, params):
     m = _model(store)
     if igw_id not in m["igws"] or vpc_id not in m["vpcs"]:
         raise VpcError("InvalidParameterValue", "IGW or VPC not found.")
+    if m["igws"][igw_id]["vpc_id"]:
+        raise VpcError("Resource.AlreadyAssociated", f"resource {igw_id} is already attached to a VPC.")
     m["igws"][igw_id]["vpc_id"] = vpc_id
     m["vpcs"][vpc_id]["igw"] = igw_id
     return _envelope("AttachInternetGateway", "<return>true</return>")
+
+
+def _detach_internet_gateway(store, params):
+    igw_id = str(params.get("InternetGatewayId", ""))
+    vpc_id = str(params.get("VpcId", ""))
+    m = _model(store)
+    igw = m["igws"].get(igw_id)
+    if igw is None or igw.get("vpc_id") != vpc_id:
+        raise VpcError("Gateway.NotAttached", f"resource {igw_id} is not attached to network {vpc_id}")
+    igw["vpc_id"] = None
+    m["vpcs"][vpc_id]["igw"] = None
+    return _envelope("DetachInternetGateway", "<return>true</return>")
+
+
+def _delete_internet_gateway(store, params):
+    igw_id = str(params.get("InternetGatewayId", ""))
+    m = _model(store)
+    igw = m["igws"].get(igw_id)
+    if igw is None:
+        raise VpcError("InvalidInternetGatewayID.NotFound", f"The internetGateway ID '{igw_id}' does not exist.")
+    if igw.get("vpc_id"):
+        raise VpcError("DependencyViolation", f"The internetGateway '{igw_id}' has dependencies and cannot be deleted.")
+    m["igws"].pop(igw_id)
+    return _envelope("DeleteInternetGateway", "<return>true</return>")
+
+
+# ── route tables ─────────────────────────────────────────────────────────
+def _rt_xml(rt: dict) -> str:
+    routes = "".join(f"<item><destinationCidrBlock>{_xml_escape(r['dest'])}</destinationCidrBlock>"
+                      f"<gatewayId>{_xml_escape(r['target'])}</gatewayId><state>active</state></item>"
+                      for r in rt["routes"])
+    assocs = ""
+    if rt.get("main"):
+        assocs += (f"<item><routeTableAssociationId>rtbassoc-main-{_xml_escape(rt['vpc_id'])}</routeTableAssociationId>"
+                   f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><main>true</main></item>")
+    assocs += "".join(f"<item><routeTableAssociationId>rtbassoc-{_xml_escape(sid)}</routeTableAssociationId>"
+                       f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><subnetId>{_xml_escape(sid)}</subnetId>"
+                       f"<main>false</main></item>" for sid in rt["subnets"])
+    return ("<item>"
+            f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><vpcId>{_xml_escape(rt['vpc_id'])}</vpcId>"
+            f"<routeSet>{routes}</routeSet><associationSet>{assocs}</associationSet>"
+            f"{_tags_xml(rt.get('tags', {}))}"
+            "</item>")
+
+
+def _create_route_table(store, params):
+    vpc_id = str(params.get("VpcId", ""))
+    m = _model(store)
+    if vpc_id not in m["vpcs"]:
+        raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
+    rt_id = _rid("rtb")
+    m["route_tables"][rt_id] = {"id": rt_id, "vpc_id": vpc_id, "main": False, "routes": [], "subnets": [],
+                               "tags": _parse_tag_specifications(params).get("route-table", {})}
+    return _envelope("CreateRouteTable", f"<routeTable>{_rt_xml(m['route_tables'][rt_id])[len('<item>'):-len('</item>')]}</routeTable>")
+
+
+def _describe_route_tables(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("RouteTableId.")]
+    rows = list(m["route_tables"].values())
+    if ids:
+        rows = [rt for rt in rows if rt["id"] in ids]
+    return _envelope("DescribeRouteTables", f"<routeTableSet>{''.join(_rt_xml(rt) for rt in rows)}</routeTableSet>")
+
+
+def _delete_route_table(store, params):
+    rt_id = str(params.get("RouteTableId", ""))
+    m = _model(store)
+    rt = m["route_tables"].get(rt_id)
+    if rt is None:
+        raise VpcError("InvalidRouteTableID.NotFound", f"The routeTable ID '{rt_id}' does not exist.")
+    if rt.get("main"):
+        raise VpcError("DependencyViolation", "The main route table cannot be deleted.")
+    if rt["subnets"]:
+        raise VpcError("DependencyViolation", f"The routeTable '{rt_id}' has dependencies and cannot be deleted.")
+    m["route_tables"].pop(rt_id)
+    return _envelope("DeleteRouteTable", "<return>true</return>")
 
 
 def _create_route(store, params):
@@ -246,15 +443,126 @@ def _create_route(store, params):
     return _envelope("CreateRoute", "<return>true</return>")
 
 
+def _delete_route(store, params):
+    rt_id = str(params.get("RouteTableId", ""))
+    dest = str(params.get("DestinationCidrBlock", ""))
+    m = _model(store)
+    rt = m["route_tables"].get(rt_id)
+    if not rt:
+        raise VpcError("InvalidRouteTableID.NotFound", f"Route table {rt_id} not found.")
+    rt["routes"] = [r for r in rt["routes"] if r["dest"] != dest]
+    return _envelope("DeleteRoute", "<return>true</return>")
+
+
+def _reassign_subnet_route_table(m: dict, subnet_id: str, new_rt_id: str) -> None:
+    sn = m["subnets"][subnet_id]
+    old_rt = m["route_tables"].get(sn.get("route_table"))
+    if old_rt and subnet_id in old_rt["subnets"]:
+        old_rt["subnets"].remove(subnet_id)
+    sn["route_table"] = new_rt_id
+    m["route_tables"][new_rt_id]["subnets"].append(subnet_id)
+
+
+def _associate_route_table(store, params):
+    m = _model(store)
+    rt_id = str(params.get("RouteTableId", ""))
+    subnet_id = str(params.get("SubnetId", ""))
+    if rt_id not in m["route_tables"] or subnet_id not in m["subnets"]:
+        raise VpcError("InvalidParameterValue", "Route table or subnet not found.")
+    _reassign_subnet_route_table(m, subnet_id, rt_id)
+    return _envelope("AssociateRouteTable", f"<associationId>rtbassoc-{_xml_escape(subnet_id)}</associationId>"
+                                            f"<associationState><state>associated</state></associationState>")
+
+
+def _disassociate_route_table(store, params):
+    m = _model(store)
+    assoc_id = str(params.get("AssociationId", ""))
+    if assoc_id.startswith("rtbassoc-main-"):
+        raise VpcError("InvalidParameterValue", "The main route table association cannot be disassociated.")
+    subnet_id = assoc_id[len("rtbassoc-"):]
+    sn = m["subnets"].get(subnet_id)
+    if sn is None:
+        raise VpcError("InvalidAssociationID.NotFound", f"The association ID '{assoc_id}' does not exist.")
+    main_rt = next((rt["id"] for rt in m["route_tables"].values() if rt["vpc_id"] == sn["vpc_id"] and rt.get("main")), None)
+    if main_rt:
+        _reassign_subnet_route_table(m, subnet_id, main_rt)
+    return _envelope("DisassociateRouteTable", "<return>true</return>")
+
+
+def _replace_route_table_association(store, params):
+    m = _model(store)
+    assoc_id = str(params.get("AssociationId", ""))
+    rt_id = str(params.get("RouteTableId", ""))
+    if rt_id not in m["route_tables"]:
+        raise VpcError("InvalidRouteTableID.NotFound", f"Route table {rt_id} not found.")
+    if assoc_id.startswith("rtbassoc-main-"):
+        vpc_id = assoc_id[len("rtbassoc-main-"):]
+        old_main = next((rt for rt in m["route_tables"].values() if rt["vpc_id"] == vpc_id and rt.get("main")), None)
+        if old_main:
+            old_main["main"] = False
+        m["route_tables"][rt_id]["main"] = True
+        new_assoc = f"rtbassoc-main-{vpc_id}"
+    else:
+        subnet_id = assoc_id[len("rtbassoc-"):]
+        if subnet_id not in m["subnets"]:
+            raise VpcError("InvalidAssociationID.NotFound", f"The association ID '{assoc_id}' does not exist.")
+        _reassign_subnet_route_table(m, subnet_id, rt_id)
+        new_assoc = f"rtbassoc-{subnet_id}"
+    return _envelope("ReplaceRouteTableAssociation", f"<newAssociationId>{_xml_escape(new_assoc)}</newAssociationId>")
+
+
+# ── network ACLs ────────────────────────────────────────────────────────
+def _nacl_xml(nacl: dict) -> str:
+    entries = "".join(
+        f"<item><ruleNumber>{e['rule_number']}</ruleNumber><protocol>{_xml_escape(e['protocol'])}</protocol>"
+        f"<ruleAction>{'allow' if e['allow'] else 'deny'}</ruleAction><egress>{str(e['egress']).lower()}</egress>"
+        f"<cidrBlock>{_xml_escape(e['cidr'])}</cidrBlock>"
+        + (f"<portRange><from>{e['from_port']}</from><to>{e['to_port']}</to></portRange>" if e.get("from_port") is not None else "")
+        + "</item>" for e in nacl["entries"])
+    assocs = "".join(f"<item><networkAclAssociationId>aclassoc-{_xml_escape(sid)}</networkAclAssociationId>"
+                      f"<networkAclId>{_xml_escape(nacl['id'])}</networkAclId><subnetId>{_xml_escape(sid)}</subnetId></item>"
+                      for sid in nacl["subnets"])
+    return ("<item>"
+            f"<networkAclId>{_xml_escape(nacl['id'])}</networkAclId><vpcId>{_xml_escape(nacl['vpc_id'])}</vpcId>"
+            f"<default>{str(nacl.get('default', False)).lower()}</default>"
+            f"<entrySet>{entries}</entrySet><associationSet>{assocs}</associationSet>"
+            f"{_tags_xml(nacl.get('tags', {}))}"
+            "</item>")
+
+
 def _create_network_acl(store, params):
     vpc_id = str(params.get("VpcId", ""))
     m = _model(store)
     if vpc_id not in m["vpcs"]:
         raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
     nacl_id = _rid("acl")
-    m["nacls"][nacl_id] = {"id": nacl_id, "vpc_id": vpc_id, "entries": [], "subnets": []}
+    m["nacls"][nacl_id] = {"id": nacl_id, "vpc_id": vpc_id, "entries": [], "subnets": [], "default": False,
+                          "tags": _parse_tag_specifications(params).get("network-acl", {})}
     return _envelope("CreateNetworkAcl",
-                     f"<networkAcl><networkAclId>{nacl_id}</networkAclId></networkAcl>")
+                     f"<networkAcl>{_nacl_xml(m['nacls'][nacl_id])[len('<item>'):-len('</item>')]}</networkAcl>")
+
+
+def _describe_network_acls(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("NetworkAclId.")]
+    rows = list(m["nacls"].values())
+    if ids:
+        rows = [n for n in rows if n["id"] in ids]
+    return _envelope("DescribeNetworkAcls", f"<networkAclSet>{''.join(_nacl_xml(n) for n in rows)}</networkAclSet>")
+
+
+def _delete_network_acl(store, params):
+    nacl_id = str(params.get("NetworkAclId", ""))
+    m = _model(store)
+    nacl = m["nacls"].get(nacl_id)
+    if nacl is None:
+        raise VpcError("InvalidNetworkAclID.NotFound", f"The networkAcl ID '{nacl_id}' does not exist.")
+    if nacl.get("default"):
+        raise VpcError("InvalidParameterValue", "The default network ACL cannot be deleted.")
+    if nacl["subnets"]:
+        raise VpcError("DependencyViolation", f"The networkAcl '{nacl_id}' has dependencies and cannot be deleted.")
+    m["nacls"].pop(nacl_id)
+    return _envelope("DeleteNetworkAcl", "<return>true</return>")
 
 
 def _create_network_acl_entry(store, params):
@@ -274,6 +582,17 @@ def _create_network_acl_entry(store, params):
     return _envelope("CreateNetworkAclEntry", "<return>true</return>")
 
 
+def _delete_network_acl_entry(store, params):
+    m = _model(store)
+    nacl = m["nacls"].get(str(params.get("NetworkAclId", "")))
+    if not nacl:
+        raise VpcError("InvalidNetworkAclID.NotFound", "Network ACL not found.")
+    rule_number = int(params.get("RuleNumber", -1))
+    egress = str(params.get("Egress", "false")).lower() == "true"
+    nacl["entries"] = [e for e in nacl["entries"] if not (e["rule_number"] == rule_number and e["egress"] == egress)]
+    return _envelope("DeleteNetworkAclEntry", "<return>true</return>")
+
+
 def _associate_network_acl(store, params):
     """Attach a NACL to a subnet (simulator convenience; real EC2 uses
     ReplaceNetworkAclAssociation with an association id)."""
@@ -282,25 +601,364 @@ def _associate_network_acl(store, params):
     subnet_id = str(params.get("SubnetId", ""))
     if nacl_id not in m["nacls"] or subnet_id not in m["subnets"]:
         raise VpcError("InvalidParameterValue", "NACL or subnet not found.")
+    old_nacl = m["nacls"].get(m["subnets"][subnet_id]["nacl"])
+    if old_nacl and subnet_id in old_nacl["subnets"]:
+        old_nacl["subnets"].remove(subnet_id)
     m["subnets"][subnet_id]["nacl"] = nacl_id
     m["nacls"][nacl_id]["subnets"].append(subnet_id)
     return _envelope("AssociateNetworkAcl", "<return>true</return>")
 
 
+def _replace_network_acl_association(store, params):
+    m = _model(store)
+    assoc_id = str(params.get("AssociationId", ""))
+    nacl_id = str(params.get("NetworkAclId", ""))
+    subnet_id = assoc_id[len("aclassoc-"):]
+    if nacl_id not in m["nacls"] or subnet_id not in m["subnets"]:
+        raise VpcError("InvalidParameterValue", "NACL or association not found.")
+    old_nacl = m["nacls"].get(m["subnets"][subnet_id]["nacl"])
+    if old_nacl and subnet_id in old_nacl["subnets"]:
+        old_nacl["subnets"].remove(subnet_id)
+    m["subnets"][subnet_id]["nacl"] = nacl_id
+    m["nacls"][nacl_id]["subnets"].append(subnet_id)
+    return _envelope("ReplaceNetworkAclAssociation", f"<newAssociationId>aclassoc-{_xml_escape(subnet_id)}</newAssociationId>")
+
+
+# ── NAT gateways ────────────────────────────────────────────────────────
+def _natgw_xml(gw: dict) -> str:
+    addr = (f"<item><allocationId>{_xml_escape(gw['allocation_id'])}</allocationId>"
+            f"<publicIp>{_xml_escape(gw.get('public_ip', ''))}</publicIp>"
+            f"<privateIp>{_xml_escape(gw.get('private_ip', ''))}</privateIp>"
+            f"<networkInterfaceId>{_xml_escape(gw.get('eni_id', ''))}</networkInterfaceId></item>"
+            if gw.get("allocation_id") else "")
+    return ("<item>"
+            f"<natGatewayId>{_xml_escape(gw['id'])}</natGatewayId><vpcId>{_xml_escape(gw['vpc_id'])}</vpcId>"
+            f"<subnetId>{_xml_escape(gw['subnet_id'])}</subnetId><state>{_xml_escape(gw['state'])}</state>"
+            f"<connectivityType>{_xml_escape(gw['connectivity_type'])}</connectivityType>"
+            f"<createTime>{_xml_escape(gw['create_time'])}</createTime>"
+            f"<natGatewayAddressSet>{addr}</natGatewayAddressSet>"
+            f"{_tags_xml(gw.get('tags', {}))}"
+            "</item>")
+
+
+def _create_nat_gateway(store, params):
+    m = _model(store)
+    subnet_id = str(params.get("SubnetId", ""))
+    subnet = m["subnets"].get(subnet_id)
+    if subnet is None:
+        raise VpcError("InvalidSubnetID.NotFound", f"The subnet ID '{subnet_id}' does not exist.")
+    connectivity = str(params.get("ConnectivityType") or "public")
+    natgw_id = _rid("nat")
+    gw = {"id": natgw_id, "vpc_id": subnet["vpc_id"], "subnet_id": subnet_id, "state": "available",
+          "connectivity_type": connectivity, "create_time": _now(), "allocation_id": "",
+          "tags": _parse_tag_specifications(params).get("natgateway", {})}
+    if connectivity == "public":
+        alloc_id = str(params.get("AllocationId") or "")
+        if alloc_id and alloc_id in m["addresses"]:
+            addr = m["addresses"][alloc_id]
+        else:
+            n = len(m["addresses"])
+            alloc_id = _rid("eipalloc")
+            addr = {"allocation_id": alloc_id, "public_ip": _pseudo_public_ip(n + 2000), "domain": "vpc",
+                    "instance_id": "", "association_id": "", "network_interface_id": "", "private_ip": "", "tags": {}}
+            m["addresses"][alloc_id] = addr
+        gw["allocation_id"] = alloc_id
+        gw["public_ip"] = addr["public_ip"]
+    gw["private_ip"] = _pseudo_ip(len(m["nat_gateways"]), base=(10, 0, 3))
+    gw["eni_id"] = _rid("eni")
+    m["nat_gateways"][natgw_id] = gw
+    return _envelope("CreateNatGateway", f"<natGateway>{_natgw_xml(gw)[len('<item>'):-len('</item>')]}</natGateway>")
+
+
+def _describe_nat_gateways(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("NatGatewayId.")]
+    rows = list(m["nat_gateways"].values())
+    if ids:
+        rows = [g for g in rows if g["id"] in ids]
+    return _envelope("DescribeNatGateways", f"<natGatewaySet>{''.join(_natgw_xml(g) for g in rows)}</natGatewaySet>")
+
+
+def _delete_nat_gateway(store, params):
+    natgw_id = str(params.get("NatGatewayId", ""))
+    m = _model(store)
+    if natgw_id not in m["nat_gateways"]:
+        raise VpcError("NatGatewayNotFound", f"The Nat Gateway ID '{natgw_id}' does not exist.")
+    m["nat_gateways"][natgw_id]["state"] = "deleted"
+    m["nat_gateways"].pop(natgw_id)
+    return _envelope("DeleteNatGateway", "<return>true</return>")
+
+
+# ── egress-only internet gateways ───────────────────────────────────────
+def _eigw_xml(g: dict) -> str:
+    att = f"<item><vpcId>{_xml_escape(g['vpc_id'])}</vpcId><state>attached</state></item>" if g.get("vpc_id") else ""
+    return ("<item>"
+            f"<egressOnlyInternetGatewayId>{_xml_escape(g['id'])}</egressOnlyInternetGatewayId>"
+            f"<attachmentSet>{att}</attachmentSet>{_tags_xml(g.get('tags', {}))}"
+            "</item>")
+
+
+def _create_egress_only_internet_gateway(store, params):
+    m = _model(store)
+    vpc_id = str(params.get("VpcId", ""))
+    if vpc_id not in m["vpcs"]:
+        raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
+    eigw_id = _rid("eigw")
+    m["eigws"][eigw_id] = {"id": eigw_id, "vpc_id": vpc_id, "tags": _parse_tag_specifications(params).get("egress-only-internet-gateway", {})}
+    return _envelope("CreateEgressOnlyInternetGateway", f"<egressOnlyInternetGateway>{_eigw_xml(m['eigws'][eigw_id])[len('<item>'):-len('</item>')]}</egressOnlyInternetGateway>")
+
+
+def _describe_egress_only_internet_gateways(store, params):
+    m = _model(store)
+    return _envelope("DescribeEgressOnlyInternetGateways", f"<egressOnlyInternetGatewaySet>{''.join(_eigw_xml(g) for g in m['eigws'].values())}</egressOnlyInternetGatewaySet>")
+
+
+def _delete_egress_only_internet_gateway(store, params):
+    eigw_id = str(params.get("EgressOnlyInternetGatewayId", ""))
+    m = _model(store)
+    if eigw_id not in m["eigws"]:
+        raise VpcError("InvalidGatewayID.NotFound", f"The gateway ID '{eigw_id}' does not exist.")
+    m["eigws"].pop(eigw_id)
+    return _envelope("DeleteEgressOnlyInternetGateway", "<return>true</return>")
+
+
+# ── DHCP option sets ─────────────────────────────────────────────────────
+def _parse_dhcp_configurations(params: dict) -> dict:
+    opts: dict = {}
+    idxs = sorted({k.split(".")[1] for k in params if k.startswith("DhcpConfiguration.") and len(k.split(".")) >= 3}, key=int)
+    for i in idxs:
+        key = params.get(f"DhcpConfiguration.{i}.Key")
+        if not key:
+            continue
+        vals = [v for k, v in params.items() if k.startswith(f"DhcpConfiguration.{i}.Value.")]
+        opts[str(key)] = ", ".join(str(v) for v in vals) if vals else ""
+    return opts
+
+
+def _dopt_xml(d: dict) -> str:
+    cfgs = "".join(f"<item><key>{_xml_escape(k)}</key><valueSet><item><value>{_xml_escape(v)}</value></item></valueSet></item>"
+                    for k, v in d.get("options", {}).items())
+    return ("<item>"
+            f"<dhcpOptionsId>{_xml_escape(d['id'])}</dhcpOptionsId><dhcpConfigurationSet>{cfgs}</dhcpConfigurationSet>"
+            f"{_tags_xml(d.get('tags', {}))}"
+            "</item>")
+
+
+def _create_dhcp_options(store, params):
+    m = _model(store)
+    dopt_id = _rid("dopt")
+    m["dhcp_options"][dopt_id] = {"id": dopt_id, "default": False, "options": _parse_dhcp_configurations(params),
+                                  "tags": _parse_tag_specifications(params).get("dhcp-options", {})}
+    return _envelope("CreateDhcpOptions", f"<dhcpOptions>{_dopt_xml(m['dhcp_options'][dopt_id])[len('<item>'):-len('</item>')]}</dhcpOptions>")
+
+
+def _describe_dhcp_options(store, params):
+    m = _model(store)
+    return _envelope("DescribeDhcpOptions", f"<dhcpOptionsSet>{''.join(_dopt_xml(d) for d in m['dhcp_options'].values())}</dhcpOptionsSet>")
+
+
+def _delete_dhcp_options(store, params):
+    dopt_id = str(params.get("DhcpOptionsId", ""))
+    m = _model(store)
+    if dopt_id not in m["dhcp_options"]:
+        raise VpcError("InvalidDhcpOptionsID.NotFound", f"The dhcpOptions ID '{dopt_id}' does not exist.")
+    if m["dhcp_options"][dopt_id].get("default"):
+        raise VpcError("InvalidParameterValue", "The default DHCP options set cannot be deleted.")
+    m["dhcp_options"].pop(dopt_id)
+    return _envelope("DeleteDhcpOptions", "<return>true</return>")
+
+
+def _associate_dhcp_options(store, params):
+    m = _model(store)
+    vpc_id = str(params.get("VpcId", ""))
+    dopt_id = str(params.get("DhcpOptionsId", ""))
+    if vpc_id not in m["vpcs"]:
+        raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
+    if dopt_id != "default" and dopt_id not in m["dhcp_options"]:
+        raise VpcError("InvalidDhcpOptionsID.NotFound", f"The dhcpOptions ID '{dopt_id}' does not exist.")
+    m["vpcs"][vpc_id]["dhcp_options_id"] = dopt_id if dopt_id != "default" else _default_dhcp_options(m)
+    return _envelope("AssociateDhcpOptions", "<return>true</return>")
+
+
+# ── managed prefix lists ─────────────────────────────────────────────────
+def _parse_prefix_entries(params: dict) -> list:
+    entries = []
+    idxs = sorted({k.split(".")[1] for k in params if k.startswith("Entry.") and len(k.split(".")) >= 3}, key=int)
+    for i in idxs:
+        cidr = params.get(f"Entry.{i}.Cidr")
+        if cidr:
+            entries.append({"cidr": str(cidr), "description": str(params.get(f"Entry.{i}.Description", ""))})
+    return entries
+
+
+def _pl_xml(pl: dict) -> str:
+    return ("<item>"
+            f"<prefixListId>{_xml_escape(pl['id'])}</prefixListId><prefixListName>{_xml_escape(pl['name'])}</prefixListName>"
+            f"<addressFamily>{_xml_escape(pl['address_family'])}</addressFamily><maxEntries>{pl['max_entries']}</maxEntries>"
+            f"<state>{_xml_escape(pl['state'])}</state><ownerId>{OWNER_ID}</ownerId><version>{pl['version']}</version>"
+            f"{_tags_xml(pl.get('tags', {}))}"
+            "</item>")
+
+
+def _create_managed_prefix_list(store, params):
+    m = _model(store)
+    name = str(params.get("PrefixListName", ""))
+    pl_id = _rid("pl")
+    pl = {"id": pl_id, "name": name, "max_entries": int(params.get("MaxEntries", 10) or 10),
+          "address_family": str(params.get("AddressFamily") or "IPv4"), "state": "create-complete", "version": 1,
+          "entries": _parse_prefix_entries(params), "tags": _parse_tag_specifications(params).get("prefix-list", {})}
+    m["prefix_lists"][pl_id] = pl
+    return _envelope("CreateManagedPrefixList", f"<prefixList>{_pl_xml(pl)[len('<item>'):-len('</item>')]}</prefixList>")
+
+
+def _describe_managed_prefix_lists(store, params):
+    m = _model(store)
+    return _envelope("DescribeManagedPrefixLists", f"<prefixListSet>{''.join(_pl_xml(pl) for pl in m['prefix_lists'].values())}</prefixListSet>")
+
+
+def _delete_managed_prefix_list(store, params):
+    pl_id = str(params.get("PrefixListId", ""))
+    m = _model(store)
+    pl = m["prefix_lists"].get(pl_id)
+    if pl is None:
+        raise VpcError("InvalidPrefixListID.NotFound", f"The prefix list ID '{pl_id}' does not exist.")
+    pl["state"] = "delete-complete"
+    m["prefix_lists"].pop(pl_id)
+    return _envelope("DeleteManagedPrefixList", f"<prefixList>{_pl_xml(pl)[len('<item>'):-len('</item>')]}</prefixList>")
+
+
+# ── VPC peering connections ──────────────────────────────────────────────
+def _pcx_xml(pcx: dict) -> str:
+    return ("<item>"
+            f"<vpcPeeringConnectionId>{_xml_escape(pcx['id'])}</vpcPeeringConnectionId>"
+            f"<requesterVpcInfo><vpcId>{_xml_escape(pcx['requester_vpc_id'])}</vpcId><ownerId>{OWNER_ID}</ownerId></requesterVpcInfo>"
+            f"<accepterVpcInfo><vpcId>{_xml_escape(pcx['accepter_vpc_id'])}</vpcId><ownerId>{OWNER_ID}</ownerId></accepterVpcInfo>"
+            f"<status><code>{_xml_escape(pcx['status'])}</code></status>"
+            f"{_tags_xml(pcx.get('tags', {}))}"
+            "</item>")
+
+
+def _create_vpc_peering_connection(store, params):
+    m = _model(store)
+    vpc_id = str(params.get("VpcId", ""))
+    peer_vpc_id = str(params.get("PeerVpcId", ""))
+    if vpc_id not in m["vpcs"] or peer_vpc_id not in m["vpcs"]:
+        raise VpcError("InvalidVpcID.NotFound", "VPC or peer VPC not found.")
+    pcx_id = _rid("pcx")
+    m["peering_connections"][pcx_id] = {"id": pcx_id, "requester_vpc_id": vpc_id, "accepter_vpc_id": peer_vpc_id,
+                                        "status": "pending-acceptance", "tags": _parse_tag_specifications(params).get("vpc-peering-connection", {})}
+    return _envelope("CreateVpcPeeringConnection", f"<vpcPeeringConnection>{_pcx_xml(m['peering_connections'][pcx_id])[len('<item>'):-len('</item>')]}</vpcPeeringConnection>")
+
+
+def _describe_vpc_peering_connections(store, params):
+    m = _model(store)
+    return _envelope("DescribeVpcPeeringConnections", f"<vpcPeeringConnectionSet>{''.join(_pcx_xml(p) for p in m['peering_connections'].values())}</vpcPeeringConnectionSet>")
+
+
+def _accept_vpc_peering_connection(store, params):
+    m = _model(store)
+    pcx_id = str(params.get("VpcPeeringConnectionId", ""))
+    pcx = m["peering_connections"].get(pcx_id)
+    if pcx is None:
+        raise VpcError("InvalidVpcPeeringConnectionID.NotFound", f"The VPC peering connection '{pcx_id}' does not exist.")
+    pcx["status"] = "active"
+    return _envelope("AcceptVpcPeeringConnection", f"<vpcPeeringConnection>{_pcx_xml(pcx)[len('<item>'):-len('</item>')]}</vpcPeeringConnection>")
+
+
+def _delete_vpc_peering_connection(store, params):
+    pcx_id = str(params.get("VpcPeeringConnectionId", ""))
+    m = _model(store)
+    if pcx_id not in m["peering_connections"]:
+        raise VpcError("InvalidVpcPeeringConnectionID.NotFound", f"The VPC peering connection '{pcx_id}' does not exist.")
+    m["peering_connections"][pcx_id]["status"] = "deleted"
+    m["peering_connections"].pop(pcx_id)
+    return _envelope("DeleteVpcPeeringConnection", "<return>true</return>")
+
+
+# ── VPC route servers ────────────────────────────────────────────────────
+def _rs_xml(rs: dict) -> str:
+    return ("<item>"
+            f"<routeServerId>{_xml_escape(rs['id'])}</routeServerId><amazonSideAsn>{rs['asn']}</amazonSideAsn>"
+            f"<state>{_xml_escape(rs['state'])}</state>"
+            f"{_tags_xml(rs.get('tags', {}))}"
+            "</item>")
+
+
+def _create_route_server(store, params):
+    m = _model(store)
+    rs_id = _rid("rs")
+    rs = {"id": rs_id, "asn": int(params.get("AmazonSideAsn", 64512) or 64512), "state": "available",
+          "tags": _parse_tag_specifications(params).get("route-server", {})}
+    m["route_servers"][rs_id] = rs
+    return _envelope("CreateRouteServer", f"<routeServer>{_rs_xml(rs)[len('<item>'):-len('</item>')]}</routeServer>")
+
+
+def _describe_route_servers(store, params):
+    m = _model(store)
+    return _envelope("DescribeRouteServers", f"<routeServerSet>{''.join(_rs_xml(rs) for rs in m['route_servers'].values())}</routeServerSet>")
+
+
+def _delete_route_server(store, params):
+    rs_id = str(params.get("RouteServerId", ""))
+    m = _model(store)
+    if rs_id not in m["route_servers"]:
+        raise VpcError("InvalidRouteServerID.NotFound", f"The route server ID '{rs_id}' does not exist.")
+    m["route_servers"].pop(rs_id)
+    return _envelope("DeleteRouteServer", "<return>true</return>")
+
+
+def _vpc_xml(v: dict, m: dict) -> str:
+    main_rt = next((rt["id"] for rt in m["route_tables"].values() if rt["vpc_id"] == v["id"] and rt.get("main")), "")
+    return ("<item>"
+            f"<vpcId>{_xml_escape(v['id'])}</vpcId><cidrBlock>{_xml_escape(v['cidr'])}</cidrBlock>"
+            f"<state>available</state><instanceTenancy>{_xml_escape(v.get('tenancy', 'default'))}</instanceTenancy>"
+            f"<dhcpOptionsId>{_xml_escape(v.get('dhcp_options_id', ''))}</dhcpOptionsId>"
+            f"<isDefault>{str(bool(v.get('default'))).lower()}</isDefault>"
+            f"<mainRouteTableId>{_xml_escape(main_rt)}</mainRouteTableId>"
+            f"<mainNetworkAclId>{_xml_escape(v.get('default_nacl', ''))}</mainNetworkAclId>"
+            f"<ownerId>{OWNER_ID}</ownerId>{_tags_xml(v.get('tags', {}))}"
+            "</item>")
+
+
 def _describe_vpcs(store, params):
     m = _model(store)
     _ensure_default_network(m)
-    items = "".join(f"<item><vpcId>{v['id']}</vpcId><cidrBlock>{v['cidr']}</cidrBlock>"
-                    f"<state>available</state></item>" for v in m["vpcs"].values())
+    ids = [v for k, v in params.items() if k.startswith("VpcId.")]
+    rows = list(m["vpcs"].values())
+    if ids:
+        rows = [v for v in rows if v["id"] in ids]
+    items = "".join(_vpc_xml(v, m) for v in rows)
     return _envelope("DescribeVpcs", f"<vpcSet>{items}</vpcSet>")
+
+
+def _subnet_xml(s: dict) -> str:
+    return ("<item>"
+            f"<subnetId>{_xml_escape(s['id'])}</subnetId><vpcId>{_xml_escape(s['vpc_id'])}</vpcId>"
+            f"<cidrBlock>{_xml_escape(s['cidr'])}</cidrBlock><availabilityZone>{_xml_escape(s.get('az', ''))}</availabilityZone>"
+            f"<state>available</state><defaultForAz>{str(bool(s.get('default'))).lower()}</defaultForAz>"
+            f"<mapPublicIpOnLaunch>{str(bool(s.get('map_public_ip'))).lower()}</mapPublicIpOnLaunch>"
+            f"<availableIpAddressCount>{max(0, _subnet_capacity(s['cidr']) - 5)}</availableIpAddressCount>"
+            f"<routeTableId>{_xml_escape(s.get('route_table') or '')}</routeTableId>"
+            f"<networkAclId>{_xml_escape(s.get('nacl') or '')}</networkAclId>"
+            f"<ownerId>{OWNER_ID}</ownerId>{_tags_xml(s.get('tags', {}))}"
+            "</item>")
+
+
+def _subnet_capacity(cidr: str) -> int:
+    try:
+        return ipaddress.ip_network(cidr, strict=False).num_addresses
+    except ValueError:
+        return 0
 
 
 def _describe_subnets(store, params):
     m = _model(store)
     _ensure_default_network(m)
-    items = "".join(f"<item><subnetId>{s['id']}</subnetId><vpcId>{s['vpc_id']}</vpcId>"
-                    f"<cidrBlock>{s['cidr']}</cidrBlock><availabilityZone>{s.get('az', '')}</availabilityZone>"
-                    f"<state>available</state></item>" for s in m["subnets"].values())
+    ids = [v for k, v in params.items() if k.startswith("SubnetId.")]
+    rows = list(m["subnets"].values())
+    if ids:
+        rows = [s for s in rows if s["id"] in ids]
+    items = "".join(_subnet_xml(s) for s in rows)
     return _envelope("DescribeSubnets", f"<subnetSet>{items}</subnetSet>")
 
 
@@ -472,17 +1130,22 @@ def _ensure_default_network(m: dict) -> tuple[str, str, str]:
     default_vpc = next((v for v in m["vpcs"].values() if v.get("default")), None)
     if default_vpc is None:
         vpc_id = _rid("vpc")
-        m["vpcs"][vpc_id] = {"id": vpc_id, "cidr": "172.31.0.0/16", "igw": None, "default": True}
+        nacl_id = _create_default_nacl(m, vpc_id)
+        m["vpcs"][vpc_id] = {"id": vpc_id, "cidr": "172.31.0.0/16", "igw": None, "default": True,
+                             "default_nacl": nacl_id, "tenancy": "default", "dhcp_options_id": _default_dhcp_options(m),
+                             "enable_dns_hostnames": True, "enable_dns_support": True, "tags": {}}
         rt_id = _rid("rtb")
         m["route_tables"][rt_id] = {"id": rt_id, "vpc_id": vpc_id, "main": True,
-                                    "routes": [{"dest": "172.31.0.0/16", "target": "local"}], "subnets": []}
+                                    "routes": [{"dest": "172.31.0.0/16", "target": "local"}], "subnets": [], "tags": {}}
         for i, az in enumerate(_AZS):
             subnet_id = _rid("subnet")
             m["subnets"][subnet_id] = {"id": subnet_id, "vpc_id": vpc_id, "cidr": f"172.31.{i}.0/24",
-                                       "az": az, "route_table": rt_id, "nacl": None, "default": True}
+                                       "az": az, "route_table": rt_id, "nacl": nacl_id, "default": True,
+                                       "map_public_ip": True, "tags": {}}
             m["route_tables"][rt_id]["subnets"].append(subnet_id)
+            m["nacls"][nacl_id]["subnets"].append(subnet_id)
         igw_id = _rid("igw")
-        m["igws"][igw_id] = {"id": igw_id, "vpc_id": vpc_id}
+        m["igws"][igw_id] = {"id": igw_id, "vpc_id": vpc_id, "tags": {}}
         m["vpcs"][vpc_id]["igw"] = igw_id
         m["route_tables"][rt_id]["routes"].append({"dest": "0.0.0.0/0", "target": igw_id})
         default_vpc = m["vpcs"][vpc_id]
@@ -522,7 +1185,9 @@ def _default_ami_id(m: dict) -> str:
 
 def _taggable_collections(m: dict) -> list:
     return [m["instances"], m["volumes"], m["snapshots"], m["images"], m["sgs"],
-            m["addresses"], m["enis"], m["placement_groups"], m["launch_templates"], m["key_pairs"]]
+            m["addresses"], m["enis"], m["placement_groups"], m["launch_templates"], m["key_pairs"],
+            m["vpcs"], m["subnets"], m["route_tables"], m["igws"], m["nacls"], m["nat_gateways"],
+            m["eigws"], m["dhcp_options"], m["prefix_lists"], m["peering_connections"], m["route_servers"]]
 
 
 def _find_resource(m: dict, rid: str):
@@ -1506,11 +2171,40 @@ _OPS = {
     "DescribeSecurityGroups": _describe_security_groups,
     "DeleteSecurityGroup": _delete_security_group,
     "CreateInternetGateway": _create_internet_gateway,
+    "DescribeInternetGateways": _describe_internet_gateways,
     "AttachInternetGateway": _attach_internet_gateway,
-    "CreateRoute": _create_route, "DescribeVpcs": _describe_vpcs, "DescribeSubnets": _describe_subnets,
-    "CreateNetworkAcl": _create_network_acl,
+    "DetachInternetGateway": _detach_internet_gateway,
+    "DeleteInternetGateway": _delete_internet_gateway,
+    "CreateRoute": _create_route, "DeleteRoute": _delete_route,
+    "DescribeVpcs": _describe_vpcs, "DeleteVpc": _delete_vpc,
+    "ModifyVpcAttribute": _modify_vpc_attribute, "DescribeVpcAttribute": _describe_vpc_attribute,
+    "DescribeSubnets": _describe_subnets, "DeleteSubnet": _delete_subnet,
+    "CreateRouteTable": _create_route_table, "DescribeRouteTables": _describe_route_tables,
+    "DeleteRouteTable": _delete_route_table,
+    "AssociateRouteTable": _associate_route_table, "DisassociateRouteTable": _disassociate_route_table,
+    "ReplaceRouteTableAssociation": _replace_route_table_association,
+    "CreateNetworkAcl": _create_network_acl, "DescribeNetworkAcls": _describe_network_acls,
+    "DeleteNetworkAcl": _delete_network_acl,
     "CreateNetworkAclEntry": _create_network_acl_entry,
+    "DeleteNetworkAclEntry": _delete_network_acl_entry,
     "AssociateNetworkAcl": _associate_network_acl,
+    "ReplaceNetworkAclAssociation": _replace_network_acl_association,
+    "CreateNatGateway": _create_nat_gateway, "DescribeNatGateways": _describe_nat_gateways,
+    "DeleteNatGateway": _delete_nat_gateway,
+    "CreateEgressOnlyInternetGateway": _create_egress_only_internet_gateway,
+    "DescribeEgressOnlyInternetGateways": _describe_egress_only_internet_gateways,
+    "DeleteEgressOnlyInternetGateway": _delete_egress_only_internet_gateway,
+    "CreateDhcpOptions": _create_dhcp_options, "DescribeDhcpOptions": _describe_dhcp_options,
+    "DeleteDhcpOptions": _delete_dhcp_options, "AssociateDhcpOptions": _associate_dhcp_options,
+    "CreateManagedPrefixList": _create_managed_prefix_list,
+    "DescribeManagedPrefixLists": _describe_managed_prefix_lists,
+    "DeleteManagedPrefixList": _delete_managed_prefix_list,
+    "CreateVpcPeeringConnection": _create_vpc_peering_connection,
+    "DescribeVpcPeeringConnections": _describe_vpc_peering_connections,
+    "AcceptVpcPeeringConnection": _accept_vpc_peering_connection,
+    "DeleteVpcPeeringConnection": _delete_vpc_peering_connection,
+    "CreateRouteServer": _create_route_server, "DescribeRouteServers": _describe_route_servers,
+    "DeleteRouteServer": _delete_route_server,
     "AnalyzeReachability": _analyze_reachability_action,
     # instances
     "RunInstances": _run_instances, "DescribeInstances": _describe_instances,
