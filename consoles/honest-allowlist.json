@@ -89,6 +89,9 @@
       "aks-workloads",
       "aks-services-and-ingresses"
     ],
+    "entra": [
+      "entra-sign-in-logs"
+    ],
     "monitor": [
       "monitor-dashboards-with-grafana",
       "monitor-managed-prometheus",
