@@ -5,7 +5,7 @@
  * the console creates an azure-mgmt-web / `az webapp` / `az appservice plan` sees, and the
  * reverse. */
 import { restJson } from "../../../common/wire.js";
-import { armType, DEFAULT_RG, parseId } from "../../kit/arm.js";
+import { armType, DEFAULT_RG, getSubscription, parseId } from "../../kit/arm.js";
 
 export const SITES = armType("Microsoft.Web", "sites", "2023-12-01");
 export const PLANS = armType("Microsoft.Web", "serverfarms", "2023-12-01");
@@ -54,6 +54,13 @@ export const listLocks = async (rg, name) => (await restJson("GET", locksPath(rg
 export const addLock = (rg, name, lockName, level, notes) =>
   restJson("PUT", `${locksPath(rg, name)}/${encodeURIComponent(lockName)}`, { query: q, body: { properties: { level, notes } } });
 export const removeLock = (rg, name, lockName) => restJson("DELETE", `${locksPath(rg, name)}/${encodeURIComponent(lockName)}`, { query: q });
+
+// Activity log: the native Microsoft.Insights Activity Log feed (az monitor activity-log list /
+// the portal's Activity Log blade), filtered to this Web App's resource id.
+export const listActivityLog = async (rg, name) => (await restJson(
+  "GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/eventtypes/management/values`,
+  { query: { "api-version": "2015-04-01", "$filter": `resourceUri eq '${SITES.path(rg, name)}'` } },
+)).value || [];
 
 // ── labels ───────────────────────────────────────────────────────────────────────────────
 export const RUNTIMES = [

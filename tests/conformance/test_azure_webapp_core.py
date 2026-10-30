@@ -4,6 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 from core import azure_webapp_core as wc  # noqa: E402
+from core import azure_monitor_core as mc  # noqa: E402
 
 PASS = FAIL = 0
 
@@ -107,6 +108,23 @@ check("plan delete now succeeds", call(st, "DELETE", ["serverfarms", "plan1"])["
 # ── invalid name / unsupported type ──────────────────────────────────────────
 check("invalid site name rejected", call(st, "PUT", ["sites", "-bad-"], {"location": "eastus"})["body"]["error"]["code"] == "InvalidResourceName")
 check("unsupported top-level type", call(st, "GET", ["notathing"])["body"]["error"]["code"] == "ResourceTypeNotSupported")
+
+# ── Activity log (Microsoft.Insights/eventtypes, read back through the monitor engine) ──────
+st2 = {}
+call(st2, "PUT", ["serverfarms", "plan2"], {"location": "eastus", "sku": {"name": "B1"}})
+call(st2, "PUT", ["sites", "app2"], {"location": "eastus", "properties": {"serverFarmId": f"/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Web/serverfarms/plan2"}})
+call(st2, "POST", ["sites", "app2", "stop"])
+call(st2, "PUT", ["sites", "app2", "hostNameBindings", "live.example.com"])
+site_id = "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Web/sites/app2"
+feed = mc.dispatch(st2, "GET", "sub1", None, ["eventtypes", "management", "values"], [], {},
+                    {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{site_id}'"})
+ops = [e["operationName"]["localizedValue"] for e in feed["body"]["value"]]
+check("activity log records create + stop + custom-domain events for the site",
+      feed["status"] == 200 and len(ops) == 3
+      and any("live.example.com" in o for o in ops) and any("Stop" in o for o in ops) and any("Create Web App" in o for o in ops), ops)
+other_feed = mc.dispatch(st2, "GET", "sub1", None, ["eventtypes", "management", "values"], [], {},
+                          {"api-version": "2015-04-01", "$filter": "resourceUri eq '/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Web/sites/nope'"})
+check("activity log filters strictly by resourceUri", other_feed["body"]["value"] == [])
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

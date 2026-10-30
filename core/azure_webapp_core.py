@@ -23,6 +23,11 @@ the site's ARM record (underscore keys, never serialised to clients) so cost/por
 stay faithful to real ARM (those are separate sub-resources on the wire, GET on the site
 itself never returns them).
 
+Every mutating call also drops a ``Microsoft.Insights/eventtypes`` record into the same
+shared ARM map (``_record_event``) — the resource's Activity Log blade reads these back
+through core/azure_monitor_core.py's ``eventtypes/management/values`` feed, the real API
+``az monitor activity-log list`` / the portal's Activity Log use.
+
 Errors use the ARM shape ``{"error":{"code","message"}}``. ``dispatch`` returns
 ``{"status","headers","body","lro","rid","verb"}``; the caller adds the Azure-AsyncOperation
 headers when ``lro`` is true and records the activity/CloudSim event.
@@ -57,6 +62,21 @@ class _E(Exception):
 
 def _now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def _record_event(state, sub, rg, resource_id, op_value, op_text, status="Succeeded"):
+    """Append an Activity Log entry (``Microsoft.Insights/eventtypes``) for one mutating call on
+    ``resource_id``. Read back by core/azure_monitor_core.py's eventtypes/management/values feed
+    (``$filter=resourceUri eq '{resourceId}'``), which is the real Activity Log blade's native call."""
+    eid = f"{resource_id}/__event__/{uuid.uuid4().hex}"
+    state[eid.lower()] = {
+        "id": eid, "_type": "microsoft.insights/eventtypes", "_sub": sub,
+        "eventTimestamp": _now(), "resourceId": resource_id, "subscriptionId": sub, "resourceGroupName": rg,
+        "caller": "admin@vyomi.local",
+        "eventName": {"value": "EndRequest", "localizedValue": "End request"},
+        "operationName": {"value": op_value, "localizedValue": op_text},
+        "status": {"value": status, "localizedValue": status},
+    }
 
 
 def _view(rec):
@@ -317,9 +337,12 @@ def _site_ops(state, sub, rg, chain, method, payload):
         else:
             rec = _site_defaults(sub, rg, name, payload, plan_id)
             state[rid.lower()] = rec
+        _record_event(state, sub, rg, rid, f"{NAMESPACE}/sites/write", f"{'Update' if existed else 'Create'} Web App '{name}'")
         return _ok(_view(rec), 200 if existed else 201, lro=True, rid=rid, verb=method.lower())
     if method == "DELETE":
         state.pop(rid.lower(), None)
+        if rec:
+            _record_event(state, sub, rg, rid, f"{NAMESPACE}/sites/delete", f"Delete Web App '{name}'")
         return _ok(None, 200 if rec else 204, rid=rid, verb="delete")
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
@@ -343,58 +366,72 @@ def _site_subresource(state, rec, rest, method, payload):
     r0 = rest[0].lower()
     if r0 in ("start", "stop", "restart") and method == "POST":
         rec["properties"]["state"] = "Stopped" if r0 == "stop" else "Running"
+        _record_event(state, rec["_sub"], rec["_rg"], rec["id"], f"{NAMESPACE}/sites/{r0}/action", f"{r0.capitalize()} Web App '{rec['name']}'")
         return _ok(None, 200)
     if r0 == "slotsswap" and method == "POST":
         target = (payload or {}).get("targetSlot") or "production"
         _swap(rec, target, rec["_slots"])
+        _record_event(state, rec["_sub"], rec["_rg"], rec["id"], f"{NAMESPACE}/sites/slotsswap/action", f"Swap Web App '{rec['name']}' deployment slots")
         return _ok(None, 200, lro=True, rid=rec["id"], verb="slotsswap")
     if r0 == "config":
-        return _config_ops(rec, rest[1:], method, payload)
+        return _config_ops(state, rec, rest[1:], method, payload)
     if r0 == "slots":
-        return _slot_ops(rec, rest[1:], method, payload)
+        return _slot_ops(state, rec, rest[1:], method, payload)
     if r0 == "hostnamebindings":
-        return _hostname_ops(rec, rest[1:], method, payload)
+        return _hostname_ops(state, rec, rest[1:], method, payload)
     if r0 == "providers" and len(rest) >= 3 and rest[1].lower() == "microsoft.authorization" and rest[2].lower() == "locks":
-        return _lock_ops(rec, rest[3:], method, payload)
+        return _lock_ops(state, rec, rest[3:], method, payload)
     return _err(404, "ResourceTypeNotSupported", f"'{'/'.join(rest)}' is not supported on sites.")
 
 
-def _config_ops(rec, rest, method, payload):
+_CONFIG_LABELS = {"web": "configuration", "appsettings": "application settings", "connectionstrings": "connection strings", "logs": "App Service logs"}
+
+
+def _config_ops(state, rec, rest, method, payload):
     if not rest:
         return _err(404, "NotFound", "Missing config name.")
     kind = rest[0].lower()
     tail = rest[1:]
     is_list = tail and tail[0].lower() == "list"
+
+    def saved():
+        _record_event(state, rec["_sub"], rec["_rg"], rec["id"], f"{NAMESPACE}/sites/config/write",
+                       f"Update {_CONFIG_LABELS[kind]} for Web App '{rec['name']}'")
+
     if kind == "web":
         if method == "GET":
             return _ok({"properties": rec["properties"]["siteConfig"]})
         if method in ("PUT", "PATCH"):
             rec["properties"]["siteConfig"] = _merge(rec["properties"]["siteConfig"], payload.get("properties") or payload or {})
+            saved()
             return _ok({"properties": rec["properties"]["siteConfig"]}, 200)
     elif kind == "appsettings":
         if method == "GET" or (method == "POST" and is_list):
             return _ok({"properties": dict(rec["_appsettings"])})
         if method == "PUT":
             rec["_appsettings"] = dict((payload.get("properties") or payload) or {})
+            saved()
             return _ok({"properties": dict(rec["_appsettings"])}, 200)
     elif kind == "connectionstrings":
         if method == "GET" or (method == "POST" and is_list):
             return _ok({"properties": dict(rec["_connectionstrings"])})
         if method == "PUT":
             rec["_connectionstrings"] = dict((payload.get("properties") or payload) or {})
+            saved()
             return _ok({"properties": dict(rec["_connectionstrings"])}, 200)
     elif kind == "logs":
         if method == "GET":
             return _ok({"properties": rec["_logs"]})
         if method in ("PUT", "PATCH"):
             rec["_logs"] = _merge(rec["_logs"], payload.get("properties") or payload or {})
+            saved()
             return _ok({"properties": rec["_logs"]}, 200)
     else:
         return _err(404, "ResourceTypeNotSupported", f"config/{kind} is not supported.")
     return _err(405, "MethodNotAllowed", f"{method} not allowed on config/{kind}.")
 
 
-def _slot_ops(rec, rest, method, payload):
+def _slot_ops(state, rec, rest, method, payload):
     if not rest:
         if method == "GET":
             return _ok({"value": [_slot_view(rec, n, s) for n, s in sorted(rec["_slots"].items())]})
@@ -415,14 +452,18 @@ def _slot_ops(rec, rest, method, payload):
     if method == "PUT":
         existed = name in rec["_slots"]
         rec["_slots"][name] = {"state": "Running", "siteConfig": dict(rec["properties"]["siteConfig"]), "appsettings": {}, "connectionstrings": {}}
+        _record_event(state, rec["_sub"], rec["_rg"], rec["id"], f"{NAMESPACE}/sites/slots/write",
+                      f"{'Update' if existed else 'Create'} deployment slot '{name}' on Web App '{rec['name']}'")
         return _ok(_slot_view(rec, name, rec["_slots"][name]), 200 if existed else 201, lro=True, rid=f"{rec['id']}/slots/{name}", verb=method.lower())
     if method == "DELETE":
         had = rec["_slots"].pop(name, None)
+        if had:
+            _record_event(state, rec["_sub"], rec["_rg"], rec["id"], f"{NAMESPACE}/sites/slots/delete", f"Delete deployment slot '{name}' on Web App '{rec['name']}'")
         return _ok(None, 200 if had else 204)
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
 
-def _hostname_ops(rec, rest, method, payload):
+def _hostname_ops(state, rec, rest, method, payload):
     if not rest:
         if method != "GET":
             return _err(405, "MethodNotAllowed", "Collection supports GET only.")
@@ -441,11 +482,15 @@ def _hostname_ops(rec, rest, method, payload):
         existed = host in rec["_hostnamebindings"]
         rec["_hostnamebindings"][host] = {"sslState": (payload.get("properties") or payload or {}).get("sslState", "Disabled")}
         rec["properties"]["hostNames"] = sorted(set(rec["properties"]["hostNames"]) | {host})
+        _record_event(state, rec["_sub"], rec["_rg"], rec["id"], f"{NAMESPACE}/sites/hostNameBindings/write",
+                      f"Add custom domain '{host}' to Web App '{rec['name']}'")
         return _ok({"id": f"{rec['id']}/hostNameBindings/{host}", "name": host, "properties": rec["_hostnamebindings"][host]}, 200 if existed else 201)
     if method == "DELETE":
         had = rec["_hostnamebindings"].pop(host, None)
         if had is not None:
             rec["properties"]["hostNames"] = [h for h in rec["properties"]["hostNames"] if h != host]
+            _record_event(state, rec["_sub"], rec["_rg"], rec["id"], f"{NAMESPACE}/sites/hostNameBindings/delete",
+                          f"Remove custom domain '{host}' from Web App '{rec['name']}'")
         return _ok(None, 200 if had else 204)
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
@@ -453,7 +498,7 @@ def _hostname_ops(rec, rest, method, payload):
 _LOCK_LEVELS = ("CanNotDelete", "ReadOnly")
 
 
-def _lock_ops(rec, rest, method, payload):
+def _lock_ops(state, rec, rest, method, payload):
     if not rest:
         if method != "GET":
             return _err(405, "MethodNotAllowed", "Collection supports GET only.")
@@ -473,9 +518,14 @@ def _lock_ops(rec, rest, method, payload):
             return _err(400, "InvalidLockLevel", f"Lock level must be one of {_LOCK_LEVELS}.")
         existed = name in rec["_locks"]
         rec["_locks"][name] = {"level": level, "notes": props.get("notes", "")}
+        _record_event(state, rec["_sub"], rec["_rg"], rec["id"], "Microsoft.Authorization/locks/write",
+                      f"Create a lock '{name}' on Web App '{rec['name']}'")
         return _ok({"id": f"{rec['id']}/providers/Microsoft.Authorization/locks/{name}", "name": name, "properties": rec["_locks"][name]}, 200 if existed else 201)
     if method == "DELETE":
         had = rec["_locks"].pop(name, None)
+        if had:
+            _record_event(state, rec["_sub"], rec["_rg"], rec["id"], "Microsoft.Authorization/locks/delete",
+                          f"Delete lock '{name}' on Web App '{rec['name']}'")
         return _ok(None, 200 if had else 204)
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 

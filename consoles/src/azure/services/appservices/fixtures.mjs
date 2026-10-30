@@ -23,6 +23,10 @@ export default {
     await put(wire, base("sites", uniq), { location: "eastus", kind: "app,linux" });
     return uniq;
   },
+  "healthcheck": async (wire, uniq) => {
+    await put(wire, base("sites", APP, "config", "web"), { properties: { healthCheckPath: `/${uniq}` } });
+    return uniq;
+  },
   "slot": async (wire, uniq) => {
     await put(wire, base("sites", APP, "slots", uniq), {});
     return uniq;

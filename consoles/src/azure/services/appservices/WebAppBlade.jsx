@@ -66,9 +66,6 @@ const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).
 // Extra honest text for panels whose real-portal page carries more than a bare title, so
 // every spec tab/section/field is at least declared a gap (never silently missing).
 const RICH_NOTES = {
-  activitylog: "Columns: Operation name, Status, Time, Time stamp, Subscription, Event initiated by. "
-    + "Actions: Activity, Edit columns, Export Activity Logs, Download as CSV, Insights, Feedback, Pin current filters, Reset filters. "
-    + "Filters: Management Group : None, Subscription, Event severity : All, Timespan : Last 6 hours, Resource group, Resource, Add Filter.",
   iam: "Tabs: Check access, Role assignments, Roles, Deny assignments, Classic administrators. "
     + "Sections: My access, Check access, Role assignments, Roles, Deny assignments. Fields: View my access, Check access.",
   deploymentcenter: "Tabs: Settings, Logs, FTPS credentials. Section: Settings. Field: Source "
@@ -90,6 +87,7 @@ export default function WebAppBlade({ params, query }) {
     const a = site.data, reload = site.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
+      activitylog: () => <ActivityLog rg={rg} name={name} />,
       tags: () => <Tags a={a} reload={reload} />,
       slots: () => <Slots rg={rg} name={name} />,
       envvars: () => <EnvVars rg={rg} name={name} />,
@@ -227,6 +225,42 @@ function SwapDialog({ open, onClose, rg, name, onDone }) {
         </DialogBody>
       </DialogSurface>
     </Dialog>
+  );
+}
+
+// ── Activity log ─────────────────────────────────────────────────────────────────────────
+function ActivityLog({ rg, name }) {
+  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(rg, name), [rg, name]);
+  const rows = (data || []).map((e) => ({
+    key: `${e.id}`,
+    op: e.operationName?.localizedValue || e.operationName?.value || "--",
+    status: e.status?.localizedValue || e.status?.value || "--",
+    time: e.eventTimestamp ? new Date(e.eventTimestamp).toLocaleString() : "--",
+    ts: e.eventTimestamp || "--",
+    sub: e.subscriptionId || "--",
+    caller: e.caller || "--",
+  }));
+  return (
+    <>
+      <div className="vy-panel-title">{name} | Activity log</div>
+      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
+      </div>
+      {loading ? <Loading /> : error ? <ErrorBar error={error} title="Failed to load the activity log" /> : (
+        <table className="vy-grid" aria-label="Activity log">
+          <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
+          <tbody>
+            {rows.length === 0
+              ? <tr><td colSpan={6}>No events to display</td></tr>
+              : rows.map((r) => <tr key={r.key}><td>{r.op}</td><td>{r.status}</td><td>{r.time}</td><td>{r.ts}</td><td>{r.sub}</td><td>{r.caller}</td></tr>)}
+          </tbody>
+        </table>
+      )}
+      <NotSimulatedContainer feature="Activity log filters and export"
+        note={vy("Filters (Management Group, Subscription, Event severity, Timespan, Resource group, Resource, Add Filter) and the "
+          + "Edit columns / Export Activity Logs / Download as CSV / Insights / Feedback / Pin current filters / Reset filters actions are "
+          + "not simulated; Vyomi lists the real create/update/delete/action operations performed on this Web App.")} />
+    </>
   );
 }
 

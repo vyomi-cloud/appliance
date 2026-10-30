@@ -13,9 +13,14 @@ so ``azure-mgmt-monitor`` / ``armmonitor`` / ``com.azure.resourcemanager.monitor
     Microsoft.Insights/metricAlerts          2018-03-01  CreateOrUpdate / Update / Delete / Get / ListBy*  .../status
     Microsoft.Insights/activityLogAlerts     2020-10-01  CreateOrUpdate / Update / Delete / Get / ListBy*
     Microsoft.Insights/autoscaleSettings     2022-10-01  CreateOrUpdate / Update / Delete / Get / ListBy*
+    Microsoft.Insights/eventtypes            2015-04-01  GET .../eventtypes/management/values (Activity Log feed,
+                                                         subscription-scoped, ``$filter=resourceUri eq '{id}'``)
 
 Resources live in the shared ARM state map (offline ``azure_services._state``; Nano ``az_arm``), keyed by the
-lower-cased resource id, so they are space-scoped and persisted by the same seams as the rest of ARM.
+lower-cased resource id, so they are space-scoped and persisted by the same seams as the rest of ARM. Activity
+Log entries are written directly into that same map by the resource providers that generate them (e.g.
+core/azure_webapp_core.py's ``_record_event``) as ``Microsoft.Insights/eventtypes`` records; this module only
+reads them back for the feed.
 Not modelled: diagnostic settings, metric definitions / metrics and scheduled query rules (resource-scoped
 extension APIs), and conditional headers (If-Match / If-None-Match).
 
@@ -522,11 +527,26 @@ def dispatch(state, method, sub, rg, chain, names, payload=None, query=None, bas
 
 
 def handles(chain):
-    return bool(chain) and (chain[0].lower() in TYPES or chain[0].lower() in ("createnotifications", "notificationstatus"))
+    return bool(chain) and (chain[0].lower() in TYPES or chain[0].lower() in ("createnotifications", "notificationstatus", "eventtypes"))
+
+
+def _activity_log_list(state, sub, query):
+    flt = (query or {}).get("$filter") or ""
+    m = re.search(r"resourceUri\s+eq\s+'([^']+)'", flt, re.I)
+    want = m.group(1).lower() if m else None
+    items = [_view(r) for r in state.values()
+             if str(r.get("_type", "")).lower() == "microsoft.insights/eventtypes" and r.get("_sub") == sub
+             and (want is None or str(r.get("resourceId", "")).lower() == want)]
+    items.sort(key=lambda e: e.get("eventTimestamp", ""), reverse=True)
+    return _ok({"value": items})
 
 
 def _dispatch(state, method, sub, rg, chain, payload, query, base=""):
     low = chain[0].lower()
+    if low == "eventtypes":
+        if method != "GET" or [c.lower() for c in chain[1:3]] != ["management", "values"]:
+            return _err(405, "MethodNotAllowed", "GET .../eventtypes/management/values required.")
+        return _activity_log_list(state, sub, query)
     if low == "createnotifications":
         if method != "POST" or len(chain) != 1:
             return _err(405, "MethodNotAllowed", "POST required.")

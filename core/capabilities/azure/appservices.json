@@ -65,9 +65,10 @@
  },
  "azure.appservices.webapp.activitylog": {
   "title": "Activity log",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["The ARM activity log (resource-scoped audit trail of control-plane operations) is not recorded."],
-  "api": []
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Records create/update/delete/start/stop/restart/swap operations on the Web App and its sub-resources (slots, custom domains, locks, configuration); filters (severity, timespan, resource group) and export/columns actions are not simulated."],
+  "api": ["Microsoft.Insights/eventtypes/management/values List"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py", "tests/conformance/test_azure_monitor_core.py"]
  },
  "azure.appservices.webapp.iam": {
   "title": "Access control (IAM)",
