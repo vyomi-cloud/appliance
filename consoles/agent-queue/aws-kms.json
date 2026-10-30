@@ -4,7 +4,8 @@
  "goal": "P2: native-fidelity console on real backends \u2014 fidelity >= 90%, raise real coverage, no statics",
  "must_build": [
   "AWS managed + customer managed keys lists/detail (General config, Key policy, Cryptographic configuration, Tags, Key rotation, Aliases), Create key wizard (symmetric/asymmetric/HMAC, usage, aliases, admins/users, policy review), Enable/Disable, Schedule/Cancel deletion",
-  "Backend: Encrypt/Decrypt/GenerateDataKey/Sign/Verify/GenerateMac real in the core; key policy stored (not evaluated = limited); automatic rotation flag + rotation history; aliases CRUD; custom key stores = not_simulated"
+  "Backend: Encrypt/Decrypt/GenerateDataKey/Sign/Verify/GenerateMac real in the core; key policy stored (not evaluated = limited); automatic rotation flag + rotation history; aliases CRUD; custom key stores = not_simulated",
+  "Liveness for the AWS managed key detail page: model AWS-managed keys being created on first use (e.g. Encrypt/GenerateDataKey with alias aws/<service> creates that key if missing, as AWS does when a service first uses it); the fixture triggers that with a unique service name and the page must show the new key"
  ],
  "always": [
   "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
@@ -12,6 +13,6 @@
   "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
   "Registry 'offline' level = 'nano' level for now; the offline appliance is verified separately (CAP_BASE)"
  ],
- "attempt": 2,
- "note": "re-run: previous run stopped on a Claude session limit before doing work"
+ "attempt": 3,
+ "note": "Previous run reached 100% fidelity/real coverage but its push was rejected (it edited .github/ \u2014 forbidden) and the gate flagged one gap."
 }
