@@ -13,7 +13,7 @@ export const SERVICES = [
   { id: "ec2", icon: "ec2", title: "EC2", description: "Virtual servers in the cloud", category: "Compute", load: () => import("./ec2/index.jsx") },
   { id: "lambda", icon: "lambda", title: "Lambda", description: "Run code without thinking about servers", category: "Compute", load: () => import("./lambda/index.jsx") },
   { id: "rds", icon: "rds", title: "RDS", description: "Managed relational database service", category: "Database", load: () => import("./rds/index.jsx") },
-  { id: "vpc", icon: "vpc", title: "VPC", description: "Isolated cloud resources", category: "Networking & Content Delivery", classic: "vpc" },
+  { id: "vpc", icon: "vpc", title: "VPC", description: "Isolated cloud resources", category: "Networking & Content Delivery", load: () => import("./vpc/index.jsx") },
   { id: "apigateway", icon: "apigateway", title: "API Gateway", description: "Build, deploy, and manage APIs", category: "Networking & Content Delivery", load: () => import("./apigateway/index.jsx") },
   { id: "iam", icon: "iam", title: "IAM", description: "Manage access to AWS resources", category: "Security, Identity, & Compliance", load: () => import("./iam/index.jsx") },
   { id: "kms", icon: "kms", title: "Key Management Service", description: "Create and control encryption keys", category: "Security, Identity, & Compliance", load: () => import("./kms/index.jsx") },
