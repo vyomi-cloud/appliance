@@ -92,6 +92,18 @@ check("AzureArm (Nano) serves Microsoft.Web with LRO headers and public state",
 j = arm.handle("GET", base + "/sites/nope", {}, {})
 check("AzureArm: unknown site → 404", j["status"] == 404)
 
+# Activity log: Microsoft.Web mutations (site + sub-resource) land on the subscription-scoped
+# Microsoft.Insights/eventtypes/management/values feed, filtered by resourceUri.
+arm.handle("PUT", base + "/sites/site1/locks/lock1", {"api-version": "2023-12-01"}, {"properties": {"level": "ReadOnly"}})
+site_rid = f"/subscriptions/s/resourceGroups/g/providers/Microsoft.Web/sites/site1"
+events_path = "/subscriptions/s/providers/Microsoft.Insights/eventtypes/management/values"
+ev = arm.handle("GET", events_path, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{site_rid}'"}, {})
+ops = [e["operationName"]["value"] for e in ev["body"]["value"]]
+check("activity log records the site create + the lock write, newest first",
+      ev["status"] == 200 and ops[0] == "Microsoft.Web/sites/locks/lock1/write" and "Microsoft.Web/sites/write" in ops, ev["body"])
+other = arm.handle("GET", events_path, {"api-version": "2015-04-01", "$filter": "resourceUri eq '/subscriptions/s/resourceGroups/g/providers/Microsoft.Web/sites/nope'"}, {})
+check("activity log is scoped per resource (no cross-resource leakage)", other["body"]["value"] == [])
+
 print(f"\n{PASS} passed, {FAIL} failed")
 
 

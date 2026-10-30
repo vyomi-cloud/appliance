@@ -161,14 +161,17 @@
  "azure.functionapp.activitylog": {
   "title": "Activity log",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi does not keep a resource-scoped control-plane audit trail for Azure resources yet."
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
   ],
   "api": [
    "ActivityLogs_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
   ]
  },
  "azure.functionapp.diagnostics": {

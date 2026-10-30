@@ -622,10 +622,30 @@ function AccessControl({ a }) {
 
 // ── Activity log ─────────────────────────────────────────────────────────────────────────
 function ActivityLog({ a }) {
+  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
+  const rows = data || [];
   return (
     <>
       <div className="vy-panel-title">{a.name} | Activity log</div>
-      <NotSimulated feature="The Activity log (a resource-scoped control-plane audit trail)" note="Vyomi does not keep a per-resource mutation history yet." />
+      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
+      </div>
+      <ErrorBar error={error} />
+      <table className="vy-grid">
+        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
+        <tbody>
+          {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
+            <tr key={r.id}>
+              <td>{r.operationName?.value}</td>
+              <td>{r.status?.localizedValue || r.status?.value}</td>
+              <td>{fmtDate(r.eventTimestamp)}</td>
+              <td>{r.eventTimestamp}</td>
+              <td>{r.subscriptionId}</td>
+              <td>{r.caller}</td>
+            </tr>
+          )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
+        </tbody>
+      </table>
     </>
   );
 }

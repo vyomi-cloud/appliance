@@ -256,7 +256,7 @@ def _new_function(site_rid, name, payload):
 
 def _fn_view(fn):
     out = _view(fn)
-    out["properties"] = dict(fn["properties"])
+    out["properties"] = dict(fn["properties"], files={"__init__.py": fn["_code"]})
     return out
 
 

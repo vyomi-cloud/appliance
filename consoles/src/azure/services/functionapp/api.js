@@ -4,7 +4,7 @@
  *                  locks — all native ARM calls on the same resource, routed to
  *                  core/azure_webapp_core.py by the shared ARM core (core/azure_arm_core.py /
  *                  providers/azure_services.py), exactly like Storage and Container Apps. */
-import { armType, parseId } from "../../kit/arm.js";
+import { armType, getSubscription, parseId } from "../../kit/arm.js";
 import { restJson } from "../../../common/wire.js";
 
 export const ARM = armType("Microsoft.Web", "sites", "2023-12-01");
@@ -36,6 +36,13 @@ export const putHostKey = (rg, name, bucket, keyName, value) =>
   restJson("PUT", `${ARM.path(rg, name)}/host/default/${bucket}/${encodeURIComponent(keyName)}`, { query: { "api-version": ARM.apiVersion }, body: { properties: { value } } });
 export const deleteHostKey = (rg, name, bucket, keyName) =>
   restJson("DELETE", `${ARM.path(rg, name)}/host/default/${bucket}/${encodeURIComponent(keyName)}`, { query: { "api-version": ARM.apiVersion } });
+
+// ── activity log (Microsoft.Insights/eventtypes/management/values, filtered to this site) ──
+export const listActivityLog = async (rg, name) => {
+  const rid = ARM.path(rg, name);
+  const query = { "api-version": "2015-04-01", "$filter": `resourceUri eq '${rid}'` };
+  return (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/eventtypes/management/values`, { query })).value || [];
+};
 
 // ── locks ─────────────────────────────────────────────────────────────────────────────────
 export const listLocks = async (rg, name) => (await restJson("GET", `${ARM.path(rg, name)}/locks`, { query: { "api-version": ARM.apiVersion } })).value || [];

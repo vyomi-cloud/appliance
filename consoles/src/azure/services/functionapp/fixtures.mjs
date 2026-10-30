@@ -40,4 +40,10 @@ export default {
     await wire("PUT", base("uicfn", `/locks/${name}`) + q, { svc: null, body: { properties: { level: "ReadOnly", notes: "uic" } } });
     return name;
   },
+  "activity": async (wire, uniq = "uic") => {
+    await ensureSite(wire, "uicfn");
+    const name = `uicact${uniq}`;
+    await wire("PUT", base("uicfn", `/locks/${name}`) + q, { svc: null, body: { properties: { level: "ReadOnly", notes: "uic" } } });
+    return name;
+  },
 };

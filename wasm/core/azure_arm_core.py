@@ -25,6 +25,7 @@ where ``path`` is the request path (``/subscriptions/...`` or
 from __future__ import annotations
 
 import datetime
+import re
 import uuid
 
 try:                                              # host: package import
@@ -72,6 +73,7 @@ DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
 
 _BY_TYPE = {(c["namespace"].lower(), c["type"].lower()): c for c in CATALOG}
+_WEB_WRITE_VERBS = {"put": "write", "patch": "write", "delete": "delete"}  # ARM activity-log verb convention
 
 
 def _now() -> str:
@@ -202,7 +204,37 @@ class AzureArm:
     def __init__(self, base: str = ""):
         self.state: dict = {}
         self.operations: dict = {}
+        self.activity: dict = {}                # resource id (lower) -> [Microsoft.Insights eventtypes entries]
         self._base = base                       # endpoint/LRO URL prefix (relative by default)
+
+    # ── Microsoft.Insights/eventtypes (resource-scoped Activity log) ───────
+    def _record_activity(self, rid: str, operation_name: str, sub: str, status: str = "Succeeded"):
+        entry = {
+            "eventTimestamp": _now(), "submissionTimestamp": _now(),
+            "eventName": {"value": status, "localizedValue": status},
+            "operationName": {"value": operation_name, "localizedValue": operation_name},
+            "status": {"value": status, "localizedValue": status},
+            "subStatus": {"value": "", "localizedValue": ""},
+            "resourceId": rid, "resourceGroupName": _rg_from_id(rid) or "",
+            "resourceProviderName": {"value": "Microsoft.Web", "localizedValue": "Microsoft Web"},
+            "subscriptionId": sub, "caller": "admin@vyomi.local", "level": "Informational",
+            "id": f"{rid}/events/{uuid.uuid4().hex}",
+        }
+        bucket = self.activity.setdefault(rid.lower(), [])
+        bucket.append(entry)
+        if len(bucket) > 200:
+            del bucket[: len(bucket) - 200]
+
+    def _activity_log(self, method: str, query: dict):
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "The activity log supports GET only.")
+        m = re.search(r"resourceUri eq '([^']+)'", query.get("$filter") or "")
+        if m:
+            events = list(self.activity.get(m.group(1).lower(), []))
+        else:
+            events = [e for bucket in self.activity.values() for e in bucket]
+        events.sort(key=lambda e: e.get("eventTimestamp") or "", reverse=True)
+        return _ok({"value": events})
 
     # ── public entry ──────────────────────────────────────────────────────
     def handle(self, method: str, path: str, query=None, body=None):
@@ -285,6 +317,13 @@ class AzureArm:
         # Microsoft.Network/dnsZones (+ record sets): the Azure DNS engine owns the zone semantics.
         if namespace.lower() == "microsoft.network" and dns_engine.handles(chain):
             return self._dns(method, sub, rg, chain, payload, query)
+
+        # Microsoft.Insights/eventtypes/management/values: the subscription-scoped Activity log
+        # feed (real ARM endpoint `az monitor activity-log list` / the portal's Activity log
+        # blade call), filtered to one resource via `$filter=resourceUri eq '...'`.
+        if (namespace.lower() == "microsoft.insights" and len(chain) >= 3
+                and chain[0].lower() == "eventtypes" and chain[1].lower() == "management" and chain[2].lower() == "values"):
+            return self._activity_log(method, query)
 
         # Microsoft.Insights (action groups, metric / activity log alerts, autoscale): the Azure Monitor engine.
         if namespace.lower() == "microsoft.insights" and monitor_engine.handles(chain):
@@ -416,6 +455,15 @@ class AzureArm:
             op_id = self._make_operation(r["rid"], method)
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or web.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+        if r["status"] < 300 and method in ("PUT", "PATCH", "DELETE", "POST") and len(chain) >= 2 and chain[0].lower() == "sites":
+            site_rid = _canonical_id(sub, rg, ["Microsoft.Web", "sites"], [chain[1]])
+            # Sub-resource writes (functions/{name}, locks/{name}, host/default/...) fold their
+            # own path tail into the operation name, same as the real ARM convention of one
+            # activity-log row per resource instance touched (not just the top-level site).
+            tail = "/".join(chain[2:]) if len(chain) > 3 or (len(chain) == 3 and chain[2].lower() in ("functions", "config", "host", "locks")) else ""
+            verb = r.get("verb") or method.lower()
+            verb = _WEB_WRITE_VERBS.get(verb, verb)
+            self._record_activity(site_rid, f"Microsoft.Web/sites/{(tail + '/') if tail else ''}{verb}", sub)
         return resp
 
     # ── CRUD primitives ───────────────────────────────────────────────────

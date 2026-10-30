@@ -6,7 +6,7 @@
   "create-function": { "route": "#/functionapp/uic-rg/uicfn/functions/create", "fixtures": ["az-functionapp"] },
   "function-detail": { "route": "#/functionapp/uic-rg/uicfn/functions/{live}", "fixtures": ["az-functionapp"], "live": "function" },
   "functionapp-overview": { "route": "#/functionapp/uic-rg/uicfn", "fixtures": ["az-functionapp"], "vars": { "resource-name": "uicfn" }, "live": "function" },
-  "functionapp-activity-log": { "route": "#/functionapp/uic-rg/uicfn/activity-log", "fixtures": ["az-functionapp"], "vars": { "resource-name": "uicfn" } },
+  "functionapp-activity-log": { "route": "#/functionapp/uic-rg/uicfn/activity-log", "fixtures": ["az-functionapp"], "vars": { "resource-name": "uicfn" }, "live": "activity" },
   "functionapp-access-control-iam": { "route": "#/functionapp/uic-rg/uicfn/access-control-iam", "fixtures": ["az-functionapp"], "vars": { "resource-name": "uicfn" } },
   "functionapp-tags": { "route": "#/functionapp/uic-rg/uicfn/tags", "fixtures": ["az-functionapp"], "vars": { "resource-name": "uicfn" } },
   "functionapp-diagnose-and-solve-problems": { "route": "#/functionapp/uic-rg/uicfn/diagnose-and-solve-problems", "fixtures": ["az-functionapp"], "vars": { "resource-name": "uicfn" } },
