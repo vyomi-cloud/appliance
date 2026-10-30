@@ -67,6 +67,8 @@ from core import gcp_monitoring_core as gcp_mon
 from core import gcp_redis_core as gcp_redis
 from core import gcp_artifactregistry_core as gcp_ar
 from core import gcp_logging_core as gcp_logging
+from core import gcp_compute_core as gcp_compute
+from core import gcp_compute_instances_core as gcp_compute_vm
 
 
 def _gcp_service(path):
@@ -80,6 +82,12 @@ def _gcp_service(path):
         return "gcp-logging"
     if re.match(r"^/v2/projects/[^/]+/locations/[^/]+/buckets", path):
         return "gcp-logging"
+    if path.startswith(("/compute/v1", "/compute/beta")):
+        # VPC resources → the networking core; everything else (instances, disks, images,
+        # templates, groups, health checks…) → the VM core.
+        if re.search(r"/(networks|subnetworks|firewalls|routes|addresses)(/|$|\?)", path):
+            return "gcp-compute"
+        return "gcp-compute-vm"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
         return "gcp-cloudsql"
     if path.startswith("/v3/projects/") or path == "/v3/uptimeCheckIps":   # Cloud Monitoring API v3
@@ -286,6 +294,8 @@ class AwsWireRouter:
         self.gcp_mon = s.get("gcp_mon") or gcp_mon.MonitoringStore()   # Cloud Monitoring (policies, channels, metrics, series)
         self.gcp_ar = s.get("gcp_ar") or gcp_ar.ArtifactRegistryStore()
         self.gcp_logging = s.get("gcp_logging") or gcp_logging.LoggingStore()   # Cloud Logging
+        self.gcp_compute = s.get("gcp_compute") or gcp_compute.ComputeStore()   # VPC: networks, subnets, firewalls, routes, addresses
+        self.gcp_compute_vm = s.get("gcp_compute_vm") or gcp_compute_vm.ComputeStore()   # Compute Engine VMs, disks, images, templates
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -520,6 +530,8 @@ class AwsWireRouter:
                 "gcp-redis": (gcp_redis, self.gcp_redis),
                 "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
                 "gcp-logging": (gcp_logging, self.gcp_logging),
+                "gcp-compute": (gcp_compute, self.gcp_compute),
+                "gcp-compute-vm": (gcp_compute_vm, self.gcp_compute_vm),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store

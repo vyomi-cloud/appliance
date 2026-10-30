@@ -283,6 +283,42 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("heading", { name: "VPC networks" }).waitFor({ timeout: 10000 });
   check("delete VPC network via UI → gone over native wire", (await wire(`/compute/v1/projects/vyomi-project/global/networks/${NET}`)).status === 404);
+  // Compute Engine: create an instance via the UI → visible over the native wire (instances.list)
+  const VM = `v4-gcp-smoke-vm-${Date.now() % 100000}`;
+  await page.goto(UI + "#/compute/instances/create");
+  await page.getByLabel("Name", { exact: true }).fill(VM);
+  await shot("12-create-instance-filled");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: VM }).waitFor({ timeout: 10000 });
+  const inst = await wjson(`/compute/v1/projects/vyomi-project/zones/us-central1-a/instances/${VM}`);
+  check("create instance via UI → visible over native wire (instances.get)", inst.name === VM && inst.status === "RUNNING");
+  await shot("13-instance-detail");
+
+  // Lifecycle action from the detail page → status change visible over the wire
+  await page.getByRole("button", { name: "Stop" }).click();
+  await page.waitForFunction(
+    async (url) => (await (await fetch(url)).json()).status === "TERMINATED",
+    `${WIRE}/compute/v1/projects/vyomi-project/zones/us-central1-a/instances/${VM}`, { timeout: 10000 },
+  );
+  check("stop from instance detail → TERMINATED over native wire", true);
+
+  // Disk created over the wire (SDK direction) → shown in the UI list
+  const DISK = `v4-gcp-smoke-disk-${Date.now() % 100000}`;
+  await wire("/compute/v1/projects/vyomi-project/zones/us-central1-a/disks", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: DISK, sizeGb: 10 }),
+  });
+  await page.goto(UI + "#/compute/disks");
+  await page.getByText(DISK).waitFor({ timeout: 10000 });
+  check("disk created over wire → shown in Disks UI", true);
+  await shot("14-disks");
+
+  // Delete the instance via the detail page → gone over the native wire
+  await page.goto(UI + `#/compute/instances/us-central1-a/${VM}`);
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(VM);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.waitForURL(/#\/compute\/instances$/, { timeout: 10000 });
+  check("delete instance via UI → gone over native wire", (await wire(`/compute/v1/projects/vyomi-project/zones/us-central1-a/instances/${VM}`)).status === 404);
 
   // Not-simulated gaps carry the conformance attribute
   await page.goto(UI + "#/storage/monitoring");

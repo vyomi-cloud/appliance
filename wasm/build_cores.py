@@ -45,6 +45,8 @@ CORES = [
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
     "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
     "gcp_compute_core.py",                          # GCP: Compute Engine networking REST v1 (VPC networks, subnets, firewalls, routes, addresses)
+    "instance_catalog.py",                          # real cloud instance-type catalog (GCP machine type shapes) — gcp_compute_instances_core depends on it
+    "gcp_compute_instances_core.py",                # GCP: Compute Engine REST v1 (instances, disks, images, templates, groups, health checks — control plane)
     "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
     "azure_cosmos_core.py",                         # Azure: Cosmos DB SQL/Core API (native azure-cosmos)
     "azure_keyvault_secrets_core.py",               # Azure: Key Vault secrets (native azure-keyvault-secrets)
