@@ -400,6 +400,41 @@ def run() -> int:
     _check("subnet carries its NSG association and address prefix",
            subnet_rec["properties"]["networkSecurityGroup"]["id"].lower() == nsg3.lower() and subnet_rec["properties"]["addressPrefix"] == "10.0.1.0/24")
 
+    # 23. Virtual network peerings — another nested, same-namespace child resource
+    # (Microsoft.Network/virtualNetworks/{vnet}/virtualNetworkPeerings/{peering}), the real
+    # ARM shape `az network vnet peering create` uses. The portal's "Add" blade provisions a
+    # peering object on BOTH vnets it connects, so this proves isolation + a full round trip.
+    vnet2 = _p(RG, "Microsoft.Network", "virtualNetworks", "vnet2")
+    arm.handle("PUT", vnet2, {"api-version": "2023-11-01"}, {"location": "eastus"})
+    peer_out = vnet + "/virtualNetworkPeerings/vnet1-to-vnet2"
+    r = arm.handle("PUT", peer_out, {"api-version": "2023-11-01"},
+                   {"properties": {"remoteVirtualNetwork": {"id": vnet2}, "peeringState": "Connected",
+                                    "peeringSyncLevel": "FullyInSync", "allowForwardedTraffic": False,
+                                    "allowGatewayTransit": False, "useRemoteGateways": False}})
+    _check("peering put 201", r["status"] == 201 and r["body"]["name"] == "vnet1-to-vnet2")
+    _check("peering id canonical", r["body"]["id"].lower() == peer_out.lower())
+    _check("peering properties", r["body"]["properties"]["remoteVirtualNetwork"]["id"].lower() == vnet2.lower()
+           and r["body"]["properties"]["peeringState"] == "Connected")
+    peer_in = vnet2 + "/virtualNetworkPeerings/vnet2-to-vnet1"
+    arm.handle("PUT", peer_in, {"api-version": "2023-11-01"},
+               {"properties": {"remoteVirtualNetwork": {"id": vnet}, "peeringState": "Connected",
+                                "peeringSyncLevel": "FullyInSync", "allowForwardedTraffic": False,
+                                "allowGatewayTransit": False, "useRemoteGateways": False}})
+    r = arm.handle("GET", vnet + "/virtualNetworkPeerings", {"api-version": "2023-11-01"})
+    _check("peerings list scoped to its own vnet", r["status"] == 200 and [x["name"] for x in r["body"]["value"]] == ["vnet1-to-vnet2"])
+    r = arm.handle("GET", vnet2 + "/virtualNetworkPeerings", {"api-version": "2023-11-01"})
+    _check("peerings isolated per vnet", [x["name"] for x in r["body"]["value"]] == ["vnet2-to-vnet1"])
+    r = arm.handle("DELETE", peer_out, {"api-version": "2023-11-01"})
+    _check("peering delete 200", r["status"] == 200)
+    r = arm.handle("GET", vnet + "/virtualNetworkPeerings", {"api-version": "2023-11-01"})
+    _check("deleted peering gone from the list", r["body"]["value"] == [])
+    r = arm.handle("GET", vnet2 + "/virtualNetworkPeerings", {"api-version": "2023-11-01"})
+    _check("the other vnet's peering survives an unrelated delete", [x["name"] for x in r["body"]["value"]] == ["vnet2-to-vnet1"])
+    # deleting a vnet cascades to its (same-namespace, nested) subnets and peerings
+    arm.handle("DELETE", vnet2, {"api-version": "2023-11-01"})
+    r = arm.handle("GET", vnet2 + "/virtualNetworkPeerings", {"api-version": "2023-11-01"})
+    _check("peerings cascade-deleted with their vnet", r["body"]["value"] == [])
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 
