@@ -22,19 +22,32 @@ real Vyomi backend through the service's native API. Read first:
    (native wire only: `awsJson` / `awsQuery` / `s3` / `restJson` from `consoles/src/common/wire.js`;
    never a bespoke `/api/*` call), `spec-map.json` (spec page id → route, fixtures, honest_page).
 2. Register the service in `consoles/src/<cloud>/services/registry.js` (set `load`).
-3. Every element in the spec must be either:
+3. **Read your queue file** `consoles/agent-queue/<cloud>-<service>.json` — it may carry
+   extra goals (specific backend operations or pages to build). They are mandatory.
+4. Every element in the spec must be either:
    - **present and real** — rendered and backed by a real native call, or
-   - **honestly absent** — inside a `NotSimulated` / `NotSimulatedContainer` panel, or the whole
-     page marked `honest_page: true` in `spec-map.json`.
+   - **honestly absent** — inside a `NotSimulated` / `NotSimulatedContainer` panel. A whole
+     page may be `honest_page: true` in `spec-map.json` ONLY if it is listed in
+     `consoles/honest-allowlist.json` (out-of-scope products). The gate reads that list from
+     the base branch; editing it does nothing.
    A control that looks like it works but does nothing is the one thing you must never ship.
-4. **Backend gaps.** If the spec needs an operation the core does not implement and it is a
+   "Not simulated" is for things Vyomi genuinely cannot do — not a shortcut. Pages that need
+   no backend (dashboards over existing data, console preference pages stored in
+   localStorage) and operations a core can reasonably model (backups as snapshots, PartiQL
+   over the store, TTL, UpdateTable…) must be BUILT.
+5. **Backend gaps.** If the spec needs an operation the core does not implement and it is a
    reasonable, self-contained addition (a stateful sub-resource, a describe/list call), add it
    to the core with a conformance check in `tests/conformance/` (follow the existing style:
    run with `PYTHONPATH=. python3 tests/conformance/<file>.py`), then re-vendor with
    `python3 wasm/build_cores.py`. Unmodelled operations must return the native "not
    implemented" error (S3: 501 `NotImplemented`), never a silent success.
-5. If you add a fixture for the conformance check, add it to `FIXTURES` in
+6. If you add a fixture for the conformance check, add it to `FIXTURES` in
    `consoles/tests/ui-conformance.mjs`.
+
+## The gate (run by the workflow, not by you — your own claims are not trusted)
+- fidelity ≥ 90 %; real coverage and the count of present elements must not drop;
+- no `honest_page` outside the base-branch allowlist;
+- smoke tests and every core conformance test you touched pass.
 
 ## Verify (all must pass before you push)
 ```

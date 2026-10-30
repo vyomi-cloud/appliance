@@ -110,8 +110,10 @@ jobs:
         continue-on-error: true
         run: |
           (cd consoles && node build.mjs)
-          python3 consoles/dev_server.py -q & for i in $(seq 60); do curl -sf localhost:8740/_wire/ >/dev/null && break; sleep 1; done
-          OUT=ui-out-before node consoles/tests/ui-conformance.mjs ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }} || true
+          pkill -f dev_server.py || true
+          python3 consoles/dev_server.py -q --port 8790 & for i in $(seq 60); do curl -sf localhost:8790/_wire/ >/dev/null && break; sleep 1; done
+          BASE=http://127.0.0.1:8790 OUT=$RUNNER_TEMP/ui-out-before node consoles/tests/ui-conformance.mjs ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }} || true
+          cp -r $RUNNER_TEMP/ui-out-before ui-out-before && echo "ui-out-before/" >> .git/info/exclude
           pkill -f dev_server.py || true
 
       # Headless Claude Code CLI (claude-code-action rejects `push` events; this workflow is
@@ -129,33 +131,43 @@ jobs:
           claude -p "Follow consoles/AGENT-UI.md exactly.
           Cloud lens: ${{ steps.tg.outputs.cloud }}. Service: ${{ steps.tg.outputs.service }}.
           Spec: ui-spec/${{ steps.tg.outputs.cloud }}/${{ steps.tg.outputs.service }}.json.
+          Extra goals for this run (mandatory): consoles/agent-queue/${{ matrix.target }}.json.
           Baseline UI conformance report: ui-out-before/${{ steps.tg.outputs.cloud }}.md (if present).
           Reference captures: captures/ (present only if the private checkout succeeded).
           Commit your work on the current branch ${{ steps.tg.outputs.branch }}; do not push." \
             --max-turns 250 \
             --allowedTools "Bash,Read,Edit,Write,Glob,Grep" \
             --permission-mode acceptEdits \
-            --output-format text 2>&1 | tee agent-summary.txt | tail -60
+            --output-format text 2>&1 | tee $RUNNER_TEMP/agent-summary.txt | tail -60
 
       # Independent gate — the agent's own claims are not trusted.
-      - name: Gate — build, UI conformance, smoke, core conformance
+      - name: Gate — build, UI conformance (no gaming), smoke, core conformance
         id: gate
         run: |
+          pkill -f dev_server.py || true     # never score against a server the agent left running
+          git rm -q --cached --ignore-unmatch agent-summary.txt ui-out-before -r 2>/dev/null || true
           (cd consoles && node build.mjs)
-          python3 consoles/dev_server.py -q & for i in $(seq 60); do curl -sf localhost:8740/_wire/ >/dev/null && break; sleep 1; done
+          python3 consoles/dev_server.py -q --port 8790 & for i in $(seq 60); do curl -sf localhost:8790/_wire/ >/dev/null && break; sleep 1; done
           set +e
-          OUT=ui-out node consoles/tests/ui-conformance.mjs ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }}; ui=$?
-          node consoles/tests/smoke-aws.mjs; smoke=$?
+          BASE=http://127.0.0.1:8790 OUT=$RUNNER_TEMP/ui-out node consoles/tests/ui-conformance.mjs ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }}
+          git show origin/${{ env.BASE_BRANCH }}:consoles/honest-allowlist.json > $RUNNER_TEMP/allow.json 2>/dev/null || echo '{}' > $RUNNER_TEMP/allow.json
+          node consoles/tests/gate-compare.mjs $RUNNER_TEMP/ui-out-before/${{ steps.tg.outputs.cloud }}.json $RUNNER_TEMP/ui-out/${{ steps.tg.outputs.cloud }}.json \
+            ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }} $RUNNER_TEMP/allow.json \
+            consoles/src/${{ steps.tg.outputs.cloud }}/services/${{ steps.tg.outputs.service }}/spec-map.json | tee $RUNNER_TEMP/gate.txt; ui=${PIPESTATUS[0]}
+          BASE=http://127.0.0.1:8790 OUT=$RUNNER_TEMP/smoke-out node consoles/tests/smoke-aws.mjs; smoke=$?
           core=0
           for f in $(git diff --name-only origin/${{ env.BASE_BRANCH }}...HEAD -- tests/conformance/ | grep '\.py$'); do PYTHONPATH=. python3 "$f" || core=1; done
-          for f in tests/conformance/test_s3_core.py tests/conformance/test_aws_wire_router.py; do PYTHONPATH=. python3 "$f" >/dev/null || core=1; done
+          for f in tests/conformance/test_s3_core.py tests/conformance/test_dynamodb_core.py tests/conformance/test_aws_wire_router.py; do PYTHONPATH=. python3 "$f" >/dev/null || core=1; done
           echo "ui=$ui smoke=$smoke core=$core"
           echo "ok=$([ $ui -eq 0 ] && [ $smoke -eq 0 ] && [ $core -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          cp -r $RUNNER_TEMP/ui-out ui-out 2>/dev/null; cp -r $RUNNER_TEMP/smoke-out smoke-out 2>/dev/null; cp $RUNNER_TEMP/gate.txt gate.txt 2>/dev/null
+          printf 'ui-out/\nsmoke-out/\ngate.txt\n' >> .git/info/exclude
 
       - name: Rebuild outputs + push branch + PR
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The repo forbids GITHUB_TOKEN from opening PRs; the conformance bot account can.
+          GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "vyomi-console-ui-agent"
           git config user.email "console-ui-agent@users.noreply.github.com"
@@ -165,6 +177,7 @@ jobs:
           {
             echo "Console-UI agent: \`${{ matrix.target }}\` (run ${{ github.run_id }})"; echo
             echo "**Gate:** ${{ steps.gate.outputs.ok == 'true' && '✅ passed' || '❌ failed — do not merge' }}"; echo
+            echo '```'; cat gate.txt 2>/dev/null; echo '```'; echo
             echo "### UI conformance (before)"; cat ui-out-before/*.md 2>/dev/null | sed -n '1,8p'; echo
             echo "### UI conformance (after)"; cat ui-out/*.md 2>/dev/null | sed -n '1,8p'; echo
             echo "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
@@ -181,7 +194,8 @@ jobs:
             ui-out-before/
             ui-out/
             smoke-out/
-            agent-summary.txt
+            ${{ runner.temp }}/agent-summary.txt
+            gate.txt
           if-no-files-found: ignore
 
       - name: Fail if gate failed
