@@ -13,5 +13,6 @@
   "Capability feature ids MUST start with 'gcp.' (e.g. 'gcp.sql.<section>') — ids share one namespace with the AWS registry",
   "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
  ],
- "attempt": 1
+ "attempt": 2,
+ "note": "RESUME: first `git fetch origin v4/ui-gcp-sql-41076510578 && git merge --no-edit origin/v4/ui-gcp-sql-41076510578` (previous attempt: 100% fidelity / 95.6% real). Fix ONLY the gate failure: the 'replicas' and 'operations' pages need a \"live\" check in spec-map.json + a fixture in fixtures.mjs (create a read replica via instances.insert with masterInstanceName, and an operation via any instance mutation, uniquely named, over the native /sql/v1beta4 wire) and the pages must list them from core/gcp_cloudsql_core.py. Keep Capability.jsx as on base, list your service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never in a // comment) + core/nano_registry.py + core/nano_persist.py. Rebuild after merging."
 }
