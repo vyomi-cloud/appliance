@@ -15,11 +15,12 @@ import cap_artifacts from "../../../../core/capabilities/gcp/artifacts.json";
 import cap_cloudscheduler from "../../../../core/capabilities/gcp/cloudscheduler.json";
 import cap_compute from "../../../../core/capabilities/gcp/compute.json";
 import cap_firestore from "../../../../core/capabilities/gcp/firestore.json";
+import cap_functions from "../../../../core/capabilities/gcp/functions.json";
 import cap_iam_admin from "../../../../core/capabilities/gcp/iam-admin.json";
 import cap_logs from "../../../../core/capabilities/gcp/logs.json";
 import cap_networking from "../../../../core/capabilities/gcp/networking.json";
 
-const REGISTRY = { ...cap_artifacts, ...cap_cloudscheduler, ...cap_compute, ...cap_firestore, ...cap_iam_admin, ...cap_logs, ...cap_networking };
+const REGISTRY = { ...cap_artifacts, ...cap_cloudscheduler, ...cap_compute, ...cap_firestore, ...cap_functions, ...cap_iam_admin, ...cap_logs, ...cap_networking };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

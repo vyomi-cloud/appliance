@@ -42,14 +42,14 @@
       ],
       "provenance": "capture",
       "confidence": "high",
-      "header_actions": [
-        "Deploy container",
-        "Connect repo",
-        "Write a function",
-        "Refresh"
-      ],
       "table": {
         "selection": "multi",
+        "header_actions": [
+          "Deploy container",
+          "Connect repo",
+          "Write a function",
+          "Refresh"
+        ],
         "actions": [
           "Copy",
           "Delete"

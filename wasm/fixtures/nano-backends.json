@@ -135,8 +135,33 @@
   "category": "gcp"
  },
  {
+  "name": "gcp_logging",
+  "label": "gcp_logging \u00b7 LoggingStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_rm",
+  "label": "gcp_rm \u00b7 ResourceManagerStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_pam",
+  "label": "gcp_pam \u00b7 PamStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_compute_vm",
+  "label": "gcp_compute_vm \u00b7 ComputeStore",
+  "category": "gcp"
+ },
+ {
   "name": "gcp_compute",
   "label": "gcp_compute \u00b7 ComputeStore",
+  "category": "gcp"
+ },
+ {
+  "name": "gcp_run",
+  "label": "gcp_run \u00b7 RunStore",
   "category": "gcp"
  },
  {
