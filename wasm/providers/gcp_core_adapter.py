@@ -36,7 +36,8 @@ from core import gcp_monitoring_core as _mon
 from core import gcp_artifactregistry_core as _ar
 from core.sql_store import InMemorySqlStore
 
-PROJ = "demo"          # the console's default project
+from core import gcp_project as _gproj
+PROJ = _gproj.NANO_PROJECT["projectId"]   # the console's project — the one `gcloud projects list` shows
 LOC = "global"         # default KMS location
 RING = "demo"          # default KMS key ring
 COLL = "console"       # default Firestore collection

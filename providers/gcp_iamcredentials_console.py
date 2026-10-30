@@ -15,8 +15,6 @@ from fastapi import HTTPException, Request, Response
 
 from core import gcp_iamcredentials_core as core
 
-DEFAULT_PROJECT = "demo"
-
 
 async def _json_body(request):
     """Console form body; a missing/invalid JSON body is a 400, not a 500."""

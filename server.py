@@ -193,11 +193,13 @@ from routes import console, aws_extras, gcp_extras, tenants, config, licensing
 from routes import terraform, azure_console, cloudsim, spaces, gcp_console, runtime
 from routes import aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns
 from routes import lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry
+from routes import gcp_resourcemanager
 
 for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
             terraform, azure_console, cloudsim, spaces, gcp_console, runtime,
             aws_apigw, aws_ec2, aws_lambda, aws_sqs, aws_vpc, aws_rds, aws_dynamodb, aws_elbv2, aws_sns,
-            lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry]:
+            lazy_backends, shared, console_next, aws_logs, metrics_series, aws_cloudwatch, aws_kinesis, gcp_artifactregistry,
+            gcp_resourcemanager]:
     mod.register(app)
 
 # ── Middleware registration ──────────────────────────────────────────
@@ -477,7 +479,7 @@ _USAGE = {
     "gcp": {
         "connect": [
             ("gcloud / gsutil — point at the simulator", "bash", """gcloud config set auth/disable_credentials true
-gcloud config set core/project gcp-dev
+gcloud config set core/project __PROJECT__
 # REST services — set the override for the one you use:
 export CLOUDSDK_API_ENDPOINT_OVERRIDES_STORAGE="__BASE__/storage/v1/"
 export CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE="__BASE__/compute/v1/"
@@ -503,12 +505,12 @@ gcloud storage buckets create gs://demo
 gcloud storage cp ./f.txt gs://demo/f.txt
 gcloud storage ls gs://demo"""),
                 ("Java", "java", """Storage st = StorageOptions.newBuilder().setHost("__BASE__")
-    .setProjectId("gcp-dev").setCredentials(NoCredentials.getInstance()).build().getService();
+    .setProjectId("__PROJECT__").setCredentials(NoCredentials.getInstance()).build().getService();
 st.create(BucketInfo.of("demo"));
 st.create(BlobInfo.newBuilder("demo", "f.txt").build(), "hello".getBytes());"""),
                 ("Go", "go", """// STORAGE_EMULATOR_HOST=__HOST__
 c, _ := storage.NewClient(ctx)
-c.Bucket("demo").Create(ctx, "gcp-dev", nil)
+c.Bucket("demo").Create(ctx, "__PROJECT__", nil)
 w := c.Bucket("demo").Object("f.txt").NewWriter(ctx); w.Write([]byte("hello")); w.Close()"""),
             ]),
             ("Compute Engine", [
@@ -516,18 +518,18 @@ w := c.Bucket("demo").Object("f.txt").NewWriter(ctx); w.Write([]byte("hello")); 
 gcloud compute instances list --zones=us-central1-a"""),
                 ("Java", "java", """Compute compute = new Compute.Builder(transport, json, null)
     .setRootUrl("__BASE__/").setApplicationName("cl").build();
-compute.instances().list("gcp-dev", "us-central1-a").execute();"""),
+compute.instances().list("__PROJECT__", "us-central1-a").execute();"""),
                 ("Go", "go", """csvc, _ := compute.NewService(ctx, noAuth, option.WithEndpoint("__BASE__/compute/v1/"))
-list, _ := csvc.Instances.List("gcp-dev", "us-central1-a").Do()"""),
+list, _ := csvc.Instances.List("__PROJECT__", "us-central1-a").Do()"""),
             ]),
             ("Cloud SQL (Admin)", [
                 ("CLI", "bash", """gcloud sql instances create db1 --database-version=POSTGRES_16 --tier=db-f1-micro --region=us-central1
 gcloud sql instances list"""),
                 ("Java", "java", """SQLAdmin sql = new SQLAdmin.Builder(transport, json, null)
     .setRootUrl("__BASE__/").setApplicationName("cl").build();
-sql.instances().list("gcp-dev").execute();"""),
+sql.instances().list("__PROJECT__").execute();"""),
                 ("Go", "go", """ssvc, _ := sqladmin.NewService(ctx, noAuth, option.WithEndpoint("__BASE__/"))
-ssvc.Instances.List("gcp-dev").Do()"""),
+ssvc.Instances.List("__PROJECT__").Do()"""),
             ]),
             ("Pub/Sub", [
                 ("CLI", "bash", """export PUBSUB_EMULATOR_HOST="__HOSTNAME__:8085"
@@ -535,11 +537,11 @@ gcloud pubsub topics create demo-topic
 gcloud pubsub subscriptions create demo-sub --topic=demo-topic"""),
                 ("Java", "java", """// PUBSUB_EMULATOR_HOST=__HOSTNAME__:8085
 TopicAdminClient admin = TopicAdminClient.create();
-admin.createTopic(TopicName.of("gcp-dev", "demo-topic"));
-Publisher pub = Publisher.newBuilder(TopicName.of("gcp-dev", "demo-topic")).build();
+admin.createTopic(TopicName.of("__PROJECT__", "demo-topic"));
+Publisher pub = Publisher.newBuilder(TopicName.of("__PROJECT__", "demo-topic")).build();
 pub.publish(PubsubMessage.newBuilder().setData(ByteString.copyFromUtf8("hi")).build());"""),
                 ("Go", "go", """// PUBSUB_EMULATOR_HOST=__HOSTNAME__:8085
-c, _ := pubsub.NewClient(ctx, "gcp-dev")
+c, _ := pubsub.NewClient(ctx, "__PROJECT__")
 t, _ := c.CreateTopic(ctx, "demo-topic")
 t.Publish(ctx, &pubsub.Message{Data: []byte("hi")}).Get(ctx)"""),
             ]),
@@ -550,35 +552,35 @@ t.Publish(ctx, &pubsub.Message{Data: []byte("hi")}).Get(ctx)"""),
 Firestore db = FirestoreOptions.getDefaultInstance().getService();
 db.collection("users").document("alice").set(Map.of("name", "Alice"));"""),
                 ("Go", "go", """// FIRESTORE_EMULATOR_HOST=__HOSTNAME__:8080
-c, _ := firestore.NewClient(ctx, "gcp-dev")
+c, _ := firestore.NewClient(ctx, "__PROJECT__")
 c.Collection("users").Doc("alice").Set(ctx, map[string]any{"name": "Alice"})"""),
             ]),
             ("Cloud Functions", [
                 ("CLI", "bash", """gcloud functions list --region=us-central1"""),
                 ("Java", "java", """CloudFunctions fn = new CloudFunctions.Builder(transport, json, null)
     .setRootUrl("__BASE__/").setApplicationName("cl").build();
-fn.projects().locations().functions().list("projects/gcp-dev/locations/us-central1").execute();"""),
+fn.projects().locations().functions().list("projects/__PROJECT__/locations/us-central1").execute();"""),
                 ("Go", "go", """fsvc, _ := cloudfunctions.NewService(ctx, noAuth, option.WithEndpoint("__BASE__/"))
-fsvc.Projects.Locations.Functions.List("projects/gcp-dev/locations/us-central1").Do()"""),
+fsvc.Projects.Locations.Functions.List("projects/__PROJECT__/locations/us-central1").Do()"""),
             ]),
             ("IAM", [
                 ("CLI", "bash", """gcloud iam service-accounts create demo-sa
 gcloud iam service-accounts list"""),
                 ("Java", "java", """Iam iam = new Iam.Builder(transport, json, null)
     .setRootUrl("__BASE__/").setApplicationName("cl").build();
-iam.projects().serviceAccounts().list("projects/gcp-dev").execute();"""),
+iam.projects().serviceAccounts().list("projects/__PROJECT__").execute();"""),
                 ("Go", "go", """isvc, _ := iam.NewService(ctx, noAuth, option.WithEndpoint("__BASE__/"))
-isvc.Projects.ServiceAccounts.List("projects/gcp-dev").Do()"""),
+isvc.Projects.ServiceAccounts.List("projects/__PROJECT__").Do()"""),
             ]),
             ("VPC Network", [
                 ("CLI", "bash", """gcloud compute networks create demo-vpc --subnet-mode=custom
 gcloud compute networks list
 gcloud compute firewall-rules list"""),
                 ("Java", "java", """// same Apiary Compute client as Compute Engine
-compute.networks().list("gcp-dev").execute();
-compute.firewalls().list("gcp-dev").execute();"""),
-                ("Go", "go", """csvc.Networks.List("gcp-dev").Do()
-csvc.Firewalls.List("gcp-dev").Do()"""),
+compute.networks().list("__PROJECT__").execute();
+compute.firewalls().list("__PROJECT__").execute();"""),
+                ("Go", "go", """csvc.Networks.List("__PROJECT__").Do()
+csvc.Firewalls.List("__PROJECT__").Do()"""),
             ]),
         ],
     },
@@ -797,6 +799,7 @@ def _usage_html(request, provider: str) -> str:
     def sub(code: str) -> str:
         return (code.replace("__BASE__", base).replace("__HOSTNAME__", hostname)
                     .replace("__HOST__", host)
+                    .replace("__PROJECT__", _gcp_project_name(None))
                     .replace("__SUB__", provider_azure_services.DEFAULT_SUBSCRIPTION))
 
     def block(title: str, lang: str, code: str) -> str:
@@ -2701,11 +2704,12 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             add("gcp", "functions", "function", fn_name, fn, "gcp_functions")
 
     # Pub/Sub backed by the emulator keeps topics/subscriptions only there (not in
-    # service_states), so list them per project (console project, SDK default projects).
+    # service_states), so list them under the space's project.
     try:
         from core import gcp_pubsub_emulator as _ps_emu
         if str(space.get("provider") or "") == "gcp" and _ps_emu.available():
-            for _pp in ("123456789012", "cloudlearn", "gcp-dev"):
+            from core import gcp_project as _gp
+            for _pp in (_gp.ensure_identity(space)[0],):
                 for _t in _ps_emu.list_topics(_pp):
                     add("gcp", "pubsub", "topic", f"{_pp}/{_t['name']}", {"name": _t["name"]})
                 for _sb in _ps_emu.list_subscriptions(_pp):
@@ -7516,7 +7520,7 @@ def _lxd_clouds_clis_bootstrap_async(container_ref: str, instance: dict) -> None
                 "export CLOUDSDK_API_ENDPOINT_OVERRIDES_STORAGE=$SIM/api/gcp/storage/v1/\n"
                 "export CLOUDSDK_API_ENDPOINT_OVERRIDES_PUBSUB=$SIM/api/gcp/pubsub/v1/\n"
                 "export CLOUDSDK_API_ENDPOINT_OVERRIDES_FIRESTORE=$SIM/api/gcp/firestore/v1/\n"
-                "export CLOUDSDK_CORE_PROJECT=123456789012\n"
+                "export CLOUDSDK_CORE_PROJECT=" + _gcp_project_name(None) + "\n"
                 "export CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true\n"
                 "export AZURE_HTTP_USER_AGENT=vyomi-simulator/2.0.5\n"
                 "EOF\n"
@@ -11712,6 +11716,21 @@ def _restore_license_at_boot():
 
 
 @app.on_event("startup")
+def _gcp_project_identity_at_boot():
+    """Each GCP space is one project (ID + number, core/gcp_project): assign the
+    ids and move GCP state stored under the number / legacy project ids onto the
+    ID, then copy the shared emulators' old-id data in a daemon thread (they may
+    still be starting)."""
+    try:
+        from core import gcp_project as _gp
+        if _gp.migrate_state():
+            _persist_state()
+        _gp.migrate_backends_async()
+    except Exception as _e:
+        print(f"[gcp-project] migration skipped: {_e}")
+
+
+@app.on_event("startup")
 def _register_install_at_boot():
     """v2.0.6 (#427): phone-home to the portal so we know about every
     appliance install — not just the ones that complete activation.
@@ -13212,8 +13231,8 @@ def _gcp_compute_find_instance(project: str, zone: str, instance_ref: str) -> di
                 break
     if not isinstance(instance, dict):
         return None
-    cand_proj = str(instance.get("project") or "cloudlearn").strip()
-    req_proj = str(project or "cloudlearn").strip()
+    cand_proj = _gcp_project_name(instance.get("project"))
+    req_proj = _gcp_project_name(project)
     if cand_proj != req_proj:
         return None
     requested_zone = str(zone or "").strip().lower().rstrip("/").split("/")[-1]
@@ -13415,7 +13434,7 @@ def _gcp_compute_sync_resource_links() -> bool:
                 continue
             groups[group_name] = {
                 "name": group_name,
-                "project": str(instance.get("project") or "cloudlearn"),
+                "project": _gcp_project_name(instance.get("project")),
                 "zone": str(instance.get("zone") or instance.get("az") or "us-central1-a"),
                 "description": "",
                 "baseInstanceName": instance_name or group_name,
@@ -13444,7 +13463,7 @@ def _gcp_compute_sync_resource_links() -> bool:
 
 
 def _gcp_compute_instance_json(instance: dict) -> dict:
-    project = str(instance.get("project") or "cloudlearn")
+    project = _gcp_project_name(instance.get("project"))
     zone = str(instance.get("zone") or instance.get("az") or "us-central1-a")
     machine_type = str(instance.get("machine_type") or instance.get("instance_type") or "e2-micro")
     instance_name = str(instance.get("name") or instance.get("instance_id") or "gcp-instance")
@@ -13543,7 +13562,7 @@ def _gcp_compute_instance_json(instance: dict) -> dict:
 
 
 def _gcp_compute_operation_json(instance: dict, operation_type: str, status: str = "DONE") -> dict:
-    project = str(instance.get("project") or "cloudlearn")
+    project = _gcp_project_name(instance.get("project"))
     zone = str(instance.get("zone") or instance.get("az") or "us-central1-a")
     instance_name = str(instance.get("name") or instance.get("instance_id") or "gcp-instance")
     op_name = f"{operation_type}-{instance_name}"
@@ -13573,7 +13592,7 @@ def _gcp_compute_json_list(project: str, zone: str) -> dict:
     for instance in gcp_compute_state.get("instances", {}).values():
         if not isinstance(instance, dict):
             continue
-        if str(instance.get("project") or "cloudlearn").strip() != str(project or "cloudlearn").strip():
+        if _gcp_project_name(instance.get("project")) != _gcp_project_name(project):
             continue
         # zone may be stored plain ("us-central1-a") or as a self-link URL
         # (".../zones/us-central1-a"); compare on the trailing segment.
@@ -13649,7 +13668,7 @@ def _gcp_compute_create_instance_instance(project: str, zone: str, payload: dict
         "reservation_id": f"r-{instance_id.replace('gce-', '')}",
         "owner_id": AWS_ACCOUNT_ID,
         "provider": "gcp",
-        "project": str(project or "cloudlearn"),
+        "project": _gcp_project_name(project),
         "zone": str(zone or "us-central1-a"),
         "name": str(payload.get("name") or "gcp-instance"),
         "machine_type": _gcp_resource_name(machine_type_ref, "e2-micro"),
@@ -13734,7 +13753,7 @@ def _gcp_compute_instance_group_view(group: dict) -> dict:
         "id": _gcp_compute_numeric_id(f"{group.get('project')}:{group.get('zone')}:{group.get('name')}"),
         "name": group.get("name", ""),
         "description": group.get("description", ""),
-        "zone": _gcp_compute_zone_path(str(group.get("project") or "cloudlearn"), str(group.get("zone") or "us-central1-a")),
+        "zone": _gcp_compute_zone_path(_gcp_project_name(group.get("project")), str(group.get("zone") or "us-central1-a")),
         "network": f"{_gcp_compute_api_root()}/projects/{group.get('project') or 'cloudlearn'}/global/networks/default",
         "size": int(group.get("targetSize") or len(group.get("instances") or [])),
         "namedPorts": group.get("namedPorts", []),
@@ -13771,7 +13790,7 @@ def _gcp_compute_disk_record(project: str, zone: str, payload: dict[str, Any] | 
 
 
 def _gcp_compute_disk_view(disk: dict) -> dict:
-    project = str(disk.get("project") or "cloudlearn")
+    project = _gcp_project_name(disk.get("project"))
     zone = str(disk.get("zone") or "us-central1-a")
     name = str(disk.get("name") or "")
     return {
@@ -13818,7 +13837,7 @@ def _gcp_compute_snapshot_record(project: str, payload: dict[str, Any] | None = 
 
 
 def _gcp_compute_snapshot_view(snapshot: dict) -> dict:
-    project = str(snapshot.get("project") or "cloudlearn")
+    project = _gcp_project_name(snapshot.get("project"))
     name = str(snapshot.get("name") or "")
     return {
         "kind": "compute#snapshot",
@@ -13853,7 +13872,7 @@ def _gcp_compute_image_record(project: str, payload: dict[str, Any] | None = Non
 
 
 def _gcp_compute_image_view(image: dict) -> dict:
-    project = str(image.get("project") or "cloudlearn")
+    project = _gcp_project_name(image.get("project"))
     name = str(image.get("name") or "")
     return {
         "kind": "compute#image",
@@ -14237,7 +14256,7 @@ def api_gcp_compute_get_operation(project: str, zone: str, operation_id: str):
     for candidate in gcp_compute_state.get("instances", {}).values():
         if not isinstance(candidate, dict):
             continue
-        candidate_project = str(candidate.get("project") or "cloudlearn")
+        candidate_project = _gcp_project_name(candidate.get("project"))
         candidate_zone = str(candidate.get("zone") or candidate.get("az") or "us-central1-a")
         candidate_name = str(candidate.get("name") or candidate.get("instance_id") or "gcp-instance")
         if candidate_project != project or candidate_zone != zone:
@@ -14631,7 +14650,7 @@ def _gcp_storage_folder_record(project: str, bucket: str, payload: dict[str, Any
 
 
 def _gcp_storage_folder_view(folder: dict) -> dict:
-    project = str(folder.get("project") or "cloudlearn")
+    project = _gcp_project_name(folder.get("project"))
     bucket = str(folder.get("bucket") or "")
     name = str(folder.get("name") or "")
     return {
@@ -14681,7 +14700,7 @@ def _gcp_storage_transfer_view(transfer: dict) -> dict:
         "labels": transfer.get("labels", {}),
         "createTime": transfer.get("createTime", _now()),
         "updateTime": transfer.get("updateTime", _now()),
-        "project": transfer.get("project", "cloudlearn"),
+        "project": _gcp_project_name(transfer.get("project")),
     }
 
 
@@ -14754,7 +14773,7 @@ def _gcp_sql_backup_record(project: str, instance: str, payload: dict[str, Any] 
 
 
 def _gcp_sql_backup_view(backup: dict) -> dict:
-    project = str(backup.get("project") or "cloudlearn")
+    project = _gcp_project_name(backup.get("project"))
     instance = str(backup.get("instance") or "")
     name = str(backup.get("name") or "")
     return {
@@ -14852,7 +14871,7 @@ def _gcp_pubsub_schema_record(project: str, payload: dict[str, Any] | None = Non
 
 
 def _gcp_pubsub_schema_view(schema: dict) -> dict:
-    project = str(schema.get("project") or "cloudlearn")
+    project = _gcp_project_name(schema.get("project"))
     name = str(schema.get("name") or "")
     return {
         "name": f"projects/{project}/schemas/{name}",
@@ -14947,7 +14966,7 @@ def _gcp_firestore_index_record(project: str, database: str, collection: str, pa
 
 
 def _gcp_firestore_index_view(index: dict) -> dict:
-    project = str(index.get("project") or "cloudlearn")
+    project = _gcp_project_name(index.get("project"))
     database = str(index.get("database") or "(default)")
     collection = str(index.get("collection") or "")
     name = str(index.get("name") or "")
@@ -15181,7 +15200,7 @@ def api_gcp_storage_get_bucket(bucket: str):
     bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
     if not bucket_rec:
         raise HTTPException(404, detail="Bucket not found")
-    project = str(bucket_rec.get("project") or "cloudlearn")
+    project = _gcp_project_name(bucket_rec.get("project"))
     return _gcp_storage_bucket_view(project, bucket_rec)
 
 
@@ -15204,7 +15223,7 @@ def api_gcp_storage_list_objects(bucket: str, request: Request):
     for name, obj in gcp_storage_state.get("objects", {}).get(bucket, {}).items():
         if prefix and not name.startswith(prefix):
             continue
-        objects.append(_gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj))
+        objects.append(_gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, name, obj))
     objects.sort(key=lambda item: item.get("name", ""))
     return {"kind": "storage#objects", "items": objects, "prefixes": [], "nextPageToken": ""}
 
@@ -15228,7 +15247,7 @@ async def api_gcp_storage_create_object(bucket: str, request: Request):
     obj = _gcp_storage_object_record(bucket, name, payload)
     gcp_storage_state.setdefault("objects", {}).setdefault(bucket, {})[name] = obj
     _record_usage("gcp.storage.create_object", {"bucket": bucket, "object": name})
-    return _gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj)
+    return _gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, name, obj)
 
 
 def api_gcp_storage_get_object(bucket: str, object_name: str):
@@ -15236,7 +15255,7 @@ def api_gcp_storage_get_object(bucket: str, object_name: str):
     obj = gcp_storage_state.get("objects", {}).get(bucket, {}).get(object_name)
     if not bucket_rec or not obj:
         raise HTTPException(404, detail="Object not found")
-    return _gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, object_name, obj)
+    return _gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, object_name, obj)
 
 
 def api_gcp_storage_delete_object(bucket: str, object_name: str):
@@ -15267,7 +15286,7 @@ async def api_gcp_storage_patch_object(bucket: str, object_name: str, request: R
         obj.setdefault("metadata", {}).update(payload["metadata"])
     obj["updated"] = _now()
     _record_usage("gcp.storage.patch_object", {"bucket": bucket, "object": object_name})
-    return _gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, object_name, obj)
+    return _gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, object_name, obj)
 
 
 async def api_gcp_storage_compose_object(bucket: str, destination: str, request: Request):
@@ -15299,7 +15318,7 @@ async def api_gcp_storage_compose_object(bucket: str, destination: str, request:
     obj = _gcp_storage_object_record(bucket, destination, dest_payload)
     gcp_storage_state.setdefault("objects", {}).setdefault(bucket, {})[destination] = obj
     _record_usage("gcp.storage.compose_object", {"bucket": bucket, "destination": destination, "sources": len(source_objects)})
-    return _gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, destination, obj)
+    return _gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, destination, obj)
 
 
 def api_gcp_storage_list_folders(bucket: str):
@@ -15324,7 +15343,7 @@ async def api_gcp_storage_create_folder(bucket: str, request: Request):
         payload = {}
     if not isinstance(payload, dict):
         payload = {}
-    folder = _gcp_storage_folder_record(str(bucket_rec.get("project") or "cloudlearn"), bucket, payload)
+    folder = _gcp_storage_folder_record(_gcp_project_name(bucket_rec.get("project")), bucket, payload)
     gcp_storage_state.setdefault("folders", {}).setdefault(bucket, {})[folder["name"]] = folder
     _record_usage("gcp.storage.create_folder", {"bucket": bucket, "folder": folder["name"]})
     return _gcp_storage_folder_view(folder)
@@ -16823,10 +16842,6 @@ def api_gcp_vpc_delete_route(project: str, route: str):
     return {"done": True}
 
 
-def _gcp_project_name(project: str | None) -> str:
-    return str(project or "cloudlearn").strip() or "cloudlearn"
-
-
 def _strip_action_suffix(value: str, *suffixes: str) -> str:
     text = str(value or "")
     for suffix in suffixes:
@@ -16951,7 +16966,10 @@ def _gcp_compute_network_root() -> str:
 
 def _gcp_storage_bucket_view(project: str, bucket: dict) -> dict:
     name = str(bucket.get("name") or "")
-    project_number = str(bucket.get("projectNumber") or _gcp_compute_numeric_id(f"{project}:{name}"))
+    from core import gcp_project as _gp
+    _proj = _gp.current()   # the space's project: its real number
+    project_number = str(bucket.get("projectNumber") or (_proj["projectNumber"] if project == _proj["projectId"]
+                                                         else _gcp_compute_numeric_id(f"{project}:{name}")))
     return {
         "kind": "storage#bucket",
         "id": name,

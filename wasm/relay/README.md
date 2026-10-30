@@ -102,7 +102,7 @@ gcloud refuses to run without an account and would otherwise phone home to real 
 equivalent of the dummy AWS creds:
 ```sh
 export CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true
-export CLOUDSDK_CORE_PROJECT=demo                 # matches the Nano GCP console project
+export CLOUDSDK_CORE_PROJECT=nano-project         # the Nano GCP console project (`gcloud projects list`)
 export CLOUDSDK_API_ENDPOINT_OVERRIDES_STORAGE=http://127.0.0.1:8090/storage/v1/
 
 gcloud storage buckets create gs://my-bucket
@@ -112,7 +112,7 @@ gcloud storage cp ./file.txt gs://my-bucket/
 Persistent equivalent (writes `~/.config/gcloud`, so you don't repeat it):
 ```sh
 gcloud config set auth/disable_credentials true
-gcloud config set project demo
+gcloud config set project nano-project
 gcloud config set api_endpoint_overrides/storage http://127.0.0.1:8090/storage/v1/
 ```
 Notes:

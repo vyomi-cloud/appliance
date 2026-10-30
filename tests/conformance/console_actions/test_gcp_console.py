@@ -18,6 +18,19 @@ _STUB_SERVICES: set[str] = set()
 _RUN_SUFFIX = current_run_suffix()
 
 
+_PROJECT: dict[str, str] = {}
+
+
+def _project(http_session, base_url) -> str:
+    """The GCP space's project ID — what the console itself puts in {project}."""
+    if "id" not in _PROJECT:
+        try:
+            _PROJECT["id"] = http_session.get(f"{base_url}/api/gcp/catalog", timeout=30).json()["project"]
+        except Exception:
+            _PROJECT["id"] = "vyomi-project"
+    return _PROJECT["id"]
+
+
 def _is_stub_response(status_code: int, body_text: str) -> bool:
     """Detect the catch-all ``{"detail": "Not found"}`` shape that the
     reserved-path guard emits when no handler is registered for a path
@@ -72,7 +85,7 @@ def test_gcp_action(spec, http_session, base_url):
         path = path.replace("{name}", placeholder)
     if "{object}" in path:
         path = path.replace("{object}", "conformance/hello.txt")
-    path = (path.replace("{project}", "cloudlearn")
+    path = (path.replace("{project}", _project(http_session, base_url))
                 .replace("{region}", "us-central1")
                 .replace("{zone}", "us-central1-a")
                 .replace("{location}", "us-central1")

@@ -35,6 +35,7 @@ CORES = [
     "iam_store.py", "iam_core.py",                  # IAM
     "messaging_store.py", "sqs_core.py", "sns_core.py",  # SQS + SNS (eventing)
     "rds_data_core.py",                             # RDS Data API (HTTP SQL over the relay)
+    "gcp_project.py",                               # GCP: the one project (ID + number), request normalization + Resource Manager
     "gcp_storage_core.py",                          # GCP: GCS JSON API (native google-cloud-storage wire)
     "gcp_firestore_core.py",                        # GCP: Firestore REST (native google-cloud-firestore)
     "gcp_kms_core.py",                              # GCP: Cloud KMS REST (native google-cloud-kms)

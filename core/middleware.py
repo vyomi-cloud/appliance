@@ -465,6 +465,41 @@ def _meter_storage_write(request, response, orig_path: str) -> None:
         pass
 
 
+async def _gcp_normalize_project(request):
+    """Every GCP request names its project by ID, number or a legacy id; map it
+    onto the space's project ID (path, query, JSON body) before any handler sees
+    it, or answer an unknown project the way the real API does (core/gcp_project)."""
+    path = request.scope.get("path", "")
+    qs = (request.scope.get("query_string") or b"").decode("latin-1")
+    if path.startswith("/ws/"):
+        return None
+    try:
+        from core import gcp_project
+        if "/projects/" in path or "project=" in qs or "parent=" in qs:
+            new_path, new_qs, err = gcp_project.normalize_request(path, qs, request.method)
+            if err is not None:
+                return JSONResponse(status_code=err[0], content=err[1])
+            if new_path != path:
+                request.scope["path"] = new_path
+                request.scope["raw_path"] = new_path.encode()
+            if new_qs != qs:
+                request.scope["query_string"] = new_qs.encode("latin-1")
+        ctype = (request.headers.get("content-type") or "").lower()
+        if (request.method in ("POST", "PUT", "PATCH") and "json" in ctype
+                and not path.startswith(("/upload/", "/storage/", "/download/"))):
+            body = await request.body()
+            if body and len(body) < 4 * 1024 * 1024:
+                new_body = gcp_project.rewrite_body(body)
+                if new_body != body:
+                    request._body = new_body
+                    request.scope["headers"] = [(k, v) for k, v in request.scope.get("headers", [])
+                                                if k.lower() != b"content-length"] + [
+                        (b"content-length", str(len(new_body)).encode())]
+    except Exception:
+        return None
+    return None
+
+
 async def provider_api_alias_middleware(request, call_next):
     response = await _provider_api_alias(request, call_next)
     _meter_storage_write(request, response, request.scope.get("path", ""))
@@ -494,6 +529,10 @@ async def _provider_api_alias(request, call_next):
             REQUEST_PROVIDER.reset(token)
     if _is_gcp_native_path(path) or path.startswith(("/ws/gcp/compute/", "/ws/compute/")):
         try:
+            denied = await _gcp_normalize_project(request)
+            if denied is not None:
+                return denied
+            path = request.scope.get("path", path)
             if not path.startswith(("/ws/", "/api/gcp/console/")):
                 denied = _gcp_iam_enforcement_response(request, path)
                 if denied is not None:
@@ -502,6 +541,11 @@ async def _provider_api_alias(request, call_next):
         finally:
             REQUEST_PROVIDER.reset(token)
     if path.startswith("/api/gcp/"):
+        denied = await _gcp_normalize_project(request)
+        if denied is not None:
+            REQUEST_PROVIDER.reset(token)
+            return denied
+        path = request.scope.get("path", path)
         request.scope["path"] = "/api/" + path[len("/api/gcp/"):]
     try:
         return await call_next(request)

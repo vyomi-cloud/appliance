@@ -266,7 +266,8 @@ def is_gcp_native_path(path: str) -> bool:
         "/sql/v1beta4/",
         "/pubsub/v1/",
         "/firestore/v1/",
-        "/v1/projects/",
+        "/v1/projects",       # incl. Cloud Resource Manager GET /v1/projects (no slash)
+        "/v3/projects",       # Cloud Resource Manager v3 + Cloud Monitoring v3
         "/v1/operations/",
         "/api/gcp/s3/",
         "/api/gcp/iam/",
@@ -1037,7 +1038,10 @@ def gcp_active_space_dict() -> dict:
 
 
 def gcp_project_name(project: str | None) -> str:
-    return str(project or "cloudlearn").strip() or "cloudlearn"
+    """The GCP space's project ID for a project ID / number / legacy id (empty →
+    the space's project); anything else is returned as given (core/gcp_project)."""
+    from core import gcp_project
+    return gcp_project.resolve(project) or str(project).strip()
 
 
 def gcp_record_matches_project(rec: dict, project: str) -> bool:

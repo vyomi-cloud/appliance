@@ -140,6 +140,19 @@ def gcp_gcutil_resolve(command: str) -> dict[str, Any]:
 
 
 def sdk_snippet(provider: str, language: str) -> dict[str, Any]:
+    out = _sdk_snippet(provider, language)
+    if provider == "gcp" and isinstance(out.get("snippet"), str):
+        # The snippets name the project `cloudlearn`; show the GCP space's project ID.
+        try:
+            from core import gcp_project
+            pid = gcp_project.project_id()
+        except Exception:
+            pid = "vyomi-project"
+        out["snippet"] = out["snippet"].replace("'cloudlearn'", f"'{pid}'").replace('"cloudlearn"', f'"{pid}"')
+    return out
+
+
+def _sdk_snippet(provider: str, language: str) -> dict[str, Any]:
     provider = provider.lower()
     language = language.lower()
     endpoint = "http://127.0.0.1:9000"
