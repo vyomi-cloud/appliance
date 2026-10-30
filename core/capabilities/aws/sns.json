@@ -22,9 +22,9 @@
   },
   "sns.topic.data-protection-policy": {
     "title": "Data protection policy",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi stores and returns the data protection policy exactly as written, but never scans published message bodies against it — no PII is ever masked, audited, or denied."
+      "Publish bodies are scanned against the policy's Inbound statements for a representative, regex-based subset of data identifiers (email addresses, credit card numbers, US Social Security numbers, IP addresses) and Deny/Deidentify/Audit are really enforced (Deny blocks the Publish, Deidentify masks the match before fan-out, Audit is recorded in the delivery log) — but Vyomi doesn't implement AWS's full ML-backed managed data-identifier catalog, and Outbound (post-delivery) statements are never evaluated."
     ],
     "tests": ["tests/conformance/test_sns_core.py"]
   },
@@ -109,9 +109,9 @@
   },
   "sns.sms.preferences": {
     "title": "SMS account attributes (default type, spend limit, sample rate, logging role, usage report bucket, sender ID)",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "SetSMSAttributes/GetSMSAttributes round-trip exactly as set, but Vyomi never enforces the monthly spend limit and never writes delivery-status logs or S3 usage reports."
+      "SetSMSAttributes/GetSMSAttributes round-trip exactly as set, and MonthlySpendLimit is really enforced — Publish to a phone number is denied once accumulated spend reaches the configured limit — but the per-message cost is a flat estimate, not real carrier billing rates, and Vyomi never writes delivery-status logs or S3 usage reports."
     ],
     "tests": ["tests/conformance/test_sns_core.py"]
   },

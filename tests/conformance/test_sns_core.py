@@ -114,6 +114,37 @@ def run(store=None):
     call("Publish", TopicArn=arn, Message=json.dumps({"order": {"kind": "slow"}}))
     _check("body filter policy delivers only the match", len(st.get_queue("q2")["messages"]) == 1)
 
+    # data protection policy — Deny / Deidentify / Audit really enforced on Publish
+    sqs.dispatch(st, SQS + "CreateQueue", {"QueueName": "q3"})
+    q3_url = sqs.dispatch(st, SQS + "GetQueueUrl", {"QueueName": "q3"}).body["QueueUrl"]
+    q3_arn = st.get_queue("q3")["queue_arn"]
+    s3sub = _v(call("Subscribe", TopicArn=arn, Protocol="sqs", Endpoint=q3_arn).body, "SubscriptionArn")
+    call("SetSubscriptionAttributes", SubscriptionArn=s3sub, AttributeName="RawMessageDelivery", AttributeValue="true")
+    email_id = "arn:aws:dataprotection::aws:data-identifier/EmailAddress"
+    deny_policy = json.dumps({"Name": "p", "Version": "2021-06-01", "Statement": [
+        {"Sid": "deny-email", "DataDirection": "Inbound", "Principal": ["*"],
+         "DataIdentifier": [email_id], "Operation": {"Deny": {}}}]})
+    call("PutDataProtectionPolicy", ResourceArn=arn, DataProtectionPolicy=deny_policy)
+    _check("data protection denies publish containing an email", err(call("Publish", TopicArn=arn, Message="reach me at a@b.com"), "AccessDenied"))
+    _check("data protection allows publish without a match", call("Publish", TopicArn=arn, Message="no pii here").status == 200)
+    sqs.dispatch(st, SQS + "ReceiveMessage", {"QueueUrl": q3_url})  # drain
+
+    mask_policy = json.dumps({"Name": "p", "Version": "2021-06-01", "Statement": [
+        {"Sid": "mask-email", "DataDirection": "Inbound", "Principal": ["*"], "DataIdentifier": [email_id],
+         "Operation": {"Deidentify": {"MaskConfig": {"MaskWithCharacter": "#"}}}}]})
+    call("PutDataProtectionPolicy", ResourceArn=arn, DataProtectionPolicy=mask_policy)
+    call("Publish", TopicArn=arn, Message="reach me at a@b.com")
+    masked = sqs.dispatch(st, SQS + "ReceiveMessage", {"QueueUrl": q3_url}).body["Messages"][0]["Body"]
+    _check("data protection deidentify masks the match", "a@b.com" not in masked and "#" in masked and "reach me at" in masked)
+
+    audit_policy = json.dumps({"Name": "p", "Version": "2021-06-01", "Statement": [
+        {"Sid": "audit-email", "DataDirection": "Inbound", "Principal": ["*"],
+         "DataIdentifier": [email_id], "Operation": {"Audit": {}}}]})
+    call("PutDataProtectionPolicy", ResourceArn=arn, DataProtectionPolicy=audit_policy)
+    call("Publish", TopicArn=arn, Message="reach me at a@b.com")
+    _check("data protection audit records a finding without blocking", any(d["kind"] == "DataProtectionAudit" for d in st.sns["deliveries"]))
+    call("PutDataProtectionPolicy", ResourceArn=arn, DataProtectionPolicy=json.dumps({"Name": "p", "Version": "2021-06-01", "Statement": []}))
+
     # batch
     b = call("PublishBatch", TopicArn=arn, **{
         "PublishBatchRequestEntries.member.1.Id": "a", "PublishBatchRequestEntries.member.1.Message": "m1",
@@ -165,6 +196,10 @@ def run(store=None):
     call("VerifySMSSandboxPhoneNumber", PhoneNumber="+15555550100", OneTimePassword=otp)
     _check("verified listed", "<Status>Verified</Status>" in call("ListSMSSandboxPhoneNumbers").body)
     _check("sms publish", bool(_v(call("Publish", PhoneNumber="+15555550100", Message="hi").body, "MessageId")))
+    call("SetSMSAttributes", **{"attributes.entry.1.key": "MonthlySpendLimit", "attributes.entry.1.value": "0"})
+    _check("sms spend limit blocks publish once reached", err(call("Publish", PhoneNumber="+15555550100", Message="hi"), "Throttling"))
+    call("SetSMSAttributes", **{"attributes.entry.1.key": "MonthlySpendLimit", "attributes.entry.1.value": "10"})
+    _check("raising the spend limit allows publish again", bool(_v(call("Publish", PhoneNumber="+15555550100", Message="hi").body, "MessageId")))
     _check("opt-out check", _v(call("CheckIfPhoneNumberIsOptedOut", phoneNumber="+15555550100").body, "isOptedOut") == "false")
     _check("list opted out", "<phoneNumbers>" in call("ListPhoneNumbersOptedOut").body)
     _check("opt in", call("OptInPhoneNumber", phoneNumber="+15555550100").status == 200)

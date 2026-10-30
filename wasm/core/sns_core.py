@@ -49,6 +49,16 @@ SUB_SETTABLE = {"DeliveryPolicy", "FilterPolicy", "FilterPolicyScope", "RawMessa
                 "RedrivePolicy", "SubscriptionRoleArn", "ReplayPolicy"}
 SMS_ATTRS = {"MonthlySpendLimit", "DeliveryStatusIAMRole", "DeliveryStatusSuccessSamplingRate",
              "DefaultSenderID", "DefaultSMSType", "UsageReportS3Bucket"}
+SMS_COST_USD = 0.00645       # flat per-message estimate (no real carrier billing) for MonthlySpendLimit enforcement
+
+# Built-in data identifiers the data protection policy can scan Publish bodies for. AWS's
+# managed catalog is far larger and ML-backed; this is a representative, regex-based subset.
+DATA_IDENTIFIER_PATTERNS = {
+    "EmailAddress": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
+    "CreditCardNumber": re.compile(r"\b(?:\d[ -]*?){13,16}\b"),
+    "Ssn-US": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    "IpAddress": re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+}
 
 
 @dataclass
@@ -87,7 +97,7 @@ def _state(store) -> dict:
         store.sns = s
     for k, default in (("platform_apps", {}), ("endpoints", {}), ("sms_attributes", {}),
                        ("sandbox", {}), ("opted_out", []), ("deliveries", []), ("dedup", {}),
-                       ("sequence", 0)):
+                       ("sequence", 0), ("sms_spend_usd", 0.0)):
         if k not in s:
             s[k] = default.copy() if isinstance(default, (dict, list)) else default
     return s
@@ -432,6 +442,68 @@ def _put_data_protection_policy(store, params):
 def _get_data_protection_policy(store, params):
     t = _require_topic(store, _p(params, "ResourceArn"))
     return _envelope("GetDataProtectionPolicy", _el("DataProtectionPolicy", t.get("data_protection_policy", "")))
+
+
+def _scan_data_identifiers(text: str, idents: list) -> dict:
+    hits = {}
+    for ref in idents:
+        name = str(ref).rsplit("/", 1)[-1]
+        pat = DATA_IDENTIFIER_PATTERNS.get(name)
+        if not pat:
+            continue
+        spans = [m.span() for m in pat.finditer(text)]
+        if spans:
+            hits[name] = spans
+    return hits
+
+
+def _enforce_data_protection_policy(store, topic: dict, msg: dict) -> None:
+    """Evaluate the topic's data protection policy (Inbound statements only, since Publish is
+    the only inbound direction Vyomi models) against the outgoing message body: Deny blocks the
+    Publish, Deidentify masks the matched text before fan-out, Audit only records a finding."""
+    raw = topic.get("data_protection_policy")
+    if not raw:
+        return
+    try:
+        doc = json.loads(raw)
+    except Exception:
+        return
+    text = msg.get("Message") or ""
+    denied, mask_spans, audited = set(), [], set()
+    for st in doc.get("Statement", []):
+        if st.get("DataDirection", "Inbound") != "Inbound":
+            continue
+        hits = _scan_data_identifiers(text, st.get("DataIdentifier") or [])
+        if not hits:
+            continue
+        op = st.get("Operation") or {}
+        if "Deny" in op:
+            denied.update(hits)
+        elif "Deidentify" in op:
+            ch = (((op["Deidentify"] or {}).get("MaskConfig") or {}).get("MaskWithCharacter") or "*")[:1] or "*"
+            for spans in hits.values():
+                mask_spans.extend((s, e, ch) for s, e in spans)
+        elif "Audit" in op:
+            audited.update(hits)
+    if denied:
+        raise SnsError("AccessDenied",
+                       "Message contains data denied by the topic's data protection policy: " + ", ".join(sorted(denied)),
+                       403)
+    if mask_spans:
+        mask_spans.sort(key=lambda x: x[0])
+        out, pos = [], 0
+        for s, e, ch in mask_spans:
+            if s < pos:
+                continue
+            out.append(text[pos:s])
+            out.append(ch * (e - s))
+            pos = e
+        out.append(text[pos:])
+        msg["Message"] = "".join(out)
+    if audited:
+        _log_delivery(store, kind="DataProtectionAudit", topic_arn=topic["topic_arn"], protocol="", endpoint="",
+                      subscription_arn="", subject="",
+                      message="Data protection policy audit matched: " + ", ".join(sorted(audited)))
 
 
 # ── subscriptions ───────────────────────────────────────────────────────────
@@ -786,6 +858,7 @@ def _enqueue_delivery(store, topic: dict, sub: dict, **job) -> bool:
 
 def _publish_to_topic(store, topic: dict, msg: dict) -> tuple[str, str]:
     fifo = _is_fifo(topic)
+    _enforce_data_protection_policy(store, topic, msg)
     _check_message(msg, fifo)
     arn = topic["topic_arn"]
     seq = ""
@@ -889,6 +962,12 @@ def _publish_to_phone(store, phone: str, msg: dict) -> str:
     sb = s["sandbox"].get(phone)
     if sb is None or sb["status"] != "Verified":
         raise SnsError("InvalidParameter", "Invalid parameter: PhoneNumber Reason: Destination phone number is not verified in the SMS sandbox", 400)
+    limit = float(s["sms_attributes"].get("MonthlySpendLimit", "1") or "1")
+    if s["sms_spend_usd"] + SMS_COST_USD > limit:
+        raise SnsError("Throttling",
+                       f"Rate exceeded for PhoneNumber {phone} Reason: the account's MonthlySpendLimit (${limit:g}) for SMS has been reached",
+                       400)
+    s["sms_spend_usd"] += SMS_COST_USD
     message_id = str(uuid.uuid4())
     _log_delivery(store, kind="Notification", topic_arn="", protocol="sms", endpoint=phone,
                   subscription_arn="", subject="", message=msg["Message"], message_id=message_id)
@@ -928,10 +1007,14 @@ def _publish(store, params):
         raise _invalid("Invalid parameter: Message Reason: Message is required")
     msg = _msg_from_params(params)
     if phone:
-        return _envelope("Publish", _el("MessageId", _publish_to_phone(store, phone, msg)))
+        mid = _publish_to_phone(store, phone, msg)
+        store.persist()
+        return _envelope("Publish", _el("MessageId", mid))
     dest = topic_arn or target
     if ":endpoint/" in dest:
-        return _envelope("Publish", _el("MessageId", _publish_to_endpoint(store, dest, msg)))
+        mid = _publish_to_endpoint(store, dest, msg)
+        store.persist()
+        return _envelope("Publish", _el("MessageId", mid))
     topic = _require_topic(store, dest)
     message_id, seq = _publish_to_topic(store, topic, msg)
     store.persist()
