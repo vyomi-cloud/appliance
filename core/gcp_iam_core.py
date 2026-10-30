@@ -42,7 +42,10 @@ import base64
 import json
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from urllib.parse import unquote
+
+MAX_ACTIVITY = 200
 
 from core.iam_store import IamStore, InMemoryIamStore
 
@@ -84,6 +87,34 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "iam.serviceAccounts.actAs", "iam.serviceAccounts.get",
     },
 }
+
+# ── predefined-role catalog (console "Roles > Predefined" tab) ─────────────
+# {name: (title, service_display_name)} — a representative slice of GCP's
+# predefined-role catalog (thousands of real roles; this is reference data,
+# not user-created, so a fixed list is a faithful rendering of this tab).
+PREDEFINED_ROLE_CATALOG: dict[str, tuple[str, str]] = {
+    "roles/owner": ("Owner", "Basic"),
+    "roles/editor": ("Editor", "Basic"),
+    "roles/viewer": ("Viewer", "Basic"),
+    "roles/storage.admin": ("Storage Admin", "Cloud Storage"),
+    "roles/storage.objectAdmin": ("Storage Object Admin", "Cloud Storage"),
+    "roles/storage.objectViewer": ("Storage Object Viewer", "Cloud Storage"),
+    "roles/iam.serviceAccountAdmin": ("Service Account Admin", "Identity and Access Management (IAM)"),
+    "roles/iam.serviceAccountUser": ("Service Account User", "Identity and Access Management (IAM)"),
+    "roles/iam.securityAdmin": ("Security Admin", "Identity and Access Management (IAM)"),
+    "roles/resourcemanager.projectIamAdmin": ("Project IAM Admin", "Resource Manager"),
+    "roles/pubsub.admin": ("Pub/Sub Admin", "Cloud Pub/Sub"),
+    "roles/pubsub.publisher": ("Pub/Sub Publisher", "Cloud Pub/Sub"),
+    "roles/cloudsql.admin": ("Cloud SQL Admin", "Cloud SQL"),
+    "roles/compute.admin": ("Compute Admin", "Compute Engine"),
+    "roles/logging.viewer": ("Logs Viewer", "Cloud Logging"),
+    "roles/monitoring.viewer": ("Monitoring Viewer", "Cloud Monitoring"),
+}
+
+
+def list_predefined_roles() -> list[dict]:
+    return [{"name": n, "title": t, "service": svc, "stage": "GA"}
+            for n, (t, svc) in sorted(PREDEFINED_ROLE_CATALOG.items())]
 
 
 @dataclass
@@ -131,6 +162,72 @@ def _policy_ns(store: IamStore) -> dict:
         ns = {}
         store.gcp_iam_policies = ns  # type: ignore[attr-defined]
     return ns
+
+
+def _keys_ns(store: IamStore) -> dict:
+    """Service account keys, keyed by SA email -> {keyId: record}."""
+    ns = getattr(store, "gcp_sa_keys", None)
+    if ns is None:
+        ns = {}
+        store.gcp_sa_keys = ns  # type: ignore[attr-defined]
+    return ns
+
+
+def _roles_ns(store: IamStore) -> dict:
+    """Custom IAM roles, keyed by 'projects/{p}/roles/{roleId}'."""
+    ns = getattr(store, "gcp_custom_roles", None)
+    if ns is None:
+        ns = {}
+        store.gcp_custom_roles = ns  # type: ignore[attr-defined]
+    return ns
+
+
+def _deny_ns(store: IamStore) -> dict:
+    """Deny policies, keyed by attachmentPoint -> {policyId: record}."""
+    ns = getattr(store, "gcp_deny_policies", None)
+    if ns is None:
+        ns = {}
+        store.gcp_deny_policies = ns  # type: ignore[attr-defined]
+    return ns
+
+
+def _pools_ns(store: IamStore) -> dict:
+    """Workload identity pools, keyed by 'projects/{p}/locations/global/workloadIdentityPools/{id}'."""
+    ns = getattr(store, "gcp_wi_pools", None)
+    if ns is None:
+        ns = {}
+        store.gcp_wi_pools = ns  # type: ignore[attr-defined]
+    return ns
+
+
+def _activity_ns(store: IamStore) -> list:
+    """Applied-policy-change log (console 'Recommendations history' tab), keyed by resource."""
+    ns = getattr(store, "gcp_policy_activity", None)
+    if ns is None:
+        ns = []
+        store.gcp_policy_activity = ns  # type: ignore[attr-defined]
+    return ns
+
+
+def _record_activity(store: IamStore, resource: str, old_bindings: list, new_bindings: list) -> None:
+    def _pairs(bindings):
+        return {(b.get("role", ""), m) for b in bindings or [] for m in b.get("members", [])}
+    added, removed = _pairs(new_bindings) - _pairs(old_bindings), _pairs(old_bindings) - _pairs(new_bindings)
+    if not added and not removed:
+        return
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    log = _activity_ns(store)
+    for role, member in sorted(added):
+        log.append({"id": uuid.uuid4().hex[:12], "resource": resource, "action": "GRANT", "role": role, "member": member, "time": now})
+    for role, member in sorted(removed):
+        log.append({"id": uuid.uuid4().hex[:12], "resource": resource, "action": "REVOKE", "role": role, "member": member, "time": now})
+    del log[:max(0, len(log) - MAX_ACTIVITY)]
+
+
+def _list_activity(store: IamStore, resource: str) -> GcpIamResponse:
+    entries = [dict(e) for e in _activity_ns(store) if e["resource"] == resource]
+    entries.reverse()  # most recent first
+    return _json(200, {"activity": entries})
 
 
 def _sa_email(account_id: str, project: str) -> str:
@@ -203,6 +300,34 @@ def _delete_service_account(store, project, ident) -> GcpIamResponse:
     return _json(200, {})
 
 
+def _patch_service_account(store, project, ident, body) -> GcpIamResponse:
+    sas = _sa_ns(store)
+    email = ident if "@" in ident else _sa_email(ident, project)
+    sa = sas.get(email)
+    if sa is None:
+        return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
+    # serviceAccounts.patch takes a "serviceAccount" resource body (updateMask implied by
+    # which fields are present) — mirrors the real partial-update contract.
+    spec = body.get("serviceAccount") or body
+    for field in ("displayName", "description"):
+        if field in spec:
+            sa[field] = spec[field]
+    sa["etag"] = _etag()
+    store.persist()
+    return _json(200, _sa_view(sa))
+
+
+def _set_service_account_disabled(store, project, ident, disabled) -> GcpIamResponse:
+    sas = _sa_ns(store)
+    email = ident if "@" in ident else _sa_email(ident, project)
+    sa = sas.get(email)
+    if sa is None:
+        return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
+    sa["disabled"] = disabled
+    store.persist()
+    return _json(200, {})
+
+
 # ── resource IAM policy operations ──────────────────────────────────────────
 def _get_iam_policy(store, resource) -> GcpIamResponse:
     policies = _policy_ns(store)
@@ -211,16 +336,21 @@ def _get_iam_policy(store, resource) -> GcpIamResponse:
         # GCP returns an empty policy (version 1, no bindings) for a resource
         # that has never had a policy set.
         return _json(200, {"version": 1, "bindings": [], "etag": _etag()})
-    return _json(200, {
+    out = {
         "version": pol.get("version", 1),
         "bindings": [dict(b) for b in pol.get("bindings", [])],
         "etag": pol.get("etag", _etag()),
-    })
+    }
+    if pol.get("auditConfigs"):
+        out["auditConfigs"] = [dict(a) for a in pol["auditConfigs"]]
+    return _json(200, out)
 
 
 def _set_iam_policy(store, resource, body) -> GcpIamResponse:
     policy = body.get("policy") or {}
     bindings = policy.get("bindings") or []
+    old = _policy_ns(store).get(resource) or {}
+    _record_activity(store, resource, old.get("bindings") or [], bindings)
     # Normalise bindings to {"role","members":[...]} preserving any condition.
     norm = []
     for b in bindings:
@@ -233,13 +363,235 @@ def _set_iam_policy(store, resource, body) -> GcpIamResponse:
         "bindings": norm,
         "etag": policy.get("etag") or _etag(),
     }
+    # auditConfigs (Data Access audit logging config) — stored and returned
+    # verbatim (config_only: Vyomi does not gate calls on it), same object
+    # shape as real IAM Policy.auditConfigs.
+    if "auditConfigs" in policy:
+        stored["auditConfigs"] = [
+            {"service": a.get("service", ""),
+             "auditLogConfigs": [dict(c) for c in a.get("auditLogConfigs", [])]}
+            for a in policy.get("auditConfigs") or []
+        ]
+    elif resource in _policy_ns(store) and _policy_ns(store)[resource].get("auditConfigs"):
+        stored["auditConfigs"] = _policy_ns(store)[resource]["auditConfigs"]
     _policy_ns(store)[resource] = stored
     store.persist()
-    return _json(200, {
+    out = {
         "version": stored["version"],
         "bindings": [dict(b) for b in stored["bindings"]],
         "etag": stored["etag"],
-    })
+    }
+    if stored.get("auditConfigs"):
+        out["auditConfigs"] = [dict(a) for a in stored["auditConfigs"]]
+    return _json(200, out)
+
+
+# ── custom IAM roles ─────────────────────────────────────────────────────────
+def _role_view(role: dict) -> dict:
+    return {k: v for k, v in role.items() if k != "_project"}
+
+
+def _create_role(store, project, role_id, body) -> GcpIamResponse:
+    if not role_id:
+        return _err(400, "roleId is required.", "INVALID_ARGUMENT")
+    roles = _roles_ns(store)
+    name = f"projects/{project}/roles/{role_id}"
+    if name in roles and not roles[name].get("deleted"):
+        return _err(409, f"Role {name} already exists.", "ALREADY_EXISTS")
+    spec = body.get("role") or {}
+    role = {
+        "name": name,
+        "title": spec.get("title", role_id),
+        "description": spec.get("description", ""),
+        "includedPermissions": list(spec.get("includedPermissions", [])),
+        "stage": spec.get("stage", "GA"),
+        "etag": _etag(),
+        "deleted": False,
+        "_project": project,
+    }
+    roles[name] = role
+    store.persist()
+    return _json(200, _role_view(role))
+
+
+def _get_role(store, name) -> GcpIamResponse:
+    role = _roles_ns(store).get(name)
+    if role is None:
+        return _err(404, f"Role {name} not found.", "NOT_FOUND")
+    return _json(200, _role_view(role))
+
+
+def _list_roles(store, project) -> GcpIamResponse:
+    roles = _roles_ns(store)
+    out = [_role_view(r) for n, r in sorted(roles.items())
+           if r.get("_project") == project and not r.get("deleted")]
+    return _json(200, {"roles": out})
+
+
+def _patch_role(store, name, body) -> GcpIamResponse:
+    roles = _roles_ns(store)
+    role = roles.get(name)
+    if role is None:
+        return _err(404, f"Role {name} not found.", "NOT_FOUND")
+    spec = body.get("role") or body
+    for field, key in (("title", "title"), ("description", "description"),
+                       ("includedPermissions", "includedPermissions"), ("stage", "stage")):
+        if key in spec:
+            role[field] = spec[key]
+    role["etag"] = _etag()
+    store.persist()
+    return _json(200, _role_view(role))
+
+
+def _delete_role(store, name) -> GcpIamResponse:
+    roles = _roles_ns(store)
+    role = roles.get(name)
+    if role is None:
+        return _err(404, f"Role {name} not found.", "NOT_FOUND")
+    role["deleted"] = True  # GCP soft-deletes custom roles (undeletable for 7 days)
+    store.persist()
+    return _json(200, _role_view(role))
+
+
+# ── service account keys ────────────────────────────────────────────────────
+def _key_id() -> str:
+    return uuid.uuid4().hex
+
+
+def _key_view(k: dict) -> dict:
+    return {kk: vv for kk, vv in k.items() if kk != "_email"}
+
+
+def _create_key(store, project, email, body) -> GcpIamResponse:
+    keys = _keys_ns(store).setdefault(email, {})
+    kid = _key_id()
+    now = _etag()  # not a real timestamp source available here; validAfterTime below uses a stable marker
+    key = {
+        "name": f"projects/{project}/serviceAccounts/{email}/keys/{kid}",
+        "privateKeyType": body.get("privateKeyType", "TYPE_GOOGLE_CREDENTIALS_FILE"),
+        "keyAlgorithm": body.get("keyAlgorithm", "KEY_ALG_RSA_2048"),
+        "privateKeyData": base64.b64encode(json.dumps({
+            "type": "service_account", "project_id": project, "private_key_id": kid,
+            "client_email": email,
+        }).encode()).decode(),
+        "publicKeyData": base64.b64encode(f"public-key-material-{kid}".encode()).decode(),
+        "validAfterTime": "2026-01-01T00:00:00Z",
+        "validBeforeTime": "2036-01-01T00:00:00Z",
+        "keyOrigin": "GOOGLE_PROVIDED",
+        "keyType": "USER_MANAGED",
+        "disabled": False,
+        "_email": email,
+    }
+    keys[kid] = key
+    store.persist()
+    return _json(200, _key_view(key))
+
+
+def _list_keys(store, email) -> GcpIamResponse:
+    keys = _keys_ns(store).get(email, {})
+    # listKey responses omit privateKeyData by default.
+    out = [{k2: v2 for k2, v2 in _key_view(k).items() if k2 != "privateKeyData"}
+           for k in sorted(keys.values(), key=lambda k: k["name"])]
+    return _json(200, {"keys": out})
+
+
+def _get_key(store, email, kid) -> GcpIamResponse:
+    key = _keys_ns(store).get(email, {}).get(kid)
+    if key is None:
+        return _err(404, f"Key {kid} not found.", "NOT_FOUND")
+    return _json(200, _key_view(key))
+
+
+def _delete_key(store, email, kid) -> GcpIamResponse:
+    keys = _keys_ns(store).get(email, {})
+    if kid not in keys:
+        return _err(404, f"Key {kid} not found.", "NOT_FOUND")
+    del keys[kid]
+    store.persist()
+    return _json(200, {})
+
+
+# ── deny policies (IAM Deny API, iam.googleapis.com/v2) ─────────────────────
+def _create_deny_policy(store, attachment_point, policy_id, body) -> GcpIamResponse:
+    if not policy_id:
+        return _err(400, "policyId is required.", "INVALID_ARGUMENT")
+    policies = _deny_ns(store).setdefault(attachment_point, {})
+    name = f"{attachment_point}/denypolicies/{policy_id}"
+    if policy_id in policies:
+        return _err(409, f"Deny policy {policy_id} already exists.", "ALREADY_EXISTS")
+    pol = {
+        "name": name,
+        "displayName": body.get("displayName", policy_id),
+        "rules": list(body.get("rules", [])),
+        "etag": _etag(),
+        "updateTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    policies[policy_id] = pol
+    store.persist()
+    return _json(200, dict(pol))
+
+
+def _list_deny_policies(store, attachment_point) -> GcpIamResponse:
+    policies = _deny_ns(store).get(attachment_point, {})
+    return _json(200, {"policies": [dict(p) for p in policies.values()]})
+
+
+def _get_deny_policy(store, attachment_point, policy_id) -> GcpIamResponse:
+    pol = _deny_ns(store).get(attachment_point, {}).get(policy_id)
+    if pol is None:
+        return _err(404, f"Deny policy {policy_id} not found.", "NOT_FOUND")
+    return _json(200, dict(pol))
+
+
+def _delete_deny_policy(store, attachment_point, policy_id) -> GcpIamResponse:
+    policies = _deny_ns(store).get(attachment_point, {})
+    if policy_id not in policies:
+        return _err(404, f"Deny policy {policy_id} not found.", "NOT_FOUND")
+    del policies[policy_id]
+    store.persist()
+    return _json(200, {})
+
+
+# ── workload identity pools (iam.googleapis.com/v1) ─────────────────────────
+def _create_pool(store, project, pool_id, body) -> GcpIamResponse:
+    if not pool_id:
+        return _err(400, "workloadIdentityPoolId is required.", "INVALID_ARGUMENT")
+    name = f"projects/{project}/locations/global/workloadIdentityPools/{pool_id}"
+    pools = _pools_ns(store)
+    if name in pools:
+        return _err(409, f"Pool {pool_id} already exists.", "ALREADY_EXISTS")
+    pool = {
+        "name": name,
+        "displayName": body.get("displayName", pool_id),
+        "description": body.get("description", ""),
+        "state": "ACTIVE",
+        "disabled": False,
+    }
+    pools[name] = pool
+    store.persist()
+    return _json(200, dict(pool))
+
+
+def _list_pools(store, project) -> GcpIamResponse:
+    prefix = f"projects/{project}/locations/global/workloadIdentityPools/"
+    pools = [dict(p) for n, p in sorted(_pools_ns(store).items()) if n.startswith(prefix)]
+    return _json(200, {"workloadIdentityPools": pools})
+
+
+def _get_pool(store, name) -> GcpIamResponse:
+    pool = _pools_ns(store).get(name)
+    if pool is None:
+        return _err(404, f"Pool not found: {name}", "NOT_FOUND")
+    return _json(200, dict(pool))
+
+
+def _delete_pool(store, name) -> GcpIamResponse:
+    pools = _pools_ns(store)
+    if name not in pools:
+        return _err(404, f"Pool not found: {name}", "NOT_FOUND")
+    pools[name]["state"] = "DELETED"
+    store.persist()
+    return _json(200, dict(pools[name]))
 
 
 def _permissions_for_role(role: str) -> set[str]:
@@ -295,10 +647,10 @@ def dispatch(store: IamStore, method: str, path: str,
         except Exception:
             return {}
 
-    # Strip a leading /v1 (iam.googleapis.com) or /v3 (resourcemanager) prefix,
-    # and query string.
+    # Strip a leading /v1 (iam.googleapis.com), /v2 (IAM Deny API) or /v3
+    # (resourcemanager) prefix, and query string.
     p = path.split("?", 1)[0]
-    for pre in ("/v1", "/v3", "/v1beta1"):
+    for pre in ("/v1", "/v2", "/v3", "/v1beta1"):
         if p.startswith(pre + "/") or p == pre:
             p = p[len(pre):]
             break
@@ -317,9 +669,28 @@ def dispatch(store: IamStore, method: str, path: str,
             return _set_iam_policy(store, resource, _body())
         if verb == "testIamPermissions":
             return _test_iam_permissions(store, resource, _body())
+        if verb in ("disable", "enable") and resource.startswith("projects/") and "/serviceAccounts/" in resource:
+            rsegs = resource.split("/")
+            return _set_service_account_disabled(store, rsegs[1], rsegs[3], verb == "disable")
         return _err(400, f"Unknown method: {verb}", "INVALID_ARGUMENT")
 
     segs = [unquote(s) for s in p.split("/") if s != ""]
+
+    # ---- service account keys: projects/{p}/serviceAccounts/{email}/keys[/{keyId}] ----
+    if len(segs) >= 5 and segs[0] == "projects" and segs[2] == "serviceAccounts" and segs[4] == "keys":
+        project, email = segs[1], segs[3]
+        if len(segs) == 5:
+            if method == "POST":
+                return _create_key(store, project, email, _body())
+            if method == "GET":
+                return _list_keys(store, email)
+            return _err(400, f"Unsupported method {method} on keys", "INVALID_ARGUMENT")
+        kid = segs[5]
+        if method == "GET":
+            return _get_key(store, email, kid)
+        if method == "DELETE":
+            return _delete_key(store, email, kid)
+        return _err(400, f"Unsupported method {method} on key", "INVALID_ARGUMENT")
 
     # ---- service accounts: projects/{p}/serviceAccounts[/{email}] ----
     if len(segs) >= 3 and segs[0] == "projects" and segs[2] == "serviceAccounts":
@@ -334,9 +705,74 @@ def dispatch(store: IamStore, method: str, path: str,
         ident = segs[3]
         if method == "GET":
             return _get_service_account(store, project, ident)
+        if method == "PATCH":
+            return _patch_service_account(store, project, ident, _body())
         if method == "DELETE":
             return _delete_service_account(store, project, ident)
         return _err(400, f"Unsupported method {method} on serviceAccount", "INVALID_ARGUMENT")
+
+    # ---- applied-policy-change activity: projects/{p}/policyActivity ----
+    if len(segs) == 3 and segs[0] == "projects" and segs[2] == "policyActivity":
+        if method == "GET":
+            return _list_activity(store, f"projects/{segs[1]}")
+        return _err(400, f"Unsupported method {method} on policyActivity", "INVALID_ARGUMENT")
+
+    # ---- predefined roles: roles ----
+    if len(segs) == 1 and segs[0] == "roles":
+        if method == "GET":
+            return _json(200, {"roles": list_predefined_roles()})
+        return _err(400, f"Unsupported method {method} on roles", "INVALID_ARGUMENT")
+
+    # ---- custom roles: projects/{p}/roles[/{roleId}] ----
+    if len(segs) >= 3 and segs[0] == "projects" and segs[2] == "roles":
+        project = segs[1]
+        if len(segs) == 3:
+            if method == "POST":
+                return _create_role(store, project, str(_body().get("roleId", "")).strip(), _body())
+            if method == "GET":
+                return _list_roles(store, project)
+            return _err(400, f"Unsupported method {method} on roles", "INVALID_ARGUMENT")
+        name = f"projects/{project}/roles/{segs[3]}"
+        if method == "GET":
+            return _get_role(store, name)
+        if method == "PATCH":
+            return _patch_role(store, name, _body())
+        if method == "DELETE":
+            return _delete_role(store, name)
+        return _err(400, f"Unsupported method {method} on role", "INVALID_ARGUMENT")
+
+    # ---- workload identity pools: projects/{p}/locations/global/workloadIdentityPools[/{id}] ----
+    if (len(segs) >= 5 and segs[0] == "projects" and segs[2] == "locations"
+            and segs[3] == "global" and segs[4] == "workloadIdentityPools"):
+        project = segs[1]
+        if len(segs) == 5:
+            if method == "POST":
+                return _create_pool(store, project, str(query.get("workloadIdentityPoolId", "")).strip(), _body())
+            if method == "GET":
+                return _list_pools(store, project)
+            return _err(400, f"Unsupported method {method} on workloadIdentityPools", "INVALID_ARGUMENT")
+        name = f"projects/{project}/locations/global/workloadIdentityPools/{segs[5]}"
+        if method == "GET":
+            return _get_pool(store, name)
+        if method == "DELETE":
+            return _delete_pool(store, name)
+        return _err(400, f"Unsupported method {method} on workloadIdentityPool", "INVALID_ARGUMENT")
+
+    # ---- deny policies: policies/{attachmentPoint}/denypolicies[/{policyId}] ----
+    if len(segs) >= 3 and segs[0] == "policies" and segs[2] == "denypolicies":
+        attachment_point = segs[1]
+        if len(segs) == 3:
+            if method == "POST":
+                return _create_deny_policy(store, attachment_point, str(query.get("policyId", "")).strip(), _body())
+            if method == "GET":
+                return _list_deny_policies(store, attachment_point)
+            return _err(400, f"Unsupported method {method} on denypolicies", "INVALID_ARGUMENT")
+        policy_id = segs[3]
+        if method == "GET":
+            return _get_deny_policy(store, attachment_point, policy_id)
+        if method == "DELETE":
+            return _delete_deny_policy(store, attachment_point, policy_id)
+        return _err(400, f"Unsupported method {method} on denypolicy", "INVALID_ARGUMENT")
 
     return _err(404, f"Unknown path: {path}", "NOT_FOUND")
 

@@ -1,0 +1,177 @@
+{
+ "$doc": "Vyomi capability registry — GCP IAM & Admin. See aws/s3.json for the contract. GCP/Azure claims have no AWS-wire probe — they are proven by 'tests' (conformance files run against the in-process router).",
+ "gcp.iam-admin.project-iam-bindings": {
+  "title": "IAM policy bindings (Allow tab — grant/remove access)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
+ },
+ "gcp.iam-admin.deny-policies": {
+  "title": "Deny policies",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
+ },
+ "gcp.iam-admin.recommendations-history": {
+  "title": "Recommendations history",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Vyomi logs applied IAM policy changes (grants and removals) here; it does not run GCP's IAM Recommender to generate new suggestions on its own, so nothing appears until you grant or remove access."
+  ],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
+ },
+ "gcp.iam-admin.service-accounts": {
+  "title": "Service accounts (create, describe, list, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
+ },
+ "gcp.iam-admin.service-account-keys": {
+  "title": "Service account keys",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Key creation, listing and deletion are real and stateful, but the private key material is synthetic — it cannot be used to authenticate against anything outside Vyomi."
+  ],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
+ },
+ "gcp.iam-admin.service-account-metrics-logs": {
+  "title": "Service account Metrics / Logs tabs",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Per-service-account request metrics and audit log panels aren't modeled; Vyomi has no telemetry pipeline backing this view."
+  ]
+ },
+ "gcp.iam-admin.roles-predefined": {
+  "title": "Predefined roles catalog",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
+ },
+ "gcp.iam-admin.roles-custom": {
+  "title": "Custom roles (create, edit, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
+ },
+ "gcp.iam-admin.project-settings": {
+  "title": "Project settings (name, labels)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
+ },
+ "gcp.iam-admin.tags": {
+  "title": "Tags (tag keys)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
+ },
+ "gcp.iam-admin.audit-logs-config": {
+  "title": "Data Access audit logs configuration",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "Admin Read / Data Read / Data Write toggles and exempted principals are stored and returned exactly as configured, but Vyomi does not gate or emit audit log entries based on them."
+  ],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
+ },
+ "gcp.iam-admin.organization-policies": {
+  "title": "Organization policy constraints",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "Policy constraints (predefined or custom) are created, listed and deleted for real, but Vyomi does not enforce them — a call that would violate a constraint in real GCP still succeeds here."
+  ],
+  "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
+ },
+ "gcp.iam-admin.privileged-access-manager": {
+  "title": "Privileged Access Manager — Entitlements",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Entitlement create/list/delete is real and stateful. Requesting, approving and time-boxed activation of a grant (the Grants / Approve grants tabs) are not modeled."
+  ],
+  "tests": ["tests/conformance/test_gcp_pam_core.py"]
+ },
+ "gcp.iam-admin.pam-workflow": {
+  "title": "PAM Grants / Approve grants / Audit Logs / Settings tabs",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Requesting a grant, approving it and the resulting time-boxed privilege escalation aren't modeled — only entitlement definitions are real."
+  ]
+ },
+ "gcp.iam-admin.essential-contacts": {
+  "title": "Essential Contacts",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
+ },
+ "gcp.iam-admin.policy-troubleshooter": {
+  "title": "Policy Troubleshooter",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
+ },
+ "gcp.iam-admin.policy-analyzer": {
+  "title": "Policy Analyzer",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Queries who has a given role on the project from the stored IAM policy. Vyomi does not run full Cloud Asset Inventory analysis (inherited org/folder policy, resource-level IAM across products)."
+  ],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
+ },
+ "gcp.iam-admin.workload-identity-federation": {
+  "title": "Workload Identity Federation — pool creation",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Creating and listing a workload identity pool is real and stateful. Connecting an external OIDC/SAML identity provider and exchanging its tokens for Google credentials is not modeled."
+  ],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
+ },
+ "gcp.iam-admin.workforce-identity-federation": {
+  "title": "Workforce Identity Federation",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["This feature requires an organization; Vyomi's GCP lens is project-scoped."]
+ },
+ "gcp.iam-admin.groups": {
+  "title": "Groups",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["This feature requires an organization; Vyomi's GCP lens is project-scoped."]
+ },
+ "gcp.iam-admin.principal-access-boundary": {
+  "title": "Principal Access Boundary",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["This feature requires an organization; Vyomi's GCP lens is project-scoped."]
+ },
+ "gcp.iam-admin.managed-workload-identities": {
+  "title": "Managed Workload Identities",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Not backed by a Vyomi backend yet."]
+ },
+ "gcp.iam-admin.asset-inventory": {
+  "title": "Asset Inventory",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Cloud Asset Inventory's resource/IAM/org-policy search index isn't modeled."]
+ },
+ "gcp.iam-admin.security-insights": {
+  "title": "Security Insights",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["IAM lint/insight analysis isn't modeled."]
+ },
+ "gcp.iam-admin.quotas-system-limits": {
+  "title": "Quotas & System Limits",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Not backed by a Vyomi backend yet."]
+ },
+ "gcp.iam-admin.identity-organization": {
+  "title": "Identity & Organization",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["This feature requires an organization; Vyomi's GCP lens is project-scoped."]
+ },
+ "gcp.iam-admin.privacy-security": {
+  "title": "Privacy & Security",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["This feature requires an organization; Vyomi's GCP lens is project-scoped."]
+ },
+ "gcp.iam-admin.identity-aware-proxy": {
+  "title": "Identity-Aware Proxy",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["IAP's per-resource access proxy isn't modeled."]
+ }
+}

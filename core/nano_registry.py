@@ -40,6 +40,8 @@ from core.gcp_redis_core import RedisStore
 from core.gcp_container_core import ContainerStore
 from core.gcp_compute_core import ComputeStore
 from core.gcp_compute_instances_core import ComputeStore as ComputeVmStore
+from core.gcp_resourcemanager_core import ResourceManagerStore
+from core.gcp_pam_core import PamStore
 from core.azure_arm_core import AzureArm
 
 import types
@@ -90,6 +92,8 @@ def get() -> dict:
             "gcp_iam": InMemoryIamStore(),
             "gcp_sql": InMemorySqlStore(),
             "gcp_ar":  ArtifactRegistryStore(),   # Artifact Registry repositories/packages
+            "gcp_rm": ResourceManagerStore(),   # Resource Manager: project, tags, contacts, org policies
+            "gcp_pam": PamStore(),   # Privileged Access Manager entitlements
             "gcp_compute_vm": ComputeVmStore(),   # Compute Engine VMs, disks, images, templates
             "gcp_compute": ComputeStore(),   # VPC network: networks/subnets/firewalls/routes/addresses
             # ── Azure ── (blob/cosmos/keyvault secrets+keys/queue/servicebus)

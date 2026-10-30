@@ -69,6 +69,8 @@ from core import gcp_artifactregistry_core as gcp_ar
 from core import gcp_logging_core as gcp_logging
 from core import gcp_compute_core as gcp_compute
 from core import gcp_compute_instances_core as gcp_compute_vm
+from core import gcp_resourcemanager_core as gcp_rm
+from core import gcp_pam_core as gcp_pam
 
 
 def _gcp_service(path):
@@ -90,13 +92,31 @@ def _gcp_service(path):
         return "gcp-compute-vm"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
         return "gcp-cloudsql"
-    if path.startswith("/v3/projects/") or path == "/v3/uptimeCheckIps":   # Cloud Monitoring API v3
+    if path == "/v3/uptimeCheckIps":   # Cloud Monitoring API v3 (global, no project)
         return "gcp-monitoring"
+    m = re.match(r"^/v3/projects/[^/]+(/.*)?$", path)
+    if m:
+        # Bare "/v3/projects/{id}" is Resource Manager's GetProject/UpdateProject;
+        # anything with a sub-resource after the project id is Cloud Monitoring
+        # (alertPolicies, metricDescriptors, timeSeries, …).
+        return "gcp-monitoring" if m.group(1) else "gcp-resourcemanager"
+    if path.startswith("/v3/tagKeys"):
+        return "gcp-resourcemanager"
+    # Deny policies (IAM Deny API): /v2/policies/{attachmentPoint}/denypolicies[/…]
+    if re.match(r"^/v2/policies/[^/]+/denypolicies(/.*)?$", path):
+        return "gcp-iam"
+    # Predefined roles catalog (no project scope): /v1/roles
+    if path.startswith("/v1/roles"):
+        return "gcp-iam"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if "/projects/" in path:
         if re.search(r"^/v1/projects/[^/]+/locations/[^/]+/instances([/:]|$)", path):
             return "gcp-redis"
+        if re.search(r"/locations/[^/]+/entitlements([/?]|$)", path):
+            return "gcp-pam"
+        if "workloadIdentityPools" in path:
+            return "gcp-iam"
         if re.search(r"^/v1(beta1)?/projects/[^/]+/(locations|zones)/[^/]+/(clusters|operations|serverConfig)([/:]|$)", path):
             return "gcp-container"
         if re.search(r"/locations/[^/]+/jobs([/:]|$)", path) or re.search(r"^/v1(beta1)?/projects/[^/]+/locations/?$", path):
@@ -119,6 +139,14 @@ def _gcp_service(path):
             return "gcp-iamcredentials"
         if "/serviceAccounts" in path or path.endswith(
                 (":getIamPolicy", ":setIamPolicy", ":testIamPermissions")):
+            return "gcp-iam"
+        if re.search(r"^/v2/projects/[^/]+/policies(/|$)", path):
+            return "gcp-resourcemanager"
+        if re.search(r"^/v1/projects/[^/]+/roles(/|$)", path):
+            return "gcp-iam"
+        if re.search(r"^/v1/projects/[^/]+/contacts(/|$)", path):
+            return "gcp-resourcemanager"
+        if re.search(r"^/v1/projects/[^/]+/policyActivity$", path):
             return "gcp-iam"
     return None
 
@@ -296,6 +324,8 @@ class AwsWireRouter:
         self.gcp_logging = s.get("gcp_logging") or gcp_logging.LoggingStore()   # Cloud Logging
         self.gcp_compute = s.get("gcp_compute") or gcp_compute.ComputeStore()   # VPC: networks, subnets, firewalls, routes, addresses
         self.gcp_compute_vm = s.get("gcp_compute_vm") or gcp_compute_vm.ComputeStore()   # Compute Engine VMs, disks, images, templates
+        self.gcp_rm = s.get("gcp_rm") or gcp_rm.ResourceManagerStore()   # Resource Manager (project, tags, contacts, org policies)
+        self.gcp_pam = s.get("gcp_pam") or gcp_pam.PamStore()   # Privileged Access Manager entitlements
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -532,6 +562,8 @@ class AwsWireRouter:
                 "gcp-logging": (gcp_logging, self.gcp_logging),
                 "gcp-compute": (gcp_compute, self.gcp_compute),
                 "gcp-compute-vm": (gcp_compute_vm, self.gcp_compute_vm),
+                "gcp-resourcemanager": (gcp_rm, self.gcp_rm),
+                "gcp-pam": (gcp_pam, self.gcp_pam),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store

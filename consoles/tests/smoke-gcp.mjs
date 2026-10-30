@@ -319,6 +319,26 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.waitForURL(/#\/compute\/instances$/, { timeout: 10000 });
   check("delete instance via UI → gone over native wire", (await wire(`/compute/v1/projects/vyomi-project/zones/us-central1-a/instances/${VM}`)).status === 404);
+  // IAM & Admin: grant access via UI → native getIamPolicy shows it; create a service
+  // account over the wire → shown in the UI list (both round-trip directions).
+  const M = `smoke-${Date.now() % 100000}@example.com`;
+  await page.goto(UI + "#/iam-admin/iam");
+  await page.getByRole("button", { name: "Grant access" }).click();
+  await page.getByLabel("New principals").fill(M);
+  await page.getByLabel("Select a role").click();
+  await page.getByRole("option", { name: "Viewer", exact: true }).click();
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByText(M).waitFor({ timeout: 10000 });
+  const iamPol = await wjson("/v1/projects/vyomi-project:getIamPolicy", { method: "POST", body: "{}" });
+  check("IAM grant access via UI → native getIamPolicy shows binding", (iamPol.bindings || []).some((b) => b.role === "roles/viewer" && b.members.includes(`user:${M}`)));
+  await shot("12-iam-allow");
+
+  const SA = `smoke-sa-${Date.now() % 100000}`;
+  await wire("/v1/projects/vyomi-project/serviceAccounts", { method: "POST", body: JSON.stringify({ accountId: SA, serviceAccount: { displayName: SA } }) });
+  await page.goto(UI + "#/iam-admin/serviceaccounts");
+  await page.getByText(`${SA}@vyomi-project.iam.gserviceaccount.com`).waitFor({ timeout: 10000 });
+  check("service account created over wire → shown in UI list", true);
+  await shot("13-service-accounts");
 
   // Not-simulated gaps carry the conformance attribute
   await page.goto(UI + "#/storage/monitoring");
