@@ -11,7 +11,7 @@ export const SERVICES = [
   { id: "s3", icon: "s3", title: "S3", description: "Scalable storage in the cloud", category: "Storage", load: () => import("./s3/index.jsx") },
   { id: "dynamodb", icon: "dynamodb", title: "DynamoDB", description: "Managed NoSQL database", category: "Database", load: () => import("./dynamodb/index.jsx") },
   { id: "ec2", icon: "ec2", title: "EC2", description: "Virtual servers in the cloud", category: "Compute", classic: "ec2" },
-  { id: "lambda", icon: "lambda", title: "Lambda", description: "Run code without thinking about servers", category: "Compute", classic: "lambda" },
+  { id: "lambda", icon: "lambda", title: "Lambda", description: "Run code without thinking about servers", category: "Compute", load: () => import("./lambda/index.jsx") },
   { id: "rds", icon: "rds", title: "RDS", description: "Managed relational database service", category: "Database", classic: "rds" },
   { id: "vpc", icon: "vpc", title: "VPC", description: "Isolated cloud resources", category: "Networking & Content Delivery", classic: "vpc" },
   { id: "apigateway", icon: "apigateway", title: "API Gateway", description: "Build, deploy, and manage APIs", category: "Networking & Content Delivery", load: () => import("./apigateway/index.jsx") },

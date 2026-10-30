@@ -1,0 +1,254 @@
+{
+ "$doc": "Vyomi capability registry — Lambda. See s3.json for the contract.",
+ "lambda.function.crud": {
+  "title": "Functions (create, configure, update code, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_lambda_core.py",
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.invoke": {
+  "title": "Invoke (synchronous)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only the Python runtime actually executes: the handler's source runs in a sandboxed interpreter (curated builtins, a stdlib allow-list, no filesystem/network/process access). Node.js/.NET/Java/Ruby runtimes can be selected and stored, but Invoke always runs the stored source as Python.",
+   "Asynchronous invocation (Event) and the Destinations/DLQ delivery that follows it are not modeled — every Invoke runs synchronously regardless of the requested invocation type."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_core.py"
+  ]
+ },
+ "lambda.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.function-url": {
+  "title": "Function URL",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.aliases-versions": {
+  "title": "Aliases and versions",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Weighted alias routing is stored and returned exactly as configured, but Invoke always runs $LATEST/the alias's primary version — Vyomi does not probabilistically split traffic."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.layers": {
+  "title": "Layers",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A layer's content is stored and sized for real, but it is never merged into the sandbox at Invoke time — attaching a layer records the association without changing what the function can import."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.triggers": {
+  "title": "Triggers / event source mappings",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Creating, listing, enabling/disabling and deleting a trigger (SQS, DynamoDB, Kinesis, S3, SNS, EventBridge, API Gateway, CloudWatch Logs) is real and stateful. Vyomi never polls or subscribes the other service, so a trigger never actually invokes the function on its own — LastProcessingResult always reads \"No records processed\". Only a direct Invoke (Test tab or the native API) runs code."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.concurrency": {
+  "title": "Reserved concurrency",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "The reserved value is stored and returned for real, but Vyomi never actually throttles — nothing enforces the limit because every Invoke is synchronous and instant. Throttles always reads 0."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.recursion-config": {
+  "title": "Recursive loop detection",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.destinations": {
+  "title": "Asynchronous invocation destinations",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "On-success/on-failure destinations are stored and returned exactly as configured, but never delivered to — async invocation itself isn't modeled (see lambda.invoke)."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.vpc-filesystems": {
+  "title": "VPC config and EFS file systems",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "VPC subnets/security groups and EFS mounts are stored and returned exactly as configured; Vyomi never attaches a real ENI or mounts a real file system, so code never actually reaches either at Invoke time."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.metrics": {
+  "title": "Monitor tab metrics and recent invocations",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Invocations/Duration/Error metrics and the recent-invocations list are real — computed from the function's actual last 20 Invoke calls — but this is Vyomi's own lightweight read, not a real CloudWatch Logs Insights / X-Ray integration. Throttles, async delivery failures and concurrent executions always read 0 (see lambda.concurrency / lambda.invoke)."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.code-signing": {
+  "title": "Code signing (deploy-time enforcement)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "A code signing configuration's AllowedPublishers / validation policy is stored and returned for real (see lambda.code-signing-configs), but Vyomi never checks a deployment's signature against it — UpdateFunctionCode always succeeds regardless of signing policy."
+  ]
+ },
+ "lambda.code-signing-configs": {
+  "title": "Code signing configurations (create, list, update, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The configuration resource (allowed signing profiles, validation policy) is stored and returned for real; it is never enforced against a deployment (see lambda.code-signing)."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.capacity-providers": {
+  "title": "Capacity providers",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The capacity provider resource (name, architectures, max vCPU, scaling mode, VPC) is stored and returned for real. It never actually schedules a function onto reserved EC2 instances — Vyomi's Lambda core only has one runtime, the sandboxed serverless one; attaching a capacity provider doesn't change where Invoke runs."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.network-connectors": {
+  "title": "Network connectors",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The connector resource (VPC, protocol, compute type) is stored and returned for real. It never actually bridges network traffic — there is no MicroVM runtime on the other end of the connection (see lambda.microvms)."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.microvms": {
+  "title": "MicroVM Images and MicroVMs",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "MicroVM images and running MicroVMs are stored and returned for real (name, state, version, status). There is no Firecracker runtime underneath — a MicroVM never actually boots or runs code; it is a tracked resource record only."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.applications": {
+  "title": "Applications",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "An application is a tracked deployment record (name, description, status, template) stored and returned for real. Vyomi has no CloudFormation/SAM core, so creating one never actually provisions the underlying Lambda functions, APIs or tables a template would describe — Status always reads CREATE_COMPLETE immediately."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.replicas": {
+  "title": "Replicas (Lambda@Edge)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A replica record is derived directly from the function it replicates (same Description/Runtime/LastModified) and the region list is stored for real. Vyomi has no CloudFront distribution to deploy a replica to, so a replica is never actually invoked at an edge location — the record is bookkeeping only."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.state-machines-link": {
+  "title": "Step Functions state machines (cross-link)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Not a Lambda resource — this page lists real Step Functions state machines (core/stepfunctions_core.py) for the console cross-link real AWS Lambda shows; create/execute them for real in the Step Functions console."
+  ],
+  "tests": [
+   "tests/conformance/test_stepfunctions_core.py"
+  ]
+ }
+}

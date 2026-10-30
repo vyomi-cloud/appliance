@@ -1,0 +1,130 @@
+/* Lambda over the native REST+JSON wire (method + versioned path, e.g.
+ * /2015-03-31/functions/{name}). Routed by PATH on the Vyomi relay (core/aws_wire_router.py),
+ * so restJson() — the shared generic-REST-JSON helper — is the right fit; see
+ * core/lambda_core.py for the full path map. */
+import { restJson, awsJson } from "../../../common/wire.js";
+
+const F = "/2015-03-31/functions";
+const enc = encodeURIComponent;
+
+export const listFunctions = async () => (await restJson("GET", F)).Functions || [];
+export const getFunction = (name) => restJson("GET", `${F}/${enc(name)}`);
+export const createFunction = (body) => restJson("POST", F, { body });
+export const deleteFunction = (name) => restJson("DELETE", `${F}/${enc(name)}`);
+export const updateFunctionCode = (name, code) => restJson("PUT", `${F}/${enc(name)}/code`, { body: code });
+export const updateFunctionConfiguration = (name, body) => restJson("PUT", `${F}/${enc(name)}/configuration`, { body });
+export const invoke = (name, payload) => restJson("POST", `${F}/${enc(name)}/invocations`, { body: payload ?? {} });
+export const recentInvocations = (name) => restJson("GET", `${F}/${enc(name)}/invocations`);
+
+// ── Tags ────────────────────────────────────────────────────────────────────────────────
+export const listTags = async (name) => (await restJson("GET", `${F}/${enc(name)}/tags`)).Tags || {};
+export const tagResource = (name, tags) => restJson("POST", `${F}/${enc(name)}/tags`, { body: { Tags: tags } });
+export const untagResource = (name, keys) => restJson("DELETE", `${F}/${enc(name)}/tags`, { query: { tagKeys: keys.join(",") } });
+
+// ── Function URL ────────────────────────────────────────────────────────────────────────
+export async function getFunctionUrlConfig(name) {
+  try { return await restJson("GET", `${F}/${enc(name)}/url`); }
+  catch (e) { if (e.status === 404) return null; throw e; }
+}
+export const createFunctionUrlConfig = (name, body) => restJson("POST", `${F}/${enc(name)}/url`, { body });
+export const updateFunctionUrlConfig = (name, body) => restJson("PUT", `${F}/${enc(name)}/url`, { body });
+export const deleteFunctionUrlConfig = (name) => restJson("DELETE", `${F}/${enc(name)}/url`);
+
+// ── Aliases ─────────────────────────────────────────────────────────────────────────────
+export const listAliases = async (name) => (await restJson("GET", `${F}/${enc(name)}/aliases`)).Aliases || [];
+export const createAlias = (name, body) => restJson("POST", `${F}/${enc(name)}/aliases`, { body });
+export const updateAlias = (name, aliasName, body) => restJson("PUT", `${F}/${enc(name)}/aliases/${enc(aliasName)}`, { body });
+export const deleteAlias = (name, aliasName) => restJson("DELETE", `${F}/${enc(name)}/aliases/${enc(aliasName)}`);
+
+// ── Versions ────────────────────────────────────────────────────────────────────────────
+export const publishVersion = (name, body) => restJson("POST", `${F}/${enc(name)}/versions`, { body: body || {} });
+export const listVersions = async (name) => (await restJson("GET", `${F}/${enc(name)}/versions`)).Versions || [];
+export const deleteVersion = (name, version) => restJson("DELETE", `${F}/${enc(name)}`, { query: { Qualifier: version } });
+
+// ── Layers ──────────────────────────────────────────────────────────────────────────────
+export const listLayers = async () => (await restJson("GET", "/2015-03-31/layers")).Layers || [];
+export const listLayerVersions = async (layerName) => (await restJson("GET", `/2015-03-31/layers/${enc(layerName)}/versions`)).LayerVersions || [];
+export const publishLayerVersion = (layerName, body) => restJson("POST", `/2015-03-31/layers/${enc(layerName)}/versions`, { body });
+export const deleteLayerVersion = (layerName, version) => restJson("DELETE", `/2015-03-31/layers/${enc(layerName)}/versions/${version}`);
+
+// ── Event source mappings ("Triggers") ─────────────────────────────────────────────────
+export const listEventSourceMappings = async (functionName) =>
+  (await restJson("GET", "/2015-03-31/event-source-mappings", { query: functionName ? { FunctionName: functionName } : undefined })).EventSourceMappings || [];
+export const createEventSourceMapping = (body) => restJson("POST", "/2015-03-31/event-source-mappings", { body });
+export const updateEventSourceMapping = (uuid, body) => restJson("PUT", `/2015-03-31/event-source-mappings/${enc(uuid)}`, { body });
+export const deleteEventSourceMapping = (uuid) => restJson("DELETE", `/2015-03-31/event-source-mappings/${enc(uuid)}`);
+
+// ── Concurrency / recursion ─────────────────────────────────────────────────────────────
+export const putFunctionConcurrency = (name, n) => restJson("PUT", `${F}/${enc(name)}/concurrency`, { body: { ReservedConcurrentExecutions: n } });
+export const deleteFunctionConcurrency = (name) => restJson("DELETE", `${F}/${enc(name)}/concurrency`);
+export const putFunctionRecursionConfig = (name, value) => restJson("PUT", `${F}/${enc(name)}/recursion-config`, { body: { RecursiveLoop: value } });
+
+// ── Destinations (async invoke config) ─────────────────────────────────────────────────
+export async function getFunctionEventInvokeConfig(name) {
+  try { return await restJson("GET", `${F}/${enc(name)}/event-invoke-config`); }
+  catch (e) { if (e.status === 404) return null; throw e; }
+}
+export const putFunctionEventInvokeConfig = (name, body) => restJson("PUT", `${F}/${enc(name)}/event-invoke-config`, { body });
+export const deleteFunctionEventInvokeConfig = (name) => restJson("DELETE", `${F}/${enc(name)}/event-invoke-config`);
+
+// ── Resource policy ─────────────────────────────────────────────────────────────────────
+export async function getPolicy(name) {
+  try { return JSON.parse((await restJson("GET", `${F}/${enc(name)}/policy`)).Policy); }
+  catch (e) { if (e.status === 404) return null; throw e; }
+}
+
+export const DEFAULT_SOURCE = {
+  "python3.12": "def handler(event, context):\n    return {\"message\": \"Hello from Lambda!\", \"event\": event}\n",
+  "python3.11": "def handler(event, context):\n    return {\"message\": \"Hello from Lambda!\", \"event\": event}\n",
+  "python3.10": "def handler(event, context):\n    return {\"message\": \"Hello from Lambda!\", \"event\": event}\n",
+};
+export const defaultSource = (runtime) => DEFAULT_SOURCE[runtime] || DEFAULT_SOURCE["python3.12"];
+
+/** Event Functions vs Web Functions — the console's own split over one function store:
+ *  a function with a Function URL is a "Web Function", everything else is an "Event Function". */
+export const isWebFunction = (fn) => !!fn.FunctionUrl || !!fn._hasUrl;
+
+export async function listFunctionsSplit() {
+  const fns = await listFunctions();
+  const withUrl = await Promise.all(fns.map(async (fn) => {
+    const url = await getFunctionUrlConfig(fn.FunctionName);
+    return { ...fn, _hasUrl: !!url, _url: url };
+  }));
+  return { eventFunctions: withUrl.filter((f) => !f._hasUrl), webFunctions: withUrl.filter((f) => f._hasUrl) };
+}
+
+// ── Vyomi-exclusive console surfaces — real named-resource CRUD, no simulated runtime
+// underneath (see core/lambda_core.py module note above _capacity_providers). ───────────
+export const listCapacityProviders = async () => (await restJson("GET", "/2015-03-31/capacity-providers")).CapacityProviders || [];
+export const createCapacityProvider = (body) => restJson("POST", "/2015-03-31/capacity-providers", { body });
+export const deleteCapacityProvider = (name) => restJson("DELETE", `/2015-03-31/capacity-providers/${enc(name)}`);
+
+export const listCodeSigningConfigs = async () => (await restJson("GET", "/2015-03-31/code-signing-configs")).CodeSigningConfigs || [];
+export const createCodeSigningConfig = (body) => restJson("POST", "/2015-03-31/code-signing-configs", { body });
+export const deleteCodeSigningConfig = (id) => restJson("DELETE", `/2015-03-31/code-signing-configs/${enc(id)}`);
+
+export const listNetworkConnectors = async () => (await restJson("GET", "/2015-03-31/network-connectors")).NetworkConnectors || [];
+export const createNetworkConnector = (body) => restJson("POST", "/2015-03-31/network-connectors", { body });
+export const deleteNetworkConnector = (name) => restJson("DELETE", `/2015-03-31/network-connectors/${enc(name)}`);
+
+export const listMicrovmImages = async () => (await restJson("GET", "/2015-03-31/microvm-images")).MicrovmImages || [];
+export const createMicrovmImage = (body) => restJson("POST", "/2015-03-31/microvm-images", { body });
+export const deleteMicrovmImage = (name) => restJson("DELETE", `/2015-03-31/microvm-images/${enc(name)}`);
+
+export const listMicrovms = async () => (await restJson("GET", "/2015-03-31/microvms")).Microvms || [];
+export const runMicrovm = (body) => restJson("POST", "/2015-03-31/microvms", { body });
+export const deleteMicrovm = (id) => restJson("DELETE", `/2015-03-31/microvms/${enc(id)}`);
+
+export const listApplications = async () => (await restJson("GET", "/2015-03-31/applications")).Applications || [];
+export const createApplication = (body) => restJson("POST", "/2015-03-31/applications", { body });
+export const deleteApplication = (name) => restJson("DELETE", `/2015-03-31/applications/${enc(name)}`);
+
+// Replicas are derived from the function they replicate — never a separate store.
+export const listReplicas = async () => (await restJson("GET", "/2015-03-31/replicas")).Replicas || [];
+export const replicateFunction = (name, regions) => restJson("PUT", `${F}/${enc(name)}/replication`, { body: { Regions: regions } });
+
+// ── Step Functions state machines (cross-link; real core/stepfunctions_core.py) ────────
+const SFN_ROLE_ARN = `arn:aws:iam::${"123456789012"}:role/service-role/StepFunctions-vyomi-role`;
+const sfn = (action, body) => awsJson("stepfunctions", `AWSStepFunctions.${action}`, body);
+export const listStateMachines = async () => (await sfn("ListStateMachines", {})).stateMachines || [];
+export const createStateMachine = (name, definition) => sfn("CreateStateMachine", { name, roleArn: SFN_ROLE_ARN, definition: JSON.stringify(definition) });
