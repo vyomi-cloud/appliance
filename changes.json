@@ -1,7 +1,63 @@
 {
- "at": "2026-10-30T22:47:43+00:00",
+ "at": "2026-10-30T23:47:41+00:00",
  "baseline": false,
  "changes": [
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStartRequest",
+     "now": "SqlWorkloadCapturesStartRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStartReplayRequest",
+     "now": "SqlWorkloadCapturesStartReplayRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStopRequest",
+     "now": "SqlWorkloadCapturesStopRequest"
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "sqladmin/v1beta4",
+   "kind": "operation-flapping",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
+   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
+   "detail": {
+    "request": {
+     "was": "WorkloadCapturesStopReplayRequest",
+     "now": "SqlWorkloadCapturesStopReplayRequest"
+    }
+   },
+   "actionable": false
+  },
   {
    "cloud": "azure",
    "service": "storage",
@@ -37,7 +93,19 @@
    "title": "Azure compute: WorkloadManager: correct 2026-11-01-preview resource contract (#47558)",
    "link": "https://github.com/Azure/azure-rest-api-specs/commit/411fb227a905864f972d26ab88b21ef69e1f67b2",
    "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "CloudWatch",
+   "kind": "announcement",
+   "key": "feed:aws:b6727a835dec",
+   "title": "Managed Prometheus collectors now support Amazon MSK consumer-group metrics",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/prometheus-collectors-msk-metrics/",
+   "detail": "Managed Prometheus collectors now support Amazon MSK consumer-group metrics for Amazon Managed Service for Prometheus and Amazon CloudWatch . The integration collects Kafka exporter metrics and consumer-group lag metrics from your Amazon MSK clusters. Managed Prometheus collectors discover and collect Prometheus metrics from your workloads, so you don't run and operate collection agents yourself. You ingest the collected metrics into an Amazon Managed Service for Prometheus workspace or into Amazon CloudWatch, where you query and analyze them. You monitor Kafka stream health and consumer perfo",
+   "actionable": false
   }
  ],
- "errors": []
+ "errors": [
+  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
+ ]
 }
