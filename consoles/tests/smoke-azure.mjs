@@ -156,6 +156,49 @@ try {
   }
   check("UI delete → ARM GET 404", gone.status === 404, `HTTP ${gone.status}`);
 
+  // ── Key vault created through the wizard → visible over native ARM ─────────────────────
+  const kvWire = (path, method = "GET", body) => wire(`${path}${path.includes("?") ? "&" : "?"}api-version=7.4`,
+    { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const KV = `vysmokekv${n}`;
+  await page.goto(UI + "#/keyvaults/create");
+  await page.getByLabel("Key vault name", { exact: true }).fill(KV);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await shot("18-create-keyvault-basics");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: KV, exact: true }).waitFor({ timeout: 10000 });
+  const gotKv = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${KV}`);
+  check("UI create key vault → visible over native ARM", gotKv.status === 200, `HTTP ${gotKv.status}`);
+  await shot("19-keyvault-overview");
+
+  // ── Secret created in the UI → readable over the Key Vault Secrets REST wire ───────────
+  await openPanel("Secrets");
+  await page.getByRole("button", { name: "Generate/Import" }).click();
+  const SECRET = `smoke-secret-${n}`;
+  await page.getByLabel("Name", { exact: true }).fill(SECRET);
+  await page.getByLabel("Secret value", { exact: true }).fill("s3cr3t");
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByRole("link", { name: SECRET, exact: true }).waitFor({ timeout: 10000 });
+  const sGet = await kvWire(`/secrets/${SECRET}`);
+  check("UI create secret → readable over Key Vault Secrets wire", sGet.status === 200 && JSON.parse(sGet.text).value === "s3cr3t", `HTTP ${sGet.status}`);
+  await shot("20-secrets");
+
+  // ── Key created over the wire → visible in the UI (CLI → UI) ───────────────────────────
+  const KEY = `wirekey${n}`;
+  const putKey = await kvWire(`/keys/${KEY}/create`, "POST", { kty: "RSA", key_size: 2048 });
+  check("Key Vault Keys REST create over wire", putKey.status === 200, `HTTP ${putKey.status}`);
+  await page.goto(UI + `#/keyvaults/${RG}/${KV}/keys`);
+  await page.getByText(KEY, { exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created key shown in Keys grid", true);
+  await shot("21-keys");
+
+  // ── Unbacked panel is honest ────────────────────────────────────────────────────────────
+  await openPanel("Locks");
+  check("key vault Locks panel is an honest NotSimulated", await page.locator("[data-vyomi-not-simulated]").first().isVisible());
+  await shot("22-locks-not-simulated");
+
   // ── Shell: unbacked service is honest; dark mode ───────────────────────────────────────
   await page.goto(UI + "#/vms");
   await page.getByRole("link", { name: /in the classic Vyomi console/ }).first().waitFor({ timeout: 10000 }).catch(() => {});

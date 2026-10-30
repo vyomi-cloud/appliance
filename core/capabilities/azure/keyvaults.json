@@ -1,0 +1,132 @@
+{
+ "$doc": "Vyomi capability registry — Azure Key vaults. See aws/s3.json for the contract.",
+ "azure.keyvaults.vault.crud": {
+  "title": "Vaults (create, get, list, delete) over ARM",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.vault.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.access_configuration": {
+  "title": "Access configuration (RBAC vs vault access policy, resource access flags)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "enableRbacAuthorization and the resource-access flags are stored and returned exactly as written, but Vyomi does not enforce them — data-plane calls to keys/secrets are never denied based on the permission model."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.access_policies": {
+  "title": "Vault access policies (properties.accessPolicies)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Access policy entries round-trip through ARM exactly as written, but Vyomi never evaluates them — every data-plane key/secret call succeeds regardless of the configured permissions."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.networking": {
+  "title": "Networking (public network access / firewall default action)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "publicNetworkAccess and networkAcls round-trip through ARM, but the Key Vault Keys/Secrets REST data planes never enforce them — a call from a 'denied' network still succeeds."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.keyvaults.keys.crud": {
+  "title": "Keys (create, get, list, delete) over the Key Vault Keys REST API",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_keyvault_keys_core.py"
+  ]
+ },
+ "azure.keyvaults.keys.crypto": {
+  "title": "Key encrypt/decrypt/wrap/unwrap/sign/verify",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "The RSA public numbers (n/e) advertised on a key are cosmetic (deterministically derived from the private material); the actual cipher behind encrypt/decrypt/wrap/unwrap is a symmetric authenticated envelope, and sign/verify is HMAC-based rather than native RSA/ECDSA. Round-trips (encrypt→decrypt, sign→verify, tamper/cross-key rejection) are real."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_kv_crypto_core.py"
+  ]
+ },
+ "azure.keyvaults.secrets.crud": {
+  "title": "Secrets (set, get, list, list versions, delete) over the Key Vault Secrets REST API",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_keyvault_secrets_core.py"
+  ]
+ },
+ "azure.keyvaults.certificates": {
+  "title": "Certificates",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi has no Key Vault Certificates REST core; the Certificates panel is an honest 'Not simulated' gap."
+  ],
+  "tests": []
+ },
+ "azure.keyvaults.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi's ARM core has no resource-scoped Microsoft.Authorization/locks support; the Locks panel is an honest 'Not simulated' gap."
+  ],
+  "tests": []
+ },
+ "azure.keyvaults.activity_log": {
+  "title": "Activity log",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi records no ARM activity-log events; the Activity log panel is an honest 'Not simulated' gap."
+  ],
+  "tests": []
+ }
+}
