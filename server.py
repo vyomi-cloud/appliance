@@ -211,6 +211,13 @@ try:
     _gfc_unified.register(app)
 except Exception as _e:   # never let this break appliance boot — legacy stays
     print(f"[wire_ingress] Firestore/Compute core mount skipped: {_e}")
+# v4 C0g — ONE engine: GCP Pub/Sub (native /v1/projects/{p}/topics|subscriptions|snapshots|
+# schemas… and the classic /api/gcp/pubsub/*, /api/gcp/sqs/queues* aliases) on the shared core.
+try:
+    from routes import gcp_pubsub_unified as _gps_unified
+    _gps_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] Pub/Sub core mount skipped: {_e}")
 
 # ── Provider route registration ──────────────────────────────────────
 register_aws_ec2_routes(app, None)
@@ -2768,7 +2775,9 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     # service_states), so list them per project (console project, SDK default projects).
     try:
         from core import gcp_pubsub_emulator as _ps_emu
-        if str(space.get("provider") or "") == "gcp" and _ps_emu.available():
+        from core import wire_ingress as _wi_ps
+        # v4 C0g: unified, the core's records ARE gcp_pubsub (counted above); the emulator is not read
+        if str(space.get("provider") or "") == "gcp" and _ps_emu.available() and not _wi_ps.is_unified("gcp_pubsub"):
             for _pp in ("123456789012", "cloudlearn", "gcp-dev"):
                 for _t in _ps_emu.list_topics(_pp):
                     add("gcp", "pubsub", "topic", f"{_pp}/{_t['name']}", {"name": _t["name"]})

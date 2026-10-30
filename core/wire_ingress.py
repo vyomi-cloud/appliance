@@ -64,6 +64,15 @@ Functions / API Gateway / SNS / S3-notification Lambda targets reach the SAME fu
 (routes/aws_lambda_unified.py). ARM types the shared core ARM engine knows but the offline
 catalog does not (Microsoft.ContainerRegistry, Microsoft.ContainerService, …) are served by
 core/azure_arm_core.AzureArm over the offline ARM state (providers/azure_services.py).
+
+v4 C0g adds "gcp_pubsub" (the Pub/Sub REST API v1, /v1/projects/{p}/topics|subscriptions|
+snapshots|schemas… — core/gcp_pubsub_core.py) over core/appliance_stores.AppStatePubsubStore,
+whose records live IN the pre-v4 `gcp_pubsub_state` slot (so inventory, cost savings, console
+counts and quantity caps read the core's own records). The classic console REST
+(/api/gcp/pubsub/*, /api/gcp/sqs/queues*) and the Cloud Scheduler pubsubTarget publish reach
+the same store (routes/gcp_pubsub_unified.py). Pre-v4 the hand-written handlers (or the
+Pub/Sub emulator, when PUBSUB_EMULATOR_HOST was set) served it, and snapshots / seek /
+schemas:validate / modifyPushConfig fell through to the S3 catch-all.
 """
 from __future__ import annotations
 
@@ -78,11 +87,11 @@ def _cfg(key: str, default: str) -> str:
 
 _DEFAULT_SERVICES = ("s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager,"
                      "gcp_firestore,gcp_compute,sqs,sns,events,scheduler,"
-                     "lambda,azure_keyvault,azure_acr,azure_servicebus")
+                     "lambda,azure_keyvault,azure_acr,azure_servicebus,gcp_pubsub")
 _KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
                    "kms", "secretsmanager", "gcp_firestore", "gcp_compute",
                    "sqs", "sns", "events", "scheduler",
-                   "lambda", "azure_keyvault", "azure_acr", "azure_servicebus")
+                   "lambda", "azure_keyvault", "azure_acr", "azure_servicebus", "gcp_pubsub")
 
 
 def unified_services() -> frozenset:
@@ -117,7 +126,8 @@ def appliance_stores() -> dict:
             "msg": aps.messaging_store(), "sched": aps.scheduler_store(),
             "lam": aps.lambda_store(), "az_kvsec": aps.az_kv_secrets_store(),
             "az_kvkeys": aps.az_kv_keys_store(), "az_kvcerts": aps.az_kv_certs_store(),
-            "az_acr": aps.acr_store(), "az_sb": aps.az_servicebus_store()}
+            "az_acr": aps.acr_store(), "az_sb": aps.az_servicebus_store(),
+            "gcp_msg": aps.gcp_pubsub_store()}
 
 
 # router store key -> unified service name (which stores a full-ingress router overrides)
@@ -127,7 +137,8 @@ STORE_SERVICE = {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb", "az_blob": "azure_
                  "gcp_compute": "gcp_compute", "gcp_compute_vm": "gcp_compute",
                  "msg": "sqs", "sched": "scheduler", "lam": "lambda",
                  "az_kvsec": "azure_keyvault", "az_kvkeys": "azure_keyvault",
-                 "az_kvcerts": "azure_keyvault", "az_acr": "azure_acr", "az_sb": "azure_servicebus"}
+                 "az_kvcerts": "azure_keyvault", "az_acr": "azure_acr", "az_sb": "azure_servicebus",
+                 "gcp_msg": "gcp_pubsub"}
 
 
 def appliance_router() -> AwsWireRouter:
@@ -270,6 +281,15 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
     if service in ("azure_keyvault", "azure_acr", "azure_servicebus"):
         return _dispatch_azure(service, r, method, path, query, headers, body)
+    if service == "gcp_pubsub":
+        from core import gcp_pubsub_core
+        st = r.gcp_msg
+        if hasattr(st, "adopt"):
+            st.adopt()                   # pre-v4 records / emulator resources → the core shape
+        resp = gcp_pubsub_core.dispatch(st, method, path, query or {}, headers or {}, body or b"")
+        hdrs = dict(resp.headers or {})
+        hdrs.setdefault("content-type", resp.media_type or "application/json")
+        return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
     raise ValueError(f"not a unified service: {service}")
 
 
@@ -576,7 +596,7 @@ def build_backed_router(overrides: dict | None = None) -> AwsWireRouter:
             SqliteStateBackend(_cfg("VYOMI_CW_DB", "/tmp/vyomi-cw.sqlite"))),
         # messaging — SQS/SNS + Pub/Sub on NATS JetStream (separate KV buckets)
         "msg": overrides.get("msg") or NatsBackedMessagingStore(servers=nats_servers, bucket="aws_msg"),
-        "gcp_msg": NatsBackedMessagingStore(servers=nats_servers, bucket="gcp_msg"),
+        "gcp_msg": overrides.get("gcp_msg") or NatsBackedMessagingStore(servers=nats_servers, bucket="gcp_msg"),
     }
     if overrides.get("sched") is not None:   # C0e: EventBridge Scheduler on the appliance state
         stores["sched"] = overrides["sched"]

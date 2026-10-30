@@ -342,6 +342,56 @@ def run() -> int:
                           json.dumps({"messages": [{"data": base64.b64encode(json.dumps({"wrong": "field"}).encode()).decode()}]}).encode())
     _check("schema-violating message rejected", bad_msg.status == 400 and _jbody(bad_msg)["error"]["status"] == "INVALID_ARGUMENT")
 
+    # 24. (C0g) modifyAckDeadline: 0 nacks (redelivered on the next pull), N extends the lease.
+    T8, S8 = f"projects/{P}/topics/modack", f"projects/{P}/subscriptions/modack-sub"
+    ps.dispatch(st, "PUT", f"/v1/{T8}", {}, {}, b"{}")
+    ps.dispatch(st, "PUT", f"/v1/{S8}", {}, {}, json.dumps({"topic": T8}).encode())
+    ps.dispatch(st, "POST", f"/v1/{T8}:publish", {}, {}, json.dumps({"messages": [{"data": "eA=="}]}).encode())
+    first = _jbody(ps.dispatch(st, "POST", f"/v1/{S8}:pull", {}, {}, b'{"maxMessages": 1}'))["receivedMessages"][0]
+    _check("leased message is not redelivered", _jbody(ps.dispatch(st, "POST", f"/v1/{S8}:pull", {}, {}, b"{}")) == {})
+    nack = ps.dispatch(st, "POST", f"/v1/{S8}:modifyAckDeadline", {}, {},
+                       json.dumps({"ackIds": [first["ackId"]], "ackDeadlineSeconds": 0}).encode())
+    again = _jbody(ps.dispatch(st, "POST", f"/v1/{S8}:pull", {}, {}, b"{}")).get("receivedMessages", [])
+    _check("modifyAckDeadline 0 redelivers immediately", nack.status == 200 and len(again) == 1
+           and again[0]["deliveryAttempt"] == 2)
+    ps.dispatch(st, "POST", f"/v1/{S8}:modifyAckDeadline", {}, {},
+                json.dumps({"ackIds": [again[0]["ackId"]], "ackDeadlineSeconds": 300}).encode())
+    st.advance(60)
+    _check("modifyAckDeadline extends the lease", _jbody(ps.dispatch(st, "POST", f"/v1/{S8}:pull", {}, {}, b"{}")) == {})
+    bad = ps.dispatch(st, "POST", f"/v1/{S8}:modifyAckDeadline", {}, {}, b'{"ackIds": [], "ackDeadlineSeconds": 601}')
+    _check("modifyAckDeadline > 600s rejected", bad.status == 400)
+
+    # 25. (C0g) topic sub-collections, modifyPushConfig, detach, snapshot patch, IAM, schema validate.
+    subs = _jbody(ps.dispatch(st, "GET", f"/v1/{T8}/subscriptions", {}, {}, b""))
+    _check("topics.subscriptions.list", subs.get("subscriptions") == [S8])
+    SN8 = f"projects/{P}/snapshots/modack-snap"
+    ps.dispatch(st, "PUT", f"/v1/{SN8}", {}, {}, json.dumps({"subscription": S8}).encode())
+    _check("topics.snapshots.list", _jbody(ps.dispatch(st, "GET", f"/v1/{T8}/snapshots", {}, {}, b"")).get("snapshots") == [SN8])
+    patched = _jbody(ps.dispatch(st, "PATCH", f"/v1/{SN8}", {}, {},
+                                 json.dumps({"snapshot": {"labels": {"a": "b"}}, "updateMask": "labels"}).encode()))
+    _check("snapshots.patch labels", patched.get("labels") == {"a": "b"})
+    ps.dispatch(st, "POST", f"/v1/{S8}:modifyPushConfig", {}, {},
+                json.dumps({"pushConfig": {"pushEndpoint": "https://h.example/p"}}).encode())
+    _check("modifyPushConfig stored", _jbody(ps.dispatch(st, "GET", f"/v1/{S8}", {}, {}, b""))["pushConfig"]
+           == {"pushEndpoint": "https://h.example/p"})
+    pol = _jbody(ps.dispatch(st, "POST", f"/v1/{T8}:setIamPolicy", {}, {},
+                             json.dumps({"policy": {"bindings": [{"role": "roles/pubsub.publisher", "members": ["user:a@b.c"]}]}}).encode()))
+    got = _jbody(ps.dispatch(st, "POST", f"/v1/{T8}:getIamPolicy", {}, {}, b"{}"))
+    _check("set/getIamPolicy round-trip", got.get("bindings") == pol.get("bindings") and got.get("etag"))
+    ps.dispatch(st, "POST", f"/v1/{S8}:detach", {}, {}, b"{}")
+    _check("subscriptions.detach", _jbody(ps.dispatch(st, "GET", f"/v1/{S8}", {}, {}, b""))["topic"] == "_deleted-topic_"
+           and "subscriptions" not in _jbody(ps.dispatch(st, "GET", f"/v1/{T8}/subscriptions", {}, {}, b"")))
+    okv = ps.dispatch(st, "POST", f"/v1/projects/{P}/schemas:validate", {}, {},
+                      json.dumps({"schema": {"type": "AVRO", "definition": '{"type": "string"}'}}).encode())
+    badv = ps.dispatch(st, "POST", f"/v1/projects/{P}/schemas:validate", {}, {},
+                       json.dumps({"schema": {"type": "AVRO", "definition": "{bad"}}).encode())
+    _check("schemas.validate", okv.status == 200 and badv.status == 400)
+    vm = ps.dispatch(st, "POST", f"/v1/projects/{P}/schemas:validateMessage", {}, {}, json.dumps({
+        "name": SCHEMA2, "encoding": "JSON", "message": base64.b64encode(b'{"wrong": 1}').decode()}).encode())
+    _check("schemas.validateMessage rejects a violating message", vm.status == 400)
+    unk = ps.dispatch(st, "GET", f"/v1/{T8}/nope", {}, {}, b"")
+    _check("unknown sub-path is a google.rpc NOT_FOUND", unk.status == 404 and _jbody(unk)["error"]["status"] == "NOT_FOUND")
+
     print("\nGCP Pub/Sub-core conformance: ALL GREEN")
     return 0
 
