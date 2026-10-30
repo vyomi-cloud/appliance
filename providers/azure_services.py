@@ -857,6 +857,12 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             names.append(token)
     is_collection = (len(chain) % 2 == 1)  # ends on a type → LIST
 
+    # Microsoft.Compute/.../vmSizes (azure.vms.size): a derived read (location- or VM-scoped),
+    # not a RESOURCE_CATALOG-stored resource — served by the shared core ARM engine, same as
+    # the Microsoft.ContainerRegistry/AKS "core knows it, this catalog doesn't" path below.
+    if namespace.lower() == "microsoft.compute" and chain and chain[-1].lower() == "vmsizes":
+        return await _handle_core_arm(request, method, rest, base)
+
     # Microsoft.AppConfiguration: a dedicated engine (core/azure_appconfiguration_core.py) owns the
     # store / key-value / replica semantics; the ARM store below is its resource map.
     if namespace.lower() == "microsoft.appconfiguration":
