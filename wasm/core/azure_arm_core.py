@@ -57,6 +57,11 @@ try:                                              # Azure Monitor engine (Micros
 except ImportError:
     import azure_monitor_core as monitor_engine    # type: ignore
 
+try:                                              # locks / identity / health / NICs / run commands …
+    from core import azure_arm_ext_core as ext_engine
+except ImportError:
+    import azure_arm_ext_core as ext_engine        # type: ignore
+
 try:                                              # Azure Log Analytics engine (Microsoft.OperationalInsights)
     from core import azure_operationalinsights_core as oi_engine
 except ImportError:
@@ -183,6 +188,24 @@ def _rg_from_id(rid: str):
     return None
 
 
+def _event_target(rest: str):
+    """(top-level resource id, full type, leaf name) of an ARM write path, for the
+    activity log: a child op (database, queue, rule…) belongs to its parent."""
+    segs = [x for x in rest.split("/") if x]
+    if not segs:
+        return "", "", ""
+    sub, tail = segs[0], segs[1:]
+    rg = None
+    if len(tail) >= 2 and tail[0].lower() == "resourcegroups":
+        rg, tail = tail[1], tail[2:]
+    if not tail or tail[0].lower() != "providers" or len(tail) < 4:
+        return "", "", ""
+    after = tail[1:]
+    top = f"/subscriptions/{sub}" + (f"/resourceGroups/{rg}" if rg else "") + "/providers/" + "/".join(after[:3])
+    typ = "/".join([after[0]] + [after[k] for k in range(1, len(after), 2)])
+    return top, typ, after[-1] if len(after) % 2 == 1 else after[-2]
+
+
 def _ok(body, status=200, headers=None):
     return {"status": status, "headers": headers or {}, "body": body}
 
@@ -216,7 +239,13 @@ class AzureArm:
         if i == -1:
             return _err(404, "NotFound", f"Not an ARM path: {path}")
         rest = path[i + len("/subscriptions/"):].split("?", 1)[0]
-        return self._arm(method, rest, query, body if isinstance(body, dict) else {})
+        self._evented = False
+        resp = self._arm(method, rest, query, body if isinstance(body, dict) else {})
+        if method != "GET" and resp.get("status", 500) < 300 and not self._evented:
+            scope, typ, name = _event_target(rest)
+            if scope:
+                self._event(method, scope, typ, name)
+        return resp
 
     # ── ARM dispatcher (port of handle_arm) ───────────────────────────────
     def _arm(self, method, rest, query, payload):
@@ -230,6 +259,9 @@ class AzureArm:
         if not rest_segs:
             return _ok({"id": f"/subscriptions/{sub}", "subscriptionId": sub,
                         "displayName": "CloudLearn Subscription", "state": "Enabled"})
+
+        if len(rest_segs) == 1 and rest_segs[0].lower() == "locations" and method == "GET":
+            return _ok(ext_engine.subscription_locations(sub))
 
         # resource groups
         if rest_segs[0].lower() == "resourcegroups" and len(rest_segs) <= 2:
@@ -259,6 +291,19 @@ class AzureArm:
             return _ok(self._provider_info(after[0]))
         if len(after) < 2:
             return _err(400, "BadRequest", "Missing provider namespace/type.")
+
+        # Management locks guard every write; the shared ext core models locks,
+        # identities, resource health, NICs/public IPs, schedules, run commands.
+        if method in ("PUT", "PATCH", "DELETE", "POST"):
+            lk = ext_engine.lock_conflict(self.state, ext_engine.target_id(sub, rg, after), method)
+            if lk:
+                return {"status": lk["status"], "headers": {}, "body": lk["body"]}
+        x = ext_engine.route(self.state, method, sub, rg, after, payload, query, executor=None,
+                             blob=getattr(self, "blob_hook", None))
+        if x is not None:
+            if method != "GET" and x["status"] < 300 and x.get("scope"):
+                self._event(method, x["scope"], x["type"], x["name"])
+            return {"status": x["status"], "headers": dict(x.get("headers") or {}), "body": x["body"]}
 
         namespace = after[0]
         chain = after[1:]
@@ -312,7 +357,8 @@ class AzureArm:
         if is_collection:
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "Collection supports GET only.")
-            return self._list(sub, rg, full_type)
+            parent = _canonical_id(sub, rg, type_chain[:-1], names) if names else None
+            return self._list(sub, rg, full_type, parent)
 
         rid = _canonical_id(sub, rg, type_chain, names)
         key = rid.lower()
@@ -326,9 +372,15 @@ class AzureArm:
                 rec = _apim_default_policy(type_chain, names, self.state, rid)
             if not rec:
                 return _err(404, "ResourceNotFound", f"Resource '{rid}' not found.")
+            ext_engine.after_upsert(self.state, rec)
             return _ok(_view(rec))
         if method in ("PUT", "PATCH"):
+            bad = ext_engine.validate_write(self.state, rid, full_type, payload)
+            if bad:
+                return {"status": bad["status"], "headers": {}, "body": bad["body"]}
             resp = self._upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
+            if full_type.lower() == ext_engine.VM_T and key in self.state:
+                ext_engine.after_vm_upsert(self.state, self.state[key])
             if lro:
                 resp["status"] = 200
                 op_id = self._make_operation(rid, method)
@@ -337,8 +389,21 @@ class AzureArm:
             return resp
         if method == "DELETE":
             rec = self.state.pop(key, None)
+            ext_engine.on_delete(self.state, rec)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+    def _event(self, method, scope, typ, name):
+        """Activity-log hook for every successful write: ``scope`` is the resource
+        whose activity log it belongs to (Nano wires ``on_event`` to core/nano_events
+        through the registry; a no-op standalone)."""
+        self._evented = True
+        cb = getattr(self, "on_event", None)
+        if cb:
+            try:
+                cb(method, scope, typ, name)
+            except Exception:
+                pass
 
     def _dns(self, method, sub, rg, chain, payload, query):
         dn = dns_engine
@@ -398,16 +463,20 @@ class AzureArm:
         return resp
 
     # ── CRUD primitives ───────────────────────────────────────────────────
-    def _list(self, sub, rg, full_type):
+    def _list(self, sub, rg, full_type, parent=None):
         ft = full_type.lower()
+        pfx = parent.lower() + "/" if parent else None
         items = []
-        for rec in self.state.values():
+        for rec in list(self.state.values()):
             if rec.get("_type", "").lower() != ft:
+                continue
+            if pfx and not str(rec.get("id", "")).lower().startswith(pfx):
                 continue
             if rec.get("_sub") != sub:
                 continue
             if rg is not None and (rec.get("_rg") or "").lower() != rg.lower():
                 continue
+            ext_engine.after_upsert(self.state, rec)
             items.append(_view(rec))
         return _ok({"value": items})
 
@@ -437,9 +506,12 @@ class AzureArm:
             rec["sku"] = _merge(rec.get("sku", {}), payload["sku"])
         if isinstance(payload.get("properties"), dict):
             rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
+        ext_engine.apply_identity(rec, payload)
+        ext_engine.mark_changed(rec)
 
         rec.setdefault("properties", {})
         rec["properties"].setdefault("provisioningState", "Succeeded")
+        ext_engine.after_upsert(self.state, rec, payload)
         for path_expr, suffix in endpoints.items():
             if _get_path(rec, path_expr) in (None, ""):
                 _set_path(rec, path_expr, base + suffix.replace("__NAME__", name))

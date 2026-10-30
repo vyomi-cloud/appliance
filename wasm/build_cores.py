@@ -43,6 +43,8 @@ CORES = [
     "gcp_iam_core.py",                              # GCP: Cloud IAM REST (SA + policy eval)
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
     "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
+    "gcp_console_tabs.py",                          # GCP console resource-detail tabs (validation + records no engine models)
+    "instance_catalog.py",                          # machine-type catalog (vCPU/RAM per GCE/EC2/Azure size)
     "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
     "azure_cosmos_core.py",                         # Azure: Cosmos DB SQL/Core API (native azure-cosmos)
     "azure_keyvault_secrets_core.py",               # Azure: Key Vault secrets (native azure-keyvault-secrets)
@@ -68,6 +70,7 @@ CORES = [
     "stepfunctions_core.py",                       # AWS: Step Functions (ASL interpreter, executions, activities)
     "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)
+    "aws_console_detail.py",                       # AWS console resource-detail tab model (shared with offline routes/aws_console_detail.py)
     "logs_core.py",                                # expansion AWS: CloudWatch Logs (log groups/streams/events/insights) — vendored VERBATIM
     "persistent_store.py",                          # v2.4.0: file-backed (sqlite) substrate — the anti-drift gate
     "aws_wire_router.py",                            # native-wire front door (relay/bridge)
@@ -77,6 +80,8 @@ CORES = [
     "azure_operationalinsights_core.py",          # expansion Azure: Log Analytics (Microsoft.OperationalInsights workspaces, saved searches, tables) — vendored VERBATIM
     "azure_appconfiguration_core.py",             # expansion Azure: App Configuration (stores, key-values, snapshots) — vendored VERBATIM
     "azure_app_core.py",                            # expansion Azure: Container Apps (Microsoft.App: environments, apps, revisions, jobs) — vendored VERBATIM
+    "azure_keyvault_certificates_core.py",          # Azure Key Vault certificates (real self-signed X.509 + RSA) — vendored VERBATIM
+    "azure_arm_ext_core.py",                        # Azure ARM: locks, managed identity, resource health, NICs/public IPs, schedules, run commands, restore points — vendored VERBATIM
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
     "console_conformance.py",                       # console-next capability manifest: per-service conformance signal (pure, `os` only)
     "nano_events.py",                               # per-resource cloudsim event/activity log (recorded on every mutating dispatch; MUST precede nano_registry which imports it)
@@ -86,7 +91,7 @@ CORES = [
 
 # Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
 # Nano copy of a new service's engine to be identical to core/.
-VERBATIM = {"gcp_monitoring_core.py", "cloudwatch_core.py", "apigatewayv2_core.py", "logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "gcp_artifactregistry_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py"}
+VERBATIM = {"gcp_monitoring_core.py", "cloudwatch_core.py", "apigatewayv2_core.py", "logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "gcp_artifactregistry_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "azure_arm_ext_core.py", "azure_keyvault_certificates_core.py"}
 
 HEADER = ("# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.\n"
           "# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py\n")

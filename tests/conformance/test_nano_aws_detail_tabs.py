@@ -1,0 +1,339 @@
+"""Nano: AWS console resource-detail tabs show THIS resource's real data.
+
+Drives the same dispatch chain the in-browser console uses (wasm/sw.js route →
+registry → aws provider handlers → aws_core_adapter → core/aws_console_detail.py
+and the service cores) and checks each tab's values are the resource's own and
+that tab actions persist. Host CPython, repo layout (mirrors the Pyodide FS).
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from wasm.backends.store import Backends  # noqa: E402
+from wasm import providers as P            # noqa: E402
+
+failed = False
+B = Backends()
+
+
+def check(name, ok, extra=""):
+    global failed
+    print(f"[{'PASS' if ok else 'FAIL'}] {name}{'' if ok else '  ' + str(extra)[:400]}")
+    failed = failed or not ok
+
+
+def d(svc, op, params=None):
+    return P.dispatch(B, "aws", svc, op, params=params or {})
+
+
+def ec2():
+    print("── EC2 instance")
+    r = d("_resource", "Create", {"service": "ec2", "body": {
+        "name": "tabs-web", "instance_type": "t3.micro", "image_id": "ami-ubuntu-24.04-x86_64", "key_name": "kp-tabs",
+        "storage_gb": 20, "root_volume_type": "gp3", "root_volume_encrypted": True, "user_data": "#!/bin/bash\necho hi",
+        "create_security_group": {"requested": True, "ssh_cidr": "0.0.0.0/0", "allow_http": True}}})
+    iid = r["instance_id"]
+    tab = lambda t: d("ec2", "DescribeInstanceDetail", {"name": iid, "tab": t})
+    det = tab("details")
+    check("Details: AMI name + login user of the chosen image", det["image_name"].startswith("Ubuntu Server 24.04") and det["default_username"] == "ubuntu", det)
+    check("Details: SSH command uses the key pair + public DNS", det["ssh_command"] == f'ssh -i "kp-tabs.pem" ubuntu@{r["public_dns"]}', det)
+    vpcs = {v["id"]: v for v in d("vpc", "List")["vpcs"]}
+    check("placed in the default VPC (VPC console lists it)", vpcs.get(det["vpc_id"], {}).get("cidr") == "172.31.0.0/16", vpcs)
+    subs = {s["id"]: s for s in d("vpc", "ListSubnets")["subnets"]}
+    check("subnet is the default VPC's subnet for the AZ", subs.get(det["subnet_id"], {}).get("vpc_id") == det["vpc_id"], subs)
+    eni = tab("network-interfaces")["network_interfaces"]
+    check("Networking: ENI with the instance's private IP in its subnet", len(eni) == 1 and eni[0]["private_ip_address"] == r["private_ip"]
+          and eni[0]["subnet_id"] == det["subnet_id"], eni)
+    sec = tab("security")
+    check("Security: launch-wizard group with SSH + HTTP", sec["security_groups"][0]["group_name"] == "launch-wizard-1"
+          and {x["port_range"] for x in sec["inbound_rules"]} == {"22", "80"}, sec)
+    sgs = {g["id"] for g in d("vpc", "ListSecurityGroups")["security_groups"]}
+    check("Security: group exists in the VPC model", sec["security_groups"][0]["group_id"] in sgs, sgs)
+    st = tab("storage")["block_devices"]
+    check("Storage: root volume from the launch (20 GiB gp3, encrypted)", st[0]["size"] == 20 and st[0]["encrypted"] is True and st[0]["volume_type"] == "gp3", st)
+    check("User data: launch script", tab("user-data")["user_data"] == "#!/bin/bash\necho hi")
+    m = d("ec2", "ModifyInstanceAttribute", {"name": iid, "tab": "user-data", "body": {"user_data": "x"}})
+    check("User data: refused while running", m.get("code") == "IncorrectInstanceState", m)
+    d("_resource", "Stop", {"service": "ec2", "name": iid})
+    check("Details: user-initiated stop reason", tab("details")["state_transition_reason"].startswith("User initiated"))
+    m = d("ec2", "ModifyInstanceAttribute", {"name": iid, "tab": "user-data", "body": {"user_data": "echo changed"}})
+    check("User data: saved while stopped", m.get("ok") and tab("user-data")["user_data"] == "echo changed", m)
+    d("ec2", "ModifyInstanceAttribute", {"name": iid, "tab": "attributes", "body": {"disable_api_termination": True}})
+    t = d("_resource", "Terminate", {"service": "ec2", "name": iid})
+    check("termination protection enforced", t.get("code") == "OperationNotPermitted", t)
+    d("iam", "CreateUser", {"name": "tabs-dev"})
+    from wasm.providers import aws_core_adapter as A
+    from core import iam_core
+    iam_core.dispatch(A.IAM, {"Action": "CreateRole", "RoleName": "tabs-role", "AssumeRolePolicyDocument": "{}"})
+    p = d("ec2", "ModifyInstanceAttribute", {"name": iid, "tab": "iam-instance-profile", "body": {"name": "tabs-role"}})
+    check("IAM role: associate an existing role", p.get("ok") and p["iam_instance_profile"]["role_name"] == "tabs-role", p)
+    check("IAM role: unknown role rejected", d("ec2", "ModifyInstanceAttribute", {"name": iid, "tab": "iam-instance-profile", "body": {"name": "ghost"}}).get("code") == "InvalidParameterValue")
+    arn = f"arn:aws:ec2:us-east-1:123456789012:instance/{iid}"
+    iam_core.dispatch(A.IAM, {"Action": "PutUserPolicy", "UserName": "tabs-dev", "PolicyName": "ops",
+                              "PolicyDocument": '{"Statement":[{"Effect":"Allow","Action":"ec2:*","Resource":"' + arn + '"}]}'})
+    acc = d("iam", "ResourceAccess", {"arn": arn, "service": "ec2"})["statements"]
+    check("Permissions: the user's inline policy on this instance", any(x["principal"] == "tabs-dev" for x in acc), acc)
+    check("Permissions: not for another instance", not d("iam", "ResourceAccess", {"arn": arn + "x", "service": "ec2"})["statements"])
+    ev = d("_events", "List", {"resource": iid, "provider": "aws"})["events"]
+    check("Activity: this instance's attribute/profile changes recorded", any(e["action"] == "ModifyInstanceAttribute" for e in ev), ev)
+
+
+
+
+def s3():
+    print("── S3 bucket")
+    import base64
+    d("s3", "CreateBucket", {"name": "tabs-bkt"})
+    cfg = lambda k: d("s3", "GetBucketConfig", {"bucket": "tabs-bkt", "kind": k})["value"]
+    put = lambda k, v: d("s3", "PutBucketConfig", {"bucket": "tabs-bkt", "kind": k, "method": "PUT", "value": v})
+    check("new bucket: SSE-S3, Block Public Access on, owner enforced",
+          cfg("encryption")["sse_algorithm"] == "AES256" and all(cfg("public_access_block").values()) and cfg("ownership") == "BucketOwnerEnforced")
+    check("Lifecycle: rule saved", put("lifecycle", [{"id": "tmp", "prefix": "tmp/", "expiration_days": 7}]).get("ok") and cfg("lifecycle")[0]["expiration_days"] == 7)
+    check("Lifecycle: rule without an action rejected", put("lifecycle", [{"id": "x"}]).get("code") == "InvalidRequest")
+    check("CORS: rule saved", put("cors", [{"allowed_methods": "GET", "allowed_origins": "*"}]).get("ok") and cfg("cors")[0]["allowed_methods"] == ["GET"])
+    pub = {"Statement": [{"Effect": "Allow", "Principal": "*", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::tabs-bkt/*"}]}
+    check("Policy: public policy blocked while BlockPublicPolicy is on", put("policy", pub).get("code") == "AccessDenied")
+    put("public_access_block", {"block_public_acls": True, "ignore_public_acls": True, "block_public_policy": False, "restrict_public_buckets": False})
+    check("Policy: saved after Block Public Access allows it", put("policy", pub).get("ok") and "GetObject" in cfg("policy"))
+    row = next(b for b in d("s3", "ListBuckets")["buckets"] if b["name"] == "tabs-bkt")
+    check("bucket list Access = Public", row["access"] == "Public", row)
+    d("s3", "PutVersioning", {"bucket": "tabs-bkt", "status": "Enabled"})
+    check("Versioning: GET reads Enabled", d("s3", "GetVersioning", {"bucket": "tabs-bkt"})["versioning"] == "Enabled")
+    for body in (b"one", b"two"):
+        d("s3", "PutObject", {"bucket": "tabs-bkt", "key": "k.txt", "body_b64": base64.b64encode(body).decode()})
+    v = d("s3", "ListObjectVersions", {"bucket": "tabs-bkt"})["versions"]
+    check("Versions: both versions of k.txt", len(v) == 2 and v[0]["is_latest"] and not v[1]["is_latest"], v)
+    n = d("s3", "PutBucketNotification", {"bucket": "tabs-bkt", "method": "PUT", "body": {"rules": [
+        {"id": "n1", "events": ["s3:ObjectRemoved:*"], "destination_type": "TopicConfiguration", "destination": "arn:aws:sns:us-east-1:123456789012:t"}]}})
+    check("Notifications: topic configuration saved", d("s3", "GetBucketNotification", {"bucket": "tabs-bkt"})["topicConfigurations"][0]["id"] == "n1", n)
+    d("s3", "PutBucketTagging", {"bucket": "tabs-bkt", "tags": {"env": "dev"}})
+    check("Tags: on the bucket", d("s3", "GetBucket", {"bucket": "tabs-bkt"})["tags"] == {"env": "dev"})
+    ev = d("_events", "List", {"resource": "tabs-bkt", "provider": "aws"})["events"]
+    check("Activity: bucket configuration changes recorded", any(e["action"] == "PutBucketConfig" for e in ev), ev)
+
+
+
+def rds():
+    print("── RDS DB instance")
+    d("rds", "CreateDatabase", {"name": "tabs-db", "engine": "postgres"})
+    det = lambda t: d("rds", "DescribeDBInstanceDetail", {"name": "tabs-db", "tab": t})
+    mod = lambda body: d("rds", "ModifyDBInstanceConfiguration", {"name": "tabs-db", "body": body})
+    c = det("connectivity")
+    vpcs = {v["id"] for v in d("vpc", "List")["vpcs"]}
+    check("Connectivity: endpoint/port + placed in the default VPC with subnets", c["endpoint"] and c["vpc_id"] in vpcs and len(c["subnets"]) == 6, c)
+    check("Security: the VPC's default security group", c["security_groups"][0]["group_name"] == "default", c)
+    check("Modify: backup retention persists", mod({"backup_retention_period": 3}).get("ok") and det("configuration")["backup_retention_period"] == 3)
+    check("Modify: storage can't shrink", mod({"allocated_storage": 1}).get("code") == "InvalidParameterValue")
+    check("Maintenance: window persists", mod({"preferred_maintenance_window": "wed:02:00-wed:02:30"}).get("ok")
+          and det("configuration")["preferred_maintenance_window"] == "wed:02:00-wed:02:30")
+    check("Performance Insights: on", mod({"performance_insights_enabled": True}).get("ok") and det("performance-insights")["enabled"] is True)
+    d("rds", "Stop", {"name": "tabs-db"})
+    ev = det("events")["events"]
+    check("Logs & events: created / modified / stopped", {e["message"].split(" to ")[0] for e in ev} >= {"DB instance created", "DB instance stopped"}
+          and any("modification" in e["message"] for e in ev), ev)
+    mod({"deletion_protection": True})
+    check("deletion protection blocks delete", d("rds", "DeleteDatabase", {"name": "tabs-db"}).get("code") == "InvalidParameterCombination")
+
+
+
+def dynamodb():
+    print("── DynamoDB table")
+    import json as _json
+    from wasm.providers import aws_core_adapter as A
+    from core import dynamodb_core as ddbc
+    d("dynamodb", "CreateTable", {"table_name": "tabs-t", "partition_key_name": "id"})
+    sec = lambda s: d("dynamodb", "DescribeTableSection", {"table": "tabs-t", "section": s})
+    put = lambda s, b: d("dynamodb", "UpdateTableSection", {"table": "tabs-t", "section": s, "method": "PUT", "body": b})
+    check("Overview: partition key + on-demand", sec("general")["partition_key"] == "id (S)" and sec("general")["capacity_mode"] == "On-demand")
+    check("Indexes: GSI created", put("indexes", {"index_name": "by-city", "partition_key": "city"}).get("ok"))
+    d("dynamodb", "PutItem", {"table": "tabs-t", "item": {"id": "1", "city": "Pune"}})
+    r = ddbc.dispatch(A.DDB, "DynamoDB_20120810.Query", {"TableName": "tabs-t", "IndexName": "by-city",
+                      "KeyConditionExpression": "city = :c", "ExpressionAttributeValues": {":c": {"S": "Pune"}}})
+    check("Indexes: the console-created GSI answers a native Query(IndexName)", r.status == 200 and r.body["Count"] == 1, r.body)
+    check("TTL: on", put("ttl", {"enabled": True, "attribute_name": "exp"}).get("time_to_live_status") == "ENABLED")
+    check("Streams: on", put("streams", {"stream_enabled": True, "view_type": "KEYS_ONLY"}).get("stream_enabled") is True)
+    check("Capacity: provisioned", put("capacity", {"billing_mode": "PROVISIONED", "read_capacity_units": 2, "write_capacity_units": 2}).get("billing_mode") == "PROVISIONED")
+    check("Backups: created", put("backups", {"backup_name": "bk1"}).get("backups")[0]["backup_name"] == "bk1")
+    check("Backups: 2-character name rejected like DynamoDB", put("backups", {"backup_name": "b1"}).get("code") == "ValidationException")
+    check("PITR: on", put("pitr", {"enabled": True}).get("point_in_time_recovery_status") == "ENABLED")
+    put("capacity", {"deletion_protection": True})
+    check("deletion protection blocks DeleteTable", d("dynamodb", "DeleteTable", {"table": "tabs-t"}).get("code") == "ValidationException")
+    ev = d("_events", "List", {"resource": "tabs-t", "provider": "aws"})["events"]
+    check("Activity: table setting changes recorded", any(e["action"] == "UpdateTableSection" for e in ev), ev)
+
+
+
+def lambda_():
+    print("── Lambda function")
+    d("lambda", "CreateFunction", {"name": "tabs-fn"})
+    sec = lambda s: d("lambda", "GetFunctionSection", {"name": "tabs-fn", "section": s})
+    put = lambda s, b: d("lambda", "UpdateFunctionSection", {"name": "tabs-fn", "section": s, "method": "PUT", "body": b})
+    check("Code: the function's source", "def handler" in sec("code")["code"])
+    put("code", {"code": "def handler(event, context):\n    return {'tripled': event['n'] * 3}"})
+    check("Code: deployed code is what Invoke runs", d("lambda", "Invoke", {"name": "tabs-fn", "payload": {"n": 5}})["result"] == {"tripled": 15})
+    check("Env: saved", put("env", {"variables": {"MODE": "x"}}).get("variables") == {"MODE": "x"})
+    check("Env: invalid key rejected", put("env", {"variables": {"1BAD": "x"}}).get("code") == "InvalidParameterValueException")
+    check("Versions: publish", put("versions", {"description": "v1"}).get("versions")[-1]["version"] == "1")
+    check("Aliases: create", put("aliases", {"name": "live", "function_version": "1"}).get("aliases")[0]["alias_arn"].endswith(":tabs-fn:live"))
+    check("Aliases: duplicate conflicts", put("aliases", {"name": "live", "function_version": "1"}).get("code") == "ResourceConflictException")
+    check("Policy: AddPermission", put("policy", {"statement_id": "apigw", "principal": "apigateway.amazonaws.com"}).get("policy")["Statement"][0]["Principal"]
+          == {"Service": "apigateway.amazonaws.com"})
+    from wasm.providers import aws_core_adapter as A
+    from core import iam_core
+    iam_core.dispatch(A.IAM, {"Action": "CreateRole", "RoleName": "fn-exec", "AssumeRolePolicyDocument": "{}"})
+    check("Execution role: existing role accepted", put("role", {"role": "arn:aws:iam::123456789012:role/fn-exec"}).get("role_exists") is True)
+    check("Execution role: unknown role rejected", put("role", {"role": "arn:aws:iam::123456789012:role/ghost"}).get("code") == "InvalidParameterValueException")
+    check("Test events: saved", put("test-events", {"name": "five", "event": {"n": 5}}).get("test_events")[0]["name"] == "five")
+    ev = d("_events", "List", {"resource": "tabs-fn", "provider": "aws"})["events"]
+    check("Activity: function changes recorded", sum(1 for e in ev if e["action"] == "UpdateFunctionSection") >= 5, ev)
+
+
+
+def iam():
+    print("── IAM account settings")
+    put = lambda s, b: d("iam", "UpdateAccountSection", {"section": s, "method": "PUT", "body": b})
+    sec = lambda s: d("iam", "GetAccountSection", {"section": s})
+    r = put("identity-providers", {"provider_type": "OIDC", "url": "https://token.actions.githubusercontent.com", "audiences": ["sts.amazonaws.com"]})
+    check("Identity providers: OIDC provider ARN", r["identity_providers"][0]["arn"].endswith(":oidc-provider/token.actions.githubusercontent.com"), r)
+    check("Password policy: IAM default before any change", sec("password-policy")["custom"] is False)
+    check("Password policy: saved", put("password-policy", {"minimum_length": 12}).get("minimum_length") == 12)
+    check("Password policy: reuse prevention > 24 rejected", put("password-policy", {"password_reuse_prevention": 30}).get("code") == "ValidationError")
+    check("Access Analyzer: no findings without an analyzer", sec("access-analyzer")["findings"] == [])
+    put("access-analyzer", {"name": "acct"})
+    check("Access Analyzer: one analyzer per account", put("access-analyzer", {"name": "two"}).get("code") in ("ConflictException", "ServiceQuotaExceededException"))
+    d("lambda", "CreateFunction", {"name": "iam-shared-fn"})
+    d("lambda", "UpdateFunctionSection", {"name": "iam-shared-fn", "section": "policy", "method": "PUT",
+                                          "body": {"statement_id": "x-acct", "principal": "arn:aws:iam::999988887777:root"}})
+    f = sec("access-analyzer")["findings"]
+    check("Access Analyzer: cross-account Lambda permission is a finding",
+          any(x["resource"].endswith(":function:iam-shared-fn") and x["shared_through"] == "Cross-account access" for x in f), f)
+
+
+
+def vpc():
+    print("── VPC")
+    vid = d("vpc", "CreateVpc", {"cidr_block": "10.9.0.0/16", "name": "tabs-vpc"})["id"]
+    sid = d("vpc", "CreateSubnet", {"vpcId": vid, "cidr": "10.9.1.0/24"})["id"]
+    sec = lambda s: d("vpc", "DescribeVpcSection", {"name": vid, "section": s})
+    put = lambda s, b: d("vpc", "ModifyVpcSection", {"name": vid, "section": s, "method": "PUT", "body": b})
+    check("VPC details: default NACL + main route table", sec("details")["default_network_acl_id"].startswith("acl-") and sec("details")["main_route_table_id"])
+    put("nacls", {"action": "create"})
+    acl = next(x for x in sec("nacls")["network_acls"] if not x["is_default"])["network_acl_id"]
+    put("nacls", {"action": "add_entry", "network_acl_id": acl, "rule_number": 100, "protocol": "6", "from_port": 22, "cidr": "0.0.0.0/0", "rule_action": "deny"})
+    put("nacls", {"action": "add_entry", "network_acl_id": acl, "rule_number": 100, "egress": True, "protocol": "-1", "cidr": "0.0.0.0/0"})
+    put("nacls", {"action": "associate", "network_acl_id": acl, "subnet_id": sid})
+    r = d("vpc", "Analyze", {"sourceIp": "10.9.1.10", "destIp": "10.9.1.20", "port": 22})
+    check("Network ACLs: a console deny rule blocks SSH in the reachability analyzer", r["reachable"] is False and "NACL" in r["reason"], r)
+    check("NAT gateways: private NAT in the subnet", put("nat_gateways", {"subnet_id": sid, "connectivity_type": "private"})["nat_gateways"][0]["private_ip"].startswith("10.9.1."))
+    check("Endpoints: DynamoDB gateway endpoint", put("endpoints", {"service": "dynamodb"})["endpoints"][0]["endpoint_type"] == "Gateway")
+    check("Flow logs: to CloudWatch Logs", put("flow_logs", {"destination": "/vpc/x"})["flow_logs"][0]["status"] == "ACTIVE")
+
+
+
+def sqs():
+    print("── SQS queue")
+    for n in ("tabs-q", "tabs-dlq"):
+        d("sqs", "CreateQueue", {"name": n})
+    sec = lambda s, q="tabs-q": d("sqs", "GetQueueSection", {"name": q, "section": s})
+    put = lambda s, b: d("sqs", "SetQueueSection", {"name": "tabs-q", "section": s, "method": "PUT", "body": b})
+    check("Configuration: SQS defaults + SSE-SQS", sec("configuration")["visibility_timeout"] == 30 and sec("configuration")["encryption"] == "SSE-SQS")
+    check("Configuration: visibility timeout 0 saved", put("configuration", {"visibility_timeout": 0}).get("visibility_timeout") == 0)
+    dlq_arn = sec("configuration", "tabs-dlq")["queue_arn"]
+    check("DLQ: redrive after 1 receive", put("dlq", {"enabled": True, "dead_letter_target_arn": dlq_arn, "max_receive_count": 1}).get("redrive_policy")["maxReceiveCount"] == 1)
+    d("sqs", "Send", {"name": "tabs-q", "body": "poison"})
+    d("sqs", "Receive", {"name": "tabs-q"})
+    d("sqs", "Receive", {"name": "tabs-q"})   # received once already -> dead-lettered by sqs_core
+    check("DLQ: the console redrive policy moves the message to the DLQ", sec("configuration", "tabs-dlq")["messages_available"] == 1
+          and sec("configuration")["messages_available"] == 0, (sec("configuration"), sec("configuration", "tabs-dlq")))
+    check("Encryption: SSE-KMS", put("encryption", {"mode": "SSE-KMS", "kms_master_key_id": "alias/aws/sqs"}).get("encryption") == "SSE-KMS")
+    check("Encryption: back to SSE-SQS clears the key", put("encryption", {"mode": "SSE-SQS"}).get("kms_master_key_id") == "")
+    check("Access policy: invalid JSON rejected", put("policy", {"policy": "{nope"}).get("code") == "InvalidAttributeValue")
+    d("sqs", "Send", {"name": "tabs-q", "body": "x"})
+    check("Purge: empties the queue", put("purge", {}).get("messages_available") == 0)
+    check("Purge: twice within 60 s refused", put("purge", {}).get("code") == "AWS.SimpleQueueService.PurgeQueueInProgress")
+
+
+
+def secrets():
+    print("── Secrets Manager secret")
+    d("secrets", "CreateSecret", {"name": "tabs-sec", "value": "v1"})
+    sec = lambda s: d("secrets", "GetSecretSection", {"name": "tabs-sec", "section": s})
+    put = lambda s, b: d("secrets", "UpdateSecretSection", {"name": "tabs-sec", "section": s, "method": "PUT", "body": b})
+    check("Secret value: GetSecretValue", sec("value")["secret_string"] == "v1")
+    put("value", {"secret_string": "v2"})
+    v = sec("versions")["versions"]
+    check("Versions: AWSCURRENT / AWSPREVIOUS from secrets_core", v[0]["stages"] == ["AWSCURRENT"] and "AWSPREVIOUS" in v[1]["stages"], v)
+    d("lambda", "CreateFunction", {"name": "rotator"})
+    r = put("rotation", {"enabled": True, "rotation_lambda_arn": "arn:aws:lambda:us-east-1:123456789012:function:rotator", "automatically_after_days": 7})
+    check("Rotation: configured + rotated immediately", r.get("rotation_enabled") and r.get("last_rotated") and len(sec("versions")["versions"]) == 3, r)
+    check("Replication: replica", put("replication", {"region": "ap-south-1"})["replicas"][0]["region"] == "ap-south-1")
+    d("kms", "CreateKey", {"alias": "alias/tabs-key"})
+    keys = d("kms", "ListKeys")
+    kid = (keys.get("value") or keys.get("keys") or [{}])[0].get("key_id") or ""
+    check("Encryption key: an existing KMS key is accepted", put("encryption", {"kms_key_id": kid}).get("kms_key_id") == kid, keys)
+    check("Encryption key: unknown key rejected", put("encryption", {"kms_key_id": "nope"}).get("code") == "ResourceNotFoundException")
+
+
+
+def kms():
+    print("── KMS key")
+    from wasm.providers import aws_core_adapter as A
+    from core import kms_core
+    k = d("kms", "CreateKey", {"alias": "alias/tabs-k"})
+    kid = k.get("key_id") or k.get("KeyId") or list(A.KMS.keys)[-1]
+    sec = lambda s: d("kms", "GetKeySection", {"name": kid, "section": s})
+    put = lambda s, b: d("kms", "UpdateKeySection", {"name": kid, "section": s, "method": "PUT", "body": b})
+    check("General configuration: key ID + spec", sec("general")["key_id"] == kid and sec("general")["key_spec"] == "SYMMETRIC_DEFAULT")
+    put("rotation", {"enabled": True, "rotation_period_in_days": 365})
+    r = kms_core.dispatch(A.KMS, "TrentService.GetKeyRotationStatus", {"KeyId": kid})
+    body = r.body if isinstance(r.body, dict) else {}
+    check("Key rotation: console setting is what native GetKeyRotationStatus reports", body.get("KeyRotationEnabled") is True, body)
+    check("Aliases: create", len(put("aliases", {"alias_name": "tabs-k2"})["aliases"]) >= 1)
+    check("Grants: create", put("grants", {"grantee_principal": "arn:aws:iam::123456789012:role/x", "operations": ["Decrypt"]})["grants"][0]["operations"] == ["Decrypt"])
+    put("general", {"description": "billing data key"})
+    r = kms_core.dispatch(A.KMS, "TrentService.DescribeKey", {"KeyId": kid})
+    check("General: description visible to native DescribeKey", (r.body or {}).get("KeyMetadata", {}).get("Description") == "billing data key", r.body)
+
+
+
+def eventbridge():
+    print("── EventBridge rule")
+    d("extras", "Create", {"key": "eventbridge/rules", "name": "tabs-rule", "event_pattern": '{"source":["my.app"]}'})
+    sec = lambda s: d("eventbridge", "DescribeRuleSection", {"name": "tabs-rule", "section": s})
+    put = lambda s, b: d("eventbridge", "PutRuleSection", {"name": "tabs-rule", "section": s, "method": "PUT", "body": b})
+    check("Rule details: rule ARN", sec("details")["arn"].endswith(":rule/tabs-rule"))
+    check("Rule page GET returns the rule record", d("eventbridge", "GetConsoleRule", {"name": "tabs-rule"}).get("name") == "tabs-rule")
+    d("sqs", "CreateQueue", {"name": "eb-q"})
+    check("Targets: add", put("targets", {"id": "q", "arn": "arn:aws:sqs:us-east-1:123456789012:eb-q"})["targets"][0]["id"] == "q")
+    check("Targets: sixth target over the limit", all(put("targets", {"id": f"t{i}", "arn": "arn:aws:sqs:us-east-1:1:x"}).get("ok") for i in range(4))
+          and put("targets", {"id": "t9", "arn": "arn:aws:sqs:us-east-1:1:x"}).get("code") == "LimitExceededException")
+    check("Event pattern: test match", put("pattern", {"action": "test", "event": {"source": "my.app"}})["result"] is True)
+    check("DLQ: existing SQS DLQ accepted", put("dlq", {"id": "q", "dead_letter_arn": "arn:aws:sqs:us-east-1:123456789012:eb-q"})["targets"][0]["dead_letter_arn"].endswith(":eb-q"))
+
+
+
+def apigateway():
+    print("── API Gateway REST API")
+    aid = d("apigateway", "CreateApi", {"name": "tabs-rest", "mockBody": "hi"})["id"]
+    sec = lambda s: d("apigateway", "GetRestApiSection", {"name": aid, "section": s})
+    put = lambda s, b: d("apigateway", "UpdateRestApiSection", {"name": aid, "section": s, "method": "PUT", "body": b})
+    check("Models: Empty + Error defaults", [m["name"] for m in sec("models")["models"]] == ["Empty", "Error"])
+    check("Deployments: the create-time prod deployment", sec("deployments")["deployments"][0]["stage_name"] == "prod")
+    put("deployments", {"stage_name": "beta", "description": "beta stage"})
+    r = d("apigateway", "Invoke", {"id": aid, "stage": "beta", "method": "GET", "path": "/hello"})
+    check("Deployments: a stage deployed from the tab serves the API", r.get("statusCode") == 200 and r.get("body") == "hi", r)
+    check("Logs/Tracing: stage settings", put("logging", {"stage_name": "beta", "logging_level": "ERROR"})["stages"][0]["stage_name"] in ("beta", "prod"))
+    check("Settings: description saved", put("settings", {"description": "nano rest"})["description"] == "nano rest")
+
+SECTIONS = {"ec2": ec2, "s3": s3, "rds": rds, "dynamodb": dynamodb, "lambda": lambda_, "iam": iam, "vpc": vpc, "sqs": sqs, "secretsmanager": secrets, "kms": kms, "eventbridge": eventbridge, "apigateway": apigateway}
+
+if __name__ == "__main__":
+    for k in sys.argv[1:] or list(SECTIONS):
+        try:
+            SECTIONS[k]()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            check(f"{k}: section ran", False, repr(e))
+    sys.exit(1 if failed else 0)

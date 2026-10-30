@@ -58,7 +58,7 @@ def _settings_props_locks():
 _EC2_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Instance", "items": [
-        {"key": "details",        "label": "Details",                "icon": "info",          "type": "overview"},
+        {"key": "details",        "label": "Details",                "icon": "info",          "type": "ec2Details"},
         {"key": "statusChecks",   "label": "Status and alarms",      "icon": "monitor_heart", "type": "metrics"},
         {"key": "monitoring",     "label": "Monitoring",             "icon": "show_chart",    "type": "metrics"},
         {"key": "networking",     "label": "Networking",             "icon": "lan",           "type": "ec2Networking"},
@@ -67,11 +67,11 @@ _EC2_SUB = [
     ]},
     {"group": "Connect", "items": [
         {"key": "connect",        "label": "Connect",                "icon": "terminal",      "type": "connect"},
-        {"key": "console",        "label": "EC2 serial console",     "icon": "terminal",      "type": "stub"},
+        {"key": "console",        "label": "EC2 serial console",     "icon": "terminal",      "type": "ec2Serial"},
     ]},
     {"group": "Operations", "items": [
-        {"key": "userData",       "label": "User data",              "icon": "code",          "type": "stub"},
-        {"key": "iam",            "label": "IAM role",               "icon": "admin_panel_settings", "type": "stub"},
+        {"key": "userData",       "label": "User data",              "icon": "code",          "type": "ec2UserData"},
+        {"key": "iamRole",        "label": "IAM role",               "icon": "admin_panel_settings", "type": "ec2IamRole"},
         *_settings_props_locks(),
     ]},
 ]
@@ -84,18 +84,18 @@ _S3_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Objects", "items": [
         {"key": "objects",        "label": "Objects",                "icon": "folder",        "type": "bucketObjects"},
-        {"key": "versions",       "label": "Versions",               "icon": "history",       "type": "stub"},
+        {"key": "versions",       "label": "Versions",               "icon": "history",       "type": "s3Versions"},
     ]},
     {"group": "Properties", "items": [
         {"key": "versioning",     "label": "Bucket Versioning",      "icon": "history_edu",   "type": "bucketVersioning"},
         {"key": "notifications",  "label": "Event notifications",    "icon": "notifications", "type": "bucketNotifications"},
-        {"key": "lifecycle",      "label": "Lifecycle rules",        "icon": "history_toggle_off", "type": "stub"},
-        {"key": "encryption",     "label": "Default encryption",     "icon": "enhanced_encryption", "type": "stub"},
+        {"key": "lifecycle",      "label": "Lifecycle rules",        "icon": "history_toggle_off", "type": "s3Lifecycle"},
+        {"key": "encryption",     "label": "Default encryption",     "icon": "enhanced_encryption", "type": "s3Encryption"},
     ]},
     {"group": "Permissions", "items": [
-        {"key": "blockPublic",    "label": "Block Public Access",    "icon": "shield",        "type": "stub"},
-        {"key": "iam",            "label": "Bucket Policy",          "icon": "policy",        "type": "iam"},
-        {"key": "cors",           "label": "Cross-origin resource sharing (CORS)", "icon": "open_in_new", "type": "stub"},
+        {"key": "blockPublic",    "label": "Block Public Access",    "icon": "shield",        "type": "s3PublicAccess"},
+        {"key": "policy",         "label": "Bucket Policy",          "icon": "policy",        "type": "s3Policy"},
+        {"key": "cors",           "label": "Cross-origin resource sharing (CORS)", "icon": "open_in_new", "type": "s3Cors"},
     ]},
     {"group": "Management", "items": [
         {"key": "metrics",        "label": "Metrics",                "icon": "show_chart",    "type": "metrics"},
@@ -114,11 +114,11 @@ _IAM_SUB = [
         {"key": "groups",      "label": "User groups",           "icon": "group",           "type": "iamGroups"},
         {"key": "roles",       "label": "Roles",                 "icon": "badge",           "type": "iamRoles"},
         {"key": "policies",    "label": "Policies",              "icon": "policy",          "type": "iamPolicies"},
-        {"key": "providers",   "label": "Identity providers",    "icon": "verified_user",   "type": "stub"},
+        {"key": "providers",   "label": "Identity providers",    "icon": "verified_user",   "type": "iamProviders"},
     ]},
     {"group": "Account settings", "items": [
-        {"key": "passwordPolicy","label":"Password policy",       "icon": "vpn_key",         "type": "stub"},
-        {"key": "accessAdvisor","label":"Access Analyzer",        "icon": "find_in_page",    "type": "stub"},
+        {"key": "passwordPolicy","label":"Password policy",       "icon": "vpn_key",         "type": "iamPasswordPolicy"},
+        {"key": "accessAdvisor","label":"Access Analyzer",        "icon": "find_in_page",    "type": "iamAccessAnalyzer"},
     ]},
 ]
 
@@ -130,23 +130,23 @@ _RDS_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Connectivity & security", "items": [
         {"key": "endpoints",   "label": "Endpoints",          "icon": "lan",         "type": "rdsEndpoints"},
-        {"key": "networking",  "label": "Networking",         "icon": "vpn_lock",    "type": "ec2Networking"},
+        {"key": "networking",  "label": "Networking",         "icon": "vpn_lock",    "type": "rdsNetworking"},
         {"key": "iam",         "label": "Permissions",        "icon": "admin_panel_settings", "type": "iam"},
     ]},
     {"group": "Configuration", "items": [
         {"key": "configuration","label":"Configuration",      "icon": "tune",        "type": "properties"},
-        {"key": "modify",       "label":"Modify",             "icon": "edit",        "type": "stub"},
+        {"key": "modify",       "label":"Modify",             "icon": "edit",        "type": "rdsModify"},
         {"key": "parameterGroups","label":"Parameter groups", "icon": "settings",    "type": "rdsParameterGroups"},
     ]},
     {"group": "Maintenance & backups", "items": [
         {"key": "snapshots",   "label": "Snapshots",          "icon": "photo_camera","type": "rdsSnapshots"},
-        {"key": "backups",     "label": "Automated backups",  "icon": "backup",      "type": "stub"},
-        {"key": "maintenance", "label": "Maintenance",        "icon": "build",       "type": "stub"},
+        {"key": "backups",     "label": "Automated backups",  "icon": "backup",      "type": "rdsBackups"},
+        {"key": "maintenance", "label": "Maintenance",        "icon": "build",       "type": "rdsMaintenance"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "monitoring",  "label": "Monitoring",         "icon": "show_chart",  "type": "metrics"},
-        {"key": "logs",        "label": "Logs & events",      "icon": "list_alt",    "type": "stub"},
-        {"key": "queryInsights","label":"Performance Insights","icon": "insights",   "type": "stub"},
+        {"key": "logs",        "label": "Logs & events",      "icon": "list_alt",    "type": "rdsLogs"},
+        {"key": "queryInsights","label":"Performance Insights","icon": "insights",   "type": "rdsPerformance"},
     ]},
 ]
 
@@ -159,22 +159,22 @@ _DYNAMODB_SUB = [
     {"group": "Tables", "items": [
         {"key": "items",       "label": "Explore items",      "icon": "table_view",  "type": "dynamoItems"},
         {"key": "query",       "label": "Query/Scan",         "icon": "search",      "type": "dynamoQuery"},
-        {"key": "indexes",     "label": "Indexes",            "icon": "format_indent_increase", "type": "stub"},
-        {"key": "streams",     "label": "Streams and triggers","icon": "stream",     "type": "stub"},
+        {"key": "indexes",     "label": "Indexes",            "icon": "format_indent_increase", "type": "ddbIndexes"},
+        {"key": "streams",     "label": "Streams and triggers","icon": "stream",     "type": "ddbStreams"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "capacity",    "label": "Read/write capacity","icon": "speed",       "type": "stub"},
-        {"key": "encryption",  "label": "Encryption at rest", "icon": "enhanced_encryption", "type": "stub"},
-        {"key": "ttl",         "label": "Time to live",       "icon": "schedule",    "type": "stub"},
+        {"key": "capacity",    "label": "Read/write capacity","icon": "speed",       "type": "ddbCapacity"},
+        {"key": "encryption",  "label": "Encryption at rest", "icon": "enhanced_encryption", "type": "ddbEncryption"},
+        {"key": "ttl",         "label": "Time to live",       "icon": "schedule",    "type": "ddbTtl"},
         *_settings_props_locks(),
     ]},
     {"group": "Backup", "items": [
-        {"key": "backups",     "label": "Backups",            "icon": "backup",      "type": "stub"},
-        {"key": "pitr",        "label": "Point-in-time recovery", "icon": "history", "type": "stub"},
+        {"key": "backups",     "label": "Backups",            "icon": "backup",      "type": "ddbBackups"},
+        {"key": "pitr",        "label": "Point-in-time recovery", "icon": "history", "type": "ddbPitr"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "monitoring",  "label": "Monitor",            "icon": "show_chart",  "type": "metrics"},
-        {"key": "insights",    "label": "Insights",           "icon": "insights",    "type": "stub"},
+        {"key": "insights",    "label": "Insights",           "icon": "insights",    "type": "ddbInsights"},
     ]},
 ]
 
@@ -186,13 +186,13 @@ _SQS_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Messages", "items": [
         {"key": "sendReceive", "label": "Send and receive messages", "icon": "send", "type": "sqsMessages"},
-        {"key": "purge",       "label": "Purge messages",     "icon": "delete_forever","type": "stub"},
+        {"key": "purge",       "label": "Purge messages",     "icon": "delete_forever","type": "sqsPurge"},
     ]},
     {"group": "Configuration", "items": [
-        {"key": "configuration","label":"Configuration",       "icon": "tune",        "type": "properties"},
+        {"key": "configuration","label":"Configuration",       "icon": "tune",        "type": "sqsConfig"},
         {"key": "deadLetter",  "label": "Dead-letter queue",   "icon": "warning",     "type": "sqsDLQ"},
-        {"key": "encryption",  "label": "Encryption",          "icon": "enhanced_encryption","type": "stub"},
-        {"key": "iam",         "label": "Access policy",       "icon": "policy",      "type": "iam"},
+        {"key": "encryption",  "label": "Encryption",          "icon": "enhanced_encryption","type": "sqsEncryption"},
+        {"key": "policy",      "label": "Access policy",       "icon": "policy",      "type": "sqsPolicy"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "monitoring",  "label": "Monitoring",          "icon": "show_chart",  "type": "metrics"},
@@ -208,16 +208,16 @@ _LAMBDA_SUB = [
     {"group": "Function", "items": [
         {"key": "code",        "label": "Code",                "icon": "code",        "type": "lambdaCode"},
         {"key": "test",        "label": "Test",                "icon": "play_arrow",  "type": "lambdaInvoke"},
-        {"key": "envVars",     "label": "Environment variables","icon": "settings",   "type": "stub"},
-        {"key": "configuration","label":"Configuration",       "icon": "tune",        "type": "properties"},
+        {"key": "envVars",     "label": "Environment variables","icon": "settings",   "type": "lambdaEnv"},
+        {"key": "configuration","label":"Configuration",       "icon": "tune",        "type": "lambdaConfig"},
     ]},
     {"group": "Aliases & versions", "items": [
-        {"key": "versions",    "label": "Versions",            "icon": "history",     "type": "stub"},
-        {"key": "aliases",     "label": "Aliases",             "icon": "alternate_email","type": "stub"},
+        {"key": "versions",    "label": "Versions",            "icon": "history",     "type": "lambdaVersions"},
+        {"key": "aliases",     "label": "Aliases",             "icon": "alternate_email","type": "lambdaAliases"},
     ]},
     {"group": "Permissions", "items": [
         {"key": "perms",       "label": "Resource-based policy","icon": "policy",     "type": "lambdaPerms"},
-        {"key": "iam",         "label": "Execution role",      "icon": "badge",       "type": "iam"},
+        {"key": "role",        "label": "Execution role",      "icon": "badge",       "type": "lambdaRole"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "monitoring",  "label": "Monitor",             "icon": "show_chart",  "type": "metrics"},
@@ -233,20 +233,20 @@ _APIGW_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Development", "items": [
         {"key": "resources",   "label": "Resources",           "icon": "account_tree","type": "apiResources"},
-        {"key": "authorizers", "label": "Authorizers",         "icon": "lock_person", "type": "stub"},
-        {"key": "models",      "label": "Models",              "icon": "schema",      "type": "stub"},
+        {"key": "authorizers", "label": "Authorizers",         "icon": "lock_person", "type": "apigwAuthorizers"},
+        {"key": "models",      "label": "Models",              "icon": "schema",      "type": "apigwModels"},
     ]},
     {"group": "Publishing", "items": [
         {"key": "stages",      "label": "Stages",              "icon": "rocket_launch","type": "apiStages"},
-        {"key": "deployments", "label": "Deployments",         "icon": "history",     "type": "stub"},
+        {"key": "deployments", "label": "Deployments",         "icon": "history",     "type": "apigwDeployments"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "settings",    "label": "Settings",            "icon": "settings",    "type": "properties"},
-        {"key": "iam",         "label": "Resource policy",     "icon": "policy",      "type": "iam"},
+        {"key": "settings",    "label": "Settings",            "icon": "settings",    "type": "apigwSettings"},
+        {"key": "resourcePolicy", "label": "Resource policy",  "icon": "policy",      "type": "apigwPolicy"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "monitoring",  "label": "Dashboard",           "icon": "show_chart",  "type": "metrics"},
-        {"key": "logs",        "label": "Logs/Tracing",        "icon": "list_alt",    "type": "stub"},
+        {"key": "logs",        "label": "Logs/Tracing",        "icon": "list_alt",    "type": "apigwLogs"},
     ]},
 ]
 
@@ -300,19 +300,19 @@ _SFN_SUB = [
 _VPC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"group": "Virtual private cloud", "items": [
-        {"key": "details",          "label": "VPC details",            "icon": "info",         "type": "overview"},
+        {"key": "details",          "label": "VPC details",            "icon": "info",         "type": "vpcDetails"},
         {"key": "subnets",          "label": "Subnets",                "icon": "view_module",  "type": "subnets"},
         {"key": "routeTables",      "label": "Route tables",           "icon": "route",        "type": "routeTables"},
         {"key": "internetGateways", "label": "Internet gateways",      "icon": "language",     "type": "igws"},
-        {"key": "natGateways",      "label": "NAT gateways",           "icon": "swap_horiz",   "type": "stub"},
-        {"key": "endpoints",        "label": "Endpoints",              "icon": "hub",          "type": "stub"},
+        {"key": "natGateways",      "label": "NAT gateways",           "icon": "swap_horiz",   "type": "vpcNat"},
+        {"key": "endpoints",        "label": "Endpoints",              "icon": "hub",          "type": "vpcEndpoints"},
     ]},
     {"group": "Security", "items": [
         {"key": "securityGroups",   "label": "Security groups",        "icon": "shield",       "type": "sgRules"},
-        {"key": "nacls",            "label": "Network ACLs",           "icon": "verified_user","type": "stub"},
+        {"key": "nacls",            "label": "Network ACLs",           "icon": "verified_user","type": "vpcNacls"},
     ]},
     {"group": "Monitoring", "items": [
-        {"key": "flowLogs",         "label": "Flow logs",              "icon": "list_alt",     "type": "stub"},
+        {"key": "flowLogs",         "label": "Flow logs",              "icon": "list_alt",     "type": "vpcFlowLogs"},
         {"key": "metrics",          "label": "Metrics",                "icon": "show_chart",   "type": "metrics"},
     ]},
 ]
@@ -324,18 +324,17 @@ _VPC_SUB = [
 _EVENTBRIDGE_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Rule", "items": [
-        {"key": "details",       "label": "Rule details",           "icon": "info",          "type": "overview"},
-        {"key": "targets",       "label": "Targets",                "icon": "send",          "type": "stub"},
-        {"key": "eventPattern",  "label": "Event pattern",          "icon": "code",          "type": "stub"},
+        {"key": "details",       "label": "Rule details",           "icon": "info",          "type": "ebDetails"},
+        {"key": "targets",       "label": "Targets",                "icon": "send",          "type": "ebTargets"},
+        {"key": "eventPattern",  "label": "Event pattern",          "icon": "code",          "type": "ebPattern"},
     ]},
     {"group": "Operations", "items": [
         {"key": "invocations",   "label": "Invocations",            "icon": "history",       "type": "activityLog"},
-        {"key": "deadletter",    "label": "Dead-letter queue",      "icon": "warning",       "type": "stub"},
+        {"key": "deadletter",    "label": "Dead-letter queue",      "icon": "warning",       "type": "ebDlq"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",       "label": "Metrics",                "icon": "show_chart",    "type": "metrics"},
-        {"key": "logs",          "label": "Trace logs",             "icon": "subject",       "type": "stub"},
     ]},
 ]
 
@@ -347,13 +346,13 @@ _SECRETSMANAGER_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Secret", "items": [
         {"key": "value",         "label": "Secret value",           "icon": "key",           "type": "secretvalue"},
-        {"key": "versions",      "label": "Versions",               "icon": "history",       "type": "stub"},
-        {"key": "rotation",      "label": "Rotation",               "icon": "autorenew",     "type": "stub"},
-        {"key": "replication",   "label": "Replication",            "icon": "public",        "type": "stub"},
+        {"key": "versions",      "label": "Versions",               "icon": "history",       "type": "secVersions"},
+        {"key": "rotation",      "label": "Rotation",               "icon": "autorenew",     "type": "secRotation"},
+        {"key": "replication",   "label": "Replication",            "icon": "public",        "type": "secReplication"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "resourcePolicy","label": "Resource policy",        "icon": "policy",        "type": "iam"},
-        {"key": "kmsKey",        "label": "Encryption key",         "icon": "enhanced_encryption", "type": "stub"},
+        {"key": "resourcePolicy","label": "Resource policy",        "icon": "policy",        "type": "secPolicy"},
+        {"key": "kmsKey",        "label": "Encryption key",         "icon": "enhanced_encryption", "type": "secKey"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
@@ -369,14 +368,14 @@ _KMS_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Key", "items": [
         {"key": "details",       "label": "General configuration",  "icon": "info",          "type": "kmsconfig"},
-        {"key": "policy",        "label": "Key policy",             "icon": "policy",        "type": "iam"},
-        {"key": "aliases",       "label": "Aliases",                "icon": "label",         "type": "stub"},
-        {"key": "rotation",      "label": "Key rotation",           "icon": "autorenew",     "type": "stub"},
+        {"key": "keyPolicy",     "label": "Key policy",             "icon": "policy",        "type": "kmsPolicy"},
+        {"key": "aliases",       "label": "Aliases",                "icon": "label",         "type": "kmsAliases"},
+        {"key": "rotation",      "label": "Key rotation",           "icon": "autorenew",     "type": "kmsRotation"},
     ]},
     {"group": "Permissions", "items": [
-        {"key": "keyUsers",      "label": "Key users",              "icon": "group",         "type": "stub"},
-        {"key": "keyAdmins",     "label": "Key administrators",     "icon": "admin_panel_settings","type": "stub"},
-        {"key": "grants",        "label": "Grants",                 "icon": "fact_check",    "type": "stub"},
+        {"key": "keyUsers",      "label": "Key users",              "icon": "group",         "type": "kmsUsers"},
+        {"key": "keyAdmins",     "label": "Key administrators",     "icon": "admin_panel_settings","type": "kmsAdmins"},
+        {"key": "grants",        "label": "Grants",                 "icon": "fact_check",    "type": "kmsGrants"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
@@ -488,7 +487,7 @@ _CLOUDWATCH_SUB = [
          "columns": [["key", "Setting"], ["value", "Value"]]},
         {"key": "history", "label": "History", "icon": "history", "type": "listtable", "field": "history",
          "columns": [["timestamp", "Date"], ["type", "Type"], ["summary", "Description"]]},
-        {"key": "actions", "label": "Actions", "icon": "bolt", "type": "listtable", "field": "action_list",
+        {"key": "actions", "label": "Actions", "icon": "bolt", "type": "cwActions", "field": "action_list",
          "columns": [["state", "State"], ["action", "Action"], ["enabled", "Enabled"]]},
     ]},
     {"group": "Settings", "items": [*_settings_props_locks()]},

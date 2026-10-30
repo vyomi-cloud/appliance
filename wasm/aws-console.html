@@ -690,7 +690,10 @@ function _shouldSkipAutoRefresh(){
   // Also skip if a dropdown / modal is open (would close it under their cursor).
   const selectedCount = document.querySelectorAll('input[type="checkbox"]:checked').length;
   const hasOpenDropdown = !!document.querySelector('.dropdown.open, .modal.open');
-  return selectedCount > 0 || hasOpenDropdown;
+  // Nor while the user is typing in a detail-tab editor (user data, settings…).
+  const ae = document.activeElement;
+  const editing = !!(ae && /^(TEXTAREA|INPUT|SELECT)$/.test(ae.tagName) && ae.closest("#main"));
+  return selectedCount > 0 || hasOpenDropdown || editing;
 }
 
 function navigate(next){
@@ -1710,7 +1713,7 @@ function renderStubPlaceholder(main, svc, label){
 // =====================================================================
 // DETAIL page (full-page; top tabs replace list)
 // =====================================================================
-async function renderDetail(main){
+async function renderDetail(main, opts){
   // Self-clear so any caller (router OR top-tab click) is safe.
   main.innerHTML = "";
   const svc = svcByKey(STATE.service);
@@ -1732,8 +1735,14 @@ async function renderDetail(main){
   }
   // Refetch
   const path = fillPath(svc.resource_path, {name});
-  const r = await api("GET", path);
+  // Switching tabs re-renders from the resource already read for this page (the
+  // header doesn't change); opening the page and the auto-refresh read it fresh.
+  const cached = opts && opts.reuse && STATE._detailRead && STATE._detailRead.path === path;
+  const r = cached ? STATE._detailRead.r : await api("GET", path);
+  STATE._detailRead = {path, r};
   const full = (r.ok && r.json) ? r.json : itemStub;
+  // Sub-renderers address the resource as full.name (as offline does).
+  if (full && typeof full === "object" && !full.name && name) full.name = name;
 
   // Top: ID line + actions
   const top = el("div",{class:"detail-top"});
@@ -1759,7 +1768,7 @@ async function renderDetail(main){
   }
   const tabsEl = el("div",{class:"top-tabs"});
   tabs.forEach((t, i) => tabsEl.append(el("button",{class: i === STATE.detailTab ? "active" : "",
-    onclick:()=>{ STATE.detailTab = i; renderDetail(main); }}, t.label)));
+    onclick:()=>{ STATE.detailTab = i; renderDetail(main, {reuse: true}); }}, t.label)));
   main.append(tabsEl);
 
   // Tab content
@@ -2521,116 +2530,8 @@ const SUB_RENDERERS = {};
 // Secrets Manager "Secret value" detail tab — mirrors the real AWS console:
 // value hidden until "Retrieve secret value"; then Key/value table or Plaintext;
 // "Edit" makes it editable (add/remove rows) and "Save" PUTs (= PutSecretValue).
-SUB_RENDERERS.secretvalue = function(svc, full, host){
-  const name = String((full && full.name) || getPath(full, svc.name_field) || "");
-  let value = (full && full.value != null) ? String(full.value) : "";
-  let revealed = false, editing = false, plaintext = false;
-  const panel = el("div",{class:"panel"}); host.append(panel);
-
-  function asPairs(s){
-    try { const o = JSON.parse(s); if (o && typeof o === "object" && !Array.isArray(o))
-      return Object.keys(o).map(k => [k, String(o[k])]); } catch(_){}
-    return null;
-  }
-  function saveBar(getVal){
-    const bar = el("div",{style:"display:flex;gap:8px;margin-top:14px"});
-    bar.append(el("button",{class:"btn primary",onclick:async ()=>{
-      const r = await api("PUT", fillPath(svc.resource_path,{name}), {value: getVal()});
-      if (r.ok || [200,204].includes(r.status)){ value = getVal(); editing = false; toast("Secret value saved"); render(); }
-      else toast("Save failed","err");
-    }}, icon("save"), "Save"));
-    bar.append(el("button",{class:"btn",onclick:()=>{ editing = false; render(); }}, "Cancel"));
-    return bar;
-  }
-  function render(){
-    panel.innerHTML = "";
-    panel.append(el("div",{class:"panel-h"}, icon("key"), "Secret value"));
-    const body = el("div",{style:"padding:14px"}); panel.append(body);
-    if (!revealed){
-      body.append(el("div",{style:"color:#5f6b7a;margin-bottom:12px;font-size:13px"},
-        "The secret value is encrypted and hidden. Retrieve it to view or edit."));
-      body.append(el("button",{class:"btn",onclick:async ()=>{
-        try { const r = await api("GET", fillPath(svc.resource_path,{name})); if (r.ok && r.json) value = String(r.json.value ?? value); } catch(_){}
-        revealed = true; render();
-      }}, icon("visibility"), "Retrieve secret value"));
-      return;
-    }
-    const pairs = asPairs(value);
-    const bar = el("div",{style:"display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap"});
-    if (pairs){
-      bar.append(el("button",{class:"btn"+(plaintext?"":" primary"),onclick:()=>{plaintext=false;render();}}, "Key/value"));
-      bar.append(el("button",{class:"btn"+(plaintext?" primary":""),onclick:()=>{plaintext=true;render();}}, "Plaintext"));
-    } else { plaintext = true; }
-    bar.append(el("div",{style:"flex:1"}));
-    if (!editing) bar.append(el("button",{class:"btn",onclick:()=>{editing=true;render();}}, icon("edit"), "Edit"));
-    body.append(bar);
-    if (plaintext || !pairs){
-      const ta = el("textarea",{rows:7,style:"width:100%;box-sizing:border-box;font-family:monospace;font-size:13px;padding:8px;border:1px solid #aab7b8;border-radius:4px"});
-      ta.value = value; ta.readOnly = !editing;
-      body.append(ta);
-      if (editing) body.append(saveBar(()=> ta.value));
-    } else {
-      const tbl = el("table",{class:"aws",style:"width:100%"});
-      const hr = el("tr",{}, el("th",{},"Key"), el("th",{},"Value"));
-      if (editing) hr.append(el("th",{style:"width:44px"},""));
-      tbl.append(hr);
-      const inputs = [];
-      function addRow(k,v){
-        const ki = el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
-        const vi = el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
-        ki.value = k; vi.value = v; ki.readOnly = !editing; vi.readOnly = !editing;
-        const pair = {ki, vi};
-        inputs.push(pair);
-        const tr = el("tr",{}, el("td",{},ki), el("td",{},vi));
-        if (editing) tr.append(el("td",{}, el("button",{class:"btn del",title:"Remove",
-          onclick:()=>{ const idx=inputs.indexOf(pair); if(idx>=0) inputs.splice(idx,1); tr.remove(); }}, "✕")));
-        tbl.append(tr);
-      }
-      pairs.forEach(p => addRow(p[0], p[1]));
-      body.append(tbl);
-      if (editing){
-        body.append(el("button",{class:"btn",style:"margin-top:10px",onclick:()=>addRow("","")}, icon("add"), "Add row"));
-        body.append(saveBar(()=> JSON.stringify(Object.fromEntries(
-          inputs.map(p=>[p.ki.value.trim(), p.vi.value]).filter(e=>e[0])))));
-      }
-    }
-  }
-  render();
-};
-
 // KMS "General configuration" — mirrors the real console: key facts + editable
 // Description (Save) + Enable/Disable key (= UpdateKeyDescription/Enable/DisableKey).
-SUB_RENDERERS.kmsconfig = function(svc, full, host){
-  const id = String(full.key_id || full.KeyId || getPath(full, svc.name_field) || "");
-  const panel = el("div",{class:"panel"}); host.append(panel);
-  function render(){
-    panel.innerHTML = "";
-    panel.append(el("div",{class:"panel-h"}, icon("info"), "General configuration"));
-    const body = el("div",{style:"padding:14px"}); panel.append(body);
-    const enabled = (full.state ? full.state === "Enabled" : !!full.enabled);
-    const facts = [["Key ID", full.key_id||id], ["ARN", full.arn], ["Status", enabled?"Enabled":(full.state||"Disabled")],
-                   ["Key spec", full.key_spec], ["Key usage", full.key_usage], ["Alias", full.alias||"—"]];
-    const grid = el("div",{style:"display:grid;grid-template-columns:150px 1fr;gap:7px 14px;margin-bottom:18px;font-size:13px"});
-    facts.forEach(f=>{ grid.append(el("div",{style:"color:#5f6b7a"}, f[0]), el("div",{class:"mono small"}, String(f[1]??"—"))); });
-    body.append(grid);
-    body.append(el("div",{style:"font-weight:600;margin-bottom:6px"}, "Description"));
-    const desc = el("input",{value: full.description||"", style:"width:100%;max-width:560px;box-sizing:border-box;border:1px solid #aab7b8;border-radius:4px;padding:7px"});
-    body.append(desc);
-    const bar = el("div",{style:"display:flex;gap:8px;margin-top:16px"});
-    bar.append(el("button",{class:"btn primary",onclick:async()=>{
-      const r = await api("PUT", fillPath(svc.resource_path,{name:id}), {description: desc.value});
-      if (r.ok){ full.description = desc.value; toast("Description saved"); } else toast("Save failed","err");
-    }}, icon("save"), "Save description"));
-    bar.append(el("button",{class:"btn"+(enabled?" del":""),onclick:async()=>{
-      const r = await api("PUT", fillPath(svc.resource_path,{name:id}), {enabled: !enabled});
-      if (r.ok){ full.enabled = !enabled; full.state = !enabled?"Enabled":"Disabled"; toast((!enabled?"Enabled":"Disabled")+" key"); render(); }
-      else toast("Failed","err");
-    }}, icon("power_settings_new"), enabled?"Disable key":"Enable key"));
-    body.append(bar);
-  }
-  render();
-};
-
 SUB_RENDERERS.overview = function(svc, full, host, tab){
   if (svc.key === "vpc" && tab && tab.key === "details"){
     // VPC console "Details" card: the VPC's own attributes (not the generic summary)
@@ -2728,20 +2629,6 @@ SUB_RENDERERS.activitylog = async function(svc, full, host){
   }
   load();
 };
-SUB_RENDERERS.iam = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("admin_panel_settings"),
-    el("div",{}, "IAM permissions and resource-based policies attached to this resource.")));
-  // FUNCTIONAL: attach/list/detach policy statements for this resource, persisted
-  // via the generic sub-resource store (durable across reload + cross-tab).
-  renderSubResourceTab(svc, full, host, {key:"perms", type:"iam", icon:"admin_panel_settings"}, {
-    kind:"list", title:"Attached policies", singular:"policy",
-    fields:[{k:"name",label:"Policy name",ph:"AllowReadAccess"},
-            {k:"policy_arn",label:"Policy ARN (managed) — optional",ph:"arn:aws:iam::aws:policy/ReadOnlyAccess"},
-            {k:"effect",label:"Effect",ph:"Allow | Deny"},
-            {k:"actions",label:"Actions",ph:"s3:GetObject,s3:ListBucket"}],
-    columns:[["name","Policy"],["effect","Effect"],["actions","Actions"],["status","Status"]],
-  });
-};
 SUB_RENDERERS.tags = function(svc, full, host){
   const tags = (full.tags && typeof full.tags === "object") ? full.tags : {};
   const state = {tags: {...tags}};
@@ -2795,7 +2682,31 @@ SUB_RENDERERS.listtable = function(svc, full, host, tab){
   }))));
   host.append(tbl);
 };
-SUB_RENDERERS.properties = function(svc, full, host){
+const _PROPS_SPECIAL = new Set(["ec2", "eventbridge", "kms", "secretsmanager", "dynamodb", "rds", "s3"]);
+SUB_RENDERERS.properties = async function(svc, full, host){
+  // Every other service: the resource's own Describe/Get response, read fresh.
+  if (!_PROPS_SPECIAL.has(svc.key) && svc.resource_path) {
+    // SSM: DescribeParameters (metadata, not the value); others: the resource Get.
+    const r = await api("GET", fillPath(svc.resource_path, {name: itemKey(svc, full)}) + (svc.key === "ssm" ? "/metadata" : ""));
+    if (r.ok && r.json && typeof r.json === "object") { const {ok, ...rest} = r.json; full = {...full, ...rest}; }
+  }
+  // EC2: every property DescribeInstances returns for the instance, not just the grid row.
+  if (svc.key === "ec2") { const r = await api("GET", _ec2p(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
+  // EventBridge: DescribeRule.
+  if (svc.key === "eventbridge") { const r = await api("GET", _ebp(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
+  // KMS: DescribeKey.
+  if (svc.key === "kms") { const r = await api("GET", _kmsp(full, "general")); if (r.ok && r.json) full = {...full, ...r.json}; }
+  // Secrets Manager: DescribeSecret.
+  if (svc.key === "secretsmanager") { const r = await api("GET", _secp(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
+  // DynamoDB: the table's DescribeTable summary.
+  if (svc.key === "dynamodb") { const r = await api("GET", _ddbp(full, "general")); if (r.ok && r.json) full = {...full, ...r.json}; }
+  // RDS: every setting DescribeDBInstances returns for the instance.
+  if (svc.key === "rds") { const r = await api("GET", _rdsp(full, "configuration")); if (r.ok && r.json) { const {instance_classes, log_types, ...c} = r.json; full = {...full, ...c}; } }
+  // S3: the bucket overview plus its default encryption and Object Ownership.
+  if (svc.key === "s3") {
+    const [e, o] = await Promise.all([api("GET", _s3p(full, "config/encryption")), api("GET", _s3p(full, "config/ownership"))]);
+    full = {...full, default_encryption: e.ok ? e.json.value : undefined, object_ownership: o.ok ? o.json.value : undefined};
+  }
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "All properties"));
   const grid = el("div",{style:"display:grid;grid-template-columns:280px 1fr;gap:4px 12px;font-size:12.5px"});
@@ -2888,6 +2799,17 @@ function renderMeasuredMetrics(host, service, resource){
 SUB_RENDERERS.connect = function(svc, full, host){
   host.append(el("div",{class:"alert info"}, icon("terminal"),
     el("div",{}, "Connect to your instance via SSH (real key + port forward) or via the LXD shell fallback.")));
+  // SSH client instructions from the instance itself (public DNS, the AMI's login user, key pair).
+  const sshCard = el("div",{}); host.append(sshCard);
+  api("GET", _ec2p(full, "details")).then(r => {
+    if (!r.ok || !r.json) return;
+    const d = r.json;
+    sshCard.append(_dkv("SSH client", [["Instance ID", d.instance_id, 1], ["Public DNS", d.public_dns_name, 1],
+      ["Public IPv4 address", d.public_ip_address, 1], ["Username", d.default_username], ["Example", d.ssh_command, 1]]));
+    sshCard.append(el("div",{class:"small",style:"margin:-6px 0 14px;color:var(--sub)"}, d.key_name
+      ? "The key used to launch this instance is " + d.key_name + ".pem."
+      : "No key pair is associated with this instance; it was launched without one."));
+  });
 
   // Container for the live values — populated by an async fetch to the
   // /connect-info endpoint, which lazy-provisions the SSH key + lxc proxy
@@ -2969,59 +2891,6 @@ SUB_RENDERERS.connect = function(svc, full, host){
       wrap.innerHTML = "";
       wrap.append(el("div",{class:"alert warn"}, el("div",{}, `Connect endpoint error: ${e.message}`)));
     });
-};
-SUB_RENDERERS.ec2networking = function(svc, full, host){
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, svc.key === "rds" ? "Connectivity & security" : "Networking details"));
-  const g = el("div",{class:"kv-grid"});
-  // RDS instances have an endpoint / subnet group, not EC2 IPv4 addresses.
-  const rows = svc.key === "rds" ? [
-    ["Endpoint",             full.endpoint_address || full.endpoint || (full.db_instance_identifier ? full.db_instance_identifier+"."+REGION+".rds.amazonaws.com" : "")],
-    ["Port",                 full.endpoint_port || full.port || 5432],
-    ["VPC ID",               full.vpc_id || "default"],
-    ["Subnet group",         full.db_subnet_group_name || "default"],
-    ["Availability Zone",    full.availability_zone || REGION+"a"],
-    ["Security groups",      (full.security_group_ids||[]).join(", ") || "default (sg-default)"],
-    ["Publicly accessible",  full.publicly_accessible ? "Yes" : "No"],
-  ] : [
-    ["Private IPv4 address", full.private_ip || "—"],
-    ["Public IPv4 address",  full.public_ip || "—"],
-    ["Public IPv4 DNS",      full.public_dns || "—"],
-    ["VPC ID",               full.vpc_id || "default"],
-    ["Subnet ID",            full.subnet_id || "subnet-default"],
-    ["Availability Zone",    full.availability_zone || REGION+"a"],
-    ["Security groups",      ((full.security_groups && full.security_groups.length ? full.security_groups : (full.security_group_ids || [])).map(g => (g && (g.groupName || g.name || g.id)) || g).join(", ")) || "default (sg-default)"],
-    ["Network interfaces",   String((full.network_interfaces||[]).length || 1)],
-  ];
-  rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k),
-    el("div",{class:"v"+(/id|address/i.test(k)?" mono":"")}, String(v)))));
-  card.append(g); host.append(card);
-};
-SUB_RENDERERS.ec2security = function(svc, full, host){
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Security details"));
-  const g = el("div",{class:"kv-grid"});
-  [
-    ["IAM role",       full.iam_instance_profile || "—"],
-    ["Owner",          ACCOUNT],
-    ["Launch time",    full.launch_time || full.created || "—"],
-    ["Key pair name",  full.key_name || "(no key pair)"],
-    ["State transition reason", full.state_reason || "—"],
-  ].forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, String(v)))));
-  card.append(g); host.append(card);
-};
-SUB_RENDERERS.ec2storage = function(svc, full, host){
-  const tbl = el("table",{class:"aws"});
-  tbl.append(el("tr",{}, el("th",{}, "Volume ID"), el("th",{}, "Type"),
-    el("th",{}, "Size (GiB)"), el("th",{}, "Encrypted"), el("th",{}, "Status")));
-  const vols = full.block_device_mappings || [{volume_id:"vol-root", volume_type:"gp3", size_gb:8, encrypted:true, status:"in-use"}];
-  vols.forEach(v => tbl.append(el("tr",{},
-    el("td",{}, el("a",{class:"id"}, v.volume_id || v.device_name || "—")),
-    el("td",{}, v.volume_type || "gp3"),
-    el("td",{}, String(v.size_gb || v.volume_size || 8)),
-    el("td",{}, String(v.encrypted ?? true)),
-    el("td",{}, stateBadge(v.status || "in-use")))));
-  host.append(tbl);
 };
 SUB_RENDERERS.sgrules = function(svc, full, host){
   host.append(el("div",{class:"alert info"}, icon("shield"),
@@ -3212,160 +3081,9 @@ SUB_RENDERERS.bucketobjects = function(svc, full, host){
     host.append(tbl);
   });
 };
-SUB_RENDERERS.bucketversioning = function(svc, full, host){
-  const enabled = !!full.versioning_enabled || full.versioning === "Enabled";
-  host.append(el("div",{class:"alert info"}, icon("history_edu"),
-    el("div",{}, "Versioning preserves an object's full history (including delete markers).")));
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Bucket Versioning"));
-  card.append(el("div",{class:"kv-grid"},
-    el("div",{}, el("div",{class:"k"}, "Status"), el("div",{class:"v"}, enabled ? "Enabled" : "Suspended"))));
-  card.append(el("div",{style:"margin-top:14px"},
-    el("button",{class:"btn primary",onclick:async()=>{
-      const r = await api(svc.api_paths.versioning.method,
-        fillPath(svc.api_paths.versioning.path, {name: full.name}),
-        {status: enabled ? "Suspended" : "Enabled"});
-      if (r.ok) toast("Versioning "+(enabled?"suspended":"enabled")); else toast("Update failed","err");
-    }}, enabled ? "Suspend versioning" : "Enable versioning")));
-  host.append(card);
-};
-SUB_RENDERERS.bucketnotifications = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("notifications"),
-    el("div",{}, "Notify EventBridge, SNS, SQS, or Lambda on object events.")));
-  // FUNCTIONAL: create/list/delete notification configurations, persisted via the
-  // generic sub-resource store (durable across reload + cross-tab).
-  renderSubResourceTab(svc, full, host, {key:"notifications", type:"bucketnotifications", icon:"notifications"}, {
-    kind:"list", title:"Event notifications", singular:"notification",
-    fields:[{k:"name",label:"Name",ph:"on-object-created"},
-            {k:"destination_type",label:"Destination type",ph:"SQS | SNS | Lambda | EventBridge"},
-            {k:"destination_arn",label:"Destination ARN",ph:"arn:aws:sqs:…"},
-            {k:"events",label:"Events",ph:"s3:ObjectCreated:*"}],
-    columns:[["name","Name"],["destination_type","Destination"],["events","Events"],["status","Status"]],
-  });
-};
-
 // Lambda specific
-SUB_RENDERERS.lambdacode = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("code"),
-    el("div",{}, "Function source code. Save to deploy a new version (PATCH /api/lambda/functions/{name}/code).")));
-  const ta = el("textarea",{style:"width:100%;min-height:340px"});
-  ta.value = full.code || "def lambda_handler(event, context):\n    return {'statusCode': 200, 'body': 'Hello!'}";
-  host.append(el("div",{class:"field"}, ta));
-  host.append(el("div",{style:"margin-top:14px"},
-    el("button",{class:"btn primary",onclick:async()=>{
-      const r = await api(svc.api_paths.updateCode.method,
-        fillPath(svc.api_paths.updateCode.path, {name: full.function_name || full.name}),
-        {code: ta.value});
-      if (r.ok) toast("Code deployed"); else toast("Deploy failed", "err");
-    }}, icon("save"), "Deploy")));
-};
-SUB_RENDERERS.lambdainvoke = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("play_arrow"),
-    el("div",{}, "Test your function with a sample event payload.")));
-  const ta = el("textarea",{style:"width:100%;min-height:160px"});
-  ta.value = '{\n  "key": "value"\n}';
-  host.append(el("div",{class:"field"}, ta));
-  const out = el("pre",{class:"json",style:"margin-top:12px"});
-  host.append(el("div",{style:"margin-top:14px"},
-    el("button",{class:"btn primary",onclick:async()=>{
-      let payload = {}; try { payload = JSON.parse(ta.value); }
-      catch(e) { toast("Invalid JSON","err"); return; }
-      const r = await api(svc.api_paths.invoke.method,
-        fillPath(svc.api_paths.invoke.path, {name: full.function_name || full.name}), payload);
-      out.textContent = JSON.stringify(r.json, null, 2);
-      if (r.ok) toast("Invocation succeeded"); else toast("Invocation failed", "err");
-    }}, icon("play_arrow"), "Test")));
-  host.append(out);
-};
-SUB_RENDERERS.lambdaperms = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("policy"),
-    el("div",{}, "Resource-based policy statements granting other services/accounts permission to invoke this function.")));
-  // FUNCTIONAL: add/list/remove permission statements, persisted (durable).
-  renderSubResourceTab(svc, full, host, {key:"perms", type:"lambdaperms", icon:"policy"}, {
-    kind:"list", title:"Resource-based policy statements", singular:"statement",
-    fields:[{k:"name",label:"Statement ID",ph:"AllowS3Invoke"},
-            {k:"principal",label:"Principal",ph:"s3.amazonaws.com"},
-            {k:"action",label:"Action",ph:"lambda:InvokeFunction"},
-            {k:"source_arn",label:"Source ARN (optional)",ph:"arn:aws:s3:::my-bucket"}],
-    columns:[["name","Statement ID"],["principal","Principal"],["action","Action"],["status","Status"]],
-  });
-};
-
 // SQS
-SUB_RENDERERS.sqsmessages = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("send"),
-    el("div",{}, "Send a test message or poll for messages.")));
-  const ta = el("textarea",{style:"width:100%;min-height:80px"});
-  ta.value = '{"hello":"world"}';
-  host.append(el("div",{class:"field"}, ta));
-  const out = el("pre",{class:"json",style:"margin-top:12px"});
-  host.append(el("div",{style:"margin-top:14px;display:flex;gap:8px"},
-    el("button",{class:"btn primary",onclick:async()=>{
-      const r = await api(svc.api_paths.send.method,
-        fillPath(svc.api_paths.send.path, {name: full.name}), {body: ta.value});
-      if (r.ok) toast("Message sent"); else toast("Send failed", "err");
-    }}, icon("send"), "Send message"),
-    el("button",{class:"btn",onclick:async()=>{
-      const r = await api(svc.api_paths.receive.method,
-        fillPath(svc.api_paths.receive.path, {name: full.name}), {max_messages: 10});
-      out.textContent = JSON.stringify(r.json, null, 2);
-    }}, icon("download"), "Poll for messages")));
-  host.append(out);
-};
-SUB_RENDERERS.sqsdlq = function(svc, full, host){
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Dead-letter queue"));
-  // Like the real console: with no redrive policy the tab only says "Disabled"
-  // (no queue / maximum-receives fields to fill).
-  card.append(el("div",{class:"kv-grid"},
-    ...(full.dlq_arn ? [
-      el("div",{}, el("div",{class:"k"}, "Queue"), el("div",{class:"v"}, full.dlq_arn)),
-      el("div",{}, el("div",{class:"k"}, "Maximum receives"), el("div",{class:"v"}, String(full.max_receive_count||5)))]
-    : [el("div",{}, el("div",{class:"k"}, "Dead-letter queue"), el("div",{class:"v"}, "Disabled"))])));
-  host.append(card);
-};
-
 // SNS
-SUB_RENDERERS.snssubs = function(svc, full, host){
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Subscriptions ("+(full.subscription_list||[]).length+")"));
-  const rows = full.subscription_list || [];
-  if (!rows.length) card.append(el("div",{class:"empty"}, "No subscriptions yet — add one below."));
-  else {
-    const tbl = el("table",{class:"aws"});
-    tbl.append(el("tr",{}, ["Subscription ID","Protocol","Endpoint","Status"].map(h => el("th",{}, h))));
-    rows.forEach(s => tbl.append(el("tr",{}, el("td",{class:"mono small"}, s.name), el("td",{}, s.protocol),
-      el("td",{class:"mono small"}, s.endpoint), el("td",{}, s.status))));
-    card.append(tbl);
-  }
-  const proto = el("input",{value:"sqs",style:"width:110px"});
-  const ep = el("input",{value:"arn:aws:sqs:us-east-1:123456789012:MyQueue",style:"width:360px"});
-  card.append(el("div",{style:"margin-top:14px;display:flex;gap:8px;align-items:center"}, proto, ep,
-    el("button",{class:"btn primary",onclick:async()=>{
-      const r = await api(svc.api_paths.subscribe.method, fillPath(svc.api_paths.subscribe.path,{name:full.name}),
-        {protocol: proto.value, endpoint: ep.value});
-      if (r.ok) { toast("Subscription created"); navigate({view:"detail", item:full.name}); }
-      else toast((r.json && r.json.detail) || "Subscribe failed", "err");
-    }}, icon("add"), "Create subscription")));
-  host.append(card);
-};
-SUB_RENDERERS.snspublish = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("send"),
-    el("div",{}, "Publish a message to this topic. SQS subscriptions receive it; other protocols appear in the Message log.")));
-  const subj = el("input",{value:"Hello from Vyomi",style:"width:100%"});
-  const ta = el("textarea",{style:"width:100%;min-height:80px"});
-  ta.value = '{"hello":"world"}';
-  host.append(el("div",{class:"field"}, subj), el("div",{class:"field"}, ta));
-  const out = el("pre",{class:"json",style:"margin-top:12px"});
-  host.append(el("div",{style:"margin-top:14px;display:flex;gap:8px"},
-    el("button",{class:"btn primary",onclick:async()=>{
-      const r = await api(svc.api_paths.publish.method, fillPath(svc.api_paths.publish.path,{name:full.name}),
-        {subject: subj.value, message: ta.value});
-      out.textContent = JSON.stringify(r.json, null, 2);
-      if (r.ok) toast("Message published"); else toast("Publish failed", "err");
-    }}, icon("send"), "Publish message")));
-  host.append(out);
-};
 SUB_RENDERERS.snspolicy = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Access policy"));
@@ -3391,39 +3109,7 @@ SUB_RENDERERS.dynamoitems = function(svc, full, host){
     host.append(tbl);
   });
 };
-SUB_RENDERERS.dynamoquery = function(svc, full, host){
-  host.append(el("div",{class:"alert info"}, icon("search"),
-    el("div",{}, "Run a Query or Scan operation against this table.")));
-  const ta = el("textarea",{style:"width:100%;min-height:140px"});
-  ta.value = '{\n  "expression_attribute_values": {":pk":"user123"},\n  "key_condition_expression":"pk = :pk"\n}';
-  host.append(el("div",{class:"field"}, ta));
-  const out = el("pre",{class:"json",style:"margin-top:12px"});
-  host.append(el("div",{style:"margin-top:14px;display:flex;gap:8px"},
-    el("button",{class:"btn primary",onclick:async()=>{
-      let p = {}; try { p = JSON.parse(ta.value); } catch(e) { toast("Invalid JSON","err"); return; }
-      const r = await api(svc.api_paths.query.method,
-        fillPath(svc.api_paths.query.path, {name: full.name}), p);
-      out.textContent = JSON.stringify(r.json, null, 2);
-    }}, icon("search"), "Query"),
-    el("button",{class:"btn",onclick:async()=>{
-      const r = await api(svc.api_paths.scan.method,
-        fillPath(svc.api_paths.scan.path, {name: full.name}), {});
-      out.textContent = JSON.stringify(r.json, null, 2);
-    }}, "Scan")));
-  host.append(out);
-};
-
 // RDS
-SUB_RENDERERS.rdsendpoints = function(svc, full, host){
-  const card = el("div",{class:"kv-card"});
-  card.append(el("div",{class:"h"}, "Endpoint & port"));
-  card.append(el("div",{class:"kv-grid"},
-    el("div",{}, el("div",{class:"k"}, "Endpoint"), el("div",{class:"v mono"}, full.endpoint_address || full.endpoint || (full.db_instance_identifier ? full.db_instance_identifier+"."+REGION+".rds.amazonaws.com" : "—"))),
-    el("div",{}, el("div",{class:"k"}, "Port"),     el("div",{class:"v"}, String(full.endpoint_port || full.port || 5432))),
-    el("div",{}, el("div",{class:"k"}, "Status"),   el("div",{class:"v"}, full.status || "available")),
-    el("div",{}, el("div",{class:"k"}, "Master username"), el("div",{class:"v"}, full.master_username || "postgres"))));
-  host.append(card);
-};
 SUB_RENDERERS.rdssnapshots = function(svc, full, host){
   fetch(ORIGIN+svc.api_paths.snapshots.path).then(r=>r.json()).then(j=>{
     const snaps = (j.snapshots || j.value || []).filter(s => !s.db_instance || s.db_instance === full.db_instance_identifier);
@@ -3484,12 +3170,25 @@ SUB_RENDERERS.sfnlist = function(svc, full, host, tab){
   }).catch(e => host.append(el("div",{class:"alert err"}, "Failed to load: " + e.message)));
 };
 // Step Functions — the Amazon States Language definition, pretty-printed.
-SUB_RENDERERS.sfndefinition = function(svc, full, host){
-  let txt = full.definition || "";
+SUB_RENDERERS.sfndefinition = async function(svc, full, host){
+  // DescribeStateMachine, read when the tab opens; Save = UpdateStateMachine.
+  const m = await _dget(host, fillPath(svc.resource_path, {name: itemKey(svc, full)})); if (!m) return;
+  let txt = m.definition || full.definition || "";
   try { txt = JSON.stringify(JSON.parse(txt), null, 2); } catch (_) {}
+  host.append(_dkv("State machine", [["Type", m.type], ["ARN", m.arn || m.stateMachineArn, 1], ["IAM role ARN", m.role_arn || m.roleArn, 1], ["Status", m.status]]
+    .filter(([, v]) => v !== undefined)));
+  let asl = {}; try { asl = JSON.parse(txt); } catch (_) {}
+  const states = Object.entries(asl.States || {}).map(([n, st]) => ({name: n, type: st.Type, next: st.End ? "End" : (st.Next || ""), start: n === asl.StartAt ? "Yes" : ""}));
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "States (" + states.length + ")"),
+    _dtbl([["name","State"],["type","Type"],["next","Next"],[s => s.start || "No","Start state"]], states, "The definition has no states.")));
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Amazon States Language definition"));
-  card.append(el("pre",{class:"mono small", style:"white-space:pre-wrap;margin:0"}, txt || "none"));
+  const ta = el("textarea",{"data-testid":"sfn-definition",style:"width:100%;min-height:240px;font-family:Consolas,Menlo,monospace"}); ta.value = txt;
+  card.append(ta, el("button",{class:"btn primary",style:"margin-top:10px","data-testid":"sfn-definition-save",onclick:async()=>{
+    try { JSON.parse(ta.value); } catch (e) { toast("The definition is not valid JSON", "err"); return; }
+    const r = await api("PATCH", fillPath(svc.resource_path, {name: itemKey(svc, full)}), {definition: ta.value});
+    if (r.ok) { toast("State machine updated"); _rerender(); } else toast("Update failed: " + _derr(r), "err");
+  }}, icon("save"), "Save"));
   host.append(card);
 };
 
@@ -3522,9 +3221,6 @@ SUB_RENDERERS.apistages = function(svc, full, host){
 // =====================================================================
 const TAB_ALIASES = {
   // keyed by lower-cased tab label (preferred) — falls back to the tab key/type.
-  "ec2 serial console":["serial_console","serial_console_output","console_output"],
-  "user data":["user_data","userData","metadata.user_data"],
-  "iam role":["iam_instance_profile","iam_role","instance_profile","iam.role"],
   "versions":["versions","version_ids","version","versioning.versions"],
   "lifecycle rules":["lifecycle","lifecycle.rule","lifecycle_rules","lifecycle_configuration"],
   "default encryption":["encryption","server_side_encryption","sse","encryption_configuration"],
@@ -3571,9 +3267,6 @@ const TAB_ALIASES = {
   "grants":["grants","grant"],
 };
 const TAB_DESC = {
-  "ec2 serial console":"Text-based access to the instance's serial port for low-level troubleshooting.",
-  "user data":"Boot-time script/metadata passed to the instance at launch.",
-  "iam role":"IAM instance profile/role granting the instance AWS permissions.",
   "versions":"Versions/revisions tracked for this resource.",
   "lifecycle rules":"Rules that transition or expire objects by age/prefix.",
   "default encryption":"Server-side encryption applied to new objects by default.",
@@ -3640,188 +3333,6 @@ async function subApi(method, ns, op, name, body){
 //   kind:"settings" — fields (each {k,label,type?:text|number|toggle|select,
 //                     options?,ph?,default?})
 const SUBRES_CATALOG = {
-  // ── Secrets Manager ──
-  "secretsmanager:versions": {kind:"list", title:"Secret versions", singular:"version",
-    fields:[{k:"name",label:"Version label",ph:"AWSCURRENT"},{k:"description",label:"Description"}],
-    columns:[["name","Version label"],["description","Description"],["status","Status"]]},
-  "secretsmanager:rotation": {kind:"settings", title:"Rotation configuration",
-    fields:[{k:"rotation_enabled",label:"Automatic rotation",type:"toggle",default:false},
-            {k:"rotation_days",label:"Rotate every (days)",type:"number",default:30},
-            {k:"rotation_lambda_arn",label:"Rotation Lambda ARN",ph:"arn:aws:lambda:…"}]},
-  "secretsmanager:replication": {kind:"list", title:"Replica Regions", singular:"replica",
-    fields:[{k:"name",label:"Region",ph:"us-west-2"},{k:"kms_key_id",label:"KMS key",ph:"alias/aws/secretsmanager"}],
-    columns:[["name","Region"],["kms_key_id","KMS key"],["status","Status"]]},
-  "secretsmanager:kmsKey": {kind:"settings", title:"Encryption key",
-    fields:[{k:"kms_key_id",label:"KMS key ID",default:"alias/aws/secretsmanager"}]},
-  // ── KMS ──
-  "kms:aliases": {kind:"list", title:"Aliases", singular:"alias",
-    fields:[{k:"name",label:"Alias name",ph:"alias/my-key"}],
-    columns:[["name","Alias"],["status","Status"]]},
-  "kms:rotation": {kind:"settings", title:"Key rotation",
-    fields:[{k:"rotation_enabled",label:"Automatic key rotation",type:"toggle",default:false},
-            {k:"rotation_days",label:"Rotation period (days)",type:"number",default:365}]},
-  "kms:keyUsers": {kind:"list", title:"Key users", singular:"key user",
-    fields:[{k:"name",label:"IAM principal",ph:"arn:aws:iam::…:user/dev"}],
-    columns:[["name","Principal"],["status","Status"]]},
-  "kms:keyAdmins": {kind:"list", title:"Key administrators", singular:"administrator",
-    fields:[{k:"name",label:"IAM principal",ph:"arn:aws:iam::…:role/admin"}],
-    columns:[["name","Principal"],["status","Status"]]},
-  "kms:grants": {kind:"list", title:"Grants", singular:"grant",
-    fields:[{k:"name",label:"Grantee principal",ph:"arn:aws:iam::…:role/app"},
-            {k:"operations",label:"Operations",ph:"Encrypt,Decrypt"}],
-    columns:[["name","Grantee"],["operations","Operations"],["status","Status"]]},
-  // ── RDS ──
-  "rds:modify": {kind:"settings", title:"Modify DB instance", saveToResource:"modify",
-    fields:[{k:"instance_class",label:"DB instance class",type:"select",
-             options:["db.t3.micro","db.t3.small","db.t3.medium","db.m5.large","db.m5.xlarge"]},
-            {k:"allocated_storage",label:"Allocated storage (GiB)",type:"number",default:20}]},
-  "rds:backups": {kind:"settings", title:"Automated backups",
-    fields:[{k:"backup_retention_period",label:"Retention period (days)",type:"number",default:7},
-            {k:"preferred_backup_window",label:"Backup window (UTC)",ph:"03:00-04:00"},
-            {k:"copy_tags_to_snapshot",label:"Copy tags to snapshots",type:"toggle",default:true}]},
-  "rds:maintenance": {kind:"settings", title:"Maintenance",
-    fields:[{k:"preferred_maintenance_window",label:"Maintenance window (UTC)",ph:"sun:05:00-sun:06:00"},
-            {k:"auto_minor_version_upgrade",label:"Auto minor version upgrade",type:"toggle",default:true}]},
-  "rds:logs": {kind:"settings", title:"Log exports",
-    fields:[{k:"export_postgresql",label:"Export PostgreSQL log",type:"toggle",default:false},
-            {k:"export_upgrade",label:"Export upgrade log",type:"toggle",default:false}]},
-  "rds:queryInsights": {kind:"settings", title:"Performance Insights",
-    fields:[{k:"performance_insights_enabled",label:"Enable Performance Insights",type:"toggle",default:false},
-            {k:"retention_days",label:"Retention (days)",type:"number",default:7}]},
-  // ── DynamoDB ──
-  "dynamodb:capacity": {kind:"settings", title:"Read/write capacity",
-    fields:[{k:"billing_mode",label:"Capacity mode",type:"select",options:["PAY_PER_REQUEST","PROVISIONED"]},
-            {k:"read_capacity",label:"Read capacity units",type:"number",default:5},
-            {k:"write_capacity",label:"Write capacity units",type:"number",default:5}]},
-  "dynamodb:encryption": {kind:"settings", title:"Encryption at rest",
-    fields:[{k:"sse_type",label:"Encryption type",type:"select",options:["AWS_OWNED","KMS"]},
-            {k:"kms_key_id",label:"KMS key ID",ph:"alias/aws/dynamodb"}]},
-  "dynamodb:ttl": {kind:"settings", title:"Time to live (TTL)",
-    fields:[{k:"ttl_enabled",label:"Enable TTL",type:"toggle",default:false},
-            {k:"ttl_attribute",label:"TTL attribute name",ph:"expiresAt"}]},
-  "dynamodb:streams": {kind:"settings", title:"DynamoDB streams",
-    fields:[{k:"stream_enabled",label:"Enable stream",type:"toggle",default:false},
-            {k:"stream_view_type",label:"View type",type:"select",
-             options:["NEW_IMAGE","OLD_IMAGE","NEW_AND_OLD_IMAGES","KEYS_ONLY"]}]},
-  "dynamodb:indexes": {kind:"list", title:"Global secondary indexes", singular:"index",
-    fields:[{k:"name",label:"Index name",ph:"gsi-email"},{k:"partition_key",label:"Partition key",ph:"email"},
-            {k:"sort_key",label:"Sort key (optional)"}],
-    columns:[["name","Index"],["partition_key","Partition key"],["sort_key","Sort key"],["status","Status"]]},
-  "dynamodb:backups": {kind:"list", title:"On-demand backups", singular:"backup",
-    fields:[{k:"name",label:"Backup name",ph:"backup-2024-01"}],
-    columns:[["name","Backup"],["status","Status"]]},
-  "dynamodb:pitr": {kind:"settings", title:"Point-in-time recovery",
-    fields:[{k:"pitr_enabled",label:"Enable PITR",type:"toggle",default:false}]},
-  "dynamodb:insights": {kind:"settings", title:"Contributor Insights",
-    fields:[{k:"insights_enabled",label:"Enable Contributor Insights",type:"toggle",default:false}]},
-  // ── SQS ──
-  "sqs:encryption": {kind:"settings", title:"Encryption",
-    fields:[{k:"sqs_managed_sse",label:"Amazon SQS managed SSE",type:"toggle",default:true},
-            {k:"kms_master_key_id",label:"KMS key (if using KMS)",ph:"alias/aws/sqs"}]},
-  // ── Lambda ──
-  "lambda:envVars": {kind:"list", title:"Environment variables", singular:"variable",
-    fields:[{k:"name",label:"Key",ph:"LOG_LEVEL"},{k:"value",label:"Value",ph:"info"}],
-    columns:[["name","Key"],["value","Value"]]},
-  "lambda:versions": {kind:"list", title:"Versions", singular:"version",
-    fields:[{k:"name",label:"Version",ph:"1"},{k:"description",label:"Description"}],
-    columns:[["name","Version"],["description","Description"],["status","Status"]]},
-  "lambda:aliases": {kind:"list", title:"Aliases", singular:"alias",
-    fields:[{k:"name",label:"Alias name",ph:"prod"},{k:"version",label:"Target version",ph:"1"}],
-    columns:[["name","Alias"],["version","Version"],["status","Status"]]},
-  // ── IAM ──
-  "iam:providers": {kind:"list", title:"Identity providers", singular:"provider",
-    fields:[{k:"name",label:"Provider name",ph:"MyOIDC"},
-            {k:"type",label:"Type",ph:"OIDC"},{k:"url",label:"Provider URL",ph:"https://…"}],
-    columns:[["name","Provider"],["type","Type"],["url","URL"],["status","Status"]]},
-  "iam:passwordPolicy": {kind:"settings", title:"Password policy",
-    fields:[{k:"min_length",label:"Minimum length",type:"number",default:8},
-            {k:"require_symbols",label:"Require symbols",type:"toggle",default:true},
-            {k:"require_numbers",label:"Require numbers",type:"toggle",default:true},
-            {k:"require_uppercase",label:"Require uppercase",type:"toggle",default:true},
-            {k:"max_age_days",label:"Max password age (days)",type:"number",default:90}]},
-  "iam:accessAdvisor": {kind:"settings", title:"Access Analyzer",
-    fields:[{k:"analyzer_enabled",label:"Enable analyzer",type:"toggle",default:false},
-            {k:"analyzer_name",label:"Analyzer name",ph:"default-analyzer"}]},
-  // ── S3 ──
-  "s3:lifecycle": {kind:"list", title:"Lifecycle rules", singular:"rule",
-    fields:[{k:"name",label:"Rule name",ph:"expire-logs"},{k:"prefix",label:"Prefix",ph:"logs/"},
-            {k:"expiration_days",label:"Expire after (days)",ph:"90"}],
-    columns:[["name","Rule"],["prefix","Prefix"],["expiration_days","Expire (days)"],["status","Status"]]},
-  "s3:encryption": {kind:"settings", title:"Default encryption",
-    fields:[{k:"sse_algorithm",label:"Encryption type",type:"select",options:["AES256","aws:kms"]},
-            {k:"kms_key_id",label:"KMS key (if aws:kms)",ph:"alias/aws/s3"},
-            {k:"bucket_key_enabled",label:"Bucket key",type:"toggle",default:true}]},
-  "s3:blockPublic": {kind:"settings", title:"Block Public Access",
-    fields:[{k:"block_public_acls",label:"Block public ACLs",type:"toggle",default:true},
-            {k:"ignore_public_acls",label:"Ignore public ACLs",type:"toggle",default:true},
-            {k:"block_public_policy",label:"Block public bucket policies",type:"toggle",default:true},
-            {k:"restrict_public_buckets",label:"Restrict public buckets",type:"toggle",default:true}]},
-  "s3:cors": {kind:"list", title:"Cross-origin resource sharing (CORS)", singular:"rule",
-    fields:[{k:"name",label:"Rule ID",ph:"allow-get"},{k:"allowed_origins",label:"Allowed origins",ph:"*"},
-            {k:"allowed_methods",label:"Allowed methods",ph:"GET,PUT"}],
-    columns:[["name","Rule"],["allowed_origins","Origins"],["allowed_methods","Methods"]]},
-  // ── VPC ──
-  "vpc:natGateways": {kind:"list", title:"NAT gateways", singular:"NAT gateway",
-    fields:[{k:"name",label:"Name",ph:"nat-1"},{k:"subnet_id",label:"Subnet",ph:"subnet-abc"}],
-    columns:[["name","Name"],["subnet_id","Subnet"],["status","Status"]]},
-  "vpc:endpoints": {kind:"list", title:"VPC endpoints", singular:"endpoint",
-    fields:[{k:"name",label:"Name",ph:"s3-endpoint"},{k:"service",label:"Service",ph:"com.amazonaws.us-east-1.s3"}],
-    columns:[["name","Name"],["service","Service"],["status","Status"]]},
-  "vpc:nacls": {kind:"list", title:"Network ACLs", singular:"network ACL",
-    fields:[{k:"name",label:"Name",ph:"nacl-1"}],
-    columns:[["name","Name"],["status","Status"]]},
-  "vpc:flowLogs": {kind:"list", title:"Flow logs", singular:"flow log",
-    fields:[{k:"name",label:"Name",ph:"flow-1"},{k:"destination",label:"Destination",ph:"cloud-watch-logs"},
-            {k:"traffic_type",label:"Traffic type",ph:"ALL"}],
-    columns:[["name","Name"],["destination","Destination"],["traffic_type","Traffic"],["status","Status"]]},
-  // ── S3 (versions) ──
-  "s3:versions": {kind:"list", title:"Object versions", singular:"version",
-    fields:[{k:"name",label:"Version ID",ph:"v1"},{k:"key",label:"Object key",ph:"file.txt"}],
-    columns:[["name","Version ID"],["key","Object key"],["status","Status"]]},
-  // ── SQS (purge = a single toggle-style confirmation setting) ──
-  "sqs:purge": {kind:"settings", title:"Purge messages",
-    fields:[{k:"confirm_purge",label:"Mark queue for purge",type:"toggle",default:false}]},
-  // ── API Gateway sub-resources ──
-  "apigateway:authorizers": {kind:"list", title:"Authorizers", singular:"authorizer",
-    fields:[{k:"name",label:"Name",ph:"jwt-auth"},{k:"type",label:"Type",ph:"JWT"}],
-    columns:[["name","Name"],["type","Type"],["status","Status"]]},
-  "apigateway:models": {kind:"list", title:"Models", singular:"model",
-    fields:[{k:"name",label:"Model name",ph:"Pet"},{k:"content_type",label:"Content type",ph:"application/json"}],
-    columns:[["name","Model"],["content_type","Content type"]]},
-  "apigateway:deployments": {kind:"list", title:"Deployments", singular:"deployment",
-    fields:[{k:"name",label:"Stage",ph:"prod"},{k:"description",label:"Description"}],
-    columns:[["name","Stage"],["description","Description"],["status","Status"]]},
-  "apigateway:logs": {kind:"settings", title:"Logging / tracing",
-    fields:[{k:"access_logging",label:"Access logging",type:"toggle",default:false},
-            {k:"xray_tracing",label:"X-Ray tracing",type:"toggle",default:false},
-            {k:"log_level",label:"Log level",type:"select",options:["OFF","ERROR","INFO"]}]},
-  // ── EventBridge sub-resources ──
-  "eventbridge:targets": {kind:"list", title:"Targets", singular:"target",
-    fields:[{k:"name",label:"Target ID",ph:"target-1"},{k:"arn",label:"Target ARN",ph:"arn:aws:sqs:…"}],
-    columns:[["name","Target"],["arn","ARN"],["status","Status"]]},
-  "eventbridge:eventPattern": {kind:"settings", title:"Event pattern",
-    fields:[{k:"source",label:"Event source",ph:"aws.ec2"},
-            {k:"detail_type",label:"Detail type",ph:"EC2 Instance State-change"}]},
-  "eventbridge:deadletter": {kind:"settings", title:"Dead-letter queue",
-    fields:[{k:"dlq_enabled",label:"Enable DLQ",type:"toggle",default:false},
-            {k:"dlq_arn",label:"DLQ ARN",ph:"arn:aws:sqs:…"},
-            {k:"max_retry_attempts",label:"Max retry attempts",type:"number",default:185}]},
-  "eventbridge:logs": {kind:"settings", title:"Trace logs",
-    fields:[{k:"trace_enabled",label:"Enable trace logging",type:"toggle",default:false}]},
-  // ── EC2 (user data = editable settings) ──
-  "ec2:userData": {kind:"settings", title:"User data",
-    fields:[{k:"user_data",label:"User data script",ph:"#!/bin/bash\n..."}]},
-  // ── EC2 IAM role (instance profile association = editable settings) ──
-  // In AWS you associate/replace an IAM instance profile on a running instance;
-  // modeled here as an editable setting (role ARN + profile name) that persists.
-  "ec2:iam": {kind:"settings", title:"IAM role (instance profile)",
-    fields:[{k:"iam_instance_profile",label:"Instance profile ARN",ph:"arn:aws:iam::123456789012:instance-profile/my-role"},
-            {k:"role_name",label:"Role name",ph:"my-ec2-role"}]},
-  // ── EC2 serial console (account-level access toggle = editable settings).
-  //    The serial OUTPUT itself is a derived read-only stream — rendered by a
-  //    dedicated renderer below the settings form (see renderSerialConsoleTab).
-  "ec2:console": {kind:"serialConsole", title:"EC2 serial console",
-    fields:[{k:"serial_console_access",label:"Serial console access",type:"toggle",default:false}]},
 };
 
 function subresCfg(svc, tab){
@@ -3964,81 +3475,12 @@ async function renderSettingsTab(svc, full, host, tab, cfg){
   render();
 }
 
-// ── FUNCTIONAL EC2 serial console: editable access setting + derived output ──
-// AWS splits this into (a) an editable account/instance-level "serial console
-// access" toggle (persisted, real), and (b) a derived read-only serial-port
-// OUTPUT stream (the boot log — not user-editable, as in the real cloud). We
-// render BOTH: the toggle rides the standard settings machinery (durable via the
-// generic ResourceStore), and the output is a simulated-but-non-empty boot log
-// seeded from the instance's real attributes.
-async function renderSerialConsoleTab(svc, full, host, tab, cfg){
-  const parent = itemKey(svc, full);
-  const ns = subNs(svc.key, parent, tab.key || tab.type);
-  host.append(el("div",{style:"font-size:12.5px;color:var(--sub);margin:-2px 0 14px"},
-    cfg.title + " for " + (parent || "this instance") + "."));
-
-  // (a) Editable access toggle — load → edit → save(upsert) → readback (durable).
-  const panel = el("div",{class:"panel"}); host.append(panel);
-  async function current(){
-    try { const r = await subApi("GET", ns, "get", "_settings");
-          if (r.ok && r.json && (r.json.ok !== false)) return r.json; } catch(_){}
-    return null;
-  }
-  async function renderAccess(){
-    panel.innerHTML = "";
-    panel.append(el("div",{class:"panel-h"}, icon("tune"), "Serial console access"));
-    const b = el("div",{style:"padding:16px"}); panel.append(b);
-    const cur = (await current()) || {};
-    const valNow = cur.serial_console_access;
-    const on = (valNow === true || valNow === "true" || valNow === "on");
-    const row = el("div",{style:"margin:10px 0;display:grid;grid-template-columns:230px 1fr;gap:12px;align-items:center;max-width:640px"});
-    row.append(el("label",{style:"font-size:13px;color:#16191f"}, "Serial console access"));
-    const cb = el("input",{type:"checkbox"}); cb.checked = on; row.append(cb); b.append(row);
-    const act = el("div",{style:"margin-top:16px;display:flex;gap:8px"});
-    act.append(el("button",{class:"btn primary",onclick:async()=>{
-      const r = await subApi("POST", ns, "create", undefined,
-        {name:"_settings", serial_console_access: cb.checked});
-      if (r.ok || [200,201].includes(r.status)) {
-        toast("Serial console access " + (cb.checked?"enabled":"disabled"));
-        recordNotif("ok","Serial console access " + (cb.checked?"enabled":"disabled") + " for " + parent);
-        renderAccess();
-      } else toast("Save failed ("+r.status+")","err");
-    }}, icon("save"), "Save changes"));
-    act.append(el("button",{class:"btn",onclick:renderAccess}, "Reset"));
-    b.append(act);
-  }
-  await renderAccess();
-
-  // (b) Derived read-only serial OUTPUT stream (the boot log). Non-empty,
-  // seeded from the instance's real attributes. Read-only — matches AWS, where
-  // GetConsoleOutput returns a system-produced log you cannot edit.
-  const out = el("div",{class:"panel",style:"margin-top:16px"}); host.append(out);
-  out.append(el("div",{class:"panel-h"}, icon("terminal"), "Serial port output",
-    el("span",{style:"margin-left:auto;font-size:11px;color:#a19f9d;font-weight:400"}, "Read-only (system-generated)")));
-  const amiLine = full.image_id || full.ami || "ami-0abcdef1234567890";
-  const itype = full.instance_type || "t3.micro";
-  const ip = full.private_ip || "10.0.0.10";
-  const host4 = (full.public_dns || ("ip-" + ip.replace(/\./g,"-"))) ;
-  const lines = [
-    "[    0.000000] Booting " + (parent || "instance") + " (" + itype + ")",
-    "[    0.004211] Linux version 6.1.0-aws (buildd@aws) ",
-    "[    0.512004] Loading AMI " + amiLine,
-    "[    1.204551] cloud-init: Cloud-init v. 23.4 running 'init-local'",
-    "[    2.880113] cloud-init: Network configured: " + ip + " (" + host4 + ")",
-    "[    3.410229] systemd[1]: Reached target Multi-User System.",
-    "[    4.001872] " + (parent || "instance") + " login: ",
-  ];
-  out.append(el("pre",{class:"json",style:"background:#0f1b2d;color:#d6e2f0;max-height:320px;overflow:auto"},
-    lines.join("\n")));
-}
-
 function renderGenericTab(svc, full, host, tab){
   // FUNCTIONAL engine first: a catalog-matched tab becomes a working sub-resource
   // browser or an editable settings form (never a read-only empty state).
   const cfg = subresCfg(svc, tab);
   if (cfg) {
     const fn = cfg.kind === "list" ? renderSubResourceTab
-             : cfg.kind === "serialConsole" ? renderSerialConsoleTab
              : renderSettingsTab;
     Promise.resolve(fn(svc, full, host, tab, cfg)).catch(e =>
       host.append(el("div",{class:"alert err"}, "Tab error: " + e.message)));
@@ -4095,10 +3537,14 @@ SUB_RENDERERS.apigw2list = function(svc, full, host, tab){
 };
 
 // Systems Manager — parameter value (SecureString decrypted via GET), editable → PUT = new version.
-SUB_RENDERERS.ssmvalue = function(svc, full, host){
+SUB_RENDERERS.ssmvalue = async function(svc, full, host){
   const name = itemKey(svc, full);
+  // GetParameter (WithDecryption) for this parameter, read when the tab opens.
+  const g = await _dget(host, fillPath(svc.resource_path, {name})); if (!g) return;
+  host.append(_dkv("Parameter details", [["Name", g.name || name], ["Type", g.type], ["Tier", g.tier], ["Data type", g.data_type],
+    ["Version", g.version], ["Last modified", g.last_modified], ["ARN", g.arn, 1]].filter(([, v]) => v !== undefined)));
   const panel = el("div",{class:"panel"}); host.append(panel);
-  let value = full.value != null ? String(full.value) : "", editing = false;
+  let value = g.value != null ? String(g.value) : (full.value != null ? String(full.value) : ""), editing = false;
   function render(){
     panel.innerHTML = "";
     panel.append(el("div",{class:"panel-h"}, icon("key"), "Parameter value"));
@@ -4135,6 +3581,1422 @@ SUB_RENDERERS.ssmlist = function(svc, full, host, tab){
     }))));
     host.append(tbl);
   }).catch(e => host.append(el("div",{class:"alert err"}, "Failed to load: " + e.message)));
+};
+
+// =====================================================================
+// Resource-detail tabs backed by the real per-resource model
+// (core/aws_console_detail.py — offline: routes/aws_console_detail.py,
+// Nano: wasm/providers/aws_core_adapter.py). Each tab fetches THIS resource's
+// data and every action persists through the same API.
+// =====================================================================
+const DASH = "–";   // what the AWS console prints for an unset field
+function _dv(v){
+  if (v === true) return "Enabled";
+  if (v === false) return "Disabled";
+  return (v === undefined || v === null || v === "") ? DASH : String(v);
+}
+function _dkv(title, pairs, extra){
+  const card = el("div",{class:"kv-card"});
+  if (title) card.append(el("div",{class:"h"}, title, ...(extra ? [extra] : [])));
+  const g = el("div",{class:"kv-grid"});
+  pairs.forEach(([k, v, mono]) => g.append(el("div",{}, el("div",{class:"k"}, k),
+    el("div",{class:"v"+(mono ? " mono" : "")}, _dv(v)))));
+  card.append(g);
+  return card;
+}
+function _dtbl(cols, rows, emptyMsg){
+  if (!rows.length) return el("div",{class:"empty"}, emptyMsg);
+  const t = el("table",{class:"aws"});
+  t.append(el("tr",{}, ...cols.map(c => el("th",{}, c[1]))));
+  rows.forEach(r => t.append(el("tr",{}, ...cols.map(c => {
+    const v = typeof c[0] === "function" ? c[0](r) : getPath(r, c[0]);
+    return el("td",{class: c[2] ? "mono small" : ""}, (v && v.nodeType) ? v : _dv(v));
+  }))));
+  return t;
+}
+function _derr(r){
+  const d = r && r.json && (r.json.detail || r.json.error || r.json);
+  return (d && (d.message || (typeof d === "string" ? d : d.code))) || ("HTTP " + (r ? r.status : "?"));
+}
+async function _dget(host, path){
+  const r = await api("GET", path);
+  if (!r.ok) { host.append(el("div",{class:"alert err"}, icon("error"), el("div",{}, "Failed to load: " + _derr(r)))); return null; }
+  return r.json || {};
+}
+function _ec2p(full, tail){ return "/api/ec2/instances/" + encodeURIComponent(full.instance_id || full.name || "") + "/" + tail; }
+function _rerender(){ renderDetail(document.getElementById("main")); }
+
+// ARN of the resource on screen (what IAM policies name in Resource).
+function resourceArn(svc, full){
+  if (full.arn && String(full.arn).startsWith("arn:")) return full.arn;
+  if (full.ARN) return full.ARN;
+  const id = itemKey(svc, full), A = ACCOUNT || "123456789012", R = REGION;
+  switch (svc.key) {
+    case "ec2": return `arn:aws:ec2:${R}:${A}:instance/${full.instance_id || id}`;
+    case "s3": return `arn:aws:s3:::${id}`;
+    case "rds": return `arn:aws:rds:${R}:${A}:db:${id}`;
+    case "dynamodb": return `arn:aws:dynamodb:${R}:${A}:table/${id}`;
+    case "lambda": return `arn:aws:lambda:${R}:${A}:function:${id}`;
+    case "sqs": return `arn:aws:sqs:${R}:${A}:${id}`;
+    case "sns": return `arn:aws:sns:${R}:${A}:${id}`;
+    case "eventbridge": return `arn:aws:events:${R}:${A}:rule/${id}`;
+    case "secretsmanager": return `arn:aws:secretsmanager:${R}:${A}:secret:${id}`;
+    case "kms": return `arn:aws:kms:${R}:${A}:key/${full.key_id || id}`;
+    case "kinesis": return `arn:aws:kinesis:${R}:${A}:stream/${id}`;
+    case "stepfunctions": return `arn:aws:states:${R}:${A}:stateMachine:${id}`;
+    case "ssm": return `arn:aws:ssm:${R}:${A}:parameter/${String(id).replace(/^\//, "")}`;
+    case "apigateway": return `arn:aws:apigateway:${R}::/restapis/${full.rest_api_id || full.id || id}`;
+    case "apigatewayv2": return `arn:aws:apigateway:${R}::/apis/${full.api_id || full.id || id}`;
+    case "logs": return `arn:aws:logs:${R}:${A}:log-group:${id}`;
+    case "cloudwatch": return `arn:aws:cloudwatch:${R}:${A}:alarm:${id}`;
+    case "elbv2": return `arn:aws:elasticloadbalancing:${R}:${A}:loadbalancer/app/${id}`;
+    case "vpc": return `arn:aws:ec2:${R}:${A}:vpc/${full.vpc_id || id}`;
+    default: return `arn:aws:${svc.service || svc.key}:${R}:${A}:${id}`;
+  }
+}
+const _IAM_PREFIX = {stepfunctions:"states", eventbridge:"events", elbv2:"elasticloadbalancing", vpc:"ec2", apigatewayv2:"apigateway", cloudwatch:"cloudwatch"};
+
+// Permissions — the identity-based IAM policy statements in this account that
+// grant this service's actions on this resource (users, groups and roles).
+SUB_RENDERERS.iam = async function(svc, full, host){
+  const arn = resourceArn(svc, full), prefix = _IAM_PREFIX[svc.key] || svc.service || svc.key;
+  host.append(_dkv("Resource", [["ARN", arn, true], ["Service namespace", prefix]]));
+  const j = await _dget(host, "/api/aws/resource-access?arn=" + encodeURIComponent(arn) + "&service=" + encodeURIComponent(prefix));
+  if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Identity-based policies that apply (" + (j.statements || []).length + ")"));
+  card.append(_dtbl([["principal","Principal"],["principal_type","Type"],["policy","Policy"],["effect","Effect"],["actions","Actions",1],["resource","Resource",1]],
+    j.statements || [], "No IAM user, group or role in account " + (ACCOUNT || "") + " has a policy granting " + prefix + " actions on " + arn + "."));
+  host.append(card);
+};
+
+// EC2 — Details: the instance summary (DescribeInstances) + instance settings
+// (ModifyInstanceAttribute: termination/stop protection, shutdown behavior, monitoring).
+SUB_RENDERERS.ec2details = async function(svc, full, host){
+  const d = await _dget(host, _ec2p(full, "details")); if (!d) return;
+  host.append(_dkv("Instance summary", [
+    ["Instance ID", d.instance_id, 1], ["Instance state", d.state], ["Instance type", d.instance_type],
+    ["Public IPv4 address", d.public_ip_address, 1], ["Private IPv4 addresses", d.private_ip_address, 1],
+    ["Public DNS", d.public_dns_name, 1], ["Private IP DNS name (IPv4 only)", d.private_dns_name, 1],
+    ["VPC ID", d.vpc_id, 1], ["Subnet ID", d.subnet_id, 1], ["Availability Zone", d.availability_zone],
+    ["IAM Role", d.iam_instance_profile, 1], ["Key pair assigned at launch", d.key_name]]));
+  host.append(_dkv("Instance details", [
+    ["AMI ID", d.image_id, 1], ["AMI name", d.image_name], ["Platform details", d.platform_details],
+    ["Launch time", d.launch_time], ["Reservation", d.reservation_id, 1], ["Owner", d.owner_id, 1],
+    ["Root device name", d.root_device_name, 1], ["Root device type", d.root_device_type],
+    ["State transition reason", d.state_transition_reason], ["Monitoring", d.monitoring]]));
+  const wrap = el("div",{class:"kv-card"});
+  wrap.append(el("div",{class:"h"}, "Instance settings"));
+  const vals = {disable_api_termination: d.termination_protection, disable_api_stop: d.stop_protection,
+                instance_initiated_shutdown_behavior: d.instance_initiated_shutdown_behavior, monitoring: d.monitoring === "enabled"};
+  const cb = (k, label) => { const i = el("input",{type:"checkbox","data-attr":k,onchange:e=>{vals[k]=e.target.checked;}}); if (vals[k]) i.checked = true;
+    return el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, i, el("span",{}, label)); };
+  const sel = el("select",{"data-attr":"instance_initiated_shutdown_behavior",onchange:e=>{vals.instance_initiated_shutdown_behavior=e.target.value;}},
+    el("option",{value:"stop"}, "Stop"), el("option",{value:"terminate"}, "Terminate"));
+  sel.value = vals.instance_initiated_shutdown_behavior || "stop";
+  wrap.append(cb("disable_api_termination", "Termination protection"), cb("disable_api_stop", "Stop protection"),
+    cb("monitoring", "Detailed CloudWatch monitoring"),
+    el("div",{class:"field"}, el("label",{}, "Shutdown behavior"), sel),
+    el("button",{class:"btn primary",onclick:async()=>{
+      const r = await api("PUT", _ec2p(full, "attributes"), vals);
+      if (r.ok) { toast("Instance settings saved"); _rerender(); } else toast("Save failed: " + _derr(r), "err");
+    }}, icon("save"), "Save"));
+  host.append(wrap);
+};
+
+// EC2 — Networking: the instance's VPC/subnet/addresses and its network interfaces.
+SUB_RENDERERS.ec2networking = async function(svc, full, host){
+  if (svc.key === "rds") return SUB_RENDERERS.rdsnetworking(svc, full, host);
+  const j = await _dget(host, _ec2p(full, "network-interfaces")); if (!j) return;
+  const enis = j.network_interfaces || [], p = enis[0] || {};
+  host.append(_dkv("Networking details", [
+    ["Public IPv4 address", p.public_ip_address, 1], ["Private IPv4 addresses", p.private_ip_address, 1],
+    ["Public DNS", p.public_dns_name, 1], ["Private IP DNS name (IPv4 only)", p.private_dns_name, 1],
+    ["VPC ID", p.vpc_id, 1], ["Subnet ID", p.subnet_id, 1], ["Subnet IPv4 CIDR", p.subnet_cidr, 1],
+    ["Availability Zone", p.availability_zone]]));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Network interfaces (" + enis.length + ")"));
+  card.append(_dtbl([["network_interface_id","Interface ID",1],["description","Description"],["device_index","Device index"],
+    ["private_ip_address","Private IPv4 address",1],["public_ip_address","Public IPv4 address",1],["mac_address","MAC address",1],
+    [r => (r.security_groups||[]).map(g => g.group_id + " (" + g.group_name + ")").join(", "),"Security groups",1],
+    ["attachment_status","Attachment status"],["attach_time","Attachment time"]], enis, "No network interfaces."));
+  host.append(card);
+};
+
+// EC2 — Security: IAM role, key pair, security groups and their rules.
+SUB_RENDERERS.ec2security = async function(svc, full, host){
+  const s = await _dget(host, _ec2p(full, "security")); if (!s) return;
+  const prof = s.iam_instance_profile;
+  host.append(_dkv("Security details", [
+    ["IAM Role", prof ? prof.role_name : "", 1], ["Owner ID", s.owner_id, 1], ["Launch time", s.launch_time],
+    ["Security groups", (s.security_groups || []).map(g => g.group_id + " (" + g.group_name + ")").join(", "), 1]]));
+  const rules = [["group_id","Security group ID",1],["group_name","Security group name"],["port_range","Port range"],
+                 [r => r.protocol === "-1" ? "All" : String(r.protocol).toUpperCase(),"Protocol"],["source","Source / destination",1],["description","Description"]];
+  const ib = el("div",{class:"kv-card"}); ib.append(el("div",{class:"h"}, "Inbound rules (" + (s.inbound_rules||[]).length + ")"),
+    _dtbl(rules, s.inbound_rules || [], "No inbound rules: the security groups allow no inbound traffic."));
+  const ob = el("div",{class:"kv-card"}); ob.append(el("div",{class:"h"}, "Outbound rules (" + (s.outbound_rules||[]).length + ")"),
+    _dtbl(rules, s.outbound_rules || [], "No outbound rules."));
+  host.append(ib, ob);
+};
+
+// EC2 — Storage: root device + every EBS volume attached to the instance.
+SUB_RENDERERS.ec2storage = async function(svc, full, host){
+  const s = await _dget(host, _ec2p(full, "storage")); if (!s) return;
+  host.append(_dkv("Root device details", [["Root device name", s.root_device_name, 1], ["Root device type", s.root_device_type],
+    ["EBS optimization", s.ebs_optimized ? "enabled" : "disabled"]]));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Block devices (" + (s.block_devices||[]).length + ")"));
+  card.append(_dtbl([["volume_id","Volume ID",1],["device_name","Device name",1],["size","Volume size (GiB)"],["volume_type","Volume type"],
+    ["attachment_status","Attachment status"],["attach_time","Attachment time"],[r => r.encrypted ? "Yes" : "No","Encrypted"],
+    [r => r.delete_on_termination ? "Yes" : "No","Delete on termination"]], s.block_devices || [], "No block devices."));
+  host.append(card);
+};
+
+// EC2 — User data: what the instance was launched with; editable while stopped
+// (ModifyInstanceAttribute userData requires a stopped instance, as in AWS).
+SUB_RENDERERS.ec2userdata = async function(svc, full, host){
+  const j = await _dget(host, _ec2p(full, "user-data")); if (!j) return;
+  const stopped = String(j.state || "").toLowerCase() === "stopped";
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "User data for " + (full.instance_id || "")));
+  if (!stopped) card.append(el("div",{class:"alert info"}, icon("info"),
+    el("div",{}, "Instance state is " + (j.state || "unknown") + ". User data can only be edited while the instance is stopped.")));
+  const ta = el("textarea",{"data-testid":"ec2-user-data",style:"width:100%;min-height:160px;font-family:Consolas,Menlo,monospace"});
+  ta.value = j.user_data || ""; if (!stopped) ta.setAttribute("readonly", "");
+  if (!j.user_data) card.append(el("div",{class:"small",style:"color:var(--sub);margin-bottom:6px"}, "This instance was launched without user data."));
+  card.append(ta);
+  if (stopped) card.append(el("div",{style:"margin-top:10px"}, el("button",{class:"btn primary",onclick:async()=>{
+    const r = await api("PUT", _ec2p(full, "user-data"), {user_data: ta.value});
+    if (r.ok) { toast("User data saved"); _rerender(); } else toast("Save failed: " + _derr(r), "err");
+  }}, icon("save"), "Save")));
+  host.append(card);
+};
+
+// EC2 — IAM role: the instance profile association (Modify IAM role).
+SUB_RENDERERS.ec2iamrole = async function(svc, full, host){
+  const j = await _dget(host, _ec2p(full, "iam-instance-profile")); if (!j) return;
+  const p = j.iam_instance_profile;
+  host.append(p ? _dkv("IAM instance profile", [["IAM Role", p.role_name], ["Instance profile ARN", p.arn, 1],
+    ["Role ARN", p.role_arn, 1], ["Association ID", p.association_id, 1], ["State", p.state]])
+    : el("div",{class:"empty"}, "No IAM role is attached to " + (full.instance_id || "this instance") + "."));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Modify IAM role"));
+  const roles = j.roles || [];
+  if (!roles.length) card.append(el("div",{class:"empty"}, "No IAM roles in this account yet. Create a role in IAM to attach it to this instance."));
+  else {
+    const sel = el("select",{"data-testid":"ec2-iam-role"}, ...roles.map(n => el("option",{value:n}, n)));
+    if (p) sel.value = p.role_name;
+    card.append(el("div",{class:"field"}, el("label",{}, "IAM role"), sel),
+      el("div",{style:"display:flex;gap:8px"},
+        el("button",{class:"btn primary",onclick:async()=>{
+          const r = await api("PUT", _ec2p(full, "iam-instance-profile"), {name: sel.value});
+          if (r.ok) { toast("IAM role updated"); _rerender(); } else toast("Update failed: " + _derr(r), "err");
+        }}, icon("save"), "Update IAM role"),
+        p ? el("button",{class:"btn",onclick:async()=>{
+          const r = await api("DELETE", _ec2p(full, "iam-instance-profile"));
+          if (r.ok) { toast("IAM role removed"); _rerender(); } else toast("Remove failed: " + _derr(r), "err");
+        }}, icon("link_off"), "Remove IAM role") : null));
+  }
+  host.append(card);
+};
+
+// EC2 — serial console: the account's EC2 serial console access setting and the
+// instance's console output (GetConsoleOutput).
+SUB_RENDERERS.ec2serial = async function(svc, full, host){
+  const acc = await _dget(host, "/api/ec2/serial-console-access"); if (!acc) return;
+  const out = await _dget(host, _ec2p(full, "console-output")); if (!out) return;
+  const on = !!acc.serial_console_access_enabled;
+  host.append(_dkv("EC2 serial console", [["Instance ID", full.instance_id, 1], ["Serial port", "ttyS0"],
+    ["EC2 serial console access (account)", on ? "Allowed" : "Not allowed"]],
+    el("button",{class:"btn",style:"margin-left:auto",onclick:async()=>{
+      const r = await api("PUT", "/api/ec2/serial-console-access", {enabled: !on});
+      if (r.ok) { toast("Serial console access " + (on ? "disallowed" : "allowed")); _rerender(); } else toast("Failed: " + _derr(r), "err");
+    }}, on ? "Disallow" : "Allow")));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Console output", el("span",{class:"small",style:"margin-left:8px;color:var(--sub);font-weight:400"}, out.timestamp || "")));
+  card.append(out.output ? el("pre",{class:"json","data-testid":"ec2-console-output"}, out.output)
+    : el("div",{class:"empty"}, "No console output has been recorded for " + (full.instance_id || "this instance") + "."));
+  host.append(card);
+};
+
+// ── S3 bucket tabs: versions, versioning, notifications, lifecycle, encryption,
+//    Block Public Access, bucket policy, CORS (GET/PUT /api/s3/buckets/{b}/config/{kind}).
+function _s3p(full, tail){ return "/api/s3/buckets/" + encodeURIComponent(full.name || "") + "/" + tail; }
+async function _s3put(full, kind, value, okMsg){
+  const r = await api("PUT", _s3p(full, "config/" + kind), {value});
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Save failed: " + _derr(r), "err"); return false;
+}
+function _field(label, input){ return el("div",{class:"field"}, el("label",{}, label), input); }
+function _csv(v){ return String(v || "").split(",").map(s => s.trim()).filter(Boolean); }
+
+SUB_RENDERERS.s3versions = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "versions")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Object versions (" + (j.versions || []).length + ")"));
+  card.append(_dtbl([["key","Name",1],["version_id","Version ID",1],[r => r.is_latest ? "Yes" : "No","Latest"],
+    [r => r.is_delete_marker ? "Delete marker" : "Object","Type"],["last_modified","Last modified"],["size","Size (bytes)"],["storage_class","Storage class"]],
+    j.versions || [], "No objects in " + full.name + " yet, so there are no versions."));
+  host.append(card);
+};
+
+SUB_RENDERERS.bucketversioning = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "versioning")); if (!j) return;
+  const st = j.versioning || j.status || "Disabled";
+  const on = st === "Enabled";
+  host.append(_dkv("Bucket Versioning", [["Bucket", full.name, 1], ["Bucket Versioning", st === "Disabled" ? "Disabled" : st]],
+    el("button",{class:"btn primary",style:"margin-left:auto",onclick:async()=>{
+      const r = await api("PUT", _s3p(full, "versioning"), {status: on ? "Suspended" : "Enabled"});
+      if (r.ok) { toast("Versioning " + (on ? "suspended" : "enabled")); _rerender(); } else toast("Update failed: " + _derr(r), "err");
+    }}, on ? "Suspend" : "Enable")));
+};
+
+SUB_RENDERERS.bucketnotifications = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "notifications")); if (!j) return;
+  const rows = [];
+  (j.queueConfigurations||[]).forEach(c => rows.push({...c, destination_type:"QueueConfiguration", type:"SQS queue", destination:c.queue}));
+  (j.topicConfigurations||[]).forEach(c => rows.push({...c, destination_type:"TopicConfiguration", type:"SNS topic", destination:c.topic}));
+  (j.cloudFunctionConfigurations||[]).forEach(c => rows.push({...c, destination_type:"CloudFunctionConfiguration", type:"Lambda function", destination:c.cloudFunction}));
+  const save = async (list, eb) => {
+    const r = await api("PUT", _s3p(full, "notifications"), {event_bridge_enabled: eb,
+      rules: list.map(x => ({id:x.id, events:x.events, prefix:x.prefix, suffix:x.suffix, destination_type:x.destination_type, destination:x.destination}))});
+    if (r.ok) { toast("Event notifications saved"); _rerender(); } else toast("Save failed: " + _derr(r), "err");
+  };
+  host.append(_dkv("Amazon EventBridge", [["Send notifications to Amazon EventBridge for all events in this bucket", j.eventBridgeEnabled ? "On" : "Off"]],
+    el("button",{class:"btn",style:"margin-left:auto",onclick:()=>save(rows, !j.eventBridgeEnabled)}, j.eventBridgeEnabled ? "Turn off" : "Turn on")));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Event notifications (" + rows.length + ")"));
+  card.append(_dtbl([["id","Name"],[r => (r.events||[]).join(", "),"Event types"],[r => [r.prefix && "prefix " + r.prefix, r.suffix && "suffix " + r.suffix].filter(Boolean).join(", ") || "All objects","Filters"],
+    ["type","Destination type"],["destination","Destination",1],
+    [r => el("button",{class:"btn",onclick:()=>save(rows.filter(x => x !== r), j.eventBridgeEnabled)}, "Delete"),"Actions"]], rows,
+    "No event notifications are configured for " + full.name + "."));
+  const f = {id:el("input",{placeholder:"on-upload"}), events:el("input",{value:"s3:ObjectCreated:*"}), prefix:el("input",{}), suffix:el("input",{}),
+    type:el("select",{}, el("option",{value:"QueueConfiguration"}, "SQS queue"), el("option",{value:"TopicConfiguration"}, "SNS topic"),
+      el("option",{value:"CloudFunctionConfiguration"}, "Lambda function")), dest:el("input",{placeholder:"arn:aws:sqs:" + REGION + ":" + ACCOUNT + ":my-queue"})};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Create event notification"),
+    _field("Event name", f.id), _field("Event types (comma-separated)", f.events), _field("Prefix", f.prefix), _field("Suffix", f.suffix),
+    _field("Destination", f.type), _field("Destination ARN", f.dest),
+    el("button",{class:"btn primary",onclick:()=>save([...rows, {id:f.id.value, events:_csv(f.events.value), prefix:f.prefix.value, suffix:f.suffix.value,
+      destination_type:f.type.value, destination:f.dest.value}], j.eventBridgeEnabled)}, icon("add"), "Save changes"));
+  host.append(card);
+};
+
+SUB_RENDERERS.s3lifecycle = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "config/lifecycle")); if (!j) return;
+  const rules = j.value || [];
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Lifecycle rules (" + rules.length + ")"));
+  card.append(_dtbl([["id","Lifecycle rule name"],["status","Status"],[r => r.prefix || "Entire bucket","Scope"],
+    [r => (r.transitions||[]).map(t => t.storage_class + " after " + t.days + " days").join("; ") || "None","Transitions"],
+    [r => r.expiration_days ? "Expire after " + r.expiration_days + " days" : "None","Expiration"],
+    [r => r.noncurrent_expiration_days ? r.noncurrent_expiration_days + " days" : "None","Noncurrent versions expire"],
+    [r => el("button",{class:"btn",onclick:()=>_s3put(full, "lifecycle", rules.filter(x => x !== r), "Lifecycle rule deleted")}, "Delete"),"Actions"]],
+    rules, "There are no lifecycle rules for " + full.name + "."));
+  const f = {id:el("input",{placeholder:"expire-logs"}), prefix:el("input",{placeholder:"logs/"}), exp:el("input",{type:"number",min:"1"}),
+    tdays:el("input",{type:"number",min:"1"}), tclass:el("select",{}, ...["STANDARD_IA","ONEZONE_IA","INTELLIGENT_TIERING","GLACIER_IR","GLACIER","DEEP_ARCHIVE"].map(c => el("option",{value:c}, c))),
+    nc:el("input",{type:"number",min:"1"})};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Create lifecycle rule"),
+    _field("Lifecycle rule name", f.id), _field("Prefix (empty = entire bucket)", f.prefix), _field("Expire current versions after (days)", f.exp),
+    _field("Transition after (days)", f.tdays), _field("Transition to storage class", f.tclass), _field("Permanently delete noncurrent versions after (days)", f.nc),
+    el("button",{class:"btn primary",onclick:()=>{
+      const r = {id:f.id.value, status:"Enabled", prefix:f.prefix.value};
+      if (f.exp.value) r.expiration_days = f.exp.value;
+      if (f.nc.value) r.noncurrent_expiration_days = f.nc.value;
+      if (f.tdays.value) r.transitions = [{days:f.tdays.value, storage_class:f.tclass.value}];
+      _s3put(full, "lifecycle", [...rules, r], "Lifecycle rule created");
+    }}, icon("add"), "Create rule"));
+  host.append(card);
+};
+
+SUB_RENDERERS.s3encryption = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "config/encryption")); if (!j) return;
+  const v = j.value || {};
+  const label = {"AES256":"Server-side encryption with Amazon S3 managed keys (SSE-S3)","aws:kms":"Server-side encryption with AWS KMS keys (SSE-KMS)",
+                 "aws:kms:dsse":"Dual-layer server-side encryption with AWS KMS keys (DSSE-KMS)"};
+  host.append(_dkv("Default encryption", [["Encryption type", label[v.sse_algorithm] || v.sse_algorithm],
+    ["Bucket Key", v.bucket_key_enabled ? "Enabled" : "Disabled"], ...(v.kms_master_key_id ? [["AWS KMS key ARN", v.kms_master_key_id, 1]] : [])]));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Edit default encryption"));
+  const alg = el("select",{}, ...Object.keys(label).map(k => el("option",{value:k}, label[k]))); alg.value = v.sse_algorithm || "AES256";
+  const key = el("input",{placeholder:"arn:aws:kms:" + REGION + ":" + ACCOUNT + ":key/…", value: v.kms_master_key_id || ""});
+  const bk = el("input",{type:"checkbox"}); if (v.bucket_key_enabled) bk.checked = true;
+  card.append(_field("Encryption type", alg), _field("AWS KMS key (SSE-KMS / DSSE-KMS)", key),
+    el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, bk, el("span",{}, "Bucket Key")),
+    el("button",{class:"btn primary",onclick:()=>_s3put(full, "encryption", {sse_algorithm:alg.value, kms_master_key_id:key.value, bucket_key_enabled:bk.checked}, "Default encryption saved")},
+      icon("save"), "Save changes"));
+  host.append(card);
+};
+
+SUB_RENDERERS.s3publicaccess = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "config/public_access_block")); if (!j) return;
+  const v = j.value || {};
+  const labels = [["block_public_acls","Block public access to buckets and objects granted through new access control lists (ACLs)"],
+    ["ignore_public_acls","Block public access to buckets and objects granted through any access control lists (ACLs)"],
+    ["block_public_policy","Block public access to buckets and objects granted through new public bucket or access point policies"],
+    ["restrict_public_buckets","Block public and cross-account access to buckets and objects through any public bucket or access point policies"]];
+  const all = labels.every(([k]) => v[k]);
+  host.append(_dkv("Block public access (bucket settings)", [["Block all public access", all ? "On" : "Off"], ...labels.map(([k, l]) => [l, v[k] ? "On" : "Off"])]));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Edit Block public access"));
+  const boxes = {};
+  labels.forEach(([k, l]) => { boxes[k] = el("input",{type:"checkbox","data-pab":k}); if (v[k]) boxes[k].checked = true;
+    card.append(el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, boxes[k], el("span",{}, l))); });
+  card.append(el("button",{class:"btn primary",onclick:()=>_s3put(full, "public_access_block",
+    Object.fromEntries(labels.map(([k]) => [k, boxes[k].checked])), "Block Public Access saved")}, icon("save"), "Save changes"));
+  host.append(card);
+};
+
+SUB_RENDERERS.s3policy = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "config/policy")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Bucket policy"));
+  card.append(el("div",{class:"small",style:"color:var(--sub);margin-bottom:6px"}, "Bucket ARN: arn:aws:s3:::" + full.name));
+  if (!j.value) card.append(el("div",{class:"empty"}, "No policy to display. " + full.name + " has no bucket policy."));
+  const ta = el("textarea",{"data-testid":"s3-policy",style:"width:100%;min-height:200px;font-family:Consolas,Menlo,monospace"});
+  ta.value = j.value || "";
+  card.append(ta, el("div",{style:"display:flex;gap:8px;margin-top:10px"},
+    el("button",{class:"btn primary",onclick:()=>_s3put(full, "policy", ta.value, "Bucket policy saved")}, icon("save"), "Save changes"),
+    j.value ? el("button",{class:"btn",onclick:async()=>{
+      const r = await api("DELETE", _s3p(full, "config/policy"));
+      if (r.ok) { toast("Bucket policy deleted"); _rerender(); } else toast("Delete failed: " + _derr(r), "err");
+    }}, icon("delete"), "Delete") : null));
+  host.append(card);
+};
+
+SUB_RENDERERS.s3cors = async function(svc, full, host){
+  const j = await _dget(host, _s3p(full, "config/cors")); if (!j) return;
+  const rules = j.value || [];
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Cross-origin resource sharing (CORS) rules (" + rules.length + ")"));
+  card.append(_dtbl([[r => r.id || "(unnamed)","ID"],[r => r.allowed_methods.join(", "),"Allowed methods"],[r => r.allowed_origins.join(", "),"Allowed origins",1],
+    [r => (r.allowed_headers||[]).join(", ") || "None","Allowed headers"],[r => (r.expose_headers||[]).join(", ") || "None","Expose headers"],
+    [r => r.max_age_seconds != null ? r.max_age_seconds + " s" : "None","Max age"],
+    [r => el("button",{class:"btn",onclick:()=>_s3put(full, "cors", rules.filter(x => x !== r), "CORS rule deleted")}, "Delete"),"Actions"]],
+    rules, "No CORS configuration for " + full.name + ": browsers on other origins cannot read its objects."));
+  const f = {id:el("input",{placeholder:"allow-web"}), m:el("input",{value:"GET,HEAD"}), o:el("input",{value:"*"}), h:el("input",{}), e:el("input",{}), age:el("input",{type:"number",min:"1"})};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Add CORS rule"),
+    _field("ID", f.id), _field("Allowed methods (comma-separated)", f.m), _field("Allowed origins", f.o), _field("Allowed headers", f.h),
+    _field("Expose headers", f.e), _field("Max age (seconds)", f.age),
+    el("button",{class:"btn primary",onclick:()=>_s3put(full, "cors", [...rules, {id:f.id.value, allowed_methods:_csv(f.m.value),
+      allowed_origins:_csv(f.o.value), allowed_headers:_csv(f.h.value), expose_headers:_csv(f.e.value), max_age_seconds:f.age.value || null}], "CORS rule added")},
+      icon("add"), "Save changes"));
+  host.append(card);
+};
+
+// ── RDS DB instance tabs: connectivity, Modify, backups, maintenance, logs &
+//    events, Performance Insights (GET/PUT /api/rds/databases/{id}/…).
+function _rdsp(full, tail){ return "/api/rds/databases/" + encodeURIComponent(full.db_instance_identifier || full.name || "") + "/" + tail; }
+// An editable settings card: fields [{k, label, type:"number"|"text"|"bool"|"select"|"multi", options}]
+// pre-filled from `cfg`, saved with ModifyDBInstance (PUT …/configuration).
+function _rdsEditor(full, title, cfg, fields){
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, title));
+  const get = {};
+  fields.forEach(f => {
+    let inp;
+    if (f.type === "bool") {
+      inp = el("input",{type:"checkbox","data-cfg":f.k}); if (cfg[f.k]) inp.checked = true;
+      card.append(el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, inp, el("span",{}, f.label)));
+      get[f.k] = () => inp.checked; return;
+    }
+    if (f.type === "multi") {
+      const boxes = (f.options || []).map(o => { const b = el("input",{type:"checkbox","data-cfg":f.k + ":" + o}); if ((cfg[f.k] || []).includes(o)) b.checked = true;
+        card.append(el("label",{class:"check",style:"display:flex;gap:8px;margin:4px 0"}, b, el("span",{}, f.label + ": " + o))); return [o, b]; });
+      get[f.k] = () => boxes.filter(([, b]) => b.checked).map(([o]) => o); return;
+    }
+    if (f.type === "select") { inp = el("select",{"data-cfg":f.k}, ...(f.options || []).map(o => el("option",{value:o}, o))); inp.value = cfg[f.k] ?? ""; }
+    else inp = el("input",{type: f.type === "number" ? "number" : "text", "data-cfg":f.k, value: cfg[f.k] ?? ""});
+    card.append(_field(f.label, inp));
+    get[f.k] = () => f.type === "number" ? Number(inp.value) : inp.value;
+  });
+  card.append(el("button",{class:"btn primary",onclick:async()=>{
+    const body = {}; fields.forEach(f => { const v = get[f.k](); if (JSON.stringify(v) !== JSON.stringify(cfg[f.k])) body[f.k] = v; });
+    if (!Object.keys(body).length) { toast("No changes to apply"); return; }
+    const r = await api("PUT", _rdsp(full, "configuration"), body);
+    if (r.ok) { toast("DB instance modified"); _rerender(); } else toast("Modify failed: " + _derr(r), "err");
+  }}, icon("save"), "Apply immediately"));
+  return card;
+}
+
+SUB_RENDERERS.rdsendpoints = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "connectivity")); if (!c) return;
+  host.append(_dkv("Endpoint & port", [["Endpoint", c.endpoint, 1], ["Port", c.port], ["Master username", c.master_username],
+    ["IAM DB authentication", c.iam_db_auth ? "Enabled" : "Not enabled"], ["Certificate authority", c.certificate_authority]]));
+  // Codespaces sandbox: reach this DB from a remote laptop through the jump host.
+  if (full.connect_help) {
+    const ch = full.connect_help;
+    host.append(_dkv("Connect from your laptop (Codespaces)", [["1 · Tunnel (keep open)", ch.tunnel_command, 1], ["2 · Connect", ch.client_command, 1]]),
+      el("div",{class:"small"}, ch.note));
+  }
+};
+SUB_RENDERERS.rdsnetworking = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "subnet-group")); if (!c) return;
+  host.append(_dkv("Networking", [["Availability Zone", c.availability_zone], ["VPC", c.vpc_id, 1], ["Subnet group", c.subnet_group],
+    ["Network type", c.network_type], ["Multi-AZ", c.multi_az ? "Yes" : "No"]]));
+  const sn = el("div",{class:"kv-card"}); sn.append(el("div",{class:"h"}, "Subnets (" + c.subnets.length + ")"),
+    _dtbl([["subnet_id","Subnet ID",1],["cidr","IPv4 CIDR",1],["availability_zone","Availability Zone"]], c.subnets, "The subnet group has no subnets."));
+  const sg = el("div",{class:"kv-card"}); sg.append(el("div",{class:"h"}, "Security"),
+    _dtbl([["group_id","VPC security group",1],["group_name","Name"],["status","Status"]], c.security_groups, "No VPC security groups."));
+  host.append(sn, sg, _dkv("", [["Publicly accessible", c.publicly_accessible ? "Yes" : "No"]]));
+};
+SUB_RENDERERS.rdsmodify = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "configuration")); if (!c) return;
+  host.append(_rdsEditor(full, "Modify DB instance: " + c.db_instance_identifier, c, [
+    {k:"db_instance_class", label:"DB instance class", type:"select", options:c.instance_classes},
+    {k:"allocated_storage", label:"Allocated storage (GiB)", type:"number"},
+    {k:"multi_az", label:"Multi-AZ deployment", type:"bool"},
+    {k:"publicly_accessible", label:"Publicly accessible", type:"bool"},
+    {k:"deletion_protection", label:"Enable deletion protection", type:"bool"},
+    {k:"copy_tags_to_snapshot", label:"Copy tags to snapshots", type:"bool"},
+    {k:"auto_minor_version_upgrade", label:"Enable auto minor version upgrade", type:"bool"}]));
+};
+SUB_RENDERERS.rdsbackups = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "configuration")); if (!c) return;
+  host.append(_dkv("Backup", [["Automated backups", c.automated_backups + (c.backup_retention_period ? " (" + c.backup_retention_period + " Days)" : "")],
+    ["Backup window", c.preferred_backup_window + " UTC"], ["Copy tags to snapshots", c.copy_tags_to_snapshot ? "Enabled" : "Disabled"],
+    ["Latest restore time", c.latest_restorable_time || c.created], ["Encryption", c.storage_encrypted ? "Enabled (" + c.kms_key_id + ")" : "Not enabled"]]));
+  host.append(_rdsEditor(full, "Edit backup settings", c, [
+    {k:"backup_retention_period", label:"Backup retention period (days, 0 disables automated backups)", type:"number"},
+    {k:"preferred_backup_window", label:"Backup window (hh24:mi-hh24:mi UTC)", type:"text"},
+    {k:"copy_tags_to_snapshot", label:"Copy tags to snapshots", type:"bool"}]));
+};
+SUB_RENDERERS.rdsmaintenance = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "configuration")); if (!c) return;
+  const pm = await _dget(host, _rdsp(full, "pending-maintenance")); if (!pm) return;
+  host.append(_dkv("Maintenance", [["Auto minor version upgrade", c.auto_minor_version_upgrade ? "Enabled" : "Disabled"],
+    ["Maintenance window", c.preferred_maintenance_window + " UTC"], ["Engine version", c.engine + " " + c.engine_version]]));
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Pending maintenance (" + pm.pending_maintenance_actions.length + ")"),
+    _dtbl([["action","Action"],["description","Description"],["auto_applied_after_date","Apply date"]], pm.pending_maintenance_actions,
+      "No maintenance is pending for " + c.db_instance_identifier + "."));
+  host.append(card);
+  host.append(_rdsEditor(full, "Edit maintenance", c, [
+    {k:"preferred_maintenance_window", label:"Maintenance window (ddd:hh24:mi-ddd:hh24:mi UTC)", type:"text"},
+    {k:"auto_minor_version_upgrade", label:"Enable auto minor version upgrade", type:"bool"}]));
+};
+SUB_RENDERERS.rdslogs = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "configuration")); if (!c) return;
+  const e = await _dget(host, _rdsp(full, "events")); if (!e) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Recent events (" + e.events.length + ")"),
+    _dtbl([["date","Time"],["category","Category"],["message","Message"]], e.events, "No events recorded for " + c.db_instance_identifier + "."));
+  host.append(card);
+  host.append(_dkv("Log exports", [["Published to CloudWatch Logs", (c.enabled_cloudwatch_logs_exports || []).join(", ") || "None"]]));
+  host.append(_rdsEditor(full, "Edit log exports", c, [{k:"enabled_cloudwatch_logs_exports", label:"Export", type:"multi", options:c.log_types}]));
+};
+SUB_RENDERERS.rdsperformance = async function(svc, full, host){
+  const c = await _dget(host, _rdsp(full, "configuration")); if (!c) return;
+  const pi = await _dget(host, _rdsp(full, "performance-insights")); if (!pi) return;
+  host.append(_dkv("Performance Insights", [["Performance Insights", pi.enabled ? "Enabled" : "Disabled"], ["Resource ID", pi.identifier, 1],
+    ["Retention period", pi.retention_period + " days"], ...(pi.enabled ? [["AWS KMS key", pi.kms_key_id, 1]] : [])]));
+  host.append(_rdsEditor(full, "Edit Performance Insights", c, [
+    {k:"performance_insights_enabled", label:"Turn on Performance Insights", type:"bool"},
+    {k:"performance_insights_retention_period", label:"Retention period (7, 731 or a multiple of 31 days)", type:"number"}]));
+};
+
+// ── Service-specific Overview cards (the universal Overview tab delegates here). ──
+const OVERVIEW_EXTRA = {};
+const _baseOverview = SUB_RENDERERS.overview;
+SUB_RENDERERS.overview = function(svc, full, host, tab){
+  const fn = OVERVIEW_EXTRA[svc.key];
+  if (fn && !(tab && tab.key === "details" && svc.key === "vpc")) return fn(svc, full, host, tab);
+  return _baseOverview(svc, full, host, tab);
+};
+
+// ── DynamoDB table tabs (GET/PUT /api/dynamodb/tables/{t}/detail/{section}). ──
+function _ddbp(full, section){ return "/api/dynamodb/tables/" + encodeURIComponent(full.name || full.table_name || "") + "/detail/" + section; }
+async function _ddbput(full, section, body, okMsg){
+  const r = await api("PUT", _ddbp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Update failed: " + _derr(r), "err"); return false;
+}
+OVERVIEW_EXTRA.dynamodb = async function(svc, full, host){
+  const g = await _dget(host, _ddbp(full, "general")); if (!g) return;
+  host.append(_dkv("General information", [["Partition key", g.partition_key, 1], ["Sort key", g.sort_key, 1],
+    ["Capacity mode", g.capacity_mode], ["Table status", g.table_status], ["Point-in-time recovery (PITR)", g.pitr === "ENABLED" ? "On" : "Off"],
+    ["Deletion protection", g.deletion_protection ? "On" : "Off"], ["Table class", g.table_class], ["Indexes", g.indexes]]));
+  host.append(_dkv("Items summary", [["Item count", g.item_count], ["Table size", g.table_size_bytes + " bytes"],
+    ["Average item size", g.average_item_size + " bytes"]]));
+  host.append(_dkv("Additional info", [["Amazon Resource Name (ARN)", g.table_arn, 1], ["Creation date", g.created]]));
+};
+SUB_RENDERERS.dynamoquery = async function(svc, full, host){
+  // Scan runs on open (as the console's "Explore items" does); Query uses the table's own key schema.
+  const g = await _dget(host, _ddbp(full, "general")); if (!g) return;
+  const pk = String(g.partition_key || "").split(" ")[0], sk = String(g.sort_key || "").split(" ")[0];
+  const out = el("div",{});
+  const show = (r, label) => { out.innerHTML = "";
+    if (!r.ok) { out.append(el("div",{class:"alert err"}, _derr(r))); return; }
+    const items = (r.json || {}).items || [];
+    const cols = Array.from(new Set(items.flatMap(i => Object.keys(i.item || i)))).slice(0, 8);
+    const card = el("div",{class:"kv-card"});
+    card.append(el("div",{class:"h"}, label + ": items returned (" + items.length + ")"),
+      _dtbl(cols.map(c => [it => { const v = (it.item || it)[c]; return v == null ? "" : (typeof v === "object" ? JSON.stringify(v) : String(v)); }, c, 1]), items,
+        "The " + label.toLowerCase() + " returned no items from " + g.table_name + "."));
+    out.append(card); };
+  const pv = el("input",{placeholder:"Enter " + pk + " value", "data-testid":"ddb-query-pk"});
+  const sv = el("input",{placeholder: sk ? "Enter " + sk + " value (optional)" : "This table has no sort key"}); if (!sk) sv.setAttribute("disabled", "");
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Scan or query items"),
+    _field(pk + " (partition key)", pv), _field((sk || "Sort key") + (sk ? " (sort key) equals" : ""), sv),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary",onclick:async()=>{
+        if (!pv.value) { toast("Enter a " + pk + " value to query", "err"); return; }
+        const body = {partition_key_value: pv.value}; if (sk && sv.value) body.sort_key_equals = sv.value;
+        show(await api(svc.api_paths.query.method, fillPath(svc.api_paths.query.path, {name: g.table_name}), body), "Query");
+      }}, icon("search"), "Run query"),
+      el("button",{class:"btn",onclick:async()=>show(await api(svc.api_paths.scan.method, fillPath(svc.api_paths.scan.path, {name: g.table_name}), {}), "Scan")}, "Run scan")));
+  host.append(card, out);
+  show(await api(svc.api_paths.scan.method, fillPath(svc.api_paths.scan.path, {name: g.table_name}), {}), "Scan");
+};
+SUB_RENDERERS.ddbindexes = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "indexes")); if (!j) return;
+  const cols = [["index_name","Name"],["status","Status"],["partition_key","Partition key"],["sort_key","Sort key"],["projection","Projected attributes"],
+    [r => r.type === "GSI" ? el("button",{class:"btn",onclick:()=>_ddbput(full, "indexes", {action:"delete", index_name:r.index_name}, "Index deleted")}, "Delete") : "", "Actions"]];
+  const g = el("div",{class:"kv-card"}); g.append(el("div",{class:"h"}, "Global secondary indexes (" + j.global_secondary_indexes.length + ")"),
+    _dtbl(cols, j.global_secondary_indexes, "No global secondary indexes on " + full.name + "."));
+  const l = el("div",{class:"kv-card"}); l.append(el("div",{class:"h"}, "Local secondary indexes (" + j.local_secondary_indexes.length + ")"),
+    _dtbl(cols.slice(0, 5), j.local_secondary_indexes, "No local secondary indexes (they can only be added when the table is created)."));
+  const f = {n:el("input",{placeholder:"email-index"}), pk:el("input",{placeholder:"email"}), pkt:el("select",{}, ...["S","N","B"].map(t => el("option",{value:t}, t))),
+    sk:el("input",{}), skt:el("select",{}, ...["S","N","B"].map(t => el("option",{value:t}, t))), pr:el("select",{}, ...["ALL","KEYS_ONLY","INCLUDE"].map(t => el("option",{value:t}, t)))};
+  const c = el("div",{class:"kv-card"}); c.append(el("div",{class:"h"}, "Create global secondary index"),
+    _field("Index name", f.n), _field("Partition key", f.pk), _field("Partition key type", f.pkt), _field("Sort key (optional)", f.sk), _field("Sort key type", f.skt),
+    _field("Attribute projections", f.pr),
+    el("button",{class:"btn primary",onclick:()=>_ddbput(full, "indexes", {index_name:f.n.value, partition_key:f.pk.value, partition_key_type:f.pkt.value,
+      sort_key:f.sk.value, sort_key_type:f.skt.value, projection:f.pr.value}, "Index created")}, icon("add"), "Create index"));
+  host.append(g, l, c);
+};
+SUB_RENDERERS.ddbstreams = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "streams")); if (!j) return;
+  const vt = el("select",{"data-testid":"ddb-stream-view"}, ...["NEW_AND_OLD_IMAGES","NEW_IMAGE","OLD_IMAGE","KEYS_ONLY"].map(t => el("option",{value:t}, t)));
+  host.append(_dkv("DynamoDB stream details", [["Stream status", j.stream_enabled ? "On" : "Off"],
+    ...(j.stream_enabled ? [["View type", j.view_type], ["Latest stream ARN", j.latest_stream_arn, 1]] : [])], j.stream_enabled
+      ? el("button",{class:"btn",style:"margin-left:auto",onclick:()=>_ddbput(full, "streams", {stream_enabled:false}, "Stream turned off")}, "Turn off")
+      : null));
+  if (!j.stream_enabled) {
+    const c = el("div",{class:"kv-card"}); c.append(el("div",{class:"h"}, "Turn on DynamoDB stream"), _field("View type", vt),
+      el("button",{class:"btn primary",onclick:()=>_ddbput(full, "streams", {stream_enabled:true, view_type:vt.value}, "Stream turned on")}, "Turn on stream"));
+    host.append(c);
+  }
+};
+SUB_RENDERERS.ddbcapacity = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "capacity")); if (!j) return;
+  host.append(_dkv("Read/write capacity", [["Capacity mode", j.billing_mode === "PAY_PER_REQUEST" ? "On-demand" : "Provisioned"],
+    ...(j.billing_mode === "PROVISIONED" ? [["Read capacity units", j.read_capacity_units], ["Write capacity units", j.write_capacity_units]] : []),
+    ["Table class", j.table_class === "STANDARD" ? "DynamoDB Standard" : "DynamoDB Standard-IA"], ["Deletion protection", j.deletion_protection ? "On" : "Off"]]));
+  const mode = el("select",{"data-testid":"ddb-billing"}, el("option",{value:"PAY_PER_REQUEST"}, "On-demand"), el("option",{value:"PROVISIONED"}, "Provisioned")); mode.value = j.billing_mode;
+  const r = el("input",{type:"number",min:"1",value:j.read_capacity_units || 5}), w = el("input",{type:"number",min:"1",value:j.write_capacity_units || 5});
+  const cls = el("select",{}, el("option",{value:"STANDARD"}, "DynamoDB Standard"), el("option",{value:"STANDARD_INFREQUENT_ACCESS"}, "DynamoDB Standard-IA")); cls.value = j.table_class;
+  const dp = el("input",{type:"checkbox"}); if (j.deletion_protection) dp.checked = true;
+  const c = el("div",{class:"kv-card"}); c.append(el("div",{class:"h"}, "Edit"), _field("Capacity mode", mode), _field("Read capacity units", r),
+    _field("Write capacity units", w), _field("Table class", cls), el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, dp, el("span",{}, "Deletion protection")),
+    el("button",{class:"btn primary",onclick:()=>_ddbput(full, "capacity", {billing_mode:mode.value, read_capacity_units:r.value, write_capacity_units:w.value,
+      table_class:cls.value, deletion_protection:dp.checked}, "Table settings saved")}, icon("save"), "Save changes"));
+  host.append(c);
+};
+SUB_RENDERERS.ddbencryption = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "encryption")); if (!j) return;
+  host.append(_dkv("Encryption at rest", [["Key type", j.description], ["Status", j.status], ...(j.kms_key_arn ? [["AWS KMS key ARN", j.kms_key_arn, 1]] : [])]));
+  const t = el("select",{}, el("option",{value:"AWS_OWNED"}, "Owned by Amazon DynamoDB"), el("option",{value:"AWS_MANAGED"}, "AWS managed key (aws/dynamodb)"),
+    el("option",{value:"CUSTOMER_MANAGED"}, "Customer managed key")); t.value = j.sse_type;
+  const k = el("input",{placeholder:"arn:aws:kms:" + REGION + ":" + ACCOUNT + ":key/…", value: j.sse_type === "CUSTOMER_MANAGED" ? j.kms_key_arn : ""});
+  const c = el("div",{class:"kv-card"}); c.append(el("div",{class:"h"}, "Manage encryption"), _field("Encryption key", t), _field("KMS key ARN (customer managed)", k),
+    el("button",{class:"btn primary",onclick:()=>_ddbput(full, "encryption", {sse_type:t.value, kms_key_arn:k.value}, "Encryption updated")}, icon("save"), "Save changes"));
+  host.append(c);
+};
+SUB_RENDERERS.ddbttl = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "ttl")); if (!j) return;
+  const on = j.time_to_live_status === "ENABLED";
+  host.append(_dkv("Time to Live (TTL)", [["TTL status", on ? "On" : "Off"], ...(on ? [["TTL attribute", j.attribute_name]] : [])],
+    on ? el("button",{class:"btn",style:"margin-left:auto",onclick:()=>_ddbput(full, "ttl", {enabled:false}, "TTL turned off")}, "Turn off") : null));
+  if (!on) {
+    const a = el("input",{placeholder:"expiresAt","data-testid":"ddb-ttl-attr"});
+    const c = el("div",{class:"kv-card"}); c.append(el("div",{class:"h"}, "Turn on Time to Live"), _field("TTL attribute name", a),
+      el("button",{class:"btn primary",onclick:()=>_ddbput(full, "ttl", {enabled:true, attribute_name:a.value}, "TTL turned on")}, "Turn on TTL"));
+    host.append(c);
+  }
+};
+SUB_RENDERERS.ddbpitr = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "pitr")); if (!j) return;
+  const on = j.point_in_time_recovery_status === "ENABLED";
+  host.append(_dkv("Point-in-time recovery (PITR)", [["Status", on ? "On" : "Off"],
+    ...(on ? [["Earliest restore date", j.earliest_restorable_date_time], ["Latest restore date", j.latest_restorable_date_time],
+              ["Backup recovery period (days)", j.recovery_period_in_days]] : [])],
+    el("button",{class:"btn",style:"margin-left:auto",onclick:()=>_ddbput(full, "pitr", {enabled:!on}, "PITR turned " + (on ? "off" : "on"))}, on ? "Turn off" : "Turn on")));
+};
+SUB_RENDERERS.ddbbackups = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "backups")); if (!j) return;
+  const c = el("div",{class:"kv-card"});
+  c.append(el("div",{class:"h"}, "Backups (" + j.backups.length + ")"),
+    _dtbl([["backup_name","Backup name"],["backup_status","Status"],["backup_type","Backup type"],["created","Creation time"],["size_bytes","Size (bytes)"],
+      ["item_count","Item count"],["backup_arn","Backup ARN",1],
+      [r => el("button",{class:"btn",onclick:()=>_ddbput(full, "backups", {action:"delete", backup_arn:r.backup_arn}, "Backup deleted")}, "Delete"),"Actions"]],
+      j.backups, "No on-demand backups of " + full.name + "."));
+  const n = el("input",{placeholder: full.name + "-backup"});
+  c.append(_field("Backup name", n), el("button",{class:"btn primary",onclick:()=>_ddbput(full, "backups", {backup_name:n.value}, "Backup created")}, icon("backup"), "Create backup"));
+  host.append(c);
+};
+SUB_RENDERERS.ddbinsights = async function(svc, full, host){
+  const j = await _dget(host, _ddbp(full, "insights")); if (!j) return;
+  const on = j.contributor_insights_status === "ENABLED";
+  host.append(_dkv("CloudWatch Contributor Insights", [["Status", on ? "Enabled" : "Disabled"], ...(on ? [["Rules", j.contributor_insights_rule_list.join(", ")]] : [])],
+    el("button",{class:"btn",style:"margin-left:auto",onclick:()=>_ddbput(full, "insights", {enabled:!on}, "Contributor Insights " + (on ? "disabled" : "enabled"))}, on ? "Turn off" : "Turn on")));
+};
+
+// ── Lambda function tabs (GET/PUT /api/lambda/functions/{fn}/detail/{section}). ──
+function _lamp(full, section){ return "/api/lambda/functions/" + encodeURIComponent(full.function_name || full.name || "") + "/detail/" + section; }
+async function _lamput(full, section, body, okMsg){
+  const r = await api("PUT", _lamp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Update failed: " + _derr(r), "err"); return false;
+}
+SUB_RENDERERS.lambdacode = async function(svc, full, host){
+  const c = await _dget(host, _lamp(full, "code")); if (!c) return;
+  host.append(_dkv("Code properties", [["Package type", c.package_type], ["Runtime", c.runtime], ["Handler", c.handler, 1],
+    ["Code size", c.code_size + " bytes"], ["SHA256 hash", c.code_sha256, 1], ["Last modified", c.last_modified]]));
+  const ta = el("textarea",{"data-testid":"lambda-code",style:"width:100%;min-height:300px;font-family:Consolas,Menlo,monospace"});
+  ta.value = c.code;
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Code source"), ta,
+    el("div",{style:"margin-top:10px"}, el("button",{class:"btn primary",onclick:()=>_lamput(full, "code", {code: ta.value}, "Code deployed")}, icon("save"), "Deploy"))));
+};
+SUB_RENDERERS.lambdainvoke = async function(svc, full, host){
+  // Saved test events (shareable per function) + Invoke with the chosen event.
+  const j = await _dget(host, _lamp(full, "test-events")); if (!j) return;
+  const evs = j.test_events || [];
+  const sel = el("select",{"data-testid":"lambda-test-event"}, el("option",{value:""}, "New event"), ...evs.map(e => el("option",{value:e.name}, e.name)));
+  const nm = el("input",{placeholder:"MyEventName"});
+  const ta = el("textarea",{"data-testid":"lambda-test-json",style:"width:100%;min-height:150px;font-family:Consolas,Menlo,monospace"});
+  ta.value = evs.length ? JSON.stringify(evs[0].event, null, 2) : '{\n  "key1": "value1"\n}';
+  if (evs.length) { sel.value = evs[0].name; nm.value = evs[0].name; }
+  sel.addEventListener("change", () => { const e = evs.find(x => x.name === sel.value); nm.value = e ? e.name : ""; ta.value = e ? JSON.stringify(e.event, null, 2) : "{}"; });
+  const out = el("div",{});
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Test event (" + evs.length + " saved)"), _field("Saved event", sel), _field("Event name", nm), _field("Event JSON", ta),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary","data-testid":"lambda-test-run",onclick:async()=>{
+        let payload; try { payload = JSON.parse(ta.value || "{}"); } catch(e) { toast("The event is not valid JSON", "err"); return; }
+        const r = await api(svc.api_paths.invoke.method, fillPath(svc.api_paths.invoke.path, {name: full.function_name || full.name}), {payload});
+        out.innerHTML = "";
+        const res = r.json || {};
+        const failed = !r.ok || res.functionError || res.function_error || res.FunctionError;
+        out.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, failed ? "Execution result: failed" : "Execution result: succeeded"),
+          el("pre",{class:"json","data-testid":"lambda-test-result"}, JSON.stringify(res.result !== undefined ? res.result : res, null, 2))));
+      }}, icon("play_arrow"), "Test"),
+      el("button",{class:"btn","data-testid":"lambda-test-save",onclick:()=>_lamput(full, "test-events", {name: nm.value, event: ta.value}, "Test event saved")}, icon("save"), "Save"),
+      sel.value ? el("button",{class:"btn",onclick:()=>_lamput(full, "test-events", {action:"delete", name: sel.value}, "Test event deleted")}, icon("delete"), "Delete") : null));
+  host.append(card, out);
+};
+SUB_RENDERERS.lambdaenv = async function(svc, full, host){
+  const j = await _dget(host, _lamp(full, "env")); if (!j) return;
+  const vars = Object.entries(j.variables || {});
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Environment variables (" + vars.length + ")"),
+    _dtbl([["0","Key",1],["1","Value",1]], vars, "No environment variables are set on " + (full.function_name || full.name) + "."));
+  const rows = el("div",{});
+  const state = vars.length ? vars.map(([k, v]) => [k, v]) : [["", ""]];
+  const paint = () => { rows.innerHTML = ""; state.forEach((pr, i) => {
+    const k = el("input",{placeholder:"Key", value: pr[0], "data-env-key": String(i), oninput:e=>{ pr[0] = e.target.value; }});
+    const v = el("input",{placeholder:"Value", value: pr[1], "data-env-val": String(i), oninput:e=>{ pr[1] = e.target.value; }});
+    rows.append(el("div",{class:"tags-rows"}, k, v, el("button",{class:"x material-symbols-outlined",onclick:()=>{ state.splice(i, 1); paint(); }}, "close"))); }); };
+  paint();
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Edit environment variables"), rows,
+    el("button",{class:"add-row",onclick:()=>{ state.push(["", ""]); paint(); }}, "+ Add environment variable"),
+    el("div",{style:"margin-top:10px"}, el("button",{class:"btn primary",onclick:()=>_lamput(full, "env",
+      {variables: Object.fromEntries(state.filter(([k]) => k))}, "Environment variables saved")}, icon("save"), "Save")));
+  host.append(card);
+};
+SUB_RENDERERS.lambdaconfig = async function(svc, full, host){
+  const c = await _dget(host, _lamp(full, "configuration")); if (!c) return;
+  host.append(_dkv("General configuration", [["Description", c.description], ["Memory", c.memory_size + " MB"], ["Ephemeral storage", c.ephemeral_storage + " MB"],
+    ["Timeout", c.timeout + " sec"], ["Architecture", (c.architectures || []).join(", ")], ["Tracing", c.tracing_mode],
+    ["Function ARN", c.function_arn, 1], ["State", c.state], ["Last modified", c.last_modified]]));
+  const f = {description:el("input",{value:c.description || ""}), memory_size:el("input",{type:"number",min:"128",max:"10240",value:c.memory_size,"data-cfg":"memory_size"}),
+    ephemeral_storage:el("input",{type:"number",min:"512",max:"10240",value:c.ephemeral_storage}), timeout:el("input",{type:"number",min:"1",max:"900",value:c.timeout,"data-cfg":"timeout"})};
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit basic settings"), _field("Description", f.description), _field("Memory (MB)", f.memory_size),
+    _field("Ephemeral storage (MB)", f.ephemeral_storage), _field("Timeout (seconds)", f.timeout),
+    el("button",{class:"btn primary",onclick:()=>_lamput(full, "configuration", {description:f.description.value, memory_size:f.memory_size.value,
+      ephemeral_storage:f.ephemeral_storage.value, timeout:f.timeout.value}, "Configuration saved")}, icon("save"), "Save")));
+};
+SUB_RENDERERS.lambdaversions = async function(svc, full, host){
+  const j = await _dget(host, _lamp(full, "versions")); if (!j) return;
+  const d = el("input",{placeholder:"Version description"});
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Versions (" + j.versions.length + ")"),
+    _dtbl([["version","Version"],["function_arn","Version ARN",1],["description","Description"],["created","Last modified"],["code_sha256","Code SHA256",1]],
+      j.versions, "No versions."),
+    _field("Description", d), el("button",{class:"btn primary",onclick:()=>_lamput(full, "versions", {description: d.value}, "Version published")}, icon("publish"), "Publish new version"));
+  host.append(card);
+};
+SUB_RENDERERS.lambdaaliases = async function(svc, full, host){
+  const j = await _dget(host, _lamp(full, "aliases")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Aliases (" + j.aliases.length + ")"),
+    _dtbl([["name","Name"],["function_version","Version"],["alias_arn","Alias ARN",1],["description","Description"],
+      [r => el("button",{class:"btn",onclick:()=>_lamput(full, "aliases", {action:"delete", name:r.name}, "Alias deleted")}, "Delete"),"Actions"]],
+      j.aliases, "No aliases point at versions of " + (full.function_name || full.name) + "."));
+  const n = el("input",{placeholder:"prod","data-testid":"lambda-alias-name"});
+  const v = el("select",{}, ...j.versions.map(x => el("option",{value:x}, x)));
+  const desc = el("input",{});
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Create alias"), _field("Name", n), _field("Version", v), _field("Description", desc),
+    el("button",{class:"btn primary","data-testid":"lambda-alias-save",onclick:()=>_lamput(full, "aliases", {name:n.value, function_version:v.value, description:desc.value}, "Alias created")}, icon("add"), "Save"));
+  host.append(card);
+};
+SUB_RENDERERS.lambdaperms = async function(svc, full, host){
+  const j = await _dget(host, _lamp(full, "policy")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Resource-based policy statements (" + j.statements.length + ")"),
+    _dtbl([["statement_id","Statement ID"],["principal","Principal",1],["action","Action"],[r => r.source_arn || r.source_account || "None","Conditions",1],
+      [r => el("button",{class:"btn",onclick:()=>_lamput(full, "policy", {action:"remove", statement_id:r.statement_id}, "Statement removed")}, "Delete"),"Actions"]],
+      j.statements, "No resource-based policy: no other account or AWS service can invoke " + (full.function_name || full.name) + "."));
+  if (j.policy) card.append(el("pre",{class:"json"}, JSON.stringify(j.policy, null, 2)));
+  const f = {sid:el("input",{placeholder:"AllowS3Invoke"}), pr:el("input",{placeholder:"s3.amazonaws.com"}), src:el("input",{placeholder:"arn:aws:s3:::my-bucket"}),
+    acct:el("input",{placeholder:ACCOUNT}), act:el("select",{}, el("option",{value:"lambda:InvokeFunction"}, "lambda:InvokeFunction"), el("option",{value:"lambda:GetFunction"}, "lambda:GetFunction"))};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Add permissions"), _field("Statement ID", f.sid), _field("Principal", f.pr), _field("Source ARN", f.src),
+    _field("Source account", f.acct), _field("Action", f.act),
+    el("button",{class:"btn primary",onclick:()=>_lamput(full, "policy", {statement_id:f.sid.value, principal:f.pr.value, source_arn:f.src.value,
+      source_account:f.acct.value, action_name:f.act.value}, "Permission added")}, icon("add"), "Save"));
+  host.append(card);
+};
+SUB_RENDERERS.lambdarole = async function(svc, full, host){
+  const j = await _dget(host, _lamp(full, "role")); if (!j) return;
+  host.append(_dkv("Execution role", [["Role name", j.role_name], ["Role ARN", j.role_arn, 1],
+    ["Role in this account's IAM", j.role_exists ? "Yes" : "No (the default service role is not an IAM role here)"]]));
+  if (j.role_exists) {
+    const card = el("div",{class:"kv-card"});
+    card.append(el("div",{class:"h"}, "Permissions policies (" + j.attached_policies.length + ")"),
+      _dtbl([[r => r,"Policy name"]], j.attached_policies, "The role has no policies attached, so the function can call no AWS APIs."));
+    host.append(card);
+  }
+  const r = el("input",{value:j.role_arn,"data-testid":"lambda-role"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit execution role"), _field("Existing role ARN", r),
+    el("button",{class:"btn primary",onclick:()=>_lamput(full, "role", {role:r.value}, "Execution role updated")}, icon("save"), "Save")));
+};
+
+// ── IAM account tabs (GET/PUT /api/iam/detail/{section}). ──
+async function _iamput(section, body, okMsg){
+  const r = await api("PUT", "/api/iam/detail/" + section, body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Update failed: " + _derr(r), "err"); return false;
+}
+SUB_RENDERERS.iamproviders = async function(svc, full, host){
+  const j = await _dget(host, "/api/iam/detail/identity-providers"); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Identity providers (" + j.identity_providers.length + ")"),
+    _dtbl([["provider_name","Provider"],["provider_type","Type"],["arn","ARN",1],[r => (r.audiences || []).join(", ") || r.url || "","Audience / URL",1],["created","Creation time"],
+      [r => el("button",{class:"btn",onclick:()=>_iamput("identity-providers", {action:"delete", provider_id:r.provider_id}, "Provider deleted")}, "Delete"),"Actions"]],
+      j.identity_providers, "No identity providers in account " + ACCOUNT + "."));
+  const f = {t:el("select",{}, el("option",{value:"OIDC"}, "OpenID Connect"), el("option",{value:"SAML"}, "SAML")), n:el("input",{placeholder:"MySAMLProvider"}),
+    u:el("input",{placeholder:"https://token.actions.githubusercontent.com","data-testid":"idp-url"}), a:el("input",{placeholder:"sts.amazonaws.com","data-testid":"idp-aud"}),
+    m:el("textarea",{placeholder:"<EntityDescriptor …>",style:"width:100%;min-height:60px"})};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Add provider"), _field("Provider type", f.t), _field("Provider name (SAML)", f.n),
+    _field("Provider URL (OIDC)", f.u), _field("Audience (OIDC)", f.a), _field("Metadata document (SAML)", f.m),
+    el("button",{class:"btn primary","data-testid":"idp-add",onclick:()=>_iamput("identity-providers", {provider_type:f.t.value, provider_name:f.n.value, url:f.u.value,
+      audiences:_csv(f.a.value), saml_metadata_document:f.m.value}, "Provider added")}, icon("add"), "Add provider"));
+  host.append(card);
+};
+SUB_RENDERERS.iampasswordpolicy = async function(svc, full, host){
+  const p = await _dget(host, "/api/iam/detail/password-policy"); if (!p) return;
+  host.append(_dkv("Password policy" + (p.custom ? "" : " (IAM default)"), [["Minimum password length", p.minimum_length + " characters"],
+    ["Require at least one uppercase letter", p.require_uppercase ? "Yes" : "No"], ["Require at least one lowercase letter", p.require_lowercase ? "Yes" : "No"],
+    ["Require at least one number", p.require_numbers ? "Yes" : "No"], ["Require at least one non-alphanumeric character", p.require_symbols ? "Yes" : "No"],
+    ["Password expiration", p.max_password_age ? "Expire after " + p.max_password_age + " days" : "Never expire"],
+    ["Prevent password reuse", p.password_reuse_prevention ? "Remember " + p.password_reuse_prevention + " passwords" : "Not enforced"],
+    ["Allow users to change their own password", p.allow_users_to_change_password ? "Yes" : "No"]]));
+  const card = el("div",{class:"kv-card"}); card.append(el("div",{class:"h"}, "Edit password policy"));
+  const inp = {minimum_length:el("input",{type:"number",min:"6",max:"128",value:p.minimum_length,"data-testid":"pwd-min"}),
+    max_password_age:el("input",{type:"number",min:"0",max:"1095",value:p.max_password_age}), password_reuse_prevention:el("input",{type:"number",min:"0",max:"24",value:p.password_reuse_prevention})};
+  const cbs = {};
+  [["require_uppercase","Require at least one uppercase letter"],["require_lowercase","Require at least one lowercase letter"],["require_numbers","Require at least one number"],
+   ["require_symbols","Require at least one non-alphanumeric character"],["allow_users_to_change_password","Allow users to change their own password"]].forEach(([k, l]) => {
+    cbs[k] = el("input",{type:"checkbox"}); if (p[k]) cbs[k].checked = true; card.append(el("label",{class:"check",style:"display:flex;gap:8px;margin:4px 0"}, cbs[k], el("span",{}, l))); });
+  card.append(_field("Minimum password length", inp.minimum_length), _field("Expire passwords after (days, 0 = never)", inp.max_password_age),
+    _field("Remember previous passwords (0 = off)", inp.password_reuse_prevention),
+    el("button",{class:"btn primary","data-testid":"pwd-save",onclick:()=>_iamput("password-policy", {...Object.fromEntries(Object.entries(inp).map(([k, i]) => [k, i.value])),
+      ...Object.fromEntries(Object.entries(cbs).map(([k, c]) => [k, c.checked]))}, "Password policy saved")}, icon("save"), "Save changes"));
+  host.append(card);
+};
+SUB_RENDERERS.iamaccessanalyzer = async function(svc, full, host){
+  const j = await _dget(host, "/api/iam/detail/access-analyzer"); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Analyzers (" + j.analyzers.length + ")"),
+    _dtbl([["name","Name"],["type","Zone of trust"],["status","Status"],["arn","ARN",1],["created","Creation time"],
+      [r => el("button",{class:"btn",onclick:()=>_iamput("access-analyzer", {action:"delete", name:r.name}, "Analyzer deleted")}, "Delete"),"Actions"]],
+      j.analyzers, "No analyzer: create one to find resources shared outside account " + ACCOUNT + "."));
+  if (!j.analyzers.length) {
+    const n = el("input",{value:"ConsoleAnalyzer-" + Date.now().toString(36),"data-testid":"analyzer-name"});
+    card.append(_field("Analyzer name", n), el("button",{class:"btn primary","data-testid":"analyzer-create",onclick:()=>_iamput("access-analyzer", {name:n.value}, "Analyzer created")}, icon("add"), "Create analyzer"));
+  }
+  host.append(card);
+  if (j.analyzers.length) {
+    const f = el("div",{class:"kv-card"});
+    f.append(el("div",{class:"h"}, "Active findings (" + j.findings.length + ")"),
+      _dtbl([["resource","Resource",1],["resource_type","Resource type"],["principal","External principal",1],["shared_through","Shared through"],["action","Access"],["status","Status"]],
+        j.findings, "No findings: no resource policy in this account grants access outside it."));
+    host.append(f);
+  }
+};
+
+// ── VPC tabs (GET/PUT /api/vpc/vpcs/{id}/detail/{section}). ──
+function _vpcp(full, section){ return "/api/vpc/vpcs/" + encodeURIComponent(full.vpc_id || full.id || full.name || "") + "/detail/" + section; }
+async function _vpcput(full, section, body, okMsg){
+  const r = await api("PUT", _vpcp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Failed: " + _derr(r), "err"); return false;
+}
+SUB_RENDERERS.vpcdetails = async function(svc, full, host){
+  const d = await _dget(host, _vpcp(full, "details")); if (!d) return;
+  host.append(_dkv("Details", [["VPC ID", d.vpc_id, 1], ["State", full.state || "available"], ["IPv4 CIDR", d.cidr_block, 1],
+    ["Default VPC", d.is_default ? "Yes" : "No"], ["Tenancy", full.tenancy || "default"], ["DHCP option set", full.dhcp_options_id, 1],
+    ["Main route table", d.main_route_table_id, 1], ["Main network ACL", d.default_network_acl_id, 1],
+    ["Default security group", d.default_security_group_id, 1], ["Subnets", d.subnet_count],
+    ["DNS resolution", d.enable_dns_support ? "Enabled" : "Disabled"], ["DNS hostnames", d.enable_dns_hostnames ? "Enabled" : "Disabled"],
+    ["Owner ID", ACCOUNT, 1]]));
+  const s = el("input",{type:"checkbox","data-testid":"vpc-dns-support"}); if (d.enable_dns_support) s.checked = true;
+  const h = el("input",{type:"checkbox","data-testid":"vpc-dns-hostnames"}); if (d.enable_dns_hostnames) h.checked = true;
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit VPC settings"),
+    el("label",{class:"check",style:"display:flex;gap:8px;margin:4px 0"}, s, el("span",{}, "Enable DNS resolution")),
+    el("label",{class:"check",style:"display:flex;gap:8px;margin:4px 0"}, h, el("span",{}, "Enable DNS hostnames")),
+    el("button",{class:"btn primary","data-testid":"vpc-settings-save",onclick:()=>_vpcput(full, "details", {enable_dns_support:s.checked, enable_dns_hostnames:h.checked}, "VPC settings saved")}, icon("save"), "Save")));
+};
+SUB_RENDERERS.vpcnat = async function(svc, full, host){
+  const j = await _dget(host, _vpcp(full, "nat_gateways")); if (!j) return;
+  const sn = await api("GET", _vpcp(full, "endpoints"));
+  const subnets = (sn.json || {}).subnets || [];
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "NAT gateways (" + j.nat_gateways.length + ")"),
+    _dtbl([["id","NAT gateway ID",1],["name","Name"],["connectivity_type","Connectivity type"],["state","State"],["public_ip","Primary public IPv4 address",1],
+      ["private_ip","Primary private IPv4 address",1],["subnet_id","Subnet",1],["created","Created"],
+      [r => r.state === "available" ? el("button",{class:"btn",onclick:()=>_vpcput(full, "nat_gateways", {action:"delete", id:r.id}, "NAT gateway deleted")}, "Delete") : "", "Actions"]],
+      j.nat_gateways, "No NAT gateways in " + (full.vpc_id || "this VPC") + "."));
+  const f = {n:el("input",{placeholder:"my-nat"}), s:el("select",{"data-testid":"nat-subnet"}, ...subnets.map(x => el("option",{value:x}, x))),
+    c:el("select",{}, el("option",{value:"public"}, "Public"), el("option",{value:"private"}, "Private"))};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Create NAT gateway"), _field("Name", f.n), _field("Subnet", f.s), _field("Connectivity type", f.c),
+    el("button",{class:"btn primary","data-testid":"nat-create",onclick:()=>_vpcput(full, "nat_gateways", {name:f.n.value, subnet_id:f.s.value, connectivity_type:f.c.value}, "NAT gateway created")}, icon("add"), "Create NAT gateway"));
+  host.append(card);
+};
+SUB_RENDERERS.vpcendpoints = async function(svc, full, host){
+  const j = await _dget(host, _vpcp(full, "endpoints")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Endpoints (" + j.endpoints.length + ")"),
+    _dtbl([["id","VPC endpoint ID",1],["service_name","Service name",1],["endpoint_type","Endpoint type"],["state","Status"],
+      [r => (r.route_table_ids || r.subnet_ids || []).join(", "),"Route tables / subnets",1],[r => r.dns_name || "","DNS name",1],
+      [r => el("button",{class:"btn",onclick:()=>_vpcput(full, "endpoints", {action:"delete", id:r.id}, "Endpoint deleted")}, "Delete"),"Actions"]],
+      j.endpoints, "No VPC endpoints in " + (full.vpc_id || "this VPC") + "."));
+  const svcIn = el("input",{value:"s3","data-testid":"vpce-service"});
+  const t = el("select",{}, el("option",{value:""}, "Default for the service"), el("option",{value:"Gateway"}, "Gateway"), el("option",{value:"Interface"}, "Interface"));
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Create endpoint"), _field("Service (e.g. s3, dynamodb, sqs, com.amazonaws." + REGION + ".kms)", svcIn), _field("Type", t),
+    el("button",{class:"btn primary","data-testid":"vpce-create",onclick:()=>_vpcput(full, "endpoints", {service:svcIn.value, endpoint_type:t.value || undefined}, "Endpoint created")}, icon("add"), "Create endpoint"));
+  host.append(card);
+};
+SUB_RENDERERS.vpcnacls = async function(svc, full, host){
+  const j = await _dget(host, _vpcp(full, "nacls")); if (!j) return;
+  j.network_acls.forEach(n => {
+    const card = el("div",{class:"kv-card"});
+    card.append(el("div",{class:"h"}, n.network_acl_id + (n.is_default ? " (default)" : "") + " · " + n.subnets.length + " subnet associations",
+      !n.is_default && !n.subnets.length ? el("button",{class:"btn",style:"margin-left:auto",onclick:()=>_vpcput(full, "nacls", {action:"delete", network_acl_id:n.network_acl_id}, "Network ACL deleted")}, "Delete") : null),
+      _dtbl([["direction","Direction"],["rule_number","Rule number"],[e => e.protocol === "-1" ? "All" : e.protocol,"Protocol"],["port_range","Port range"],["cidr","Source / destination",1],["action","Allow/Deny"],
+        [e => el("button",{class:"btn",onclick:()=>_vpcput(full, "nacls", {action:"delete_entry", network_acl_id:n.network_acl_id, rule_number:e.rule_number, egress:e.egress}, "Rule deleted")}, "Delete"),"Actions"]],
+        n.entries, "No rules: every packet is denied by the * rule."));
+    const f = {num:el("input",{type:"number",min:"1",max:"32766",value:"100"}), dir:el("select",{}, el("option",{value:"false"}, "Inbound"), el("option",{value:"true"}, "Outbound")),
+      pr:el("select",{}, el("option",{value:"6"}, "TCP (6)"), el("option",{value:"17"}, "UDP (17)"), el("option",{value:"-1"}, "All")), port:el("input",{placeholder:"443"}),
+      cidr:el("input",{value:"0.0.0.0/0"}), act:el("select",{}, el("option",{value:"allow"}, "Allow"), el("option",{value:"deny"}, "Deny")),
+      sub:el("select",{}, ...j.subnets.map(s => el("option",{value:s}, s)))};
+    card.append(el("div",{style:"display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px"}, _field("Rule number", f.num), _field("Direction", f.dir),
+      _field("Protocol", f.pr), _field("Port", f.port), _field("CIDR", f.cidr), _field("Action", f.act)),
+      el("div",{style:"display:flex;gap:8px"},
+        el("button",{class:"btn primary",onclick:()=>_vpcput(full, "nacls", {action:"add_entry", network_acl_id:n.network_acl_id, rule_number:f.num.value, egress:f.dir.value === "true",
+          protocol:f.pr.value, from_port:f.port.value, to_port:f.port.value, cidr:f.cidr.value, rule_action:f.act.value}, "Rule added")}, icon("add"), "Add rule"),
+        !n.is_default ? el("span",{style:"display:flex;gap:6px;align-items:center"}, f.sub,
+          el("button",{class:"btn",onclick:()=>_vpcput(full, "nacls", {action:"associate", network_acl_id:n.network_acl_id, subnet_id:f.sub.value}, "Subnet associated")}, "Associate subnet")) : null));
+    host.append(card);
+  });
+  host.append(el("button",{class:"btn primary","data-testid":"nacl-create",onclick:()=>_vpcput(full, "nacls", {action:"create"}, "Network ACL created")}, icon("add"), "Create network ACL"));
+};
+SUB_RENDERERS.vpcflowlogs = async function(svc, full, host){
+  const j = await _dget(host, _vpcp(full, "flow_logs")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Flow logs (" + j.flow_logs.length + ")"),
+    _dtbl([["id","Flow log ID",1],["traffic_type","Filter"],["destination_type","Destination type"],["destination","Destination",1],["max_aggregation_interval","Max aggregation interval (s)"],
+      ["status","Status"],["created","Creation time"],
+      [r => el("button",{class:"btn",onclick:()=>_vpcput(full, "flow_logs", {action:"delete", id:r.id}, "Flow log deleted")}, "Delete"),"Actions"]],
+      j.flow_logs, "No flow logs capture traffic for " + (full.vpc_id || "this VPC") + "."));
+  const f = {t:el("select",{}, el("option",{value:"ALL"}, "All"), el("option",{value:"ACCEPT"}, "Accept"), el("option",{value:"REJECT"}, "Reject")),
+    dt:el("select",{}, el("option",{value:"cloud-watch-logs"}, "CloudWatch Logs"), el("option",{value:"s3"}, "Amazon S3 bucket")),
+    d:el("input",{placeholder:"/vpc/flow-logs  or  arn:aws:s3:::my-bucket","data-testid":"flowlog-dest"}),
+    a:el("select",{}, el("option",{value:"600"}, "10 minutes"), el("option",{value:"60"}, "1 minute"))};
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Create flow log"), _field("Filter", f.t), _field("Destination", f.dt), _field("Log group / bucket ARN", f.d),
+    _field("Maximum aggregation interval", f.a),
+    el("button",{class:"btn primary","data-testid":"flowlog-create",onclick:()=>_vpcput(full, "flow_logs", {traffic_type:f.t.value, destination_type:f.dt.value, destination:f.d.value,
+      max_aggregation_interval:f.a.value}, "Flow log created")}, icon("add"), "Create flow log"));
+  host.append(card);
+};
+
+// ── SQS queue tabs (GET/PUT /api/sqs/queues/{q}/detail/{section}). ──
+function _sqsp(full, section){ return "/api/sqs/queues/" + encodeURIComponent(full.queue_name || full.name || "") + "/detail/" + section; }
+async function _sqsput(full, section, body, okMsg){
+  const r = await api("PUT", _sqsp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Failed: " + _derr(r), "err"); return false;
+}
+function _sqsCounts(q){ return [["Messages available", q.messages_available], ["Messages in flight", q.messages_in_flight], ["Messages delayed", q.messages_delayed]]; }
+SUB_RENDERERS.sqsmessages = async function(svc, full, host){
+  const q = await _dget(host, _sqsp(full, "configuration")); if (!q) return;
+  host.append(_dkv("Queue " + q.queue_name, [["Type", q.type], ..._sqsCounts(q), ["URL", q.queue_url, 1]]));
+  const ta = el("textarea",{"data-testid":"sqs-body",style:"width:100%;min-height:80px"}); ta.value = "";
+  const grp = el("input",{placeholder:"Message group ID (FIFO)"});
+  const out = el("div",{});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Send message"), _field("Message body", ta), ...(q.type === "FIFO" ? [_field("Message group ID", grp)] : []),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary","data-testid":"sqs-send",onclick:async()=>{
+        if (!ta.value) { toast("Enter a message body", "err"); return; }
+        const body = {message_body: ta.value, body: ta.value, MessageBody: ta.value}; if (q.type === "FIFO") { body.message_group_id = grp.value; body.MessageGroupId = grp.value; }
+        const r = await api(svc.api_paths.send.method, fillPath(svc.api_paths.send.path, {name: q.queue_name}), body);
+        if (r.ok) { toast("Message sent"); _rerender(); } else toast("Send failed: " + _derr(r), "err");
+      }}, icon("send"), "Send message"),
+      el("button",{class:"btn","data-testid":"sqs-poll",onclick:async()=>{
+        const r = await api(svc.api_paths.receive.method, fillPath(svc.api_paths.receive.path, {name: q.queue_name}), {max_number_of_messages: 10, max: 10});
+        const msgs = ((r.json || {}).messages || []).map(m => ({id: m.message_id || m.MessageId, body: m.body ?? m.Body, receives: m.receive_count ?? (m.Attributes || {}).ApproximateReceiveCount ?? "", sent: m.sent || m.created || ""}));
+        out.innerHTML = "";
+        out.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Received messages (" + msgs.length + ")"),
+          _dtbl([["id","ID",1],["body","Body",1],["receives","Receive count"],["sent","Sent"]], msgs, "No messages available in " + q.queue_name + ".")));
+      }}, icon("download"), "Poll for messages"))));
+  host.append(out);
+};
+SUB_RENDERERS.sqspurge = async function(svc, full, host){
+  const q = await _dget(host, _sqsp(full, "purge")); if (!q) return;
+  host.append(_dkv("Purge " + q.queue_name, _sqsCounts(q)));
+  host.append(el("div",{class:"alert warn"}, icon("warning"), el("div",{}, "Purging deletes every message in " + q.queue_name + ". You can purge a queue once every 60 seconds.")),
+    el("button",{class:"btn danger","data-testid":"sqs-purge",onclick:()=>_sqsput(full, "purge", {}, "Queue purged")}, icon("delete_forever"), "Purge"));
+};
+SUB_RENDERERS.sqsconfig = async function(svc, full, host){
+  const q = await _dget(host, _sqsp(full, "attributes")); if (!q) return;   // GetQueueAttributes
+  host.append(_dkv("Details", [["Name", q.queue_name], ["Type", q.type], ["ARN", q.queue_arn, 1], ["URL", q.queue_url, 1], ["Encryption", q.encryption],
+    ["Visibility timeout", q.visibility_timeout + " seconds"], ["Message retention period", Math.round(q.message_retention_period / 86400 * 10) / 10 + " days"],
+    ["Maximum message size", q.max_message_size / 1024 + " KB"], ["Delivery delay", q.delay_seconds + " seconds"],
+    ["Receive message wait time", q.receive_wait_time_seconds + " seconds"], ..._sqsCounts(q)]));
+  const f = {};
+  [["visibility_timeout","Visibility timeout (seconds, 0-43200)"],["message_retention_period","Message retention (seconds, 60-1209600)"],
+   ["max_message_size","Maximum message size (bytes, 1024-262144)"],["delay_seconds","Delivery delay (seconds, 0-900)"],
+   ["receive_wait_time_seconds","Receive message wait time (seconds, 0-20)"]].forEach(([k, l]) => f[k] = [l, el("input",{type:"number",value:q[k],"data-cfg":k})]);
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit configuration"), ...Object.values(f).map(([l, i]) => _field(l, i)),
+    el("button",{class:"btn primary","data-testid":"sqs-config-save",onclick:()=>_sqsput(full, "configuration", Object.fromEntries(Object.entries(f).map(([k, [, i]]) => [k, i.value])), "Queue configuration saved")}, icon("save"), "Save")));
+};
+SUB_RENDERERS.sqsdlq = async function(svc, full, host){
+  const q = await _dget(host, _sqsp(full, "dlq")); if (!q) return;
+  const rp = q.redrive_policy;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Dead-letter queue"));
+  // Like the real console: with no redrive policy the tab only says "Disabled".
+  card.append(el("div",{class:"kv-grid"}, ...(rp ? [
+      el("div",{}, el("div",{class:"k"}, "Queue"), el("div",{class:"v mono"}, rp.deadLetterTargetArn)),
+      el("div",{}, el("div",{class:"k"}, "Maximum receives"), el("div",{class:"v"}, String(rp.maxReceiveCount)))]
+    : [el("div",{}, el("div",{class:"k"}, "Dead-letter queue"), el("div",{class:"v"}, "Disabled"))])));
+  if (q.source_queues.length) card.append(el("div",{class:"small",style:"margin-top:8px"}, "This queue is the dead-letter queue of: " + q.source_queues.join(", ")));
+  const sel = el("select",{"data-testid":"sqs-dlq-target"}, ...q.queues.map(x => el("option",{value:x.queue_arn}, x.queue_name + (x.fifo ? " (FIFO)" : ""))));
+  if (rp) sel.value = rp.deadLetterTargetArn;
+  const mr = el("input",{type:"number",min:"1",max:"1000",value: rp ? rp.maxReceiveCount : 10});
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Edit"), ...(q.queues.length ? [_field("Choose queue", sel), _field("Maximum receives (1-1000)", mr)]
+      : [el("div",{class:"empty"}, "Create another queue to use as this queue's dead-letter queue.")]),
+    el("div",{style:"display:flex;gap:8px"},
+      q.queues.length ? el("button",{class:"btn primary","data-testid":"sqs-dlq-save",onclick:()=>_sqsput(full, "dlq", {enabled:true, dead_letter_target_arn:sel.value, max_receive_count:mr.value}, "Dead-letter queue set")}, icon("save"), "Save") : null,
+      rp ? el("button",{class:"btn",onclick:()=>_sqsput(full, "dlq", {enabled:false}, "Dead-letter queue disabled")}, "Disable") : null));
+  host.append(card);
+};
+SUB_RENDERERS.sqsencryption = async function(svc, full, host){
+  const q = await _dget(host, _sqsp(full, "encryption")); if (!q) return;
+  host.append(_dkv("Encryption", [["Server-side encryption", q.encryption === "SSE-SQS" ? "Enabled (Amazon SQS key, SSE-SQS)" : q.encryption === "SSE-KMS" ? "Enabled (AWS KMS key, SSE-KMS)" : "Disabled"],
+    ...(q.encryption === "SSE-KMS" ? [["AWS KMS key", q.kms_master_key_id, 1], ["Data key reuse period", q.kms_data_key_reuse_period + " seconds"]] : [])]));
+  const mode = el("select",{"data-testid":"sqs-sse-mode"}, el("option",{value:"SSE-SQS"}, "Amazon SQS key (SSE-SQS)"), el("option",{value:"SSE-KMS"}, "AWS KMS key (SSE-KMS)"), el("option",{value:"Disabled"}, "Disabled")); mode.value = q.encryption;
+  const key = el("input",{value:q.kms_master_key_id || "alias/aws/sqs"}), reuse = el("input",{type:"number",min:"60",max:"86400",value:q.kms_data_key_reuse_period});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit encryption"), _field("Encryption key type", mode), _field("AWS KMS key (SSE-KMS)", key), _field("Data key reuse period (seconds)", reuse),
+    el("button",{class:"btn primary","data-testid":"sqs-sse-save",onclick:()=>_sqsput(full, "encryption", {mode:mode.value, kms_master_key_id:key.value, kms_data_key_reuse_period:reuse.value}, "Encryption saved")}, icon("save"), "Save")));
+};
+SUB_RENDERERS.sqspolicy = async function(svc, full, host){
+  const q = await _dget(host, _sqsp(full, "policy")); if (!q) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Access policy"), el("div",{class:"small",style:"color:var(--sub);margin-bottom:6px"}, "Queue ARN: " + q.queue_arn));
+  if (!q.policy) card.append(el("div",{class:"empty"}, "No access policy: only the queue owner (account " + ACCOUNT + ") can use " + q.queue_name + "."));
+  const ta = el("textarea",{"data-testid":"sqs-policy",style:"width:100%;min-height:180px;font-family:Consolas,Menlo,monospace"}); ta.value = q.policy || "";
+  card.append(ta, el("div",{style:"display:flex;gap:8px;margin-top:10px"},
+    el("button",{class:"btn primary",onclick:()=>_sqsput(full, "policy", {policy: ta.value}, "Access policy saved")}, icon("save"), "Save"),
+    q.policy ? el("button",{class:"btn",onclick:()=>_sqsput(full, "policy", {policy: ""}, "Access policy removed")}, "Remove") : null));
+  host.append(card);
+};
+
+// ── SNS topic tabs: the topic's subscriptions (ListSubscriptionsByTopic) and its
+//    message log (deliveries the topic made), both from core/sns_core.py. ──
+function _snsTopic(full){ return encodeURIComponent(full.name || ""); }
+SUB_RENDERERS.snssubs = async function(svc, full, host){
+  const j = await _dget(host, "/api/aws/sns/topics/" + _snsTopic(full) + "/subscriptions"); if (!j) return;
+  const rows = j.items || j.subscriptions || [];
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Subscriptions (" + rows.length + ")"),
+    _dtbl([["name","ID",1],["protocol","Protocol"],["endpoint","Endpoint",1],["status","Status"],["filter_policy","Filter policy"],["raw_delivery","Raw message delivery"],
+      [r => el("button",{class:"btn",onclick:async()=>{
+        const x = await api("DELETE", "/api/aws/sns/subscriptions/" + encodeURIComponent(r.name));
+        if (x.ok) { toast("Subscription deleted"); _rerender(); } else toast("Delete failed: " + _derr(x), "err");
+      }}, "Delete"),"Actions"]], rows, "No subscriptions to " + full.name + "."));
+  const proto = el("select",{"data-testid":"sns-proto"}, ...["sqs","lambda","email","email-json","http","https","sms","application","firehose"].map(p => el("option",{value:p}, p)));
+  const ep = el("input",{placeholder:"arn:aws:sqs:" + REGION + ":" + ACCOUNT + ":MyQueue","data-testid":"sns-endpoint"});
+  card.append(el("div",{class:"h",style:"margin-top:14px"}, "Create subscription"), _field("Protocol", proto), _field("Endpoint", ep),
+    el("button",{class:"btn primary","data-testid":"sns-subscribe",onclick:async()=>{
+      const r = await api(svc.api_paths.subscribe.method, fillPath(svc.api_paths.subscribe.path,{name:full.name}), {protocol: proto.value, endpoint: ep.value});
+      if (r.ok) { toast("Subscription created"); _rerender(); } else toast("Subscribe failed: " + _derr(r), "err");
+    }}, icon("add"), "Create subscription"));
+  host.append(card);
+};
+SUB_RENDERERS.snspublish = async function(svc, full, host){
+  const j = await _dget(host, "/api/aws/sns/deliveries"); if (!j) return;
+  const log = (j.items || []).filter(d => d.topic === full.name).slice(-20).reverse();
+  const subj = el("input",{placeholder:"Subject (optional)","data-testid":"sns-subject"});
+  const ta = el("textarea",{"data-testid":"sns-message",style:"width:100%;min-height:80px"});
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Publish message to " + full.name), _field("Subject", subj), _field("Message body", ta),
+    el("button",{class:"btn primary","data-testid":"sns-publish",onclick:async()=>{
+      if (!ta.value) { toast("Enter a message body", "err"); return; }
+      const r = await api(svc.api_paths.publish.method, fillPath(svc.api_paths.publish.path,{name:full.name}), {subject: subj.value, message: ta.value});
+      if (r.ok) { toast("Message published" + ((r.json || {}).message_id ? ": " + r.json.message_id : "")); _rerender(); } else toast("Publish failed: " + _derr(r), "err");
+    }}, icon("send"), "Publish message"));
+  const lc = el("div",{class:"kv-card"});
+  lc.append(el("div",{class:"h"}, "Message log (" + log.length + ")"),
+    _dtbl([["timestamp","Time"],["kind","Type"],["protocol","Protocol"],["endpoint","Endpoint",1],["subject","Subject"],["message","Message",1]], log,
+      "Nothing has been delivered from " + full.name + " yet."));
+  host.append(card, lc);
+};
+
+// ── Secrets Manager secret tabs (GET/PUT /api/aws/secrets/{name}/detail/{section}). ──
+function _secp(full, section){ return "/api/aws/secrets/" + encodeURIComponent(full.name || "") + "/detail/" + section; }
+async function _secput(full, section, body, okMsg){
+  const r = await api("PUT", _secp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Failed: " + _derr(r), "err"); return false;
+}
+// Secret value — like the real console: details, value hidden until "Retrieve
+// secret value" (GetSecretValue), then Key/value or Plaintext; Edit saves a new
+// AWSCURRENT version (PutSecretValue).
+SUB_RENDERERS.secretvalue = async function(svc, full, host){
+  const d = await _dget(host, _secp(full, "details")); if (!d) return;
+  host.append(_dkv("Secret details", [["Encryption key", d.kms_key_id, 1], ["Secret name", d.name], ["Secret ARN", d.arn, 1],
+    ["Description", d.description], ["Versions", d.version_count], ["Last changed", d.last_changed]]));
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  let value = null, editing = false, plaintext = false;
+  const pairs = s => { try { const o = JSON.parse(s); if (o && typeof o === "object" && !Array.isArray(o)) return Object.entries(o).map(([k, v]) => [k, String(v)]); } catch(_){} return null; };
+  function render(){
+    panel.innerHTML = "";
+    panel.append(el("div",{class:"panel-h"}, icon("key"), "Secret value"));
+    const body = el("div",{style:"padding:14px"}); panel.append(body);
+    if (value === null) {
+      body.append(el("div",{class:"small",style:"color:var(--sub);margin-bottom:8px"}, "Retrieve and view the secret value."),
+        el("button",{class:"btn primary","data-testid":"secret-retrieve",onclick:async()=>{
+          const r = await api("GET", _secp(full, "value"));
+          if (!r.ok) { toast("Retrieve failed: " + _derr(r), "err"); return; }
+          value = r.json.secret_string || ""; render();
+        }}, "Retrieve secret value"));
+      return;
+    }
+    const kv = pairs(value);
+    if (!editing) {
+      body.append(el("div",{style:"display:flex;gap:8px;margin-bottom:8px"},
+        el("button",{class:"btn" + (!plaintext ? " primary" : ""),onclick:()=>{ plaintext = false; render(); }}, "Key/value"),
+        el("button",{class:"btn" + (plaintext ? " primary" : ""),onclick:()=>{ plaintext = true; render(); }}, "Plaintext"),
+        el("button",{class:"btn","data-testid":"secret-edit",onclick:()=>{ editing = true; render(); }}, icon("edit"), "Edit")));
+      body.append(kv && !plaintext ? _dtbl([["0","Secret key",1],["1","Secret value",1]], kv, "Empty secret.")
+        : el("pre",{class:"json","data-testid":"secret-plaintext"}, value));
+    } else {
+      const ta = el("textarea",{"data-testid":"secret-edit-text",style:"width:100%;min-height:120px;font-family:Consolas,Menlo,monospace"}); ta.value = value;
+      body.append(ta, el("div",{style:"display:flex;gap:8px;margin-top:10px"},
+        el("button",{class:"btn primary","data-testid":"secret-save",onclick:async()=>{
+          const r = await api("PUT", _secp(full, "value"), {secret_string: ta.value});
+          if (r.ok) { value = ta.value; editing = false; toast("Secret value saved"); render(); } else toast("Save failed: " + _derr(r), "err");
+        }}, icon("save"), "Save"),
+        el("button",{class:"btn",onclick:()=>{ editing = false; render(); }}, "Cancel")));
+    }
+  }
+  render();
+};
+SUB_RENDERERS.secversions = async function(svc, full, host){
+  const j = await _dget(host, _secp(full, "versions")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Versions (" + j.versions.length + ")"),
+    _dtbl([["version_id","Version ID",1],[v => (v.stages || []).join(", ") || "None (deprecated)","Staging labels"],["created","Created on"]], j.versions, "No versions."));
+  host.append(card);
+};
+SUB_RENDERERS.secrotation = async function(svc, full, host){
+  const j = await _dget(host, _secp(full, "rotation")); if (!j) return;
+  host.append(_dkv("Rotation configuration", [["Rotation status", j.rotation_enabled ? "Enabled" : "Disabled"],
+    ...(j.rotation_enabled ? [["Rotation schedule", j.schedule_expression || ("Every " + j.automatically_after_days + " days")], ["Lambda rotation function", j.rotation_lambda_arn, 1],
+      ["Last rotated date", j.last_rotated], ["Next rotation date", j.next_rotation]] : [])]));
+  const fn = el("input",{value:j.rotation_lambda_arn || "",placeholder:"arn:aws:lambda:" + REGION + ":" + ACCOUNT + ":function:my-rotator","data-testid":"sec-rot-fn"});
+  const days = el("input",{type:"number",min:"1",max:"1000",value:j.automatically_after_days || 30});
+  const now = el("input",{type:"checkbox"}); now.checked = true;
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit rotation"), _field("Rotation function (Lambda ARN)", fn), _field("Rotate every (days)", days),
+    el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, now, el("span",{}, "Rotate immediately when the secret is stored")),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary","data-testid":"sec-rot-save",onclick:()=>_secput(full, "rotation", {enabled:true, rotation_lambda_arn:fn.value, automatically_after_days:days.value, rotate_immediately:now.checked}, "Rotation configured")}, icon("save"), "Save"),
+      j.rotation_enabled ? el("button",{class:"btn",onclick:()=>_secput(full, "rotation", {enabled:false}, "Rotation disabled")}, "Disable rotation") : null)));
+};
+SUB_RENDERERS.secreplication = async function(svc, full, host){
+  const j = await _dget(host, _secp(full, "replication")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Replicate secret (primary Region " + j.primary_region + ")"),
+    _dtbl([["region","Region"],["status","Replication status"],["kms_key_id","Encryption key",1],["created","Replicated"],
+      [r => el("button",{class:"btn",onclick:()=>_secput(full, "replication", {action:"remove", region:r.region}, "Replica removed")}, "Remove"),"Actions"]],
+      j.replicas, full.name + " is not replicated to other Regions."));
+  const rg = el("select",{"data-testid":"sec-rep-region"}, ...["us-east-2","us-west-1","us-west-2","eu-west-1","eu-central-1","ap-south-1","ap-southeast-1","ap-northeast-1"].map(r => el("option",{value:r}, r)));
+  card.append(_field("Region", rg), el("button",{class:"btn primary","data-testid":"sec-rep-add",onclick:()=>_secput(full, "replication", {region:rg.value}, "Replica added")}, icon("add"), "Replicate"));
+  host.append(card);
+};
+SUB_RENDERERS.seckey = async function(svc, full, host){
+  const j = await _dget(host, _secp(full, "encryption")); if (!j) return;
+  host.append(_dkv("Encryption key", [["Encryption key", j.kms_key_id, 1]]));
+  const k = el("input",{value:j.kms_key_id,"data-testid":"sec-kms"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit encryption key"), _field("AWS KMS key (ID, ARN or alias; aws/secretsmanager = AWS managed)", k),
+    el("button",{class:"btn primary",onclick:()=>_secput(full, "encryption", {kms_key_id:k.value}, "Encryption key updated")}, icon("save"), "Save")));
+};
+SUB_RENDERERS.secpolicy = async function(svc, full, host){
+  const j = await _dget(host, _secp(full, "policy")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Resource permissions"));
+  if (!j.policy) card.append(el("div",{class:"empty"}, "No resource policy on " + full.name + "."));
+  const ta = el("textarea",{"data-testid":"sec-policy",style:"width:100%;min-height:160px;font-family:Consolas,Menlo,monospace"}); ta.value = j.policy || "";
+  card.append(ta, el("div",{style:"display:flex;gap:8px;margin-top:10px"},
+    el("button",{class:"btn primary",onclick:()=>_secput(full, "policy", {policy:ta.value}, "Resource policy saved")}, icon("save"), "Save"),
+    j.policy ? el("button",{class:"btn",onclick:()=>_secput(full, "policy", {policy:""}, "Resource policy deleted")}, "Delete") : null));
+  host.append(card);
+};
+
+// ── KMS key tabs (GET/PUT /api/aws/kms/keys/{id}/detail/{section}). ──
+function _kmsp(full, section){ return "/api/aws/kms/keys/" + encodeURIComponent(full.key_id || full.KeyId || full.name || "") + "/detail/" + section; }
+async function _kmsput(full, section, body, okMsg){
+  const r = await api("PUT", _kmsp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Failed: " + _derr(r), "err"); return false;
+}
+SUB_RENDERERS.kmsconfig = async function(svc, full, host){
+  const g = await _dget(host, _kmsp(full, "general")); if (!g) return;
+  host.append(_dkv("General configuration", [["Alias", g.alias], ["Status", g.status], ["Creation date", g.creation_date], ["ARN", g.arn, 1],
+    ["Description", g.description], ["Key ID", g.key_id, 1], ["Key spec", g.key_spec], ["Key usage", g.key_usage], ["Origin", g.origin],
+    ["Regionality", g.multi_region ? "Multi-Region" : "Single-Region"]]));
+  const desc = el("input",{value:g.description || "","data-testid":"kms-desc"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit"), _field("Description", desc),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary","data-testid":"kms-desc-save",onclick:()=>_kmsput(full, "general", {description: desc.value}, "Description saved")}, icon("save"), "Save description"),
+      g.status !== "PendingDeletion" ? el("button",{class:"btn",onclick:()=>_kmsput(full, "general", {enabled: g.status !== "Enabled"}, g.status === "Enabled" ? "Key disabled" : "Key enabled")},
+        icon("power_settings_new"), g.status === "Enabled" ? "Disable key" : "Enable key") : null)));
+};
+SUB_RENDERERS.kmspolicy = async function(svc, full, host){
+  const j = await _dget(host, _kmsp(full, "policy")); if (!j) return;
+  const ta = el("textarea",{"data-testid":"kms-policy",style:"width:100%;min-height:220px;font-family:Consolas,Menlo,monospace"});
+  ta.value = JSON.stringify(j.policy, null, 2);
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Key policy" + (j.is_default ? " (default)" : "")), ta,
+    el("button",{class:"btn primary",style:"margin-top:10px",onclick:()=>_kmsput(full, "policy", {policy: ta.value}, "Key policy saved")}, icon("save"), "Save changes")));
+};
+SUB_RENDERERS.kmsaliases = async function(svc, full, host){
+  const j = await _dget(host, _kmsp(full, "aliases")); if (!j) return;
+  const n = el("input",{placeholder:"alias/my-app-key","data-testid":"kms-alias"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Aliases (" + j.aliases.length + ")"),
+    _dtbl([["alias_name","Alias name"],["alias_arn","Alias ARN",1],[r => el("button",{class:"btn",onclick:()=>_kmsput(full, "aliases", {action:"delete", alias_name:r.alias_name}, "Alias deleted")}, "Delete"),"Actions"]],
+      j.aliases, "No aliases point to this key."),
+    _field("New alias", n), el("button",{class:"btn primary","data-testid":"kms-alias-add",onclick:()=>_kmsput(full, "aliases", {alias_name:n.value}, "Alias created")}, icon("add"), "Create alias")));
+};
+SUB_RENDERERS.kmsrotation = async function(svc, full, host){
+  const j = await _dget(host, _kmsp(full, "rotation")); if (!j) return;
+  if (!j.rotation_supported) { host.append(el("div",{class:"empty"}, "Automatic rotation is only available for symmetric encryption keys with key material from AWS KMS.")); return; }
+  host.append(_dkv("Key rotation", [["Automatic key rotation", j.key_rotation_enabled ? "Enabled" : "Disabled"],
+    ...(j.key_rotation_enabled ? [["Rotation period", j.rotation_period_in_days + " days"], ["Next rotation date", j.next_rotation_date]] : [])]));
+  const on = el("input",{type:"checkbox","data-testid":"kms-rot-on"}); if (j.key_rotation_enabled) on.checked = true;
+  const per = el("input",{type:"number",min:"90",max:"2560",value:j.rotation_period_in_days});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit"), el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, on, el("span",{}, "Automatically rotate this KMS key")),
+    _field("Rotation period (90-2560 days)", per),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary","data-testid":"kms-rot-save",onclick:()=>_kmsput(full, "rotation", {enabled:on.checked, rotation_period_in_days:per.value}, "Rotation saved")}, icon("save"), "Save"),
+      el("button",{class:"btn",onclick:()=>_kmsput(full, "rotation", {enabled:j.key_rotation_enabled, rotation_period_in_days:j.rotation_period_in_days, rotate_now:true}, "Key rotated")}, icon("autorenew"), "Rotate now"))));
+  if (j.rotations.length) host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Rotations (" + j.rotations.length + ")"),
+    _dtbl([["rotation_date","Date"],["rotation_type","Type"]], j.rotations, "")));
+};
+function _kmsPrincipals(kind){
+  return async function(svc, full, host){
+    const j = await _dget(host, _kmsp(full, kind)); if (!j) return;
+    const list = kind === "users" ? j.key_users : j.key_administrators;
+    const p = el("input",{placeholder:"arn:aws:iam::" + ACCOUNT + ":role/app","data-testid":"kms-" + kind + "-arn"});
+    host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, (kind === "users" ? "Key users" : "Key administrators") + " (" + list.length + ")"),
+      _dtbl([[r => r,"Principal",1],[r => el("button",{class:"btn",onclick:()=>_kmsput(full, kind, {action:"remove", principal:r}, "Removed")}, "Remove"),"Actions"]],
+        list, kind === "users" ? "No key users: only principals granted by IAM policies (via the root statement) can use this key." : "No key administrators besides the account root."),
+      _field("IAM user or role ARN", p), el("button",{class:"btn primary","data-testid":"kms-" + kind + "-add",onclick:()=>_kmsput(full, kind, {principal:p.value}, "Added to the key policy")}, icon("add"), "Add")));
+  };
+}
+SUB_RENDERERS.kmsusers = _kmsPrincipals("users");
+SUB_RENDERERS.kmsadmins = _kmsPrincipals("admins");
+SUB_RENDERERS.kmsgrants = async function(svc, full, host){
+  const j = await _dget(host, _kmsp(full, "grants")); if (!j) return;
+  const g = el("input",{placeholder:"arn:aws:iam::" + ACCOUNT + ":role/worker","data-testid":"kms-grantee"}), ops = el("input",{value:"Encrypt,Decrypt"}), nm = el("input",{});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Grants (" + j.grants.length + ")"),
+    _dtbl([["grant_id","Grant ID",1],["name","Name"],["grantee_principal","Grantee principal",1],[r => r.operations.join(", "),"Operations"],["creation_date","Creation date"],
+      [r => el("button",{class:"btn",onclick:()=>_kmsput(full, "grants", {action:"revoke", grant_id:r.grant_id}, "Grant revoked")}, "Revoke"),"Actions"]],
+      j.grants, "No grants on this key."),
+    _field("Grantee principal", g), _field("Operations (comma-separated)", ops), _field("Grant name", nm),
+    el("button",{class:"btn primary","data-testid":"kms-grant-add",onclick:()=>_kmsput(full, "grants", {grantee_principal:g.value, operations:_csv(ops.value), name:nm.value}, "Grant created")}, icon("add"), "Create grant")));
+};
+
+// ── EventBridge rule tabs (GET/PUT /api/aws/extras/eventbridge/rules/{name}/detail/{section}). ──
+function _ebp(full, section){ return "/api/aws/extras/eventbridge/rules/" + encodeURIComponent(full.name || "") + "/detail/" + section; }
+async function _ebput(full, section, body, okMsg){
+  const r = await api("PUT", _ebp(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return r.json; }
+  toast("Failed: " + _derr(r), "err"); return null;
+}
+SUB_RENDERERS.ebdetails = async function(svc, full, host){
+  const d = await _dget(host, _ebp(full, "details")); if (!d) return;
+  host.append(_dkv("Rule details", [["Rule name", d.name], ["Status", d.state], ["Type", d.rule_type === "Schedule" ? "Scheduled" : "Standard rule"],
+    ["Event bus name", d.event_bus_name], ["Rule ARN", d.arn, 1], ["Description", d.description],
+    ...(d.schedule_expression ? [["Schedule", d.schedule_expression, 1]] : [["Event source", d.event_source]]), ["Targets", d.target_count], ["Created", d.created]]));
+  const desc = el("input",{value:d.description || ""});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit rule"), _field("Description", desc),
+    el("div",{style:"display:flex;gap:8px"},
+      el("button",{class:"btn primary",onclick:()=>_ebput(full, "details", {description: desc.value}, "Rule updated")}, icon("save"), "Save"),
+      el("button",{class:"btn","data-testid":"eb-toggle",onclick:()=>_ebput(full, "details", {state: d.state === "ENABLED" ? "DISABLED" : "ENABLED"}, d.state === "ENABLED" ? "Rule disabled" : "Rule enabled")},
+        d.state === "ENABLED" ? "Disable" : "Enable"))));
+};
+SUB_RENDERERS.ebtargets = async function(svc, full, host){
+  const j = await _dget(host, _ebp(full, "targets")); if (!j) return;
+  const id = el("input",{placeholder:"Target" + j.targets.length}), arn = el("input",{placeholder:"arn:aws:sqs:" + REGION + ":" + ACCOUNT + ":my-queue","data-testid":"eb-target-arn"}), inp = el("input",{placeholder:'{"constant":"input"} (optional)'});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Targets (" + j.targets.length + ")"),
+    _dtbl([["id","Target ID"],["arn","ARN",1],[t => t.input || "Matched event","Input"],[t => t.dead_letter_arn || "Not configured","Dead-letter queue",1],
+      [t => el("button",{class:"btn",onclick:()=>_ebput(full, "targets", {action:"remove", id:t.id}, "Target removed")}, "Remove"),"Actions"]],
+      j.targets, "No targets: matched events go nowhere."),
+    _field("Target ID", id), _field("Target ARN", arn), _field("Constant input (JSON)", inp),
+    el("button",{class:"btn primary","data-testid":"eb-target-add",onclick:()=>_ebput(full, "targets", {id:id.value, arn:arn.value, input:inp.value}, "Target added")}, icon("add"), "Add target")));
+};
+SUB_RENDERERS.ebpattern = async function(svc, full, host){
+  const j = await _dget(host, _ebp(full, "pattern")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  if (j.rule_type === "Schedule") {
+    const s = el("input",{value:j.schedule_expression || ""});
+    card.append(el("div",{class:"h"}, "Schedule"), el("pre",{class:"json"}, j.schedule_expression || ""), _field("Schedule expression (rate() or cron())", s),
+      el("button",{class:"btn primary",onclick:()=>_ebput(full, "pattern", {schedule_expression:s.value}, "Schedule saved")}, icon("save"), "Save"));
+    host.append(card); return;
+  }
+  const ta = el("textarea",{"data-testid":"eb-pattern",style:"width:100%;min-height:140px;font-family:Consolas,Menlo,monospace"}); ta.value = JSON.stringify(j.event_pattern || {}, null, 2);
+  const ev = el("textarea",{"data-testid":"eb-test-event",style:"width:100%;min-height:110px;font-family:Consolas,Menlo,monospace"});
+  ev.value = JSON.stringify({"version":"0","source":(j.event_pattern && (j.event_pattern.source || [])[0]) || "aws.ec2","detail-type":((j.event_pattern || {})["detail-type"] || [])[0] || "",
+    "account":ACCOUNT,"region":REGION,"detail":{}}, null, 2);
+  const res = el("div",{"data-testid":"eb-test-result"});
+  card.append(el("div",{class:"h"}, "Event pattern"), ta,
+    el("button",{class:"btn primary",style:"margin-top:8px","data-testid":"eb-pattern-save",onclick:()=>_ebput(full, "pattern", {event_pattern: ta.value}, "Event pattern saved")}, icon("save"), "Save"),
+    el("div",{class:"h",style:"margin-top:14px"}, "Test pattern (TestEventPattern)"), ev,
+    el("button",{class:"btn",style:"margin-top:8px","data-testid":"eb-test",onclick:async()=>{
+      const r = await api("PUT", _ebp(full, "pattern"), {action:"test", event: ev.value, event_pattern: ta.value});
+      res.innerHTML = ""; res.append(r.ok ? el("div",{class:"alert " + (r.json.result ? "info" : "warn")}, r.json.result ? "Sample event matched the event pattern." : "Sample event did not match the event pattern.")
+        : el("div",{class:"alert err"}, _derr(r)));
+    }}, "Test pattern"), res);
+  host.append(card);
+};
+SUB_RENDERERS.ebdlq = async function(svc, full, host){
+  const j = await _dget(host, _ebp(full, "dlq")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Retry policy and dead-letter queue per target"),
+    _dtbl([["id","Target"],["arn","ARN",1],["max_retry_attempts","Retry attempts"],["max_event_age","Maximum age of event (s)"],[t => t.dead_letter_arn || "Not configured","Dead-letter queue",1]],
+      j.targets, "Add a target to configure its retry policy and dead-letter queue."));
+  if (j.targets.length) {
+    const t = el("select",{}, ...j.targets.map(x => el("option",{value:x.id}, x.id))), q = el("input",{placeholder:"arn:aws:sqs:" + REGION + ":" + ACCOUNT + ":my-dlq","data-testid":"eb-dlq-arn"}),
+      r = el("input",{type:"number",min:"0",max:"185",value:j.targets[0].max_retry_attempts}), a = el("input",{type:"number",min:"60",max:"86400",value:j.targets[0].max_event_age});
+    card.append(_field("Target", t), _field("Dead-letter queue (SQS ARN, empty = none)", q), _field("Retry attempts (0-185)", r), _field("Maximum age of event (60-86400 s)", a),
+      el("button",{class:"btn primary","data-testid":"eb-dlq-save",onclick:()=>_ebput(full, "dlq", {id:t.value, dead_letter_arn:q.value, max_retry_attempts:r.value, max_event_age:a.value}, "Target settings saved")}, icon("save"), "Save"));
+  }
+  host.append(card);
+};
+
+// ── API Gateway (REST) tabs (GET/PUT /api/apigateway/apis/{id}/detail/{section}). ──
+function _apip(full, section){ return "/api/apigateway/apis/" + encodeURIComponent(full.rest_api_id || full.id || full.name || "") + "/detail/" + section; }
+async function _apiput(full, section, body, okMsg){
+  const r = await api("PUT", _apip(full, section), body);
+  if (r.ok) { toast(okMsg || "Saved"); _rerender(); return true; }
+  toast("Failed: " + _derr(r), "err"); return false;
+}
+SUB_RENDERERS.apigwauthorizers = async function(svc, full, host){
+  const j = await _dget(host, _apip(full, "authorizers")); if (!j) return;
+  const n = el("input",{placeholder:"my-authorizer","data-testid":"apigw-auth-name"}), t = el("select",{}, ...["TOKEN","REQUEST","COGNITO_USER_POOLS"].map(x => el("option",{value:x}, x)));
+  const fn = el("input",{placeholder:"Lambda function name","data-testid":"apigw-auth-fn"}), src = el("input",{value:"method.request.header.Authorization"}), ttl = el("input",{type:"number",value:"300",min:"0",max:"3600"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Authorizers (" + j.authorizers.length + ")"),
+    _dtbl([["name","Name"],["id","ID",1],["type","Type"],["identity_source","Identity source"],["ttl","Caching TTL (s)"],[a => a.authorizer_uri || (a.provider_arns || []).join(", "),"Lambda / user pool",1],
+      [a => el("button",{class:"btn",onclick:()=>_apiput(full, "authorizers", {action:"delete", id:a.id}, "Authorizer deleted")}, "Delete"),"Actions"]],
+      j.authorizers, "No authorizers: methods use IAM or no authorization."),
+    _field("Name", n), _field("Type", t), _field("Lambda function (TOKEN/REQUEST)", fn), _field("Identity source", src), _field("Caching TTL (0-3600 s)", ttl),
+    el("button",{class:"btn primary","data-testid":"apigw-auth-add",onclick:()=>_apiput(full, "authorizers", {name:n.value, type:t.value, lambda_function:fn.value, identity_source:src.value, ttl:ttl.value}, "Authorizer created")}, icon("add"), "Create authorizer")));
+};
+SUB_RENDERERS.apigwmodels = async function(svc, full, host){
+  const j = await _dget(host, _apip(full, "models")); if (!j) return;
+  const n = el("input",{placeholder:"Pet","data-testid":"apigw-model-name"}), ct = el("input",{value:"application/json"});
+  const sch = el("textarea",{style:"width:100%;min-height:90px;font-family:Consolas,Menlo,monospace"}); sch.value = '{\n  "$schema": "http://json-schema.org/draft-04/schema#",\n  "type": "object"\n}';
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Models (" + j.models.length + ")"),
+    _dtbl([["name","Name"],["content_type","Content type"],["description","Description"],["id","ID",1],
+      [m => el("button",{class:"btn",onclick:()=>_apiput(full, "models", {action:"delete", name:m.name}, "Model deleted")}, "Delete"),"Actions"]], j.models, "No models."),
+    _field("Model name", n), _field("Content type", ct), _field("Model schema (JSON Schema)", sch),
+    el("button",{class:"btn primary","data-testid":"apigw-model-add",onclick:()=>_apiput(full, "models", {name:n.value, content_type:ct.value, schema:sch.value}, "Model created")}, icon("add"), "Create model")));
+};
+SUB_RENDERERS.apigwdeployments = async function(svc, full, host){
+  const j = await _dget(host, _apip(full, "deployments")); if (!j) return;
+  const st = el("input",{placeholder:"prod",value:(j.stages || [])[0] || "","data-testid":"apigw-dep-stage"}), ds = el("input",{placeholder:"Deployment description"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Deployments (" + j.deployments.length + ")"),
+    _dtbl([["deployment_id","Deployment ID",1],["stage_name","Stage"],["description","Description"],["created","Created"]], j.deployments, "This API has not been deployed."),
+    _field("Stage (new or existing)", st), _field("Description", ds),
+    el("button",{class:"btn primary","data-testid":"apigw-deploy",onclick:()=>_apiput(full, "deployments", {stage_name:st.value, description:ds.value}, "API deployed")}, icon("rocket_launch"), "Deploy API")));
+};
+SUB_RENDERERS.apigwlogs = async function(svc, full, host){
+  const j = await _dget(host, _apip(full, "logging")); if (!j) return;
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Logs and tracing per stage (" + j.stages.length + ")"),
+    _dtbl([["stage_name","Stage"],["logging_level","CloudWatch logs"],[s => s.data_trace ? "On" : "Off","Full request/response logging"],
+      [s => s.access_log_destination || "Off","Access logging",1],[s => s.tracing_enabled ? "On" : "Off","X-Ray tracing"],[s => s.metrics_enabled ? "On" : "Off","Detailed metrics"]],
+      j.stages, "Deploy the API to a stage to configure its logging and tracing."));
+  if (j.stages.length) {
+    const sel = el("select",{}, ...j.stages.map(s => el("option",{value:s.stage_name}, s.stage_name))), lvl = el("select",{"data-testid":"apigw-log-level"}, ...["OFF","ERROR","INFO"].map(x => el("option",{value:x}, x)));
+    const xr = el("input",{type:"checkbox","data-testid":"apigw-xray"}), dest = el("input",{placeholder:"arn:aws:logs:" + REGION + ":" + ACCOUNT + ":log-group:API-Gateway-Access-Logs"});
+    const cur = j.stages[0]; lvl.value = cur.logging_level; if (cur.tracing_enabled) xr.checked = true; dest.value = cur.access_log_destination || "";
+    card.append(_field("Stage", sel), _field("CloudWatch logs", lvl), _field("Access log destination ARN", dest),
+      el("label",{class:"check",style:"display:flex;gap:8px;margin:6px 0"}, xr, el("span",{}, "X-Ray tracing")),
+      el("button",{class:"btn primary","data-testid":"apigw-log-save",onclick:()=>_apiput(full, "logging", {stage_name:sel.value, logging_level:lvl.value, tracing_enabled:xr.checked, access_log_destination:dest.value}, "Stage logging saved")}, icon("save"), "Save"));
+  }
+  host.append(card);
+  if (j.execution_logs.length) host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Recent executions (" + j.execution_logs.length + ")"),
+    _dtbl([["at","Time"],["method","Method"],["path","Path"],["status","Status"],["stage","Stage"]], j.execution_logs, "")));
+};
+SUB_RENDERERS.apigwpolicy = async function(svc, full, host){
+  const j = await _dget(host, _apip(full, "policy")); if (!j) return;
+  const ta = el("textarea",{"data-testid":"apigw-policy",style:"width:100%;min-height:160px;font-family:Consolas,Menlo,monospace"}); ta.value = j.policy || "";
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Resource policy"), el("div",{class:"small",style:"color:var(--sub);margin-bottom:6px"}, "API ARN: " + j.api_arn),
+    ...(j.policy ? [] : [el("div",{class:"empty"}, "No resource policy: any caller allowed by the methods' authorization can invoke this API.")]), ta,
+    el("div",{style:"display:flex;gap:8px;margin-top:10px"}, el("button",{class:"btn primary",onclick:()=>_apiput(full, "policy", {policy:ta.value}, "Resource policy saved")}, icon("save"), "Save"),
+      j.policy ? el("button",{class:"btn",onclick:()=>_apiput(full, "policy", {policy:""}, "Resource policy removed")}, "Remove") : null)));
+};
+SUB_RENDERERS.apigwsettings = async function(svc, full, host){
+  const s = await _dget(host, _apip(full, "settings")); if (!s) return;
+  host.append(_dkv("API details", [["API name", s.name], ["API ID", s.rest_api_id, 1], ["Description", s.description], ["API endpoint type", s.endpoint_type],
+    ["API key source", s.api_key_source], ["Binary media types", (s.binary_media_types || []).join(", ") || "None set"],
+    ["Content encoding", s.minimum_compression_size == null ? "Inactive" : "Active (minimum " + s.minimum_compression_size + " bytes)"],
+    ["Default execute-api endpoint", s.disable_execute_api_endpoint ? "Inactive" : "Active"], ["Created", s.created]]));
+  const d = el("input",{value:s.description || ""}), k = el("select",{}, el("option",{value:"HEADER"}, "HEADER"), el("option",{value:"AUTHORIZER"}, "AUTHORIZER")); k.value = s.api_key_source;
+  const bm = el("input",{value:(s.binary_media_types || []).join(","),placeholder:"image/png,application/octet-stream"}), mc = el("input",{type:"number",min:"0",value:s.minimum_compression_size ?? ""});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit API settings"), _field("Description", d), _field("API key source", k), _field("Binary media types", bm),
+    _field("Minimum compression size (bytes, empty = off)", mc),
+    el("button",{class:"btn primary","data-testid":"apigw-settings-save",onclick:()=>_apiput(full, "settings", {description:d.value, api_key_source:k.value, binary_media_types:_csv(bm.value), minimum_compression_size:mc.value}, "API settings saved")}, icon("save"), "Save")));
+};
+
+// ── CloudWatch alarm Actions: each alarm action with its target resolved
+//    (an SNS topic's existence and subscriptions, read from SNS). ──
+SUB_RENDERERS.cwactions = async function(svc, full, host){
+  const acts = full.action_list || [];
+  const t = await _dget(host, "/api/aws/sns/topics"); if (!t) return;
+  const topics = Object.fromEntries((t.topics || t.items || []).map(x => [x.arn, x]));
+  const rows = acts.map(a => {
+    const tp = topics[a.action];
+    const kind = /^arn:aws:sns:/.test(a.action) ? "Notification" : /^arn:aws:autoscaling:/.test(a.action) ? "Auto Scaling action"
+      : /^arn:aws:automate:.*:ec2:/.test(a.action) ? "EC2 action" : /^arn:aws:lambda:/.test(a.action) ? "Lambda action" : "Action";
+    const target = kind !== "Notification" ? "Not an SNS topic" : (tp ? "Topic " + tp.name + " (" + (tp.subscriptions || 0) + " confirmed subscriptions)" : "Topic does not exist in this account");
+    return {...a, kind, target};
+  });
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Actions (" + rows.length + ")"),
+    _dtbl([["state","Alarm state trigger"],["kind","Type"],["action","Target ARN",1],["target","Target status"],["enabled","Enabled"]], rows,
+      "No actions: this alarm changes state without notifying anyone.")));
 };
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──

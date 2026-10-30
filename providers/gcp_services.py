@@ -190,10 +190,18 @@ async def api_gcp_storage_patch_bucket(bucket: str, request: Request):
         raise HTTPException(404, detail="Bucket not found")
     payload = await request.json() if request is not None else {}
     payload = payload if isinstance(payload, dict) else {}
-    for key in ("storageClass", "location", "locationType"):
+    # Lifecycle / retention / encryption / versioning / soft delete / storage class / labels
+    # go through the GCS engine's buckets.patch validation (core/gcp_storage_core) — the
+    # same rules Nano's bucket PATCH applies.
+    from core import gcp_storage_core as _gcs_core
+    try:
+        _gcs_core.apply_bucket_patch(rec, _gcs_core.validate_bucket_patch(rec, payload))
+    except _gcs_core.BucketPatchError as e:
+        raise HTTPException(e.status, detail=e.message)
+    for key in ("location", "locationType"):
         if payload.get(key):
             rec[key] = str(payload[key])
-    for key in ("labels", "versioning", "iamConfiguration", "lifecycle", "encryption", "website", "cors"):
+    for key in ("iamConfiguration", "website", "cors"):
         if isinstance(payload.get(key), (dict, list)):
             rec[key] = payload[key]
     if "defaultEventBasedHold" in payload:
@@ -320,6 +328,11 @@ def api_gcp_storage_delete_object(bucket: str, object_name: str):
     s = _server()
     if bucket not in gcp_storage_state.get("objects", {}) or object_name not in gcp_storage_state["objects"][bucket]:
         raise HTTPException(404, detail="Object not found")
+    from core import gcp_storage_core as _gcs_core
+    held = _gcs_core.retention_blocks(gcp_storage_state.get("buckets", {}).get(bucket) or {}, bucket, object_name,
+                                      gcp_storage_state["objects"][bucket][object_name])
+    if held:
+        raise HTTPException(403, detail=held)
     try:
         from core import gcp_gcs_store as gcs
         gcs.delete(s._tenant_scoped_bucket(bucket), object_name)
@@ -410,9 +423,14 @@ async def api_gcp_sql_patch_instance(project: str, instance: str, request: Reque
         payload = {}
     payload = payload if isinstance(payload, dict) else {}
     if isinstance(payload.get("settings"), dict):
+        # flags / ipConfiguration / backups / insights validated by the Cloud SQL engine
+        # (core/gcp_cloudsql_core) — the rules Nano's instances.patch applies.
+        from core import gcp_cloudsql_core as _sqlc
         cur = rec.get("settings") if isinstance(rec.get("settings"), dict) else {}
-        cur.update(payload["settings"])
-        rec["settings"] = cur
+        try:
+            rec["settings"] = _sqlc.patch_settings(rec.get("databaseVersion", ""), cur, payload["settings"])
+        except _sqlc.SqlSettingsError as e:
+            raise HTTPException(e.status, detail=e.message)
     for key in ("databaseVersion", "region"):
         if payload.get(key):
             rec[key] = str(payload[key])
@@ -561,11 +579,35 @@ def _pubsub_mirror(s, kind: str, project: str, rid: str, payload: dict | None = 
         pass
 
 
+def _pubsub_topic_settings(t: dict) -> dict:
+    """Emulator topic + the settings the emulator doesn't hold (CMEK key, schema,
+    labels set from the console), kept on the topic's gcp_pubsub_state record."""
+    rec = gcp_pubsub_state.get("topics", {}).get(str(t.get("name") or "").split("/")[-1]) or {}
+    out = dict(t)
+    for k in ("kmsKeyName", "schemaSettings", "labels"):
+        if rec.get(k):
+            out[k] = rec[k]
+    return out
+
+
+def _pubsub_check_schema(topic: str, data_b64: str) -> None:
+    rec = gcp_pubsub_state.get("topics", {}).get(topic) or {}
+    ss = rec.get("schemaSettings") or {}
+    if not ss.get("schema"):
+        return
+    from core import gcp_pubsub_core as _psc
+    sc = gcp_pubsub_state.get("schemas", {}).get(str(ss["schema"]).split("/")[-1])
+    try:
+        _psc.check_message(sc, ss.get("encoding", "JSON"), data_b64)
+    except _psc.PubsubError as e:
+        raise HTTPException(e.code, detail=e.message)
+
+
 def api_gcp_pubsub_list_topics(project: str):
     s = _server()
     project = _gcp_project_name(project)
     if _ps_emu.available():
-        topics = [s._gcp_pubsub_topic_view(project, t) for t in _ps_emu.list_topics(project)]
+        topics = [s._gcp_pubsub_topic_view(project, _pubsub_topic_settings(t)) for t in _ps_emu.list_topics(project)]
         topics.sort(key=lambda item: item.get("name", ""))
         return {"topics": topics, "nextPageToken": "", "kind": "pubsub#topicList"}
     topics = [s._gcp_pubsub_topic_view(project, topic) for topic in gcp_pubsub_state.get("topics", {}).values() if str(topic.get("project") or project) == project]
@@ -607,7 +649,7 @@ def api_gcp_pubsub_get_topic(project: str, topic: str):
         t = _ps_emu.get_topic(project, topic)
         if not t:
             raise HTTPException(404, detail="Topic not found")
-        return s._gcp_pubsub_topic_view(project, t)
+        return s._gcp_pubsub_topic_view(project, _pubsub_topic_settings(t))
     rec = gcp_pubsub_state.get("topics", {}).get(topic)
     if not rec or str(rec.get("project") or project) != project:
         raise HTTPException(404, detail="Topic not found")
@@ -689,6 +731,7 @@ async def api_gcp_pubsub_publish(project: str, topic: str, request: Request):
                 continue
             raw = message.get("data") or ""
             if isinstance(raw, str):
+                _pubsub_check_schema(topic, raw)
                 try:
                     data = _b64.b64decode(raw, validate=True)
                 except (ValueError, _bin.Error):
@@ -1658,8 +1701,18 @@ async def api_gcp_vpc_create_network(project: str, request: Request):
     name = str(payload.get("name") or payload.get("network") or "").strip()
     if not name:
         raise HTTPException(400, detail="Network name is required")
-    rec = {"id": s._gcp_compute_numeric_id(f"{project}:{name}"), "name": name, "project": project, "description": str(payload.get("description") or ""), "IPv4Range": str(payload.get("IPv4Range") or ""), "gatewayIPv4": str(payload.get("gatewayIPv4") or ""), "mtu": int(payload.get("mtu") or 1460), "autoCreateSubnetworks": bool(payload.get("autoCreateSubnetworks", True)), "routingMode": str(payload.get("routingMode") or "REGIONAL"), "subnetworks": payload.get("subnetworks", []) if isinstance(payload.get("subnetworks"), list) else [], "peerings": payload.get("peerings", []) if isinstance(payload.get("peerings"), list) else [], "createTime": _now()}
+    routing = str(payload.get("routingMode") or (payload.get("routingConfig") or {}).get("routingMode") or "REGIONAL").upper()
+    rec = {"id": s._gcp_compute_numeric_id(f"{project}:{name}"), "name": name, "project": project, "description": str(payload.get("description") or ""), "IPv4Range": str(payload.get("IPv4Range") or ""), "gatewayIPv4": str(payload.get("gatewayIPv4") or ""), "mtu": int(payload.get("mtu") or 1460), "autoCreateSubnetworks": bool(payload.get("autoCreateSubnetworks", True)), "routingMode": routing, "subnetworks": payload.get("subnetworks", []) if isinstance(payload.get("subnetworks"), list) else [], "peerings": payload.get("peerings", []) if isinstance(payload.get("peerings"), list) else [], "createTime": _now()}
     gcp_vpc_state.setdefault("networks", {})[name] = rec
+    # Like networks.insert: an auto-mode network gets one subnet per region, and every
+    # network gets its default route to the internet gateway.
+    from core import gcp_console_tabs as _tabs
+    if rec["autoCreateSubnetworks"]:
+        for sn in _tabs.auto_subnets(name):
+            gcp_vpc_state.setdefault("subnetworks", {})["%s/%s" % (sn["region"], sn["name"])] = {
+                **sn, "id": s._gcp_compute_numeric_id(f"{project}:{sn['region']}:{name}"), "project": project, "createTime": _now()}
+    dr = _tabs.default_route(name)
+    gcp_vpc_state.setdefault("routes", {})[dr["name"]] = {**dr, "id": s._gcp_compute_numeric_id(f"{project}:{dr['name']}"), "project": project, "createTime": _now()}
     return {"kind": "compute#network", "id": rec["id"], "creationTimestamp": rec["createTime"], "name": name, "description": rec["description"], "IPv4Range": rec["IPv4Range"], "gatewayIPv4": rec["gatewayIPv4"], "mtu": rec["mtu"], "selfLink": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{name}", "selfLinkWithId": f"{s._gcp_compute_network_root()}/projects/{project}/global/networks/{name}?id={rec['id']}", "autoCreateSubnetworks": rec["autoCreateSubnetworks"], "subnetworks": rec["subnetworks"], "peerings": rec["peerings"], "routingConfig": {"routingMode": rec["routingMode"]}}
 
 
@@ -1679,6 +1732,12 @@ def api_gcp_vpc_delete_network(project: str, network: str):
     if not rec or str(rec.get("project") or project) != project:
         raise HTTPException(404, detail="Network not found")
     del gcp_vpc_state["networks"][network]
+    # the network's auto-mode subnets and its default internet route go with it
+    from core import gcp_console_tabs as _tabs
+    for k, sn in list(gcp_vpc_state.get("subnetworks", {}).items()):
+        if sn.get("network") == network and sn.get("autoCreated"):
+            gcp_vpc_state["subnetworks"].pop(k, None)
+    gcp_vpc_state.get("routes", {}).pop(_tabs.default_route(network)["name"], None)
     return {"done": True}
 
 

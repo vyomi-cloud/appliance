@@ -7,6 +7,8 @@ from fastapi import Request, HTTPException
 
 from core.models import EC2InstanceRequest, EC2ConsoleInputRequest, EC2ConsoleCommandRequest
 from core import app_context as ctx
+from core import aws_console_detail as _D
+from routes import aws_console_detail as _detail
 
 ec2_state = ctx.ec2_state
 
@@ -97,6 +99,9 @@ def _server():
 
 
 def register(app, h) -> None:
+    # Resource-detail tab routes (/api/ec2/instances/{id}/network-interfaces, …).
+    _detail.register(app)
+
     @app.get("/api/ec2/amis")
     def api_ec2_amis():
         return _server().api_ec2_amis()
@@ -133,7 +138,8 @@ def register(app, h) -> None:
     def api_ec2_get_instance(instance_id: str):
         for inst in _server().api_ec2_list_instances().get("instances", []):
             if inst.get("instance_id") == instance_id:
-                return inst
+                # Instances recorded before the placement/ENI/volume model get it now.
+                return _detail.ensure_model(inst)
         raise HTTPException(status_code=404, detail="InvalidInstanceID.NotFound")
 
     @app.post("/api/ec2/instances")
@@ -145,28 +151,58 @@ def register(app, h) -> None:
             payload = {}
         if not isinstance(payload, dict):
             payload = {}
+        # The console's launch wizard names the key pair `key_name` (RunInstances KeyName).
+        if payload.get("key_name") and not payload.get("key_pair"):
+            payload["key_pair"] = payload["key_name"]
+        if payload.get("vpc_id") == "default":
+            payload.pop("vpc_id")
         model = EC2InstanceRequest(**payload)
-        return _server().api_ec2_create_instance(
+        instance = _server().api_ec2_create_instance(
             model,
             auto_start=auto_start,
             host_os_hint=request.headers.get("x-cloudlearn-host-os", ""),
         )
+        # Placement in the default VPC, launch-wizard SG, ENI, root volume, IAM profile.
+        _detail.apply_launch(instance, payload)
+        return instance
 
     @app.get("/api/ec2/instances/{instance_id}")
     def api_ec2_get_instance(instance_id: str):
         return _server().api_ec2_get_instance(instance_id)
 
+    def _guard(instance_id: str, check):
+        inst = ec2_state.get("instances", {}).get(instance_id)
+        if isinstance(inst, dict):
+            try:
+                check(inst)
+            except _D.DetailError as e:
+                raise HTTPException(e.status, detail={"code": e.code, "message": e.message})
+
+    def _transition(instance_id: str, state: str):
+        inst = ec2_state.get("instances", {}).get(instance_id)
+        if isinstance(inst, dict):
+            _D.record_state_change(inst, state)
+            ctx.persist_state()
+
     @app.delete("/api/ec2/instances/{instance_id}")
     def api_ec2_delete_instance(instance_id: str):
-        return _server().api_ec2_terminate_instance(instance_id)
+        _guard(instance_id, _D.check_terminate)
+        out = _server().api_ec2_terminate_instance(instance_id)
+        _transition(instance_id, "terminated")
+        return out
 
     @app.post("/api/ec2/instances/{instance_id}/start")
     def api_ec2_start_instance(instance_id: str):
-        return _server().api_ec2_start_instance(instance_id)
+        out = _server().api_ec2_start_instance(instance_id)
+        _transition(instance_id, "pending")
+        return out
 
     @app.post("/api/ec2/instances/{instance_id}/stop")
     def api_ec2_stop_instance(instance_id: str):
-        return _server().api_ec2_stop_instance(instance_id)
+        _guard(instance_id, _D.check_stop)
+        out = _server().api_ec2_stop_instance(instance_id)
+        _transition(instance_id, "stopped")
+        return out
 
     @app.post("/api/ec2/instances/{instance_id}/reboot")
     def api_ec2_reboot_instance(instance_id: str):
@@ -174,7 +210,10 @@ def register(app, h) -> None:
 
     @app.post("/api/ec2/instances/{instance_id}/terminate")
     def api_ec2_terminate_instance(instance_id: str):
-        return _server().api_ec2_terminate_instance(instance_id)
+        _guard(instance_id, _D.check_terminate)
+        out = _server().api_ec2_terminate_instance(instance_id)
+        _transition(instance_id, "terminated")
+        return out
 
     @app.get("/api/ec2/instances/{instance_id}/console")
     def api_ec2_console(instance_id: str):

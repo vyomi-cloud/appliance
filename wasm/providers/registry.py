@@ -45,6 +45,9 @@ _MUTATING_OPS = {
     # native sub-resource ops seen on the _resource path (GCP cores)
     "CreateSubscription", "CreateDatabase", "DeleteObject", "PutObject", "Pause", "Resume", "Run", "Enable", "Disable", "Resize", "Upgrade", "Failover",
 }
+# GCP resource-detail tab writes (/api/gcp/sub/{service}/{op}/{name}) — logged on the parent.
+_GCP_TAB_WRITES = ("Set", "Attach", "Detach", "Create", "Delete", "Grant", "Revoke", "Add", "Update", "Destroy",
+                   "Restore", "Publish", "Seek", "Rotate", "Import", "Export", "Patch", "Promote", "Test")
 
 
 def _emit_event(provider: str, service: str, resource: str, action: str,
@@ -116,7 +119,7 @@ def _resource_dispatch(backends: Backends, provider: str, operation: str,
         out = _gcp_fill_out(svc, operation, out)
     # cloudsim event: record mutating ops (best-effort). For a sub-resource op the
     # "resource" is the CHILD's name (body.name) when present, else the parent name.
-    if operation in _MUTATING_OPS:
+    if operation in _MUTATING_OPS or (provider == "gcp" and operation.startswith(_GCP_TAB_WRITES)):
         res_name = str(body.get("name") or name or "") if operation in (
             "CreateSubscription", "CreateDatabase") else str(name or body.get("name") or "")
         _emit_event(provider, svc, res_name, operation, out)
@@ -142,11 +145,12 @@ def _ec2_launch_defaults(body: dict) -> dict:
     out.setdefault("public_dns", "ec2-" + out["public_ip"].replace(".", "-") + ".compute-1.amazonaws.com")
     out.setdefault("image_id", "ami-0" + h[25:32] + h[:9])
     out.setdefault("availability_zone", "us-east-1a")
-    out.setdefault("vpc_id", "vpc-0" + h[:16])
-    out.setdefault("subnet_id", "subnet-0" + h[16:32])
+    out.setdefault("az", out["availability_zone"])
     out.setdefault("launch_time", _t.strftime("%Y-%m-%dT%H:%M:%S.000Z", _t.gmtime()))
-    out.setdefault("security_groups", ["sg-0" + h[8:24]])   # the VPC's default group, as RunInstances attaches it
-    return out
+    # Placement (default VPC + subnet, default / launch-wizard security group),
+    # the primary ENI, root volume and IAM profile: core/aws_console_detail.
+    from . import aws_core_adapter as _A
+    return _A.ec2_apply_launch(out)
 
 
 def _gcp_fill(svc: str, rec):
@@ -209,6 +213,9 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
         from . import gcp_core_adapter as _gca
         if svc in _gca.GCP_CORE_SERVICES:
             return _gca.resource_op(svc, operation, name, body)
+        # Resource-detail tab ops on generic-store parents (compute, vpc, functions, …).
+        if _gca.is_tab_op(svc, operation):
+            return _gca.tab_dispatch(svc, operation, name, body, backends.resources, account)
     if provider == "azure":
         from . import azure_core_adapter as _aca
         if svc in _aca.AZURE_DP_SERVICES:
@@ -225,9 +232,16 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
             body = _ec2_launch_defaults(body)
         if provider == "gcp":   # stored described, so created/updated times stay fixed
             body = _gcp_fill(svc, body)
+            if svc in ("compute", "functions"):   # described like instances.get / functions.get
+                from core import gcp_console_tabs as _gct
+                body = (_gct.describe_instance(body, "demo", body.get("zone") or "us-central1-a") if svc == "compute"
+                        else _gct.describe_function(body, "nano-project", "us-central1"))
         return {"ok": True, **r.create(provider, account, svc, body)}
     if operation == "Get":
         rec = r.get(provider, account, svc, name)
+        if rec and provider == "aws" and svc == "ec2":
+            from . import aws_core_adapter as _A   # instances launched before placement was modeled
+            rec = _A._ec2_rec(backends, account, {"name": name}) or rec
         if not rec and name == "_settings":
             # Detail-tab settings that were never saved: an empty record, so the
             # tab renders each field's default (not a 404 for a normal state).
@@ -236,6 +250,14 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
     if operation == "Update":
         rec = r.update(provider, account, svc, name, body)
         return {"ok": True, **rec} if rec else {"ok": False, "code": "NotFound", "name": name}
+    if provider == "aws" and svc == "ec2" and operation in ("Delete", "Terminate", "Stop", "Start"):
+        # Termination / stop protection and the state-transition reason (core/aws_console_detail).
+        rec = r.get(provider, account, svc, name)
+        if rec is not None:
+            from . import aws_core_adapter as _A
+            err = _A.ec2_guard(rec, "Terminate" if operation == "Delete" else operation)
+            if err:
+                return err
     if operation == "Delete":
         ok = r.delete(provider, account, svc, name)
         return {"ok": ok, "code": None if ok else "NotFound", "name": name}
@@ -252,6 +274,8 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
             "Stop":   ("stopped", "stopped"),
             "Reboot": ("running", "available"),
         }[operation]
+        if provider == "gcp" and svc == "compute":   # GCE instance status values
+            status = "TERMINATED" if operation == "Stop" else "RUNNING"
         updated = r.update(provider, account, svc, name, {"state": st, "status": status})
         return {"ok": True, **(updated or {"name": name, "state": st, "status": status})}
     if operation == "Terminate":
@@ -259,6 +283,41 @@ def _resource_dispatch_inner(backends: Backends, provider: str, operation: str,
         ok = r.delete(provider, account, svc, name)
         return {"ok": ok, "code": None if ok else "NotFound", "name": name}
     return {"ok": False, "code": "UnsupportedOperation", "operation": operation}
+
+
+def _arm_event(method: str, scope: str, typ: str, name: str) -> None:
+    """Activity log for an ARM write: recorded against the resource it belongs to
+    (``scope``'s name), with the ARM operation name (``<type>/write|delete|action``)."""
+    try:
+        from core import nano_events
+        verb = {"DELETE": "delete", "POST": "action"}.get(method.upper(), "write")
+        top = scope.rstrip("/").split("/")[-1]
+        nano_events.record(provider="azure", service=typ, resource=top, action=f"{typ}/{verb}",
+                           status="ok", detail=f"{method.upper()} {typ} {name}".strip())
+    except Exception:
+        pass
+
+
+class _NanoBlobHook:
+    """The in-browser blob core (shared registry store) for ARM operations that read or
+    write blobs (API Management backup/restore). Nano's blob store is one account."""
+
+    def _store(self):
+        from core import nano_registry
+        return nano_registry.get()["az_blob"]
+
+    def exists(self, account, container):
+        return self._store().container_exists(container)
+
+    def put(self, account, container, name, data, content_type):
+        from core import azure_blob_core as bc
+        bc.dispatch(self._store(), "PUT", f"/{container}/{name}", {}, {"x-ms-blob-type": "BlockBlob",
+                    "content-type": content_type, "x-ms-blob-content-type": content_type}, data)
+
+    def get(self, account, container, name):
+        from core import azure_blob_core as bc
+        r = bc.dispatch(self._store(), "GET", f"/{container}/{name}", {}, {}, b"")
+        return r.body if getattr(r, "status", 404) == 200 else None
 
 
 def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
@@ -284,6 +343,10 @@ def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
             from core.azure_arm_core import AzureArm
             arm = AzureArm()
         backends._azure_arm = arm
+    if getattr(arm, "on_event", None) is None:
+        arm.on_event = _arm_event
+    if getattr(arm, "blob_hook", None) is None:
+        arm.blob_hook = _NanoBlobHook()
     resp = arm.handle(method, params.get("path", ""),
                       params.get("query") or {}, params.get("body"))
     return {"ok": resp["status"] < 400, "__http": resp}
@@ -458,6 +521,10 @@ def _census_dispatch(backends: Backends, provider: str) -> dict:
                 if len(tail) != 3:
                     continue
                 rtype = (tail[0] + "/" + tail[1]).lower()
+                # Locks, auto-shutdown schedules and NICs are configuration, not billed resources.
+                if rtype in ("microsoft.authorization/locks", "microsoft.devtestlab/schedules",
+                             "microsoft.network/networkinterfaces"):
+                    continue
                 by_service[rtype] = by_service.get(rtype, 0) + 1
                 if rtype in _VM_SERVICES["azure"]:
                     vms += 1

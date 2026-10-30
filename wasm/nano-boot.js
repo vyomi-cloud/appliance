@@ -89,16 +89,20 @@ const CORES = [
   "kms_keystore.py", "kms_core.py", "kv_store.py", "secrets_core.py",
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py",
+  "aws_console_detail.py",   // AWS resource-detail tab model (EC2 placement/ENI/volumes/attributes, IAM resource access)
   "azure_cognitiveservices_core.py",  // Azure AI services engine (Microsoft.CognitiveServices) — loaded before azure_arm_core which delegates to it
   "azure_monitor_core.py",   // Azure Monitor engine (Microsoft.Insights) — loaded before azure_arm_core which delegates to it
   "azure_dns_core.py",   // Azure DNS engine (Microsoft.Network/dnsZones) — loaded before azure_arm_core which delegates to it
   "azure_operationalinsights_core.py",   // Azure Log Analytics engine (Microsoft.OperationalInsights) — loaded before azure_arm_core which delegates to it
   "azure_appconfiguration_core.py",   // Azure App Configuration engine — loaded before azure_arm_core which delegates to it
+  "azure_keyvault_certificates_core.py",   // Azure Key Vault certificates (self-signed X.509) — imported by the Azure adapter
+  "azure_arm_ext_core.py",   // Azure ARM locks / identity / health / NICs / run commands — loaded before azure_arm_core which delegates to it
   "azure_app_core.py",   // Azure Container Apps engine (Microsoft.App) — loaded before azure_arm_core which delegates to it
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
   "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py",
+  "gcp_console_tabs.py", "instance_catalog.py",   // GCP resource-detail tabs engine + machine-type catalog (gcp_core_adapter imports them)
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
   "azure_keyvault_keys_core.py", "azure_queue_core.py",

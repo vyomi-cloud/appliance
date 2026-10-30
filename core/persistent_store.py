@@ -20,6 +20,7 @@ from __future__ import annotations
 import base64
 import json
 import sqlite3
+import threading
 from typing import Any
 
 from core.object_store import InMemoryObjectStore
@@ -64,20 +65,25 @@ class SqliteStateBackend:
 
     def __init__(self, path: str = ":memory:"):
         self.path = path
-        # A single shared connection so `:memory:` persists across save/load.
-        self._conn = sqlite3.connect(path)
+        # A single shared connection so `:memory:` persists across save/load. The
+        # appliance calls the cores from FastAPI's worker threads, so the connection
+        # is shared across threads and serialized by a lock.
+        self._conn = sqlite3.connect(path, check_same_thread=False)
+        self._lock = threading.Lock()
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS store_state (id TEXT PRIMARY KEY, blob TEXT)")
         self._conn.commit()
 
     def save(self, store_id: str, state: dict) -> None:
-        self._conn.execute("INSERT OR REPLACE INTO store_state VALUES (?, ?)",
-                           (store_id, _dumps(state)))
-        self._conn.commit()
+        blob = _dumps(state)
+        with self._lock:
+            self._conn.execute("INSERT OR REPLACE INTO store_state VALUES (?, ?)", (store_id, blob))
+            self._conn.commit()
 
     def load(self, store_id: str) -> dict:
-        row = self._conn.execute(
-            "SELECT blob FROM store_state WHERE id = ?", (store_id,)).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT blob FROM store_state WHERE id = ?", (store_id,)).fetchone()
         return _loads(row[0]) if row else {}
 
 
@@ -200,7 +206,7 @@ class PersistentAzureBlobStore(_PersistentMixin, AzureBlobStore):
 class PersistentFirestoreStore(_PersistentMixin, FirestoreStore):
     """Durable Firestore (v2.5.0): the FirestoreStore has clean put/delete methods,
     so we persist on those — no core edits needed."""
-    _STATE_ATTRS = ("documents",)
+    _STATE_ATTRS = ("documents", "databases", "indexes")
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "firestore"):
         FirestoreStore.__init__(self)

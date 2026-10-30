@@ -447,6 +447,9 @@ def _mon_op(operation, name, body):
 
 
 def resource_op(service, operation, name="", body=None):
+    tab = tab_dispatch(service, operation, name, body)
+    if tab is not None:
+        return tab
     out = _resource_op(service, operation, name, body)
     if isinstance(out, dict) and service in ("kms", "firestore", "secretmanager"):
         if isinstance(out.get("items"), list) and operation == "List":
@@ -510,28 +513,35 @@ def _resource_op(service, operation, name="", body=None):
                           f"/storage/v1/b/{body.get('bucket','')}/o/{quote(str(body.get('key','')), safe='')}")
             return {"ok": st < 300, "key": body.get("key"), "code": None if st < 300 else "NotFound"}
 
-    # ---------------- FIRESTORE (documents in a default collection) ----------------
+    # ---------------- FIRESTORE (projects.databases — the Admin API's databases) ----------------
     if svc == "firestore":
-        base = f"{_P}/databases/(default)/documents/{COLL}"
+        base = f"{_P}/databases"
         if operation == "List":
-            return _ok_list(svc)
-        if operation == "ListDocuments":   # database Usage tab: the documents the database holds
             st, p = _call(svc, "GET", base)
-            docs = _items(p) if isinstance(p, dict) else []
-            return {"ok": st < 300, "documents": docs, "items": docs}
+            return {"ok": True, "items": [_rec(x) for x in (p.get("databases") or [])]}
+        if operation == "ListDocuments":   # database Usage tab: the documents the database holds
+            from core.gcp_firestore_core import _DbDocs, _doc_view
+            db = _short(name) if name else "(default)"
+            docs = [_doc_view("projects/%s/databases/%s/documents" % (PROJ, db), r, e)
+                    for r, e in _DbDocs(_STORES["firestore"], db).all()]
+            return {"ok": True, "documents": docs, "items": docs}
         if operation == "Create":
-            st, p = _call(svc, "POST", base, {"documentId": rid}, {"fields": {}})
-            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "AlreadyExists", "name": rid}
+            st, p = _call(svc, "POST", base, {"databaseId": rid},
+                          {k: body[k] for k in ("type", "concurrencyMode", "locationId", "appEngineIntegrationMode",
+                                                "pointInTimeRecoveryEnablement", "deleteProtectionState") if body.get(k)})
+            if st < 300:
+                return {"ok": True, **_rec(p.get("response") or {})}
+            err = (p or {}).get("error") or {}
+            return {"ok": False, "code": err.get("status") or "AlreadyExists", "message": err.get("message", ""), "name": rid}
         if operation == "Get":
             st, p = _call(svc, "GET", f"{base}/{name}")
             return {"ok": True, **_rec(p)} if st < 300 else {"ok": False, "code": "NotFound", "name": name}
         if operation == "Delete":
-            st, _ = _call(svc, "DELETE", f"{base}/{name}")
-            return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
-        if operation == "Update":   # Data tab edit → document PATCH (merge typed fields)
-            fields = body.get("fields", body)
-            st, p = _call(svc, "PATCH", f"{base}/{name}", {}, {"fields": fields})
-            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "UpdateFailed", "name": name}
+            st, p = _call(svc, "DELETE", f"{base}/{name}")
+            return {"ok": st < 300, "code": None if st < 300 else ((p or {}).get("error") or {}).get("status", "NotFound"), "name": name}
+        if operation == "Update":   # databases.patch (delete protection, PITR, concurrency)
+            st, p = _call(svc, "PATCH", f"{base}/{name}", {}, body)
+            return {"ok": True, **_rec(p.get("response") or {})} if st < 300 else {"ok": False, "code": "UpdateFailed", "name": name}
 
     # ---------------- KMS (cryptoKeys under a default key ring) ----------------
     if svc == "kms":
@@ -569,7 +579,12 @@ def _resource_op(service, operation, name="", body=None):
         if operation == "List":
             return _ok_list(svc)
         if operation == "Create":
-            st, p = _call(svc, "POST", base, {"secretId": rid}, {"replication": {"automatic": {}}})
+            try:   # the form's replication choice (automatic / user-managed regions)
+                repl = _sec.replication_from_form(body)
+            except _sec.SecretPatchError as e:
+                return {"ok": False, "code": "INVALID_ARGUMENT", "message": e.message, "name": rid}
+            st, p = _call(svc, "POST", base, {"secretId": rid},
+                          {"replication": repl, **({"labels": body["labels"]} if isinstance(body.get("labels"), dict) and body["labels"] else {})})
             if st < 300:
                 val = body.get("secret_value") or body.get("value")
                 if val:   # a secret may be created empty; a version exists only once a value is added
@@ -755,3 +770,710 @@ def _resource_op(service, operation, name="", body=None):
 
 
 GCP_CORE_SERVICES = frozenset(_MOD.keys())
+
+
+# ── Resource-detail tabs (/api/gcp/sub/{service}/{op}/{name}) ─────────────
+# The same ops the offline appliance serves (providers/gcp_tabs_console.py), over the
+# Nano engines: the cores for core-backed services, the generic ResourceStore record
+# for compute / vpc / functions / apigateway / eventarc. Validation and the records
+# no engine models on its own come from core/gcp_console_tabs.py (shared with offline).
+from core import gcp_console_tabs as _T
+
+_GENERIC_TAB_SERVICES = {"compute", "functions", "apigateway", "vpc", "eventarc"}
+_CRUD = {"List", "Create", "Get", "Update", "Delete", "Start", "Stop", "Reboot", "Terminate"}
+
+
+def _tab_err(e):
+    body = {"ok": False, "code": e.code, "message": e.message}
+    return {**body, "__http": {"status": e.status, "body": body}}
+
+
+def _tab_root():
+    return _sub_root()   # the durable nano_sub dict (persisted + cross-tab synced)
+
+
+class _Generic:
+    """A generic-store (ResourceStore) record of `svc`, fetched by name."""
+
+    def __init__(self, resources, account, svc, name):
+        self.r, self.account, self.svc, self.name = resources, account, svc, name
+
+    def get(self):
+        rec = self.r.get("gcp", self.account, self.svc, self.name) if self.r is not None else None
+        if rec is None:
+            raise _T.TabError(404, "NOT_FOUND", "The resource '%s' was not found" % self.name)
+        return rec
+
+    def update(self, patch):
+        return self.r.update("gcp", self.account, self.svc, self.name, patch)
+
+
+def _compute_tab(g, op, body):
+    rec = g.get()
+    if "networkInterfaces" not in rec:   # created before instances were described: fill once
+        g.update({k: v for k, v in _T.describe_instance(rec, PROJ, "us-central1-a").items() if k not in rec})
+        rec = g.get()
+    name = str(rec.get("name") or g.name)
+    v = _T.view_op("compute", op)
+    if v:
+        return {"ok": True, "item": _T.view("compute", v, rec)}
+    if op == "SetMetadata":
+        g.update({"metadata": {"items": _T.validate_metadata(body.get("items", []))}})
+        return {"ok": True, "item": g.get()}
+    if op == "SetMachineType":
+        _T.check_stopped(rec.get("status"), "changing its machine type")
+        from core import instance_catalog as _ic
+        g.update({"machineType": _T.validate_machine_type(body.get("machineType"), list(_ic.GCP.keys()))})
+        return {"ok": True, "item": g.get()}
+    if op == "SetScheduling":
+        g.update({"scheduling": _T.validate_scheduling(body, rec.get("scheduling"))})
+        return {"ok": True, "item": g.get()}
+    if op == "SetLabels":
+        g.update({"labels": _T.validate_labels(body.get("labels", {}))})
+        return {"ok": True, "item": g.get()}
+    disks = list(rec.get("disks") or [])
+    root = _tab_root()
+    if op == "ListDisks":
+        return {"ok": True, "items": [{"name": d.get("deviceName") or d.get("source"), "boot": bool(d.get("boot")),
+                                       "sizeGb": str(d.get("diskSizeGb") or ""), "type": d.get("diskType") or "pd-balanced",
+                                       "status": "READY", "autoDelete": bool(d.get("autoDelete")),
+                                       "mode": d.get("mode") or "READ_WRITE",
+                                       "sourceImage": _T.short(d.get("sourceImage") or "") or "None",
+                                       "deviceName": d.get("deviceName")} for d in disks]}
+    if op == "AttachDisk":
+        taken = [d.get("deviceName") for d in disks] + [
+            d.get("deviceName") for x in g.r.list("gcp", g.account, "compute") for d in (x.get("disks") or [])]
+        spec = _T.disk_spec(body, name, taken)
+        disks.append({"deviceName": spec["name"], "source": spec["name"], "boot": False, "autoDelete": spec["autoDelete"],
+                      "mode": "READ_WRITE", "type": "PERSISTENT", "diskSizeGb": str(spec["sizeGb"]), "diskType": spec["type"]})
+        g.update({"disks": disks})
+        return {"ok": True, "name": spec["name"]}
+    if op == "DetachDisk":
+        dn = str(body.get("name") or "")
+        d = next((x for x in disks if x.get("deviceName") == dn), None)
+        if d is None:
+            raise _T.TabError(404, "NOT_FOUND", "Disk '%s' is not attached to this instance." % dn)
+        if d.get("boot"):
+            raise _T.TabError(400, "INVALID_ARGUMENT", "The boot disk cannot be detached from a VM instance.")
+        g.update({"disks": [x for x in disks if x is not d]})
+        return {"ok": True, "name": dn}
+    names = [d.get("deviceName") for d in disks]
+    if op == "ListSnapshots":
+        snaps = _T.list_children(root, "compute", "_project", "snapshots")
+        return {"ok": True, "items": [x for x in snaps if x.get("sourceDisk") in names]}
+    if op == "CreateSnapshot":
+        existing = [x.get("name") for x in _T.list_children(root, "compute", "_project", "snapshots")]
+        spec = _T.snapshot_spec(body, names, existing)
+        d = next(x for x in disks if x.get("deviceName") == spec["sourceDisk"])
+        _T.put_child(root, "compute", "_project", "snapshots",
+                     {**spec, "status": "READY", "sizeGb": str(d.get("diskSizeGb") or ""), "storageLocations": "us",
+                      "created": _T.now_iso()})
+        return {"ok": True, "name": spec["name"]}
+    if op == "DeleteSnapshot":
+        sn = str(body.get("name") or "")
+        x = _T.children(root, "compute", "_project", "snapshots").get(sn)
+        if not x or x.get("sourceDisk") not in names:
+            raise _T.TabError(404, "NOT_FOUND", "The resource 'snapshots/%s' was not found" % sn)
+        _T.delete_child(root, "compute", "_project", "snapshots", sn)
+        return {"ok": True, "name": sn}
+    return None
+
+
+def _storage_tab(name, op, body):
+    st, b = _call("storage", "GET", "/storage/v1/b/%s" % name)
+    if st >= 300:
+        raise _T.TabError(404, "NOT_FOUND", "The specified bucket does not exist.")
+    v = _T.view_op("storage", op)
+    if v:
+        return {"ok": True, "item": _T.view("storage", v, b)}
+    if op == "LockRetention":
+        st, out = _call("storage", "POST", "/storage/v1/b/%s/lockRetentionPolicy" % name, {}, {})
+    else:
+        patch = _T.storage_patch(op, body)
+        if patch is None:
+            return None
+        st, out = _call("storage", "PATCH", "/storage/v1/b/%s" % name, {}, patch)
+    if st >= 300:
+        err = (out or {}).get("error") or {}
+        raise _T.TabError(st, "INVALID_ARGUMENT" if st == 400 else "FAILED_PRECONDITION", err.get("message") or "Update failed")
+    return {"ok": True, "item": out}
+
+
+def _sql_tab(name, op, body):
+    """Cloud SQL detail tabs over core/gcp_cloudsql_core (the Cloud SQL Admin engine)."""
+    base = "/sql/v1beta4/projects/%s/instances/%s" % (PROJ, name)
+
+    def call(method, path="", query=None, payload=None, ok=(200,)):
+        st, out = _call("cloudsql", method, base + path, query or {}, payload if payload is not None else b"")
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "FAILED_PRECONDITION", err.get("message") or "Request failed")
+        return out
+
+    full = call("GET")
+    op = op[0].lower() + op[1:]
+    v = _T.view_op("cloudsql", op)
+    if v:
+        return {"ok": True, "item": _T.view("cloudsql", v, full)}
+    patch = _T.sql_settings_patch(op, body, full.get("settings") or {})
+    if patch is not None:
+        call("PATCH", "", None, {"settings": patch})
+        return {"ok": True, "item": call("GET")}
+    if op == "listDatabases":
+        return {"ok": True, "items": [{"name": d["name"], "charset": d.get("charset"), "collation": d.get("collation")}
+                                      for d in call("GET", "/databases").get("items", [])]}
+    if op == "createDatabase":
+        call("POST", "/databases", None, {k: body[k] for k in ("name", "charset", "collation") if body.get(k)})
+        return {"ok": True, "name": body.get("name")}
+    if op == "deleteDatabase":
+        call("DELETE", "/databases/%s" % body.get("name"))
+        return {"ok": True, "name": body.get("name")}
+    if op == "listUsers":
+        return {"ok": True, "items": [{"name": u["name"], "host": u.get("host") or "", "type": u.get("type")}
+                                      for u in call("GET", "/users").get("items", [])]}
+    if op == "createUser":
+        call("POST", "/users", None, body)
+        return {"ok": True, "name": body.get("name")}
+    if op == "deleteUser":
+        call("DELETE", "/users", {"name": body.get("name", ""), "host": body.get("host", "")})
+        return {"ok": True, "name": body.get("name")}
+    if op == "setUserPassword":
+        if not str(body.get("password") or ""):
+            raise _T.TabError(400, "INVALID_ARGUMENT", "Invalid request: a password is required.")
+        call("PUT", "/users", {"name": body.get("name", ""), "host": body.get("host", "")}, {"password": body["password"]})
+        return {"ok": True, "name": body.get("name")}
+    if op == "listBackups":
+        return {"ok": True, "items": [{"id": b["id"], "type": b.get("type"), "status": b.get("status"),
+                                       "description": b.get("description") or "", "windowStartTime": b.get("windowStartTime"),
+                                       "location": b.get("location")} for b in call("GET", "/backupRuns").get("items", [])]}
+    if op == "createBackup":
+        call("POST", "/backupRuns", None, {"description": body.get("description") or ""})
+        return {"ok": True}
+    if op == "deleteBackup":
+        call("DELETE", "/backupRuns/%s" % body.get("id"))
+        return {"ok": True, "id": body.get("id")}
+    if op == "listReplicas":
+        st, lst = _call("cloudsql", "GET", "/sql/v1beta4/projects/%s/instances" % PROJ)
+        reps = [r for r in (lst or {}).get("items", []) if r.get("masterInstanceName") == name]
+        return {"ok": True, "items": [{"name": r["name"], "state": r.get("state"), "region": r.get("region"),
+                                       "databaseVersion": r.get("databaseVersion"), "tier": r["settings"].get("tier"),
+                                       "instanceType": r.get("instanceType")} for r in reps]}
+    if op == "createReplica":
+        rn = _T.validate_name(body.get("name"), "name")
+        st, out = _call("cloudsql", "POST", "/sql/v1beta4/projects/%s/instances" % PROJ, {},
+                        {"name": rn, "masterInstanceName": name, "settings": {"tier": (full.get("settings") or {}).get("tier")}})
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "FAILED_PRECONDITION", err.get("message") or "Create failed")
+        return {"ok": True, "name": rn}
+    if op in ("promoteReplica", "deleteReplica"):
+        rn = str(body.get("name") or "")
+        if rn not in (full.get("replicaNames") or []):
+            raise _T.TabError(404, "NOT_FOUND", "%s is not a read replica of %s." % (rn, name))
+        path = "/sql/v1beta4/projects/%s/instances/%s" % (PROJ, rn)
+        if op == "promoteReplica":
+            st, out = _call("cloudsql", "POST", path + "/promoteReplica")
+        else:
+            st, out = _call("cloudsql", "DELETE", path)
+        if st >= 300:
+            raise _T.TabError(st, "FAILED_PRECONDITION", ((out or {}).get("error") or {}).get("message") or "Failed")
+        return {"ok": True, "name": rn}
+    if op == "listOperations":
+        st, out = _call("cloudsql", "GET", "/sql/v1beta4/projects/%s/operations" % PROJ, {"instance": name})
+        return {"ok": True, "items": [{"operationType": o.get("operationType"), "status": o.get("status"),
+                                       "insertTime": o.get("insertTime"), "endTime": o.get("endTime"), "user": o.get("user"),
+                                       "name": o.get("name")} for o in (out or {}).get("items", [])]}
+    if op == "listQueryInsights":
+        return {"ok": True, "items": []}   # no query has run through this instance's Query Insights recorder
+    return None
+
+
+def _pubsub_tab(name, op, body):
+    """Pub/Sub topic tabs over core/gcp_pubsub_core (topics.patch, schemas, subscriptions, publish/pull)."""
+    topic = "projects/%s/topics/%s" % (PROJ, _short(name))
+
+    def call(method, path, query=None, payload=None):
+        st, out = _call("pubsub", method, "/v1/" + path, query or {}, payload if payload is not None else b"")
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "FAILED_PRECONDITION", err.get("message") or "Request failed")
+        return out
+
+    t = call("GET", topic)
+    op = op[0].lower() + op[1:]
+    v = _T.view_op("pubsub", op)
+    if v:
+        if v == "schema" and (t.get("schemaSettings") or {}).get("schema"):
+            st, sc = _call("pubsub", "GET", "/v1/" + t["schemaSettings"]["schema"])
+            t["schema"] = sc if st < 300 else None
+        return {"ok": True, "item": _T.view("pubsub", v, t)}
+    patch = _T.pubsub_topic_patch(op, body)
+    if patch is not None:
+        return {"ok": True, "item": call("PATCH", topic, None, {"topic": patch, "updateMask": ",".join(patch)})}
+    if op == "listSchemas":
+        return {"ok": True, "items": call("GET", "projects/%s/schemas" % PROJ).get("schemas", [])}
+    if op == "createSchema":
+        call("POST", "projects/%s/schemas" % PROJ, {"schemaId": body.get("name", "")},
+             {"type": body.get("type"), "definition": body.get("definition")})
+        return {"ok": True, "name": body.get("name")}
+    if op in ("listSubscriptions", "listPullSubscriptions"):   # the Messages tab pulls from pull subscriptions
+        items = []
+        for sn in call("GET", topic + "/subscriptions").get("subscriptions", []):
+            st, sub = _call("pubsub", "GET", "/v1/" + sn)
+            if st < 300:
+                items.append({"name": _short(sub["name"]), "ackDeadlineSeconds": sub.get("ackDeadlineSeconds", 10),
+                              "messageRetentionDuration": sub.get("messageRetentionDuration") or "604800s",
+                              "deliveryType": "Push" if (sub.get("pushConfig") or {}).get("pushEndpoint") else "Pull",
+                              "retainAckedMessages": bool(sub.get("retainAckedMessages"))})
+        if op == "listPullSubscriptions":
+            items = [x for x in items if x["deliveryType"] == "Pull"]
+        return {"ok": True, "items": items}
+    if op == "createSubscription":
+        sid = _T.validate_pubsub_id(body.get("name"))
+        ack = int(body.get("ackDeadlineSeconds") or 10)
+        if not 10 <= ack <= 600:
+            raise _T.TabError(400, "INVALID_ARGUMENT", "The ack deadline must be between 10 and 600 seconds.")
+        call("PUT", "projects/%s/subscriptions/%s" % (PROJ, sid), None, {"topic": topic, "ackDeadlineSeconds": ack})
+        return {"ok": True, "name": sid}
+    if op == "deleteSubscription":
+        call("DELETE", "projects/%s/subscriptions/%s" % (PROJ, _short(body.get("name"))))
+        return {"ok": True, "name": body.get("name")}
+    if op == "publishMessage":
+        data = str(body.get("data") or "")
+        attrs = {str(k): str(v) for k, v in (body.get("attributes") or {}).items()}
+        if not data and not attrs:
+            raise _T.TabError(400, "INVALID_ARGUMENT", "A message needs data or at least one attribute.")
+        out = call("POST", topic + ":publish", None,
+                   {"messages": [{"data": base64.b64encode(data.encode()).decode(), "attributes": attrs}]})
+        return {"ok": True, "messageIds": out.get("messageIds", [])}
+    if op == "pullMessages":
+        sub = "projects/%s/subscriptions/%s" % (PROJ, _short(body.get("subscription")))
+        got = call("POST", sub + ":pull", None, {"maxMessages": max(1, min(int(body.get("maxMessages") or 10), 100))}).get("receivedMessages", [])
+        if body.get("ack") and got:
+            call("POST", sub + ":acknowledge", None, {"ackIds": [g["ackId"] for g in got]})
+        items = []
+        for g in got:
+            m = g["message"]
+            try:
+                text = base64.b64decode(m.get("data") or "").decode("utf-8")
+            except Exception:
+                text = str(m.get("data") or "")
+            items.append({"messageId": m.get("messageId"), "publishTime": m.get("publishTime"), "data": text,
+                          "attributes": ", ".join("%s=%s" % kv for kv in (m.get("attributes") or {}).items()) or "No attributes",
+                          "acked": bool(body.get("ack"))})
+        return {"ok": True, "items": items}
+    return None
+
+
+class _NanoVpc:
+    """VPC storage for core/gcp_console_tabs.vpc_op: networks are ResourceStore records;
+    subnets / firewall rules / routes are durable child collections (nano_sub)."""
+
+    def __init__(self, g):
+        self.g, self.root = g, _tab_root()
+
+    def network(self, name):
+        rec = self.g.r.get("gcp", self.g.account, "vpc", name) if self.g.r is not None else None
+        if rec is not None and "autoCreateSubnetworks" not in rec:
+            rec["autoCreateSubnetworks"] = True
+        return rec
+
+    def update_network(self, name, field, value):
+        self.g.r.update("gcp", self.g.account, "vpc", name, {field: value})
+
+    def subnets(self, network):
+        return [dict(x) for x in _T.children(self.root, "vpc", network, "subnets").values()]
+
+    def put_subnet(self, rec):
+        coll = _T.children(self.root, "vpc", rec["network"], "subnets", create=True)
+        key = "%s/%s" % (rec["region"], rec["name"])
+        coll[key] = {**(coll.get(key) or {"creationTimestamp": _T.now_iso()}), **rec}
+
+    def delete_subnet(self, region, name):
+        for key in [k for k in self.root if k.startswith("vpc/") and k.endswith("/subnets")]:
+            self.root[key].pop("%s/%s" % (region, name), None)
+
+    def _proj(self, kind):
+        return _T.children(self.root, "vpc", "_project", kind, create=True)
+
+    def firewalls(self, network):
+        return [dict(f) for f in self._proj("firewalls").values() if f.get("network") == network]
+
+    def firewall_names(self):
+        return list(self._proj("firewalls"))
+
+    def put_firewall(self, rec):
+        self._proj("firewalls")[rec["name"]] = {**rec, "creationTimestamp": _T.now_iso()}
+
+    def update_firewall(self, name, patch):
+        self._proj("firewalls")[name].update(patch)
+
+    def delete_firewall(self, name):
+        self._proj("firewalls").pop(name, None)
+
+    def routes(self, network):
+        return [dict(r) for r in self._proj("routes").values() if r.get("network") == network]
+
+    def route_names(self):
+        return list(self._proj("routes"))
+
+    def put_route(self, rec):
+        self._proj("routes")[rec["name"]] = {**rec, "creationTimestamp": _T.now_iso()}
+
+    def delete_route(self, name):
+        self._proj("routes").pop(name, None)
+
+
+def _vpc_tab(g, op, body):
+    g.get()   # 404 when the network doesn't exist
+    return _T.vpc_op(_NanoVpc(g), g.name, op, body)
+
+
+class _NanoFunction:
+    """Cloud Functions storage for core/gcp_console_tabs.functions_op: the ResourceStore record,
+    described like functions.get; test runs execute in the in-browser Python sandbox."""
+
+    def __init__(self, g):
+        self.g = g
+        rec = g.get()
+        if "serviceConfig" not in rec or "code" not in rec:
+            g.update({k: v for k, v in _T.describe_function(rec, "nano-project", "us-central1").items()
+                      if k not in rec or k in ("serviceConfig", "httpsTrigger")})
+
+    def rec(self):
+        return self.g.get()
+
+    def update(self, patch):
+        self.g.update(patch)
+
+    def view(self):
+        return dict(self.g.get())
+
+    def execute(self, code, entry, runtime, event, env, timeout):
+        if not str(runtime).startswith("python"):
+            return {"status": "ERROR", "result": None, "logs": "",
+                    "error": "Runtime %s can't execute in Nano's in-browser (Pyodide) runtime; Python runtimes run here, "
+                             "every runtime runs on the offline appliance." % runtime}
+        return _T.run_python_function(code, entry, event, env)
+
+    def topic_exists(self, topic):
+        st, _ = _call("pubsub", "GET", "/v1/projects/%s/topics/%s" % (PROJ, topic))
+        return st < 300
+
+
+def _functions_tab(g, op, body):
+    return _T.functions_op(_NanoFunction(g), op, body)
+
+
+class _NanoFirestore:
+    """Firestore storage for core/gcp_console_tabs.firestore_op over core/gcp_firestore_core
+    (documents per database, composite indexes) + GCS for exports."""
+
+    def __init__(self, db):
+        self.db, self.root = db, _tab_root()
+        self.base = "%s/databases/%s/documents" % (_P, db)
+        st, _ = _call("firestore", "GET", "%s/databases/%s" % (_P, db))
+        if st >= 300 and db != "(default)":
+            raise _T.TabError(404, "NOT_FOUND", "The database %s does not exist for project %s" % (db, PROJ))
+
+    def _ok(self, st, out):
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "FAILED_PRECONDITION", err.get("message") or "Request failed")
+        return out
+
+    def collections(self):
+        from core.gcp_firestore_core import _DbDocs
+        rels = _DbDocs(_STORES["firestore"], self.db).all()
+        return sorted({r.split("/")[0] for r, _ in rels if "/" in r})
+
+    def docs(self, coll):
+        if not coll:
+            return []
+        st, out = _call("firestore", "GET", "%s/%s" % (self.base, coll))
+        return [{"id": d["name"].rsplit("/", 1)[-1], "fields": d.get("fields") or {}, "createTime": d.get("createTime", ""),
+                 "updateTime": d.get("updateTime", "")} for d in (out or {}).get("documents", [])]
+
+    def create_doc(self, coll, did, typed):
+        self._ok(*_call("firestore", "POST", "%s/%s" % (self.base, coll), {"documentId": did}, {"fields": typed}))
+
+    def update_doc(self, coll, did, typed):
+        self._ok(*_call("firestore", "PATCH", "%s/%s/%s" % (self.base, coll, did), {}, {"fields": typed}))
+
+    def delete_doc(self, coll, did):
+        self._ok(*_call("firestore", "DELETE", "%s/%s/%s" % (self.base, coll, did)))
+
+    def indexes(self):
+        st, out = _call("firestore", "GET", "%s/databases/%s/collectionGroups/-/indexes" % (_P, self.db))
+        return (out or {}).get("indexes", [])
+
+    def create_index(self, cg, body):
+        self._ok(*_call("firestore", "POST", "%s/databases/%s/collectionGroups/%s/indexes" % (_P, self.db, cg), {}, body))
+
+    def delete_index(self, name):
+        self._ok(*_call("firestore", "DELETE", "/v1/" + name))
+
+    def put_object(self, bucket, name, text):
+        r = _MOD["storage"].dispatch(_STORES["storage"], "POST", "/upload/storage/v1/b/%s/o" % bucket,
+                                     {"uploadType": "media", "name": name}, {"content-type": "application/json"}, text.encode())
+        if r.status >= 300:
+            raise _T.TabError(404 if r.status == 404 else r.status, "NOT_FOUND", "Bucket gs://%s does not exist." % bucket)
+
+    def get_object(self, bucket, name):
+        from urllib.parse import quote
+        r = _MOD["storage"].dispatch(_STORES["storage"], "GET", "/storage/v1/b/%s/o/%s" % (bucket, quote(name, safe="")),
+                                     {"alt": "media"}, {}, b"")
+        return r.body.decode("utf-8") if r.status < 300 else None
+
+
+def _firestore_tab(name, op, body):
+    db = _short(name) or "(default)"
+    return _T.firestore_op(_NanoFirestore(db), "nano-project", db, op, body)
+
+
+class _NanoSecret:
+    """Secret Manager storage for core/gcp_console_tabs.secret_op over core/gcp_secretmanager_core."""
+
+    def __init__(self, name):
+        self.id = _short(name)
+        self.base = "%s/secrets/%s" % (_P, self.id)
+        self.name = "projects/%s/secrets/%s" % (PROJ, self.id)
+        st, self.s = _call("secretmanager", "GET", self.base)
+        if st >= 300:
+            raise _T.TabError(404, "NOT_FOUND", "Secret [%s] not found." % self.name)
+
+    def meta(self):
+        return dict(self.s)
+
+    def patch(self, fields):
+        st, out = _call("secretmanager", "PATCH", self.base, {"updateMask": ",".join(fields)},
+                        {k: (v if v is not None else {}) for k, v in fields.items()})
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "INVALID_ARGUMENT", err.get("message") or "Update failed")
+
+    def versions(self):
+        st, out = _call("secretmanager", "GET", self.base + "/versions")
+        return [{"version": v["name"].rsplit("/", 1)[-1], "state": v["state"], "createTime": v.get("createTime", ""),
+                 **({"destroyTime": v["destroyTime"]} if v.get("destroyTime") else {})} for v in (out or {}).get("versions", [])]
+
+    def add_version(self, value):
+        st, out = _call("secretmanager", "POST", self.base + ":addVersion", {},
+                        {"payload": {"data": base64.b64encode(value.encode()).decode()}})
+        return out.get("name", "").rsplit("/", 1)[-1]
+
+    def set_state(self, ver, state):
+        verb = {"ENABLED": "enable", "DISABLED": "disable", "DESTROYED": "destroy"}[state]
+        _call("secretmanager", "POST", "%s/versions/%s:%s" % (self.base, ver, verb), {}, {})
+
+    def access(self, ver):
+        st, out = _call("secretmanager", "GET", "%s/versions/%s:access" % (self.base, ver))
+        return base64.b64decode(((out or {}).get("payload") or {}).get("data") or "").decode("utf-8", "replace")
+
+    def topic_exists(self, topic):
+        st, _ = _call("pubsub", "GET", "/v1/projects/%s/topics/%s" % (PROJ, topic))
+        return st < 300
+
+
+def _secret_tab(name, op, body):
+    return _T.secret_op(_NanoSecret(name), op, body)
+
+
+class _NanoKey:
+    """Cloud KMS storage for core/gcp_console_tabs.kms_op over core/gcp_kms_core."""
+
+    def __init__(self, name):
+        self.key = _short(name)
+        self.ring = "projects/%s/locations/%s/keyRings/%s" % (PROJ, LOC, RING)
+        self.name = "%s/cryptoKeys/%s" % (self.ring, self.key)
+        self._m = None
+        if self.get() is None:
+            raise _T.TabError(404, "NOT_FOUND", "CryptoKey %s not found." % self.name)
+
+    def _ok(self, st, out):
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "FAILED_PRECONDITION", err.get("message") or "Request failed")
+        return out
+
+    def get(self):
+        st, _ = _call("kms", "GET", "/v1/" + self.name)   # applies due rotations / destructions
+        return _STORES["kms"].get_key(self.name) if st < 300 else None
+
+    def meta(self):
+        return self.get() or {}
+
+    def versions(self):
+        st, out = _call("kms", "GET", "/v1/%s/cryptoKeyVersions" % self.name)
+        return [{"version": v["name"].rsplit("/", 1)[-1], **{k: v[k] for k in ("state", "createTime", "algorithm", "protectionLevel",
+                                                                              "destroyTime", "destroyEventTime") if k in v}}
+                for v in (out or {}).get("cryptoKeyVersions", [])]
+
+    def create_version(self):
+        out = self._ok(*_call("kms", "POST", "/v1/%s/cryptoKeyVersions" % self.name, {}, {}))
+        return out["name"].rsplit("/", 1)[-1]
+
+    def version_action(self, ver, action):
+        path = "/v1/%s/cryptoKeyVersions/%s" % (self.name, ver)
+        if action in ("destroy", "restore"):
+            self._ok(*_call("kms", "POST", path + ":" + action, {}, {}))
+        else:
+            self._ok(*_call("kms", "PATCH", path, {"updateMask": "state"}, {"state": "ENABLED" if action == "enable" else "DISABLED"}))
+
+    def set_primary(self, ver):
+        self._ok(*_call("kms", "POST", "/v1/%s:updatePrimaryVersion" % self.name, {}, {"cryptoKeyVersionId": ver}))
+
+    def set_rotation(self, fields):
+        self._ok(*_call("kms", "PATCH", "/v1/" + self.name, {"updateMask": "rotationPeriod,nextRotationTime"},
+                        {"rotationPeriod": fields.get("rotationPeriod"), "nextRotationTime": fields.get("nextRotationTime")}))
+
+    def set_labels(self, labels):
+        self._ok(*_call("kms", "PATCH", "/v1/" + self.name, {"updateMask": "labels"}, {"labels": labels}))
+
+    def import_jobs(self):
+        st, out = _call("kms", "GET", "/v1/%s/importJobs" % self.ring, {"_keygen_budget_s": "0.8"})
+        return (out or {}).get("importJobs", [])
+
+    def create_import_job(self, jid, body):
+        return self._ok(*_call("kms", "POST", "/v1/%s/importJobs" % self.ring, {"importJobId": jid, "_keygen_budget_s": "0.8"},
+                               {"importMethod": body.get("importMethod"), "protectionLevel": body.get("protectionLevel") or "SOFTWARE"}))
+
+
+def _kms_tab(name, op, body):
+    _ensure_keyring()
+    return _T.kms_op(_NanoKey(name), op, body)
+
+
+class _NanoSA:
+    """IAM service-account tabs over core/gcp_iam_core (account policy, project policy, keys)."""
+
+    def __init__(self, name):
+        st, sa = _call("iam", "GET", "%s/serviceAccounts/%s" % (_P, _short(name)))
+        if st >= 300:
+            raise _T.TabError(404, "NOT_FOUND", "Unknown service account: %s" % _short(name))
+        self.email = sa["email"]
+        self.res = "projects/%s/serviceAccounts/%s" % (PROJ, self.email)
+
+    def _pol(self, res):
+        return _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})[1]
+
+    def sa_policy(self):
+        return self._pol(self.res)
+
+    def set_sa_policy(self, pol):
+        _call("iam", "POST", "/v1/%s:setIamPolicy" % self.res, {}, {"policy": pol})
+
+    def project_policy(self):
+        return self._pol("projects/nano-project")
+
+    def set_project_policy(self, pol):
+        _call("iam", "POST", "/v1/projects/nano-project:setIamPolicy", {}, {"policy": pol})
+
+    def keys(self):
+        return _call("iam", "GET", "/v1/%s/keys" % self.res)[1].get("keys", [])
+
+    def create_key(self):
+        st, out = _call("iam", "POST", "/v1/%s/keys" % self.res, {}, {})
+        if st >= 300:
+            err = (out or {}).get("error") or {}
+            raise _T.TabError(st, err.get("status") or "FAILED_PRECONDITION", err.get("message") or "Key creation failed")
+        return out
+
+    def key_action(self, kid, action):
+        path = "/v1/%s/keys/%s" % (self.res, kid)
+        if action == "delete":
+            _call("iam", "DELETE", path)
+        else:
+            _call("iam", "POST", path + ":" + action, {}, {})
+
+
+def _iam_tab(name, op, body):
+    return _T.iam_sa_op(_NanoSA(name), op, body)
+
+
+def _apigw_tab(g, op, body):
+    rec = g.get()
+    if op in ("GetLabels", "getLabels"):
+        return {"ok": True, "item": {"name": g.name, "labels": rec.get("labels") or {}}}
+    if op in ("SetLabels", "setLabels"):
+        g.update({"labels": _T.validate_labels(body.get("labels", {}))})
+        return {"ok": True}
+    return _T.apigw_op(_tab_root(), "nano-project", g.name, op, body)
+
+
+class _NanoTrigger:
+    def __init__(self, g):
+        self.g = g
+        g.get()
+
+    def rec(self):
+        return self.g.get()
+
+    def update(self, patch):
+        self.g.update(patch)
+
+    def exists(self, kind, name):
+        if kind == "bucket":
+            return _call("storage", "GET", "/storage/v1/b/%s" % name)[0] < 300
+        if kind == "topic":
+            return _call("pubsub", "GET", "/v1/projects/%s/topics/%s" % (PROJ, name))[0] < 300
+        if kind == "function":
+            return self.g.r.get("gcp", self.g.account, "functions", name) is not None
+        return False
+
+
+def _eventarc_tab(g, op, body):
+    return _T.eventarc_op(_NanoTrigger(g), "nano-project", op, body)
+
+
+def _project_policy(op, project, body):
+    res = "projects/%s" % (project or PROJ)
+    st, pol = _call("iam", "POST", "/v1/%s:getIamPolicy" % res, {}, {})
+    if op == "GetProjectPolicy":
+        return {"ok": True, "project": project, "bindings": pol.get("bindings", []), "etag": pol.get("etag", "")}
+    fn = _T.policy_grant if op == "GrantAccess" else _T.policy_revoke
+    new = fn(pol, body.get("role"), body.get("member"))
+    st, out = _call("iam", "POST", "/v1/%s:setIamPolicy" % res, {}, {"policy": new})
+    return {"ok": st < 300, "project": project, "bindings": out.get("bindings", [])}
+
+
+_TAB_HANDLERS = {"compute": _compute_tab, "storage": _storage_tab, "cloudsql": _sql_tab, "pubsub": _pubsub_tab,
+                 "vpc": _vpc_tab, "functions": _functions_tab, "firestore": _firestore_tab,
+                 "secretmanager": _secret_tab, "kms": _kms_tab, "iam": _iam_tab,
+                 "apigateway": _apigw_tab, "eventarc": _eventarc_tab}
+
+
+def tab_dispatch(svc, operation, name, body, resources=None, account="default"):
+    """Serve one resource-detail tab op, or None when `operation` isn't a tab op."""
+    body = body or {}
+    try:
+        if svc == "iam" and operation in ("GetProjectPolicy", "GrantAccess", "RevokeAccess"):
+            return _project_policy(operation, name, body)
+        if svc == "artifactregistry" and operation in ("GetLabels", "SetLabels"):
+            full, repo = _ar.console_find(_STORES[svc], name)
+            if repo is None:
+                return {"ok": False, "code": "NotFound", "name": name}
+            if operation == "SetLabels":
+                labels = _T.validate_labels(body.get("labels", {}))
+                _ar.dispatch(_STORES[svc], "PATCH", "/v1/" + full, {"updateMask": "labels"}, {}, json.dumps({"labels": labels}).encode())
+            return {"ok": True, "item": {"name": name, "labels": dict(_STORES[svc].repos[full].get("labels") or {})}}
+        # per-tab reads of the newer services: the resource's console view
+        if svc in ("container", "redis", "cloudscheduler", "iamcredentials", "monitoring") \
+                and operation.startswith("Get") and len(operation) > 3:
+            out = _resource_op(svc, "Get", name, {})
+            if not out.get("ok"):
+                return out
+            return {"ok": True, "item": {k: v for k, v in out.items() if k != "ok"}}
+        h = _TAB_HANDLERS.get(svc)
+        if h is None or operation in _CRUD:
+            return None
+        if svc in _GENERIC_TAB_SERVICES:
+            out = h(_Generic(resources, account, svc, name), operation, body)
+            return out if out is not None else {"ok": False, "code": "UnsupportedOperation", "operation": operation, "service": svc}
+        return h(name, operation, body)
+    except _T.TabError as e:
+        return _tab_err(e)
+
+
+def is_tab_op(svc, operation):
+    return svc in _GENERIC_TAB_SERVICES and operation not in _CRUD and svc in _TAB_HANDLERS

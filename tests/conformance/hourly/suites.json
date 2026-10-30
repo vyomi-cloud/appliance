@@ -449,6 +449,38 @@
       "timeout": 300
     },
     {
+      "id": "offline-api-aws-detail-tabs",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_detail_tabs_api.py",
+      "timeout": 300
+    },
+    {
+      "id": "nano-core-aws-detail-tabs",
+      "target": "nano",
+      "cloud": "aws",
+      "kind": "core",
+      "cmd": "python3 tests/conformance/test_nano_aws_detail_tabs.py",
+      "timeout": 120
+    },
+    {
+      "id": "nano-ui-aws-real-tabs",
+      "target": "nano",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-real-tabs.mjs",
+      "timeout": 900
+    },
+    {
+      "id": "offline-ui-aws-real-tabs",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/aws node wasm/ui-tests/validate-aws-real-tabs.mjs",
+      "timeout": 900
+    },
+    {
       "id": "offline-ui-aws-sqs-dlq-tab",
       "target": "offline",
       "cloud": "aws",

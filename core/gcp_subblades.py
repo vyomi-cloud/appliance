@@ -45,21 +45,21 @@ def _settings_props():
 _COMPUTE_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Settings", "items": [
-        {"key": "networking",  "label": "Networking",       "icon": "lan",        "type": "networking"},
-        {"key": "disks",       "label": "Disks",            "icon": "storage",    "type": "stub"},
-        {"key": "machineSize", "label": "Machine size",     "icon": "tune",       "type": "stub"},
-        {"key": "metadata",    "label": "Metadata",         "icon": "data_object","type": "stub"},
-        {"key": "startup",     "label": "Startup script",   "icon": "code",       "type": "stub"},
+        {"key": "networking",  "label": "Networking",       "icon": "lan",        "type": "gceNetworking"},
+        {"key": "disks",       "label": "Disks",            "icon": "storage",    "type": "gceDisks"},
+        {"key": "machineSize", "label": "Machine size",     "icon": "tune",       "type": "gceMachine"},
+        {"key": "metadata",    "label": "Metadata",         "icon": "data_object","type": "gceMetadata"},
+        {"key": "startup",     "label": "Startup script",   "icon": "code",       "type": "gceStartup"},
         *_settings_props(),
     ]},
     {"group": "Operations", "items": [
-        {"key": "connect",     "label": "Connect",          "icon": "terminal",   "type": "stub"},
-        {"key": "scheduling",  "label": "Scheduling",       "icon": "schedule",   "type": "stub"},
-        {"key": "snapshots",   "label": "Snapshots",        "icon": "photo_camera","type": "stub"},
+        {"key": "connect",     "label": "Connect",          "icon": "terminal",   "type": "gceConnect"},
+        {"key": "scheduling",  "label": "Scheduling",       "icon": "schedule",   "type": "gceScheduling"},
+        {"key": "snapshots",   "label": "Snapshots",        "icon": "photo_camera","type": "gceSnapshots"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",     "label": "Metrics",          "icon": "show_chart", "type": "metrics"},
-        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "stub"},
+        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "logs"},
     ]},
 ]
 
@@ -71,12 +71,12 @@ _STORAGE_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Data", "items": [
         {"key": "objects",     "label": "Objects",          "icon": "folder",     "type": "objects"},
-        {"key": "lifecycle",   "label": "Lifecycle",        "icon": "history_toggle_off","type":"stub"},
+        {"key": "lifecycle",   "label": "Lifecycle",        "icon": "history_toggle_off","type":"gcsLifecycle"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "configuration","label":"Configuration",     "icon": "tune",       "type": "properties"},
-        {"key": "encryption",  "label": "Encryption",       "icon": "enhanced_encryption","type":"stub"},
-        {"key": "retention",   "label": "Retention",        "icon": "lock",       "type": "stub"},
+        {"key": "configuration","label":"Configuration",     "icon": "tune",       "type": "gcsConfig"},
+        {"key": "encryption",  "label": "Encryption",       "icon": "enhanced_encryption","type":"gcsEncryption"},
+        {"key": "retention",   "label": "Retention",        "icon": "lock",       "type": "gcsRetention"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
@@ -91,20 +91,20 @@ _STORAGE_SUB = [
 _CLOUDSQL_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Data", "items": [
-        {"key": "databases",   "label": "Databases",        "icon": "database",   "type": "stub"},
-        {"key": "users",       "label": "Users",            "icon": "person",     "type": "stub"},
-        {"key": "backups",     "label": "Backups",          "icon": "backup",     "type": "stub"},
-        {"key": "replicas",    "label": "Replicas",         "icon": "content_copy","type": "stub"},
+        {"key": "databases",   "label": "Databases",        "icon": "database",   "type": "sqlDatabases"},
+        {"key": "users",       "label": "Users",            "icon": "person",     "type": "sqlUsers"},
+        {"key": "backups",     "label": "Backups",          "icon": "backup",     "type": "sqlBackups"},
+        {"key": "replicas",    "label": "Replicas",         "icon": "content_copy","type": "sqlReplicas"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "connectivity","label":"Connectivity",      "icon": "lan",        "type": "stub"},
-        {"key": "flags",       "label": "Flags",            "icon": "tune",       "type": "stub"},
-        {"key": "logging",     "label": "Logging",          "icon": "subject",    "type": "stub"},
+        {"key": "connectivity","label":"Connectivity",      "icon": "lan",        "type": "sqlConnectivity"},
+        {"key": "flags",       "label": "Flags",            "icon": "tune",       "type": "sqlFlags"},
+        {"key": "logging",     "label": "Logging",          "icon": "subject",    "type": "sqlLogging"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",     "label": "Metrics",          "icon": "show_chart", "type": "metrics"},
-        {"key": "insights",    "label": "Query Insights",   "icon": "insights",   "type": "stub"},
+        {"key": "insights",    "label": "Query Insights",   "icon": "insights",   "type": "sqlInsights"},
     ]},
 ]
 
@@ -115,12 +115,12 @@ _CLOUDSQL_SUB = [
 _PUBSUB_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Topic", "items": [
-        {"key": "subscriptions","label":"Subscriptions",    "icon": "subscriptions","type": "stub"},
-        {"key": "schemas",     "label": "Schema",           "icon": "schema",     "type": "stub"},
-        {"key": "messages",    "label": "Messages",         "icon": "mail",       "type": "stub"},
+        {"key": "subscriptions","label":"Subscriptions",    "icon": "subscriptions","type": "psSubscriptions"},
+        {"key": "schemas",     "label": "Schema",           "icon": "schema",     "type": "psSchema"},
+        {"key": "messages",    "label": "Messages",         "icon": "mail",       "type": "psMessages"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "encryption",  "label": "Encryption",       "icon": "enhanced_encryption","type":"stub"},
+        {"key": "encryption",  "label": "Encryption",       "icon": "enhanced_encryption","type":"psEncryption"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
@@ -132,16 +132,17 @@ _PUBSUB_SUB = [
 # ============================================================================
 # Firestore — Database detail
 # ============================================================================
+# (Firestore databases carry no labels in the Firestore Admin API, so there is no Labels tab.)
 _FIRESTORE_SUB = [
-    *_UNIVERSAL_TOP,
+    *[t for t in _UNIVERSAL_TOP if t["key"] != "tags"],
     {"group": "Data", "items": [
-        {"key": "data",        "label": "Data",             "icon": "data_object","type": "stub"},
-        {"key": "query",       "label": "Query builder",    "icon": "search",     "type": "stub"},
-        {"key": "indexes",     "label": "Indexes",          "icon": "format_indent_increase","type":"stub"},
+        {"key": "data",        "label": "Data",             "icon": "data_object","type": "fsData"},
+        {"key": "query",       "label": "Query builder",    "icon": "search",     "type": "fsQuery"},
+        {"key": "indexes",     "label": "Indexes",          "icon": "format_indent_increase","type":"fsIndexes"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "rules",       "label": "Security rules",   "icon": "policy",     "type": "stub"},
-        {"key": "imports",     "label": "Import / Export",  "icon": "import_export","type": "stub"},
+        {"key": "rules",       "label": "Security rules",   "icon": "policy",     "type": "fsRules"},
+        {"key": "imports",     "label": "Import / Export",  "icon": "import_export","type": "fsImportExport"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
@@ -156,18 +157,18 @@ _FIRESTORE_SUB = [
 _FUNCTIONS_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Function", "items": [
-        {"key": "sourceCode",  "label": "Source",           "icon": "code",       "type": "stub"},
-        {"key": "trigger",     "label": "Trigger",          "icon": "bolt",       "type": "stub"},
-        {"key": "envVars",     "label": "Variables",        "icon": "settings",   "type": "stub"},
-        {"key": "testing",     "label": "Testing",          "icon": "play_arrow", "type": "stub"},
+        {"key": "sourceCode",  "label": "Source",           "icon": "code",       "type": "fnSource"},
+        {"key": "trigger",     "label": "Trigger",          "icon": "bolt",       "type": "fnTrigger"},
+        {"key": "envVars",     "label": "Variables",        "icon": "settings",   "type": "fnVariables"},
+        {"key": "testing",     "label": "Testing",          "icon": "play_arrow", "type": "fnTesting"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "networking",  "label": "Networking",       "icon": "lan",        "type": "stub"},
+        {"key": "networking",  "label": "Networking",       "icon": "lan",        "type": "fnNetworking"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",     "label": "Metrics",          "icon": "show_chart", "type": "metrics"},
-        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "stub"},
+        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "fnLogs"},
     ]},
 ]
 
@@ -178,13 +179,13 @@ _FUNCTIONS_SUB = [
 _APIGW_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Configuration", "items": [
-        {"key": "apiConfigs",  "label": "Configs",          "icon": "tune",       "type": "stub"},
-        {"key": "routes",      "label": "Routes",           "icon": "alt_route",  "type": "stub"},
+        {"key": "apiConfigs",  "label": "Configs",          "icon": "tune",       "type": "agConfigs"},
+        {"key": "routes",      "label": "Routes",           "icon": "alt_route",  "type": "agRoutes"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",     "label": "Metrics",          "icon": "show_chart", "type": "metrics"},
-        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "stub"},
+        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "logs"},
     ]},
 ]
 
@@ -192,18 +193,19 @@ _APIGW_SUB = [
 # ============================================================================
 # VPC Network — Network detail
 # ============================================================================
+# (VPC networks carry no labels in the Compute API, so there is no Labels tab.)
 _VPC_SUB = [
-    *_UNIVERSAL_TOP,
+    *[t for t in _UNIVERSAL_TOP if t["key"] != "tags"],
     {"group": "Network", "items": [
-        {"key": "subnetsList", "label": "Subnets",          "icon": "view_module","type": "stub"},
-        {"key": "firewalls",   "label": "Firewall rules",   "icon": "shield",     "type": "stub"},
-        {"key": "routes",      "label": "Routes",           "icon": "route",      "type": "stub"},
-        {"key": "peerings",    "label": "VPC peering",      "icon": "compare_arrows","type": "stub"},
+        {"key": "subnetsList", "label": "Subnets",          "icon": "view_module","type": "vpcSubnets"},
+        {"key": "firewalls",   "label": "Firewall rules",   "icon": "shield",     "type": "vpcFirewalls"},
+        {"key": "routes",      "label": "Routes",           "icon": "route",      "type": "vpcRoutes"},
+        {"key": "peerings",    "label": "VPC peering",      "icon": "compare_arrows","type": "vpcPeerings"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",     "label": "Network metrics",  "icon": "show_chart", "type": "metrics"},
-        {"key": "flowLogs",    "label": "Flow logs",        "icon": "subject",    "type": "stub"},
+        {"key": "flowLogs",    "label": "Flow logs",        "icon": "subject",    "type": "vpcFlowLogs"},
     ]},
 ]
 
@@ -214,9 +216,9 @@ _VPC_SUB = [
 _IAM_SUB = [
     {"key": "overview",   "label": "Overview", "icon": "dashboard", "type": "overview"},
     {"group": "Access", "items": [
-        {"key": "members",     "label": "Members",          "icon": "group",      "type": "stub"},
-        {"key": "permissions", "label": "Permissions",      "icon": "policy",     "type": "stub"},
-        {"key": "keys",        "label": "Keys",             "icon": "vpn_key",    "type": "stub"},
+        {"key": "members",     "label": "Members",          "icon": "group",      "type": "iamMembers"},
+        {"key": "permissions", "label": "Permissions",      "icon": "policy",     "type": "iamPermissions"},
+        {"key": "keys",        "label": "Keys",             "icon": "vpn_key",    "type": "iamKeys"},
     ]},
     {"group": "Settings", "items": [
         *_settings_props(),
@@ -233,13 +235,13 @@ _IAM_SUB = [
 _EVENTARC_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Trigger", "items": [
-        {"key": "matching",    "label": "Event matching",   "icon": "filter_alt", "type": "stub"},
-        {"key": "destination", "label": "Destination",      "icon": "send",       "type": "stub"},
+        {"key": "matching",    "label": "Event matching",   "icon": "filter_alt", "type": "evMatching"},
+        {"key": "destination", "label": "Destination",      "icon": "send",       "type": "evDestination"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [
         {"key": "metrics",     "label": "Metrics",          "icon": "show_chart", "type": "metrics"},
-        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "stub"},
+        {"key": "logs",        "label": "Logs",             "icon": "subject",    "type": "logs"},
     ]},
 ]
 
@@ -251,12 +253,12 @@ _SECRETMANAGER_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Secret", "items": [
         {"key": "value",       "label": "Secret value",     "icon": "key",        "type": "secretvalue"},
-        {"key": "versions",    "label": "Versions",         "icon": "history",    "type": "stub"},
-        {"key": "rotation",    "label": "Rotation",         "icon": "autorenew",  "type": "stub"},
-        {"key": "replication", "label": "Replication",      "icon": "public",     "type": "stub"},
+        {"key": "versions",    "label": "Versions",         "icon": "history",    "type": "smVersions"},
+        {"key": "rotation",    "label": "Rotation",         "icon": "autorenew",  "type": "smRotation"},
+        {"key": "replication", "label": "Replication",      "icon": "public",     "type": "smReplication"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "encryption",  "label": "Encryption",       "icon": "enhanced_encryption", "type": "stub"},
+        {"key": "encryption",  "label": "Encryption",       "icon": "enhanced_encryption", "type": "smEncryption"},
         *_settings_props(),
     ]},
 ]
@@ -268,12 +270,12 @@ _SECRETMANAGER_SUB = [
 _KMS_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Key", "items": [
-        {"key": "versions",    "label": "Versions",         "icon": "history",    "type": "stub"},
-        {"key": "rotation",    "label": "Rotation & labels","icon": "autorenew",  "type": "kmsconfig"},
+        {"key": "versions",    "label": "Versions",         "icon": "history",    "type": "kmsVersions"},
+        {"key": "rotation",    "label": "Rotation",         "icon": "autorenew",  "type": "kmsconfig"},
         {"key": "policy",      "label": "Key policy",       "icon": "policy",     "type": "iam"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "imports",     "label": "Import jobs",      "icon": "upload",     "type": "stub"},
+        {"key": "imports",     "label": "Import jobs",      "icon": "upload",     "type": "kmsImportJobs"},
         *_settings_props(),
     ]},
     {"group": "Monitoring", "items": [

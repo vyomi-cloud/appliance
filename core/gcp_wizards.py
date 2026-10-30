@@ -403,6 +403,12 @@ _VPC_WIZARD = _basic_wizard(
         ]},
     ],
 )
+# The networks.insert fields the form's choices set (subnet mode, routing mode, description).
+_VPC_WIZARD["synthetic_map"] = {
+    "__subnetCreationMode__": {"auto": {"autoCreateSubnetworks": True}, "custom": {"autoCreateSubnetworks": False}},
+    "__routingMode__": {"regional": {"routingConfig.routingMode": "REGIONAL"}, "global": {"routingConfig.routingMode": "GLOBAL"}},
+    "__description__": {"*": {"description": "$value"}},
+}
 
 
 # ============================================================================

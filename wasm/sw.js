@@ -439,6 +439,12 @@ async function route(method, path, body, query) {
   }
   // Key Vault data plane as the vault blade (and the native SDK) address it:
   // /azure-data/keyvault/{vault}/secrets|keys[/{name}[/create]] → the KV secrets/keys cores.
+  // Key Vault certificates (create / get / versions / pending / delete) → the shared certificates core.
+  am = path.match(/^\/azure-data\/keyvault\/([^/]+)\/certificates((?:\/[^/]+){0,2})$/);
+  if (am) {
+    return { tuple: ["azure", "_resource", "KvData", { service: "kvcerts",
+      body: { method, vault: decodeURIComponent(am[1]), sub: am[2].replace(/^\//, "").split("/").map(decodeURIComponent).join("/"), body: body || {} } }] };
+  }
   am = path.match(/^\/azure-data\/keyvault\/([^/]+)\/(secrets|keys)((?:\/[^/]+){0,2})$/);
   if (am) {
     return { tuple: ["azure", "_resource", "KvData", { service: am[2] === "keys" ? "kvkeys" : "kvsecrets",
@@ -488,8 +494,19 @@ async function route(method, path, body, query) {
     if (method === "POST") return { tuple: ["aws", "s3", "CreateBucket", body || {}] };
   }
   m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/versioning$/);
+  if (m && method === "GET") return { tuple: ["aws", "s3", "GetVersioning", { bucket: dec(m[1]) }] };
   if (m && (method === "PUT" || method === "POST"))
     return { tuple: ["aws", "s3", "PutVersioning", { bucket: dec(m[1]), status: (body && body.status) || "Enabled" }] };
+  // Bucket detail tabs: configuration (lifecycle/cors/encryption/public_access_block/
+  // policy/ownership), object versions, event notifications (core/aws_console_detail.py).
+  m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/config\/([a-z_]+)$/);
+  if (m) return { tuple: ["aws", "s3", { GET: "GetBucketConfig", PUT: "PutBucketConfig", DELETE: "DeleteBucketConfig" }[method] || "GetBucketConfig",
+                          { bucket: dec(m[1]), kind: m[2], method, value: (body || {}).value }] };
+  m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/versions$/);
+  if (m && method === "GET") return { tuple: ["aws", "s3", "ListObjectVersions", { bucket: dec(m[1]), prefix: (query && query.prefix) || "" }] };
+  m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/notifications?$/);
+  if (m && method === "GET") return { tuple: ["aws", "s3", "GetBucketNotification", { bucket: dec(m[1]) }] };
+  if (m && method === "PUT") return { tuple: ["aws", "s3", "PutBucketNotification", { bucket: dec(m[1]), method, body: body || {} }] };
   m = path.match(/^\/api\/s3\/buckets\/([^/]+)\/objects\/?$/);
   if (m && method === "GET") return { tuple: ["aws", "s3", "ListObjects", { bucket: dec(m[1]) }] };
   // (POST upload to this path is multipart — handled in the fetch listener.)
@@ -498,6 +515,7 @@ async function route(method, path, body, query) {
   if (m && method === "DELETE") return { tuple: ["aws", "s3", "DeleteObject", { bucket: dec(m[1]), key: m[2] }] };
   m = path.match(/^\/api\/s3\/buckets\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "s3", "GetBucket", { bucket: dec(m[1]) }] };
+  if (m && method === "PATCH")  return { tuple: ["aws", "s3", "PutBucketTagging", { bucket: dec(m[1]), tags: (body || {}).tags || {} }] };
   if (m && method === "DELETE") return { tuple: ["aws", "s3", "DeleteBucket", { bucket: dec(m[1]) }] };
   // Console-next creates a bucket with the name in the PATH (/api/s3/buckets/{bucket}),
   // not the collection path — route that POST to CreateBucket (was falling through → 501).
@@ -507,6 +525,11 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "dynamodb", "ListTables", {}] };
     if (method === "POST") return { tuple: ["aws", "dynamodb", "CreateTable", body || {}] };
   }
+  // Table detail tabs (core/aws_console_detail.py): indexes, streams, capacity,
+  // encryption, TTL, PITR, backups, Contributor Insights.
+  m = path.match(/^\/api\/dynamodb\/tables\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "dynamodb", "DescribeTableSection", { table: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "dynamodb", "UpdateTableSection", { table: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/dynamodb\/tables\/([^/]+)\/items$/);
   if (m && method === "GET")  return { tuple: ["aws", "dynamodb", "ListItems", { table: dec(m[1]) }] };
   if (m && method === "POST") return { tuple: ["aws", "dynamodb", "PutItem", { table: dec(m[1]), item: (body && body.item) || body || {} }] };
@@ -523,6 +546,10 @@ async function route(method, path, body, query) {
     if (method === "POST") return { tuple: ["aws", "iam", "CreateUser", body || {}] };
   }
   if (path === "/api/iam/roles" && method === "GET")    return { tuple: ["aws", "iam", "ListRoles", {}] };
+  // IAM account tabs (core/aws_console_detail.py): identity providers, password policy, Access Analyzer.
+  m = path.match(/^\/api\/iam\/detail\/([a-z-]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "iam", "GetAccountSection", { section: m[1] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "iam", "UpdateAccountSection", { section: m[1], method, body: body || {} }] };
   if (path === "/api/iam/policies" && method === "GET") return { tuple: ["aws", "iam", "ListPolicies", {}] };
   if (path === "/api/iam/groups" && method === "GET")   return { tuple: ["aws", "iam", "ListGroups", {}] };
   if (path === "/api/iam/attachments" && method === "GET") return { tuple: ["aws", "iam", "ListAttachments", {}] };
@@ -542,6 +569,11 @@ async function route(method, path, body, query) {
     if (method === "POST") return { tuple: ["aws", "rds", "CreateDatabase", body || {}] };
   }
   if (path === "/api/rds/snapshots" && method === "GET") return { tuple: ["aws", "rds", "Snapshots", {}] };
+  // DB instance detail tabs (core/aws_console_detail.py): connectivity, configuration, events.
+  m = path.match(/^\/api\/rds\/databases\/([^/]+)\/(connectivity|subnet-group|pending-maintenance|performance-insights|configuration|events)$/);
+  if (m && method === "GET") return { tuple: ["aws", "rds", "DescribeDBInstanceDetail", { name: dec(m[1]), tab: m[2] }] };
+  if (m && m[2] === "configuration" && method === "PUT")
+    return { tuple: ["aws", "rds", "ModifyDBInstanceConfiguration", { name: dec(m[1]), body: body || {} }] };
   m = path.match(/^\/api\/rds\/databases\/([^/]+)\/(start|stop|reboot|modify)$/);
   if (m && method === "POST") return { tuple: ["aws", "rds", m[2][0].toUpperCase() + m[2].slice(1), { name: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/rds\/databases\/([^/]+)$/);
@@ -552,6 +584,10 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "sqs", "ListQueues", {}] };
     if (method === "POST") return { tuple: ["aws", "sqs", "CreateQueue", body || {}] };
   }
+  // Queue detail tabs (core/aws_console_detail.py): configuration, DLQ, encryption, access policy, purge.
+  m = path.match(/^\/api\/sqs\/queues\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "sqs", "GetQueueSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "sqs", "SetQueueSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/sqs\/queues\/([^/]+)\/(send|receive|purge)$/);
   if (m && method === "POST") return { tuple: ["aws", "sqs", m[2][0].toUpperCase() + m[2].slice(1), { name: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/sqs\/queues\/([^/]+)$/);
@@ -562,6 +598,10 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "secrets", "ListSecrets", {}] };
     if (method === "POST") return { tuple: ["aws", "secrets", "CreateSecret", body || {}] };
   }
+  // Secret detail tabs (core/aws_console_detail.py): value, versions, rotation, replication, key, policy.
+  m = path.match(/^\/api\/aws\/secrets\/(.+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "secrets", "GetSecretSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "secrets", "UpdateSecretSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/aws\/secrets\/(.+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "secrets", "GetSecret", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "secrets", "DeleteSecret", { name: dec(m[1]) }] };
@@ -579,6 +619,10 @@ async function route(method, path, body, query) {
     if (method === "POST") return { tuple: ["aws", "kms", "CreateKey", body || {}] };
   }
   if (path === "/api/aws/extras/kms/aliases" && method === "GET") return { tuple: ["aws", "kms", "ListAliases", {}] };
+  // Key detail tabs (core/aws_console_detail.py): configuration, policy, aliases, rotation, users, admins, grants.
+  m = path.match(/^\/api\/aws\/kms\/keys\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "kms", "GetKeySection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "kms", "UpdateKeySection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/aws\/kms\/keys\/([^/]+)$/);
   if (m && method === "GET")    return { tuple: ["aws", "kms", "GetKey", { name: dec(m[1]) }] };
   if (m && method === "DELETE") return { tuple: ["aws", "kms", "DeleteKey", { name: dec(m[1]) }] };
@@ -588,6 +632,11 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "lambda", "ListFunctions", {}] };
     if (method === "POST") return { tuple: ["aws", "lambda", "CreateFunction", body || {}] };
   }
+  // Function detail tabs (core/aws_console_detail.py): code, env, configuration,
+  // versions, aliases, resource-based policy, execution role, saved test events.
+  m = path.match(/^\/api\/lambda\/functions\/([^/]+)\/detail\/([a-z-]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "lambda", "GetFunctionSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "lambda", "UpdateFunctionSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/lambda\/functions\/([^/]+)\/invoke$/);
   if (m && method === "POST") return { tuple: ["aws", "lambda", "Invoke", { name: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/lambda\/functions\/([^/]+)$/);
@@ -598,6 +647,10 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "apigateway", "ListApis", {}] };
     if (method === "POST") return { tuple: ["aws", "apigateway", "CreateApi", body || {}] };
   }
+  // REST API detail tabs (core/aws_console_detail.py): authorizers, models, deployments, logging, policy, settings.
+  m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "apigateway", "GetRestApiSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "apigateway", "UpdateRestApiSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/invoke$/);
   if (m && method === "POST") return { tuple: ["aws", "apigateway", "Invoke", { id: dec(m[1]), ...(body || {}) }] };
   m = path.match(/^\/api\/apigateway\/apis\/([^/]+)\/resources$/);
@@ -623,6 +676,8 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "ssm", "ListParameters", {}] };
     if (method === "POST") return { tuple: ["aws", "ssm", "PutParameter", body || {}] };
   }
+  m = path.match(/^\/api\/ssm\/parameters\/(.+)\/metadata$/);
+  if (m && method === "GET") return { tuple: ["aws", "ssm", "DescribeParameter", { name: dec(m[1]) }] };
   m = path.match(/^\/api\/ssm\/parameters\/(.+)\/history$/);
   if (m && method === "GET") return { tuple: ["aws", "ssm", "ParameterHistory", { name: dec(m[1]) }] };
   m = path.match(/^\/api\/ssm\/parameters\/(.+)$/);
@@ -645,6 +700,10 @@ async function route(method, path, body, query) {
   // VPC (core/vpc_core.py) — topology + reachability analyzer
   if (path === "/api/vpc" && method === "GET") return { tuple: ["aws", "vpc", "List", {}] };
   if (path === "/api/vpc/vpcs" && method === "GET") return { tuple: ["aws", "vpc", "List", {}] };
+  // VPC detail tabs (core/aws_console_detail.py): attributes, NAT gateways, endpoints, NACLs, flow logs.
+  m = path.match(/^\/api\/vpc\/vpcs\/([^/]+)\/detail\/([a-z_-]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "vpc", "DescribeVpcSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "vpc", "ModifyVpcSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
   m = path.match(/^\/api\/vpc\/vpcs\/([^/]+)$/);
   if (m && method === "GET") return { tuple: ["aws", "vpc", "GetVpc", { name: dec(m[1]) }] };
   if (path === "/api/vpc/vpcs" && method === "POST") return { tuple: ["aws", "vpc", "CreateVpc", body || {}] };
@@ -664,10 +723,27 @@ async function route(method, path, body, query) {
   if (/^\/api\/aws\/ec2\/instances\/[^/]+\/connect-info$/.test(path) && method === "GET")
     return { response: json({ detail: { error: "NoRuntime", hint: "Nano has no instance runtime to SSH into; use the Vyomi appliance for SSH/console access." } }, 409) };
   if (path === "/api/ec2/amis" && method === "GET") return { response: json({ ok: true, amis: [] }) };
+  // EC2 instance detail tabs (core/aws_console_detail.py, same engine as offline).
+  m = path.match(/^\/api\/ec2\/instances\/([^/]+)\/(details|network-interfaces|security|storage|user-data|iam-instance-profile|console-output)$/);
+  if (m && method === "GET") return { tuple: ["aws", "ec2", "DescribeInstanceDetail", { name: dec(m[1]), tab: m[2] }] };
+  m = path.match(/^\/api\/ec2\/instances\/([^/]+)\/(attributes|user-data|iam-instance-profile)$/);
+  if (m && (method === "PUT" || method === "DELETE"))
+    return { tuple: ["aws", "ec2", "ModifyInstanceAttribute", { name: dec(m[1]), tab: m[2], method, body: body || {} }] };
+  if (path === "/api/ec2/serial-console-access" && method === "GET") return { tuple: ["aws", "ec2", "GetSerialConsoleAccess", {}] };
+  if (path === "/api/ec2/serial-console-access" && method === "PUT") return { tuple: ["aws", "ec2", "ModifySerialConsoleAccess", { method, body: body || {} }] };
+  // Permissions tab (every AWS service): identity policies covering the resource ARN.
+  if (path === "/api/aws/resource-access" && method === "GET")
+    return { tuple: ["aws", "iam", "ResourceAccess", { arn: (query && query.arn) || "", service: (query && query.service) || "" }] };
   // Console "extras" — generic EC2/VPC sub-resource CRUD (volumes, snapshots,
   // launch templates, spot requests, endpoint services). Specific extras + fixtures
   // (kms/aliases, secretsmanager/*) are matched earlier, so only the unrouted ones
   // fall here. fullKey = "{category}/{resource}". Was 501; now a real in-memory CRUD.
+  // EventBridge rule detail tabs (core/aws_console_detail.py): details, targets, pattern, DLQ.
+  m = path.match(/^\/api\/aws\/extras\/eventbridge\/rules\/([^/]+)\/detail\/([a-z]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "eventbridge", "DescribeRuleSection", { name: dec(m[1]), section: m[2] }] };
+  if (m && method === "PUT") return { tuple: ["aws", "eventbridge", "PutRuleSection", { name: dec(m[1]), section: m[2], method, body: body || {} }] };
+  m = path.match(/^\/api\/aws\/extras\/eventbridge\/rules\/([^/]+)$/);
+  if (m && method === "GET") return { tuple: ["aws", "eventbridge", "GetConsoleRule", { name: dec(m[1]) }] };
   let _ex = path.match(/^\/api\/aws\/extras\/(.+?)\/([^/]+)\/([^/]+)$/);
   if (_ex && method === "DELETE") return { tuple: ["aws", "extras", "Delete", { key: _ex[1] + "/" + _ex[2], name: dec(_ex[3]) }] };
   _ex = path.match(/^\/api\/aws\/extras-config\/(.+)$/);
