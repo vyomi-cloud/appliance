@@ -3176,7 +3176,7 @@ SUB_RENDERERS.identity = function(svc, full, host){
       {key:"systemAssigned", label:"System assigned", type:"bool", default:"false",
        help:"Azure creates a service principal tied to this resource's lifecycle."},
       {key:"userAssigned", label:"User-assigned identities", type:"text", default:"",
-       help:"Comma-separated identity resource names (simulated)."},
+       help:"Comma-separated identity resource names."},
     ],
   });
 };
@@ -3234,7 +3234,7 @@ function armListEditor(svc, full, host, o){
     form.append(el("div",{class:"h"}, "Add "+o.label.toLowerCase()));
     o.fields.forEach(f => {
       const inp = f.options
-        ? el("select",{class:"sub-select"}, f.options.map(v=>el("option",{value:v}, v)))
+        ? el("select",{class:"sub-select"}, ...f.options.map(v=>el("option",{value:v}, v)))
         : el("input",{class:"sub-nav-filter",placeholder:f.label,value:f.default||""});
       inputs[f.key] = inp;
       form.append(el("label",{class:"k",style:"display:block;margin-top:6px"}, f.label), inp);
@@ -3300,6 +3300,104 @@ SUB_RENDERERS.diagnose = async function(svc, full, host){
   }
 };
 
+// ---- Settings tabs backed by the resource's ARM properties (PATCH → reload) ----
+// Scalar properties: o.fields = [{path, label, options?, def}] under properties.<path>; Save PATCHes them.
+function armPropsEditor(svc, full, host, o){
+  host.append(el("div",{class:"sub-info"}, o.info));
+  const wrap = el("div",{}); host.append(wrap);
+  (async function render(){
+    wrap.innerHTML = "";
+    const r = await arm("GET", full.id, undefined, svc.apiVersion);
+    const cur = (r.ok && r.json) ? r.json : full;
+    const sec = el("div",{class:"essentials"});
+    sec.append(el("div",{class:"h"}, o.heading));
+    const g = el("div",{class:"essentials-grid"});
+    g.append(el("div",{class:"k"},"Resource"), el("div",{class:"v"}, cur.name || full.name));
+    const inputs = {};
+    o.fields.forEach(f => {
+      let v = getPath(cur, "properties."+f.path);
+      if (v == null || v === "") v = f.def;
+      if (Array.isArray(v)) v = v.join(",");
+      const inp = f.options
+        ? el("select",{class:"sub-select"}, ...f.options.map(x=>el("option",{value:x}, x)))
+        : el("input",{class:"sub-nav-filter",placeholder:f.label,value:v==null?"":String(v)});
+      if (f.options) inp.value = String(v);
+      inputs[f.path] = inp;
+      g.append(el("div",{class:"k"}, f.label), el("div",{class:"v"}, inp));
+    });
+    sec.append(g); wrap.append(sec);
+    wrap.append(el("div",{class:"blade-actions"}, el("button",{class:"btn",onclick:async()=>{
+      const props = {};
+      o.fields.forEach(f => { let v = inputs[f.path].value.trim();
+        if (f.list) v = v.split(",").map(s=>s.trim()).filter(Boolean);
+        else if (f.number) v = Number(v) || 0;
+        setPath(props, f.path, v); });
+      const p = await arm("PATCH", full.id, {properties: props}, svc.apiVersion);
+      if (p.ok) { toast(o.heading+" saved"); render(); } else toast(o.heading+" update failed ("+p.status+")","err");
+    }}, "Save")));
+  })();
+}
+SUB_RENDERERS.tde = function(svc, full, host){
+  armPropsEditor(svc, full, host, {heading:"Transparent data encryption",
+    info:"Transparent data encryption encrypts databases, backups and logs at rest on "+full.name+". Saved with a PATCH to "+full.id+".",
+    fields:[{path:"transparentDataEncryption.state",label:"Data encryption",options:["Enabled","Disabled"],def:"Enabled"},
+            {path:"transparentDataEncryption.keySource",label:"Key source",options:["ServiceManaged","CustomerManaged"],def:"ServiceManaged"}]});
+};
+SUB_RENDERERS.auditing = function(svc, full, host){
+  armPropsEditor(svc, full, host, {heading:"Auditing",
+    info:"Auditing tracks database events and writes them to an audit log on "+full.name+". Saved with a PATCH to "+full.id+".",
+    fields:[{path:"auditing.state",label:"Auditing",options:["Disabled","Enabled"],def:"Disabled"},
+            {path:"auditing.storageAccount",label:"Storage account",def:""},
+            {path:"auditing.retentionDays",label:"Retention (days)",def:"0",number:true}]});
+};
+SUB_RENDERERS.defender = function(svc, full, host){
+  armPropsEditor(svc, full, host, {heading:"Microsoft Defender for Cloud",
+    info:"Microsoft Defender plan for "+full.name+". Saved with a PATCH to "+full.id+".",
+    fields:[{path:"defender.state",label:"Defender plan",options:["Disabled","Enabled"],def:"Disabled"},
+            {path:"defender.emailAdmins",label:"Email subscription admins",options:["false","true"],def:"false"}]});
+};
+SUB_RENDERERS.consistency = function(svc, full, host){
+  armPropsEditor(svc, full, host, {heading:"Default consistency",
+    info:"Default consistency level for Cosmos account "+full.name+". Saved with a PATCH to "+full.id+".",
+    fields:[{path:"consistencyPolicy.defaultConsistencyLevel",label:"Consistency level",options:["Strong","BoundedStaleness","Session","ConsistentPrefix","Eventual"],def:"Session"},
+            {path:"consistencyPolicy.maxStalenessPrefix",label:"Max staleness (ops)",def:"100",number:true},
+            {path:"consistencyPolicy.maxIntervalInSeconds",label:"Max staleness (seconds)",def:"5",number:true}]});
+};
+SUB_RENDERERS.dnsservers = function(svc, full, host){
+  armPropsEditor(svc, full, host, {heading:"DNS servers",
+    info:"DNS servers for virtual network "+full.name+" (comma-separated IPs; empty = Azure-provided DNS). Saved with a PATCH to "+full.id+".",
+    fields:[{path:"dhcpOptions.dnsServers",label:"Custom DNS servers",def:"",list:true}]});
+};
+SUB_RENDERERS.ddos = function(svc, full, host){
+  armPropsEditor(svc, full, host, {heading:"DDoS protection",
+    info:"DDoS protection plan for virtual network "+full.name+". Saved with a PATCH to "+full.id+".",
+    fields:[{path:"enableDdosProtection",label:"DDoS Protection Standard",options:["false","true"],def:"false"},
+            {path:"ddosProtectionPlan.id",label:"DDoS protection plan ID",def:""}]});
+};
+SUB_RENDERERS.accessconfig = function(svc, full, host){
+  armPropsEditor(svc, full, host, {heading:"Access configuration",
+    info:"Permission model and resource access for "+full.name+". Saved with a PATCH to "+full.id+".",
+    fields:[{path:"enableRbacAuthorization",label:"Permission model (RBAC)",options:["false","true"],def:"false"},
+            {path:"enabledForDeployment",label:"Azure Virtual Machines for deployment",options:["false","true"],def:"false"},
+            {path:"enabledForDiskEncryption",label:"Azure Disk Encryption",options:["false","true"],def:"false"},
+            {path:"enabledForTemplateDeployment",label:"Azure Resource Manager for template deployment",options:["false","true"],def:"false"}]});
+};
+SUB_RENDERERS.failover = function(svc, full, host){
+  armListEditor(svc, full, host, {prop:"failoverGroups", label:"Failover group", stamp:"createdAt",
+    info:"Failover groups replicate databases on "+full.name+" to a partner server with automatic failover. Each group is stored on the server.",
+    empty:"No failover groups. Add one to pair this server with a partner server.",
+    cols:[["name","Name"],["partnerServer","Partner server"],["policy","Failover policy"],["createdAt","Created"]],
+    fields:[{key:"name",label:"Name",required:true},{key:"partnerServer",label:"Partner server",required:true},
+            {key:"policy",label:"Failover policy",options:["Automatic","Manual"]}]});
+};
+SUB_RENDERERS.certificates = function(svc, full, host){
+  armListEditor(svc, full, host, {prop:"certificates", label:"Certificate", stamp:"createdAt",
+    info:"Certificates stored in vault "+full.name+". Each certificate is recorded on the vault.",
+    empty:"No certificates. Generate/import one to add it to this vault.",
+    cols:[["name","Name"],["subject","Subject"],["issuer","Issuer"],["createdAt","Created"]],
+    fields:[{key:"name",label:"Name",required:true},{key:"subject",label:"Subject",default:"CN=contoso.com",required:true},
+            {key:"issuer",label:"Issuer",options:["Self","Unknown"]}]});
+};
 SUB_RENDERERS.addressspace = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"The IPv4 and IPv6 address space for this virtual network."));
   const prefixes = getPath(full,"properties.addressSpace.addressPrefixes") || [];
