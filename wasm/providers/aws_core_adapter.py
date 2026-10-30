@@ -87,7 +87,20 @@ def _bucket_view(name: str) -> dict:
     b = OBJ.buckets.get(name, {})
     ver = b.get("versioning", "Disabled")
     return {"name": name, "creation_date": b.get("creation_date", ""), "region": REGION,
-            "versioning": ver, "versioning_enabled": ver == "Enabled"}
+            "versioning": ver, "versioning_enabled": ver == "Enabled",
+            "arn": f"arn:aws:s3:::{name}", "access": DET.s3_access_summary(b), "tags": dict(b.get("tags") or {})}
+
+
+def s3_put_tagging(p: dict) -> dict:
+    """PutBucketTagging — the bucket's Tags tab saves its whole tag set."""
+    name = str(p.get("bucket") or "")
+    if name not in OBJ.buckets:
+        return _no_bucket(name)
+    tags = p.get("tags") or {}
+    if not isinstance(tags, dict) or len(tags) > 50:
+        return _det_err(DET.DetailError("InvalidTag", "A bucket can have up to 50 tags."))
+    OBJ.buckets[name]["tags"] = {str(k): str(v) for k, v in tags.items() if str(k)}
+    return {"ok": True, "name": name, "tags": OBJ.buckets[name]["tags"]}
 
 
 def s3_create_bucket(p: dict) -> dict:
@@ -126,6 +139,13 @@ def s3_set_versioning(p: dict) -> dict:
     status = str(p.get("status") or "Suspended")
     OBJ.buckets[name]["versioning"] = status if status in ("Enabled", "Suspended", "Disabled") else "Suspended"
     return {"ok": True, "status": OBJ.buckets[name]["versioning"]}
+
+
+def s3_get_versioning(p: dict) -> dict:
+    name = str(p.get("bucket") or p.get("name") or "")
+    if not OBJ.bucket_exists(name):
+        return _no_bucket(name)
+    return {"ok": True, "name": name, "versioning": OBJ.versioning_status(name)}
 
 
 def s3_list_objects(p: dict) -> dict:
@@ -194,7 +214,7 @@ def _ddb_err(r) -> dict:
 
 
 def ddb_create_table(p: dict) -> dict:
-    name = str(p.get("name") or p.get("TableName") or "").strip()
+    name = str(p.get("name") or p.get("TableName") or p.get("table_name") or "").strip()
     pk = str(p.get("partition_key") or p.get("partition_key_name") or "id").strip() or "id"
     sk = str(p.get("sort_key") or p.get("sort_key_name") or "").strip()
     billing = str(p.get("billing_mode") or "PAY_PER_REQUEST")
@@ -223,6 +243,10 @@ def ddb_get_table(p: dict) -> dict:
 
 def ddb_delete_table(p: dict) -> dict:
     name = str(p.get("table") or p.get("name") or "")
+    try:
+        DET.ddb_check_delete(ddb._find_table(DDB, name))   # deletion protection
+    except DET.DetailError as e:
+        return _det_err(e)
     r = ddb.dispatch(DDB, "DynamoDB_20120810.DeleteTable", {"TableName": name})
     if r.status != 200:
         return _ddb_err(r)
@@ -582,7 +606,10 @@ def rds_create(p):
                            "MasterUsername": str(p.get("master_username") or "admin")})
     if r.status != 200:
         return {"ok": False, "code": _xml_code(r.body)}
-    return {"ok": True, **_rds_row(RDB.get_instance(name))}
+    db = RDB.get_instance(name)
+    DET.rds_ensure(db, ec2_net())        # placed in the default VPC, default backup/maintenance settings
+    DET.rds_record_event(db, "CreateDBInstance")
+    return {"ok": True, **_rds_row(db)}
 
 
 def rds_get(p):
@@ -598,11 +625,19 @@ def _rds_action(name, action):
     if r.status != 200:
         return {"ok": False, "code": _xml_code(r.body), "name": name}
     db = RDB.get_instance(name)
+    if db:
+        DET.rds_record_event(db, action)
     return {"ok": True, **(_rds_row(db) if db else {"name": name})}
 
 
 def rds_delete(p):
     name = str(p.get("name") or "")
+    db = RDB.get_instance(name)
+    if db:
+        try:
+            DET.rds_check_delete(db)     # deletion protection
+        except DET.DetailError as e:
+            return _det_err(e)
     r = rds.dispatch(RDB, {"Action": "DeleteDBInstance", "DBInstanceIdentifier": name})
     if r.status != 200:
         return {"ok": False, "code": _xml_code(r.body), "name": name}
@@ -649,3 +684,574 @@ def cw_get(p):
 
 def cw_delete(p):
     return cw.console_delete(CW, str(p.get("name") or ""))
+
+
+# ── Resource-detail tabs (core/aws_console_detail.py — the same engine the offline
+#    routes/aws_console_detail.py runs). EC2 instances live in the generic catalog
+#    store (backends.resources, service "ec2"); their network is the VPC core model.
+from core import aws_console_detail as DET
+
+_EXTRAS = _R["extras"]
+
+
+def _det_err(e):
+    return {"ok": False, "code": e.code, "message": e.message,
+            "__http": {"status": e.status, "body": {"detail": {"code": e.code, "message": e.message}}}}
+
+
+def ec2_net():
+    return DET.CoreNet(_R["vpc_net"])
+
+
+def _iam_role_lookup(name):
+    r = IAM.roles.get(name)
+    return {"role_name": name, "arn": r.get("arn")} if r else None
+
+
+def ec2_apply_launch(body: dict) -> dict:
+    """RunInstances placement for a console launch (called by the registry's EC2 Create)."""
+    rec = dict(body or {})
+    DET.apply_launch(rec, body, ec2_net(), _iam_role_lookup)
+    return rec
+
+
+def _ec2_rec(b, a, p):
+    rec = b.resources.get("aws", a, "ec2", str(p.get("name") or p.get("id") or ""))
+    if rec is not None:
+        try:
+            DET.ensure_instance_model(rec, ec2_net())
+        except DET.DetailError:
+            pass
+        rec.setdefault("owner_id", IAM.account_id)
+    return rec
+
+
+def _nf(p):
+    iid = str(p.get("name") or "")
+    return {"ok": False, "code": "InvalidInstanceID.NotFound",
+            "__http": {"status": 404, "body": {"detail": {"code": "InvalidInstanceID.NotFound",
+                                                          "message": f"The instance ID '{iid}' does not exist"}}}}
+
+
+def ec2_detail(b, a, p):
+    rec = _ec2_rec(b, a, p)
+    if rec is None:
+        return _nf(p)
+    tab = p.get("tab")
+    if tab == "details":
+        return {"ok": True, **DET.details_view(rec)}
+    if tab == "network-interfaces":
+        return {"ok": True, "network_interfaces": DET.network_interfaces_view(rec, ec2_net())}
+    if tab == "security":
+        return {"ok": True, **DET.security_view(rec, ec2_net())}
+    if tab == "storage":
+        vols = [v for v in (_EXTRAS.items.get("ec2/volumes") or {}).values()
+                if any(x.get("instance_id") == rec.get("instance_id") for x in v.get("attachments") or [])] \
+            if isinstance(_EXTRAS.items.get("ec2/volumes"), dict) else []
+        return {"ok": True, **DET.storage_view(rec, vols)}
+    if tab == "user-data":
+        return {"ok": True, "instance_id": rec.get("instance_id"), "user_data": rec.get("user_data") or "",
+                "state": rec.get("state", "")}
+    if tab == "iam-instance-profile":
+        return {"ok": True, "instance_id": rec.get("instance_id"), "iam_instance_profile": rec.get("iam_instance_profile") or None,
+                "roles": sorted(IAM.roles)}
+    if tab == "console-output":
+        # Nano runs no instance OS, so nothing has been written to the console.
+        return {"ok": True, **DET.console_output(rec, "")}
+    return {"ok": False, "code": "UnknownTab"}
+
+
+def ec2_modify(b, a, p):
+    """ModifyInstanceAttribute / user data / IAM instance profile writes."""
+    rec = _ec2_rec(b, a, p)
+    if rec is None:
+        return _nf(p)
+    body = p.get("body") or {}
+    try:
+        what = p.get("tab")
+        if what == "attributes":
+            return {"ok": True, **DET.modify_attributes(rec, body)}
+        if what == "user-data":
+            return {"ok": True, **DET.set_user_data(rec, body.get("user_data", ""))}
+        if what == "iam-instance-profile":
+            if p.get("method") == "DELETE":
+                return {"ok": True, "instance_id": rec.get("instance_id"), "iam_instance_profile": None,
+                        "disassociated": DET.disassociate_iam_instance_profile(rec)}
+            return {"ok": True, "instance_id": rec.get("instance_id"),
+                    "iam_instance_profile": DET.associate_iam_instance_profile(rec, body.get("name", ""), _iam_role_lookup, IAM.account_id)}
+    except DET.DetailError as e:
+        return _det_err(e)
+    return {"ok": False, "code": "UnknownTab"}
+
+
+def ec2_guard(rec: dict, operation: str):
+    """Termination / stop protection + state-transition reason for lifecycle ops."""
+    try:
+        if operation == "Terminate":
+            DET.check_terminate(rec)
+        elif operation == "Stop":
+            DET.check_stop(rec)
+    except DET.DetailError as e:
+        return _det_err(e)
+    DET.record_state_change(rec, {"Terminate": "terminated", "Stop": "stopped", "Start": "running"}.get(operation, ""))
+    return None
+
+
+def ec2_serial_access(p):
+    cfg = _EXTRAS.cfg.setdefault("ec2/account-attributes", {})
+    if p.get("method") == "PUT":
+        cfg["serial_console_access"] = (p.get("body") or {}).get("enabled") in DET._TRUE
+    return {"ok": True, "serial_console_access_enabled": bool(cfg.get("serial_console_access"))}
+
+
+def iam_principals() -> list:
+    """Nano IAM users / groups / roles with their attached + inline policy documents."""
+    def docs(rec):
+        out = []
+        for arn in rec.get("attached_policies") or []:
+            pol = IAM.policies.get(arn)
+            if pol:
+                out.append({"name": pol.get("policy_name", arn), "arn": arn, "document": pol.get("document")})
+        for name, doc in (rec.get("inline_policies") or {}).items():
+            out.append({"name": name + " (inline)", "arn": "", "document": doc})
+        return out
+    out = []
+    for kind, coll in (("User", IAM.users), ("Group", IAM.groups), ("Role", IAM.roles)):
+        for name, rec in coll.items():
+            out.append({"type": kind, "name": name, "arn": rec.get("arn", ""), "policies": docs(rec)})
+    return out
+
+
+def resource_access(p):
+    arn = str(p.get("arn") or "")
+    return {"ok": True, "resource_arn": arn, "statements": DET.resource_access(iam_principals(), arn, str(p.get("service") or ""))}
+
+
+# ── S3 bucket detail tabs (core/aws_console_detail.py, same engine as offline) ──
+def _no_bucket(name):
+    return {"ok": False, "code": "NoSuchBucket",
+            "__http": {"status": 404, "body": {"detail": {"code": "NoSuchBucket", "message": "The specified bucket does not exist"}}}}
+
+
+def s3_bucket_config(p):
+    name = str(p.get("bucket") or "")
+    b = OBJ.buckets.get(name)
+    if b is None:
+        return _no_bucket(name)
+    kind, method = str(p.get("kind") or ""), p.get("method") or "GET"
+    try:
+        if method == "PUT":
+            DET.s3_put_bucket_config(b, name, kind, p.get("value"))
+        elif method == "DELETE":
+            if kind not in ("lifecycle", "cors", "policy"):
+                raise DET.DetailError("InvalidRequest", f"{kind} cannot be deleted.")
+            DET.s3_put_bucket_config(b, name, kind, [] if kind != "policy" else "")
+        return {"ok": True, "bucket": name, "kind": kind, "value": DET.s3_bucket_config(b, kind)}
+    except DET.DetailError as e:
+        return _det_err(e)
+
+
+def s3_list_versions(p):
+    name = str(p.get("bucket") or "")
+    if name not in OBJ.buckets:
+        return _no_bucket(name)
+    v = DET.s3_versions(OBJ.objects.get(name) or {}, str(p.get("prefix") or ""))
+    return {"ok": True, "bucket": name, "versions": v, "count": len(v)}
+
+
+def s3_notifications(p):
+    name = str(p.get("bucket") or "")
+    b = OBJ.buckets.get(name)
+    if b is None:
+        return _no_bucket(name)
+    try:
+        if p.get("method") == "PUT":
+            DET.s3_put_notifications(b, p.get("body") or {})
+    except DET.DetailError as e:
+        return _det_err(e)
+    n = {**DET.s3_notifications_default(), **(b.get("notifications") or {})}
+    return {"ok": True, "bucket": name, **n}
+
+
+# ── RDS DB instance tabs (core/aws_console_detail.py) ───────────────────────
+def _rds_db(p):
+    name = str(p.get("name") or "")
+    db = RDB.get_instance(name)
+    if db is not None:
+        DET.rds_ensure(db, ec2_net())
+    return db
+
+
+def _rds_nf(p):
+    return {"ok": False, "code": "DBInstanceNotFound",
+            "__http": {"status": 404, "body": {"detail": {"code": "DBInstanceNotFound",
+                                                          "message": f"DBInstance {p.get('name')} not found."}}}}
+
+
+def rds_detail(p):
+    db = _rds_db(p)
+    if db is None:
+        return _rds_nf(p)
+    tab = p.get("tab")
+    if tab == "pending-maintenance":
+        return {"ok": True, "db_instance_identifier": db["db_instance_identifier"],
+                "pending_maintenance_actions": DET.rds_pending_maintenance(db)}
+    if tab == "performance-insights":
+        return {"ok": True, **DET.rds_performance_insights(db)}
+    if tab in ("connectivity", "subnet-group"):
+        return {"ok": True, **DET.rds_connectivity(db, ec2_net(), {"db_subnet_group_name": "default"})}
+    if tab == "events":
+        return {"ok": True, "db_instance_identifier": db["db_instance_identifier"], "events": DET.rds_events(db)}
+    return {"ok": True, **DET.rds_configuration(db)}
+
+
+def rds_modify_configuration(p):
+    db = _rds_db(p)
+    if db is None:
+        return _rds_nf(p)
+    try:
+        out = DET.rds_modify(db, p.get("body") or {})
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (ValueError, TypeError) as e:
+        return _det_err(DET.DetailError("InvalidParameterValue", str(e)))
+    RDB.persist()
+    return {"ok": True, **out}
+
+
+# ── DynamoDB table tabs (core/aws_console_detail.py) ────────────────────────
+def ddb_table_section(p):
+    name = str(p.get("table") or "")
+    t = ddb._find_table(DDB, name)
+    if t is None:
+        return {"ok": False, "code": "ResourceNotFoundException",
+                "__http": {"status": 404, "body": {"detail": {"code": "ResourceNotFoundException",
+                                                              "message": f"Requested resource not found: Table: {name} not found"}}}}
+    section = str(p.get("section") or "")
+    try:
+        if p.get("method") == "PUT":
+            out = DET.ddb_update_section(t, section, p.get("body") or {})
+            DDB.persist()
+        else:
+            out = DET.ddb_section(t, section)
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (TypeError, ValueError) as e:
+        return _det_err(DET.DetailError("ValidationException", str(e)))
+    return {"ok": True, "table_name": name, "section": section, **out}
+
+
+# ── Lambda function tabs (core/aws_console_detail.py) ───────────────────────
+def _nano_role_info(name):
+    r = IAM.roles.get(name)
+    if not r:
+        return None
+    return {"policies": [a.rsplit("/", 1)[-1] for a in r.get("attached_policies") or []] + list((r.get("inline_policies") or {}).keys()),
+            "trust": r.get("assume_role_policy_document")}
+
+
+def lambda_section(p):
+    name = str(p.get("name") or "")
+    fn = (getattr(_R["compute"], "_lambda_functions", None) or {}).get(name)
+    if fn is None:
+        return {"ok": False, "code": "ResourceNotFoundException",
+                "__http": {"status": 404, "body": {"detail": {"code": "ResourceNotFoundException", "message": f"Function not found: {name}"}}}}
+    section = str(p.get("section") or "")
+    try:
+        if p.get("method") == "PUT":
+            out = DET.lambda_update_section(fn, section, p.get("body") or {}, _nano_role_info)
+        else:
+            out = DET.lambda_section(fn, section, _nano_role_info)
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (TypeError, ValueError) as e:
+        return _det_err(DET.DetailError("InvalidParameterValueException", str(e)))
+    return {"ok": True, "function_name": name, "section": section, **out}
+
+
+# ── IAM account tabs (core/aws_console_detail.py). Stored as public attrs on the
+#    IAM store so nano_persist snapshots them with the users/roles/policies. ──
+def _iam_attr(name, default):
+    if not isinstance(getattr(IAM, name, None), type(default)):
+        setattr(IAM, name, default)
+    return getattr(IAM, name)
+
+
+def _nano_shared_resources():
+    out = []
+    for name, b in OBJ.buckets.items():
+        if isinstance(b, dict) and b.get("policy"):
+            out.append({"type": "AWS::S3::Bucket", "arn": f"arn:aws:s3:::{name}", "policy": b["policy"]})
+    for fn in (getattr(_R["compute"], "_lambda_functions", None) or {}).values():
+        if fn.get("permissions"):
+            out.append({"type": "AWS::Lambda::Function", "arn": fn.get("arn", ""), "policy": DET.lambda_policy_document(fn)})
+    for name, r in IAM.roles.items():
+        if r.get("assume_role_policy_document"):
+            out.append({"type": "AWS::IAM::Role", "arn": r.get("arn", ""), "policy": r["assume_role_policy_document"]})
+    return out
+
+
+def _iam_view(section):
+    acct = IAM.account_id
+    if section == "identity-providers":
+        return {"ok": True, "identity_providers": DET.iam_identity_providers(_iam_attr("identity_providers", {}), acct)}
+    if section == "password-policy":
+        return {"ok": True, **DET.iam_password_policy(_iam_attr("account_settings", {}))}
+    if section == "access-analyzer":
+        an = _iam_attr("access_analyzers", [])
+        return {"ok": True, "analyzers": DET.iam_analyzers(an), "findings": DET.access_findings(acct, _nano_shared_resources()) if an else []}
+    return _det_err(DET.DetailError("NoSuchEntity", f"Unknown IAM section {section}", 404))
+
+
+def iam_section(p):
+    section, b = str(p.get("section") or ""), p.get("body") or {}
+    if p.get("method") == "PUT":
+        acct = IAM.account_id
+        try:
+            if section == "identity-providers":
+                store = _iam_attr("identity_providers", {})
+                if b.get("action") == "delete":
+                    if store.pop(str(b.get("provider_id") or ""), None) is None:
+                        raise DET.DetailError("NoSuchEntity", "Identity provider not found.", 404)
+                else:
+                    DET.iam_create_identity_provider(store, b, acct)
+            elif section == "password-policy":
+                DET.iam_update_password_policy(_iam_attr("account_settings", {}), b)
+            elif section == "access-analyzer":
+                an = _iam_attr("access_analyzers", [])
+                if b.get("action") == "delete":
+                    an[:] = [a for a in an if a["name"] != b.get("name")]
+                else:
+                    DET.iam_create_analyzer(an, b.get("name"), acct)
+        except DET.DetailError as e:
+            return _det_err(e)
+        except (TypeError, ValueError) as e:
+            return _det_err(DET.DetailError("ValidationError", str(e)))
+        IAM.persist()
+    return _iam_view(section)
+
+
+# ── VPC tabs (core/aws_console_detail.py; records live in the vpc_core model) ──
+def vpc_detail_section(p):
+    vid, section = str(p.get("name") or ""), str(p.get("section") or "").replace("-", "_")
+    try:
+        if p.get("method") == "PUT":
+            out = DET.vpc_update_section(ec2_net(), vid, section, p.get("body") or {}, lambda b: b in OBJ.buckets)
+        else:
+            out = DET.vpc_section(ec2_net(), vid, section)
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (TypeError, ValueError) as e:
+        return _det_err(DET.DetailError("InvalidParameterValue", str(e)))
+    return {"ok": True, "vpc_id": vid, "section": p.get("section"), **out}
+
+
+# ── SQS queue tabs (core/aws_console_detail.py over sqs_core's attribute map) ──
+def _sqs_view(q):
+    now = MSG.now()
+    live = [m for m in q.get("messages", []) if not m.get("deleted")]
+    counts = {"available": sum(1 for m in live if m.get("visible_at", 0) <= now),
+              "in_flight": sum(1 for m in live if m.get("visible_at", 0) > now and (m.get("in_flight") or m.get("receive_count"))),
+              "delayed": 0}
+    counts["delayed"] = len(live) - counts["available"] - counts["in_flight"]
+    attrs = {**(q.get("attributes") or {}), "VisibilityTimeout": q.get("visibility_timeout", 30), "DelaySeconds": q.get("delay_seconds", 0)}
+    return DET.sqs_view(q["queue_name"], q["queue_arn"], q["queue_url"], bool(q.get("fifo")), attrs, counts)
+
+
+def sqs_section(p):
+    name = str(p.get("name") or "")
+    q = MSG.get_queue(name)
+    if not q:
+        return {"ok": False, "code": "QueueDoesNotExist",
+                "__http": {"status": 404, "body": {"detail": {"code": "AWS.SimpleQueueService.NonExistentQueue",
+                                                              "message": "The specified queue does not exist."}}}}
+    section = str(p.get("section") or "")
+    if p.get("method") == "PUT":
+        try:
+            if section == "purge":
+                DET.sqs_check_purge(q)
+                sqs.dispatch(MSG, "AmazonSQS.PurgeQueue", {"QueueUrl": q["queue_url"]})
+            else:
+                def lookup(n):
+                    t = MSG.get_queue(n)
+                    return {"fifo": bool(t.get("fifo"))} if t else None
+                attrs = DET.sqs_validate(section, p.get("body") or {}, name, q["queue_arn"], bool(q.get("fifo")), lookup)
+                sqs.dispatch(MSG, "AmazonSQS.SetQueueAttributes", {"QueueUrl": q["queue_url"], "Attributes": attrs})
+                if "DelaySeconds" in attrs:
+                    q["delay_seconds"] = int(attrs["DelaySeconds"])
+                for k in [k for k, v in q.get("attributes", {}).items() if v == ""]:
+                    q["attributes"].pop(k)
+                MSG.persist()
+        except DET.DetailError as e:
+            return _det_err(e)
+        except (TypeError, ValueError) as e:
+            return _det_err(DET.DetailError("InvalidAttributeValue", str(e)))
+    out = {"ok": True, "section": section, **_sqs_view(q)}
+    if section == "dlq":
+        out["queues"] = [{"queue_name": n, "queue_arn": MSG.get_queue(n)["queue_arn"], "fifo": bool(MSG.get_queue(n).get("fifo"))}
+                         for n in MSG.queue_names() if n != name]
+        import json as _json
+        def _target(x):
+            rp = (x.get("attributes") or {}).get("RedrivePolicy")
+            try:
+                return (_json.loads(rp) if isinstance(rp, str) and rp else rp or {}).get("deadLetterTargetArn")
+            except Exception:
+                return None
+        out["source_queues"] = [n for n in MSG.queue_names() if _target(MSG.get_queue(n)) == q["queue_arn"]]
+    return out
+
+
+# ── Secrets Manager secret tabs (core/aws_console_detail.py over secrets_core) ──
+def _sec_versions(s):
+    vs = sorted(s.get("versions", {}).items(), key=lambda kv: -(float(kv[1].get("CreatedDate") or 0)))
+    return [{"version_id": vid, "stages": list(v.get("stages") or []), "created": _iso(v.get("CreatedDate"))} for vid, v in vs]
+
+
+def secret_section(p):
+    name = str(p.get("name") or "")
+    s = SEC.get_secret(name)
+    if not s or s.get("deleted_date"):
+        return {"ok": False, "code": "ResourceNotFoundException",
+                "__http": {"status": 404, "body": {"detail": {"code": "ResourceNotFoundException",
+                                                              "message": "Secrets Manager can't find the specified secret."}}}}
+    s.setdefault("created_iso", _iso(s.get("created")))
+    meta = s
+    meta.setdefault("created", s.get("created"))
+    section = str(p.get("section") or "")
+    if p.get("method") == "PUT":
+        body = p.get("body") or {}
+        if section == "value":
+            if body.get("secret_string") in (None, ""):
+                return _det_err(DET.DetailError("InvalidParameterException", "SecretString is required."))
+            secrets.dispatch(SEC, "secretsmanager.PutSecretValue", {"SecretId": name, "SecretString": str(body["secret_string"])})
+        else:
+            fns = getattr(_R["compute"], "_lambda_functions", None) or {}
+            kms_ok = lambda k: k in KMS.keys or k in KMS.aliases or ("alias/" + k) in KMS.aliases
+            try:
+                follow = DET.secret_update(meta, section, body, lambda f: f in fns, kms_ok)
+            except DET.DetailError as e:
+                return _det_err(e)
+            except (TypeError, ValueError) as e:
+                return _det_err(DET.DetailError("InvalidParameterException", str(e)))
+            if follow == "rotate":
+                cur = secrets.dispatch(SEC, "secretsmanager.GetSecretValue", {"SecretId": name}).body
+                secrets.dispatch(SEC, "secretsmanager.PutSecretValue", {"SecretId": name, "SecretString": cur.get("SecretString", "")})
+                DET.secret_mark_rotated(meta)
+            SEC.persist()
+    vers = _sec_versions(s)
+    if section == "value":
+        v = secrets.dispatch(SEC, "secretsmanager.GetSecretValue", {"SecretId": name}).body
+        return {"ok": True, "section": section, "name": name, "secret_string": v.get("SecretString", ""),
+                "version_id": v.get("VersionId", ""), "version_stages": v.get("VersionStages", [])}
+    try:
+        view = DET.secret_section({**meta, "created": s.get("created_iso")}, section, vers, name, s["arn"])
+    except DET.DetailError as e:
+        return _det_err(e)
+    return {"ok": True, "section": section, **view}
+
+
+# ── KMS key tabs (core/aws_console_detail.py over kms_core's key metadata) ──
+def _nano_principal_exists(arn):
+    name = arn.rsplit("/", 1)[-1]
+    return name in (IAM.users if ":user/" in arn else IAM.roles)
+
+
+def kms_section(p):
+    kid = str(p.get("name") or "")
+    meta = KMS.keys.get(kid)
+    if meta is None:
+        return {"ok": False, "code": "NotFoundException",
+                "__http": {"status": 404, "body": {"detail": {"code": "NotFoundException", "message": f"Key '{kid}' does not exist."}}}}
+    section = str(p.get("section") or "")
+    try:
+        if p.get("method") == "PUT":
+            out = DET.kms_update(meta, kid, KMS.aliases, section, p.get("body") or {}, KMS.account_id, _nano_principal_exists)
+            KMS.persist()
+        else:
+            out = DET.kms_section(meta, kid, KMS.aliases, section, KMS.account_id)
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (TypeError, ValueError) as e:
+        return _det_err(DET.DetailError("ValidationException", str(e)))
+    return {"ok": True, "section": section, **out}
+
+
+# ── EventBridge rule tabs (core/aws_console_detail.py over the console's rule
+#    record in the persisted extras store) ──
+def eb_rule_section(p):
+    name = str(p.get("name") or "")
+    rule = (_EXTRAS.items.get("eventbridge/rules") or {}).get(name)
+    if not isinstance(rule, dict):
+        return {"ok": False, "code": "ResourceNotFoundException",
+                "__http": {"status": 404, "body": {"detail": {"code": "ResourceNotFoundException", "message": f"Rule {name} does not exist."}}}}
+    section = str(p.get("section") or "")
+    try:
+        if p.get("method") == "PUT":
+            out = DET.eb_update(rule, section, p.get("body") or {}, IAM.account_id, lambda q: MSG.get_queue(q) is not None)
+        else:
+            out = DET.eb_section(rule, section, IAM.account_id)
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (TypeError, ValueError) as e:
+        return _det_err(DET.DetailError("ValidationException", str(e)))
+    return {"ok": True, "section": section, **out}
+
+
+def eb_get_rule(p):
+    """GET /api/aws/extras/eventbridge/rules/{name} — the console's rule record (detail page)."""
+    name = str(p.get("name") or "")
+    rule = (_EXTRAS.items.get("eventbridge/rules") or {}).get(name)
+    if not isinstance(rule, dict):
+        return {"ok": False, "code": "ResourceNotFoundException", "name": name}
+    return {"ok": True, **DET.eb_ensure(rule)}
+
+
+# ── API Gateway (REST) tabs (core/aws_console_detail.py over apigateway_core's API) ──
+def apigw_section(p):
+    from core import apigateway_core
+    import json as _json
+    apis = getattr(_R["compute"], "_apigateway_apis", None) or {}
+    key = str(p.get("name") or "")
+    api = apis.get(key) or next((a for a in apis.values() if a.get("name") == key), None)
+    if api is None:
+        return {"ok": False, "code": "NotFoundException",
+                "__http": {"status": 404, "body": {"detail": {"code": "NotFoundException", "message": "Invalid API identifier specified"}}}}
+    section = str(p.get("section") or "")
+    fns = getattr(_R["compute"], "_lambda_functions", None) or {}
+    try:
+        if p.get("method") == "PUT":
+            b = p.get("body") or {}
+            if section == "deployments":
+                stage = str(b.get("stage_name") or "")
+                r = apigateway_core.dispatch(_R["compute"], "POST", f"/restapis/{api['id']}/deployments", {}, {},
+                                             _json.dumps({"stageName": stage}).encode())
+                dep = _json.loads(r.body.decode() or "{}")
+                hist = api.setdefault("deployment_history", {})
+                hist[dep.get("id")] = {"deployment_id": dep.get("id"), "stage_name": stage, "description": str(b.get("description") or ""), "created": _iso(__import__("time").time())}
+                if stage and stage in api.get("deployments", {}):
+                    api["deployments"][stage]["created"] = hist[dep.get("id")]["created"]
+                    api["deployments"][stage]["description"] = hist[dep.get("id")]["description"]
+                out = DET.apigw_section(api, section, api["id"], IAM.account_id)
+            else:
+                out = DET.apigw_update(api, section, b, api["id"], IAM.account_id, lambda f: f in fns)
+        else:
+            out = DET.apigw_section(api, section, api["id"], IAM.account_id)
+    except DET.DetailError as e:
+        return _det_err(e)
+    except (TypeError, ValueError) as e:
+        return _det_err(DET.DetailError("BadRequestException", str(e)))
+    if section == "deployments":
+        for d in out["deployments"]:
+            # the console create deploys the API to its first stage in the same call
+            d["created"] = d.get("created") or api.get("created", "")
+        seen = {d["deployment_id"] for d in out["deployments"]}
+        out["deployments"] = sorted(out["deployments"] + [d for d in (api.get("deployment_history") or {}).values() if d["deployment_id"] not in seen],
+                                    key=lambda d: d.get("created", ""), reverse=True)
+    return {"ok": True, "section": section, **out}
+
+
+def ssm_describe(p):
+    """DescribeParameters for one parameter (the Properties tab): metadata, no value."""
+    from . import dataplane_adapter as _D
+    r = _D.ssm_get(p)
+    return {k: v for k, v in r.items() if k != "value"}

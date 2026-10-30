@@ -182,6 +182,18 @@ _EC2_WIZARD = {
             "rhel9":      {"image_id": "ami-rhel-9-x86_64"},
             "windows2022":{"image_id": "ami-windows-2022-x86_64"},
         },
+        # Network / storage / advanced choices the backend records on the instance
+        # (core/aws_console_detail.apply_launch).
+        "__sgChoice__":      {"create": {"create_security_group.requested": True}},
+        "__sgName__":        {"*": {"create_security_group.name": "$value"}},
+        "__sgDesc__":        {"*": {"create_security_group.description": "$value"}},
+        "__allowSsh__":      {"*": {"create_security_group.ssh_cidr": "$value"}},
+        "__allowHttp__":     {"true": {"create_security_group.allow_https": True}},
+        "__allowHttpsBasic__": {"true": {"create_security_group.allow_http": True}},
+        "__rootSize__":      {"*": {"storage_gb": "$value"}},
+        "__rootType__":      {"*": {"root_volume_type": "$value"}},
+        "__rootEncrypt__":   {"true": {"root_volume_encrypted": True}, "false": {"root_volume_encrypted": False}},
+        "__detailedMon__":   {"true": {"monitoring": True}},
     },
 }
 
