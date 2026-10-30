@@ -8,11 +8,10 @@
  *   not_simulated  → the whole section becomes the honest Not-simulated panel
  */
 import { Badge, Popover, PopoverSurface, PopoverTrigger } from "@fluentui/react-components";
-import cost from "../../../../core/capabilities/azure/cost.json";
 import { NotSimulatedContainer } from "./common.jsx";
-import { VyomiMark } from "../../common/VyomiMark.jsx";
+import cap_cost from "../../../../core/capabilities/azure/cost.json";
 
-const REGISTRY = { ...cost };
+const REGISTRY = { ...cap_cost };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 
@@ -47,7 +46,7 @@ export function CapabilityBadge({ id }) {
           <b>{c.title}: {LABEL[c.level]}</b>
           <p style={{ margin: "6px 0" }}>{DEFAULT_NOTE[c.level]}</p>
           {c.limitations?.length > 0 && <ul style={{ margin: 0, paddingLeft: 18 }}>{c.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
-          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>Applies to this <VyomiMark /> environment ({SUBSTRATE}).</div>
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>Applies to this Vyomi environment ({SUBSTRATE}).</div>
         </PopoverSurface>
       </Popover>
     </span>
