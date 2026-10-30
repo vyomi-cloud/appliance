@@ -13,13 +13,15 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Popover from "@cloudscape-design/components/popover";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import s3 from "../../../../core/capabilities/aws/s3.json";
-import dynamodb from "../../../../core/capabilities/aws/dynamodb.json";
-import sqs from "../../../../core/capabilities/aws/sqs.json";
-import sns from "../../../../core/capabilities/aws/sns.json";
 import { NotSimulatedContainer } from "./common.jsx";
+import cap_dynamodb from "../../../../core/capabilities/aws/dynamodb.json";
+import cap_kms from "../../../../core/capabilities/aws/kms.json";
+import cap_s3 from "../../../../core/capabilities/aws/s3.json";
+import cap_secretsmanager from "../../../../core/capabilities/aws/secretsmanager.json";
+import cap_sns from "../../../../core/capabilities/aws/sns.json";
+import cap_sqs from "../../../../core/capabilities/aws/sqs.json";
 
-const REGISTRY = { ...s3, ...dynamodb, ...sqs, ...sns };
+const REGISTRY = { ...cap_dynamodb, ...cap_kms, ...cap_s3, ...cap_secretsmanager, ...cap_sns, ...cap_sqs };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

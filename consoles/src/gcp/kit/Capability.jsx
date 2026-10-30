@@ -10,13 +10,14 @@
 import { useState } from "react";
 import { Box, Chip, Popover, Stack, Typography } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/esm/InfoOutlined.js";
-import artifacts from "../../../../core/capabilities/gcp/artifacts.json";
-import cloudscheduler from "../../../../core/capabilities/gcp/cloudscheduler.json";
-import firestore from "../../../../core/capabilities/gcp/firestore.json";
-import logs from "../../../../core/capabilities/gcp/logs.json";
 import { NotSimulatedContainer, Section } from "./common.jsx";
+import cap_artifacts from "../../../../core/capabilities/gcp/artifacts.json";
+import cap_cloudscheduler from "../../../../core/capabilities/gcp/cloudscheduler.json";
+import cap_firestore from "../../../../core/capabilities/gcp/firestore.json";
+import cap_logs from "../../../../core/capabilities/gcp/logs.json";
+import cap_networking from "../../../../core/capabilities/gcp/networking.json";
 
-const REGISTRY = { ...artifacts, ...cloudscheduler, ...firestore, ...logs };
+const REGISTRY = { ...cap_artifacts, ...cap_cloudscheduler, ...cap_firestore, ...cap_logs, ...cap_networking };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

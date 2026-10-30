@@ -235,6 +235,54 @@ try {
   const sinks = await wjson(`/v2/projects/vyomi-project/sinks`);
   check("create sink via UI → visible over native wire (sinks.list)", (sinks.sinks || []).some((s) => s.name.endsWith(`/${SINK}`) && s.destination === "storage.googleapis.com/v4-smoke-sink-bucket"));
   await shot("14-log-router");
+  // VPC network: create a network through the UI → visible over native wire (networks.list)
+  const NET = `v4-gcp-net-${Date.now() % 100000}`;
+  await page.goto(UI + "#/networking/networks/add");
+  await page.getByLabel("Name").first().fill(NET);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: NET }).waitFor({ timeout: 10000 });
+  const nets = await wjson("/compute/v1/projects/vyomi-project/global/networks");
+  check("create VPC network → visible over native wire (networks.list)", (nets.items || []).some((n) => n.name === NET));
+  await shot("12-network-created");
+
+  // Subnet created over the wire (SDK → UI direction) → shown in the network's Subnets tab
+  const SUB = `v4-gcp-sub-${Date.now() % 100000}`;
+  await wire("/compute/v1/projects/vyomi-project/regions/us-central1/subnetworks", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: SUB, network: NET, ipCidrRange: "10.9.0.0/24" }),
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("cell", { name: SUB, exact: true }).waitFor({ timeout: 10000 });
+  check("subnet created over wire → shown in UI (Subnets tab)", true);
+
+  // Firewall rule created through the UI → visible over native wire, then deleted from the UI
+  await page.goto(UI + "#/networking/firewall/add");
+  const FW = `v4-gcp-fw-${Date.now() % 100000}`;
+  await page.getByLabel("Name").fill(FW);
+  await page.getByRole("combobox", { name: "Network" }).click();
+  await page.getByRole("option", { name: NET }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("cell", { name: FW, exact: true }).waitFor({ timeout: 10000 });
+  const fws = await wjson("/compute/v1/projects/vyomi-project/global/firewalls");
+  check("create firewall rule via UI → visible over native wire (firewalls.list)", (fws.items || []).some((f) => f.name === FW));
+  await page.getByRole("checkbox", { name: `Select ${FW}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(FW);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  check("delete firewall rule via UI → gone over native wire", (await wire(`/compute/v1/projects/vyomi-project/global/firewalls/${FW}`)).status === 404);
+  await shot("13-networking");
+
+  // Delete the subnet (so the network can be deleted) then the network itself, from the UI
+  await page.goto(UI + `#/networking/networks/details/${NET}`);
+  await page.getByRole("checkbox", { name: new RegExp(`Select .*${SUB}`) }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("cell", { name: SUB, exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  await page.getByRole("button", { name: "Delete VPC network" }).click();
+  await page.getByLabel("Confirm deletion").fill(NET);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "VPC networks" }).waitFor({ timeout: 10000 });
+  check("delete VPC network via UI → gone over native wire", (await wire(`/compute/v1/projects/vyomi-project/global/networks/${NET}`)).status === 404);
 
   // Not-simulated gaps carry the conformance attribute
   await page.goto(UI + "#/storage/monitoring");

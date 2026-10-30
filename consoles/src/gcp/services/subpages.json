@@ -95,7 +95,8 @@
   "VPC connectivity",
   "Shared VPC",
   "Serverless VPC access",
-  "Packet mirroring"
+  "Packet mirroring",
+  "VPC Flow Logs"
  ],
  "pubsub": [
   "Topics",

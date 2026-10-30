@@ -1,0 +1,198 @@
+{
+ "$doc": "Vyomi capability registry — GCP VPC network. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
+ "gcp.networking.vpc.crud": {
+  "title": "VPC networks (create, list, get, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "networks.insert",
+   "networks.list",
+   "networks.get",
+   "networks.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_core.py"
+  ]
+ },
+ "gcp.networking.subnet.crud": {
+  "title": "Subnets (create, list, get, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "subnetworks.insert",
+   "subnetworks.list",
+   "subnetworks.aggregatedList",
+   "subnetworks.get",
+   "subnetworks.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_core.py"
+  ]
+ },
+ "gcp.networking.firewall.crud": {
+  "title": "VPC firewall rules (create, list, get, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Hit count, last hit and Firewall Insights are observability features Vyomi does not compute — rules enforce nothing on live traffic, so these show as empty rather than simulated numbers."
+  ],
+  "api": [
+   "firewalls.insert",
+   "firewalls.list",
+   "firewalls.get",
+   "firewalls.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_core.py"
+  ]
+ },
+ "gcp.networking.route.crud": {
+  "title": "Routes (create, list, get, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Effective routes are computed from the project's static routes only — dynamic routes learned from Cloud Router/VPN peering are not modeled, since BGP peering itself is not simulated."
+  ],
+  "api": [
+   "routes.insert",
+   "routes.list",
+   "routes.get",
+   "routes.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_core.py"
+  ]
+ },
+ "gcp.networking.address.crud": {
+  "title": "Static IP addresses, regional and global (reserve, list, release)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "addresses.insert",
+   "addresses.list",
+   "addresses.aggregatedList",
+   "addresses.get",
+   "addresses.delete",
+   "globalAddresses.insert",
+   "globalAddresses.list",
+   "globalAddresses.get",
+   "globalAddresses.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_compute_core.py"
+  ]
+ },
+ "gcp.networking.peering": {
+  "title": "VPC network peering",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Peering connects two independent VPCs' route tables; Vyomi's Compute core does not model cross-network route exchange. Peering requests are not accepted."
+  ]
+ },
+ "gcp.networking.private-service-connection": {
+  "title": "Private service connection",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Allocating ranges for Google-managed services and the private-services-access connection to them is not modeled."
+  ]
+ },
+ "gcp.networking.network-firewall-policies": {
+  "title": "Network firewall policies (hierarchical / regional policy resources)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi models the classic per-network VPC firewall rule, not the newer Network Firewall Policy resource (its own rule evaluation order and org/folder attachment)."
+  ]
+ },
+ "gcp.networking.vpc-flow-logs": {
+  "title": "VPC Flow Logs (Subnets / VLAN attachments / Cloud VPN tunnels)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Flow Logs requires the Network Management API exporting real packet samples; Vyomi has no data plane to sample traffic from, so no log records are produced."
+  ]
+ },
+ "gcp.networking.internal-ranges": {
+  "title": "Internal ranges",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "The Internal Range Allocator (planning/reserving CIDR blocks across an org before they're assigned to subnets) is not modeled."
+  ]
+ },
+ "gcp.networking.byoip": {
+  "title": "Bring your own IP (BYOIP)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Advertising customer-owned IP ranges over Google's network requires real BGP/RPKI infrastructure Vyomi does not have."
+  ]
+ },
+ "gcp.networking.hybrid-connectivity": {
+  "title": "VPC connectivity (Cloud Interconnect, Cloud VPN, Network Connectivity Center)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Hybrid connectivity to on-premises or other clouds needs real tunnels/circuits; Vyomi's network model stops at the project boundary."
+  ]
+ },
+ "gcp.networking.shared-vpc": {
+  "title": "Shared VPC (host/service project attachment)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi's Compute core is single-project; cross-project host/service VPC sharing and its IAM delegation are not modeled."
+  ]
+ },
+ "gcp.networking.serverless-vpc-access": {
+  "title": "Serverless VPC Access connectors",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Connectors bridge serverless products (Cloud Run/Functions) into a VPC; Vyomi does not run a serverless data plane that would use one."
+  ]
+ },
+ "gcp.networking.packet-mirroring": {
+  "title": "Packet mirroring",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Mirroring clones live packets to a collector; Vyomi has no data plane producing real packets to mirror."
+  ]
+ }
+}
