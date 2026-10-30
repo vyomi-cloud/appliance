@@ -31,6 +31,7 @@ const html = (cloud, title, nano = false) => `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
+<meta name="vyomi-substrate" content="${nano ? "nano" : "offline"}">
 <link rel="stylesheet" href="./main.css">
 ${nano ? NANO_HEAD : ""}</head>
 <body>

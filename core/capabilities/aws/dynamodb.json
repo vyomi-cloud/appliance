@@ -1,0 +1,205 @@
+{
+ "$doc": "Vyomi capability registry \u2014 DynamoDB. See s3.json for the contract.",
+ "dynamodb.table.crud": {
+  "title": "Tables (create, describe, list, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "CreateTable",
+   "DescribeTable",
+   "ListTables",
+   "DeleteTable"
+  ],
+  "probe": {
+   "ddb_ok": [
+    "ListTables",
+    "DescribeTable"
+   ]
+  },
+  "tests": [
+   "tests/conformance/test_dynamodb_core.py"
+  ]
+ },
+ "dynamodb.item.crud": {
+  "title": "Items (put, get, update, delete, query, scan, batch, transactions)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "probe": {
+   "ddb_ok": [
+    "Query",
+    "Scan",
+    "BatchWriteItem",
+    "TransactWriteItems"
+   ]
+  },
+  "tests": [
+   "tests/conformance/test_dynamodb_core.py"
+  ]
+ },
+ "dynamodb.table.indexes": {
+  "title": "Global secondary indexes",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_dynamodb_gsi_core.py"
+  ]
+ },
+ "dynamodb.table.settings": {
+  "title": "Table class, deletion protection, encryption (at create)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Stored and returned at create time; deletion protection does not block DeleteTable yet and data is not encrypted at rest."
+  ],
+  "probe": {
+   "ddb_ok": [
+    "DescribeTable"
+   ]
+  },
+  "tests": [
+   "tests/conformance/test_dynamodb_table_settings_core.py"
+  ]
+ },
+ "dynamodb.table.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "probe": {
+   "ddb_ok": [
+    "TagResource",
+    "ListTagsOfResource"
+   ]
+  }
+ },
+ "dynamodb.table.update": {
+  "title": "Update capacity / settings (UpdateTable)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "ddb_unknown": "UpdateTable"
+  }
+ },
+ "dynamodb.table.ttl": {
+  "title": "Time to Live (TTL)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "ddb_unknown": "DescribeTimeToLive"
+  }
+ },
+ "dynamodb.table.pitr": {
+  "title": "Point-in-time recovery (PITR)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "ddb_unknown": "DescribeContinuousBackups"
+  }
+ },
+ "dynamodb.backups": {
+  "title": "On-demand backups",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "ddb_unknown": "ListBackups"
+  }
+ },
+ "dynamodb.partiql": {
+  "title": "PartiQL editor",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "ddb_unknown": "ExecuteStatement"
+  }
+ },
+ "dynamodb.streams": {
+  "title": "DynamoDB stream details",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "ddb_unknown": "DescribeStream"
+  }
+ },
+ "dynamodb.exports": {
+  "title": "Exports to S3",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "ddb_unknown": "ExportTableToPointInTime"
+  }
+ },
+ "dynamodb.kinesis": {
+  "title": "Amazon Kinesis data stream details",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "ddb_unknown": "DescribeKinesisStreamingDestination"
+  }
+ },
+ "dynamodb.resource-policy": {
+  "title": "Resource-based policy",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "ddb_unknown": "GetResourcePolicy"
+  }
+ },
+ "dynamodb.monitor": {
+  "title": "CloudWatch metrics and alarms",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": []
+ },
+ "dynamodb.global-tables": {
+  "title": "Global tables",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi simulates a single region."
+  ]
+ }
+}

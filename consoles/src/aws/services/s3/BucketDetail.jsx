@@ -16,6 +16,8 @@ import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import Permissions from "./Permissions.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 
 const arn = (b) => `arn:aws:s3:::${b}`;
 
@@ -142,15 +144,15 @@ function Properties({ bucket }) {
           ...(d.kmsKey ? [["Encryption key ARN", d.kmsKey]] : []),
         ]} />
       )} />
-      <NotSimulatedContainer title="Intelligent-Tiering Archive configurations" />
-      <NotSimulatedContainer title="Server access logging" />
+      <CapabilityContainer id="s3.bucket.intelligent-tiering" title="Intelligent-Tiering Archive configurations" />
+      <CapabilityContainer id="s3.bucket.logging" title="Server access logging" />
       <NotSimulatedContainer title="AWS CloudTrail data events" />
-      <NotSimulatedContainer title="Event notifications" />
+      <CapabilityContainer id="s3.bucket.notification" title="Event notifications" />
       <NotSimulatedContainer title="Amazon EventBridge" />
-      <NotSimulatedContainer title="Transfer acceleration" />
-      <NotSimulatedContainer title="Object Lock" />
-      <NotSimulatedContainer title="Requester pays" />
-      <NotSimulatedContainer title="Static website hosting" />
+      <CapabilityContainer id="s3.bucket.accelerate" title="Transfer acceleration" />
+      <CapabilityContainer id="s3.bucket.object-lock" title="Object Lock" />
+      <CapabilityContainer id="s3.bucket.request-payment" title="Requester pays" />
+      <CapabilityContainer id="s3.bucket.website" title="Static website hosting" />
     </SpaceBetween>
   );
 }
@@ -167,36 +169,6 @@ function Metrics() {
   );
 }
 
-function Permissions({ bucket }) {
-  const pab = useAsync(() => api.getPublicAccessBlock(bucket), [bucket]);
-  const pol = useAsync(() => api.getPolicy(bucket), [bucket]);
-  const on = (v) => (v ? "On" : "Off");
-  return (
-    <SpaceBetween size="l">
-      <SubSetting title="Block public access (bucket settings)" state={pab} render={(d) => {
-        const c = d.config || { BlockPublicAcls: false, IgnorePublicAcls: false, BlockPublicPolicy: false, RestrictPublicBuckets: false };
-        const all = Object.values(c).every(Boolean);
-        return <KeyValue title="Block public access (bucket settings)" columns={1} items={[
-          ["Block all public access", <StatusIndicator type={all ? "success" : "warning"}>{on(all)}</StatusIndicator>],
-          ["Block public access to buckets and objects granted through new access control lists (ACLs)", on(c.BlockPublicAcls)],
-          ["Block public access to buckets and objects granted through any access control lists (ACLs)", on(c.IgnorePublicAcls)],
-          ["Block public access to buckets and objects granted through new public bucket or access point policies", on(c.BlockPublicPolicy)],
-          ["Block public and cross-account access to buckets and objects through any public bucket or access point policies", on(c.RestrictPublicBuckets)],
-        ]} />;
-      }} />
-      <SubSetting title="Bucket policy" state={pol} render={(d) => (
-        <Container header={<Header variant="h2" description="The bucket policy, written in JSON, provides access to the objects stored in the bucket.">Bucket policy</Header>}>
-          {d.policy ? <Box variant="code"><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{pretty(d.policy)}</pre></Box> : <Box color="text-body-secondary">No policy to display.</Box>}
-        </Container>
-      )} />
-      <NotSimulatedContainer title="Permissions overview" />
-      <NotSimulatedContainer title="Object Ownership" />
-      <NotSimulatedContainer title="Access control list (ACL)" />
-      <NotSimulatedContainer title="Cross-origin resource sharing (CORS)" feature="CORS configuration" />
-    </SpaceBetween>
-  );
-}
-
 function Management({ bucket }) {
   const lc = useAsync(() => api.getLifecycle(bucket), [bucket]);
   return (
@@ -206,8 +178,8 @@ function Management({ bucket }) {
           items={d.rules} columnDefinitions={[{ id: "id", header: "Lifecycle rule name", cell: (r) => r.id }, { id: "status", header: "Status", cell: (r) => r.status }, { id: "scope", header: "Scope", cell: (r) => r.prefix ? `Prefix ${r.prefix}` : "Entire bucket" }]}
           empty={<Box textAlign="center" color="inherit"><b>No lifecycle rules</b><Box variant="p" color="inherit">There are no lifecycle rules for this bucket.</Box></Box>} />
       )} />
-      <NotSimulatedContainer title="Replication rules" />
-      <NotSimulatedContainer title="Inventory configurations" />
+      <CapabilityContainer id="s3.bucket.replication" title="Replication rules" />
+      <CapabilityContainer id="s3.bucket.inventory" title="Inventory configurations" />
     </SpaceBetween>
   );
 }

@@ -83,6 +83,36 @@ try {
   check("S3 object detail shows real HeadObject + ListObjectVersions data", true);
   await page.goBack();
 
+  // W1 Permissions tab: every edit must land in the backend (native GET) and carry its badge.
+  await page.goto(UI + `#/s3/buckets/${B}`);
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  await page.getByText("Object Ownership", { exact: true }).first().waitFor({ timeout: 10000 });
+  check("Permissions: config-only badges rendered from the registry", (await page.locator('[data-vyomi-capability="config_only"]').count()) >= 3);
+  const editIn = async (title) => page.getByRole("heading", { name: title }).first()
+    .locator('xpath=ancestor::*[.//button[normalize-space()="Edit"]][1]').getByRole("button", { name: "Edit" }).first().click();
+  await editIn("Object Ownership");
+  await page.getByText("ACLs enabled — Object writer").click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.getByText("ObjectWriter").first().waitFor({ timeout: 10000 });
+  check("Permissions: Object Ownership saved (native GetBucketOwnershipControls)", /ObjectWriter/.test(await wire(`/${B}?ownershipControls=`)));
+  await editIn("Cross-origin resource sharing (CORS)");
+  await page.getByRole("dialog").locator("textarea").fill('[{"AllowedMethods":["GET","PUT"],"AllowedOrigins":["https://app.example"]}]');
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.waitForTimeout(800);
+  const corsXml = await wire(`/${B}?cors=`);
+  check("Permissions: CORS saved (native GetBucketCors)", /https:\/\/app\.example/.test(corsXml) && /<AllowedMethod>PUT<\/AllowedMethod>/.test(corsXml), corsXml.slice(0, 120));
+  await editIn("Bucket policy");
+  await page.getByRole("dialog").locator("textarea").fill(JSON.stringify({ Version: "2012-10-17", Statement: [{ Sid: "v4", Effect: "Deny", Principal: "*", Action: "s3:DeleteBucket", Resource: `arn:aws:s3:::${B}` }] }));
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.waitForTimeout(800);
+  check("Permissions: bucket policy saved (native GetBucketPolicy)", /"Sid":\s*"v4"/.test(await wire(`/${B}?policy=`)));
+  await editIn("Block public access (bucket settings)");
+  await page.getByRole("dialog").getByText("Block all public access").click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.waitForTimeout(800);
+  check("Permissions: Block Public Access saved (native GetPublicAccessBlock)", /<BlockPublicPolicy>false<\/BlockPublicPolicy>/.test(await wire(`/${B}?publicAccessBlock=`)));
+  await shot("05b-s3-permissions-edited");
+
   // Bucket list shows it
   await page.goto(UI + "#/s3");
   await page.getByRole("link", { name: B }).waitFor({ timeout: 10000 });

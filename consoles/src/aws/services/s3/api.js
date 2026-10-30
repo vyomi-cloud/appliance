@@ -160,3 +160,48 @@ export async function getLifecycle(b) {
 }
 
 const esc = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]));
+
+// ── Permissions sub-resources (W1: every one round-trips through the native API) ──
+export const putPolicy = (b, json) => s3("PUT", `/${b}`, { query: { policy: "" }, body: json, headers: { "content-type": "application/json" } });
+export const deletePolicy = (b) => s3("DELETE", `/${b}`, { query: { policy: "" } });
+
+export async function getOwnership(b) {
+  const r = await sub(b, "ownershipControls");
+  if (r.absent) return { ownership: null };
+  if (!r.value) return r;
+  return { ownership: asList(r.value.OwnershipControls?.Rule)[0]?.ObjectOwnership || null };
+}
+export const putOwnership = (b, ownership) => s3("PUT", `/${b}`, {
+  query: { ownershipControls: "" },
+  body: xml(`<OwnershipControls ${NS}><Rule><ObjectOwnership>${ownership}</ObjectOwnership></Rule></OwnershipControls>`),
+});
+
+export async function getAcl(b) {
+  const r = await sub(b, "acl");
+  if (!r.value) return r;
+  const p = r.value.AccessControlPolicy || {};
+  return {
+    owner: p.Owner?.DisplayName || p.Owner?.ID,
+    grants: asList(p.AccessControlList?.Grant).map((g) => ({
+      grantee: g.Grantee?.DisplayName || g.Grantee?.URI || g.Grantee?.ID || "-",
+      type: g.Grantee?.URI ? "Group" : "Canonical user",
+      permission: g.Permission,
+    })),
+  };
+}
+
+export async function getCors(b) {
+  const r = await sub(b, "cors");
+  if (r.absent) return { rules: null };
+  if (!r.value) return r;
+  return {
+    rules: asList(r.value.CORSConfiguration?.CORSRule).map((x) => ({
+      AllowedHeaders: asList(x.AllowedHeader), AllowedMethods: asList(x.AllowedMethod), AllowedOrigins: asList(x.AllowedOrigin),
+      ExposeHeaders: asList(x.ExposeHeader), ...(x.MaxAgeSeconds ? { MaxAgeSeconds: Number(x.MaxAgeSeconds) } : {}),
+    })),
+  };
+}
+const tagList = (name, xs) => (xs || []).map((v) => `<${name}>${esc(v)}</${name}>`).join("");
+export const putCors = (b, rules) => rules.length
+  ? s3("PUT", `/${b}`, { query: { cors: "" }, body: xml(`<CORSConfiguration ${NS}>${rules.map((r) => `<CORSRule>${tagList("AllowedHeader", r.AllowedHeaders)}${tagList("AllowedMethod", r.AllowedMethods)}${tagList("AllowedOrigin", r.AllowedOrigins)}${tagList("ExposeHeader", r.ExposeHeaders)}${r.MaxAgeSeconds ? `<MaxAgeSeconds>${r.MaxAgeSeconds}</MaxAgeSeconds>` : ""}</CORSRule>`).join("")}</CORSConfiguration>`) })
+  : s3("DELETE", `/${b}`, { query: { cors: "" } });

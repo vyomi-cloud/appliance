@@ -1,0 +1,337 @@
+{
+ "$doc": "Vyomi capability registry \u2014 S3. One entry per console feature; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py \u2014 a claim the backend does not honour fails CI.",
+ "s3.bucket.crud": {
+  "title": "Buckets (create, list, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "CreateBucket",
+   "ListBuckets",
+   "HeadBucket",
+   "DeleteBucket"
+  ],
+  "probe": {
+   "s3": "bucket-crud"
+  },
+  "tests": [
+   "tests/conformance/test_s3_core.py"
+  ]
+ },
+ "s3.bucket.location": {
+  "title": "AWS Region",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "GetBucketLocation"
+  ],
+  "probe": {
+   "s3_get": "location"
+  }
+ },
+ "s3.object.crud": {
+  "title": "Objects (upload, download, delete, folders)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "PutObject",
+   "GetObject",
+   "DeleteObject",
+   "ListObjectsV2",
+   "CopyObject"
+  ],
+  "probe": {
+   "s3": "object-crud"
+  },
+  "tests": [
+   "tests/conformance/test_s3_core.py",
+   "tests/conformance/test_s3_multipart_core.py"
+  ]
+ },
+ "s3.bucket.versioning": {
+  "title": "Bucket Versioning",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "PutBucketVersioning",
+   "GetBucketVersioning",
+   "ListObjectVersions"
+  ],
+  "probe": {
+   "s3_versioning": true
+  },
+  "tests": [
+   "tests/conformance/test_s3_versions_core.py"
+  ]
+ },
+ "s3.bucket.tagging": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "PutBucketTagging",
+   "GetBucketTagging",
+   "DeleteBucketTagging"
+  ],
+  "probe": {
+   "s3_roundtrip": "tagging",
+   "doc": "<Tagging><TagSet><Tag><Key>team</Key><Value>web</Value></Tag></TagSet></Tagging>"
+  }
+ },
+ "s3.bucket.encryption": {
+  "title": "Default encryption",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Stored and returned exactly as configured; objects are not encrypted at rest and responses do not carry x-amz-server-side-encryption yet."
+  ],
+  "api": [
+   "PutBucketEncryption",
+   "GetBucketEncryption"
+  ],
+  "probe": {
+   "s3_roundtrip": "encryption",
+   "doc": "<ServerSideEncryptionConfiguration><Rule><ApplyServerSideEncryptionByDefault><SSEAlgorithm>AES256</SSEAlgorithm></ApplyServerSideEncryptionByDefault></Rule></ServerSideEncryptionConfiguration>"
+  }
+ },
+ "s3.bucket.public-access-block": {
+  "title": "Block public access (bucket settings)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Stored and returned; public bucket policies and ACLs are not rejected yet, and Vyomi does not authenticate requests, so anonymous access is not modelled."
+  ],
+  "api": [
+   "PutPublicAccessBlock",
+   "GetPublicAccessBlock",
+   "DeletePublicAccessBlock"
+  ],
+  "probe": {
+   "s3_roundtrip": "publicAccessBlock",
+   "doc": "<PublicAccessBlockConfiguration><BlockPublicAcls>true</BlockPublicAcls><IgnorePublicAcls>true</IgnorePublicAcls><BlockPublicPolicy>true</BlockPublicPolicy><RestrictPublicBuckets>true</RestrictPublicBuckets></PublicAccessBlockConfiguration>"
+  }
+ },
+ "s3.bucket.policy": {
+  "title": "Bucket policy",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Stored and returned; the policy is not evaluated for authorization."
+  ],
+  "api": [
+   "PutBucketPolicy",
+   "GetBucketPolicy",
+   "DeleteBucketPolicy"
+  ],
+  "probe": {
+   "s3_roundtrip": "policy",
+   "doc": "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+  }
+ },
+ "s3.bucket.lifecycle": {
+  "title": "Lifecycle rules",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Rules are stored and returned; expiration and transitions are not applied yet."
+  ],
+  "api": [
+   "PutBucketLifecycleConfiguration",
+   "GetBucketLifecycleConfiguration",
+   "DeleteBucketLifecycle"
+  ],
+  "probe": {
+   "s3_roundtrip": "lifecycle",
+   "doc": "<LifecycleConfiguration><Rule><ID>r1</ID><Status>Enabled</Status><Filter><Prefix>logs/</Prefix></Filter><Expiration><Days>30</Days></Expiration></Rule></LifecycleConfiguration>"
+  }
+ },
+ "s3.bucket.cors": {
+  "title": "Cross-origin resource sharing (CORS)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Stored and returned; CORS headers are not applied to browser requests yet."
+  ],
+  "api": [
+   "PutBucketCors",
+   "GetBucketCors",
+   "DeleteBucketCors"
+  ],
+  "probe": {
+   "s3_roundtrip": "cors",
+   "doc": "<CORSConfiguration><CORSRule><AllowedMethod>GET</AllowedMethod><AllowedOrigin>*</AllowedOrigin></CORSRule></CORSConfiguration>"
+  }
+ },
+ "s3.bucket.ownership": {
+  "title": "Object Ownership",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Stored and returned; object ownership is not enforced."
+  ],
+  "api": [
+   "PutBucketOwnershipControls",
+   "GetBucketOwnershipControls"
+  ],
+  "probe": {
+   "s3_roundtrip": "ownershipControls",
+   "doc": "<OwnershipControls><Rule><ObjectOwnership>BucketOwnerEnforced</ObjectOwnership></Rule></OwnershipControls>"
+  }
+ },
+ "s3.bucket.acl": {
+  "title": "Access control list (ACL)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Read-only: GetBucketAcl returns the owner's FULL_CONTROL grant; PutBucketAcl is not implemented (501)."
+  ],
+  "api": [
+   "GetBucketAcl"
+  ],
+  "probe": {
+   "s3_get": "acl"
+  }
+ },
+ "s3.bucket.object-lock": {
+  "title": "Object Lock",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "api": [
+   "PutObjectLockConfiguration",
+   "GetObjectLockConfiguration"
+  ],
+  "probe": {
+   "s3_unsupported": "object-lock"
+  }
+ },
+ "s3.bucket.website": {
+  "title": "Static website hosting",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "s3_unsupported": "website"
+  }
+ },
+ "s3.bucket.logging": {
+  "title": "Server access logging",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "s3_unsupported": "logging"
+  }
+ },
+ "s3.bucket.notification": {
+  "title": "Event notifications",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "s3_unsupported": "notification"
+  }
+ },
+ "s3.bucket.replication": {
+  "title": "Replication rules",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "s3_unsupported": "replication"
+  }
+ },
+ "s3.bucket.accelerate": {
+  "title": "Transfer acceleration",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "s3_unsupported": "accelerate"
+  }
+ },
+ "s3.bucket.request-payment": {
+  "title": "Requester pays",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "s3_unsupported": "requestPayment"
+  }
+ },
+ "s3.bucket.intelligent-tiering": {
+  "title": "Intelligent-Tiering Archive configurations",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "s3_unsupported": "intelligent-tiering"
+  }
+ },
+ "s3.bucket.inventory": {
+  "title": "Inventory configurations",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "s3_unsupported": "inventory"
+  }
+ },
+ "s3.bucket.metrics": {
+  "title": "Metrics",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [],
+  "probe": {
+   "s3_unsupported": "metrics"
+  }
+ }
+}

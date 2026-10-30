@@ -189,6 +189,14 @@ def run() -> int:
     ddb.dispatch(st, T + "UntagResource", {"TableName": "Tags", "TagKeys": ["team"]})
     tags2 = ddb.dispatch(st, T + "ListTagsOfResource", {"TableName": "Tags"})
     _check("tags after untag", [t["Key"] for t in tags2.body["Tags"]] == ["env"])
+    # Native SDKs identify the table ONLY by ResourceArn for the tagging operations.
+    arn = dt.body["Table"]["TableArn"]
+    _check("TagResource by ResourceArn", ddb.dispatch(st, T + "TagResource",
+           {"ResourceArn": arn, "Tags": [{"Key": "cost", "Value": "42"}]}).status == 200)
+    by_arn = ddb.dispatch(st, T + "ListTagsOfResource", {"ResourceArn": arn})
+    _check("ListTagsOfResource by ResourceArn", {t["Key"] for t in by_arn.body.get("Tags", [])} == {"env", "cost"})
+    _check("UntagResource by ResourceArn", ddb.dispatch(st, T + "UntagResource",
+           {"ResourceArn": arn, "TagKeys": ["cost"]}).status == 200)
 
     # 15. DeleteTable -> DELETING; then it's gone
     dtl = ddb.dispatch(st, T + "DeleteTable", {"TableName": "Tags"})

@@ -592,7 +592,14 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None) -> Ddb
         return _error("MissingAction", "The request must include X-Amz-Target.", 400)
 
     def table_name() -> str:
-        return str(payload.get("TableName") or payload.get("table_name") or "").strip()
+        name = str(payload.get("TableName") or payload.get("table_name") or "").strip()
+        if not name:
+            # Tagging (and other resource-level) operations identify the table only by
+            # ResourceArn ("arn:aws:dynamodb:<region>:<acct>:table/<name>[/index/…]").
+            arn = str(payload.get("ResourceArn") or "")
+            if ":table/" in arn:
+                name = arn.split(":table/", 1)[1].split("/", 1)[0]
+        return name
 
     try:
         if action == "ListTables":
