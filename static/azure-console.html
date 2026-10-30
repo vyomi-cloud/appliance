@@ -1239,7 +1239,7 @@ function buildSubBlade(svc, full, item){
   wrap.append(inner);
   const t = (item.type||"").toLowerCase();
   // Catalog tabs typed "stub" whose key has a real renderer resolve by key (Nano does the same).
-  const R = SUB_RENDERERS[t] || (t==="stub" && item.key==="identity" ? SUB_RENDERERS.identity : null);
+  const R = SUB_RENDERERS[t] || (t==="stub" && (item.key==="identity" || item.key==="diagnose") ? SUB_RENDERERS[item.key] : null);
   if (R) { try { R(svc, full, inner, item); } catch (e) {
     inner.append(el("div",{class:"sub-stub"},"Renderer error: "+e.message)); } }
   else inner.append(stubPane(item));
@@ -1555,17 +1555,76 @@ SUB_RENDERERS.networking = function(svc, full, host){
     rows.push(["Virtual network/subnet", "vnet-demo/default (10.0.0.0/24)"]);
     rows.push(["NSG",          "basic — allows SSH (22) inbound from any"]);
   } else {
-    const access = getPath(full,"properties.networkAcls.defaultAction") || "Allow";
-    rows.push(["Public network access", access]);
-    rows.push(["Bypass services",       "AzureServices"]);
-    rows.push(["Allow trusted Microsoft services", "Yes"]);
-    rows.push(["Minimum TLS version",   getPath(full,"properties.minimumTlsVersion")||"TLS1_2"]);
+    return netPane(svc, full, host);
   }
   rows.forEach(([k,v])=>g.append(el("div",{class:"k"},k), el("div",{class:"v"},String(v))));
   sec.append(g);
   host.append(sec);
   host.append(el("div",{class:"sub-info",style:"margin-top:14px"},
     "Networking configuration shown is synthesized for parity. To attach real subnet/NSG, create them via the Virtual networks console and reference at VM create time."));
+};
+
+// Non-VM Networking tab: public network access + default firewall action, read from and PATCHed to the resource.
+function netPane(svc, full, host){
+  host.append(el("div",{class:"sub-info"},
+    "Public network access and firewall default action for this resource. Saved with a PATCH to " + full.id + "."));
+  const wrap = el("div",{}); host.append(wrap);
+  (async function render(){
+    wrap.innerHTML = "";
+    const r = await arm("GET", full.id, undefined, svc.apiVersion);
+    const props = (r.ok && r.json && r.json.properties) || {};
+    const acls = props.networkAcls || {};
+    const pna = props.publicNetworkAccess || "Enabled";
+    const act = acls.defaultAction || "Allow";
+    const sel = (opts, cur) => { const s = el("select",{class:"sub-nav-filter"}); opts.forEach(o => { const op = el("option",{value:o}, o); if (o===cur) op.selected = true; s.append(op); }); return s; };
+    const pnaSel = sel(["Enabled","Disabled"], pna);
+    const actSel = sel(["Allow","Deny"], act);
+    const sec = el("div",{class:"essentials"});
+    sec.append(el("div",{class:"h"},"Network connectivity"));
+    const g = el("div",{class:"essentials-grid"});
+    g.append(el("div",{class:"k"},"Resource"), el("div",{class:"v"}, full.name),
+             el("div",{class:"k"},"Public network access"), el("div",{class:"v"}, pnaSel),
+             el("div",{class:"k"},"Default action"), el("div",{class:"v"}, actSel),
+             el("div",{class:"k"},"Bypass"), el("div",{class:"v"}, acls.bypass || "AzureServices"),
+             el("div",{class:"k"},"Minimum TLS version"), el("div",{class:"v"}, props.minimumTlsVersion || props.minimalTlsVersion || "TLS1_2"),
+             el("div",{class:"k"},"IP rules"), el("div",{class:"v"}, String((acls.ipRules||[]).length)),
+             el("div",{class:"k"},"Virtual network rules"), el("div",{class:"v"}, String((acls.virtualNetworkRules||[]).length)));
+    sec.append(g);
+    sec.append(el("button",{class:"btn",onclick:async()=>{
+      const body = {properties:{publicNetworkAccess:pnaSel.value, networkAcls:{defaultAction:actSel.value, bypass: acls.bypass || "AzureServices"}}};
+      const w = await arm("PATCH", full.id, body, svc.apiVersion);
+      if (w.ok) { toast("Networking settings saved"); render(); } else toast("Save failed ("+w.status+")","err");
+    }}, "Save"));
+    wrap.append(sec);
+  })();
+}
+
+// Diagnose and solve problems: health from the resource's own state plus its recorded operations.
+SUB_RENDERERS.diagnose = async function(svc, full, host){
+  host.append(el("div",{class:"sub-info"},"Resource health and recent operations for " + full.name + "."));
+  const r = await arm("GET", full.id, undefined, svc.apiVersion);
+  const cur = (r.ok && r.json) ? r.json : full;
+  const state = getPath(cur,"properties.provisioningState") || getPath(cur,"properties.state") || "Unknown";
+  const events = await fetchActivity(full.id);
+  const failed = events.filter(e => /fail|error/i.test(String(e.event||"")));
+  const healthy = /^(succeeded|running|online|active|ready)$/i.test(state) && !failed.length;
+  const sec = el("div",{class:"essentials"});
+  sec.append(el("div",{class:"h"},"Resource health"));
+  const g = el("div",{class:"essentials-grid"});
+  g.append(el("div",{class:"k"},"Availability"), el("div",{class:"v"}, healthy ? "Available" : "Needs attention"),
+           el("div",{class:"k"},"Provisioning state"), el("div",{class:"v"}, state),
+           el("div",{class:"k"},"Location"), el("div",{class:"v"}, cur.location || "—"),
+           el("div",{class:"k"},"Recorded operations"), el("div",{class:"v"}, String(events.length)),
+           el("div",{class:"k"},"Failed operations"), el("div",{class:"v"}, String(failed.length)),
+           el("div",{class:"k"},"Last operation"), el("div",{class:"v"}, events.length ? String(events[events.length-1].event||"") : "none"));
+  sec.append(g);
+  host.append(sec);
+  if (failed.length) {
+    const t = el("table",{class:"sub-table"});
+    t.append(el("tr",{},el("th",{},"Time"),el("th",{},"Failed operation")));
+    failed.slice(0,20).forEach(e => t.append(el("tr",{},el("td",{class:"mono"}, e.ts||e.timestamp||"—"), el("td",{}, String(e.event||"")))));
+    host.append(t);
+  }
 };
 
 SUB_RENDERERS.disks = function(svc, full, host){
