@@ -116,6 +116,26 @@ def names(obj, *keys: str) -> set[str]:
     return out
 
 
+def wait_ready(timeout_s: int = int(os.environ.get("READY_TIMEOUT_S", "900"))) -> None:
+    """Wait for the appliance, then start every on-demand backend the way the
+    UI does (tests/installer/startup_check.mjs), so the CLIs hit live backends."""
+    t0, kicked, rd = time.time(), set(), {}
+    while time.time() - t0 < timeout_s:
+        code, rd = http("GET", "/api/runtime/readiness")
+        if code == 200 and isinstance(rd, dict):
+            for svc in rd.get("services", []):
+                if svc.get("status") != "ready" and svc.get("name") != "simulator" and svc["name"] not in kicked:
+                    kicked.add(svc["name"])
+                    http("POST", f"/api/runtime/backends/{svc['name']}/provision")
+            if rd.get("ready"):
+                break
+        time.sleep(5)
+    rd = rd if isinstance(rd, dict) else {}
+    down = [f"{x.get('name')}: {x.get('status')}" for x in rd.get("services", []) if x.get("status") != "ready"]
+    check("tools", f"appliance backends ready ({rd.get('ready_count', '?')}/{rd.get('total_count', '?')})",
+          bool(rd.get("ready")), "; ".join(down) or "appliance not reachable")
+
+
 # ── 1. identity ────────────────────────────────────────────────────────────
 def catalog(cloud: str) -> dict:
     code, d = http("GET", f"/api/{cloud}/catalog")
@@ -288,6 +308,7 @@ def main() -> int:
     for tool in ("aws", "gcloud", "az"):
         rc, out = run(tool, "--version", timeout=60)
         check("tools", f"{tool} installed", rc == 0, out[-200:])
+    wait_ready()
     ids = identities()
     both_ways(ids)
     cli_suites(ids)

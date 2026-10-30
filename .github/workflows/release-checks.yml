@@ -127,12 +127,10 @@ jobs:
           docker compose -f docker-compose.cloudlite.yml -p vyomi pull --quiet
           docker compose -f docker-compose.cloudlite.yml -p vyomi up -d
           docker compose -f docker-compose.cloudlite.yml -p vyomi --profile full up -d
-          for i in $(seq 1 90); do curl -sf -o /dev/null http://localhost:9000/api/health && break; sleep 5; done
-          curl -sf http://localhost:9000/api/health >/dev/null
       - name: CLI versions
         run: aws --version; gcloud --version | head -1; az version -o tsv 2>/dev/null | head -1
       - name: CLI conformance + CLI ↔ console both ways
-        env: { ENDPOINT: 'http://localhost:9000', OUT: out }
+        env: { ENDPOINT: 'http://localhost:9000', OUT: out }   # waits for readiness and starts on-demand backends
         run: python3 tests/release/cli_crosscheck.py
       - name: Job summary
         if: always()
