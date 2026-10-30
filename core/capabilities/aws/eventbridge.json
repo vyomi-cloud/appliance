@@ -1,0 +1,77 @@
+{
+  "$doc": "Vyomi capability registry — EventBridge (+ EventBridge Scheduler). See s3.json for the contract.",
+  "eventbridge.bus.crud": {
+    "title": "Event buses (default + custom; create, describe, list, delete, tags)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": [
+      "tests/conformance/test_eventbridge_console_v4_core.py"
+    ]
+  },
+  "eventbridge.rule.crud": {
+    "title": "Rules (create with event pattern, describe, list, delete, enable/disable, tags)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": [
+      "tests/conformance/test_eventbridge_core.py",
+      "tests/conformance/test_eventbridge_console_v4_core.py"
+    ]
+  },
+  "eventbridge.rule.targets": {
+    "title": "Targets (SQS, SNS, Lambda)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Only SQS, SNS and Lambda targets are actually invoked. Other target types (Step Functions, Kinesis, API destinations, ECS tasks, ...) are accepted and stored by PutTargets like the real API, but PutEvents never delivers to them — there is no silent fake success, the delivery simply never happens."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_console_v4_core.py"
+    ]
+  },
+  "eventbridge.events.put": {
+    "title": "PutEvents — pattern matching + fan-out to matching rules' targets",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": [
+      "tests/conformance/test_eventbridge_core.py",
+      "tests/conformance/test_eventbridge_console_v4_core.py"
+    ]
+  },
+  "eventbridge.archives": {
+    "title": "Archives (capture a bus's events matching a pattern)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "An archive filters the bus's most recent 500 events (a bounded in-memory log), not a true unlimited-retention store. RetentionDays is recorded but nothing is ever actually expired early or kept past that window."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_console_v4_core.py"
+    ]
+  },
+  "eventbridge.replay": {
+    "title": "Replay — redeliver archived events to their original rule targets",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Replay is synchronous (completes inside the StartReplay call, not asynchronously over minutes) and is bounded by the same 500-event archive window as eventbridge.archives."
+    ],
+    "tests": [
+      "tests/conformance/test_eventbridge_console_v4_core.py"
+    ]
+  },
+  "eventbridge.scheduler.schedule": {
+    "title": "Scheduler: schedules (one-time at(), rate(), cron()) and schedule groups",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": [
+      "tests/conformance/test_scheduler_core.py"
+    ]
+  },
+  "eventbridge.scheduler.firing": {
+    "title": "Scheduler: target delivery (SQS, SNS, Lambda) when a schedule's time arrives",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Vyomi has no background timer. A schedule's firing is computed and delivered the next time any Scheduler API call is made after its due time (console navigation and the periodic list/describe calls it makes are usually enough) — it does not fire on the wall clock while nothing is polling."
+    ],
+    "tests": [
+      "tests/conformance/test_scheduler_core.py"
+    ]
+  }
+}
