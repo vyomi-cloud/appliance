@@ -892,8 +892,62 @@ async function metricsSeries(q) {
            total_requests: points.reduce((a, p) => a + p.requests, 0), total_errors: points.reduce((a, p) => a + p.errors, 0) };
 }
 
+// ── v4 native-wire prefix: <BASE>/_wire/<native path> ─────────────────
+// The v4 consoles speak each cloud's NATIVE wire (S3 REST+XML, X-Amz-Target JSON,
+// Query+XML, GCP REST, Azure data plane) at /_wire/<native path>. We strip the
+// prefix and run the request through the page's AwsWireRouter (wire_adapter.py)
+// on the SAME shared registry the relay serves an SDK/CLI from, so console and
+// CLI see one state (persisted + cross-tab synced by the normal dispatch bridge).
+// Azure ARM (/subscriptions/*) is not in the router; it rides the existing ARM
+// tuple (same AzureArm store as the /subscriptions/* console path). Bodies cross
+// the bridge as base64 (binary-safe). Mirrors the appliance's routes/wire_prefix.py.
+function bufFromB64(b64) {
+  const bin = atob(b64 || "");
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function handleWire(request, url) {
+  const wirePath = url.pathname.slice((BASE + "/_wire").length) || "/";
+  if (wirePath === "/_wire" || wirePath.startsWith("/_wire/"))
+    return json({ error: { code: "WirePrefixRecursion", message: "Nested /_wire/ prefixes are not allowed." } }, 400);
+  const method = request.method.toUpperCase();
+  const query = Object.fromEntries(url.searchParams.entries());
+  const hasBody = !["GET", "HEAD"].includes(method);
+  const raw = hasBody ? await request.arrayBuffer() : new ArrayBuffer(0);
+  if (wirePath.startsWith("/subscriptions/")) {
+    let body = null;
+    if (raw.byteLength) { const t = new TextDecoder().decode(raw); try { body = JSON.parse(t); } catch (_) { body = { raw: t }; } }
+    const res = await runInPage(["azure", "_arm", method, { path: wirePath, query, body }]);
+    const h = (res && res.__http) || { status: 200, body: res };
+    return json(h.body === undefined ? null : h.body, h.status, h.headers);
+  }
+  const headers = {};
+  request.headers.forEach((v, k) => { headers[k] = v; });
+  const res = await runInPage(["_wire", "wire", method,
+    { method, path: wirePath, query, headers, body_b64: raw.byteLength ? b64FromBuf(raw) : "" }]);
+  if (!res || typeof res.status !== "number") return json({ ok: false, error: (res && res.error) || "bad /_wire response" }, 500);
+  const h = new Headers();
+  for (const [k, v] of Object.entries(res.headers || {}))
+    if (!/^(content-length|transfer-encoding|connection|set-cookie)$/i.test(k)) { try { h.set(k, v); } catch (_) {} }
+  const nullBody = method === "HEAD" || [101, 204, 205, 304].includes(res.status);
+  return new Response(nullBody ? null : bufFromB64(res.body_b64), { status: res.status, headers: h });
+}
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  // v4 consoles' native-wire prefix (see handleWire above).
+  if (url.origin === self.location.origin && (url.pathname === BASE + "/_wire" || url.pathname.startsWith(BASE + "/_wire/"))) {
+    const _tw = Date.now();
+    event.respondWith((async () => {
+      let _res;
+      try { _res = await handleWire(event.request, url); }
+      catch (e) { _res = json({ ok: false, error: String(e) }, 500); }
+      try { recordReq(event.request.method, url.pathname.slice(BASE.length), url.search.slice(1), _res.status, Date.now() - _tw); } catch (_) {}
+      return _res;
+    })());
+    return;
+  }
   // We own /api/* (console REST) AND /subscriptions/* (native Azure ARM).
   const inApi = url.pathname.startsWith(BASE + "/api/");
   const inArm = url.pathname.startsWith(BASE + "/subscriptions/") || url.pathname.startsWith(BASE + "/azure-data/keyvault/");

@@ -579,6 +579,85 @@ def list_all_buckets(store: ObjectStore) -> S3Response:
     return _xml_response(xml, 200)
 
 
+# ── Bucket sub-resources (?versioning, ?tagging, …) ──────────────────────────────────
+# Stored in the bucket's own dict (store.buckets[name]) so every substrate persists them
+# with the bucket. PUT bodies are kept verbatim and returned by GET (S3 round-trips the
+# document); anything Vyomi does not model returns 501 NotImplemented — never a silent
+# 200 or an object listing, which would let an SDK or the console believe it worked.
+_SUBRESOURCES_STORED = {
+    # query key: (element returned when absent → 404 code, or None = has a default)
+    "tagging": "NoSuchTagSet",
+    "encryption": "ServerSideEncryptionConfigurationNotFoundError",
+    "publicAccessBlock": "NoSuchPublicAccessBlockConfiguration",
+    "policy": "NoSuchBucketPolicy",
+    "lifecycle": "NoSuchLifecycleConfiguration",
+    "cors": "NoSuchCORSConfiguration",
+    "ownershipControls": "OwnershipControlsNotFoundError",
+}
+_SUBRESOURCES_UNSUPPORTED = (
+    "website", "logging", "notification", "replication", "accelerate", "requestPayment",
+    "inventory", "analytics", "metrics", "intelligent-tiering", "versions", "object-lock",
+)
+_NS = 'xmlns="http://s3.amazonaws.com/doc/2006-03-01/"'
+
+
+def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dict,
+                        headers: dict, body: bytes) -> S3Response | None:
+    sub = next((k for k in ("versioning", "location", "acl", "object-lock", *_SUBRESOURCES_STORED)
+                if k in query), None)
+    if sub is None:
+        sub = next((k for k in _SUBRESOURCES_UNSUPPORTED if k in query), None)
+        if sub is None:
+            return None
+    if not store.bucket_exists(bucket):
+        return _error_xml("NoSuchBucket", "The specified bucket does not exist", f"/{bucket}", 404)
+    meta = store.buckets[bucket]
+    cfg = meta.setdefault("cfg", {})
+    if sub == "versioning":
+        if method == "GET":
+            st = meta.get("versioning", "Disabled")
+            inner = f"<Status>{st}</Status>" if st in ("Enabled", "Suspended") else ""
+            return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><VersioningConfiguration {_NS}>{inner}</VersioningConfiguration>')
+        if method == "PUT":
+            m = re.search(r"<Status>\s*(Enabled|Suspended)\s*</Status>", body.decode("utf-8", "replace"))
+            if not m:
+                return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
+            meta["versioning"] = m.group(1)
+            return _empty_response(200)
+    elif sub == "location":
+        if method == "GET":
+            region = meta.get("region", "")
+            inner = region if region and region != "us-east-1" else ""
+            return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><LocationConstraint {_NS}>{inner}</LocationConstraint>')
+    elif sub == "acl":
+        if method == "GET":
+            return _xml_response(
+                f'<?xml version="1.0" encoding="UTF-8"?><AccessControlPolicy {_NS}><Owner><ID>simulator</ID><DisplayName>cloudlearn-simulator</DisplayName></Owner>'
+                '<AccessControlList><Grant><Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser"><ID>simulator</ID>'
+                '<DisplayName>cloudlearn-simulator</DisplayName></Grantee><Permission>FULL_CONTROL</Permission></Grant></AccessControlList></AccessControlPolicy>')
+    elif sub == "object-lock" and meta.get("object_lock"):
+        if method == "GET":
+            return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><ObjectLockConfiguration {_NS}><ObjectLockEnabled>Enabled</ObjectLockEnabled></ObjectLockConfiguration>')
+    elif sub in _SUBRESOURCES_STORED:
+        if method == "GET":
+            doc = cfg.get(sub)
+            if doc is None:
+                return _error_xml(_SUBRESOURCES_STORED[sub], f"The {sub} configuration does not exist", f"/{bucket}", 404)
+            if sub == "policy":
+                return S3Response(status=200, headers=_amz_headers({"Content-Type": "application/json"}), body=doc.encode())
+            return _xml_response(doc)
+        if method == "PUT":
+            text = body.decode("utf-8", "replace").strip()
+            if not text:
+                return _error_xml("MalformedXML" if sub != "policy" else "MalformedPolicy", "The request body is empty.", f"/{bucket}", 400)
+            cfg[sub] = text
+            return _empty_response(204 if sub in ("tagging", "policy", "cors", "lifecycle") else 200)
+        if method == "DELETE":
+            cfg.pop(sub, None)
+            return _empty_response(204)
+    return _error_xml("NotImplemented", f"Vyomi does not implement the bucket {sub} sub-resource yet.", f"/{bucket}?{sub}", 501)
+
+
 def dispatch(store: ObjectStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> S3Response:
@@ -594,8 +673,16 @@ def dispatch(store: ObjectStore, method: str, path: str,
         return _error_xml("InvalidRequest", "Missing bucket.", "/", 400)
     if not key:
         # bucket-level
+        sr = _bucket_subresource(store, method, bucket, query, headers, body)
+        if sr is not None:
+            return sr
         if method in ("PUT",):
             store.create_bucket(bucket)
+            m = re.search(r"<LocationConstraint>\s*([\w-]+)\s*</LocationConstraint>", (body or b"").decode("utf-8", "replace"))
+            store.buckets[bucket].setdefault("region", m.group(1) if m else "us-east-1")
+            if str((headers or {}).get("x-amz-bucket-object-lock-enabled", "")).lower() == "true":
+                store.buckets[bucket]["object_lock"] = True
+                store.buckets[bucket]["versioning"] = "Enabled"
             return _empty_response(200, {"Location": f"/{bucket}"})
         if method in ("GET",):
             return list_objects_v2(store, bucket, query)

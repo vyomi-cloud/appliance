@@ -81,6 +81,7 @@ const MODULES = [
   // its Pyodide adapter. console_next_manifest imports `from core import
   // console_conformance` (vendored under /core, see CORES), NO FastAPI.
   "console_next_manifest.py", "providers/console_next_adapter.py",
+  "providers/wire_adapter.py",   // v4 /_wire/* native-wire prefix → AwsWireRouter on the shared registry
 ];
 // The PROVEN conformance cores (vendored into wasm/core/ by build_cores.py).
 // aws_core_adapter imports these; they ARE the S3/DynamoDB data-plane.
@@ -121,6 +122,8 @@ const CORES = [
   // nano_events (per-resource cloudsim activity log) MUST precede nano_registry,
   // which imports `from core.nano_events import EventStore`.
   "nano_events.py", "nano_registry.py", "nano_persist.py",
+  // v4 /_wire/*: the relay's native-wire front door (+ its rds_data dep), imported lazily by wire_adapter.
+  "rds_data_core.py", "aws_wire_router.py",
 ];
 
 // Boot screen (wasm/nano-kernel.js): the page paints it first thing in <body>;
@@ -184,6 +187,9 @@ def _disp(payload_json):
     # is slice 2). Route it straight to the console_next adapter.
     if prov == "_console":
         return json.dumps(_CN.handle(d["op"], d.get("params") or {}))
+    if prov == "_wire":   # v4 consoles: native wire via the relay's AwsWireRouter (same stores)
+        from wasm.providers import wire_adapter as _W
+        return json.dumps(_W.handle(d.get("params") or {}))
     return json.dumps(P.dispatch(_B, prov, d["service"], d["op"],
                                  params=d.get("params") or {}))
 import builtins; builtins._disp = _disp

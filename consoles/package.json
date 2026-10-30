@@ -1,0 +1,21 @@
+{
+  "name": "vyomi-consoles",
+  "private": true,
+  "version": "4.0.0-dev",
+  "description": "Vyomi v4 native-fidelity consoles (AWS/GCP/Azure lenses). One source, built into static/v4 (offline appliance) and wasm/v4 (Nano).",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch"
+  },
+  "dependencies": {
+    "@cloudscape-design/components": "3.0.900",
+    "@cloudscape-design/global-styles": "1.0.40",
+    "@fluentui/react-components": "9.56.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0"
+  }
+}

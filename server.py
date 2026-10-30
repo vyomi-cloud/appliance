@@ -229,6 +229,12 @@ os.makedirs(STATIC_DIR, exist_ok=True)
 _UI_HTML = os.path.join(STATIC_DIR, "index.html")
 _PRICING_HTML = os.path.join(STATIC_DIR, "pricing.html")
 app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="assets")
+# v4 native-fidelity consoles (built by consoles/build.mjs) at /v4/<cloud>/. They call the
+# native cloud wire through /_wire (routes/wire_prefix.py). Note: shadows a path-style S3
+# bucket literally named "v4" on this port.
+_V4_DIR = os.path.join(STATIC_DIR, "v4")
+if os.path.isdir(_V4_DIR):
+    app.mount("/v4", StaticFiles(directory=_V4_DIR, html=True), name="console-v4")
 
 # S3 routes are registered at the BOTTOM of this file (see end-of-file
 # block) so the catch-all @app.post("/{bucket}/{key:path}") doesn't
@@ -23733,6 +23739,13 @@ else:
     # serves S3 + any native cloud wire no explicit route claims.
     from core.wire_ingress import mount as _mount_unified_ingress
     _mount_unified_ingress(app)
+
+# v4 consoles: `/_wire/<native path>` → same app at `/<native path>` (outermost middleware; see routes/wire_prefix.py).
+try:
+    from routes import wire_prefix as _wire_prefix
+    _wire_prefix.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[wire_prefix] /_wire routes skipped: {_e}")
 
 
 if __name__ == "__main__":
