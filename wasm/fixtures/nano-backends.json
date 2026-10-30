@@ -205,6 +205,11 @@
   "category": "azure"
  },
  {
+  "name": "az_graph",
+  "label": "az_graph \u00b7 GraphStore",
+  "category": "azure"
+ },
+ {
   "name": "az_arm",
   "label": "az_arm \u00b7 AzureArm",
   "category": "azure"
