@@ -30,9 +30,10 @@
   },
   "gcp.firestore.single-field-exemptions": {
     "title": "Single-field index exemptions",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": { "nano": "full", "offline": "full" },
     "limitations": [
-      "Per-field index-exemption overrides round-trip through the fields API, but Vyomi always indexes every field automatically regardless of an exemption — the override is stored, not enforced."
+      "Exempting a field now really disables its automatic index: a query that needs the removed index (an inequality, orderBy or array-contains on that field) fails with FAILED_PRECONDITION unless a composite index covers it, matching the real service.",
+      "The composite-index coverage check only matches an exact field-path + order/arrayConfig pair; it does not model the full multi-field prefix matching real Firestore uses to pick a usable composite index."
     ],
     "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
   },
@@ -45,9 +46,9 @@
   },
   "gcp.firestore.ttl": {
     "title": "Time-to-live (TTL) policies",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": { "nano": "full", "offline": "full" },
     "limitations": [
-      "Setting a field's ttlConfig is real and round-trips, but Vyomi never runs the background sweep that deletes expired documents — documents past their TTL timestamp are not actually removed."
+      "Expiry is checked lazily — on the next access to the owning database — rather than by a continuously running background process; real Firestore's own TTL sweep is likewise best-effort and not immediate, so the functional difference is only in timing, not outcome."
     ],
     "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
   },
@@ -55,15 +56,16 @@
     "title": "Security rules editor",
     "level": { "nano": "config_only", "offline": "config_only" },
     "limitations": [
-      "Vyomi stores and returns the rules source exactly as written through its own getSecurityRules/updateSecurityRules endpoints (real Firestore security rules are managed by the separate Firebase Rules API), but it never evaluates the rules against a request — every document read/write Vyomi allows is unconditional."
+      "Vyomi stores and returns the rules source exactly as written through its own getSecurityRules/updateSecurityRules endpoints (real Firestore security rules are managed by the separate Firebase Rules API), but it never evaluates the rules against a request — every document read/write Vyomi allows is unconditional.",
+      "Real Firestore only evaluates rules against end-user client-SDK requests — the Admin SDK, gcloud and the console's own Data viewer always bypass them. Vyomi's native wire has no notion of a client-vs-admin caller (the console itself is one of the callers), so evaluating rules against it would lock the console out of its own data viewer rather than model the real behavior."
     ],
     "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
   },
   "gcp.firestore.import-export": {
     "title": "Import / Export (exportDocuments / importDocuments)",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": { "nano": "full", "offline": "full" },
     "limitations": [
-      "Export/import calls are accepted and recorded as completed operations on the Import/Export page exactly like the real console, but Vyomi does not actually read or write Cloud Storage objects — no real file transfer happens."
+      "Export really writes a Cloud Storage object (via Vyomi's own GCS simulator) and import really reads it back, but the file is a Vyomi-internal JSON snapshot, not the real protobuf/LevelDB export layout — the object isn't portable to a real `gcloud firestore import`."
     ],
     "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
   },
@@ -71,15 +73,17 @@
     "title": "Backup schedules and backups",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Creating a backup schedule is real and immediately takes one backup (there is no background scheduler in Vyomi to fire later ticks on the daily/weekly recurrence), and a backup cannot be restored into a new database."
+      "Creating a backup schedule is real and immediately takes one backup (there is no background scheduler in Vyomi to fire later ticks on the daily/weekly recurrence).",
+      "`databases:restore` now really repopulates a brand-new database's documents, indexes and fields from the backup's snapshot, synchronously (the real API returns a long-running operation)."
     ],
     "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
   },
   "gcp.firestore.point-in-time-recovery": {
     "title": "Point-in-time recovery (PITR)",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "The pointInTimeRecoveryEnablement setting round-trips on the database resource, but Vyomi keeps no change history to recover from — enabling it does not let you actually restore an earlier version of a document."
+      "While enabled, Vyomi keeps a per-document version history and `documents.get` / `documents.list` / `:runQuery` / `:batchGet` honor a `readTime` in the past, really returning the document as it was at that time.",
+      "There is no one-click whole-database PITR restore into a new database (unlike backup restore) — recovering a prior state means reading documents at that `readTime` yourself."
     ],
     "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
   },
@@ -92,10 +96,11 @@
   },
   "gcp.firestore.usage": {
     "title": "Usage dashboard (reads/writes/deletes/storage charts)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi does not meter per-operation usage over time, so it cannot render the usage charts the real console builds from Cloud Monitoring metrics."
-    ]
+      "Vyomi meters real running totals (reads, writes, deletes, current document count and an estimated storage size) via a dedicated `:usage` endpoint, but keeps no history, so it cannot render the real console's over-time charts built from Cloud Monitoring metrics."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
   },
   "gcp.firestore.key-visualizer": {
     "title": "Key Visualizer",

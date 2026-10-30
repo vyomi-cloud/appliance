@@ -17,6 +17,7 @@ import Ttl from "./Ttl.jsx";
 import SecurityRules from "./SecurityRules.jsx";
 import ImportExport from "./ImportExport.jsx";
 import DisasterRecovery from "./DisasterRecovery.jsx";
+import Usage from "./Usage.jsx";
 import GapPage from "./GapPage.jsx";
 
 const gap = (title, id) => () => <GapPage title={title} id={id} />;
@@ -58,7 +59,7 @@ export default {
     { pattern: "/firestore/databases/:name/import-export", component: ImportExport },
     { pattern: "/firestore/databases/:name/disaster-recovery", component: DisasterRecovery },
     { pattern: "/firestore/databases/:name/insights", component: gap("Insights", "gcp.firestore.insights") },
-    { pattern: "/firestore/databases/:name/usage", component: gap("Usage", "gcp.firestore.usage") },
+    { pattern: "/firestore/databases/:name/usage", component: Usage },
     { pattern: "/firestore/databases/:name/key-visualizer", component: gap("Key Visualizer", "gcp.firestore.key-visualizer") },
   ],
 };

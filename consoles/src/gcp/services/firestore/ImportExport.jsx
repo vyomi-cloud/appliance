@@ -1,6 +1,7 @@
 /* Import/Export — exportDocuments / importDocuments recorded as completed operations, as
- * the real console's Import/Export page lists them. No real Cloud Storage I/O happens
- * (see the capability badge). */
+ * the real console's Import/Export page lists them. Export really writes a Cloud Storage
+ * object (via Vyomi's own GCS simulator) and import really reads it back (see the
+ * capability badge for the file-format caveat). */
 import { useState } from "react";
 import { Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
 import { useAsync } from "../../../common/useAsync.js";

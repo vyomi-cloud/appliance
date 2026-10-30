@@ -1,4 +1,5 @@
-/* Indexes — Composite (real CRUD), Single field (exemption overrides, stored not enforced)
+/* Indexes — Composite (real CRUD), Single field (exemption overrides are really enforced:
+ * a query needing a removed automatic index now fails unless a composite index covers it)
  * and Vector (not simulated) tabs, as in the console's Indexes page. */
 import { useState } from "react";
 import { Box, Button, Chip, FormControl, InputLabel, MenuItem, Select, Stack, Tab, Tabs, TextField, Typography } from "@mui/material";

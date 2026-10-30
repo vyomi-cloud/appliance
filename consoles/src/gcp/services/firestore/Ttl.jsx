@@ -1,5 +1,5 @@
-/* Time-to-live (TTL) policies — real per-field config round-trip; Vyomi never runs the
- * background sweep that actually deletes expired documents (see the capability badge). */
+/* Time-to-live (TTL) policies — real per-field config round-trip; expired documents are
+ * really swept away, lazily on the next access to their database (see the capability badge). */
 import { useState } from "react";
 import { Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
