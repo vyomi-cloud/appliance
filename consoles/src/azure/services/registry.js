@@ -12,7 +12,7 @@ export const SERVICES = [
   { id: "cosmos", title: "Azure Cosmos DB", type: "Microsoft.DocumentDB/databaseAccounts", category: "Databases", icon: "cosmos" },
   { id: "keyvaults", title: "Key vaults", type: "Microsoft.KeyVault/vaults", category: "Security", icon: "keyvaults" },
   { id: "servicebus", title: "Service Bus", type: "Microsoft.ServiceBus/namespaces", category: "Integration", icon: "servicebus" },
-  { id: "functionapp", title: "Function App", type: "Microsoft.Web/sites (functionapp)", category: "Compute", icon: "functionapp" },
+  { id: "functionapp", title: "Function App", type: "Microsoft.Web/sites (functionapp)", category: "Compute", icon: "functionapp", load: () => import("./functionapp/index.jsx") },
   { id: "appservices", title: "App Services", type: "Microsoft.Web/sites", category: "Compute", icon: "appservices" },
   { id: "vnets", title: "Virtual networks", type: "Microsoft.Network/virtualNetworks", category: "Networking", icon: "vnets" },
   { id: "nsgs", title: "Network security groups", type: "Microsoft.Network/networkSecurityGroups", category: "Networking", icon: "nsgs" },
