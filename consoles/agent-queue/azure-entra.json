@@ -13,5 +13,6 @@
   "Capability feature ids MUST start with 'azure.' (e.g. 'azure.entra.<section>') — ids share one namespace with the AWS registry",
   "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
  ],
- "attempt": 1
+ "attempt": 2,
+ "note": "RESUME: first `git fetch origin v4/ui-azure-entra-41076515994 && git merge --no-edit origin/v4/ui-azure-entra-41076515994` (previous: 100% fidelity / 91.5% real). Fix ONLY the gate failure: entra-app-overview, entra-app-api-permissions and entra-user-overview need a \"live\" check + fixture (create a uniquely named app registration / user over the native wire Vyomi serves for Entra, then the detail page must show it). entra-sign-in-logs: if Vyomi records no sign-ins, render it as an honest NotSimulated page (the orchestrator will review an allowlist entry) — do not fake rows. Keep Capability.jsx as on base, list the service ONCE in registry.js, register NEW cores in build_cores.py + nano-boot.js (own line) + nano_registry.py + nano_persist.py, plain-text 'Vyomi', commit your source, rebuild after merging."
 }
