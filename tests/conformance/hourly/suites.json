@@ -1789,6 +1789,14 @@
       "timeout": 600
     },
     {
+      "id": "offline-ui-aws-secretsmanager-tabs",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-secretsmanager-tabs.mjs",
+      "timeout": 600
+    },
+    {
       "id": "nano-ui-aws-cloudwatch",
       "target": "nano",
       "cloud": "aws",

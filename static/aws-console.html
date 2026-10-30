@@ -3617,6 +3617,79 @@ SUB_RENDERERS.kmsgrants = async function(svc, full, host){
     }}, "Create grant")));
 };
 
+// ── Secrets Manager tabs ─────────────────────────────────────────────
+// Read/written through the Secrets Manager wire API (DescribeSecret, ListSecretVersionIds,
+// RotateSecret, ReplicateSecretToRegions, UpdateSecret, Put/GetResourcePolicy) so edits persist.
+async function smRpc(op, payload){
+  const r = await fetch(ORIGIN+"/", {method:"POST",
+    headers:{"Content-Type":"application/x-amz-json-1.1","X-Amz-Target":"secretsmanager."+op,
+             "Authorization":"AWS4-HMAC-SHA256 Credential=test/20260531/us-east-1/secretsmanager/aws4_request"},
+    body: JSON.stringify(payload||{})});
+  let j = {}; try { j = await r.json(); } catch(e) {}
+  return {ok:r.ok && !j.__type, status:r.status, json:j};
+}
+const smName = (svc, full) => String(full.name || getPath(full, svc.name_field) || "");
+const smWhen = v => (v === null || v === undefined || v === "") ? "—" : (typeof v === "number" ? ddbWhen(v) : String(v).replace("T"," ").slice(0,19)+" UTC");
+SUB_RENDERERS.smversions = async function(svc, full, host){
+  const r = await smRpc("ListSecretVersionIds",{SecretId:smName(svc, full),IncludeDeprecated:true}), rows = r.json.Versions || [];
+  host.append(el("h3",{class:"page-h"}, "Secret versions ("+rows.length+")"));
+  ddbTbl(host, ["Version ID","Staging labels","Created"], rows.slice().reverse().map(v => [v.VersionId,(v.VersionStages||[]).join(", ") || "(deprecated)",smWhen(v.CreatedDate)]), "This secret has no versions.");
+};
+SUB_RENDERERS.smrotation = async function(svc, full, host){
+  const name = smName(svc, full), r = await smRpc("DescribeSecret",{SecretId:name}), d = r.json, on = !!d.RotationEnabled;
+  ddbCard(host, "Rotation configuration", [["Automatic rotation", on ? "Enabled" : "Disabled"],
+    ["Rotation interval (days)", on && d.RotationRules ? d.RotationRules.AutomaticallyAfterDays : null],
+    ["Rotation function", d.RotationLambdaARN], ["Last rotated", d.LastRotatedDate ? smWhen(d.LastRotatedDate) : null],
+    ["Next rotation", d.NextRotationDate ? smWhen(d.NextRotationDate) : null]]);
+  const days = el("input",{type:"number",min:1,max:1000,value:(d.RotationRules||{}).AutomaticallyAfterDays||30,"data-testid":"sm-rotation-days"});
+  const fn = el("input",{value:d.RotationLambdaARN||"arn:aws:lambda:us-east-1:000000000000:function:SecretsManagerRotation","data-testid":"sm-rotation-fn"});
+  const card = el("div",{class:"kv-card"}, el("div",{class:"h"}, on ? "Rotation" : "Configure rotation"));
+  if (!on) card.append(el("div",{class:"field"}, el("label",{},"Rotation function ARN"), fn), el("div",{class:"field"}, el("label",{},"Rotation interval (days)"), days));
+  card.append(el("button",{class:"btn primary","data-testid":"sm-rotation-toggle",onclick:async()=>{
+    const u = on ? await smRpc("CancelRotateSecret",{SecretId:name})
+                 : await smRpc("RotateSecret",{SecretId:name,RotationLambdaARN:fn.value,RotationRules:{AutomaticallyAfterDays:+days.value}});
+    if (u.ok) { toast("Rotation "+(on?"turned off":"turned on")); host.innerHTML=""; SUB_RENDERERS.smrotation(svc, full, host); } else toast("Update failed: "+(u.json.message||u.status),"err");
+  }}, on ? "Turn off rotation" : "Save and rotate"));
+  host.append(card);
+};
+SUB_RENDERERS.smreplication = async function(svc, full, host){
+  const name = smName(svc, full), r = await smRpc("DescribeSecret",{SecretId:name}), reps = r.json.ReplicationStatus || [];
+  host.append(el("h3",{class:"page-h"}, "Replicate secret ("+reps.length+")"));
+  if (!reps.length) host.append(el("div",{class:"empty"}, "This secret is not replicated to other Regions."));
+  else { const t = el("table",{class:"aws"}); t.append(el("tr",{}, ...["Region","Encryption key","Status","Message",""].map(h => el("th",{}, h))));
+    reps.forEach(x => t.append(el("tr",{}, el("td",{class:"small"}, x.Region), el("td",{class:"small mono"}, x.KmsKeyId), el("td",{class:"small"}, x.Status), el("td",{class:"small"}, x.StatusMessage),
+      el("td",{}, el("button",{class:"btn","data-testid":"sm-replica-del",onclick:async()=>{ await smRpc("RemoveRegionsFromReplication",{SecretId:name,RemoveReplicaRegions:[x.Region]}); host.innerHTML=""; SUB_RENDERERS.smreplication(svc, full, host); }}, "Remove")))));
+    host.append(t); }
+  const reg = el("select",{"data-testid":"sm-replica-region"}, ...["us-east-2","us-west-1","us-west-2","eu-west-1","eu-central-1","ap-southeast-1"].map(x => el("option",{value:x}, x)));
+  host.append(el("div",{class:"kv-card",style:"margin-top:14px"}, el("div",{class:"h"},"Add replica Region"), el("div",{class:"field"}, el("label",{},"Region"), reg),
+    el("button",{class:"btn primary","data-testid":"sm-replica-add",onclick:async()=>{
+      const u = await smRpc("ReplicateSecretToRegions",{SecretId:name,AddReplicaRegions:[{Region:reg.value}]});
+      if (u.ok) { toast("Replica added"); host.innerHTML=""; SUB_RENDERERS.smreplication(svc, full, host); } else toast("Replication failed: "+(u.json.message||u.status),"err");
+    }}, "Replicate")));
+};
+SUB_RENDERERS.smkmskey = async function(svc, full, host){
+  const name = smName(svc, full), r = await smRpc("DescribeSecret",{SecretId:name});
+  ddbCard(host, "Encryption key", [["KMS key", r.json.KmsKeyId], ["Secret ARN", r.json.ARN]]);
+  const inp = el("input",{value:r.json.KmsKeyId||"","data-testid":"sm-kms-key"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"field"}, el("label",{},"Encryption key (KMS key ID or alias)"), inp),
+    el("button",{class:"btn primary","data-testid":"sm-kms-save",onclick:async()=>{
+      const u = await smRpc("UpdateSecret",{SecretId:name,KmsKeyId:inp.value});
+      if (u.ok) { toast("Encryption key saved"); host.innerHTML=""; SUB_RENDERERS.smkmskey(svc, full, host); } else toast("Save failed: "+(u.json.message||u.status),"err");
+    }}, "Save")));
+};
+SUB_RENDERERS.smpolicy = async function(svc, full, host){
+  const name = smName(svc, full), r = await smRpc("GetResourcePolicy",{SecretId:name});
+  let doc = r.json.ResourcePolicy || ""; try { doc = JSON.stringify(JSON.parse(doc), null, 2); } catch(e) {}
+  const ta = el("textarea",{style:"width:100%;min-height:200px;font-family:Consolas,Menlo,monospace","data-testid":"sm-policy"}); ta.value = doc;
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"},"Resource permissions"),
+    el("div",{class:"small",style:"margin-bottom:8px"}, doc ? "A resource policy is attached to this secret." : "No resource policy is attached to this secret."),
+    el("div",{class:"field"}, ta),
+    el("button",{class:"btn primary","data-testid":"sm-policy-save",onclick:async()=>{
+      const u = ta.value.trim() ? await smRpc("PutResourcePolicy",{SecretId:name,ResourcePolicy:ta.value}) : await smRpc("DeleteResourcePolicy",{SecretId:name});
+      if (u.ok) { toast("Resource policy saved"); host.innerHTML=""; SUB_RENDERERS.smpolicy(svc, full, host); } else toast("Save failed","err");
+    }}, "Save")));
+};
+
 // ── DynamoDB settings tabs ───────────────────────────────────────────
 // Each tab reads the table through the DynamoDB wire API (DescribeTable, DescribeTimeToLive,
 // DescribeContinuousBackups, ...), exactly what the SDK/CLI sees, and Save writes through the

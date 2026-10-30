@@ -47,6 +47,12 @@ _kms_keys: dict[str, dict] = {}
 _kms_aliases: dict[str, str] = {}
 _kms_alias_created: dict[str, float] = {}
 _kms_grants: dict[str, dict[str, dict]] = {}
+# Secrets Manager per-secret settings (rotation, replication, policy, key): (space, name) -> dict
+_sm_settings: dict[tuple[str, str], dict] = {}
+
+
+def _sm_arn(name: str) -> str:
+    return f"arn:aws:secretsmanager:us-east-1:000000000000:secret:{name}"
 
 
 def _kms_default_policy() -> str:
@@ -318,6 +324,16 @@ async def _aws_secrets_dispatch(target: str, body: dict, space: str) -> dict | N
         return {"Name": name, "ARN": f"arn:aws:secretsmanager:us-east-1:000000000000:secret:{name}",
                 "SecretString": value, "VersionId": str((got.get("metadata") or {}).get("version", 1))}
     if op in ("PutSecretValue", "UpdateSecret"):
+        st = _sm_settings.setdefault((space, name), {})
+        if op == "UpdateSecret":
+            if body.get("KmsKeyId"):
+                st["KmsKeyId"] = body["KmsKeyId"]
+            if "Description" in body:
+                st["Description"] = body["Description"]
+            if "SecretString" not in body and "SecretBinary" not in body:
+                if vc.kv_get("aws", space, name) is None:
+                    return {"__type": "ResourceNotFoundException", "message": "Secrets Manager can't find the specified secret."}
+                return {"Name": name, "ARN": _sm_arn(name)}
         value = body.get("SecretString") or json.dumps(body.get("SecretBinary", ""))
         md = vc.kv_put("aws", space, name, value)
         if md is None:
@@ -325,6 +341,71 @@ async def _aws_secrets_dispatch(target: str, body: dict, space: str) -> dict | N
         _aws_secret_index_add(space, name)
         return {"Name": name, "ARN": f"arn:aws:secretsmanager:us-east-1:000000000000:secret:{name}",
                 "VersionId": str(md.get("version", 1))}
+    if op in ("DescribeSecret", "RotateSecret", "CancelRotateSecret", "ReplicateSecretToRegions",
+              "RemoveRegionsFromReplication", "GetResourcePolicy", "PutResourcePolicy", "DeleteResourcePolicy"):
+        got = vc.kv_get("aws", space, name)
+        if got is None:
+            return {"__type": "ResourceNotFoundException", "message": "Secrets Manager can't find the specified secret."}
+        st = _sm_settings.setdefault((space, name), {})
+        cur = str((got.get("metadata") or {}).get("version", 1))
+        if op == "RotateSecret":
+            if body.get("RotationLambdaARN"):
+                st["RotationLambdaARN"] = body["RotationLambdaARN"]
+            if body.get("RotationRules"):
+                st["RotationRules"] = body["RotationRules"]
+            st["RotationEnabled"] = True
+            st["LastRotatedDate"] = time.time()
+            if body.get("RotateImmediately", True):
+                data = got.get("data", {})
+                md = vc.kv_put("aws", space, name, data.get("value") if "value" in data else json.dumps(data))
+                cur = str((md or {}).get("version", cur))
+            days = int((st.get("RotationRules") or {}).get("AutomaticallyAfterDays") or 30)
+            st["NextRotationDate"] = time.time() + days * 86400
+            return {"ARN": _sm_arn(name), "Name": name, "VersionId": cur}
+        if op == "CancelRotateSecret":
+            st["RotationEnabled"] = False
+            st.pop("NextRotationDate", None)
+            return {"ARN": _sm_arn(name), "Name": name}
+        if op == "ReplicateSecretToRegions":
+            reps = st.setdefault("ReplicationStatus", [])
+            for r in body.get("AddReplicaRegions") or []:
+                if not any(x["Region"] == r.get("Region") for x in reps):
+                    reps.append({"Region": r.get("Region"), "KmsKeyId": r.get("KmsKeyId") or "alias/aws/secretsmanager",
+                                 "Status": "InSync", "StatusMessage": "Replication succeeded", "LastAccessedDate": time.time()})
+            return {"ARN": _sm_arn(name), "ReplicationStatus": reps}
+        if op == "RemoveRegionsFromReplication":
+            drop = set(body.get("RemoveReplicaRegions") or [])
+            st["ReplicationStatus"] = [x for x in st.get("ReplicationStatus", []) if x["Region"] not in drop]
+            return {"ARN": _sm_arn(name), "ReplicationStatus": st["ReplicationStatus"]}
+        if op == "PutResourcePolicy":
+            st["ResourcePolicy"] = body.get("ResourcePolicy", "")
+            return {"ARN": _sm_arn(name), "Name": name}
+        if op == "DeleteResourcePolicy":
+            st.pop("ResourcePolicy", None)
+            return {"ARN": _sm_arn(name), "Name": name}
+        if op == "GetResourcePolicy":
+            out = {"ARN": _sm_arn(name), "Name": name}
+            if st.get("ResourcePolicy"):
+                out["ResourcePolicy"] = st["ResourcePolicy"]
+            return out
+        versions = vc.kv_list_versions("aws", space, name)
+        stages = {}
+        for v in versions:
+            vid = str(v["version"])
+            stages[vid] = ["AWSCURRENT"] if vid == cur else (["AWSPREVIOUS"] if vid == str(int(cur) - 1) else [])
+        d = {"ARN": _sm_arn(name), "Name": name, "Description": st.get("Description", ""),
+             "KmsKeyId": st.get("KmsKeyId", "alias/aws/secretsmanager"),
+             "RotationEnabled": bool(st.get("RotationEnabled")),
+             "CreatedDate": (_aws_secret_created(space).get(name) or ""),
+             "LastChangedDate": (versions[-1].get("created_time") if versions else None),
+             "LastAccessedDate": time.time(),
+             "VersionIdsToStages": {k: v for k, v in stages.items() if v}}
+        for k in ("RotationLambdaARN", "RotationRules", "LastRotatedDate", "NextRotationDate"):
+            if st.get(k):
+                d[k] = st[k]
+        if st.get("ReplicationStatus"):
+            d["ReplicationStatus"] = st["ReplicationStatus"]
+        return d
     if op == "DeleteSecret":
         vc.kv_delete("aws", space, name)
         _aws_secret_index_remove(space, name)
@@ -332,8 +413,10 @@ async def _aws_secrets_dispatch(target: str, body: dict, space: str) -> dict | N
                 "DeletionDate": time.time()}
     if op == "ListSecretVersionIds":
         versions = vc.kv_list_versions("aws", space, name)
-        return {"Name": name, "Versions": [
-            {"VersionId": str(v["version"]), "CreatedDate": v.get("created_time")}
+        cur = max((int(v["version"]) for v in versions), default=0)
+        return {"Name": name, "ARN": _sm_arn(name), "Versions": [
+            {"VersionId": str(v["version"]), "CreatedDate": v.get("created_time"),
+             "VersionStages": ["AWSCURRENT"] if int(v["version"]) == cur else (["AWSPREVIOUS"] if int(v["version"]) == cur - 1 else [])}
             for v in versions
         ]}
     return None
