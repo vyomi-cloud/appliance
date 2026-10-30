@@ -37,6 +37,8 @@ const APIM2 = `vyapimwire${n}`;    // API Management service created over the wi
 const AKS = `vysmokeaks${n}`;      // AKS cluster created through the UI
 const AKS2 = `vywireaks${n}`;      // AKS cluster created over the wire
 const POOL = `pool${n}`;           // node pool created through the UI (AKS pool names are short: <=12 chars)
+const EUSR = `vysmokeuser${n}`;    // Entra ID user created through the UI
+const EUSR2 = `vywireuser${n}`;    // Entra ID user created over the wire
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -53,6 +55,7 @@ const armWeb = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const armAks = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-09-02-preview`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+const graph = (method, path, body) => wire(`/v1.0${path}`, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const blobHdr = (acct) => ({ "x-ms-version": "2021-12-02", authorization: `SharedKey ${acct}:c21va2U=` });
 const blob = (method, acct, path, { query = "", headers = {}, body } = {}) => wire(`/${acct}${path}${query}`, { method, headers: { ...blobHdr(acct), ...headers }, body });
 
@@ -675,6 +678,7 @@ try {
     acrGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR2}`);
   }
   check("UI delete container registry → ARM GET 404", acrGone.status === 404, `HTTP ${acrGone.status}`);
+
   // ── Service Bus: namespace created through the UI → visible over native ARM ────────────
   const SBNS = `vysbns${n}`;
   const SBQ = `vysbq${n}`;
@@ -686,6 +690,7 @@ try {
   await page.getByLabel("New resource group name").fill(RG);
   await page.getByRole("button", { name: "Review + create" }).click();
   await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await shot("23-servicebus-create-review");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("heading", { name: SBNS, exact: true }).waitFor({ timeout: 10000 });
   const gotSbNs = await arm("GET", sbArm);
@@ -789,6 +794,7 @@ try {
   check("UI create namespace → visible over native ARM (properties.namespaces)",
     (nsCluster.properties?.namespaces || []).some((x) => x.name === NS), JSON.stringify(nsCluster.properties?.namespaces));
   await shot("28-aks-namespaces");
+
   // ── Lock created in the UI → visible over the native ARM wire ─────────────────────────
   await openPanel("Locks");
   await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -935,6 +941,7 @@ try {
   await page.getByRole("heading", { name: "SQL databases", exact: true }).waitFor({ timeout: 10000 });
   const dbGone = await sqlArm("GET", `/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SRV}/databases/${DB}`);
   check("UI delete SQL database → ARM GET 404", dbGone.status === 404, `HTTP ${dbGone.status}`);
+
   // ── Network security group created through the wizard → visible over native ARM ──────
   const NSG = `vysmokensg${n}`;
   const NSG2 = `vywirensg${n}`;
@@ -966,6 +973,7 @@ try {
   await shot("25-nsg-inbound-rules");
 
   // ── Lock created in the UI on the NSG → visible over native ARM ──────────────────────
+  // ── Lock created in the UI → visible over the native ARM wire ─────────────────────────
   await openPanel("Locks");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await page.getByLabel("Lock name", { exact: true }).fill(NSGLOCK);
@@ -993,6 +1001,37 @@ try {
     if (nsgGone.status !== 404) await page.waitForTimeout(500);
   }
   check("UI delete NSG → ARM GET 404", nsgGone.status === 404, `HTTP ${nsgGone.status}`);
+
+  // ── Entra ID: UI create user → visible over native Microsoft Graph wire ────────────────
+  await page.goto(UI + "#/entra/users/create");
+  await page.getByLabel("User principal name", { exact: true }).fill(`${EUSR}@vyomilearn.onmicrosoft.com`);
+  await page.getByLabel("Display name", { exact: true }).fill(EUSR);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: EUSR, exact: true }).waitFor({ timeout: 10000 });
+  const gotUsers = await graph("GET", "/users");
+  const createdUsers = gotUsers.status === 200 ? JSON.parse(gotUsers.text).value : [];
+  check("UI create user → visible over native Microsoft Graph wire", createdUsers.some((u) => u.displayName === EUSR), `HTTP ${gotUsers.status}`);
+  await shot("22-entra-create-user");
+
+  // ── Entra ID: user created over the wire → visible in the UI (CLI → UI direction) ──────
+  const graphPut = await graph("POST", "/users", { displayName: EUSR2, userPrincipalName: `${EUSR2}@vyomilearn.onmicrosoft.com`, passwordProfile: { password: "Vy3omi!2345AB" } });
+  check("Graph POST user over wire", graphPut.status === 201, `HTTP ${graphPut.status}`);
+  await page.goto(UI + "#/entra/users");
+  await page.getByText(EUSR2).first().waitFor({ timeout: 10000 });
+  check("wire-created user shown in browse grid", true);
+  await shot("23-entra-users");
+
+  // ── Entra ID: delete through the user's own blade → gone over native Microsoft Graph ───
+  await page.getByRole("link", { name: EUSR, exact: true }).click();
+  await page.getByRole("toolbar", { name: "User commands" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(EUSR);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "Users", exact: true }).waitFor({ timeout: 10000 });
+  const afterDelete = await graph("GET", "/users");
+  const stillThere = (afterDelete.status === 200 ? JSON.parse(afterDelete.text).value : []).some((u) => u.displayName === EUSR);
+  check("UI delete user → gone over native Microsoft Graph wire", !stillThere);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});

@@ -116,6 +116,7 @@ const CORES = [
   // lock-step with the relay + build_cores (usable now via the Nano relay;
   // dedicated console UI pages are a follow-up). Deps (messaging_store, sql_store,
   // iam_store, lambda_core) are already listed above.
+  "azure_graph_core.py",   // Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units) — own data plane, not ARM-delegated
   "azure_servicebus_core.py", "eventbridge_core.py", "scheduler_core.py", "lambda_core.py",
   "apigateway_core.py", "apigatewayv2_core.py", "apigatewayv2_gateway.py", "vpc_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_iamcredentials_core.py", "gcp_monitoring_core.py",
   // console-next capability manifest dependency (slice 1): the pure conformance

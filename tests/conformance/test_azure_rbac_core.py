@@ -58,6 +58,22 @@ def run(store=None):
                          "denyActions": ["Microsoft.Storage/blob/write"], "scope": "/subscriptions/S1"}})
     _check("explicit deny wins", check("carol", "Microsoft.Storage/blob/write", "/subscriptions/S1") == "NotAllowed")
 
+    # Roles and administrators (Entra ID "Roles and administrators" blade): list built-in +
+    # custom role definitions with assignment counts, and custom-role create/delete.
+    defs = json.loads(call("GET", f"{AUTH}/roleDefinitions").body)["value"]
+    names = {d["properties"]["roleName"]: d for d in defs}
+    _check("built-in directory roles are listed", "Global Administrator" in names and "User Administrator" in names)
+    _check("Owner assignment count reflects live assignments", names["Reader"]["assignmentCount"] == 1)
+    _check("custom role (BlobOnly) created via PUT is listed as CustomRole",
+           names["BlobOnly"]["properties"]["type"] == "CustomRole" and names["BlobOnly"]["assignmentCount"] == 1)
+    _check("built-in role cannot be deleted",
+           json.loads(call("DELETE", f"{AUTH}/roleDefinitions/Owner").body)["error"]["code"] == "RoleDefinitionIsBuiltIn")
+    _check("custom role can be deleted", call("DELETE", f"{AUTH}/roleDefinitions/BlobOnly").status == 200)
+    _check("deleted custom role no longer listed",
+           "BlobOnly" not in {d["properties"]["roleName"] for d in json.loads(call("GET", f"{AUTH}/roleDefinitions").body)["value"]})
+    assignments = json.loads(call("GET", f"{AUTH}/roleAssignments").body)["value"]
+    _check("role assignments are listed", any(a["name"] == "ra1" for a in assignments))
+
     print("\nAzure RBAC checkAccess conformance: ALL GREEN")
     return s
 

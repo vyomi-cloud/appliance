@@ -24,14 +24,40 @@ import json
 import re
 from dataclasses import dataclass, field
 
-# Azure built-in roles (the common three) as {actions, notActions}.
+# Azure built-in roles (the common three ARM roles, plus the Entra ID directory roles the
+# "Roles and administrators" blade lists) as {actions, notActions, privileged, directory}.
 _BUILTIN_ROLES = {
-    "Owner": {"actions": ["*"], "notActions": []},
+    "Owner": {"actions": ["*"], "notActions": [], "privileged": True},
     "Contributor": {"actions": ["*"],
                     "notActions": ["Microsoft.Authorization/*/Delete",
                                    "Microsoft.Authorization/*/Write",
-                                   "Microsoft.Authorization/elevateAccess/Action"]},
-    "Reader": {"actions": ["*/read"], "notActions": []},
+                                   "Microsoft.Authorization/elevateAccess/Action"],
+                    "privileged": False},
+    "Reader": {"actions": ["*/read"], "notActions": [], "privileged": False},
+    # Entra ID directory roles (Microsoft Graph roleManagement/directory catalog, modelled
+    # on this same assignment store — scope "/" is the tenant root).
+    "Global Administrator": {"actions": ["*"], "notActions": [], "privileged": True, "directory": True,
+                             "description": "Can manage all aspects of Microsoft Entra ID and Microsoft services that use Microsoft Entra identities."},
+    "User Administrator": {"actions": ["Microsoft.Directory/users/*", "Microsoft.Directory/groups/*/read"],
+                           "notActions": [], "privileged": True, "directory": True,
+                           "description": "Can manage all aspects of users and groups."},
+    "Application Administrator": {"actions": ["Microsoft.Directory/applications/*", "Microsoft.Directory/servicePrincipals/*"],
+                                  "notActions": [], "privileged": True, "directory": True,
+                                  "description": "Can create and manage all aspects of app registrations and enterprise applications."},
+    "Groups Administrator": {"actions": ["Microsoft.Directory/groups/*"], "notActions": [],
+                             "privileged": False, "directory": True,
+                             "description": "Can manage all aspects of groups and group settings."},
+    "Helpdesk Administrator": {"actions": ["Microsoft.Directory/users/password/update"], "notActions": [],
+                               "privileged": True, "directory": True,
+                               "description": "Can reset passwords for non-administrators and Helpdesk Administrators."},
+    "Reports Reader": {"actions": ["*/read"], "notActions": [], "privileged": False, "directory": True,
+                       "description": "Can read sign-in and audit reports."},
+    "Security Administrator": {"actions": ["Microsoft.Directory/security/*"], "notActions": [],
+                               "privileged": True, "directory": True,
+                               "description": "Can read security information and reports, and manage configuration in security-related services."},
+    "Security Reader": {"actions": ["Microsoft.Directory/security/*/read"], "notActions": [],
+                        "privileged": False, "directory": True,
+                        "description": "Can read security information and reports."},
 }
 
 
@@ -54,7 +80,7 @@ def _err(status: int, code: str, message: str) -> AzureIamResponse:
 def _role_defs(store) -> dict:
     m = getattr(store, "_azure_role_defs", None)
     if m is None:
-        m = {name: {"roleName": name, **perms} for name, perms in _BUILTIN_ROLES.items()}
+        m = {name: {"roleName": name, "custom": False, **perms} for name, perms in _BUILTIN_ROLES.items()}
         store._azure_role_defs = m
     return m
 
@@ -100,14 +126,74 @@ def _resolve_role(store, role_ref: str) -> dict | None:
 
 # ── control plane ───────────────────────────────────────────────────────────
 def _put_role_definition(store, name: str, body: dict) -> AzureIamResponse:
-    perms = (body.get("properties") or body).get("permissions") or []
+    props = body.get("properties") or body
+    perms = props.get("permissions") or []
     actions, not_actions = [], []
     for p in perms:
         actions.extend(p.get("actions") or [])
         not_actions.extend(p.get("notActions") or [])
-    role_name = (body.get("properties") or body).get("roleName") or name
-    _role_defs(store)[role_name] = {"roleName": role_name, "actions": actions, "notActions": not_actions}
+    role_name = props.get("roleName") or name
+    _role_defs(store)[role_name] = {
+        "roleName": role_name, "actions": actions, "notActions": not_actions, "custom": True,
+        "privileged": bool(props.get("privileged", False)), "directory": bool(props.get("directory", True)),
+        "description": props.get("description", ""),
+    }
     return _json(201, {"name": name, "properties": {"roleName": role_name, "type": "CustomRole"}})
+
+
+def _role_definition_view(name: str, perms: dict, assignment_count: int) -> dict:
+    return {
+        "name": name, "id": name,
+        "properties": {
+            "roleName": name,
+            "description": perms.get("description", ""),
+            "type": "CustomRole" if perms.get("custom") else "BuiltInRole",
+            "privileged": bool(perms.get("privileged", False)),
+            "isDirectoryRole": bool(perms.get("directory", False)),
+            "assignableScopes": ["/"],
+            "permissions": [{"actions": perms.get("actions") or [], "notActions": perms.get("notActions") or []}],
+        },
+        "assignmentCount": assignment_count,
+    }
+
+
+def _assignment_counts(store) -> dict:
+    counts: dict[str, int] = {}
+    for a in _assignments(store).values():
+        if a["kind"] != "deny":
+            counts[a["roleDefinition"]] = counts.get(a["roleDefinition"], 0) + 1
+    return counts
+
+
+def _list_role_definitions(store) -> AzureIamResponse:
+    counts = _assignment_counts(store)
+    value = [_role_definition_view(name, perms, counts.get(name, 0)) for name, perms in _role_defs(store).items()]
+    return _json(200, {"value": value})
+
+
+def _get_role_definition(store, name: str) -> AzureIamResponse:
+    perms = _role_defs(store).get(name)
+    if not perms:
+        return _err(404, "RoleDefinitionNotFound", f"Role definition '{name}' not found.")
+    return _json(200, _role_definition_view(name, perms, _assignment_counts(store).get(name, 0)))
+
+
+def _delete_role_definition(store, name: str) -> AzureIamResponse:
+    perms = _role_defs(store).get(name)
+    if not perms:
+        return _err(404, "RoleDefinitionNotFound", f"Role definition '{name}' not found.")
+    if not perms.get("custom"):
+        return _err(400, "RoleDefinitionIsBuiltIn", f"'{name}' is a built-in role and cannot be deleted.")
+    del _role_defs(store)[name]
+    return _json(200, {})
+
+
+def _list_role_assignments(store) -> AzureIamResponse:
+    value = [{"name": a["name"],
+             "properties": {"principalId": a["principalId"], "roleDefinitionId": a["roleDefinition"],
+                            "scope": a["scope"], "kind": a["kind"]}}
+            for a in _assignments(store).values()]
+    return _json(200, {"value": value})
 
 
 def _put_role_assignment(store, name: str, body: dict) -> AzureIamResponse:
@@ -208,11 +294,22 @@ def dispatch(store, method: str, path: str,
     kind = tail[0].lower()
     if kind == "checkaccess" and method == "POST":
         return _check_access(store, payload)
-    if kind == "roledefinitions" and len(tail) >= 2 and method == "PUT":
-        return _put_role_definition(store, tail[1], payload)
-    if kind == "roleassignments" and len(tail) >= 2:
-        if method == "PUT":
-            return _put_role_assignment(store, tail[1], payload)
-        if method == "DELETE":
-            return _delete_role_assignment(store, tail[1])
+    if kind == "roledefinitions":
+        if len(tail) == 1 and method == "GET":
+            return _list_role_definitions(store)
+        if len(tail) >= 2:
+            if method == "GET":
+                return _get_role_definition(store, tail[1])
+            if method == "PUT":
+                return _put_role_definition(store, tail[1], payload)
+            if method == "DELETE":
+                return _delete_role_definition(store, tail[1])
+    if kind == "roleassignments":
+        if len(tail) == 1 and method == "GET":
+            return _list_role_assignments(store)
+        if len(tail) >= 2:
+            if method == "PUT":
+                return _put_role_assignment(store, tail[1], payload)
+            if method == "DELETE":
+                return _delete_role_assignment(store, tail[1])
     return _err(404, "NotFound", f"Unsupported {method} {path}")

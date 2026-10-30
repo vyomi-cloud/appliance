@@ -49,6 +49,7 @@ from core.scheduler_core import SchedulerStore
 from core.azure_acr_core import AcrRegistryStore
 from core.gcp_run_core import RunStore
 from core.azure_arm_core import AzureArm
+from core.azure_graph_core import GraphStore
 
 import types
 from core.cloudwatch_core import CloudWatchStore
@@ -114,6 +115,7 @@ def get() -> dict:
             "az_kvcerts": InMemoryKvStore(),
             "az_queue":  AzureQueueStore(),
             "az_sb":     InMemoryMessagingStore(),   # Service Bus (router-only today)
+            "az_graph":  GraphStore(),               # Microsoft Graph (Entra ID: users/groups/apps)
             "az_arm":    AzureArm(),                 # ARM control plane (VMs, apps, …): public `state` map → persisted + synced
             # ── cross-cloud ── per-resource cloudsim event / activity log. DURABLE
             # + bounded: recorded on every mutating dispatch; persisted + cross-tab
