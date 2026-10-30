@@ -17,6 +17,16 @@ is enforced (Encrypt/Decrypt on a disabled or pending-deletion key fail with
 KMSInvalidStateException); and all errors use the native {"__type","message"}
 shape.
 
+v4 C0c (the offline appliance now serves AWS KMS through this core — see
+tests/conformance/test_c0c_legacy_parity_core.py): a DISABLED key fails with
+DisabledException (pending deletion stays KMSInvalidStateException), as real AWS
+does; Encrypt / GenerateDataKey need an ENCRYPT_DECRYPT key (InvalidKeyUsageException
+otherwise); EnableKeyRotation honours
+an explicit RotationPeriodInDays; UpdateKeyDescription; custom key stores live in
+`store.custom_key_stores` (persisted state); and an optional
+`store.legacy_decrypt(key_ref, blob)` hook decrypts ciphertext minted by the
+pre-v4 Vault-transit handler.
+
 Scope (v1 slice): CreateKey, DescribeKey, ListKeys, Encrypt, Decrypt,
 GenerateDataKey(+WithoutPlaintext), GenerateRandom, EnableKey, DisableKey,
 ScheduleKeyDeletion, CreateAlias, ListAliases. Grants / key policies / rotation /
@@ -99,11 +109,19 @@ def _require_active_key(store: KeyStore, ref: str, auto_provision: bool = False)
         key_id = _provision_aws_managed_key(store, ref)
     if not key_id or not store.key_exists(key_id):
         raise KmsError("NotFoundException", f"Key '{ref}' does not exist.", 400)
+    _require_enabled_state(store, key_id)
+    return key_id
+
+
+def _require_enabled_state(store: KeyStore, key_id: str) -> None:
+    """Real AWS: a Disabled key → DisabledException; any other non-Enabled state
+    (PendingDeletion, PendingImport, …) → KMSInvalidStateException."""
     state = store.get_key(key_id).get("KeyState", "Enabled")
+    if state == "Disabled":
+        raise KmsError("DisabledException", f"{_key_arn(store, key_id)} is disabled.", 400)
     if state != "Enabled":
         raise KmsError("KMSInvalidStateException",
                        f"{_key_arn(store, key_id)} is {state}.", 400)
-    return key_id
 
 
 def _key_metadata(store: KeyStore, key_id: str) -> dict:
@@ -237,8 +255,16 @@ def _list_keys(store: KeyStore, body: dict) -> dict:
             "Truncated": False}
 
 
+def _require_encrypt_usage(store: KeyStore, key_id: str) -> None:
+    usage = store.get_key(key_id).get("KeyUsage", "ENCRYPT_DECRYPT")
+    if usage != "ENCRYPT_DECRYPT":
+        raise KmsError("InvalidKeyUsageException",
+                       f"{_key_arn(store, key_id)} key usage is {usage}, not ENCRYPT_DECRYPT.", 400)
+
+
 def _encrypt(store: KeyStore, body: dict) -> dict:
     key_id = _require_active_key(store, body.get("KeyId", ""), auto_provision=True)
+    _require_encrypt_usage(store, key_id)
     plaintext = _b64d(body.get("Plaintext", ""))
     if not plaintext:
         raise KmsError("ValidationException", "Plaintext must not be empty.", 400)
@@ -265,9 +291,43 @@ def _decrypt_with_history(store: KeyStore, key_id: str, blob: bytes) -> bytes:
     raise last_exc or ValueError("no key material")
 
 
+def _legacy_decrypt(store: KeyStore, body: dict) -> dict | None:
+    """Pre-v4 ciphertext (`vault:v1:…`, no embedded key id) through the store's
+    optional legacy hook. The retired handler wrapped the Vault string in base64
+    (Encrypt) or returned it raw (GenerateDataKey) — accept both."""
+    hook = getattr(store, "legacy_decrypt", None)
+    if hook is None:
+        return None
+    raw = str(body.get("CiphertextBlob") or "")
+    blob = raw.encode() if raw.startswith("vault:") else _b64d(raw)
+    if not blob.startswith(b"vault:"):
+        return None
+    got = hook(str(body.get("KeyId") or ""), blob)
+    if not got:
+        raise KmsError("InvalidCiphertextException",
+                       "The ciphertext could not be decrypted with any known key.", 400)
+    key_id, plaintext = got
+    if key_id and store.key_exists(key_id):
+        _require_enabled_state(store, key_id)
+        _touch_last_used(store, key_id)
+        store.persist()
+        return {"KeyId": _key_arn(store, key_id), "Plaintext": _b64e(plaintext),
+                "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"}
+    return {"KeyId": _key_arn(store, key_id or ""), "Plaintext": _b64e(plaintext),
+            "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"}
+
+
 def _decrypt(store: KeyStore, body: dict) -> dict:
+    if str(body.get("CiphertextBlob") or "").startswith("vault:"):
+        legacy = _legacy_decrypt(store, body)
+        if legacy is not None:
+            return legacy
     blob = _b64d(body.get("CiphertextBlob", ""))
     key_id = store.engine.key_id_in(blob)
+    if not key_id and blob.startswith(b"vault:"):
+        legacy = _legacy_decrypt(store, body)
+        if legacy is not None:
+            return legacy
     if not key_id:
         # AWS allows/expects KeyId in the request when the blob can't self-identify.
         key_id = _resolve_key_id(store, body.get("KeyId", ""))
@@ -279,9 +339,7 @@ def _decrypt(store: KeyStore, body: dict) -> dict:
         if want and want != key_id:
             raise KmsError("IncorrectKeyException",
                            "The key supplied does not match the ciphertext's key.", 400)
-    state = store.get_key(key_id).get("KeyState", "Enabled")
-    if state != "Enabled":
-        raise KmsError("KMSInvalidStateException", f"{_key_arn(store, key_id)} is {state}.", 400)
+    _require_enabled_state(store, key_id)
     try:
         plaintext = _decrypt_with_history(store, key_id, blob)
     except Exception as e:
@@ -412,6 +470,7 @@ def _verify_mac(store: KeyStore, body: dict) -> dict:
 
 def _generate_data_key(store: KeyStore, body: dict, with_plaintext: bool = True) -> dict:
     key_id = _require_active_key(store, body.get("KeyId", ""), auto_provision=True)
+    _require_encrypt_usage(store, key_id)
     n = int(body.get("NumberOfBytes") or _DATA_KEY_BYTES.get(str(body.get("KeySpec", "AES_256")), 32))
     if n < 1 or n > 1024:
         raise KmsError("ValidationException", "NumberOfBytes must be 1..1024.", 400)
@@ -453,8 +512,11 @@ def _set_key_rotation(store: KeyStore, body: dict, enabled: bool) -> dict:
     if k.get("KeyState") == "PendingDeletion":
         raise KmsError("KMSInvalidStateException", "Key is pending deletion.", 400)
     k["KeyRotationEnabled"] = enabled
-    if enabled and "RotationPeriodInDays" not in k:
-        k["RotationPeriodInDays"] = int(body.get("RotationPeriodInDays") or 365)
+    if enabled:
+        days = int(body.get("RotationPeriodInDays") or k.get("RotationPeriodInDays") or 365)
+        if days < 90 or days > 2560:
+            raise KmsError("ValidationException", "RotationPeriodInDays must be 90..2560.", 400)
+        k["RotationPeriodInDays"] = days
     store.persist()
     return {}
 
@@ -566,6 +628,18 @@ def _update_alias(store: KeyStore, body: dict) -> dict:
     return {}
 
 
+def _update_key_description(store: KeyStore, body: dict) -> dict:
+    key_id = _resolve_key_id(store, body.get("KeyId", ""))
+    if not key_id or not store.key_exists(key_id):
+        raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    k = store.get_key(key_id)
+    if k.get("KeyState") == "PendingDeletion":
+        raise KmsError("KMSInvalidStateException", "Key is pending deletion.", 400)
+    k["Description"] = str(body.get("Description", ""))
+    store.persist()
+    return {}
+
+
 def _cancel_key_deletion(store: KeyStore, body: dict) -> dict:
     key_id = _resolve_key_id(store, body.get("KeyId", ""))
     if not key_id or not store.key_exists(key_id):
@@ -648,7 +722,10 @@ def _list_key_policies(store: KeyStore, body: dict) -> dict:
 # fails exactly as it would in AWS without live backing infrastructure — never a
 # faked CONNECTED state. No key ever stores its material in a custom key store.
 def _custom_key_stores(store: KeyStore) -> dict:
-    return store.__dict__.setdefault("_custom_key_stores", {})
+    cks = getattr(store, "custom_key_stores", None)
+    if cks is None:      # a store subclass that skipped KeyStore.__init__
+        cks = store.__dict__.setdefault("custom_key_stores", {})
+    return cks
 
 
 def _create_custom_key_store(store: KeyStore, body: dict) -> dict:
@@ -795,6 +872,8 @@ def dispatch(store: KeyStore, target: str, payload: dict | None = None) -> KmsRe
             return _ok(_rotate_key_on_demand(store, body))
         if action == "ListKeyRotations":
             return _ok(_list_key_rotations(store, body))
+        if action == "UpdateKeyDescription":
+            return _ok(_update_key_description(store, body))
         if action == "CancelKeyDeletion":
             return _ok(_cancel_key_deletion(store, body))
         if action == "CreateAlias":

@@ -113,11 +113,11 @@ def run() -> int:
     desc_alias = kms.dispatch(st, T + "DescribeKey", {"KeyId": "alias/app-key"})
     _check("describe via alias resolves to key", desc_alias.body["KeyMetadata"]["KeyId"] == key_id)
 
-    # 10. DisableKey -> Encrypt fails KMSInvalidStateException; EnableKey -> works again
+    # 10. DisableKey -> Encrypt fails DisabledException (real AWS); EnableKey -> works again
     kms.dispatch(st, T + "DisableKey", {"KeyId": key_id})
     disabled = kms.dispatch(st, T + "Encrypt", {"KeyId": key_id, "Plaintext": base64.b64encode(b"x").decode()})
     _check("encrypt on disabled key 400", disabled.status == 400)
-    _check("encrypt on disabled key KMSInvalidStateException", disabled.body["__type"] == "KMSInvalidStateException")
+    _check("encrypt on disabled key DisabledException", disabled.body["__type"] == "DisabledException")
     kms.dispatch(st, T + "EnableKey", {"KeyId": key_id})
     reenabled = kms.dispatch(st, T + "Encrypt", {"KeyId": key_id, "Plaintext": base64.b64encode(b"x").decode()})
     _check("encrypt after re-enable 200", reenabled.status == 200)

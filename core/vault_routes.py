@@ -1188,7 +1188,12 @@ def register(app: FastAPI, aws_dispatchers: dict | None = None) -> None:
 
     v4 C0b: GCP Secret Manager / Cloud KMS (native + classic console REST) are served by
     the shared cores (routes/gcp_secrets_kms_unified.py) unless opted out; the Vault
-    handlers below are then not registered for those paths."""
+    handlers below are then not registered for those paths.
+
+    v4 C0c: likewise AWS KMS / Secrets Manager — the classic console REST is served by
+    routes/aws_secrets_kms_unified.py and the native wire by the shared cores
+    (routes/aws_s3.aws_query_root checks the unified set before these dispatchers,
+    which stay registered as the opted-out path)."""
     skip: set = set()
     try:
         from routes import gcp_secrets_kms_unified as _gsk
@@ -1197,7 +1202,13 @@ def register(app: FastAPI, aws_dispatchers: dict | None = None) -> None:
         print(f"[wire_ingress] GCP secrets/KMS core mount skipped: {exc}")
     _register_gcp(_SkipRoutes(app, skip) if skip else app)
     _register_azure(app)
-    _register_aws_console(app)
+    aws_skip: set = set()
+    try:
+        from routes import aws_secrets_kms_unified as _ask
+        aws_skip = _ask.register(app)
+    except Exception as exc:   # never let this break appliance boot — legacy stays
+        print(f"[wire_ingress] AWS KMS/Secrets Manager core mount skipped: {exc}")
+    _register_aws_console(_SkipRoutes(app, aws_skip) if aws_skip else app)
     if aws_dispatchers is not None:
         aws_dispatchers["TrentService"] = _aws_kms_dispatch        # KMS uses TrentService
         aws_dispatchers["secretsmanager"] = _aws_secrets_dispatch  # Secrets uses secretsmanager

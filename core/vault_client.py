@@ -307,3 +307,18 @@ def kv_list_versions(provider: str, space_id: str, name: str) -> list[dict]:
         ]
     except Exception:
         return []
+
+
+def transit_list_keys(provider: str, space_id: str) -> list[str]:
+    """The transit key names (without the provider/space prefix) of one space —
+    used by the v4 upgrade path to adopt keys a pre-v4 appliance created."""
+    c = _client()
+    if c is None:
+        return []
+    prefix = _transit_key_name(provider, space_id, "")
+    try:
+        r = c.secrets.transit.list_keys(mount_point=_TRANSIT_MOUNT)
+        names = ((r or {}).get("data") or {}).get("keys") or []
+        return sorted(n[len(prefix):] for n in names if isinstance(n, str) and n.startswith(prefix))
+    except Exception:
+        return []
