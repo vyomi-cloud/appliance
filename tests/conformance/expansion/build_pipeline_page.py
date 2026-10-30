@@ -13,6 +13,7 @@ and the upstream-state branch (what the watcher tracks, open drift issues).
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -110,6 +111,50 @@ def main() -> int:
         bits = [name] + ([f"{x['idle_mb']} MB"] if x.get("idle_mb") else []) + ([tier.capitalize()] if tier else [])
         return " · ".join(bits) + ("" if b else " (default)")
 
+    def code_wiring(branch: str, b: dict) -> str | None:
+        """Where the branch's code reaches the backend its manifest names: a
+        string or import on a line the branch added (docstrings and comments
+        don't count). None for in-process services, "" when the code never
+        reaches it. Evidence: `docker` run by the code (substrate), the client
+        library, the compose service host, a VYOMI_/CLOUDLEARN_ env var named
+        after the backend, or one the branch adds to compose next to it."""
+        kind, name = b.get("kind"), (b.get("name") or "").lower()
+        if kind not in ("container", "substrate"):
+            return None
+        svc = (b.get("compose_service") or "").lower()
+        envre = re.compile(rf"^(VYOMI|CLOUDLEARN)_\w*{re.escape(name.upper())}\w*$") if name else None
+        clients = {"nats": {"nats"}, "valkey": {"redis", "valkey"}}.get(name, set())
+        rng = f"origin/main...origin/{branch}"
+        compose = sh("git", "diff", "-U0", rng, "--", "docker-compose.yml", "docker-compose.cloudlite.yml")
+        env_added = set(re.findall(r"^\+\s+((?:VYOMI|CLOUDLEARN)_\w+):", compose, re.M)) if svc and svc in compose else set()
+        for f in sh("git", "diff", "--name-only", rng, "--", "core", "routes", "providers", "server.py").split():
+            if not f.endswith(".py"):
+                continue
+            try:
+                tree = ast.parse(sh("git", "show", f"origin/{branch}:{f}"))
+            except (SyntaxError, ValueError):
+                continue
+            added = set()
+            for h in re.finditer(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@", sh("git", "diff", "-U0", rng, "--", f), re.M):
+                added.update(range(int(h.group(1)), int(h.group(1)) + int(h.group(2) or 1)))
+            docs = {id(n.body[0].value) for n in ast.walk(tree)
+                    if isinstance(n, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.body
+                    and isinstance(n.body[0], ast.Expr) and isinstance(n.body[0].value, ast.Constant)}
+            for n in ast.walk(tree):
+                if getattr(n, "lineno", None) not in added:
+                    continue
+                if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in docs:
+                    v = n.value
+                    if kind == "substrate" and v.strip().lower() == "docker":
+                        return f"`{f}` runs docker"
+                    if kind == "container" and ((svc and svc in v.lower()) or (envre and envre.match(v)) or v in env_added):
+                        return f"`{f}` uses {v}"
+                elif isinstance(n, (ast.Import, ast.ImportFrom)):
+                    for m in [a.name for a in n.names] + ([n.module] if getattr(n, "module", None) else []):
+                        if (kind == "container" and m.split(".")[0] in clients) or (kind == "substrate" and "docker" in m.lower()):
+                            return f"`{f}` imports {m}"
+        return ""
+
     def real_backend_cell(cloud: str, upstream: str) -> str:
         """The backend the service should have: the shared default for its
         upstream id, else in-process (the engine itself is the backend)."""
@@ -147,9 +192,15 @@ def main() -> int:
         m = re.search(r"<!-- expansion: cloud=(\w+) key=([\w.-]+)", it.get("body") or "")
         if m:
             by_key[(m.group(1), m.group(2))] = it
-    prs = {p["headRefName"]: p for p in gh_json("pr", "list", "-R", REPO, "--state", "all", "--limit", "300",
-                                                 "--json", "number,state,headRefName,mergedAt,url")
-           if p["headRefName"].startswith("expansion/")}
+    prs: dict = {}
+    rank = {"OPEN": 2, "MERGED": 1}
+    for p in gh_json("pr", "list", "-R", REPO, "--state", "all", "--limit", "300",
+                     "--json", "number,state,headRefName,mergedAt,url"):
+        b = p["headRefName"]
+        # A branch can carry an older closed PR next to its open one: keep the
+        # live one (the list is newest first, so ties keep the newest).
+        if b.startswith("expansion/") and (b not in prs or rank.get(p["state"], 0) > rank.get(prs[b]["state"], 0)):
+            prs[b] = p
     drift = gh_json("issue", "list", "-R", REPO, "--label", "upstream-drift", "--state", "open", "--limit", "500",
                     "--json", "number,body")
     sh("git", "fetch", "-q", "origin", "+refs/heads/expansion/*:refs/remotes/origin/expansion/*")
@@ -267,15 +318,27 @@ def main() -> int:
                 stage = "📋 Queued"
             else:
                 stage = "Not filed"
-            mb = None
+            mb, why = None, ""
             if branch in branches:
                 try:
-                    mb = json.loads(sh("git", "show", f"origin/{branch}:services/manifests/{cloud}-{k}.json") or "{}").get("backend")
+                    man = json.loads(sh("git", "show", f"origin/{branch}:services/manifests/{cloud}-{k}.json") or "{}")
                 except ValueError:
-                    mb = None
+                    man = {}
+                mb = man.get("backend")
+                name = man.get("name") if name == s["id"] and man.get("name") else name
+            built = backend_cell(cloud, s["id"], mb).replace(" (default)", "")
+            if mb:
+                ev = code_wiring(branch, mb)
+                if ev:
+                    built += " ✅"
+                    why = f"{built.removesuffix(' ✅')}: {ev}"
+                elif ev == "":
+                    built += " ⚠️ not in code"
+                    why = f"the manifest says {mb.get('name') or mb.get('kind')}, but no code the branch adds reaches it"
+                elif mb.get("reason"):
+                    why = "in-process: " + mb["reason"]
             row = {"name": name, "link": link, "priority": s["priority"], "stage": stage,
-                   "backend": backend_cell(cloud, s["id"], mb).replace(" (default)", ""),
-                   "real": real_backend_cell(cloud, s["id"])}
+                   "backend": built, "why": why, "real": real_backend_cell(cloud, s["id"])}
             if stage.startswith(("📋", "Not")):
                 queued.append(row)
                 continue
@@ -345,10 +408,18 @@ def main() -> int:
 
     md += ["", "## In progress", ""]
     if moving_all:
-        md += ["| Service | Cloud | Stage | Checks | Real backend | Built with | Still missing |", "|---|---|---|---|---|---|---|"]
+        md += ["- **Real backend:** what the service should run on · **Backend in the code:** what the branch really runs on — "
+               "✅ the code reaches it · ⚠️ not in code: the manifest names it but no code reaches it · in-process: the engine itself is the backend", "",
+               "| Service | Cloud | Stage | Checks | Real backend | Backend in the code | Still missing |", "|---|---|---|---|---|---|---|"]
         for lbl, r in moving_all:
             miss = "; ".join(r["missing"][:3]) + (f" (+{len(r['missing']) - 3} more)" if len(r["missing"]) > 3 else "")
             md.append(f"| {r['name']} {r['link']} | {lbl} | {r['stage']} | {r['checks']} | {r['real']} | {r['backend']} | {miss or '—'} |")
+        whys = [(lbl, r) for lbl, r in moving_all if r.get("why")]
+        if whys:
+            md += ["", "<details><summary><b>Backend evidence</b> — where each service's code reaches its backend, or why it runs in-process</summary>", "",
+                   "| Service | Cloud | Evidence |", "|---|---|---|"]
+            md += [f"| {r['name']} | {lbl} | {r['why'].replace('|', '/')} |" for lbl, r in whys]
+            md += ["", "</details>"]
     else:
         md.append("- Nothing is being built right now.")
 
