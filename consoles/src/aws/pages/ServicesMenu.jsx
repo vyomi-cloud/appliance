@@ -36,7 +36,7 @@ export default function ServicesMenu({ onClose }) {
   return (
     <>
       <div onClick={onClose} style={{ position: "fixed", inset: "40px 0 32px 0", zIndex: 1499 }} aria-hidden />
-      <div style={PANEL} role="dialog" aria-label="Services">
+      <div style={PANEL} role="dialog" aria-label="Services" className="vy-dark-chrome">
         <nav style={NAV} aria-label="Service categories">
           {["recent", "favorites", "all"].map((k) => <button key={k} style={navBtn(section === k)} onClick={() => setSection(k)}>{sections[k][0]}</button>)}
           <div style={{ height: 1, background: "#414d5c", margin: "12px 18px" }} />

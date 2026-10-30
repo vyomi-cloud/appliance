@@ -74,7 +74,10 @@ export default function TopBar({ onServices, region, regions, onRegion, mode, de
   const regionLabel = regions.find(([r]) => r === region)?.[1] || region;
   const unread = notifications.length;
   return (
-    <div style={BAR} role="banner">
+    <div style={BAR} role="banner" className="vy-dark-chrome">
+      {/* The bar and services drawer are dark in both visual modes, but Cloudscape's "inverted"
+          icon colour flips with the theme — pin chrome icons to white. */}
+      <style>{`.vy-dark-chrome [class*="awsui_icon_"] { color: #fff !important; }`}</style>
       <a href="#/" aria-label="vyomi.cloud AWS — Console Home" style={{ display: "inline-flex", alignItems: "center", marginRight: 6 }}>
         <img src={LOGO} alt="vyomi.cloud | AWS" height={26} style={{ display: "block" }} />
       </a>
