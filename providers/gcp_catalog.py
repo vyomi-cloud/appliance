@@ -427,7 +427,7 @@ RESOURCE_CATALOG_GCP = [
             {"name": "targetType",  "label": "Target type (HTTP or Pub/Sub)", "default": "HTTP"},
             {"name": "url",         "label": "URL (HTTP target)",            "default": "https://example.com/hook"},
             {"name": "httpMethod",  "label": "HTTP method",                  "default": "POST"},
-            {"name": "topic",       "label": "Topic (Pub/Sub target)",       "default": "projects/demo/topics/my-topic"},
+            {"name": "topic",       "label": "Topic (Pub/Sub target)",       "default": "my-topic"},
             {"name": "message",     "label": "Message body (Pub/Sub target)", "default": "scheduled"},
         ],
     },

@@ -9,10 +9,11 @@ number for the same project.
 One seam normalizes every GCP request to the project ID before any handler runs
 (`normalize_request`, called from core/middleware.py): the `projects/{p}` path
 segment, the `?project=` / `?parent=` query params, and `projects/{p}/...`
-references inside JSON bodies. The number — and the ids earlier releases used
-(`cloudlearn`, `demo`, `gcp-dev`; their data is migrated by `migrate_state` /
-`migrate_backends`) — resolve to the ID. Any other project gets the error the
-real API returns for a project that doesn't exist.
+references inside JSON bodies. The number resolves to the ID. Any other
+project — including the ids earlier releases used (`cloudlearn`, `demo`,
+`gcp-dev`) — gets the error the real API returns for a project that doesn't
+exist. Data stored under those old ids is moved onto the project once, at
+upgrade (`migrate_state` / `migrate_backends`).
 
 Cloud Resource Manager (`gcloud projects list/describe`) serves the same project:
 see routes/gcp_resourcemanager.py.
@@ -31,6 +32,7 @@ NANO_PROJECT = {"projectId": "nano-project", "projectNumber": DEFAULT_PROJECT_NU
                 "name": "Nano GCP", "createTime": ""}
 # Project ids earlier releases used or defaulted to (console "cloudlearn",
 # Nano/expansion consoles "demo", the CLI suites + SDK snippets "gcp-dev").
+# Only the upgrade migration reads these; requests naming them are refused.
 LEGACY_PROJECT_IDS = ("cloudlearn", "demo", "gcp-dev")
 # `projects/-` (any project) and `projects/_` (GCS global namespace).
 _WILDCARDS = ("-", "_")
@@ -124,13 +126,13 @@ def current() -> dict:
 
 
 def resolve(value, proj: dict | None = None) -> str:
-    """The project ID for a project ID / number / legacy id of `proj` (default:
-    the GCP space's project), '' if unknown. Empty → the project."""
+    """The project ID for a project ID / number of `proj` (default: the GCP
+    space's project), '' if unknown. Empty → the project."""
     v = str(value or "").strip()
     if v.startswith("projects/"):
         v = v[len("projects/"):].split("/", 1)[0]
     proj = proj or current()
-    if not v or v in (proj["projectId"], proj["projectNumber"]) or v in LEGACY_PROJECT_IDS:
+    if not v or v in (proj["projectId"], proj["projectNumber"]):
         return proj["projectId"]
     return ""
 
@@ -180,7 +182,7 @@ def unknown_project_error(path: str, method: str, project: str) -> tuple[int, di
 
 
 def _old_ids(proj: dict) -> list[str]:
-    return [x for x in (proj["projectNumber"], *LEGACY_PROJECT_IDS) if x and x != proj["projectId"]]
+    return [x for x in (proj["projectNumber"],) if x and x != proj["projectId"]]
 
 
 def _alt(old) -> str:
@@ -198,7 +200,7 @@ def _swap_refs(text: str, alt: str, pid: str) -> str:
 
 
 def rewrite_body(body: bytes, proj: dict | None = None) -> bytes:
-    """`projects/{number|legacy id}` references, service-account emails and
+    """`projects/{number}` references, service-account emails and
     "project"/"projectId" fields inside a JSON body → the project ID."""
     proj = proj or current()
     try:

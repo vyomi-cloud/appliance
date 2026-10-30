@@ -2,8 +2,8 @@
 
 Pure checks of core/gcp_project (the seam the appliance middleware and Nano's
 AwsWireRouter both use) plus the Nano router end to end: Cloud Resource Manager
-lists the project, the number and the legacy ids land in the same store as the
-ID, and an unknown project gets the real API's error. Runs on host CPython with
+lists the project, the number lands in the same store as the ID, and any other
+project — including the ids earlier releases used — gets the real API's error. Runs on host CPython with
 PYTHONPATH=wasm/core (the vendored copies Nano loads).
 
     PYTHONPATH=wasm/core:. pytest -q tests/conformance/test_gcp_project_identity.py
@@ -29,29 +29,32 @@ def test_project_id_rules():
         assert not gp.valid_project_id(bad), bad
 
 
-def test_resolve_id_number_legacy_unknown():
-    for v in ("vyomi-project", "123456789012", "projects/123456789012", "cloudlearn", "demo", "gcp-dev", ""):
+def test_resolve_id_number_unknown():
+    for v in ("vyomi-project", "123456789012", "projects/123456789012", ""):
         assert gp.resolve(v, P) == "vyomi-project", v
-    assert gp.resolve("someone-elses-project", P) == ""
+    for v in ("someone-elses-project", "cloudlearn", "demo", "gcp-dev"):   # old ids are other projects now
+        assert gp.resolve(v, P) == "", v
 
 
 def test_normalize_path_and_query():
     path, q, err = gp.normalize_request("/v1/projects/123456789012/topics/t", "", "GET", P)
     assert err is None and path == "/v1/projects/vyomi-project/topics/t"
     path, q, err = gp.normalize_request("/compute/v1/projects/gcp-dev/zones/z/instances", "", "GET", P)
-    assert path == "/compute/v1/projects/vyomi-project/zones/z/instances"
+    assert err and err[0] == 404 and "projects/gcp-dev" in json.dumps(err[1])
     _, q, err = gp.normalize_request("/storage/v1/b", "project=123456789012&alt=json", "GET", P)
     assert err is None and "project=vyomi-project" in q and "alt=json" in q
-    _, q, _ = gp.normalize_request("/v3/projects/123456789012/timeSeries", {"parent": "projects/demo"}, "GET", P)
+    _, q, _ = gp.normalize_request("/v3/projects/123456789012/timeSeries", {"parent": "projects/123456789012"}, "GET", P)
     assert q == {"parent": "projects/vyomi-project"}
     # wildcards, public image projects and storage object paths are left alone
     for path in ("/v1/projects/-/serviceAccounts/a@b.iam.gserviceaccount.com:signBlob",
                  "/compute/v1/projects/debian-cloud/global/images/family/debian-12",
                  "/storage/v1/b/bkt/o/projects/whatever"):
         assert gp.normalize_request(path, "", "GET", P) == (path, "", None)
-    # service-account emails of the old project move with it
-    path, _, _ = gp.normalize_request("/v1/projects/demo/serviceAccounts/svc@demo.iam.gserviceaccount.com", "", "GET", P)
+    # service-account emails addressed by the number move with it
+    path, _, _ = gp.normalize_request("/v1/projects/123456789012/serviceAccounts/svc@123456789012.iam.gserviceaccount.com", "", "GET", P)
     assert path == "/v1/projects/vyomi-project/serviceAccounts/svc@vyomi-project.iam.gserviceaccount.com"
+    _, _, err = gp.normalize_request("/v1/projects/demo/serviceAccounts/svc@demo.iam.gserviceaccount.com", "", "GET", P)
+    assert err and err[0] == 403
 
 
 def test_unknown_project_errors_match_the_real_apis():
@@ -69,11 +72,13 @@ def test_unknown_project_errors_match_the_real_apis():
 
 
 def test_rewrite_body_and_tree():
-    body = json.dumps({"topic": "projects/123456789012/topics/t", "project": "gcp-dev",
-                       "member": "serviceAccount:svc@demo.iam.gserviceaccount.com", "data": "demo"}).encode()
+    body = json.dumps({"topic": "projects/123456789012/topics/t", "project": "123456789012",
+                       "member": "serviceAccount:svc@123456789012.iam.gserviceaccount.com", "data": "123456789012"}).encode()
     out = json.loads(gp.rewrite_body(body, P))
     assert out == {"topic": "projects/vyomi-project/topics/t", "project": "vyomi-project",
-                   "member": "serviceAccount:svc@vyomi-project.iam.gserviceaccount.com", "data": "demo"}
+                   "member": "serviceAccount:svc@vyomi-project.iam.gserviceaccount.com", "data": "123456789012"}
+    old = json.dumps({"topic": "projects/gcp-dev/topics/t", "project": "demo"}).encode()
+    assert gp.rewrite_body(old, P) == old   # old ids are not rewritten on requests
     tree = {"topics": {"projects/demo/topics/a": {"name": "projects/demo/topics/a", "project": "demo"}},
             "buckets": {"demo": {"name": "demo", "project": "123456789012"}}}
     gp.rewrite_tree(tree, {"demo", "123456789012"}, "vyomi-project")
@@ -100,13 +105,13 @@ def test_nano_router_resource_manager():
     assert [p["projectId"] for p in _j(R.handle("GET", "/v3/projects:search", {}, {}, b""))["projects"]] == [pid]
 
 
-def test_nano_router_one_store_for_id_number_and_legacy():
+def test_nano_router_one_store_for_id_and_number():
     R = AwsWireRouter()
     pid, num = gp.NANO_PROJECT["projectId"], gp.NANO_PROJECT["projectNumber"]
     assert R.handle("PUT", f"/v1/projects/{num}/topics/by-number", {}, JSON, b"{}")["status"] == 200
-    assert R.handle("PUT", "/v1/projects/demo/topics/by-legacy", {}, JSON, b"{}")["status"] == 200
+    assert R.handle("PUT", "/v1/projects/demo/topics/by-old-id", {}, JSON, b"{}")["status"] == 404
     names = {t["name"] for t in _j(R.handle("GET", f"/v1/projects/{pid}/topics", {}, {}, b""))["topics"]}
-    assert {f"projects/{pid}/topics/by-number", f"projects/{pid}/topics/by-legacy"} <= names
+    assert f"projects/{pid}/topics/by-number" in names and not any("by-old-id" in n for n in names)
     R.handle("PUT", f"/v1/projects/{pid}/subscriptions/s1", {}, JSON,
              json.dumps({"topic": f"projects/{num}/topics/by-number"}).encode())
     sub = _j(R.handle("GET", f"/v1/projects/{num}/subscriptions/s1", {}, {}, b""))

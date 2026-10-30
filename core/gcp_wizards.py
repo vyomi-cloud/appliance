@@ -625,7 +625,7 @@ _CLOUDSCHEDULER_WIZARD = _basic_wizard(
             {"name": "httpMethod", "label": "HTTP method", "type": "select", "default": "POST",
              "ifEquals": {"targetType": "HTTP"}, "options": [
                 {"value": m, "label": m} for m in ("POST", "GET", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")]},
-            {"name": "topic", "label": "Cloud Pub/Sub topic", "default": "projects/demo/topics/my-topic",
+            {"name": "topic", "label": "Cloud Pub/Sub topic", "default": "my-topic",
              "ifEquals": {"targetType": "Pub/Sub"}},
             {"name": "message", "label": "Message body", "default": "scheduled",
              "ifEquals": {"targetType": "Pub/Sub"}},

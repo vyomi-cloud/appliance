@@ -168,7 +168,7 @@ def run() -> int:
 
     # ── GCP: every service routes by REST path to its proven core ──────────
     import json as _j
-    P = "/v1/projects/demo"
+    P = "/v1/projects/nano-project"
 
     # Firestore
     fs = R.handle("POST", f"{P}/databases/(default)/documents/users", {"documentId": "alice"},
@@ -206,7 +206,7 @@ def run() -> int:
     # Pub/Sub — topic, subscription, publish, pull
     R.handle("PUT", f"{P}/topics/orders", {}, {"content-type": "application/json"}, b"{}")
     R.handle("PUT", f"{P}/subscriptions/orders-sub", {}, {"content-type": "application/json"},
-             _j.dumps({"topic": f"projects/demo/topics/orders"}).encode())
+             _j.dumps({"topic": f"projects/nano-project/topics/orders"}).encode())
     R.handle("POST", f"{P}/topics/orders:publish", {}, {"content-type": "application/json"},
              _j.dumps({"messages": [{"data": _b64.b64encode(b"order-42").decode()}]}).encode())
     pull = R.handle("POST", f"{P}/subscriptions/orders-sub:pull", {}, {"content-type": "application/json"},
@@ -218,13 +218,13 @@ def run() -> int:
     # Cloud IAM — service account create + get
     R.handle("POST", f"{P}/serviceAccounts", {}, {"content-type": "application/json"},
              _j.dumps({"accountId": "svc", "serviceAccount": {"displayName": "Svc"}}).encode())
-    sa = R.handle("GET", f"{P}/serviceAccounts/svc@demo.iam.gserviceaccount.com", {}, {}, b"")
+    sa = R.handle("GET", f"{P}/serviceAccounts/svc@nano-project.iam.gserviceaccount.com", {}, {}, b"")
     _check("gcp iam service account routes", sa["status"] == 200 and "email" in _body(sa))
 
     # Cloud SQL — instance insert + get
-    R.handle("POST", "/sql/v1beta4/projects/demo/instances", {}, {"content-type": "application/json"},
+    R.handle("POST", "/sql/v1beta4/projects/nano-project/instances", {}, {"content-type": "application/json"},
              _j.dumps({"name": "pg1", "databaseVersion": "POSTGRES_15", "settings": {"tier": "db-f1-micro"}}).encode())
-    inst = R.handle("GET", "/sql/v1beta4/projects/demo/instances/pg1", {}, {}, b"")
+    inst = R.handle("GET", "/sql/v1beta4/projects/nano-project/instances/pg1", {}, {}, b"")
     _check("gcp cloudsql instance routes", inst["status"] == 200 and "RUNNABLE" in _body(inst))
 
     # ── Azure: data-plane services route by x-ms-* / api-version / path shape ──
