@@ -139,6 +139,13 @@ def _read_gcp() -> list[ActionSpec]:
         return []
     specs: list[ActionSpec] = []
     from .sample_payloads import payload_for, form_payload
+    # Payloads name the space's project, as the console does (other ids are refused).
+    project = str(cat.get("project") or "") if isinstance(cat, dict) else ""
+
+    def scoped(payload):
+        if not (payload and project):
+            return payload
+        return json.loads(json.dumps(payload).replace("@cloudlearn.iam.", f"@{project}.iam."))
     for svc in services:
         key = str(svc.get("key", "")).strip()
         if not key:
@@ -154,7 +161,7 @@ def _read_gcp() -> list[ActionSpec]:
             specs.append(ActionSpec(
                 provider="gcp", service=key, action="create",
                 method=str(svc.get("create_method") or "POST").upper(),
-                path=coll, payload=payload_for("gcp", key) or form_payload("gcp", svc),
+                path=coll, payload=scoped(payload_for("gcp", key) or form_payload("gcp", svc)),
                 name_field=name_field,
             ))
         if res:

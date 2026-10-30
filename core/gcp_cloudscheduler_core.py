@@ -529,7 +529,10 @@ def job_from_form(b, project="demo"):
         job["description"] = str(b["description"])
     kind = str(b.get("targetType") or "HTTP").upper().replace("/", "")
     if kind == "PUBSUB":
-        job["pubsubTarget"] = {"topicName": str(b.get("topic") or "").strip(),
+        topic = str(b.get("topic") or "").strip()
+        if topic and not topic.startswith("projects/"):   # a topic picked by name lives in this project
+            topic = f"projects/{project}/topics/{topic}"
+        job["pubsubTarget"] = {"topicName": topic,
                                "data": base64.b64encode(str(b.get("message") or "").encode()).decode()}
     else:
         job["httpTarget"] = {"uri": str(b.get("url") or "").strip(),

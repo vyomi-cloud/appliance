@@ -100,6 +100,8 @@ def build_backed_router() -> AwsWireRouter:
     stores["gcp_redis"] = _gcp_redis_store()   # shared with the console REST (/api/gcp/redis)
     from core.gcp_monitoring_core import shared_store as _gcp_mon_store
     stores["gcp_mon"] = _gcp_mon_store()   # shared with the console REST (/api/gcp/monitoring)
+    from core.gcp_project import current as _gcp_project
+    stores["gcp_project"] = _gcp_project   # the GCP space's project, not Nano's fixed one
     return AwsWireRouter(stores=stores)
 
 

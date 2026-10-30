@@ -9,6 +9,11 @@ import uuid
 import requests
 
 BASE = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000") + "/api/console"
+# The GCP space's project ID — what every GCP resource name carries.
+try:
+    PROJECT = requests.get(BASE.rsplit("/api/console", 1)[0] + "/api/gcp/catalog", timeout=60).json()["project"]
+except Exception:   # appliance not up yet (collection)
+    PROJECT = "vyomi-project"
 failed = False
 
 
@@ -29,7 +34,7 @@ def call(method, path, **kw):
 
 def pubsub(tag):
     q, t = f"q-{tag}", f"t-{tag}"
-    topic_arn = f"projects/cloudlearn/topics/{t}"
+    topic_arn = f"projects/{PROJECT}/topics/{t}"
     s, b = call("POST", "/gcp-pubsub/subscriptions", json={"name": q})
     check("pubsub: create subscription", s == 200 and b.get("queue_name") == q, b)
     s, b = call("POST", f"/gcp-pubsub/subscriptions/{q}/send", json={"body": "hello"})
@@ -61,7 +66,7 @@ def pubsub(tag):
 def secrets(tag):
     n = f"sec-{tag}"
     s, b = call("POST", "/gcp-secrets/secrets", json={"name": n, "secret_string": "v1", "description": "d"})
-    check("secrets: create", s == 200 and b.get("arn") == f"projects/cloudlearn/secrets/{n}", b)
+    check("secrets: create", s == 200 and b.get("arn") == f"projects/{PROJECT}/secrets/{n}", b)
     s, b = call("GET", f"/gcp-secrets/secrets/{n}")
     check("secrets: describe has description and created", s == 200 and b.get("description") == "d" and b.get("created"), b)
     s, b = call("GET", f"/gcp-secrets/secrets/{n}/value")

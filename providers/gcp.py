@@ -15,6 +15,7 @@ def matrix() -> dict:
 
 
 def tool_response(tool: str) -> dict:
+    from core.app_context import gcp_project_name   # the GCP space's project ID
     tool = tool.lower()
     provider_info = get_provider("gcp")
     endpoint = "http://127.0.0.1:9000"
@@ -71,7 +72,7 @@ def tool_response(tool: str) -> dict:
             "status": "partial",
             "endpoint": endpoint,
             "dependency": "google-cloud-storage (and other google-cloud-* packages)",
-            "config": {"STORAGE_EMULATOR_HOST": endpoint, "project": "cloudlearn"},
+            "config": {"STORAGE_EMULATOR_HOST": endpoint, "project": gcp_project_name(None)},
             "help": ["Set STORAGE_EMULATOR_HOST env var to point Python clients at the simulator.", "Client wrappers are partial, so transport and request shape glue is still expanding."],
             "provider_surface": provider_info.get("surface", {}),
         }
@@ -82,7 +83,7 @@ def tool_response(tool: str) -> dict:
             "status": "partial",
             "endpoint": endpoint,
             "dependency": "@google-cloud/storage (and other @google-cloud/* packages)",
-            "config": {"apiEndpoint": endpoint, "projectId": "cloudlearn"},
+            "config": {"apiEndpoint": endpoint, "projectId": gcp_project_name(None)},
             "help": ["Pass apiEndpoint to each client constructor.", "Client wrappers are partial, so transport and request shape glue is still expanding."],
             "provider_surface": provider_info.get("surface", {}),
         }

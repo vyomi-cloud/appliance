@@ -173,7 +173,14 @@ class Backends:
             _r = _reg.get()
             # The registry has no ResourceStore of its own (it can't import wasm/);
             # register this one so nano_persist (STORE_ATTRS "resources") snapshots it.
-            self.resources = _r.setdefault("resources", ResourceStore())
+            cur = _r.get("resources")
+            if not isinstance(cur, ResourceStore):
+                # The router may have registered a plain holder first (core/aws_wire_router
+                # ResourceCollections); the console needs the full store, with its contents.
+                rs = ResourceStore()
+                rs.collections.update(getattr(cur, "collections", None) or {})
+                _r["resources"] = cur = rs
+            self.resources = cur
             self._azure_arm = _r["az_arm"]
         except Exception:
             # Defensive fallback (e.g. registry unavailable in an isolated test):

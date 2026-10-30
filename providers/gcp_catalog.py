@@ -19,9 +19,9 @@ works across providers. Each service entry has:
     - wizard:           Multi-step (or collapsible) wizard from core/gcp_wizards
     - subBlades:        Detail-page left sub-nav from core/gcp_subblades
 
-GCP "Project" maps to our "Space" — project name comes from the active space's
-``active_account`` (or "cloudlearn" default). The frontend substitutes it at
-request time.
+GCP "Project" maps to our "Space" — the space's project ID (core/gcp_project;
+the space's ``active_account`` is its project number). The frontend substitutes
+it at request time.
 """
 from __future__ import annotations
 
@@ -427,7 +427,7 @@ RESOURCE_CATALOG_GCP = [
             {"name": "targetType",  "label": "Target type (HTTP or Pub/Sub)", "default": "HTTP"},
             {"name": "url",         "label": "URL (HTTP target)",            "default": "https://example.com/hook"},
             {"name": "httpMethod",  "label": "HTTP method",                  "default": "POST"},
-            {"name": "topic",       "label": "Topic (Pub/Sub target)",       "default": "projects/demo/topics/my-topic"},
+            {"name": "topic",       "label": "Topic (Pub/Sub target)",       "default": "my-topic"},
             {"name": "message",     "label": "Message body (Pub/Sub target)", "default": "scheduled"},
         ],
     },
@@ -624,12 +624,13 @@ def catalog_for_console() -> list[dict]:
     return out
 
 
-def build_console_payload(active_project: str = "cloudlearn",
+def build_console_payload(active_project: str = "vyomi-project",
                           active_region: str = "us-central1",
-                          active_zone: str = "us-central1-a") -> dict:
-    """Full payload for /api/gcp/catalog. Project comes from the active
-    space's account/project setting; region/zone default to us-central1/-a
-    which most GCP defaults use.
+                          active_zone: str = "us-central1-a",
+                          project_number: str = "") -> dict:
+    """Full payload for /api/gcp/catalog. Project is the space's project ID
+    (with its project number); region/zone default to us-central1/-a which
+    most GCP defaults use.
 
     `extras` carries per-stub schemas for the new Eventarc/Secret Manager/
     Cloud KMS services backed by /api/gcp/extras/...
@@ -638,6 +639,7 @@ def build_console_payload(active_project: str = "cloudlearn",
     slim_extras = {k: {**v, "seed": None} for k, v in EXTRAS.items()}
     return {
         "project": active_project,
+        "projectNumber": project_number,
         "region":  active_region,
         "zone":    active_zone,
         "services": catalog_for_console(),

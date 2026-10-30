@@ -10,6 +10,10 @@ import uuid
 import requests
 
 BASE = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000")
+try:   # the GCP space's project ID
+    PROJECT = requests.get(f"{BASE}/api/gcp/catalog", timeout=60).json()["project"]
+except Exception:   # appliance not up yet (collection)
+    PROJECT = "vyomi-project"
 failed = False
 
 
@@ -21,18 +25,18 @@ def check(name, ok, extra=""):
 
 def main():
     tag = uuid.uuid4().hex[:6]
-    ps = f"{BASE}/api/gcp/pubsub/v1/projects/cloudlearn"
-    jobs = f"{BASE}/v1/projects/cloudlearn/locations/us-central1/jobs"
+    ps = f"{BASE}/api/gcp/pubsub/v1/projects/{PROJECT}"
+    jobs = f"{BASE}/v1/projects/{PROJECT}/locations/us-central1/jobs"
     topic, sub = f"sch-t-{tag}", f"sch-s-{tag}"
     r = requests.put(f"{ps}/topics/{topic}", json={}, timeout=60)
     check("create topic", r.status_code < 300, r.text[:120])
-    r = requests.put(f"{ps}/subscriptions/{sub}", json={"topic": f"projects/cloudlearn/topics/{topic}"}, timeout=60)
+    r = requests.put(f"{ps}/subscriptions/{sub}", json={"topic": f"projects/{PROJECT}/topics/{topic}"}, timeout=60)
     check("create subscription", r.status_code < 300, r.text[:120])
     body = {"schedule": "* * * * *", "pubsubTarget": {
-        "topicName": f"projects/cloudlearn/topics/{topic}", "data": base64.b64encode(b"tick").decode()}}
-    r = requests.post(jobs, json={**body, "name": f"projects/cloudlearn/locations/us-central1/jobs/on-{tag}"}, timeout=60)
+        "topicName": f"projects/{PROJECT}/topics/{topic}", "data": base64.b64encode(b"tick").decode()}}
+    r = requests.post(jobs, json={**body, "name": f"projects/{PROJECT}/locations/us-central1/jobs/on-{tag}"}, timeout=60)
     check("create ENABLED job", r.status_code < 300, r.text[:160])
-    r = requests.post(jobs, json={**body, "name": f"projects/cloudlearn/locations/us-central1/jobs/off-{tag}"}, timeout=60)
+    r = requests.post(jobs, json={**body, "name": f"projects/{PROJECT}/locations/us-central1/jobs/off-{tag}"}, timeout=60)
     check("create job to pause", r.status_code < 300, r.text[:160])
     r = requests.post(f"{jobs}/off-{tag}:pause", json={}, timeout=60)
     check("pause job", r.status_code < 300 and r.json().get("state") == "PAUSED", r.text[:160])
@@ -41,7 +45,7 @@ def main():
     msgs, end = [], time.time() + 85
     while time.time() < end and not msgs:
         time.sleep(5)
-        r = requests.post(f"{BASE}/v1/projects/cloudlearn/subscriptions/{sub}:pull", json={"maxMessages": 10}, timeout=60)
+        r = requests.post(f"{BASE}/v1/projects/{PROJECT}/subscriptions/{sub}:pull", json={"maxMessages": 10}, timeout=60)
         msgs = r.json().get("receivedMessages", []) if r.status_code < 300 else []
     check("scheduled message reached the subscription with no scheduler call", len(msgs) >= 1, "none within 85s")
     if msgs:

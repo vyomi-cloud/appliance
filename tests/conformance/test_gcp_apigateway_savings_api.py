@@ -8,6 +8,10 @@ import uuid
 import requests
 
 BASE = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000")
+try:   # the GCP space's project ID
+    PROJECT = requests.get(f"{BASE}/api/gcp/catalog", timeout=60).json()["project"]
+except Exception:   # appliance not up yet (collection)
+    PROJECT = "vyomi-project"
 failed = False
 
 
@@ -39,7 +43,7 @@ def snap(settle=None):
 def main():
     prev = switch_to_gcp()
     api = f"apigw-sav-{uuid.uuid4().hex[:6]}"
-    root = f"{BASE}/api/gcp/apigateway/v1/projects/cloudlearn/locations/global/apis"
+    root = f"{BASE}/api/gcp/apigateway/v1/projects/{PROJECT}/locations/global/apis"
     c0, g0 = snap()
     r = requests.post(root, json={"name": api}, timeout=60)
     check("create API", r.status_code < 300, r.text[:120])

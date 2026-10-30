@@ -60,7 +60,7 @@ const CORES = [
   "sql_store.py", "rds_core.py", "iam_store.py", "iam_core.py",
   "messaging_store.py", "sqs_core.py", "sns_core.py", "elbv2_core.py", "rds_data_core.py",
   // GCP cores — imported by aws_wire_router for the /storage/v1, /v1/projects/*, /sql/* routes.
-  "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
+  "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py",
   // Azure data-plane cores — imported by aws_wire_router for the x-ms-*/dbs/keys/secrets routes.
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
@@ -77,6 +77,7 @@ async function boot() {
   // RDS's SQL data-plane uses sqlite3 (a loadable Pyodide package); the control
   // plane doesn't, but load it so SQL-over-RDS works through the relay too.
   try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
+  try { await py.loadPackage("tzdata"); } catch (e) { log("tzdata load skipped: " + e, "dim"); }   // zoneinfo zones (Cloud Scheduler time zones)
   // RDS data-plane engine swap: prefer REAL Postgres (PGlite) when it loads,
   // else keep the sqlite3 default. Both run behind the same SqlStore seam.
   const hasPg = await installPGlite();

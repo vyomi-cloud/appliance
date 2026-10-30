@@ -178,7 +178,7 @@ def api_gcp_storage_get_bucket(bucket: str):
     bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
     if not bucket_rec:
         raise HTTPException(404, detail="Bucket not found")
-    project = str(bucket_rec.get("project") or "cloudlearn")
+    project = _gcp_project_name(bucket_rec.get("project"))
     return s._gcp_storage_bucket_view(project, bucket_rec)
 
 
@@ -207,7 +207,7 @@ async def api_gcp_storage_patch_bucket(bucket: str, request: Request):
     if "defaultEventBasedHold" in payload:
         rec["defaultEventBasedHold"] = bool(payload.get("defaultEventBasedHold"))
     rec["updated"] = _now()
-    project = str(rec.get("project") or "cloudlearn")
+    project = _gcp_project_name(rec.get("project"))
     return s._gcp_storage_bucket_view(project, rec)
 
 
@@ -230,7 +230,7 @@ def api_gcp_storage_list_objects(bucket: str, request: Request):
     for name, obj in gcp_storage_state.get("objects", {}).get(bucket, {}).items():
         if prefix and not name.startswith(prefix):
             continue
-        objects.append(s._gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, name, obj))
+        objects.append(s._gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, name, obj))
     objects.sort(key=lambda item: item.get("name", ""))
     # Real GCS OMITS nextPageToken when the listing is complete. Emitting an
     # empty string makes the google-cloud-storage SDKs treat it as "another
@@ -244,7 +244,7 @@ async def api_gcp_storage_create_object(bucket: str, request: Request):
     bucket_rec = gcp_storage_state.get("buckets", {}).get(bucket)
     if not bucket_rec:
         raise HTTPException(404, detail="Bucket not found")
-    project = str(bucket_rec.get("project") or "cloudlearn")
+    project = _gcp_project_name(bucket_rec.get("project"))
     ctype = request.headers.get("content-type", "") if request is not None else ""
     qp = request.query_params if request is not None else {}
     upload_type = str(qp.get("uploadType") or "")
@@ -321,7 +321,7 @@ def api_gcp_storage_get_object(bucket: str, object_name: str, request: Request =
     obj = gcp_storage_state.get("objects", {}).get(bucket, {}).get(object_name)
     if not obj:
         raise HTTPException(404, detail="Object not found")
-    return s._gcp_storage_object_view(str(bucket_rec.get("project") or "cloudlearn"), bucket, object_name, obj)
+    return s._gcp_storage_object_view(_gcp_project_name(bucket_rec.get("project")), bucket, object_name, obj)
 
 
 def api_gcp_storage_delete_object(bucket: str, object_name: str):

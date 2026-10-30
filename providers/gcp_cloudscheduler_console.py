@@ -14,7 +14,10 @@ from fastapi import HTTPException, Request, Response
 
 from core import gcp_cloudscheduler_core as core
 
-DEFAULT_PROJECT = "demo"
+def _project():
+    """The GCP space's project ID — the project the console creates in."""
+    from core.app_context import gcp_project_name
+    return gcp_project_name(None)
 DEFAULT_REGION = "us-central1"
 TICK_SECONDS = 15
 
@@ -239,7 +242,7 @@ def register(app, on_change=None):
         b = await _json_body(request)
         job = build_job(b)
         loc = str(b.get("region") or DEFAULT_REGION)
-        r = await call("POST", f"/v1/projects/{DEFAULT_PROJECT}/locations/{loc}/jobs", body=json.dumps(job).encode())
+        r = await call("POST", f"/v1/projects/{_project()}/locations/{loc}/jobs", body=json.dumps(job).encode())
         if r.status >= 300:
             raise _http_error(r)
         v = core.console_view(store().jobs[job["name"]])
@@ -282,6 +285,6 @@ def register(app, on_change=None):
         return core.console_view(store().jobs[json.loads(r.body)["name"]])
 
 
-def build_job(b, project=DEFAULT_PROJECT):
+def build_job(b, project=None):
     """Console create form → REST Job (shared with the Nano adapter's shape)."""
-    return core.job_from_form(b, project)
+    return core.job_from_form(b, project or _project())

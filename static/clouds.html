@@ -1732,13 +1732,14 @@
   <script>
   (function () {
     // Multi-cloud quick-start catalog. Each service carries a snippet per transport
-    // (cli / sdk / curl); {EP} → the live endpoint, {EPHOST} → it without scheme.
+    // (cli / sdk / curl); {EP} → the live endpoint, {EPHOST} → it without scheme,
+    // {PROJECT} → the GCP project.
     // Curated (not exhaustive) — the "Full per-service reference" link covers all.
     var CLOUDS = [
       { id:'aws', name:'AWS', icon:'cloud', color:'#ff9900',
         setup:'Dummy creds + any region, and disable the CLI pager: export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=""' },
       { id:'gcp', name:'Google Cloud', icon:'cloud_queue', color:'#4285f4',
-        setup:'First: gcloud config set auth/disable_credentials true && gcloud config set core/project gcp-dev',
+        setup:'First: gcloud config set auth/disable_credentials true && gcloud config set core/project {PROJECT}',
         nanoNote:'On Nano, GCP runs inside the in-browser console — it is NOT exposed over the AWS relay tunnel. These external examples apply to the appliance (Lite/Pro/Max).' },
       { id:'azure', name:'Azure', icon:'cloud_circle', color:'#38b6ff',
         setup:'Data plane uses the Azurite dev account devstoreaccount1; control plane after: az cloud register --endpoint-resource-manager {EP}',
@@ -1781,20 +1782,20 @@
       // ── Google Cloud (endpoint via *_EMULATOR_HOST / API-endpoint override) ──
       { cloud:'gcp', key:'gcp-gcs', name:'Cloud Storage', icon:'inventory_2', color:'#4285f4', desc:'Object storage (GCS) — buckets & objects.',
         cli:'export STORAGE_EMULATOR_HOST="{EPHOST}"\ngcloud storage buckets create gs://demo\ngcloud storage ls gs://demo',
-        sdk:'import os\nos.environ["STORAGE_EMULATOR_HOST"] = "{EP}"\nfrom google.cloud import storage\nclient = storage.Client(project="gcp-dev")\nclient.create_bucket("demo")\nprint([b.name for b in client.list_buckets()])',
-        curl:'curl "{EP}/storage/v1/b?project=gcp-dev"' },
+        sdk:'import os\nos.environ["STORAGE_EMULATOR_HOST"] = "{EP}"\nfrom google.cloud import storage\nclient = storage.Client(project="{PROJECT}")\nclient.create_bucket("demo")\nprint([b.name for b in client.list_buckets()])',
+        curl:'curl "{EP}/storage/v1/b?project={PROJECT}"' },
       { cloud:'gcp', key:'gcp-firestore', name:'Firestore', icon:'table_chart', color:'#ffa000', desc:'Serverless document database.',
         cli:'export FIRESTORE_EMULATOR_HOST="{EPHOST}"\n# data CRUD is via the SDK (gcloud has no document ops)',
-        sdk:'import os\nos.environ["FIRESTORE_EMULATOR_HOST"] = "{EPHOST}"\nfrom google.cloud import firestore\ndb = firestore.Client(project="gcp-dev")\ndb.collection("users").document("u1").set({"name": "Ada"})\nprint(db.collection("users").document("u1").get().to_dict())',
-        curl:'curl "{EP}/v1/projects/gcp-dev/databases/(default)/documents/users"' },
+        sdk:'import os\nos.environ["FIRESTORE_EMULATOR_HOST"] = "{EPHOST}"\nfrom google.cloud import firestore\ndb = firestore.Client(project="{PROJECT}")\ndb.collection("users").document("u1").set({"name": "Ada"})\nprint(db.collection("users").document("u1").get().to_dict())',
+        curl:'curl "{EP}/v1/projects/{PROJECT}/databases/(default)/documents/users"' },
       { cloud:'gcp', key:'gcp-pubsub', name:'Pub/Sub', icon:'campaign', color:'#34a853', desc:'Messaging — topics & subscriptions.',
         cli:'export PUBSUB_EMULATOR_HOST="{EPHOST}"\ngcloud pubsub topics create orders\ngcloud pubsub topics list',
-        sdk:'import os\nos.environ["PUBSUB_EMULATOR_HOST"] = "{EPHOST}"\nfrom google.cloud import pubsub_v1\npub = pubsub_v1.PublisherClient()\npub.create_topic(name="projects/gcp-dev/topics/orders")',
-        curl:'curl -X PUT "{EP}/v1/projects/gcp-dev/topics/orders"' },
+        sdk:'import os\nos.environ["PUBSUB_EMULATOR_HOST"] = "{EPHOST}"\nfrom google.cloud import pubsub_v1\npub = pubsub_v1.PublisherClient()\npub.create_topic(name="projects/{PROJECT}/topics/orders")',
+        curl:'curl -X PUT "{EP}/v1/projects/{PROJECT}/topics/orders"' },
       { cloud:'gcp', key:'gcp-secrets', name:'Secret Manager', icon:'lock', color:'#ea4335', desc:'Store & retrieve secrets.',
         cli:'export CLOUDSDK_API_ENDPOINT_OVERRIDES_SECRETMANAGER="{EP}/"\ngcloud secrets create db-pass --replication-policy=automatic\ngcloud secrets list',
-        sdk:'from google.cloud import secretmanager\nc = secretmanager.SecretManagerServiceClient(\n    client_options={"api_endpoint": "{EPHOST}"})\nprint(list(c.list_secrets(request={"parent": "projects/gcp-dev"})))',
-        curl:'curl "{EP}/v1/projects/gcp-dev/secrets"' },
+        sdk:'from google.cloud import secretmanager\nc = secretmanager.SecretManagerServiceClient(\n    client_options={"api_endpoint": "{EPHOST}"})\nprint(list(c.list_secrets(request={"parent": "projects/{PROJECT}"})))',
+        curl:'curl "{EP}/v1/projects/{PROJECT}/secrets"' },
       // ── Azure (data plane via Azurite; control plane via ARM) ──────────
       { cloud:'azure', key:'az-blob', name:'Blob Storage', icon:'inventory_2', color:'#0078d4', desc:'Object storage — containers & blobs.',
         cli:'export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=<azurite-key>;BlobEndpoint={EP}/devstoreaccount1;"\naz storage container create -n demo\naz storage container list',
@@ -1833,7 +1834,11 @@
         return 'https://relay.vyomi.cloud/' + encodeURIComponent(ls('nano_session') || 'nano');
       }
       var endpoint = isNano ? (ls('nano_relay_external') || derived()) : location.origin;
-      function sub(str){ return String(str).replace(/\{EPHOST\}/g, endpoint.replace(/^https?:\/\//,'')).replace(/\{EP\}/g, endpoint); }
+      // {PROJECT} → the GCP project the console works in (what `gcloud projects list` shows).
+      var gcpProject = isNano ? 'nano-project' : 'vyomi-project';
+      fetch('/api/gcp/catalog').then(function(r){ return r.json(); })
+        .then(function(c){ if(c && c.project) gcpProject = c.project; }).catch(function(){});
+      function sub(str){ return String(str).replace(/\{EPHOST\}/g, endpoint.replace(/^https?:\/\//,'')).replace(/\{EP\}/g, endpoint).replace(/\{PROJECT\}/g, gcpProject); }
       // AWS CLI snippets must be paste-and-run: the CLI refuses to sign without
       // creds + region, and CLI v2's pager can swallow short output (LESS=-F
       // without -X), which looked like "rds describe-db-instances prints nothing".

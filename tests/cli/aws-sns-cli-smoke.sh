@@ -5,6 +5,7 @@
 #   ENDPOINT=http://127.0.0.1:9000 bash tests/cli/aws-sns-cli-smoke.sh
 set -u
 BASE="${ENDPOINT:-http://127.0.0.1:9000}"
+CONSOLE="${CONSOLE:-$BASE}"   # the console's own API: the same server offline, the Nano tab on Nano
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
@@ -16,7 +17,7 @@ if ! command -v aws >/dev/null 2>&1; then
 fi
 
 pass=0; fail=0
-chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: $3"; fail=$((fail+1)); fi; }
+chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 sns() { aws sns --endpoint-url "$BASE" "$@" 2>&1; }
 sqs() { aws sqs --endpoint-url "$BASE" "$@" 2>&1; }
 # q <expected-substring> <description> <aws args...>: run and look for a substring.
@@ -29,7 +30,11 @@ v() { local what="$1"; shift; OUT=$(sns "$@"); local rc=$?
 f() { local want="$1" what="$2"; shift 2; local out; out=$(sns "$@"); local rc=$?
       if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q -- "$want"; then chk 0 "$what"; else chk 1 "$what" "$(printf '%s' "$out" | head -c 300)"; fi; }
 # log <jq-free python expr over the delivery log item list `items`> -> prints result
-logq() { curl -s "$BASE/api/aws/sns/deliveries" | python3 -c "import json,sys; items=json.load(sys.stdin)['items']; print($1)"; }
+logq() { curl -s "$CONSOLE/api/aws/sns/deliveries" | python3 -c "import json,sys; items=json.load(sys.stdin)['items']; print($1)"; }
+# logq_until <expr>: logq, re-read for a few seconds until it prints something truthy — the log
+# can trail the CLI call (Nano syncs the console and the tunnel through a debounced save).
+logq_until() { local out=""; for _ in 1 2 3 4 5 6 7 8; do
+    out=$(logq "$1" 2>/dev/null); case "$out" in ""|False|None|0|"[]") sleep 1;; *) break;; esac; done; printf '%s' "$out"; }
 
 SFX=$(date +%s | tail -c 6)
 TOPIC="cli-topic-$SFX"
@@ -79,11 +84,11 @@ printf '%s' "$BODIES" | grep -q "filtered-out" && chk 1 "filter policy dropped t
 # email subscription needs confirmation (token comes from the message log)
 v "subscribe (email, pending)" subscribe --topic-arn "$TARN" --protocol email --notification-endpoint "cli-$SFX@example.com" --query SubscriptionArn --output text
 [ "$OUT" = "pending confirmation" ] && chk 0 "email subscription is pending confirmation" || chk 1 "email subscription is pending confirmation" "$OUT"
-TOKEN=$(logq "[i['token'] for i in items if i['kind']=='SubscriptionConfirmation' and i['endpoint']=='cli-$SFX@example.com'][0]")
+TOKEN=$(logq_until "([i['token'] for i in items if i['kind']=='SubscriptionConfirmation' and i['endpoint']=='cli-$SFX@example.com'] or [''])[0]")
 f "InvalidParameter" "confirm-subscription with a wrong token" confirm-subscription --topic-arn "$TARN" --token deadbeef
 q "SubscriptionArn" "confirm-subscription with the logged token" confirm-subscription --topic-arn "$TARN" --token "$TOKEN"
 q "" "publish after confirmation" publish --topic-arn "$TARN" --message "to-email" --subject "hello"
-[ "$(logq "any(i['kind']=='Notification' and i['protocol']=='email' and i['message']=='to-email' for i in items)")" = "True" ] \
+[ "$(logq_until "any(i['kind']=='Notification' and i['protocol']=='email' and i['message']=='to-email' for i in items)")" = "True" ] \
   && chk 0 "email delivery recorded in the message log" || chk 1 "email delivery recorded in the message log"
 
 # publish-batch
@@ -111,7 +116,7 @@ q "Transactional" "get-sms-attributes" get-sms-attributes
 q "true" "get-sms-sandbox-account-status" get-sms-sandbox-account-status
 PHONE="+1555555$(printf '%04d' $((SFX % 10000)))"
 q "" "create-sms-sandbox-phone-number" create-sms-sandbox-phone-number --phone-number "$PHONE"
-OTP=$(logq "[i['token'] for i in items if i['kind']=='SMSSandboxVerification' and i['endpoint']=='$PHONE'][0]")
+OTP=$(logq_until "([i['token'] for i in items if i['kind']=='SMSSandboxVerification' and i['endpoint']=='$PHONE'] or [''])[0]")
 q "" "verify-sms-sandbox-phone-number" verify-sms-sandbox-phone-number --phone-number "$PHONE" --one-time-password "$OTP"
 q "Verified" "list-sms-sandbox-phone-numbers" list-sms-sandbox-phone-numbers
 q "MessageId" "publish an SMS to the verified number" publish --phone-number "$PHONE" --message "hi"
@@ -120,6 +125,11 @@ q "false" "check-if-phone-number-is-opted-out" check-if-phone-number-is-opted-ou
 
 
 # ── push delivery through NATS JetStream: HTTP confirm/notify/retry/DLQ, FIFO dedup ──────────
+# SNS_HTTP_PUSH=0 (Nano): a browser tab can't be an SNS server pushing to HTTP endpoints —
+# cross-origin rules hide the response (so no retries) and an https page can't reach private
+# addresses. The section is reported as not applicable there, not as passed.
+RDIR=""; RPID=""
+if [ "${SNS_HTTP_PUSH:-1}" = "1" ]; then
 RDIR=$(mktemp -d)
 cat > "$RDIR/recv.py" <<'PY'
 import json, sys
@@ -182,7 +192,7 @@ v "subscribe a 500-returning endpoint with a DeliveryPolicy + RedrivePolicy" sub
   --attributes "$FATTRS"
 FSARN="$OUT"
 sleep 1
-FTOKEN=$(logq "[i['token'] for i in items if i['kind']=='SubscriptionConfirmation' and i['endpoint'].endswith('/fail-$SFX')][0]")
+FTOKEN=$(logq_until "([i['token'] for i in items if i['kind']=='SubscriptionConfirmation' and i['endpoint'].endswith('/fail-$SFX')] or [''])[0]")
 q "$FTARN" "confirm the failing subscription" confirm-subscription --topic-arn "$FTARN" --token "$FTOKEN"
 sleep 4
 q "MessageId" "publish to the failing topic" publish --topic-arn "$FTARN" --message "will-fail-$SFX"
@@ -194,6 +204,9 @@ q "" "unsubscribe the HTTP subscription" unsubscribe --subscription-arn "$FSARN"
 q "" "delete the HTTP topic" delete-topic --topic-arn "$HTARN"
 sns delete-topic --topic-arn "$FTARN" >/dev/null 2>&1
 sqs delete-queue --queue-url "$DLQURL" >/dev/null 2>&1
+else
+  echo "[N/A] HTTP/S endpoint delivery (confirmation POST, signed messages, retries, dead-letter queue) :: Nano: a browser tab cannot push to HTTP endpoints"
+fi
 
 DT="cli-dedup-$SFX.fifo"
 v "create-topic (FIFO, dedup)" create-topic --name "$DT" --attributes FifoTopic=true --query TopicArn --output text; DTARN="$OUT"
@@ -201,7 +214,7 @@ M1=$(sns publish --topic-arn "$DTARN" --message dup --message-group-id g --messa
 M2=$(sns publish --topic-arn "$DTARN" --message dup --message-group-id g --message-deduplication-id d1 --query MessageId --output text)
 [ -n "$M1" ] && [ "$M1" = "$M2" ] && chk 0 "a FIFO duplicate within the 5-minute window is dropped (same MessageId, delivered once)" || chk 1 "a FIFO duplicate within the 5-minute window is dropped" "$M1 vs $M2"
 sns delete-topic --topic-arn "$DTARN" >/dev/null 2>&1
-kill "$RPID" 2>/dev/null; rm -rf "$RDIR"
+[ -n "$RPID" ] && kill "$RPID" 2>/dev/null; [ -n "$RDIR" ] && rm -rf "$RDIR"
 
 # clean up
 q "" "unsubscribe" unsubscribe --subscription-arn "$SARN"
