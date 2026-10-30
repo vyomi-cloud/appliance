@@ -1,0 +1,68 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap, approved on consoles/honest-allowlist.json (hooks, invocation-summary, public-extensions). activated-extensions/extension-detail are approved as read-only REFERENCE pages (_reference) — real backend data (ListTypes/DescribeType), no create-a-resource liveness.",
+  "getting-started": {
+    "route": "#/cloudformation"
+  },
+  "stacks": {
+    "route": "#/cloudformation/stacks",
+    "fixtures": ["cfn-stack"],
+    "live": "live-stack"
+  },
+  "stack-detail": {
+    "route": "#/cloudformation/stacks/{live}",
+    "fixtures": ["cfn-stack"],
+    "live": "live-stack"
+  },
+  "create-stack": {
+    "route": "#/cloudformation/create",
+    "expand": ["role=button[name=\"Next\"]", "role=button[name=\"Next\"]", "role=button[name=\"Next\"]"]
+  },
+  "stack-refactors": {
+    "route": "#/cloudformation/stack-refactors",
+    "live": "live-stack-refactor"
+  },
+  "stacksets": {
+    "route": "#/cloudformation/stacksets",
+    "fixtures": ["cfn-stackset"],
+    "live": "live-stackset"
+  },
+  "exports": {
+    "route": "#/cloudformation/exports",
+    "fixtures": ["cfn-export-stack"],
+    "live": "live-export"
+  },
+  "iac-generator": {
+    "route": "#/cloudformation/iac-generator"
+  },
+  "template-studio": {
+    "route": "#/cloudformation/template-studio"
+  },
+  "hooks-overview": {
+    "route": "#/cloudformation/hooks/overview"
+  },
+  "invocation-summary": {
+    "route": "#/cloudformation/hooks/invocations",
+    "honest_page": true
+  },
+  "hooks": {
+    "route": "#/cloudformation/hooks/list",
+    "honest_page": true
+  },
+  "public-extensions": {
+    "route": "#/cloudformation/registry/public-extensions",
+    "honest_page": true
+  },
+  "extension-detail": {
+    "route": "#/cloudformation/registry/public-extensions/resource-type/AWS::S3::Bucket",
+    "vars": { "resource-name": "AWS::S3::Bucket" }
+  },
+  "activated-extensions": {
+    "route": "#/cloudformation/registry/activated-extensions"
+  },
+  "publisher": {
+    "route": "#/cloudformation/registry/publisher"
+  },
+  "spotlight": {
+    "route": "#/cloudformation/spotlight"
+  }
+}
