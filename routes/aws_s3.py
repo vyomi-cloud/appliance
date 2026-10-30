@@ -716,11 +716,50 @@ def _s3_notification_record_delivery(
             else:
                 record["status"] = "failed"
                 record["error"] = "SQS queue not found"
+        elif target["type"] in ("TopicConfiguration", "EventBridgeConfiguration"):
+            # v4 C0e: SNS topics / the default event bus live in the shared messaging store
+            ok, err = _s3_deliver_messaging(target, bucket, key, event_name, payload or {})
+            if ok is False:
+                record["status"] = "failed"
+                record["error"] = err
         notifications["deliveries"].append(record)
         records.append(record)
     notifications["deliveries"] = notifications["deliveries"][-200:]
     notifications["updatedAt"] = _now()
     return records
+
+
+def _s3_deliver_messaging(target: dict, bucket: str, key: str, event_name: str, payload: dict):
+    """S3 → SNS topic / → EventBridge (default bus) through the shared cores (v4 C0e).
+    Returns (None, "") when the service is opted out (the pre-v4 behaviour: recorded only)."""
+    from core import wire_ingress as _wi
+    try:
+        st = _wi.appliance_router().msg
+        if target["type"] == "TopicConfiguration":
+            if not _wi.is_unified("sns"):
+                return None, ""
+            from core import sns_core
+            ok = sns_core.publish_arn(st, target["destination"], json.dumps(payload, default=str))
+            return ok, "" if ok else "SNS topic not found"
+        if not _wi.is_unified("events") or event_name == "s3:TestEvent":
+            return None, ""   # (AWS sends the s3:TestEvent to SQS / SNS / Lambda only)
+        from core import eventbridge_core
+        rec = (payload.get("Records") or [{}])[0]
+        obj = (rec.get("s3") or {}).get("object") or {}
+        removed = "ObjectRemoved" in event_name
+        detail = {"version": "0", "bucket": {"name": bucket},
+                  "object": {"key": key, **({} if removed else {"size": obj.get("size", 0), "etag": obj.get("eTag", "")}),
+                             **({"version-id": obj["versionId"]} if obj.get("versionId") not in (None, "", "null") else {}),
+                             "sequencer": obj.get("sequencer", "")},
+                  "request-id": ((rec.get("responseElements") or {}).get("x-amz-request-id") or ""),
+                  "requester": AWS_ACCOUNT_ID, "reason": event_name.split(":")[-1]}
+        r = eventbridge_core.dispatch(st, "AWSEvents.PutEvents", {"Entries": [{
+            "Source": "aws.s3", "DetailType": "Object Deleted" if removed else "Object Created",
+            "Resources": [f"arn:aws:s3:::{bucket}"], "Detail": json.dumps(detail)}]},
+            lam_store=_wi._lam_store(_wi.appliance_router()))
+        return r.status == 200, ""
+    except Exception as exc:   # never fail the S3 write over a notification
+        return False, str(exc)
 
 
 def _s3_emit_event(bucket: str, key: str, event_name: str, version: dict | None = None, source: str = "") -> dict:
@@ -1089,6 +1128,13 @@ _UNSIGNED_QUERY_ACTION = {
     "CreateQueue": "sqs", "DeleteQueue": "sqs", "ListQueues": "sqs", "GetQueueUrl": "sqs",
     "SendMessage": "sqs", "ReceiveMessage": "sqs", "DeleteMessage": "sqs",
     "GetQueueAttributes": "sqs", "SetQueueAttributes": "sqs", "PurgeQueue": "sqs",
+    "SendMessageBatch": "sqs", "DeleteMessageBatch": "sqs", "ChangeMessageVisibility": "sqs",
+    "ChangeMessageVisibilityBatch": "sqs", "ListQueueTags": "sqs", "TagQueue": "sqs", "UntagQueue": "sqs",
+    "ListDeadLetterSourceQueues": "sqs",
+    # SNS (mirrors core/aws_wire_router._QUERY_ACTION)
+    "CreateTopic": "sns", "DeleteTopic": "sns", "ListTopics": "sns", "Subscribe": "sns",
+    "Unsubscribe": "sns", "ListSubscriptions": "sns", "ListSubscriptionsByTopic": "sns", "Publish": "sns",
+    "GetTopicAttributes": "sns", "SetSubscriptionAttributes": "sns", "GetSubscriptionAttributes": "sns",
     # EC2 (compute; VPC actions are matched via _EC2_VPC_ACTIONS in register())
     "RunInstances": "ec2", "DescribeInstances": "ec2", "TerminateInstances": "ec2",
     "StartInstances": "ec2", "StopInstances": "ec2", "DescribeImages": "ec2",
@@ -1128,6 +1174,10 @@ def _register_unified_s3(app: FastAPI) -> None:
     methods = ["GET", "PUT", "POST", "DELETE", "HEAD"]
 
     async def _serve(bucket: str, request: Request) -> Response:
+        from routes import aws_messaging_unified as _amu
+        if _amu.queue_path_request(request):
+            # v4 C0e: an SDK POSTing to a queue URL the appliance handed out (/<account>/<queue>)
+            return await _amu.serve_queue_path(request)
         if _is_reserved_bucket(bucket):
             raise HTTPException(status_code=404, detail="Not found")
         path = request.scope.get("path") or request.url.path
@@ -1214,6 +1264,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if service == "monitoring":
             from routes.aws_cloudwatch import handle as _cw_handle
             return await _cw_handle(request)
+        if service in ("sqs", "sns", "events") and _wi.is_unified(service):
+            # v4 C0e — SQS (JSON + Query) / SNS / EventBridge on the shared cores over ONE
+            # messaging store (core/appliance_stores.AppStateMessagingStore), like Nano.
+            return await _wi.serve_service(service, request)
         if service == "sqs":
             return await _srv().api_sqs_query(request)
         if service == "elasticloadbalancing":

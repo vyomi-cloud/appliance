@@ -178,13 +178,30 @@ def _view(sched: dict) -> dict:
             "NextInvocationTime": sched.get("next_run"), "LastInvocationTime": sched.get("last_run")}
 
 
+def _as_dt(v) -> datetime | None:
+    """`next_run_dt` is kept as epoch seconds (JSON-safe, so the store persists on every
+    substrate); a datetime is accepted too."""
+    if v is None or v == "":
+        return None
+    if isinstance(v, datetime):
+        return v
+    try:
+        return datetime.fromtimestamp(float(v), timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _epoch(dt: datetime | None) -> float | None:
+    return dt.timestamp() if dt is not None else None
+
+
 def _advance(store: SchedulerStore, msg_store=None, lam_store=None, now: datetime | None = None):
     """Fire every ENABLED schedule whose computed next run has passed."""
     now = now or _now_dt()
     for sched in store.schedules.values():
         if sched["state"] != "ENABLED":
             continue
-        nxt = sched.get("next_run_dt")
+        nxt = _as_dt(sched.get("next_run_dt"))
         if nxt is None or nxt > now:
             continue
         tgt = sched["target"]
@@ -205,7 +222,7 @@ def _advance(store: SchedulerStore, msg_store=None, lam_store=None, now: datetim
             sched["next_run"] = None
             continue
         nxt2 = _next_occurrence(sched["expr"], now)
-        sched["next_run_dt"] = nxt2
+        sched["next_run_dt"] = _epoch(nxt2)
         sched["next_run"] = nxt2.strftime("%Y-%m-%dT%H:%M:%S.000Z") if nxt2 else None
     for name in [n for n, s in store.schedules.items() if s["state"] == "DELETED_MARK"]:
         store.schedules.pop(name, None)
@@ -265,7 +282,7 @@ def _create_schedule(store, name, body):
              "flexible_time_window": body.get("FlexibleTimeWindow") or {"Mode": "OFF"},
              "start_date": body.get("StartDate"), "end_date": body.get("EndDate"),
              "action_after_completion": body.get("ActionAfterCompletion", "NONE"),
-             "created": _now_iso(), "next_run_dt": next_dt,
+             "created": _now_iso(), "next_run_dt": _epoch(next_dt),
              "next_run": next_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z") if next_dt else None, "last_run": None}
     store.schedules[key] = sched
     return _json(200, {"ScheduleArn": sched["arn"]})

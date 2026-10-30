@@ -123,7 +123,10 @@ class PersistentNoSqlStore(_PersistentMixin, InMemoryNoSqlStore):
 
 
 class PersistentMessagingStore(_PersistentMixin, InMemoryMessagingStore):
-    _STATE_ATTRS = ("queues", "topics")
+    # + the SNS core's non-topic state and the EventBridge core's lazy namespaces
+    # (buses / rules / archives / replays live on the SAME store as the queues).
+    _STATE_ATTRS = ("queues", "topics", "sns", "event_buses", "event_rules", "event_archives",
+                    "event_replays", "sqs_move_tasks")
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "messaging"):
         InMemoryMessagingStore.__init__(self)

@@ -64,9 +64,12 @@ Consequences:
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import threading
 import time
+import uuid
 
 from core.azure_blob_core import AzureBlobStore
 from core.kms_keystore import InMemoryKmsEngine, KeyStore
@@ -989,9 +992,443 @@ class AppStateComputeVmStore(_SlotStore, _gci.ComputeStore):
             _log.warning("compute engine: pre-v4 adoption skipped: %s", exc)
 
 
+# ── v4 C0e: SQS + SNS + EventBridge (+ Scheduler) — ONE messaging store ────────────
+from core.messaging_store import MessagingStore   # noqa: E402
+
+_EB_FACTORY = lambda: {"buses": {}, "rules": {}, "archives": {}, "replays": {}, "meta": {}}   # noqa: E731
+
+
+def _iso_epoch(ts, default: float | None = None) -> float:
+    """Pre-v4 SQS timestamps are ISO strings ("2026-10-30T10:00:00.000Z")."""
+    if isinstance(ts, (int, float)):
+        return float(ts)
+    s = str(ts or "").strip()
+    if s:
+        from datetime import datetime, timezone
+        for fmt, n in (("%Y-%m-%dT%H:%M:%S.%f", 26), ("%Y-%m-%dT%H:%M:%S", 19)):
+            try:
+                return datetime.strptime(s.replace("Z", "")[:n], fmt).replace(tzinfo=timezone.utc).timestamp()
+            except ValueError:
+                continue
+    return time.time() if default is None else default
+
+
+def _unified(service: str) -> bool:
+    try:
+        from core import wire_ingress
+        return wire_ingress.is_unified(service)
+    except Exception:
+        return False
+
+
+class AppStateMessagingStore(MessagingStore):
+    """The store sqs_core + sns_core + eventbridge_core share on the offline appliance
+    (on Nano they share one InMemoryMessagingStore the same way), so an EventBridge rule's
+    SQS / SNS targets and an SNS topic's SQS subscriptions are real, receivable deliveries.
+
+    Every attribute resolves, per access, into the active space's persisted state:
+        queues                     -> service_states["sqs"]["queues"]     (pre-v4 SQS slot; records
+                                      converted to the core shape on adoption)
+        topics / sns               -> service_states["sns"]["topics" | "extra"]  (already core-shaped:
+                                      SNS has run on sns_core offline since v3)
+        event_buses / event_rules / event_archives / event_replays
+                                   -> service_states["eventbridge"]["buses" | "rules" | "archives" | "replays"]
+        sqs_move_tasks             -> service_states["sqs"]["move_tasks"]
+    """
+
+    def __init__(self, account_id: str):
+        # NB: no super().__init__() — the dicts are the space's persisted slots.
+        self.account_id = account_id
+        self._clock = None
+        self._adopted: set = set()
+
+    # ── state slots ──────────────────────────────────────────────────────
+    @staticmethod
+    def _sqs():
+        from core import app_context as ctx
+        return ctx.sqs_state
+
+    @staticmethod
+    def _sns():
+        from core import app_context as ctx
+        return ctx.sns_state
+
+    @staticmethod
+    def _eb() -> dict:
+        slot = _proxy("eventbridge", _EB_FACTORY, None)._target()
+        for k, f in _EB_FACTORY().items():
+            slot.setdefault(k, f)
+        return slot
+
+    queues = property(lambda self: self._sqs().setdefault("queues", {}))
+    topics = property(lambda self: self._sns().setdefault("topics", {}))
+    sqs_move_tasks = property(lambda self: self._sqs().setdefault("move_tasks", {}))
+    event_buses = property(lambda self: self._eb()["buses"])
+    event_rules = property(lambda self: self._eb()["rules"])
+    event_archives = property(lambda self: self._eb()["archives"])
+    event_replays = property(lambda self: self._eb()["replays"])
+
+    @property
+    def sns(self):
+        return self._sns().setdefault("extra", {})
+
+    @sns.setter
+    def sns(self, v):
+        self._sns()["extra"] = v
+
+    def persist(self) -> None:
+        """No-op: the tier middleware persists the kernel state after every mutating
+        request (every slot above lives inside it)."""
+
+    # ── queue URLs an SDK can POST back to (`<endpoint>/<account>/<queue>`) ────
+    def queue_url_for(self, name: str) -> str:
+        return f"{request_base()}/{self.account_id}/{name}"
+
+    # ── cross-service hooks ──────────────────────────────────────────────
+    @property
+    def deliver_sqs(self):
+        """None while SQS is unified (the queues are this store's: the cores enqueue
+        directly); opted out, deliveries go to the pre-v4 SQS handler's queues."""
+        if _unified("sqs"):
+            return None
+        return _legacy_deliver_sqs
+
+    def deliver_lambda(self, arn: str, event: dict) -> bool:
+        """EventBridge / Scheduler Lambda targets: the appliance's Lambda functions
+        (server.py's registry, which the classic console and `/2015-03-31/functions`
+        create into) — else the net-new lambda_core router's functions."""
+        name = str(arn).split(":function:", 1)[-1].split(":", 1)[0]
+        try:
+            import server as _srv
+            if _srv._lambda_find_function(name):
+                _srv._lambda_invoke_function(name, event, invocation_type="Event", source="events.amazonaws.com")
+                return True
+        except Exception as exc:
+            _log.warning("eventbridge: lambda target %s not invoked: %s", name, exc)
+        try:
+            from core import lambda_core, wire_ingress
+            r = wire_ingress.new_services_router()
+            if r is not None:
+                return bool(lambda_core.invoke_by_arn(r.lam, arn, event))
+        except Exception:
+            pass
+        return False
+
+    def enqueue_delivery(self, job: dict) -> bool:
+        """SNS push deliveries (HTTP/S, Lambda, email) → the JetStream-backed workers."""
+        try:
+            from routes.aws_sns import DELIVERY
+            return DELIVERY.enqueue(job)
+        except Exception:
+            return False
+
+    def eventbridge_notify(self, kind: str, *args) -> None:
+        """Keep the pre-v4 NATS subjects (`aws.eventbridge.<bus>.<source>` per event,
+        `aws.eventbridge.rule.<rule>.<target>` per matched target) for tooling that
+        tails them (/__nats/inbox, the e2e suites)."""
+        try:
+            from core import nats_client as nc
+        except Exception:
+            return
+        if kind == "put":
+            bus, env = args
+            nc.publish(f"aws.eventbridge.{bus}.{env.get('source', '')}", env)
+        elif kind == "target":
+            rule, tid, env = args
+            nc.publish(f"aws.eventbridge.rule.{rule}.{tid or 'default'}", env)
+
+    # ── upgrade path: pre-v4 state → this store, once per space ───────────
+    def adopt(self) -> None:
+        if _unified("sqs"):
+            self._adopt_sqs()
+        if _unified("events"):
+            self._adopt_eventbridge()
+
+    def _adopt_sqs(self) -> None:
+        sqs = self._sqs()
+        meta = sqs.setdefault("engine", {})
+        key = ("sqs", id(sqs._target() if hasattr(sqs, "_target") else sqs))
+        if key in self._adopted:
+            return
+        self._adopted.add(key)
+        if not meta.get("adopted"):
+            meta["adopted"] = _http_date()
+            try:
+                _adopt_elasticmq_queues(self)
+            except Exception as exc:
+                _log.warning("sqs: ElasticMQ adoption skipped: %s", exc)
+        n = 0
+        for name, q in list(self.queues.items()):
+            if isinstance(q, dict) and "created_epoch" not in q:
+                adopt_legacy_queue(self, name, q)
+                n += 1
+        if n:
+            _log.info("sqs: adopted %d pre-v4 queues", n)
+
+    def _adopt_eventbridge(self) -> None:
+        slot = self._eb()
+        if slot["meta"].get("adopted"):
+            return
+        slot["meta"]["adopted"] = _http_date()
+        try:
+            adopt_legacy_eventbridge(self, _legacy_extras_items(), _legacy_nats_rules())
+        except Exception as exc:
+            _log.warning("eventbridge: pre-v4 adoption skipped: %s", exc)
+
+
+def _legacy_deliver_sqs(arn, body, attrs, group, dedup) -> bool:
+    try:
+        import server as s
+        q = s._sqs_queue_from_name_or_url(str(arn).rsplit(":", 1)[-1])
+        if q is None:
+            return False
+        s._sqs_enqueue_message(q, body, None, attrs or {}, group or "", dedup or "", source="events")
+        return True
+    except Exception:
+        return False
+
+
+def adopt_legacy_queue(store, name: str, q: dict) -> dict:
+    """Convert a pre-v4 SQS queue record (server.py `_sqs_*` shape: ISO timestamps,
+    `fifo_queue`, a `redrive_policy` dict, `group_id` / `dedup_id` on messages) IN PLACE
+    into the sqs_core shape, keeping its messages (with their receive counts and any
+    still-running visibility lease)."""
+    now = store.now()
+    attrs = {str(k): str(v) for k, v in dict(q.get("attributes") or {}).items()}
+    fifo = bool(q.get("fifo_queue") or str(name).endswith(".fifo"))
+    for key, field, default in (("VisibilityTimeout", "visibility_timeout", 30), ("DelaySeconds", "delay_seconds", 0),
+                                ("MessageRetentionPeriod", "message_retention_period", 345600),
+                                ("MaximumMessageSize", "max_message_size", 262144),
+                                ("ReceiveMessageWaitTimeSeconds", "receive_wait_time_seconds", 0)):
+        attrs.setdefault(key, str(int(q.get(field, default) or default)))
+    rp = q.get("redrive_policy") or {}
+    if isinstance(rp, str):
+        try:
+            rp = json.loads(rp)
+        except Exception:
+            rp = {}
+    if rp:
+        rp = dict(rp)
+        if "deadLetterTargetArn" not in rp and rp.get("deadLetterTargetQueueArn"):
+            rp["deadLetterTargetArn"] = rp.pop("deadLetterTargetQueueArn")
+        attrs.setdefault("RedrivePolicy", json.dumps(rp, separators=(",", ":")))
+    if fifo:
+        attrs["FifoQueue"] = "true"
+        attrs["ContentBasedDeduplication"] = "true" if q.get("content_based_deduplication") else "false"
+    msgs = []
+    for m in q.get("messages") or []:
+        if not isinstance(m, dict) or m.get("deleted"):
+            continue
+        sent = _iso_epoch(m.get("sent_at"), now)
+        vis = _iso_epoch(m.get("visible_at"), sent) if m.get("visible_at") else sent
+        msgs.append({
+            "message_id": m.get("message_id") or "msg-" + uuid.uuid4().hex,
+            "body": m.get("body", ""), "md5_of_body": m.get("md5_of_body") or hashlib.md5(
+                str(m.get("body", "")).encode("utf-8")).hexdigest(),
+            "message_attributes": m.get("message_attributes") or {},
+            "sent_at": m.get("sent_at") or _http_date(), "sent_epoch": sent,
+            "visible_at": vis, "receive_count": int(m.get("receive_count", 0) or 0),
+            "receipt_handle": m.get("receipt_handle", "") if m.get("in_flight") else "",
+            "in_flight": bool(m.get("in_flight")), "deleted": False,
+            "message_group_id": m.get("group_id") or None, "message_dedup_id": m.get("dedup_id") or None,
+            **({"sequence_number": str(m["sequence_number"]).zfill(20)} if fifo and m.get("sequence_number") else {}),
+        })
+    created = _iso_epoch(q.get("created"), now)
+    q.update({
+        "queue_name": name, "queue_arn": q.get("queue_arn") or f"arn:aws:sqs:us-east-1:{store.account_id}:{name}",
+        "attributes": attrs, "visibility_timeout": int(attrs["VisibilityTimeout"]),
+        "delay_seconds": int(attrs["DelaySeconds"]), "tags": dict(q.get("tags") or {}),
+        "messages": msgs, "created": q.get("created") or _http_date(), "created_epoch": created,
+        "last_modified_epoch": _iso_epoch(q.get("last_modified"), created), "fifo": fifo,
+        "content_based_dedup": bool(q.get("content_based_deduplication")),
+        "dedup_seen": {}, "sequence": len(msgs),
+    })
+    return q
+
+
+def _legacy_extras_items() -> dict:
+    """The classic console's pre-v4 EventBridge rows (service_states["aws_extras"]),
+    minus the demo seed rows it injected into every space."""
+    from core.aws_rail_extras import EXTRAS
+    out = {}
+    extras = _proxy("aws_extras", dict, None)._target()
+    for stub in ("eventbridge/rules", "eventbridge/event-buses", "eventbridge/archives"):
+        seeds = {s.get("name") for s in (EXTRAS.get(stub) or {}).get("seed") or []}
+        items = ((extras.get(stub) or {}).get("items") or {}) if isinstance(extras, dict) else {}
+        out[stub] = {k: v for k, v in items.items() if isinstance(v, dict) and k not in seeds}
+    return out
+
+
+def _legacy_nats_rules() -> tuple[dict, dict]:
+    try:
+        from core import nats_routes as nr
+        return dict(nr._eventbridge_rules), {k: list(v) for k, v in nr._eventbridge_targets.items()}
+    except Exception:
+        return {}, {}
+
+
+def adopt_legacy_eventbridge(store, extras: dict, nats: tuple[dict, dict]) -> dict:
+    """Import pre-v4 EventBridge state into the core's store: the classic console's
+    event buses / rules (+ their one target) / archives, and the rules + targets the
+    pre-v4 wire handler (core/nats_routes.py) held in process memory."""
+    from core import eventbridge_core as ebc
+    T = "AWSEvents."
+    n = {"buses": 0, "rules": 0, "targets": 0, "archives": 0}
+
+    def call(op, body):
+        return ebc.dispatch(store, T + op, body)
+
+    for name, it in (extras.get("eventbridge/event-buses") or {}).items():
+        if name != "default" and call("CreateEventBus", {"Name": name}).status == 200:
+            n["buses"] += 1
+    for name, it in (extras.get("eventbridge/rules") or {}).items():
+        bus = str(it.get("event_bus_name") or "default")
+        if bus not in ebc._buses(store):
+            call("CreateEventBus", {"Name": bus})
+        req = {"Name": name, "EventBusName": bus, "State": str(it.get("state") or "ENABLED")}
+        if str(it.get("rule_type")) == "Schedule":
+            req["ScheduleExpression"] = str(it.get("schedule_expression") or it.get("schedule") or "rate(1 day)")
+        elif it.get("event_pattern"):
+            req["EventPattern"] = it["event_pattern"] if isinstance(it["event_pattern"], str) else json.dumps(it["event_pattern"])
+        if req["State"] not in ("ENABLED", "DISABLED"):
+            req["State"] = "ENABLED"
+        if call("PutRule", req).status != 200:
+            continue
+        n["rules"] += 1
+        if it.get("target_arn") and str(it["target_arn"]) not in ("—", "-"):
+            call("PutTargets", {"Rule": name, "EventBusName": bus, "Targets": [{"Id": "Target0", "Arn": it["target_arn"]}]})
+            n["targets"] += 1
+    for name, it in (extras.get("eventbridge/archives") or {}).items():
+        src = str(it.get("event_source") or "")
+        if src in ("", "—", "-"):
+            src = ebc._bus_arn(store, "default")
+        if call("CreateArchive", {"ArchiveName": name, "EventSourceArn": src,
+                                  "RetentionDays": int(it.get("retention_days") or 0)}).status == 200:
+            n["archives"] += 1
+    rules, targets = nats
+    for name, r in (rules or {}).items():
+        bus = str(r.get("EventBusName") or "default")
+        if bus not in ebc._buses(store):
+            call("CreateEventBus", {"Name": bus})
+        req = {"Name": name, "EventBusName": bus, "State": r.get("State") or "ENABLED",
+               "Description": r.get("Description") or ""}
+        if r.get("EventPattern"):
+            pat = r["EventPattern"]
+            req["EventPattern"] = pat if isinstance(pat, str) else json.dumps(pat)
+        if r.get("ScheduleExpression"):
+            req["ScheduleExpression"] = r["ScheduleExpression"]
+        if call("PutRule", req).status != 200:
+            continue
+        n["rules"] += 1
+        tg = [t for t in (targets or {}).get(name, []) if isinstance(t, dict) and t.get("Arn")]
+        if tg:
+            call("PutTargets", {"Rule": name, "EventBusName": bus, "Targets": tg})
+            n["targets"] += len(tg)
+    if any(n.values()):
+        _log.info("eventbridge: adopted pre-v4 %s", n)
+    return n
+
+
+def _adopt_elasticmq_queues(store, fetch=None) -> int:
+    """Pre-v4 Query-protocol SQS calls went to ElasticMQ when it ran, so a queue may exist
+    only there. Import those queue DEFINITIONS (name + attributes). Their messages are not
+    read: an SQS receive is destructive (it would lease them), and ElasticMQ is in-memory
+    — the appliance re-seeded it from this same state at boot."""
+    import xml.etree.ElementTree as ET
+    if fetch is None:
+        from core import elasticmq_proxy as emq
+        if not emq.available():
+            return 0
+        import urllib.parse
+        import urllib.request
+
+        def fetch(params):
+            url = emq._EMQ_URL + "/?" + urllib.parse.urlencode(params)
+            with urllib.request.urlopen(url, timeout=3) as r:
+                return r.read()
+
+    def _strip(tag):
+        return tag.rsplit("}", 1)[-1]
+
+    root = ET.fromstring(fetch({"Action": "ListQueues"}))
+    urls = [el.text or "" for el in root.iter() if _strip(el.tag) == "QueueUrl"]
+    from core import sqs_core
+    n = 0
+    for url in urls:
+        name = url.rstrip("/").rsplit("/", 1)[-1]
+        if not name or store.queue_exists(name):
+            continue
+        attrs = {}
+        try:
+            ar = ET.fromstring(fetch({"Action": "GetQueueAttributes", "QueueUrl": url, "AttributeName.1": "All"}))
+            for el in ar.iter():
+                if _strip(el.tag) == "Attribute":
+                    kv = {_strip(c.tag): c.text or "" for c in el}
+                    if kv.get("Name") in ("VisibilityTimeout", "DelaySeconds", "MessageRetentionPeriod",
+                                          "MaximumMessageSize", "ReceiveMessageWaitTimeSeconds", "RedrivePolicy",
+                                          "FifoQueue", "ContentBasedDeduplication"):
+                        attrs[kv["Name"]] = kv.get("Value", "")
+        except Exception:
+            pass
+        if sqs_core.dispatch(store, "AmazonSQS.CreateQueue", {"QueueName": name, "Attributes": attrs}).status == 200:
+            n += 1
+    return n
+
+
+class AppStateSchedulerStore:
+    """scheduler_core store over service_states["scheduler"]{groups,schedules}."""
+
+    def _slot(self) -> dict:
+        from core import scheduler_core as sc
+        slot = _proxy("scheduler", lambda: {"groups": {}, "schedules": {}}, None)._target()
+        groups = slot.setdefault("groups", {})
+        if "default" not in groups:
+            groups["default"] = sc.SchedulerStore().groups["default"]
+        slot.setdefault("schedules", {})
+        return slot
+
+    groups = property(lambda self: self._slot()["groups"])
+    schedules = property(lambda self: self._slot()["schedules"])
+
+
+# ── the request's endpoint (for queue URLs an SDK can POST back to) ─────────
+import contextvars as _cv   # noqa: E402
+
+_REQUEST_BASE: "_cv.ContextVar[str]" = _cv.ContextVar("vyomi_request_base", default="")
+
+
+def set_request_base(headers: dict) -> None:
+    h = {str(k).lower(): v for k, v in (headers or {}).items()}
+    host = h.get("x-forwarded-host") or h.get("host") or ""
+    if host:
+        proto = (h.get("x-forwarded-proto") or "http").split(",")[0].strip()
+        _REQUEST_BASE.set(f"{proto}://{host}")
+
+
+def request_base() -> str:
+    import os
+    return _REQUEST_BASE.get() or os.environ.get("VYOMI_PUBLIC_URL", "http://localhost:9000").rstrip("/")
+
+
 # ── singletons ─────────────────────────────────────────────────────────────
 _S3 = _GCS = _DDB = _AZB = _GSEC = _GKMS = _AKMS = _ASEC = None
 _GFS = _GVPC = _GVM = None
+_MSG = _SCHED = None
+
+
+def messaging_store() -> AppStateMessagingStore:
+    global _MSG
+    if _MSG is None:
+        from core import app_context as ctx
+        _MSG = AppStateMessagingStore(account_id=ctx.AWS_ACCOUNT_ID)
+    return _MSG
+
+
+def scheduler_store() -> AppStateSchedulerStore:
+    global _SCHED
+    if _SCHED is None:
+        _SCHED = AppStateSchedulerStore()
+    return _SCHED
 
 
 def s3_store() -> AppStateObjectStore:

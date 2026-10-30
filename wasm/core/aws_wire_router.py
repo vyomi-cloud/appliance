@@ -329,6 +329,14 @@ _QUERY_ACTION = {
 }
 
 
+# SQS legacy Query protocol (unsigned `Action=…` requests; signed ones route by scope).
+for _a in ("CreateQueue", "DeleteQueue", "ListQueues", "GetQueueUrl", "GetQueueAttributes",
+           "SetQueueAttributes", "SendMessage", "SendMessageBatch", "ReceiveMessage", "DeleteMessage",
+           "DeleteMessageBatch", "ChangeMessageVisibility", "ChangeMessageVisibilityBatch", "PurgeQueue",
+           "ListQueueTags", "TagQueue", "UntagQueue", "ListDeadLetterSourceQueues"):
+    _QUERY_ACTION.setdefault(_a, "sqs")
+
+
 # ELBv2 (Query protocol; signs as `elasticloadbalancing`). Tag / limit verbs are
 # shared with other services, so unsigned requests only route here for the rest.
 _AMBIGUOUS_ELB = {"AddTags", "RemoveTags", "DescribeTags", "DescribeAccountLimits"}
@@ -674,6 +682,15 @@ class AwsWireRouter:
             status, hdrs, out = kinesis.handle_wire(self.kinesis, lheaders.get("x-amz-target", "") or "",
                                                     bytes(body), lheaders.get("content-type", ""))
             return {"status": status, "headers": hdrs, "body": out}
+
+        if svc == "sqs" and not lheaders.get("x-amz-target"):   # legacy SQS Query protocol (XML)
+            params = self._query_params(query, body)
+            if "QueueUrl" not in params:   # POSTed to the queue URL itself (Java v1 SDK style)
+                segs = [x for x in path.split("/") if x]
+                if len(segs) == 2:
+                    params["QueueUrl"] = segs[1]
+            status, xml = sqs.dispatch_query(self.msg, params)
+            return {"status": status, "headers": {"content-type": "text/xml"}, "body": xml.encode()}
 
         if svc in _JSON_CT:
             target = lheaders.get("x-amz-target", "") or ""
