@@ -207,7 +207,7 @@ def ddb_parity(store):
                          "ExpressionAttributeValues": {":one": {"N": "1"}, ":e": {"L": []}, ":l": {"L": [{"N": "7"}]}},
                          "ReturnValues": "ALL_NEW"}).body["Attributes"]
     _check("ddb UpdateExpression SET arithmetic / list_append / if_not_exists / REMOVE / ADD",
-           u["n"] == {"N": "2"} and u["cnt"] == {"N": "1"} and "tag" not in u and u["lst"] == {"NS": ["7"]}, u)
+           u["n"] == {"N": "2"} and u["cnt"] == {"N": "1"} and "tag" not in u and u["lst"] == {"L": [{"N": "7"}]}, u)   # a List stays a List (was mis-typed NS pre-parity)
     r = d("UpdateItem", {"TableName": "par", "Key": {"pk": {"S": "u"}, "sk": {"N": "1"}},
                          "UpdateExpression": "SET n = :z", "ConditionExpression": "n > :big",
                          "ExpressionAttributeValues": {":z": {"N": "0"}, ":big": {"N": "100"}}})

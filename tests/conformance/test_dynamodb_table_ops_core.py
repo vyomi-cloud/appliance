@@ -40,8 +40,8 @@ def run(store=None):
     call("CreateTable", {
         "TableName": "orders",
         "KeySchema": [{"AttributeName": "id", "KeyType": "HASH"}],
-        "AttributeDefinitions": [{"AttributeName": "id", "AttributeType": "S"},
-                                 {"AttributeName": "customer", "AttributeType": "S"}],
+        # (only key attributes may be defined — DynamoDB rejects an unused "customer" definition)
+        "AttributeDefinitions": [{"AttributeName": "id", "AttributeType": "S"}],
         "BillingMode": "PAY_PER_REQUEST",
     })
     status, body = call("UpdateTable", {"TableName": "orders", "BillingMode": "PROVISIONED",

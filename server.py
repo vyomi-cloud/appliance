@@ -23753,6 +23753,18 @@ else:
         k: v for k, v in _wire_ingress.appliance_stores().items()
         if {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb"}[k] in _wire_ingress.unified_services()}))
 
+# v4 C0 upgrade path: tables/items a pre-v4 appliance kept in DynamoDB Local are copied
+# ONCE into the core's state (core/ddb_local_migration.py; opt out with
+# VYOMI_DDB_MIGRATE_FROM_LOCAL=0). Never blocks or breaks boot.
+@app.on_event("startup")
+def _migrate_dynamodb_local_once():
+    try:
+        from core import ddb_local_migration as _ddb_mig
+        _ddb_mig.start_at_boot()
+    except Exception as _e:
+        print(f"[ddb-migrate] skipped: {_e}")
+
+
 # v4 consoles: `/_wire/<native path>` → same app at `/<native path>` (outermost middleware; see routes/wire_prefix.py).
 try:
     from routes import wire_prefix as _wire_prefix
