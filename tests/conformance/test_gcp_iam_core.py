@@ -152,6 +152,117 @@ def run() -> int:
            not giam.is_permission_granted(st2, "projects/_/buckets/b2",
                                           "user:x@example.com", "storage.objects.get"))
 
+    # 9. predefined roles catalog -------------------------------------------
+    pr = giam.dispatch(st, "GET", "/v1/roles", {}, {}, b"")
+    _check("predefined roles 200", pr.status == 200)
+    pr_names = [r["name"] for r in _jbody(pr)["roles"]]
+    _check("predefined roles has owner/editor/viewer", {"roles/owner", "roles/editor", "roles/viewer"} <= set(pr_names))
+
+    # 10. custom roles CRUD ---------------------------------------------------
+    cr_role = _post(st, f"projects/{project}/roles",
+                    {"roleId": "myCustomRole",
+                     "role": {"title": "My Custom Role", "description": "d", "includedPermissions": ["storage.objects.get"]}})
+    _check("create role 200", cr_role.status == 200)
+    role = _jbody(cr_role)
+    _check("create role name", role["name"] == f"projects/{project}/roles/myCustomRole")
+    _check("create role title", role["title"] == "My Custom Role")
+    dup_role = _post(st, f"projects/{project}/roles", {"roleId": "myCustomRole", "role": {}})
+    _check("duplicate role 409", dup_role.status == 409)
+    gr = giam.dispatch(st, "GET", f"/v1/{role['name']}", {}, {}, b"")
+    _check("get role 200", gr.status == 200 and _jbody(gr)["title"] == "My Custom Role")
+    lr = giam.dispatch(st, "GET", f"/v1/projects/{project}/roles", {}, {}, b"")
+    _check("list roles has myCustomRole", "myCustomRole" in [r["name"].rsplit("/", 1)[-1] for r in _jbody(lr)["roles"]])
+    pr2 = giam.dispatch(st, "PATCH", f"/v1/{role['name']}", {}, {}, json.dumps({"title": "Renamed"}).encode())
+    _check("patch role 200", pr2.status == 200 and _jbody(pr2)["title"] == "Renamed")
+    dr = giam.dispatch(st, "DELETE", f"/v1/{role['name']}", {}, {}, b"")
+    _check("delete role 200", dr.status == 200 and _jbody(dr)["deleted"] is True)
+    lr2 = giam.dispatch(st, "GET", f"/v1/projects/{project}/roles", {}, {}, b"")
+    _check("deleted role dropped from list", "myCustomRole" not in [r["name"].rsplit("/", 1)[-1] for r in _jbody(lr2)["roles"]])
+
+    # 11. service account keys -----------------------------------------------
+    sa2 = _jbody(_post(st, f"/v1/projects/{project}/serviceAccounts",
+                       {"accountId": "svc-keys", "serviceAccount": {}}))
+    ck = _post(st, f"/v1/projects/{project}/serviceAccounts/{sa2['email']}/keys",
+               {"privateKeyType": "TYPE_GOOGLE_CREDENTIALS_FILE"})
+    _check("create key 200", ck.status == 200)
+    key = _jbody(ck)
+    _check("create key has privateKeyData", bool(key.get("privateKeyData")))
+    kid = key["name"].rsplit("/", 1)[-1]
+    lk = giam.dispatch(st, "GET", f"/v1/projects/{project}/serviceAccounts/{sa2['email']}/keys", {}, {}, b"")
+    _check("list keys has new key", kid in [k["name"].rsplit("/", 1)[-1] for k in _jbody(lk)["keys"]])
+    _check("list keys omits private key material", all("privateKeyData" not in k for k in _jbody(lk)["keys"]))
+    gk = giam.dispatch(st, "GET", f"/v1/projects/{project}/serviceAccounts/{sa2['email']}/keys/{kid}", {}, {}, b"")
+    _check("get key 200", gk.status == 200 and _jbody(gk)["name"] == key["name"])
+    dk = giam.dispatch(st, "DELETE", f"/v1/projects/{project}/serviceAccounts/{sa2['email']}/keys/{kid}", {}, {}, b"")
+    _check("delete key 200", dk.status == 200)
+    lk2 = giam.dispatch(st, "GET", f"/v1/projects/{project}/serviceAccounts/{sa2['email']}/keys", {}, {}, b"")
+    _check("deleted key dropped", kid not in [k["name"].rsplit("/", 1)[-1] for k in _jbody(lk2)["keys"]])
+
+    # 12. auditConfigs round-trip on setIamPolicy/getIamPolicy ---------------
+    aud_resource = f"projects/{project}"
+    _post(st, f"/v1/{aud_resource}:setIamPolicy", {"policy": {"bindings": [], "auditConfigs": [
+        {"service": "storage.googleapis.com", "auditLogConfigs": [
+            {"logType": "DATA_WRITE", "exemptedMembers": ["user:exempt@example.com"]}]}]}})
+    aud_get = _post(st, f"/v1/{aud_resource}:getIamPolicy", {})
+    acfgs = _jbody(aud_get).get("auditConfigs") or []
+    _check("auditConfigs round-trip", acfgs and acfgs[0]["service"] == "storage.googleapis.com"
+           and acfgs[0]["auditLogConfigs"][0]["exemptedMembers"] == ["user:exempt@example.com"])
+
+    # 13. deny policies CRUD ---------------------------------------------------
+    attach = f"cloudresourcemanager.googleapis.com%2Fprojects%2F{project}"
+    cdp = giam.dispatch(st, "POST", f"/v2/policies/{attach}/denypolicies", {"policyId": "myDenyPolicy"}, {},
+                        json.dumps({"displayName": "My deny", "rules": [{"denyRule": {
+                            "deniedPrincipals": ["user:bad@example.com"], "deniedPermissions": ["storage.objects.delete"]}}]}).encode())
+    _check("create deny policy 200", cdp.status == 200)
+    dp = _jbody(cdp)
+    _check("deny policy name", dp["name"].endswith("/denypolicies/myDenyPolicy"))
+    ldp = giam.dispatch(st, "GET", f"/v2/policies/{attach}/denypolicies", {}, {}, b"")
+    _check("list deny policies has it", "myDenyPolicy" in [p["name"].rsplit("/", 1)[-1] for p in _jbody(ldp)["policies"]])
+    gdp = giam.dispatch(st, "GET", f"/v2/policies/{attach}/denypolicies/myDenyPolicy", {}, {}, b"")
+    _check("get deny policy 200", gdp.status == 200)
+    ddp = giam.dispatch(st, "DELETE", f"/v2/policies/{attach}/denypolicies/myDenyPolicy", {}, {}, b"")
+    _check("delete deny policy 200", ddp.status == 200)
+    ldp2 = giam.dispatch(st, "GET", f"/v2/policies/{attach}/denypolicies", {}, {}, b"")
+    _check("deleted deny policy dropped", _jbody(ldp2)["policies"] == [])
+
+    # 14. workload identity pools ---------------------------------------------
+    cwp = giam.dispatch(st, "POST", f"/v1/projects/{project}/locations/global/workloadIdentityPools",
+                        {"workloadIdentityPoolId": "my-pool"}, {},
+                        json.dumps({"displayName": "My pool"}).encode())
+    _check("create pool 200", cwp.status == 200 and _jbody(cwp)["state"] == "ACTIVE")
+    lwp = giam.dispatch(st, "GET", f"/v1/projects/{project}/locations/global/workloadIdentityPools", {}, {}, b"")
+    _check("list pools has my-pool", "my-pool" in [p["name"].rsplit("/", 1)[-1] for p in _jbody(lwp)["workloadIdentityPools"]])
+    gwp = giam.dispatch(st, "GET", f"/v1/projects/{project}/locations/global/workloadIdentityPools/my-pool", {}, {}, b"")
+    _check("get pool 200", gwp.status == 200)
+    dwp = giam.dispatch(st, "DELETE", f"/v1/projects/{project}/locations/global/workloadIdentityPools/my-pool", {}, {}, b"")
+    _check("delete pool -> state DELETED", dwp.status == 200 and _jbody(dwp)["state"] == "DELETED")
+
+    # 14b. service account patch + disable/enable -----------------------------
+    sa3 = _jbody(_post(st, f"/v1/projects/{project}/serviceAccounts", {"accountId": "svc-patch", "serviceAccount": {}}))
+    pch = giam.dispatch(st, "PATCH", f"/v1/projects/{project}/serviceAccounts/{sa3['email']}", {}, {},
+                        json.dumps({"serviceAccount": {"displayName": "Patched", "description": "d2"}}).encode())
+    _check("patch SA 200", pch.status == 200 and _jbody(pch)["displayName"] == "Patched" and _jbody(pch)["description"] == "d2")
+    dis = _post(st, f"projects/{project}/serviceAccounts/{sa3['email']}:disable", {})
+    _check("disable SA 200", dis.status == 200)
+    got_dis = giam.dispatch(st, "GET", f"/v1/projects/{project}/serviceAccounts/{sa3['email']}", {}, {}, b"")
+    _check("SA shows disabled", _jbody(got_dis)["disabled"] is True)
+    en = _post(st, f"projects/{project}/serviceAccounts/{sa3['email']}:enable", {})
+    _check("enable SA 200", en.status == 200)
+    got_en = giam.dispatch(st, "GET", f"/v1/projects/{project}/serviceAccounts/{sa3['email']}", {}, {}, b"")
+    _check("SA shows enabled", _jbody(got_en)["disabled"] is False)
+
+    # 15. policy-change activity log (recommendations-history backing) -------
+    act_project = f"{project}-activity"
+    act_resource = f"projects/{act_project}"
+    _post(st, f"/v1/{act_resource}:setIamPolicy",
+          {"policy": {"bindings": [{"role": "roles/viewer", "members": ["user:a@example.com"]}]}})
+    _post(st, f"/v1/{act_resource}:setIamPolicy", {"policy": {"bindings": []}})
+    act = giam.dispatch(st, "GET", f"/v1/projects/{act_project}/policyActivity", {}, {}, b"")
+    log = _jbody(act)["activity"]
+    _check("activity has GRANT then REVOKE, most recent first",
+           len(log) == 2 and log[0]["action"] == "REVOKE" and log[1]["action"] == "GRANT")
+    _check("activity entry has role/member/time", bool(log[0]["role"]) and bool(log[0]["member"]) and bool(log[0]["time"]))
+
     print("\nGCP IAM-core conformance: ALL GREEN")
     return 0
 
