@@ -1239,7 +1239,7 @@ function buildSubBlade(svc, full, item){
   wrap.append(inner);
   const t = (item.type||"").toLowerCase();
   // Catalog tabs typed "stub" whose key has a real renderer resolve by key (Nano does the same).
-  const R = SUB_RENDERERS[t] || (t==="stub" && (item.key==="identity" || item.key==="diagnose") ? SUB_RENDERERS[item.key] : null);
+  const R = SUB_RENDERERS[t] || (t==="stub" ? SUB_RENDERERS[String(item.key||"").toLowerCase()] : null);
   if (R) { try { R(svc, full, inner, item); } catch (e) {
     inner.append(el("div",{class:"sub-stub"},"Renderer error: "+e.message)); } }
   else inner.append(stubPane(item));
@@ -2751,6 +2751,71 @@ SUB_RENDERERS.identity = function(svc, full, host){
     wrap.append(usec);
   }
   render();
+};
+// ---- API Management tabs backed by the service's ARM properties (PATCH → reload) ----
+// A list stored at properties.<prop>: read from ARM, add/delete rows, PATCH the whole list back.
+function armListEditor(svc, full, host, o){
+  host.append(el("div",{class:"sub-info"}, o.info));
+  const wrap = el("div",{}); host.append(wrap);
+  async function render(){
+    wrap.innerHTML = "";
+    const r = await arm("GET", full.id, undefined, svc.apiVersion);
+    const cur = (r.ok && r.json) ? r.json : full;
+    const rows = getPath(cur, "properties."+o.prop) || [];
+    async function save(next, msg){
+      const p = await arm("PATCH", full.id, {properties:{[o.prop]: next}}, svc.apiVersion);
+      if (p.ok) { toast(msg); render(); } else toast(o.label+" update failed ("+p.status+")","err");
+    }
+    if (!rows.length) wrap.append(emptyState(o.empty));
+    else {
+      const t = el("table",{class:"sub-table"});
+      t.append(el("tr",{}, ...o.cols.map(c=>el("th",{}, c[1])), el("th",{},"")));
+      rows.forEach((row,i) => t.append(el("tr",{}, ...o.cols.map(c=>el("td",{class:"small"}, String(row[c[0]]==null?"":row[c[0]]))), ...[
+        el("td",{}, el("button",{class:"vm-action danger",title:"Delete",onclick:()=>save(rows.filter((_,j)=>j!==i), o.label+" deleted")}, icon("delete")))])));
+      wrap.append(t);
+    }
+    const inputs = {};
+    const form = el("div",{class:"essentials",style:"margin-top:14px"});
+    form.append(el("div",{class:"h"}, "Add "+o.label.toLowerCase()));
+    o.fields.forEach(f => {
+      const inp = f.options
+        ? el("select",{class:"sub-select"}, f.options.map(v=>el("option",{value:v}, v)))
+        : el("input",{class:"sub-nav-filter",placeholder:f.label,value:f.default||""});
+      inputs[f.key] = inp;
+      form.append(el("label",{class:"k",style:"display:block;margin-top:6px"}, f.label), inp);
+    });
+    form.append(el("div",{}, el("button",{class:"btn",style:"margin-top:8px",onclick:()=>{
+      const row = {};
+      for (const f of o.fields) { const v = inputs[f.key].value.trim(); if (f.required && !v) { toast(f.label+" is required","err"); return; } row[f.key] = v; }
+      if (o.stamp) row[o.stamp] = new Date().toISOString().replace(/\.\d+Z$/,"Z");
+      save(rows.concat([row]), o.label+" added");
+    }}, "Add")));
+    wrap.append(form);
+  }
+  render();
+}
+SUB_RENDERERS.namedvalues = function(svc, full, host){
+  armListEditor(svc, full, host, {prop:"namedValues", label:"Named value",
+    info:"Named values — reusable properties referenced by API Management policies as {{name}}. Changes are PATCHed to "+full.id+" and survive a reload.",
+    empty:"No named values yet. Add one to reference it in policies.",
+    cols:[["name","Name"],["value","Value"],["secret","Secret"]],
+    fields:[{key:"name",label:"Name",required:true},{key:"value",label:"Value",required:true},{key:"secret",label:"Secret",options:["false","true"]}]});
+};
+SUB_RENDERERS.customdomains = function(svc, full, host){
+  armListEditor(svc, full, host, {prop:"hostnameConfigurations", label:"Custom domain",
+    info:"Custom hostnames bound to "+full.name+". The default gateway hostname is "+(getPath(full,"properties.gatewayUrl")||"")+". Changes are PATCHed to the service.",
+    empty:"No custom domains. Only the default gateway hostname is in use.",
+    cols:[["type","Type"],["hostName","Hostname"],["certificateSource","Certificate"]],
+    fields:[{key:"type",label:"Type",options:["Proxy","Portal","Management","Scm","DeveloperPortal"]},{key:"hostName",label:"Hostname",required:true},
+            {key:"certificateSource",label:"Certificate",options:["Managed","Custom","KeyVault"]}]});
+};
+SUB_RENDERERS.backups = function(svc, full, host){
+  armListEditor(svc, full, host, {prop:"backups", label:"Backup", stamp:"createdAt",
+    info:"Back up "+full.name+" (configuration, APIs, products, subscriptions, policies) to a storage account container. Each backup is recorded on the service.",
+    empty:"No backups taken yet.",
+    cols:[["backupName","Backup name"],["storageAccount","Storage account"],["containerName","Container"],["createdAt","Created"]],
+    fields:[{key:"storageAccount",label:"Storage account",required:true},{key:"containerName",label:"Container",default:"apim-backups",required:true},
+            {key:"backupName",label:"Backup name",default:"backup-"+Date.now(),required:true}]});
 };
 SUB_RENDERERS.addressspace = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"The IPv4 and IPv6 address space for this virtual network."));

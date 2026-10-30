@@ -1919,6 +1919,22 @@
       "kind": "ui",
       "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-secrets-created.mjs",
       "timeout": 300
+    },
+    {
+      "id": "nano-ui-azure-apim-tabs",
+      "target": "nano",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-apim-tabs.mjs",
+      "timeout": 300
+    },
+    {
+      "id": "offline-ui-azure-apim-tabs",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/azure node wasm/ui-tests/validate-azure-apim-tabs.mjs",
+      "timeout": 300
     }
   ]
 }
