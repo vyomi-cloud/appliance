@@ -30,7 +30,8 @@ if (before.coverage !== undefined && after.coverage + 1e-9 < before.coverage)
   problems.push(`real coverage dropped ${(before.coverage * 100).toFixed(1)}% → ${(after.coverage * 100).toFixed(1)}%`);
 if (before.present !== undefined && after.present < before.present)
   problems.push(`present elements dropped ${before.present} → ${after.present}`);
-const needLive = (after.pages || []).filter((p) => ["list", "detail"].includes(p.kind) && p.route && !map[p.id]?.honest_page && !p.live).map((p) => p.id);
+// Pages that are entirely an honest gap (nothing counted present) need no liveness check.
+const needLive = (after.pages || []).filter((p) => ["list", "detail"].includes(p.kind) && p.route && !map[p.id]?.honest_page && !p.live && p.present.length > 0).map((p) => p.id);
 if (needLive.length) problems.push(`list/detail pages without a liveness check (add "live" to spec-map + a fixture): ${needLive.join(", ")}`);
 if (after.liveness?.failed?.length) problems.push(`liveness failed (page did not show a resource created over the wire): ${after.liveness.failed.join(", ")}`);
 const unapproved = Object.entries(map).filter(([k, v]) => v && v.honest_page && !allow.has(k)).map(([k]) => k);

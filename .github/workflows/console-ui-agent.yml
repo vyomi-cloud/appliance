@@ -145,6 +145,10 @@ jobs:
         id: gate
         run: |
           pkill -f dev_server.py || true     # never score against a server the agent left running
+          # No statics: a Not-simulated feature renders its title + note only, never a disabled
+          # skeleton built from spec labels (empty cells, "Not simulated" input stubs).
+          if grep -rnE 'placeholder="Not simulated|cell: \(\) => ""|FieldStub' consoles/src/${{ steps.tg.outputs.cloud }}/services/${{ steps.tg.outputs.service }}/; then
+            echo "::error::static skeleton UI found (see above)"; echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           git rm -q --cached --ignore-unmatch agent-summary.txt ui-out-before -r 2>/dev/null || true
           (cd consoles && node build.mjs)
           python3 consoles/dev_server.py -q --port 8790 & for i in $(seq 60); do curl -sf localhost:8790/_wire/ >/dev/null && break; sleep 1; done

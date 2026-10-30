@@ -31,6 +31,9 @@ real Vyomi backend through the service's native API. Read first:
      `consoles/honest-allowlist.json` (out-of-scope products). The gate reads that list from
      the base branch; editing it does nothing.
    A control that looks like it works but does nothing is the one thing you must never ship.
+   A not-simulated page or section renders ONLY its title and a NotSimulated note — never a
+   disabled skeleton of the real UI (copied column headers with empty cells, disabled
+   buttons, "Not simulated" input stubs). The gate rejects that pattern.
    "Not simulated" is for things Vyomi genuinely cannot do — not a shortcut. Pages that need
    no backend (dashboards over existing data, console preference pages stored in
    localStorage) and operations a core can reasonably model (backups as snapshots, PartiQL

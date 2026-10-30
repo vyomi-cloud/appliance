@@ -22,7 +22,34 @@ import { useNotify } from "../../../common/notify.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { ErrorAlert } from "../../kit/common.jsx";
 import { keyOf } from "./Tables.jsx";
+import { getExploreSettings } from "./prefs.js";
 import * as api from "./api.js";
+
+const ATTR_TYPES = ["String", "Number", "Boolean", "Null", "JSON"];
+
+function fieldsFromObj(obj) {
+  return Object.entries(obj || {}).map(([key, value]) => {
+    if (typeof value === "number") return { key, type: "Number", value: String(value) };
+    if (typeof value === "boolean") return { key, type: "Boolean", value: String(value) };
+    if (value === null) return { key, type: "Null", value: "" };
+    if (typeof value === "object") return { key, type: "JSON", value: JSON.stringify(value) };
+    return { key, type: "String", value: String(value ?? "") };
+  });
+}
+function objFromFields(fields) {
+  const obj = {};
+  for (const f of fields) {
+    if (!f.key) continue;
+    if (f.type === "Number") obj[f.key] = Number(f.value) || 0;
+    else if (f.type === "Boolean") obj[f.key] = f.value === "true";
+    else if (f.type === "Null") obj[f.key] = null;
+    else if (f.type === "JSON") { try { obj[f.key] = JSON.parse(f.value); } catch { obj[f.key] = f.value; } }
+    else obj[f.key] = f.value;
+  }
+  return obj;
+}
+const jsonTextFor = (obj, syntax) => JSON.stringify(syntax === "DynamoDB JSON" ? api.marshalItem(obj) : obj, null, 2);
+const objFromJsonText = (text, syntax) => { const parsed = JSON.parse(text); return syntax === "DynamoDB JSON" ? api.unmarshalItem(parsed) : parsed; };
 
 const OPERATORS = [{ value: "eq", label: "=" }, { value: "ne", label: "≠" }, { value: "contains", label: "contains" }, { value: "begins", label: "begins with" }];
 const PROJECTION_OPTIONS = [{ value: "ALL", label: "All attributes" }, { value: "SPECIFIC", label: "Specific attributes" }];
@@ -40,13 +67,33 @@ const applyOp = (v, op, needle) => {
 export default function ExploreItems({ params }) {
   const name = params.name;
   const notify = useNotify();
+  const settings = getExploreSettings();
   const [sel, setSel] = useState([]);
-  const [edit, setEdit] = useState(null);      // {json, isNew}
+  const [edit, setEdit] = useState(null);      // {isNew, viewMode, jsonSyntax, fields, json}
   const [editErr, setEditErr] = useState(null);
   const [del, setDel] = useState(false);
   const meta = useAsync(() => api.describeTable(name), [name]);
 
-  const [op, setOp] = useState("scan");
+  const openEdit = (obj, isNew) => {
+    const viewMode = settings.defaultItemEditorView === "JSON view" ? "json" : "form";
+    setEdit({ isNew, viewMode, jsonSyntax: settings.defaultJsonSyntax, fields: fieldsFromObj(obj), json: jsonTextFor(obj, settings.defaultJsonSyntax) });
+    setEditErr(null);
+  };
+  const setViewMode = (viewMode) => {
+    setEdit((e) => {
+      if (viewMode === "json") return { ...e, viewMode, json: jsonTextFor(objFromFields(e.fields), e.jsonSyntax) };
+      try { return { ...e, viewMode, fields: fieldsFromObj(objFromJsonText(e.json, e.jsonSyntax)) }; }
+      catch (err) { setEditErr(err); return e; }
+    });
+  };
+  const setJsonSyntax = (jsonSyntax) => {
+    setEdit((e) => {
+      try { return { ...e, jsonSyntax, json: jsonTextFor(objFromJsonText(e.json, e.jsonSyntax), jsonSyntax) }; }
+      catch (err) { setEditErr(err); return { ...e, jsonSyntax }; }
+    });
+  };
+
+  const [op, setOp] = useState(settings.defaultQueryType === "Query" ? "query" : "scan");
   const [indexSel, setIndexSel] = useState("TABLE");
   const [pkVal, setPkVal] = useState(""); const [skVal, setSkVal] = useState("");
   const [projection, setProjection] = useState("ALL");
@@ -114,7 +161,7 @@ export default function ExploreItems({ params }) {
   const save = async () => {
     setEditErr(null);
     try {
-      const obj = JSON.parse(edit.json);
+      const obj = edit.viewMode === "json" ? objFromJsonText(edit.json, edit.jsonSyntax) : objFromFields(edit.fields);
       await api.putItem(name, api.marshalItem(obj));
       notify.success(edit.isNew ? "The item has been saved successfully." : "The item has been updated successfully.");
       setEdit(null); run();
@@ -189,9 +236,9 @@ export default function ExploreItems({ params }) {
           trackBy={(it) => JSON.stringify(keyFor(it))}
           header={<Header variant="h2" counter={`(${items.length})`} actions={
             <SpaceBetween direction="horizontal" size="xs">
-              <Button disabled={sel.length !== 1} onClick={() => setEdit({ json: JSON.stringify(api.unmarshalItem(sel[0]), null, 2), isNew: false })}>Edit item</Button>
+              <Button disabled={sel.length !== 1} onClick={() => openEdit(api.unmarshalItem(sel[0]), false)}>Edit item</Button>
               <Button disabled={!sel.length} onClick={() => setDel(true)}>Delete items</Button>
-              <Button variant="primary" onClick={() => setEdit({ json: JSON.stringify(Object.fromEntries(keyAttrs.map((k) => [k, ""])), null, 2), isNew: true })}>Create item</Button>
+              <Button variant="primary" onClick={() => openEdit(Object.fromEntries(keyAttrs.map((k) => [k, ""])), true)}>Create item</Button>
             </SpaceBetween>
           }>Table: {name} - Items returned</Header>}
           columnDefinitions={attrs.map((a) => ({ id: a, header: keyAttrs.includes(a) ? `${a} (${keyAttrs[0] === a ? "Partition key" : "Sort key"})` : a, cell: (it) => it[a] === undefined ? "" : fmt(api.unmarshal(it[a])) }))}
@@ -201,9 +248,43 @@ export default function ExploreItems({ params }) {
       </SpaceBetween>
       <Modal visible={!!edit} size="large" onDismiss={() => setEdit(null)} header={edit?.isNew ? "Create item" : "Edit item"}
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs"><Button variant="link" onClick={() => setEdit(null)}>Cancel</Button><Button variant="primary" onClick={save}>{edit?.isNew ? "Create item" : "Save changes"}</Button></SpaceBetween></Box>}>
-        <FormField label="Attributes (JSON)" description="Plain JSON; strings, numbers, booleans, null, lists and maps are converted to DynamoDB types." errorText={editErr?.message}>
-          <Textarea rows={16} value={edit?.json || ""} onChange={({ detail }) => setEdit({ ...edit, json: detail.value })} />
-        </FormField>
+        {edit && (
+          <SpaceBetween size="l">
+            <FormField label="Item editor view">
+              <RadioGroup value={edit.viewMode} onChange={({ detail }) => setViewMode(detail.value)}
+                items={[{ value: "form", label: "Form view" }, { value: "json", label: "JSON view" }]} />
+            </FormField>
+            {edit.viewMode === "json" ? (
+              <>
+                <FormField label="View as">
+                  <RadioGroup value={edit.jsonSyntax} onChange={({ detail }) => setJsonSyntax(detail.value)}
+                    items={[{ value: "DynamoDB JSON", label: "DynamoDB JSON" }, { value: "JSON", label: "JSON" }]} />
+                </FormField>
+                <FormField label="Attributes" description="Strings, numbers, booleans, null, lists and maps are converted to DynamoDB types." errorText={editErr?.message}>
+                  <Textarea rows={14} value={edit.json} onChange={({ detail }) => setEdit({ ...edit, json: detail.value })} />
+                </FormField>
+              </>
+            ) : (
+              <FormField label="Attributes" errorText={editErr?.message}>
+                <SpaceBetween size="xs">
+                  {edit.fields.map((f, i) => (
+                    <Grid key={i} gridDefinition={[{ colspan: 4 }, { colspan: 3 }, { colspan: 4 }, { colspan: 1 }]}>
+                      <Input value={f.key} placeholder="Attribute name" disabled={keyAttrs.includes(f.key)}
+                        onChange={({ detail }) => setEdit({ ...edit, fields: edit.fields.map((x, j) => (j === i ? { ...x, key: detail.value } : x)) })} />
+                      <Select selectedOption={{ value: f.type, label: f.type }} options={ATTR_TYPES.map((t) => ({ value: t, label: t }))}
+                        onChange={({ detail }) => setEdit({ ...edit, fields: edit.fields.map((x, j) => (j === i ? { ...x, type: detail.selectedOption.value } : x)) })} />
+                      <Input value={f.value} placeholder="Value" disabled={f.type === "Null"}
+                        onChange={({ detail }) => setEdit({ ...edit, fields: edit.fields.map((x, j) => (j === i ? { ...x, value: detail.value } : x)) })} />
+                      <Button iconName="close" variant="icon" ariaLabel="Remove attribute" disabled={keyAttrs.includes(f.key)}
+                        onClick={() => setEdit({ ...edit, fields: edit.fields.filter((_, j) => j !== i) })} />
+                    </Grid>
+                  ))}
+                  <Button onClick={() => setEdit({ ...edit, fields: [...edit.fields, { key: "", type: "String", value: "" }] })}>Add new attribute</Button>
+                </SpaceBetween>
+              </FormField>
+            )}
+          </SpaceBetween>
+        )}
       </Modal>
       <DeleteModal visible={del} resourceType="item" names={sel.map((it) => JSON.stringify(api.unmarshalItem(keyFor(it))))} confirmText="delete"
         onDismiss={() => setDel(false)}

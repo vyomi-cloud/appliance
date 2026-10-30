@@ -56,18 +56,15 @@
  "dynamodb.table.settings": {
   "title": "Table class, deletion protection, encryption (at create)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Stored and returned at create time; deletion protection does not block DeleteTable yet and data is not encrypted at rest."
+   "Deletion protection is enforced (DeleteTable is rejected while it is on).",
+   "Table class and encryption at rest are stored and returned but have no effect; data is not encrypted at rest."
   ],
-  "probe": {
-   "ddb_ok": [
-    "DescribeTable"
-   ]
-  },
   "tests": [
+   "tests/conformance/test_dynamodb_table_ops_core.py",
    "tests/conformance/test_dynamodb_table_settings_core.py"
   ]
  },
@@ -88,57 +85,66 @@
  "dynamodb.table.update": {
   "title": "Update capacity / settings (UpdateTable)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
-  "limitations": [],
-  "probe": {
-   "ddb_unknown": "UpdateTable"
-  }
+  "limitations": [
+   "Provisioned capacity is recorded but not enforced \u2014 Vyomi never throttles requests."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_table_ops_core.py"
+  ]
  },
  "dynamodb.table.ttl": {
   "title": "Time to Live (TTL)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
-  "limitations": [],
-  "probe": {
-   "ddb_unknown": "DescribeTimeToLive"
-  }
+  "limitations": [
+   "Expired items are removed when they are read, queried or scanned \u2014 not by a background process within ~48 hours as in AWS."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_table_ops_core.py"
+  ]
  },
  "dynamodb.table.pitr": {
   "title": "Point-in-time recovery (PITR)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
-  "limitations": [],
-  "probe": {
-   "ddb_unknown": "DescribeContinuousBackups"
-  }
+  "limitations": [
+   "PITR can be turned on and reports its restore window; RestoreTableToPointInTime is not implemented yet \u2014 use on-demand backups to restore."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_table_ops_core.py"
+  ]
  },
  "dynamodb.backups": {
   "title": "On-demand backups",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "full",
+   "offline": "full"
   },
   "limitations": [],
-  "probe": {
-   "ddb_unknown": "ListBackups"
-  }
+  "tests": [
+   "tests/conformance/test_dynamodb_table_ops_core.py"
+  ]
  },
  "dynamodb.partiql": {
   "title": "PartiQL editor",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
-  "limitations": [],
-  "probe": {
-   "ddb_unknown": "ExecuteStatement"
-  }
+  "limitations": [
+   "Supported: SELECT (WHERE on key and attributes, ? parameters), INSERT \u2026 VALUE, UPDATE \u2026 SET \u2026 WHERE, DELETE FROM \u2026 WHERE.",
+   "Not supported: BatchExecuteStatement, ExecuteTransaction, nested paths and functions."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_table_ops_core.py"
+  ]
  },
  "dynamodb.streams": {
   "title": "DynamoDB stream details",

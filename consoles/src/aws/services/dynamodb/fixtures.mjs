@@ -4,6 +4,11 @@ const table = (name) => ({ TableName: name, AttributeDefinitions: [{ AttributeNa
 export default {
   "ddb-table": async (wire) => { await wire("POST", "/", { ...T("CreateTable"), body: table("uic-table") }).catch(() => {}); return "uic-table"; },
   "live-table": async (wire, uniq) => { await wire("POST", "/", { ...T("CreateTable"), body: table(uniq) }); return uniq; },
+  "live-backup": async (wire, uniq) => {
+    await wire("POST", "/", { ...T("CreateTable"), body: table("uic-table") }).catch(() => {});
+    await wire("POST", "/", { ...T("CreateBackup"), body: { TableName: "uic-table", BackupName: uniq } });
+    return uniq;
+  },
   "live-item": async (wire, uniq) => {
     await wire("POST", "/", { ...T("CreateTable"), body: table("uic-table") }).catch(() => {});
     await wire("POST", "/", { ...T("PutItem"), body: { TableName: "uic-table", Item: { pk: { S: uniq } } } });

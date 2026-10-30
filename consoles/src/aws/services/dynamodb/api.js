@@ -24,6 +24,15 @@ export const deleteItem = (name, key) => call("DeleteItem", { TableName: name, K
 export const tags = async (arn) => { try { return (await call("ListTagsOfResource", { ResourceArn: arn })).Tags || []; } catch (e) { if (e.status === 501 || e.code === "UnknownOperationException") return null; throw e; } };
 export const describeTtl = async (name) => { try { return (await call("DescribeTimeToLive", { TableName: name })).TimeToLiveDescription; } catch (e) { if (e.status === 501 || e.code === "UnknownOperationException") return null; throw e; } };
 export const describeBackups = async (name) => { try { return (await call("DescribeContinuousBackups", { TableName: name })).ContinuousBackupsDescription; } catch (e) { if (e.status === 501 || e.code === "UnknownOperationException") return null; throw e; } };
+export const updateTable = (input) => call("UpdateTable", input);
+export const updateTtl = (name, spec) => call("UpdateTimeToLive", { TableName: name, TimeToLiveSpecification: spec });
+export const updateContinuousBackups = (name, enabled) => call("UpdateContinuousBackups", { TableName: name, PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: enabled } });
+export const createBackup = (tableName, backupName) => call("CreateBackup", { TableName: tableName, BackupName: backupName });
+export const listBackups = async (tableName) => (await call("ListBackups", tableName ? { TableName: tableName } : {})).BackupSummaries || [];
+export const describeBackup = (arn) => call("DescribeBackup", { BackupArn: arn }).then((r) => r.BackupDescription);
+export const deleteBackup = (arn) => call("DeleteBackup", { BackupArn: arn });
+export const restoreTableFromBackup = (arn, targetTableName) => call("RestoreTableFromBackup", { BackupArn: arn, TargetTableName: targetTableName });
+export const executeStatement = (statement, parameters) => call("ExecuteStatement", { Statement: statement, ...(parameters ? { Parameters: parameters } : {}) });
 
 /** DynamoDB attribute-value JSON → plain JS, and back. */
 export function unmarshal(av) {
