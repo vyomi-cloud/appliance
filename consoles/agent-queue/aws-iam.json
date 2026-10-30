@@ -13,5 +13,7 @@
   "core/capabilities/aws/<service>.json: one entry per console section with honest level + probe; tests/conformance/test_capabilities.py must pass",
   "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
   "Registry 'offline' level = 'nano' level for now; the offline appliance is verified separately (CAP_BASE)"
- ]
+ ],
+ "attempt": 2,
+ "note": "re-run: previous run stopped on a Claude session limit before doing work"
 }
