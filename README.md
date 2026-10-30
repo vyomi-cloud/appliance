@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-30 02:58 UTC · refreshes after every pipeline run_
+_Updated 2026-10-30 03:31 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 55 services (AWS 19 · GCP 18 · Azure 18) of 1,068 the clouds publish
-- **Building now:** Amazon Cognito Identity Provider (AWS, 18/18 checks), Amazon EC2 Container Service (AWS, 19/19 checks), Amazon Elastic Container Registry (AWS, 20/20 checks), Amazon ElastiCache (AWS, 20/20 checks), Amazon Kinesis (AWS, 20/20 checks), Amazon Route 53 (AWS, 20/20 checks), Amazon Simple Email Service (AWS, 20/20 checks), AWS CloudFormation (AWS, 20/20 checks), AWS Security Token Service (AWS, 18/18 checks), BigQuery API (GCP, 17/18 checks), Cloud DNS API (GCP, 17/18 checks), Cloud Logging API (GCP, 17/18 checks), Cloud Run Admin API (GCP, 19/19 checks), Cloud Tasks API (GCP, 20/20 checks), Workflows API (GCP, 17/18 checks), applicationinsights (Azure, 16/17 checks), containerregistry (Azure, 20/20 checks), containerservice (Azure, 16/17 checks), eventhub (Azure, 16/17 checks), msi (Azure, 17/17 checks), redis (Azure, 20/20 checks)
-- **In the gate / releasing:** nothing
+- **Building now:** nothing
+- **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 72% · Nano 76%
 - **Hourly tests:** 215 of 223 suites passing (run 01:47 UTC)
@@ -16,35 +16,58 @@ _Updated 2026-10-30 02:58 UTC · refreshes after every pipeline run_
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 19 | 9 | 0 | 17 | 61% · 80% |
-| GCP | 18 | 6 | 0 | 12 | 85% · 74% |
-| Azure | 18 | 6 | 0 | 12 | 72% · 74% |
+| AWS | 19 | 0 | 9 | 17 | 61% · 80% |
+| GCP | 18 | 0 | 6 | 12 | 85% · 74% |
+| Azure | 18 | 0 | 6 | 12 | 72% · 74% |
 
 ## In progress
 
-| Service | Cloud | Stage | Checks | Real backend | Built with | Still missing |
+- **Real backend:** what the service should run on · **Backend in the code:** what the branch really runs on — ✅ the code reaches it · ⚠️ not in code: the manifest names it but no code reaches it · in-process: the engine itself is the backend
+
+| Service | Cloud | Stage | Checks | Real backend | Backend in the code | Still missing |
 |---|---|---|---|---|---|---|
-| Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🛠 Building | 18/18 | in-process | in-process | — |
-| Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🛠 Building | 19/19 | docker · Pro · + caddy gateway | docker · Pro | — |
-| Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🛠 Building | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
-| Amazon ElastiCache [#56](https://github.com/vyomi-cloud/appliance/issues/56) | AWS | 🛠 Building | 20/20 | valkey · Lite | valkey · 8 MB · Lite | — |
-| Amazon Kinesis [#58](https://github.com/vyomi-cloud/appliance/issues/58) | AWS | 🛠 Building | 20/20 | nats · Lite | nats · 10 MB · Lite | — |
-| Amazon Route 53 [#60](https://github.com/vyomi-cloud/appliance/issues/60) | AWS | 🛠 Building | 20/20 | coredns · Lite | coredns · 15 MB · Lite | — |
-| Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🛠 Building | 20/20 | mailpit · Lite | mailpit · 15 MB · Lite | — |
-| AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🛠 Building | 20/20 | iac-engine · in-process | in-process | — |
-| AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🛠 Building | 18/18 | in-process | in-process | — |
-| BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🛠 Building | 17/18 | duckdb · in-process | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🛠 Building | 17/18 | coredns · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🛠 Building | 17/18 | logstore · in-process · + fluent-bit agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🛠 Building | 19/19 | docker · Pro · + caddy gateway | docker · Pro | — |
-| Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🛠 Building | 20/20 | nats · Lite | nats · 10 MB · Lite | — |
-| Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🛠 Building | 17/18 | workflow-engine · in-process · + temporal engine | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| applicationinsights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🛠 Building | 16/17 | logstore · in-process · + fluent-bit agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| containerregistry [#82](https://github.com/vyomi-cloud/appliance/issues/82) | Azure | 🛠 Building | 20/20 | registry · Lite | registry · 10 MB · Lite | — |
-| containerservice [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🛠 Building | 16/17 | k3s · Max | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| eventhub [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🛠 Building | 16/17 | nats · Lite · + amqp protocol | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| msi [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🛠 Building | 17/17 | in-process | in-process | — |
-| redis [#89](https://github.com/vyomi-cloud/appliance/issues/89) | Azure | 🛠 Building | 20/20 | valkey · Lite | valkey · 8 MB · Lite | — |
+| Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🔍 In gate ([PR #199](https://github.com/vyomi-cloud/appliance/pull/199)) | 18/18 | in-process | in-process | — |
+| Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🔍 In gate ([PR #201](https://github.com/vyomi-cloud/appliance/pull/201)) | 19/19 | docker · Pro · + caddy gateway | docker · Pro ✅ | — |
+| Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🔍 In gate ([PR #200](https://github.com/vyomi-cloud/appliance/pull/200)) | 20/20 | registry · Lite | registry · 10 MB · Lite ✅ | — |
+| Amazon ElastiCache [#56](https://github.com/vyomi-cloud/appliance/issues/56) | AWS | 🔍 In gate ([PR #202](https://github.com/vyomi-cloud/appliance/pull/202)) | 20/20 | valkey · Lite | valkey · 8 MB · Lite ✅ | — |
+| Amazon Kinesis [#58](https://github.com/vyomi-cloud/appliance/issues/58) | AWS | 🚀 Releasing | 20/20 | nats · Lite | nats · 10 MB · Lite ⚠️ not in code | — |
+| Amazon Route 53 [#60](https://github.com/vyomi-cloud/appliance/issues/60) | AWS | 🔍 In gate ([PR #205](https://github.com/vyomi-cloud/appliance/pull/205)) | 20/20 | coredns · Lite | coredns · 15 MB · Lite ✅ | — |
+| Amazon Simple Email Service [#61](https://github.com/vyomi-cloud/appliance/issues/61) | AWS | 🔍 In gate ([PR #206](https://github.com/vyomi-cloud/appliance/pull/206)) | 20/20 | mailpit · Lite | mailpit · 15 MB · Lite ✅ | — |
+| AWS CloudFormation [#51](https://github.com/vyomi-cloud/appliance/issues/51) | AWS | 🔍 In gate ([PR #197](https://github.com/vyomi-cloud/appliance/pull/197)) | 20/20 | iac-engine · in-process | in-process | — |
+| AWS Security Token Service [#65](https://github.com/vyomi-cloud/appliance/issues/65) | AWS | 🔍 In gate ([PR #209](https://github.com/vyomi-cloud/appliance/pull/209)) | 18/18 | in-process | in-process | — |
+| BigQuery API [#67](https://github.com/vyomi-cloud/appliance/issues/67) | GCP | 🔍 In gate ([PR #211](https://github.com/vyomi-cloud/appliance/pull/211)) | 17/18 | duckdb · in-process | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Cloud DNS API [#71](https://github.com/vyomi-cloud/appliance/issues/71) | GCP | 🔍 In gate ([PR #213](https://github.com/vyomi-cloud/appliance/pull/213)) | 17/18 | coredns · Lite | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Cloud Logging API [#73](https://github.com/vyomi-cloud/appliance/issues/73) | GCP | 🔍 In gate ([PR #214](https://github.com/vyomi-cloud/appliance/pull/214)) | 17/18 | logstore · in-process · + fluent-bit agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Cloud Run Admin API [#76](https://github.com/vyomi-cloud/appliance/issues/76) | GCP | 🔍 In gate ([PR #216](https://github.com/vyomi-cloud/appliance/pull/216)) | 19/19 | docker · Pro · + caddy gateway | docker · Pro ⚠️ not in code | — |
+| Cloud Tasks API [#69](https://github.com/vyomi-cloud/appliance/issues/69) | GCP | 🔍 In gate ([PR #212](https://github.com/vyomi-cloud/appliance/pull/212)) | 20/20 | nats · Lite | nats · 10 MB · Lite ✅ | — |
+| Workflows API [#77](https://github.com/vyomi-cloud/appliance/issues/77) | GCP | 🔍 In gate ([PR #221](https://github.com/vyomi-cloud/appliance/pull/221)) | 17/18 | workflow-engine · in-process · + temporal engine | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Application Insights [#80](https://github.com/vyomi-cloud/appliance/issues/80) | Azure | 🔍 In gate ([PR #222](https://github.com/vyomi-cloud/appliance/pull/222)) | 16/17 | logstore · in-process · + fluent-bit agent | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Container Registry [#82](https://github.com/vyomi-cloud/appliance/issues/82) | Azure | 🔍 In gate ([PR #223](https://github.com/vyomi-cloud/appliance/pull/223)) | 20/20 | registry · Lite | registry · 10 MB · Lite ✅ | — |
+| Azure Kubernetes Service [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🔍 In gate ([PR #224](https://github.com/vyomi-cloud/appliance/pull/224)) | 16/17 | k3s · Max | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Event Hubs [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🔍 In gate ([PR #225](https://github.com/vyomi-cloud/appliance/pull/225)) | 16/17 | nats · Lite · + amqp protocol | in-process | backend is the recommended one, or a different real backend the manifest justifies |
+| Managed Identities [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🔍 In gate ([PR #226](https://github.com/vyomi-cloud/appliance/pull/226)) | 17/17 | in-process | in-process | — |
+| Azure Cache for Redis [#89](https://github.com/vyomi-cloud/appliance/issues/89) | Azure | 🔍 In gate ([PR #227](https://github.com/vyomi-cloud/appliance/pull/227)) | 20/20 | valkey · Lite | valkey · 8 MB · Lite ✅ | — |
+
+<details><summary><b>Backend evidence</b> — where each service's code reaches its backend, or why it runs in-process</summary>
+
+| Service | Cloud | Evidence |
+|---|---|---|
+| Amazon EC2 Container Service | AWS | docker · Pro: `core/ecs_docker_runtime.py` runs docker |
+| Amazon Elastic Container Registry | AWS | registry · 10 MB · Lite: `routes/aws_ecr.py` uses VYOMI_ECR_REGISTRY_URL |
+| Amazon ElastiCache | AWS | valkey · 8 MB · Lite: `routes/aws_elasticache.py` uses VYOMI_VALKEY_HOST |
+| Amazon Kinesis | AWS | the manifest says nats, but no code the branch adds reaches it |
+| Amazon Route 53 | AWS | coredns · 15 MB · Lite: `routes/aws_route53.py` uses VYOMI_DNS_ZONES_DIR |
+| Amazon Simple Email Service | AWS | mailpit · 15 MB · Lite: `core/ses_mail.py` uses VYOMI_MAILPIT_HOST |
+| BigQuery API | GCP | in-process: SQL runs on the stdlib sqlite3 engine inside the core (a GoogleSQL-to-SQLite translation): zero containers, no extra dependency, and it is exactly what Nano runs in Pyodide, where DuckDB is not available |
+| Cloud DNS API | GCP | in-process: Zones, record sets and changes are control-plane state held by the engine (identical offline and in Nano, zero extra containers or idle memory). The shared CoreDNS data plane (dig/nslookup answering from these zones) is better added once, for Route 53 / Cloud DNS / Azure DNS together, with a zone-file sync from the shared store; it needs no change to this API surface. |
+| Cloud Run Admin API | GCP | the manifest says docker, but no code the branch adds reaches it |
+| Cloud Tasks API | GCP | nats · 10 MB · Lite: `core/gcp_cloudtasks_delivery.py` imports nats |
+| Container Registry | Azure | registry · 10 MB · Lite: `providers/azure_containerregistry_routes.py` uses CLOUDLEARN_REGISTRY_URL |
+| Azure Kubernetes Service | Azure | in-process: This release is control plane only (clusters, node pools, upgrades, credentials, maintenance, snapshots); the console says so. The recommended Max-tier k3s container would only add a real Kubernetes API behind the cluster FQDN, which is not served yet, so no container is added and every tier runs the same in-process engine. |
+| Event Hubs | Azure | in-process: Event Hubs' native wire is AMQP 1.0 / Kafka, which no Vyomi tier exposes; the engine keeps the partitioned event log in-process (state in the ARM store, identical in Nano), served over the REST send API and the console Data Explorer, so the shared NATS container would add memory without a reachable data plane. |
+| Azure Cache for Redis | Azure | valkey · 8 MB · Lite: `providers/azure_redis_routes.py` uses CLOUDLEARN_VALKEY_HOST |
+
+</details>
 
 ## Released services
 
@@ -682,7 +705,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Gate checks — applicationinsights (Azure)</summary>
+<details><summary>Gate checks — Application Insights (Azure)</summary>
 
 | | Check | Detail |
 |---|---|---|
@@ -706,7 +729,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Gate checks — containerregistry (Azure)</summary>
+<details><summary>Gate checks — Container Registry (Azure)</summary>
 
 | | Check | Detail |
 |---|---|---|
@@ -733,7 +756,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Gate checks — containerservice (Azure)</summary>
+<details><summary>Gate checks — Azure Kubernetes Service (Azure)</summary>
 
 | | Check | Detail |
 |---|---|---|
@@ -757,7 +780,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Gate checks — eventhub (Azure)</summary>
+<details><summary>Gate checks — Event Hubs (Azure)</summary>
 
 | | Check | Detail |
 |---|---|---|
@@ -781,7 +804,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Gate checks — msi (Azure)</summary>
+<details><summary>Gate checks — Managed Identities (Azure)</summary>
 
 | | Check | Detail |
 |---|---|---|
@@ -805,7 +828,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Gate checks — redis (Azure)</summary>
+<details><summary>Gate checks — Azure Cache for Redis (Azure)</summary>
 
 | | Check | Detail |
 |---|---|---|
