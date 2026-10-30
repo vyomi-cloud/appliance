@@ -1,9 +1,9 @@
 {
  "cloud": "aws",
  "service": "ec2",
- "goal": "P2: native-fidelity console on real backends \u2014 fidelity >= 90%, high real coverage, no statics",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, high real coverage, no statics",
  "must_build": [
-  "Instances list/detail (Details, Status and alarms, Monitoring, Security, Networking, Storage, Tags), Launch instance wizard (name/tags, AMI, instance type, key pair, network settings, storage, advanced) \u2014 RunInstances real; start/stop/reboot/terminate real",
+  "Instances list/detail (Details, Status and alarms, Monitoring, Security, Networking, Storage, Tags), Launch instance wizard (name/tags, AMI, instance type, key pair, network settings, storage, advanced) — RunInstances real; start/stop/reboot/terminate real",
   "Security groups (+ inbound/outbound rule editors), Key pairs (create/import/delete), Volumes (create/attach/detach), AMIs, Snapshots, Elastic IPs, Network interfaces",
   "Offline: real Docker-backed instances where the appliance has them; Nano: honest limited (no real VM) via capability registry"
  ],
@@ -12,5 +12,7 @@
   "core/capabilities/aws/<service>.json: one entry per console section with honest level + probe; tests/conformance/test_capabilities.py must pass",
   "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
   "Never edit .github/ (reverted before push)"
- ]
+ ],
+ "attempt": 2,
+ "note": "RESUME: first `git fetch origin v4/ui-aws-ec2-41030228157 && git merge --no-edit origin/v4/ui-aws-ec2-41030228157` — your previous attempt (already high fidelity/coverage). Then fix ONLY what the gate rejected: - list/detail pages without a liveness check (add \"live\" to spec-map + a fixture): events, instance-types, instance-type-detail Liveness = add \"live\" to spec-map.json + a fixture in fixtures.mjs that creates a uniquely named resource over the native wire, and make the page really list/show it from the backend. If the gate cites honest_page outside the allowlist, BUILD those pages for real (or a NotSimulated section inside a built page) — never mark whole pages honest. Rebuild bundles after merging (node build.mjs)."
 }

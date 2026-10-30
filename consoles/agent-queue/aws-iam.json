@@ -1,7 +1,7 @@
 {
  "cloud": "aws",
  "service": "iam",
- "goal": "P2: native-fidelity console on real backends \u2014 fidelity >= 90%, raise real coverage, no statics",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
  "must_build": [
   "Users, User groups, Roles, Policies (customer + AWS managed), Identity providers, Account settings, Credential report: list/detail/create/edit/delete",
   "User detail: Permissions (attach/detach managed, inline policies), Groups, Tags, Security credentials (access keys create/deactivate/delete, console password = limited, MFA = not_simulated)",
@@ -14,6 +14,6 @@
   "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
   "Registry 'offline' level = 'nano' level for now; the offline appliance is verified separately (CAP_BASE)"
  ],
- "attempt": 3,
- "note": "Previous run built it (real coverage 82-93%) but its push was rejected (workflow file); the workflow now reverts .github changes. Rebuild."
+ "attempt": 4,
+ "note": "RESUME: first `git fetch origin v4/ui-aws-iam-41029849634 && git merge --no-edit origin/v4/ui-aws-iam-41029849634` — your previous attempt (already high fidelity/coverage). Then fix ONLY what the gate rejected: - list/detail pages without a liveness check (add \"live\" to spec-map + a fixture): user-detail, group-detail, role-detail, policy-detail, temporary-delegation-requests, service-control-policies, service-control-policy-detail, resource-control-policies Liveness = add \"live\" to spec-map.json + a fixture in fixtures.mjs that creates a uniquely named resource over the native wire, and make the page really list/show it from the backend. If the gate cites honest_page outside the allowlist, BUILD those pages for real (or a NotSimulated section inside a built page) — never mark whole pages honest. Rebuild bundles after merging (node build.mjs)."
 }

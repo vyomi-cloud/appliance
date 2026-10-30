@@ -1,7 +1,7 @@
 {
  "cloud": "aws",
  "service": "rds",
- "goal": "P2: native-fidelity console on real backends \u2014 fidelity >= 90%, high real coverage, no statics",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, high real coverage, no statics",
  "must_build": [
   "Databases list/detail (Connectivity & security, Monitoring, Logs & events, Configuration, Maintenance & backups, Tags), Create database (engine options incl. PostgreSQL/MySQL, templates, settings, instance config, storage, connectivity, auth, monitoring), Modify, Reboot, Delete with final snapshot",
   "Snapshots (manual create/restore/delete), Subnet groups, Parameter groups (create/edit params); real SQL backends where Vyomi has them (PGlite on Nano, Postgres offline)"
@@ -11,5 +11,7 @@
   "core/capabilities/aws/<service>.json: one entry per console section with honest level + probe; tests/conformance/test_capabilities.py must pass",
   "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
   "Never edit .github/ (reverted before push)"
- ]
+ ],
+ "attempt": 2,
+ "note": "RESUME: first `git fetch origin v4/ui-aws-rds-41030228157 && git merge --no-edit origin/v4/ui-aws-rds-41030228157` — your previous attempt (already high fidelity/coverage). Then fix ONLY what the gate rejected: - list/detail pages without a liveness check (add \"live\" to spec-map + a fixture): exports-in-amazon-s3, automated-backups, reserved-instances, capacity-reservations, custom-engine-versions, zero-etl-integrations, recommendations, certificate-update Liveness = add \"live\" to spec-map.json + a fixture in fixtures.mjs that creates a uniquely named resource over the native wire, and make the page really list/show it from the backend. If the gate cites honest_page outside the allowlist, BUILD those pages for real (or a NotSimulated section inside a built page) — never mark whole pages honest. Rebuild bundles after merging (node build.mjs)."
 }
