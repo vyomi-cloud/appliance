@@ -1,0 +1,100 @@
+{
+ "$doc": "Vyomi capability registry — Azure Resource groups. See aws/s3.json for the contract.",
+ "azure.resourcegroups.rg.crud": {
+  "title": "Resource groups (create, get, list, delete) over ARM",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.rg.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.resources_in_group": {
+  "title": "Resources (every resource type inside the group, at once)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to the resource group itself",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.deployments": {
+  "title": "Deployments (Microsoft.Resources/deployments) history",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Deployment creation stores whatever template/parameters/mode the client sends and returns Succeeded immediately — there is no template-language evaluation (no parameter/variable resolution, no dependsOn ordering) and nothing is actually provisioned from it; the underlying resources still need their own PUT calls. Cancel and Redeploy are not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.activity_log": {
+  "title": "Activity log",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only records the resource group's own create/update/delete lifecycle events — operations on the resources inside the group are not aggregated into this view (each resource has its own Activity log). Only console/SDK-triggered mutations made since the simulation booted are recorded, and `caller` is a fixed placeholder identity."
+  ],
+  "api": [
+   "ActivityLogs_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.access_control_iam": {
+  "title": "Access control (IAM) — role assignments and definitions",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Role assignments/definitions are the generic ARM catalog store (Microsoft.Authorization/roleAssignments, roleDefinitions) at subscription scope, not actually scoped to this resource group, and no access decisions are evaluated — every data-plane call succeeds regardless of what is assigned. Deny assignments and classic administrators are always empty."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.resourcegroups.cost_management": {
+  "title": "Cost analysis, budgets and cost alerts, scoped to this resource group",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_cost_core.py"
+  ]
+ }
+}

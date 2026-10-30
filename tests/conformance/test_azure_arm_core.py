@@ -216,6 +216,83 @@ def run() -> int:
     r = arm.handle("GET", kv + "/providers/Microsoft.Authorization/locks", {"api-version": "2020-05-01"})
     _check("locks cascade-deleted with resource", r["body"]["value"] == [])
 
+    # 21. Resource groups are their own real resource, not just names inferred from their
+    # contents: an explicitly-created, EMPTY group persists its own location/tags and shows
+    # up in the list even with nothing inside it.
+    empty_rg = "uic-empty-rg"
+    r = arm.handle("PUT", f"/subscriptions/{SUB}/resourceGroups/{empty_rg}", {"api-version": AV},
+                   {"location": "westus", "tags": {"team": "platform"}})
+    _check("empty rg put 200", r["status"] == 200 and r["body"]["location"] == "westus" and r["body"]["tags"]["team"] == "platform")
+    r = arm.handle("GET", f"/subscriptions/{SUB}/resourceGroups/{empty_rg}", {"api-version": AV})
+    _check("empty rg get persists tags/location", r["status"] == 200 and r["body"]["tags"] == {"team": "platform"} and r["body"]["location"] == "westus")
+    r = arm.handle("GET", f"/subscriptions/{SUB}/resourcegroups")
+    _check("rg list contains the empty group", any(g["name"] == empty_rg for g in r["body"]["value"]))
+
+    # 22. PATCH merges resource-group tags; PUT replaces them (same contract as every other
+    # catalog resource — see _upsert).
+    r = arm.handle("PATCH", f"/subscriptions/{SUB}/resourceGroups/{empty_rg}", {"api-version": AV}, {"tags": {"env": "dev"}})
+    _check("rg patch merges tags", r["status"] == 200 and r["body"]["tags"] == {"team": "platform", "env": "dev"})
+    r = arm.handle("PUT", f"/subscriptions/{SUB}/resourceGroups/{empty_rg}", {"api-version": AV}, {"location": "westus", "tags": {"env": "prod"}})
+    _check("rg put replaces tags", r["status"] == 200 and r["body"]["tags"] == {"env": "prod"})
+
+    # 23. GET .../resourceGroups/{rg}/resources — every resource in the group, any type at
+    # once (the real "list resources" API the RG Overview/Resources tab and the delete
+    # confirmation's dependent-resources table both call).
+    cascade_rg = "uic-cascade-rg"
+    arm.handle("PUT", f"/subscriptions/{SUB}/resourceGroups/{cascade_rg}", {"api-version": AV}, {"location": "eastus"})
+    arm.handle("PUT", _p(cascade_rg, "Microsoft.Storage", "storageAccounts", "uiccascadesa"), {"api-version": AV}, {"location": "eastus"})
+    arm.handle("PUT", _p(cascade_rg, "Microsoft.KeyVault", "vaults", "uiccascadekv"), {"api-version": AV}, {"location": "eastus"})
+    r = arm.handle("GET", f"/subscriptions/{SUB}/resourceGroups/{cascade_rg}/resources", {"api-version": AV})
+    names_in_group = {x["name"] for x in r["body"]["value"]}
+    _check("resources-in-group lists every type, excludes the group itself",
+           r["status"] == 200 and names_in_group == {"uiccascadesa", "uiccascadekv"})
+
+    # 24. Deleting a resource group cascades to everything inside it (real ARM behaviour).
+    r = arm.handle("DELETE", f"/subscriptions/{SUB}/resourceGroups/{cascade_rg}", {"api-version": AV})
+    _check("rg delete 200", r["status"] == 200)
+    r = arm.handle("GET", _p(cascade_rg, "Microsoft.Storage", "storageAccounts", "uiccascadesa"), {"api-version": AV})
+    _check("cascade-deleted storage account is gone", r["status"] == 404)
+    r = arm.handle("GET", f"/subscriptions/{SUB}/resourceGroups/{cascade_rg}", {"api-version": AV})
+    _check("deleted resource group itself is gone (no implicit resources left)", r["status"] == 404)
+    r = arm.handle("DELETE", f"/subscriptions/{SUB}/resourceGroups/uic-never-existed", {"api-version": AV})
+    _check("deleting a never-created resource group 404s", r["status"] == 404)
+
+    # 25. Microsoft.Authorization/locks scoped directly to a resource group (not one of its
+    # resources) — e.g. "don't delete this whole resource group".
+    rg_lock_rg = "uic-locked-rg"
+    arm.handle("PUT", f"/subscriptions/{SUB}/resourceGroups/{rg_lock_rg}", {"api-version": AV}, {"location": "eastus"})
+    rg_lock = f"/subscriptions/{SUB}/resourceGroups/{rg_lock_rg}/providers/Microsoft.Authorization/locks/protect-rg"
+    r = arm.handle("PUT", rg_lock, {"api-version": "2020-05-01"}, {"properties": {"level": "CanNotDelete"}})
+    _check("rg-scoped lock put 201", r["status"] == 201 and r["body"]["properties"]["level"] == "CanNotDelete")
+    r = arm.handle("GET", f"/subscriptions/{SUB}/resourceGroups/{rg_lock_rg}/providers/Microsoft.Authorization/locks", {"api-version": "2020-05-01"})
+    _check("rg-scoped locks list has item", any(x["name"] == "protect-rg" for x in r["body"]["value"]))
+    r = arm.handle("DELETE", rg_lock, {"api-version": "2020-05-01"})
+    _check("rg-scoped lock delete 200", r["status"] == 200)
+
+    # a lock scoped to the resource group itself (no _sub/_rg bookkeeping fields of its own —
+    # see azure_locks_core.upsert) must still cascade away when the GROUP is deleted.
+    rg_lock2 = f"/subscriptions/{SUB}/resourceGroups/{rg_lock_rg}/providers/Microsoft.Authorization/locks/protect-rg-2"
+    arm.handle("PUT", rg_lock2, {"api-version": "2020-05-01"}, {"properties": {"level": "CanNotDelete"}})
+    arm.handle("DELETE", f"/subscriptions/{SUB}/resourceGroups/{rg_lock_rg}", {"api-version": AV})
+    r = arm.handle("GET", rg_lock2, {"api-version": "2020-05-01"})
+    _check("resource-group-scoped lock cascades away when the group itself is deleted", r["status"] == 404)
+
+    # 26. Microsoft.Resources/deployments: a generic catalog resource (no template evaluation,
+    # see azure_arm_data.py) — enough to back a real "Deployments" history list + "View
+    # template" honestly. PUT is an LRO like any other top-level type.
+    dep = _p(RG, "Microsoft.Resources", "deployments", "uic-deployment")
+    r = arm.handle("PUT", dep, {"api-version": "2021-04-01"},
+                   {"properties": {"mode": "Incremental", "template": {"resources": []}, "timestamp": "2026-01-01T00:00:00Z"}})
+    _check("deployment put 200 (LRO)", r["status"] == 200 and r["body"]["properties"]["provisioningState"] == "Succeeded")
+    _check("deployment stores the template verbatim", r["body"]["properties"]["template"] == {"resources": []})
+    r = arm.handle("GET", _p(RG, "Microsoft.Resources", "deployments", "uic-deployment"), {"api-version": "2021-04-01"})
+    _check("deployment get 200", r["status"] == 200 and r["body"]["name"] == "uic-deployment")
+    coll = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Resources/deployments"
+    r = arm.handle("GET", coll, {"api-version": "2021-04-01"})
+    _check("deployment collection lists it", any(x["name"] == "uic-deployment" for x in r["body"]["value"]))
+    r = arm.handle("DELETE", dep, {"api-version": "2021-04-01"})
+    _check("deployment delete 200", r["status"] == 200)
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 

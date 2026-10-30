@@ -14,8 +14,9 @@ import cap_cost from "../../../../core/capabilities/azure/cost.json";
 import cap_eventgrid from "../../../../core/capabilities/azure/eventgrid.json";
 import cap_functionapp from "../../../../core/capabilities/azure/functionapp.json";
 import cap_keyvaults from "../../../../core/capabilities/azure/keyvaults.json";
+import cap_resourcegroups from "../../../../core/capabilities/azure/resourcegroups.json";
 
-const REGISTRY = { ...cap_appservices, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults };
+const REGISTRY = { ...cap_appservices, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_resourcegroups };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 
