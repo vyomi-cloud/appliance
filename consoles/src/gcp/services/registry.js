@@ -29,7 +29,7 @@ export const PRODUCTS = [
   { id: "sql", title: "Cloud SQL", description: "Managed MySQL, PostgreSQL, SQL Server", category: "Databases", icon: SqlIcon, classic: "sql" },
   { id: "firestore", title: "Firestore", description: "Serverless NoSQL document database", category: "Databases", icon: DocumentIcon, load: () => import("./firestore/index.jsx") },
   { id: "networking", title: "VPC network", description: "Networks, subnets, firewall rules", category: "Networking", icon: NetworkIcon, load: () => import("./networking/index.jsx") },
-  { id: "run", title: "Cloud Run", description: "Fully managed container platform", category: "Serverless", icon: RunIcon, classic: "run" },
+  { id: "run", title: "Cloud Run", description: "Fully managed container platform", category: "Serverless", icon: RunIcon, load: () => import("./run/index.jsx") },
   { id: "functions", title: "Cloud Functions", description: "Event-driven serverless functions", category: "Serverless", icon: FunctionsIcon, load: () => import("./functions/index.jsx") },
   { id: "pubsub", title: "Pub/Sub", description: "Global real-time messaging", category: "Integration Services", icon: MessageIcon, classic: "pubsub" },
   { id: "cloudscheduler", title: "Cloud Scheduler", description: "Fully managed cron job service", category: "Integration Services", icon: ScheduleIcon, load: () => import("./cloudscheduler/index.jsx") },
