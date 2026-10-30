@@ -38,10 +38,12 @@
     "route": "#/apigateway/settings"
   },
   "portals": {
-    "route": "#/apigateway/portals"
+    "route": "#/apigateway/portals",
+    "honest_page": true
   },
   "portal-products": {
-    "route": "#/apigateway/portal-products"
+    "route": "#/apigateway/portal-products",
+    "honest_page": true
   },
   "create-api": {
     "route": "#/apigateway/create"
