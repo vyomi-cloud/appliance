@@ -1,5 +1,5 @@
 {
- "at": "2026-10-30T20:47:37+00:00",
+ "at": "2026-10-30T21:47:55+00:00",
  "baseline": false,
  "changes": [
   {
@@ -21,17 +21,27 @@
    "actionable": false
   },
   {
+   "cloud": "azure",
+   "service": "compute",
+   "kind": "spec-commit",
+   "key": "azure:compute:411fb227a9",
+   "title": "Azure compute: WorkloadManager: correct 2026-11-01-preview resource contract (#47558)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/411fb227a905864f972d26ab88b21ef69e1f67b2",
+   "actionable": true
+  },
+  {
    "cloud": "aws",
-   "service": "Amazon S3",
+   "service": "Amazon S3, CloudWatch Logs, CloudWatch",
    "kind": "announcement",
-   "key": "feed:aws:5c6928d6a6f5",
-   "title": "Amazon Connect Customer automatically saves in-progress emails as drafts",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/amazon-connect-email-draft-save/",
-   "detail": "Amazon Connect Customer automatically saves in-progress emails as drafts, helping agents resume work without losing progress when connectivity is interrupted or when their browser is accidentally closed or refreshed. When agents return, their drafts are restored with the message body, recipients, subject line, and attachment references intact. Customers can also access saved draft data in their Amazon S3 buckets to build integrations with other applications.",
+   "key": "feed:aws:f8bd89552413",
+   "title": "Amazon Bedrock expands API support and introduces Cross Region Inferencing for OpenAI models in AWS GovCloud (US)",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/bedrock-openai-runtime-govcloud/",
+   "detail": "Amazon Bedrock now supports the OpenAI GPT-5.6 models (Terra and Luna) on the bedrock-runtime endpoint, with support for the Responses, Converse, and Chat Completions APIs in AWS GovCloud (US). It also adds support for cross-Region inference, allowing customers to use cross-Region inference within AWS GovCloud (US) regions to access higher throughput and increased redundancy. Cross-Region inference automatically routes inference requests across both AWS GovCloud (US) Regions to give you higher throughput, without you needing to manage capacity across multiple Regions. Cross region inference wi",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
+  "maven/com.azure:azure-cosmos: The read operation timed out",
+  "maven/com.azure:azure-data-appconfiguration: The read operation timed out"
  ]
 }
