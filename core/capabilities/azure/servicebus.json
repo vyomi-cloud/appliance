@@ -1,0 +1,114 @@
+{
+  "$doc": "Vyomi capability registry — Azure Service Bus. See aws/s3.json for the contract. 'nano' = Nano/dev_server (core/azure_arm_core.py generic catalog + core/azure_servicebus_core.py + core/azure_locks_core.py); 'offline' = the appliance, which shares the same generic ARM catalog.",
+  "azure.servicebus.namespace.crud": {
+    "title": "Namespaces — create, list, get, update, delete (generic ARM catalog)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.servicebus.namespace.tags": {
+    "title": "Tags",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.servicebus.namespace.scale": {
+    "title": "Scale (pricing tier)",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "The pricing tier (Basic/Standard/Premium) and Premium's messaging units/partitions round-trip through ARM exactly as written, but Vyomi never enforces tier-specific throughput, size or partition limits."
+    ],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.servicebus.namespace.saspolicies": {
+    "title": "Shared access policies (authorizationRules) and their keys/connection strings (listKeys)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "listKeys returns the same fixed simulated key pair every generic ARM resource's listKeys action does; it is not derived from the policy's configured rights."
+    ],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.servicebus.namespace.locks": {
+    "title": "Resource locks (Microsoft.Authorization/locks), scoped to this namespace",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "Vyomi stores and returns locks exactly as configured (CanNotDelete / ReadOnly, notes) but never enforces them — writes and deletes on a locked resource are not blocked.",
+      "Locks are only simulated at the resource scope (this namespace); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+    ],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.servicebus.namespace.activitylog": {
+    "title": "Namespace activity log",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+    ],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.servicebus.namespace.listactions": {
+    "title": "Secondary toolbar actions on the namespace's Activity log and Locks panels (Edit columns, Export, Insights, Pin/reset filters, Feedback)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Column customization, log export/insights, filter pinning and portal feedback are not modeled."]
+  },
+  "azure.servicebus.namespace.properties": {
+    "title": "Properties (read-only resource summary)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.servicebus.namespace.exporttemplate": {
+    "title": "Export template (ARM template)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": ["Only the ARM Template tab is generated from the namespace's real properties; Bicep and Terraform export are not modeled."],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.servicebus.namespace.iam": {
+    "title": "Access control (IAM) on a namespace",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Role assignments scoped to an individual resource are not modeled."]
+  },
+  "azure.servicebus.namespace.networking": {
+    "title": "Networking, Encryption and Identity",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Private endpoints, customer-managed key encryption and managed identities are not modeled."]
+  },
+  "azure.servicebus.namespace.georecovery": {
+    "title": "Geo-disaster recovery (paired namespaces + failover)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Namespace pairing and alias failover are not modeled."]
+  },
+  "azure.servicebus.namespace.monitoring": {
+    "title": "Insights, Alerts, Metrics, Diagnostic settings and Logs on a namespace",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Metrics charts, alert rules, diagnostic-setting log routing and Log Analytics queries are not modeled."]
+  },
+  "azure.servicebus.namespace.tools": {
+    "title": "Diagnose and solve problems, Events, Tasks, and Support + Troubleshooting",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["These portal troubleshooting, Event Grid integration and support tools are not modeled."]
+  },
+  "azure.servicebus.queue.crud": {
+    "title": "Queues — create, list, get, update, delete (ARM sub-resource of the namespace)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "maxDeliveryCount, requiresDuplicateDetection, enablePartitioning, requiresSession and the auto-delete-on-idle/forwarding toggles round-trip through ARM exactly as configured, but only defaultMessageTimeToLive, lockDuration and dead-lettering-on-expiration are enforced by the data plane (see azure.servicebus.queue.explorer)."
+    ],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.servicebus.topic.crud": {
+    "title": "Topics — create, list, get, update, delete (ARM sub-resource of the namespace)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": ["Topic subscriptions and their SQL filter rules are not modeled in this console — only the topic resource itself round-trips."],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.servicebus.queue.explorer": {
+    "title": "Service Bus Explorer — send, peek, receive, complete, defer and move to dead letter on a queue",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "The Service Bus data plane is a simplified, invented REST surface (the real Service Bus data plane is AMQP-only and can't cross the relay) — complete/defer/dead-letter act by sequence number directly rather than the SDK's lock-token dance, and 'Peek next messages' re-peeks the same backlog rather than paging through it.",
+      "Entity names are global across every namespace in this simulator (like the AWS lens's shared KMS/Secrets Manager stores) — two namespaces sharing a queue name would share its backlog.",
+      "Sessions, scheduled messages and transfer queues are not modeled; their counts always read zero."
+    ],
+    "tests": ["tests/conformance/test_azure_servicebus_core.py"]
+  }
+}

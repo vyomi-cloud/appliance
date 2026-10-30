@@ -671,6 +671,9 @@ class AzureArm:
         for path_expr, suffix in endpoints.items():
             if _get_path(rec, path_expr) in (None, ""):
                 _set_path(rec, path_expr, base + suffix.replace("__NAME__", name))
+        # systemData.createdAt/lastModifiedAt: real ARM returns this on every resource; the
+        # Overview "Created"/"Updated" fields some blades show read it back.
+        rec["systemData"] = {"createdAt": rec.get("_created", _now()), "lastModifiedAt": _now()}
 
         self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)

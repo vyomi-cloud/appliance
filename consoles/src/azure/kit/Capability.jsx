@@ -17,8 +17,9 @@ import cap_eventgrid from "../../../../core/capabilities/azure/eventgrid.json";
 import cap_functionapp from "../../../../core/capabilities/azure/functionapp.json";
 import cap_keyvaults from "../../../../core/capabilities/azure/keyvaults.json";
 import cap_resourcegroups from "../../../../core/capabilities/azure/resourcegroups.json";
+import cap_servicebus from "../../../../core/capabilities/azure/servicebus.json";
 
-const REGISTRY = { ...cap_acr, ...cap_apim, ...cap_appservices, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_resourcegroups };
+const REGISTRY = { ...cap_acr, ...cap_apim, ...cap_appservices, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_resourcegroups, ...cap_servicebus };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 
