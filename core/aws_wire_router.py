@@ -695,6 +695,8 @@ class AwsWireRouter:
             elif svc == "gcp-container" and re.search(r"/operations([/:]|$)", path):   # operations are shared with Memorystore
                 r = gcp_redis.dispatch_shared_operations(
                     self.gcp_redis, lambda *a: gcp_gke.dispatch(self.gcp_gke, *a), method, path, query or {}, headers or {}, bytes(body))
+            elif svc == "gcp-firestore":   # exportDocuments/importDocuments read/write real GCS objects
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
             else:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})

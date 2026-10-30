@@ -76,8 +76,15 @@ class FirestoreStore:
         self.fields: dict[str, dict[str, dict]] = {}           # db -> {"{cid}/{fieldPath}": Field}
         self.backup_schedules: dict[str, dict[str, dict]] = {}  # db -> {scheduleId: BackupSchedule}
         self.backups: dict[str, dict] = {}                      # backupId -> Backup
+        self.backup_snapshots: dict[str, dict] = {}             # backupId -> internal restore payload (not API-visible)
         self.operations: dict[str, dict[str, dict]] = {}       # db -> {opId: Operation}
         self.security_rules: dict[str, str] = {}                # db -> rules source
+        # Point-in-time recovery: per-document version history, recorded only while
+        # the owning database has pointInTimeRecoveryEnablement ON (real Firestore's
+        # PITR window). key = "{database}/{rel}" -> [(timestamp, entry|None), ...] oldest-first.
+        self.history: dict[str, list[tuple[str, dict | None]]] = {}
+        # Usage metering: running totals only (no time-series) — db -> {"reads","writes","deletes"}.
+        self.usage: dict[str, dict[str, int]] = {}
 
     # -- documents ------------------------------------------------------------
     def get(self, db: str, rel: str) -> dict | None:
@@ -86,9 +93,22 @@ class FirestoreStore:
 
     def put(self, db: str, rel: str, entry: dict) -> None:
         self.documents[f"{db}/{rel}"] = entry
+        self._record_history(db, rel, entry)
 
     def delete(self, db: str, rel: str) -> None:
         self.documents.pop(f"{db}/{rel}", None)
+        self._record_history(db, rel, None)
+
+    def _record_history(self, db: str, rel: str, entry: dict | None) -> None:
+        if (self.databases.get(db) or {}).get("pointInTimeRecoveryEnablement") != "POINT_IN_TIME_RECOVERY_ENABLED":
+            return
+        snap = json.loads(json.dumps(entry)) if entry is not None else None
+        ts = entry.get("updateTime") if entry else _now()
+        self.history.setdefault(f"{db}/{rel}", []).append((ts, snap))
+
+    def bump_usage(self, db: str, kind: str, n: int = 1) -> None:
+        u = self.usage.setdefault(db, {"reads": 0, "writes": 0, "deletes": 0})
+        u[kind] = u.get(kind, 0) + n
 
     def persist(self) -> None:
         """Durable subclasses save here; called after every mutating request."""
@@ -249,6 +269,217 @@ def _ensure_db(store: FirestoreStore, project: str, database: str) -> dict:
     return store.databases[database]
 
 
+# ── TTL enforcement (lazy sweep) ────────────────────────────────────────────
+def _ttl_fields_by_group(store: FirestoreStore, db: str) -> dict[str, set[str]]:
+    out: dict[str, set[str]] = {}
+    for key, rec in store.fields.get(db, {}).items():
+        if "ttlConfig" not in rec:
+            continue
+        group, fp = key.split("/", 1)
+        out.setdefault(group, set()).add(fp)
+    return out
+
+
+def _sweep_ttl(store: FirestoreStore, db: str) -> None:
+    """Delete documents past an ACTIVE ttlConfig timestamp, checked lazily on every
+    access to this database (real Firestore's own TTL sweep is also best-effort, not
+    immediate — the functional difference is only in timing, not outcome)."""
+    ttl_fields = _ttl_fields_by_group(store, db)
+    if not ttl_fields:
+        return
+    now = datetime.now(timezone.utc)
+    prefix = f"{db}/"
+    doomed = []
+    for key, entry in store.documents.items():
+        if not key.startswith(prefix):
+            continue
+        rel = key[len(prefix):]
+        segs = rel.split("/")
+        if len(segs) < 2:
+            continue
+        fps = ttl_fields.get(segs[-2])
+        if not fps:
+            continue
+        fields = entry.get("fields", {})
+        for fp in fps:
+            v = fields.get(fp)
+            if not (isinstance(v, dict) and "timestampValue" in v):
+                continue
+            try:
+                ts = datetime.fromisoformat(str(v["timestampValue"]).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if ts <= now:
+                doomed.append(key)
+                break
+    for key in doomed:
+        store.documents.pop(key, None)
+
+
+# ── point-in-time recovery (version history reads) ─────────────────────────
+def _entry_at(store: FirestoreStore, db: str, rel: str, read_time: str) -> dict | None:
+    """The document's state as of `read_time`, from its recorded history (falls back
+    to the current state if no history was kept — e.g. PITR was never enabled)."""
+    hist = store.history.get(f"{db}/{rel}")
+    if not hist:
+        return store.get(db, rel)
+    try:
+        rt = datetime.fromisoformat(str(read_time).replace("Z", "+00:00"))
+    except ValueError:
+        return store.get(db, rel)
+    result: dict | None = None
+    found = False
+    for ts, snap in hist:
+        try:
+            t = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if t <= rt:
+            result, found = snap, True
+        else:
+            break
+    return result if found else None
+
+
+def _historical_in_collection(store: FirestoreStore, db: str, coll: str,
+                              read_time: str) -> list[tuple[str, dict]]:
+    prefix = f"{db}/{coll}/"
+    depth = coll.count("/") + 2
+    rels: set[str] = set()
+    for key in store.documents:
+        if key.startswith(prefix):
+            rels.add(key[len(db) + 1:])
+    for key in store.history:
+        if key.startswith(prefix):
+            rels.add(key[len(db) + 1:])
+    out = []
+    for rel in rels:
+        if rel.count("/") + 1 != depth:
+            continue
+        entry = _entry_at(store, db, rel, read_time)
+        if entry is not None:
+            out.append((rel, entry))
+    return out
+
+
+# ── single-field index-exemption enforcement ────────────────────────────────
+_INEQUALITY_OPS = {"LESS_THAN", "LESS_THAN_OR_EQUAL", "GREATER_THAN", "GREATER_THAN_OR_EQUAL",
+                    "NOT_EQUAL", "NOT_IN"}
+
+
+def _collect_filter_needs(filt: dict, needs: dict[str, set[str]]) -> None:
+    if not filt:
+        return
+    if "fieldFilter" in filt:
+        ff = filt["fieldFilter"]
+        fp = (ff.get("field") or {}).get("fieldPath")
+        op = ff.get("op")
+        if fp and op in _INEQUALITY_OPS:
+            needs.setdefault(fp, set()).update({"ASCENDING", "DESCENDING"})
+        elif fp and op in ("ARRAY_CONTAINS", "ARRAY_CONTAINS_ANY"):
+            needs.setdefault(fp, set()).add("CONTAINS")
+    elif "compositeFilter" in filt:
+        for sub in filt["compositeFilter"].get("filters") or []:
+            _collect_filter_needs(sub, needs)
+
+
+def _index_exempted(store: FirestoreStore, db: str, group: str, field_path: str, kind: str) -> bool:
+    """True if `field_path` has an explicit single-field exemption removing the
+    automatic index `kind` would otherwise provide (no fields record = still
+    automatic = never exempted)."""
+    rec = store.fields.get(db, {}).get(f"{group}/{field_path}")
+    if not rec:
+        return False
+    indexes = (rec.get("indexConfig") or {}).get("indexes")
+    if indexes is None:
+        return False
+    provided = set()
+    for i in indexes:
+        if i.get("order"):
+            provided.add(i["order"])
+        if i.get("arrayConfig"):
+            provided.add("CONTAINS")
+    return kind not in provided
+
+
+def _covered_by_composite(store: FirestoreStore, db: str, group: str, field_path: str, kind: str) -> bool:
+    for idx in store.indexes.get(db, {}).values():
+        if idx.get("collectionGroup") != group:
+            continue
+        for f in idx.get("fields") or []:
+            if f.get("fieldPath") == field_path and (f.get("order") == kind or f.get("arrayConfig") == kind):
+                return True
+    return False
+
+
+def _check_index_requirements(store: FirestoreStore, db: str, group: str, where: dict,
+                              order_by: list) -> FirestoreResponse | None:
+    needs: dict[str, set[str]] = {}
+    _collect_filter_needs(where, needs)
+    for ob in order_by or []:
+        fp = (ob.get("field") or {}).get("fieldPath")
+        if fp:
+            needs.setdefault(fp, set()).add(str(ob.get("direction", "ASCENDING")).upper())
+    for fp, kinds in needs.items():
+        missing = [k for k in kinds if _index_exempted(store, db, group, fp, k)]
+        if not missing:
+            continue
+        if not any(_covered_by_composite(store, db, group, fp, k) for k in missing):
+            return _err(400, "FAILED_PRECONDITION",
+                        f'The query requires an index on field "{fp}": automatic single-field '
+                        f'indexing is disabled for it (see Indexes > Single field) and no composite '
+                        f'index on collection group "{group}" covers it.')
+    return None
+
+
+# ── export / import <-> real Cloud Storage objects ──────────────────────────
+def _parse_gs_uri(uri: str) -> tuple[str | None, str]:
+    if not uri.startswith("gs://"):
+        return None, ""
+    bucket, _, path = uri[5:].partition("/")
+    return (bucket or None), path.strip("/")
+
+
+def _collect_export_docs(store: FirestoreStore, db: str, collection_ids: list[str]) -> list[dict]:
+    prefix = f"{db}/"
+    out = []
+    for key, entry in store.documents.items():
+        if not key.startswith(prefix):
+            continue
+        rel = key[len(prefix):]
+        if collection_ids and rel.split("/", 1)[0] not in collection_ids:
+            continue
+        out.append({"rel": rel, "fields": entry.get("fields", {}),
+                    "createTime": entry.get("createTime"), "updateTime": entry.get("updateTime")})
+    return out
+
+
+def _export_key(path: str) -> str:
+    return f"{path}/export.json" if path else "export.json"
+
+
+def _gcs_write_export(gcs_store, bucket: str, path: str, payload: dict) -> None:
+    from core.gcp_storage_core import _new_entry  # local import: avoid a module-load cycle
+    gcs_store.create_bucket(bucket)
+    objs = gcs_store.bucket_objects(bucket)
+    key = _export_key(path)
+    media = json.dumps(payload).encode()
+    objs[key] = _new_entry(objs, key, media, "application/json", {})
+
+
+def _gcs_read_export(gcs_store, bucket: str, path: str) -> dict | None:
+    from core.gcp_storage_core import _entry_bytes
+    objs = gcs_store.bucket_objects(bucket)
+    key = _export_key(path)
+    entry = objs.get(key)
+    if entry is None:
+        return None
+    try:
+        return json.loads(_entry_bytes(gcs_store, bucket, key, entry).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
 # ── dispatch ───────────────────────────────────────────────────────────────
 def _upgrade_legacy_keys(store: FirestoreStore) -> None:
     """Documents saved before multi-database support are keyed by `rel` alone
@@ -265,7 +496,7 @@ def _upgrade_legacy_keys(store: FirestoreStore) -> None:
 
 def dispatch(store: FirestoreStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"") -> FirestoreResponse:
+             body: bytes = b"", gcs_store=None) -> FirestoreResponse:
     query = query or {}
     method = method.upper()
     _upgrade_legacy_keys(store)
@@ -274,9 +505,10 @@ def dispatch(store: FirestoreStore, method: str, path: str,
     if parsed is not None:
         project, database, base, rel, suffix = parsed
         _ensure_db(store, project, database)
+        _sweep_ttl(store, database)
         r = _dispatch_documents(store, database, base, method, rel, suffix, query, body)
     else:
-        r = _admin_dispatch(store, method, path, query, body)
+        r = _admin_dispatch(store, method, path, query, body, gcs_store)
     if method != "GET":
         store.persist()
     return r
@@ -315,10 +547,14 @@ def _dispatch_documents(store: FirestoreStore, db: str, base: str, method: str,
             ts = _now()
             entry = {"fields": data.get("fields", {}), "createTime": ts, "updateTime": ts}
             store.put(db, new_rel, entry)
+            store.bump_usage(db, "writes")
             return _json(200, _doc_view(base, new_rel, entry))
         if method == "GET":                # list documents
-            docs = [_doc_view(base, r, e) for r, e in
-                    sorted(store.in_collection(db, coll), key=lambda kv: kv[0])]
+            read_time = query.get("readTime")
+            rows = (_historical_in_collection(store, db, coll, read_time) if read_time
+                    else sorted(store.in_collection(db, coll), key=lambda kv: kv[0]))
+            docs = [_doc_view(base, r, e) for r, e in rows]
+            store.bump_usage(db, "reads", max(1, len(docs)))
             out: dict[str, Any] = {}
             if docs:
                 out["documents"] = docs
@@ -329,9 +565,13 @@ def _dispatch_documents(store: FirestoreStore, db: str, base: str, method: str,
     if is_document:
         entry = store.get(db, rel)
         if method == "GET":
+            read_time = query.get("readTime")
+            if read_time:
+                entry = _entry_at(store, db, rel, read_time)
             if entry is None:
                 return _err(404, "NOT_FOUND",
                             f"Document not found: {_doc_name(base, rel)}")
+            store.bump_usage(db, "reads")
             return _json(200, _doc_view(base, rel, entry))
         if method in ("PATCH", "PUT"):     # set / merge fields
             data = _load_json(body)
@@ -348,20 +588,24 @@ def _dispatch_documents(store: FirestoreStore, db: str, base: str, method: str,
                 entry["fields"] = _apply_mask(dict(entry.get("fields", {})), new_fields, mask)
                 entry["updateTime"] = ts
                 store.put(db, rel, entry)
+                store.bump_usage(db, "writes")
                 return _json(200, _doc_view(base, rel, entry))
             if entry is None:              # create-on-set
                 ts = _now()
                 entry = {"fields": dict(new_fields), "createTime": ts, "updateTime": ts}
                 store.put(db, rel, entry)
+                store.bump_usage(db, "writes")
                 return _json(200, _doc_view(base, rel, entry))
             merged = dict(entry.get("fields", {}))
             merged.update(new_fields)      # merge: add/overwrite named fields, keep others
             entry["fields"] = merged
             entry["updateTime"] = _now()
             store.put(db, rel, entry)
+            store.bump_usage(db, "writes")
             return _json(200, _doc_view(base, rel, entry))
         if method == "DELETE":
             store.delete(db, rel)          # Firestore delete is idempotent → 200 {}
+            store.bump_usage(db, "deletes")
             return _json(200, {})
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on document")
 
@@ -515,22 +759,26 @@ def _commit(store: FirestoreStore, db: str, base: str, request: dict) -> Firesto
     for rel, entry in staged.items():
         if entry is None:
             store.delete(db, rel)
+            store.bump_usage(db, "deletes")
         else:
             store.put(db, rel, entry)
+            store.bump_usage(db, "writes")
     return _json(200, {"writeResults": results, "commitTime": ts})
 
 
 def _batch_get(store: FirestoreStore, db: str, base: str, request: dict) -> FirestoreResponse:
     """`documents:batchGet` — the streaming shape: a JSON array of {found|missing, readTime}."""
     ts = _now()
+    read_time = request.get("readTime")
     out = []
     for name in request.get("documents") or []:
         rel = _rel_of(base, name)
-        entry = store.get(db, rel) if rel else None
+        entry = (_entry_at(store, db, rel, read_time) if read_time else store.get(db, rel)) if rel else None
         if entry is None:
             out.append({"missing": name, "readTime": ts})
         else:
             out.append({"found": _doc_view(base, rel, entry), "readTime": ts})
+    store.bump_usage(db, "reads", max(1, len(out)))
     return _json(200, out)
 
 
@@ -667,14 +915,20 @@ def _run_query(store: FirestoreStore, db: str, base: str, parent_rel: str,
     coll_id = froms[0].get("collectionId", "")
     coll = f"{parent_rel}/{coll_id}" if parent_rel else coll_id
     where = sq.get("where") or {}
+    order_by = sq.get("orderBy") or []
 
+    index_err = _check_index_requirements(store, db, coll_id, where, order_by)
+    if index_err:
+        return index_err
+
+    as_of = request.get("readTime")
+    candidates = _historical_in_collection(store, db, coll, as_of) if as_of else store.in_collection(db, coll)
     matched = []
-    for rel, entry in store.in_collection(db, coll):
+    for rel, entry in candidates:
         if _eval_filter(entry.get("fields", {}), where):
             matched.append((rel, entry))
 
     # orderBy (may be multiple keys); default to document-name order.
-    order_by = sq.get("orderBy") or []
     if order_by:
         for ob in reversed(order_by):
             fp = (ob.get("field") or {}).get("fieldPath")
@@ -694,6 +948,7 @@ def _run_query(store: FirestoreStore, db: str, base: str, parent_rel: str,
     if limit is not None:
         matched = matched[:int(limit)]
 
+    store.bump_usage(db, "reads", max(1, len(matched)))
     read_time = _now()
     rows = [{"document": _doc_view(base, rel, entry), "readTime": read_time}
             for rel, entry in matched]
@@ -704,20 +959,23 @@ def _run_query(store: FirestoreStore, db: str, base: str, parent_rel: str,
 
 # ── admin plane ─────────────────────────────────────────────────────────────
 def _admin_dispatch(store: FirestoreStore, method: str, path: str,
-                    query: dict, body: bytes) -> FirestoreResponse:
+                    query: dict, body: bytes, gcs_store=None) -> FirestoreResponse:
     segs = [unquote(s) for s in _admin_segs(path)]
     if len(segs) < 3 or segs[0] != "projects":
         return _err(404, "NOT_FOUND", f"Unknown path: {path}")
     project = segs[1]
     if segs[2] == "locations":
         return _dispatch_backups(store, project, method, segs[3:])
-    if segs[2] != "databases":
+    base_seg, admin_suffix = _split_suffix(segs[2])
+    if base_seg != "databases":
         return _err(404, "NOT_FOUND", f"Unknown path: {path}")
+    if admin_suffix == "restore" and len(segs) == 3:
+        return _dispatch_database_restore(store, project, method, body)
     if len(segs) == 3:
         return _dispatch_databases_collection(store, project, method, query, body)
     dbid, suffix = _split_suffix(segs[3])
     if len(segs) == 4:
-        return _dispatch_database_item(store, project, dbid, suffix, method, query, body)
+        return _dispatch_database_item(store, project, dbid, suffix, method, query, body, gcs_store)
     sub = segs[4]
     if sub == "operations":
         return _dispatch_operations(store, dbid, method, segs[5:])
@@ -752,17 +1010,26 @@ def _dispatch_databases_collection(store: FirestoreStore, project: str, method: 
 
 
 def _dispatch_database_item(store: FirestoreStore, project: str, dbid: str, suffix: str,
-                            method: str, query: dict, body: bytes) -> FirestoreResponse:
+                            method: str, query: dict, body: bytes, gcs_store=None) -> FirestoreResponse:
     if suffix in ("exportDocuments", "importDocuments"):
         if dbid not in store.databases:
             return _err(404, "NOT_FOUND", f"Database does not exist: {dbid}")
-        return _dispatch_export_import(store, project, dbid, suffix, body)
+        return _dispatch_export_import(store, project, dbid, suffix, body, gcs_store)
     if suffix in ("getSecurityRules", "updateSecurityRules"):
         if suffix == "getSecurityRules":
             return _json(200, {"rules": store.security_rules.get(dbid, "")})
         data = _load_json(body)
         store.security_rules[dbid] = data.get("rules", "")
         return _json(200, {"rules": store.security_rules[dbid]})
+    if suffix == "usage":
+        if dbid not in store.databases:
+            return _err(404, "NOT_FOUND", f"Database does not exist: {dbid}")
+        u = store.usage.get(dbid, {"reads": 0, "writes": 0, "deletes": 0})
+        prefix = f"{dbid}/"
+        doc_count = sum(1 for k in store.documents if k.startswith(prefix))
+        storage_bytes = sum(len(json.dumps(e.get("fields", {}))) for k, e in store.documents.items()
+                            if k.startswith(prefix))
+        return _json(200, {"documentCount": doc_count, "storageBytes": storage_bytes, **u})
 
     db = store.databases.get(dbid)
     if method == "GET":
@@ -793,12 +1060,15 @@ def _dispatch_database_item(store: FirestoreStore, project: str, dbid: str, suff
         store.backup_schedules.pop(dbid, None)
         store.operations.pop(dbid, None)
         store.security_rules.pop(dbid, None)
+        store.usage.pop(dbid, None)
+        for key in [k for k in store.history if k.startswith(prefix)]:
+            store.history.pop(key, None)
         return _json(200, db)
     return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on database")
 
 
 def _dispatch_export_import(store: FirestoreStore, project: str, dbid: str, kind: str,
-                            body: bytes) -> FirestoreResponse:
+                            body: bytes, gcs_store=None) -> FirestoreResponse:
     data = _load_json(body)
     ops = store.operations.setdefault(dbid, {})
     opid = _auto_id()
@@ -809,10 +1079,27 @@ def _dispatch_export_import(store: FirestoreStore, project: str, dbid: str, kind
         meta_extra = {"outputUriPrefix": location}
         response = {"@type": "type.googleapis.com/google.firestore.admin.v1.ExportDocumentsResponse",
                     "outputUriPrefix": location}
+        if gcs_store is not None:
+            bucket, gpath = _parse_gs_uri(location)
+            if bucket:
+                payload = {"project": project, "database": dbid,
+                           "documents": _collect_export_docs(store, dbid, collection_ids)}
+                _gcs_write_export(gcs_store, bucket, gpath, payload)
     else:
         op_kind, location = "ImportDocuments", data.get("inputUriPrefix", "")
         meta_extra = {"inputUriPrefix": location}
         response = {"@type": "type.googleapis.com/google.protobuf.Empty"}
+        if gcs_store is not None:
+            bucket, gpath = _parse_gs_uri(location)
+            if bucket:
+                payload = _gcs_read_export(gcs_store, bucket, gpath)
+                for doc in (payload or {}).get("documents", []):
+                    rel = doc.get("rel")
+                    if not rel or (collection_ids and rel.split("/", 1)[0] not in collection_ids):
+                        continue
+                    store.put(dbid, rel, {"fields": doc.get("fields", {}),
+                                          "createTime": doc.get("createTime") or ts,
+                                          "updateTime": doc.get("updateTime") or ts})
     op = {
         "name": f"projects/{project}/databases/{dbid}/operations/{opid}",
         "metadata": {
@@ -903,6 +1190,16 @@ def _take_backup(store: FirestoreStore, project: str, dbid: str) -> dict:
         "state": "READY",
     }
     store.backups[bid] = rec
+    # A real document-data snapshot (not API-visible) so `databases:restore` can
+    # actually reconstruct a new database from this backup.
+    prefix = f"{dbid}/"
+    store.backup_snapshots[bid] = {
+        "documents": {k[len(prefix):]: json.loads(json.dumps(v))
+                      for k, v in store.documents.items() if k.startswith(prefix)},
+        "indexes": json.loads(json.dumps(store.indexes.get(dbid) or {})),
+        "fields": json.loads(json.dumps(store.fields.get(dbid) or {})),
+        "pitr": db.get("pointInTimeRecoveryEnablement", "POINT_IN_TIME_RECOVERY_DISABLED"),
+    }
     return rec
 
 
@@ -923,8 +1220,37 @@ def _dispatch_backups(store: FirestoreStore, project: str, method: str,
         return _json(200, rec)
     if method == "DELETE":
         store.backups.pop(bid, None)
+        store.backup_snapshots.pop(bid, None)
         return _json(200, {})
     return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on backup")
+
+
+def _dispatch_database_restore(store: FirestoreStore, project: str, method: str,
+                               body: bytes) -> FirestoreResponse:
+    """`databases:restore` — real Firestore's restore-a-backup-into-a-new-database RPC
+    (`databaseId` + `backup`). Synchronous here (no LRO) but genuinely repopulates the
+    new database's documents/indexes/fields from the backup's snapshot."""
+    if method != "POST":
+        return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on databases:restore")
+    data = _load_json(body)
+    dbid = data.get("databaseId")
+    backup_name = data.get("backup", "")
+    if not dbid:
+        return _err(400, "INVALID_ARGUMENT", "databaseId is required")
+    if dbid in store.databases:
+        return _err(409, "ALREADY_EXISTS", f"Database already exists: {dbid}")
+    bid = backup_name.rsplit("/", 1)[-1]
+    backup = store.backups.get(bid)
+    snap = store.backup_snapshots.get(bid)
+    if backup is None or snap is None or backup["database"].split("/")[1] != project:
+        return _err(404, "NOT_FOUND", f"Backup not found: {backup_name}")
+    rec = _ensure_db(store, project, dbid)
+    rec["pointInTimeRecoveryEnablement"] = snap.get("pitr", "POINT_IN_TIME_RECOVERY_DISABLED")
+    for rel, entry in snap["documents"].items():
+        store.put(dbid, rel, json.loads(json.dumps(entry)))
+    store.indexes[dbid] = json.loads(json.dumps(snap.get("indexes") or {}))
+    store.fields[dbid] = json.loads(json.dumps(snap.get("fields") or {}))
+    return _json(200, rec)
 
 
 def _dispatch_indexes(store: FirestoreStore, project: str, dbid: str, cid: str, method: str,

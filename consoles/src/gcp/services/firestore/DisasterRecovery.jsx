@@ -1,10 +1,12 @@
 /* Disaster recovery — Backups + Backup schedules (a schedule's first tick fires an
  * immediate backup; there's no background scheduler in Vyomi) and Point-in-time recovery
- * (a real toggle on the database resource). */
+ * (a real toggle on the database resource). A backup can be restored into a new database
+ * (databases:restore really repopulates it from the backup's snapshot). */
 import { useState } from "react";
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Stack, Switch, Tab, Tabs, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
+import RestoreIcon from "@mui/icons-material/esm/Restore.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
@@ -72,7 +74,10 @@ function CreateScheduleButton({ db, onCreated }) {
 }
 
 function Backups({ db, location }) {
+  const notify = useNotify();
   const { data = [], loading, error, reload } = useAsync(() => (location ? api.listBackups(location) : Promise.resolve([])), [db, location]);
+  const [restoring, setRestoring] = useState(null); // the backup being restored, or null
+
   return (
     <CapabilityContainer id="gcp.firestore.backups" title="Backups">
       <ResourceTable
@@ -87,10 +92,51 @@ function Backups({ db, location }) {
           { id: "database", header: "Database", cell: (b) => b.database.split("/").pop() },
           { id: "snapshot", header: "Snapshot time", sortField: "snapshotTime", cell: (b) => fmtDate(b.snapshotTime) },
           { id: "state", header: "State", cell: (b) => b.state },
+          { id: "actions", header: "Actions", cell: (b) => (
+            <Button size="small" startIcon={<RestoreIcon />} onClick={() => setRestoring(b)}>Restore</Button>
+          ) },
         ]}
         empty={<Typography variant="body2" color="text.secondary">No backups yet. Create a backup schedule to take one.</Typography>}
       />
+      <RestoreDialog backup={restoring} onClose={() => setRestoring(null)} onRestored={(newDb) => {
+        notify.success(`Restored into database "${newDb}"`);
+        window.location.hash = `#/firestore/databases/${encodeURIComponent(newDb)}/studio`;
+      }} />
     </CapabilityContainer>
+  );
+}
+
+function RestoreDialog({ backup, onClose, onRestored }) {
+  const notify = useNotify();
+  const [newDb, setNewDb] = useState("");
+  const [busy, setBusy] = useState(false);
+  const err = newDb ? api.validDatabaseId(newDb) : null;
+  const go = async () => {
+    setBusy(true);
+    try {
+      await api.restoreDatabase(newDb, backup.name);
+      onRestored(newDb);
+      onClose(); setNewDb("");
+    } catch (e) { notify.error(e); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={!!backup} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth aria-labelledby="restore-title">
+      <DialogTitle id="restore-title">Restore backup into a new database</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            Restoring "{backup?.name.split("/").pop()}" repopulates a brand-new database's documents, indexes and TTL fields from this backup's snapshot.
+          </Typography>
+          <TextField label="New database ID" autoFocus value={newDb} onChange={(e) => setNewDb(e.target.value.trim())}
+            error={!!err} helperText={err || " "} />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" disabled={busy || !newDb || !!err} onClick={go}>{busy ? "Restoring…" : "Restore"}</Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
@@ -153,6 +199,38 @@ function Pitr({ db, database }) {
         }} />}
         label={enabled ? "Enabled" : "Disabled"}
       />
+      {enabled && <RecoverDocument db={db} />}
     </CapabilityContainer>
+  );
+}
+
+function RecoverDocument({ db }) {
+  const notify = useNotify();
+  const [docPath, setDocPath] = useState("");
+  const [when, setWhen] = useState("");
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true); setResult(null);
+    try {
+      const readTime = when ? new Date(when).toISOString() : undefined;
+      const doc = await api.getDocument(db, docPath, readTime);
+      setResult(doc);
+    } catch (e) { notify.error(e); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Stack spacing={2} sx={{ mt: 3, maxWidth: 480 }}>
+      <Typography variant="subtitle2">Recover a document as of a past time</Typography>
+      <TextField label="Document path (collection/doc)" value={docPath} onChange={(e) => setDocPath(e.target.value.trim())} />
+      <TextField label="As of" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} InputLabelProps={{ shrink: true }}
+        helperText="Leave blank to read the current version" />
+      <Button variant="outlined" disabled={busy || !docPath} onClick={go} sx={{ alignSelf: "flex-start" }}>{busy ? "Reading…" : "Read"}</Button>
+      {result && (
+        <Typography component="pre" variant="body2" sx={{ p: 1.5, bgcolor: "action.hover", borderRadius: 1, overflow: "auto", fontFamily: "monospace" }}>
+          {JSON.stringify(result.fields, null, 2)}
+        </Typography>
+      )}
+    </Stack>
   );
 }

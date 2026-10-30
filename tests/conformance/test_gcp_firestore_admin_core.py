@@ -12,9 +12,11 @@ import json
 try:
     from core.gcp_firestore_core import FirestoreStore
     from core import gcp_firestore_core as fs
+    from core.object_store import InMemoryObjectStore
 except ImportError:  # pragma: no cover - Pyodide flat layout
     from gcp_firestore_core import FirestoreStore  # type: ignore
     import gcp_firestore_core as fs  # type: ignore
+    from object_store import InMemoryObjectStore  # type: ignore
 
 PROJECT = "demo-project"
 DB_BASE = f"/v1/projects/{PROJECT}/databases"
@@ -139,6 +141,104 @@ def run() -> int:
                json.dumps({"rules": rules_src}).encode())
     gr = _jbody(fs.dispatch(st, "POST", f"{DB_BASE}/(default):getSecurityRules", {}, {}, b""))
     _check("security rules round-trip", gr["rules"] == rules_src)
+
+    # 11c. TTL ENFORCEMENT: a document past its ttlConfig timestamp is swept away lazily
+    # on the next access to its database (no static "ttlConfig stored but ignored" gap).
+    fs.dispatch(st, "PATCH", f"{DB_BASE}/(default)/collectionGroups/sessions/fields/expiresAt", {}, {},
+               json.dumps({"ttlConfig": {}}).encode())
+    fs.dispatch(st, "POST", f"{DB_BASE}/(default)/documents/sessions", {"documentId": "stale"}, {},
+               json.dumps({"fields": {"expiresAt": {"timestampValue": "2000-01-01T00:00:00.000000Z"}}}).encode())
+    fs.dispatch(st, "POST", f"{DB_BASE}/(default)/documents/sessions", {"documentId": "fresh"}, {},
+               json.dumps({"fields": {"expiresAt": {"timestampValue": "2999-01-01T00:00:00.000000Z"}}}).encode())
+    swept = fs.dispatch(st, "GET", f"{DB_BASE}/(default)/documents/sessions/stale", {}, {}, b"")
+    _check("expired document swept on next access", swept.status == 404)
+    kept = fs.dispatch(st, "GET", f"{DB_BASE}/(default)/documents/sessions/fresh", {}, {}, b"")
+    _check("non-expired document kept", kept.status == 200)
+    fs.dispatch(st, "PATCH", f"{DB_BASE}/(default)/collectionGroups/sessions/fields/expiresAt", {}, {},
+               json.dumps({"ttlConfig": None}).encode())
+
+    # 11d. single-field index-EXEMPTION enforcement: exempting a field from automatic
+    # indexing makes an inequality query on it fail until a composite index covers it.
+    fs.dispatch(st, "POST", f"{DB_BASE}/(default)/documents/widgets", {"documentId": "w1"}, {},
+               json.dumps({"fields": {"price": {"integerValue": "10"}}}).encode())
+    fs.dispatch(st, "PATCH", f"{DB_BASE}/(default)/collectionGroups/widgets/fields/price", {}, {},
+               json.dumps({"indexConfig": {"indexes": [], "usesAncestorConfig": False}}).encode())
+    needs_index = fs.dispatch(st, "POST", f"{DB_BASE}/(default)/documents:runQuery", {}, {},
+                              json.dumps({"structuredQuery": {"from": [{"collectionId": "widgets"}],
+                                          "where": {"fieldFilter": {"field": {"fieldPath": "price"},
+                                                                     "op": "GREATER_THAN",
+                                                                     "value": {"integerValue": "0"}}}}}).encode())
+    _check("exempted field query needs an index", needs_index.status == 400)
+    fs.dispatch(st, "POST", f"{DB_BASE}/(default)/collectionGroups/widgets/indexes", {}, {},
+               json.dumps({"queryScope": "COLLECTION",
+                           "fields": [{"fieldPath": "price", "order": "ASCENDING"}]}).encode())
+    now_works = fs.dispatch(st, "POST", f"{DB_BASE}/(default)/documents:runQuery", {}, {},
+                            json.dumps({"structuredQuery": {"from": [{"collectionId": "widgets"}],
+                                        "where": {"fieldFilter": {"field": {"fieldPath": "price"},
+                                                                   "op": "GREATER_THAN",
+                                                                   "value": {"integerValue": "0"}}}}}).encode())
+    _check("composite index covers the exempted field", now_works.status == 200)
+    _check("composite index query returns the widget", len(_jbody(now_works)) == 1 and "document" in _jbody(now_works)[0])
+
+    # 11e. point-in-time recovery: a readTime before the latest write recovers the prior
+    # version, from the history Vyomi keeps while PITR is enabled on the database.
+    fs.dispatch(st, "POST", f"{DB_BASE}", {"databaseId": "pitr-db"}, {},
+               json.dumps({"pointInTimeRecoveryEnablement": "POINT_IN_TIME_RECOVERY_ENABLED"}).encode())
+    v1 = _jbody(fs.dispatch(st, "POST", f"{DB_BASE}/pitr-db/documents/notes", {"documentId": "n1"}, {},
+                            json.dumps({"fields": {"text": {"stringValue": "v1"}}}).encode()))
+    t1 = v1["updateTime"]
+    fs.dispatch(st, "PATCH", f"{DB_BASE}/pitr-db/documents/notes/n1", {}, {},
+               json.dumps({"fields": {"text": {"stringValue": "v2"}}}).encode())
+    asof = _jbody(fs.dispatch(st, "GET", f"{DB_BASE}/pitr-db/documents/notes/n1", {"readTime": t1}, {}, b""))
+    _check("PITR readTime recovers the prior version", asof["fields"]["text"]["stringValue"] == "v1")
+    now = _jbody(fs.dispatch(st, "GET", f"{DB_BASE}/pitr-db/documents/notes/n1", {}, {}, b""))
+    _check("current read still sees the latest version", now["fields"]["text"]["stringValue"] == "v2")
+
+    # 11f. backup RESTORE into a new database: the backup taken in step 9 can now
+    # actually repopulate a brand-new database, not just appear in a list.
+    before_backups = _jbody(fs.dispatch(st, "GET", f"/v1/projects/{PROJECT}/locations/nam5/backups", {}, {}, b""))
+    bid = before_backups["backups"][0]["name"].rsplit("/", 1)[-1]
+    rst = fs.dispatch(st, "POST", f"{DB_BASE}:restore", {}, {},
+                      json.dumps({"databaseId": "restored-db",
+                                  "backup": f"projects/{PROJECT}/locations/nam5/backups/{bid}"}).encode())
+    _check("restore 200", rst.status == 200)
+    restored_doc = fs.dispatch(st, "GET", f"{DB_BASE}/restored-db/documents/users/alice", {}, {}, b"")
+    _check("restored database has the backed-up document", restored_doc.status == 200)
+    dup_restore = fs.dispatch(st, "POST", f"{DB_BASE}:restore", {}, {},
+                              json.dumps({"databaseId": "restored-db",
+                                          "backup": f"projects/{PROJECT}/locations/nam5/backups/{bid}"}).encode())
+    _check("restore into an existing database id 409", dup_restore.status == 409)
+
+    # 11g. export/import now really round-trips through Cloud Storage objects (a
+    # shared GCS-backed store, passed the same way aws_wire_router shares it).
+    gcs = InMemoryObjectStore()
+    fs.dispatch(st, "POST", f"{DB_BASE}", {"databaseId": "io-src-db"}, {}, b"{}")
+    fs.dispatch(st, "POST", f"{DB_BASE}/io-src-db/documents/items", {"documentId": "i1"}, {},
+               json.dumps({"fields": {"sku": {"stringValue": "abc"}}}).encode(), )
+    real_exp = fs.dispatch(st, "POST", f"{DB_BASE}/io-src-db:exportDocuments", {}, {},
+                           json.dumps({"outputUriPrefix": "gs://uic-bucket/fs-export"}).encode(),
+                           gcs_store=gcs)
+    _check("export with a gcs_store writes a real object", "fs-export/export.json" in gcs.bucket_objects("uic-bucket"))
+    fs.dispatch(st, "POST", f"{DB_BASE}", {"databaseId": "io-dst-db"}, {}, b"{}")
+    fs.dispatch(st, "POST", f"{DB_BASE}/io-dst-db:importDocuments", {}, {},
+               json.dumps({"inputUriPrefix": "gs://uic-bucket/fs-export"}).encode(),
+               gcs_store=gcs)
+    imported = fs.dispatch(st, "GET", f"{DB_BASE}/io-dst-db/documents/items/i1", {}, {}, b"")
+    _check("import reads the real object back into a different database", imported.status == 200)
+    _check("imported document has the exported field",
+           _jbody(imported)["fields"]["sku"]["stringValue"] == "abc")
+
+    # 11h. usage metering: real running totals (not a fake historical chart).
+    fs.dispatch(st, "POST", f"{DB_BASE}", {"databaseId": "usage-db"}, {}, b"{}")
+    fs.dispatch(st, "POST", f"{DB_BASE}/usage-db/documents/items", {"documentId": "i1"}, {},
+               json.dumps({"fields": {}}).encode())
+    fs.dispatch(st, "GET", f"{DB_BASE}/usage-db/documents/items/i1", {}, {}, b"")
+    fs.dispatch(st, "DELETE", f"{DB_BASE}/usage-db/documents/items/i1", {}, {}, b"")
+    usage = _jbody(fs.dispatch(st, "GET", f"{DB_BASE}/usage-db:usage", {}, {}, b""))
+    _check("usage counted the write", usage["writes"] >= 1)
+    _check("usage counted the read", usage["reads"] >= 1)
+    _check("usage counted the delete", usage["deletes"] >= 1)
+    _check("usage reports a document count", usage["documentCount"] == 0)
 
     # 12. delete database cascades: documents, indexes, fields, schedules, operations, rules all gone
     fs.dispatch(st, "DELETE", f"{DB_BASE}/orders-db", {}, {}, b"")

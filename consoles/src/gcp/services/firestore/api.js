@@ -21,6 +21,8 @@ export const createDatabase = (databaseId, body) =>
 export const patchDatabase = (db, body) =>
   restJson("PATCH", dbBase(db), { query: { updateMask: Object.keys(body).join(",") }, body });
 export const deleteDatabase = (db) => restJson("DELETE", dbBase(db));
+export const restoreDatabase = (databaseId, backupName) =>
+  restJson("POST", `/v1/projects/${getProject()}/databases:restore`, { body: { databaseId, backup: backupName } });
 
 export const DB_LOCATIONS = [
   ["nam5", "nam5 (United States)"], ["eur3", "eur3 (Europe)"],
@@ -45,7 +47,8 @@ export async function listDocuments(db, coll) {
   const r = await restJson("GET", docsBase(db, coll));
   return r.documents || [];
 }
-export const getDocument = (db, docPath) => restJson("GET", docsBase(db, docPath));
+export const getDocument = (db, docPath, readTime) =>
+  restJson("GET", docsBase(db, docPath), readTime ? { query: { readTime } } : {});
 export const createDocument = (db, coll, fields, documentId) =>
   restJson("POST", docsBase(db, coll), { query: documentId ? { documentId } : {}, body: { fields } });
 export const setDocument = (db, docPath, fields) =>
@@ -145,6 +148,9 @@ export async function listOperations(db) {
 }
 export const exportDocuments = (db, body) => restJson("POST", `${dbBase(db)}:exportDocuments`, { body });
 export const importDocuments = (db, body) => restJson("POST", `${dbBase(db)}:importDocuments`, { body });
+
+// ── Usage (real running totals, no time-series) ─────────────────────────────────────────────
+export const getUsage = (db) => restJson("GET", `${dbBase(db)}:usage`);
 
 // ── Security rules ───────────────────────────────────────────────────────────────────────
 export async function getSecurityRules(db) {
