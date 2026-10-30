@@ -194,6 +194,29 @@ def _access_version(store: KvStore, project: str, secret_id: str, ver_ref: str) 
     })
 
 
+def _patch_secret(store: KvStore, project: str, secret_id: str, body: dict, query: dict) -> GcpResponse:
+    """secrets.patch: only `labels` (and annotations-free metadata) is updatable here."""
+    key = _key(project, secret_id)
+    secret = store.get_secret(key)
+    if secret is None:
+        return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
+    mask = [m.strip() for m in (query.get("updateMask") or "").split(",") if m.strip()]
+    for f in mask:
+        if f != "labels":
+            return _err(400, f"Invalid update mask path: \"{f}\" is not an updatable field of Secret.",
+                        token="INVALID_ARGUMENT")
+    if not mask and "labels" not in body:
+        return _err(400, "update_mask is required.", token="INVALID_ARGUMENT")
+    labels = body.get("labels") or {}
+    if not isinstance(labels, dict):
+        return _err(400, "labels must be a map.", token="INVALID_ARGUMENT")
+    secret["labels"] = {str(k): str(v) for k, v in labels.items()}
+    store.put_secret(key, secret)
+    store.mirror_put(key, secret)
+    store.persist()
+    return _json(200, _secret_view(secret))
+
+
 def _list_secrets(store: KvStore, project: str) -> GcpResponse:
     prefix = f"{project}/"
     secrets = [_secret_view(store.get_secret(k)) for k in store.names() if k.startswith(prefix)]
@@ -302,6 +325,8 @@ def dispatch(store: KvStore, method: str, path: str,
             return _get_secret(store, project, secret_id)
         if method == "DELETE":
             return _delete_secret(store, project, secret_id)
+        if method == "PATCH":
+            return _patch_secret(store, project, secret_id, payload, query)
         return _err(400, f"Unsupported operation on secret ({method} :{verb}).")
 
     # ---- versions collection: projects/{p}/secrets/{s}/versions ----

@@ -1596,21 +1596,56 @@ async function renderSublistTab(host, svc, item, tab){
   await load();
 }
 
+// Services whose resource PATCH/Update persists `labels` (storage bucket PATCH, KMS
+// cryptoKeys.patch, secrets.patch, AR repositories.patch, generic-store resources).
+const LABEL_SERVICES = new Set(["storage", "kms", "secretmanager", "artifactregistry", "functions", "vpc", "compute", "apigateway", "eventarc"]);
 function renderLabelsTab(host, svc, item){
-  const labels = (item.labels && typeof item.labels === "object") ? item.labels : {};
-  if (!Object.keys(labels).length) {
-    host.append(el("div",{class:"empty"},
-      el("span",{class:"ic material-symbols-outlined"}, "sell"),
-      el("div",{}, "No labels attached."),
-      el("div",{style:"font-size:11.5px;color:var(--hint);margin-top:6px"},
-        "Labels are key-value pairs that help organize and filter resources.")));
-    return;
+  const name = String((item && item.name) || getPath(item, svc.name_field) || "").split("/").pop();
+  const writable = LABEL_SERVICES.has(svc.key) && !!svc.resource_path;
+  let labels = (item.labels && typeof item.labels === "object") ? {...item.labels} : {};
+  let editing = false;
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  async function load(){
+    try{
+      const r = await api("GET", fillCommon(svc.resource_path,{name}));
+      if(r.ok && r.json && r.json.labels && typeof r.json.labels === "object") labels = {...r.json.labels};
+    }catch(_){}
+    render();
   }
-  const card = el("div",{class:"kv-card"});
-  const g = el("div",{class:"kv-grid"});
-  Object.entries(labels).forEach(([k,v]) =>
-    g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, String(v)))));
-  card.append(g); host.append(card);
+  function render(){
+    panel.innerHTML = "";
+    const body = el("div",{style:"padding:14px"}); panel.append(body);
+    const tbl = el("table",{class:"gc",style:"width:100%;max-width:540px"});
+    const hr = el("tr",{},el("th",{},"Key"),el("th",{},"Value")); if(editing) hr.append(el("th",{style:"width:44px"},"")); tbl.append(hr);
+    const inputs = [];
+    function addRow(k,v){
+      const mk = () => el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+      const ki = mk(), vi = mk(); ki.value = k; vi.value = v; ki.readOnly = vi.readOnly = !editing;
+      const pair = {ki,vi}; inputs.push(pair);
+      const tr = el("tr",{},el("td",{},ki),el("td",{},vi));
+      if(editing) tr.append(el("td",{}, el("button",{class:"btn del",title:"Remove",onclick:()=>{const i=inputs.indexOf(pair); if(i>=0) inputs.splice(i,1); tr.remove();}}, "\u2715")));
+      tbl.append(tr);
+    }
+    Object.entries(labels).forEach(([k,v]) => addRow(k,String(v)));
+    if(!Object.keys(labels).length && !editing){
+      body.append(el("div",{style:"color:var(--sub);margin-bottom:8px"}, "No labels on " + name + ". Labels are key-value pairs that help organize and filter resources."));
+    } else body.append(tbl);
+    if(!writable) return;
+    if(editing) body.append(el("button",{class:"btn",style:"margin-top:10px",onclick:()=>addRow("","")}, icon("add"), "Add label"));
+    const bar = el("div",{style:"display:flex;gap:8px;margin-top:16px"});
+    if(!editing){
+      bar.append(el("button",{class:"btn",onclick:()=>{editing=true;render();}}, icon("edit"), Object.keys(labels).length ? "Edit labels" : "Add labels"));
+    } else {
+      bar.append(el("button",{class:"btn primary",onclick:async()=>{
+        const next = Object.fromEntries(inputs.map(p=>[p.ki.value.trim(),p.vi.value]).filter(e=>e[0]));
+        const r = await api("PATCH", fillCommon(svc.resource_path,{name}), {labels: next});
+        if(r.ok){ labels = next; item.labels = next; editing = false; toast("Labels saved"); load(); } else toast("Save failed","err");
+      }}, icon("save"), "Save"));
+      bar.append(el("button",{class:"btn",onclick:()=>{editing=false;render();}}, "Cancel"));
+    }
+    body.append(bar);
+  }
+  render(); load();
 }
 // Activity tab — REAL: fetch the in-browser cloudsim event log for THIS resource
 // (recorded automatically on every mutating dispatch) and render newest-first.

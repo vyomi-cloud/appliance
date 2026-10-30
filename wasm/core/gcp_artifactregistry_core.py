@@ -595,6 +595,18 @@ def console_find(store: ArtifactRegistryStore, name: str):
     return None, None
 
 
+def console_update(store: ArtifactRegistryStore, name: str, body: dict) -> dict:
+    """Console Labels edit → repositories.patch (updateMask=labels)."""
+    full, repo = console_find(store, name)
+    if repo is None:
+        return {"ok": False, "code": "NotFound", "name": name}
+    labels = body.get("labels") or {}
+    repo["labels"] = {str(k): str(v) for k, v in labels.items()} if isinstance(labels, dict) else {}
+    repo["updateTime"] = _now()
+    store.persist()
+    return {"ok": True, **console_row(repo)}
+
+
 def console_delete(store: ArtifactRegistryStore, name: str) -> dict:
     full, _ = console_find(store, name)
     if full is None:

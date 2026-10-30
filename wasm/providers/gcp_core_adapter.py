@@ -550,6 +550,10 @@ def _resource_op(service, operation, name="", body=None):
             # Cloud KMS keeps key material; drop it from the store for console UX.
             _STORES["kms"].drop_key(f"projects/{PROJ}/locations/{LOC}/keyRings/{RING}/cryptoKeys/{name}")
             return {"ok": True, "code": None, "name": name}
+        if operation == "Update":   # cryptoKeys.patch (labels)
+            st, p = _call(svc, "PATCH", f"{base}/{name}", {"updateMask": "labels"},
+                          {"labels": body.get("labels") or {}})
+            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "UpdateFailed", "name": name}
         if operation == "ListVersions":   # cryptoKeyVersions under a key
             st, p = _call(svc, "GET", f"{base}/{name}/cryptoKeyVersions")
             vs = p.get("cryptoKeyVersions", []) if isinstance(p, dict) else []
@@ -583,6 +587,10 @@ def _resource_op(service, operation, name="", body=None):
         if operation == "Delete":
             st, _ = _call(svc, "DELETE", f"{base}/{name}")
             return {"ok": st < 300, "code": None if st < 300 else "NotFound", "name": name}
+        if operation == "Update":   # secrets.patch (labels)
+            st, p = _call(svc, "PATCH", f"{base}/{name}", {"updateMask": "labels"},
+                          {"labels": body.get("labels") or {}})
+            return {"ok": st < 300, **_rec(p)} if st < 300 else {"ok": False, "code": "UpdateFailed", "name": name}
         if operation == "ListVersions":   # secret versions (live metadata)
             st, p = _call(svc, "GET", f"{base}/{name}/versions")
             vs = p.get("versions", []) if isinstance(p, dict) else []
@@ -666,6 +674,8 @@ def _resource_op(service, operation, name="", body=None):
         if operation == "Get":
             full, repo = _ar.console_find(st_, name)
             return {"ok": True, **_ar.console_row(repo)} if repo else {"ok": False, "code": "NotFound", "name": name}
+        if operation == "Update":
+            return _ar.console_update(st_, name, body)
         if operation == "Delete":
             return _ar.console_delete(st_, name)
         if operation in ("ListPackages", "ListVersions", "ListTags", "ListImages"):

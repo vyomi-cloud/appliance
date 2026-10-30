@@ -97,6 +97,7 @@ def _crypto_key_view(store: KeyStore, name: str) -> dict:
         "primary": _version_view(name, primary, versions.get(primary, {})),
         "purpose": meta.get("purpose", "ENCRYPT_DECRYPT"),
         "createTime": meta.get("createTime", _now()),
+        **({"labels": meta["labels"]} if meta.get("labels") else {}),
         "versionTemplate": {
             "protectionLevel": "SOFTWARE",
             "algorithm": meta.get("algorithm", "GOOGLE_SYMMETRIC_ENCRYPTION"),
@@ -219,6 +220,19 @@ def dispatch(store: KeyStore, method: str, path: str,
         if method == "GET":
             if not store.key_exists(name):
                 return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+            return _json(200, _crypto_key_view(store, name))
+        if method == "PATCH":
+            meta = store.get_key(name)
+            if meta is None:
+                return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+            mask = [m.strip() for m in (query.get("updateMask") or "").split(",") if m.strip()]
+            if any(m != "labels" for m in mask):
+                return _err(400, "INVALID_ARGUMENT", "Only the labels field of a CryptoKey is updatable here.")
+            labels = payload.get("labels") or {}
+            if not isinstance(labels, dict):
+                return _err(400, "INVALID_ARGUMENT", "labels must be a map.")
+            meta["labels"] = {str(k): str(v) for k, v in labels.items()}
+            store.persist()
             return _json(200, _crypto_key_view(store, name))
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on cryptoKey")
 

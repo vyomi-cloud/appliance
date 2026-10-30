@@ -93,6 +93,7 @@ def _bucket_view(store: ObjectStore, name: str) -> dict:
         "metageneration": "1",
         "location": meta.get("location", "US"),
         "storageClass": meta.get("storageClass", "STANDARD"),
+        **({"labels": meta["labels"]} if meta.get("labels") else {}),
         "etag": "CAE=",
         "timeCreated": meta.get("timeCreated", _now()),
         "updated": meta.get("updated", _now()),
@@ -233,6 +234,17 @@ def dispatch(store: ObjectStore, method: str, path: str,
             store.buckets.pop(bucket, None)
             store.objects.pop(bucket, None)
             return GcsResponse(status=204, body=b"", media_type=None)
+        if method == "PATCH":
+            if not store.bucket_exists(bucket):
+                return _err(404, "notFound", "The specified bucket does not exist.")
+            try:
+                meta = json.loads(body.decode("utf-8")) if body else {}
+            except Exception:
+                meta = {}
+            if isinstance(meta, dict) and isinstance(meta.get("labels"), dict):
+                store.buckets[bucket]["labels"] = {str(k): str(v) for k, v in meta["labels"].items()}
+            store.buckets[bucket]["updated"] = _now()
+            return _json(200, _bucket_view(store, bucket))
         return _err(400, "invalid", f"Unsupported method {method} on bucket")
 
     # ---- objects ----

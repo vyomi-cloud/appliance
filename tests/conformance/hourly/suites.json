@@ -1855,6 +1855,14 @@
       "timeout": 600
     },
     {
+      "id": "nano-ui-gcp-labels-tab",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-labels-tab.mjs",
+      "timeout": 400
+    },
+    {
       "id": "nano-ui-gcp-iam-detail",
       "target": "nano",
       "cloud": "gcp",
