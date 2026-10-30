@@ -7,6 +7,7 @@
  */
 import * as esbuild from "esbuild";
 import { cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,7 +17,7 @@ const TARGETS = [join(ROOT, "static", "v4"), join(ROOT, "wasm", "v4")];
 const argv = process.argv.slice(2);
 const only = argv.includes("--cloud") ? argv[argv.indexOf("--cloud") + 1] : null;
 const TITLES = { aws: "Vyomi · AWS", gcp: "Vyomi · Google Cloud", azure: "Vyomi · Azure" };
-const CLOUDS = ["aws"].filter((c) => !only || c === only);
+const CLOUDS = ["aws", "gcp", "azure"].filter((c) => (!only || c === only) && existsSync(join(HERE, "src", c, "main.jsx")));
 
 // Nano: the page must boot the in-browser backend — nano-boot.js registers the service
 // worker (which answers /_wire) and runs Pyodide in this page; nano-kernel.js shows the
