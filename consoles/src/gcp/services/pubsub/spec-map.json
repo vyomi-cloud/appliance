@@ -1,0 +1,20 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "overview": { "route": "#/pubsub" },
+  "topics": { "route": "#/pubsub/topics", "fixtures": ["ps-topic"], "live": "live-topic" },
+  "create-topic": { "route": "#/pubsub/topics/create" },
+  "topic-details": { "route": "#/pubsub/topics/uic-topic", "fixtures": ["ps-topic"], "vars": { "resource-name": "uic-topic" } },
+  "publish-message": { "route": "#/pubsub/topics/uic-topic/publish", "fixtures": ["ps-topic"] },
+  "subscriptions": { "route": "#/pubsub/subscriptions", "fixtures": ["ps-subscription"], "live": "live-subscription" },
+  "create-subscription": {
+    "route": "#/pubsub/subscriptions/create",
+    "fixtures": ["ps-topic"],
+    "expand": [
+      "role=radio[name='Push']",
+      "role=checkbox[name='Enable dead lettering']"
+    ]
+  },
+  "subscription-details": { "route": "#/pubsub/subscriptions/uic-sub", "fixtures": ["ps-subscription"], "vars": { "resource-name": "uic-sub" } },
+  "snapshots": { "route": "#/pubsub/snapshots", "fixtures": ["ps-snapshot"], "live": "live-snapshot" },
+  "schemas": { "route": "#/pubsub/schemas", "fixtures": ["ps-schema"], "live": "live-schema" }
+}

@@ -143,7 +143,7 @@ def _gcp_service(path):
             return "gcp-kms"
         if "/secrets" in path:
             return "gcp-secretmanager"
-        if "/topics" in path or "/subscriptions" in path:
+        if "/topics" in path or "/subscriptions" in path or "/snapshots" in path or "/schemas" in path:
             return "gcp-pubsub"
         if re.search(r"^/v1/projects/[^/]+/serviceAccounts/[^/:]+:(generateAccessToken|generateIdToken|signBlob|signJwt)$", path):
             return "gcp-iamcredentials"
