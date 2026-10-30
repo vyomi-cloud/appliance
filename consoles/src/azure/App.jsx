@@ -91,7 +91,7 @@ export default function App() {
   );
 
   return (
-    <FluentProvider theme={theme} style={{ "--vy-top-bg": mode === "dark" ? "#0b2a4a" : "#0f548c", background: "transparent" }}>
+    <FluentProvider theme={theme} style={{ "--vy-top-bg": mode === "dark" ? "#0b2a4a" : "#0078d4", background: "transparent" }}>
       <SubscriptionCtx.Provider value={sub}>
         <div className="vy-app">
           <header className="vy-top">

@@ -51,7 +51,7 @@ const openPanel = async (label) => { await page.getByRole("navigation", { name: 
 try {
   await page.goto(UI, { waitUntil: "networkidle" });
   if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 180000, polling: 500 });
-  await page.getByRole("heading", { name: "Welcome to Vyomi · Azure" }).waitFor({ timeout: 120000 });
+  await page.getByRole("heading", { name: "Azure services" }).waitFor({ timeout: 120000 });   // portal Home (no page title)
   check("home renders (Azure services + Resources)", await page.getByRole("heading", { name: "Azure services" }).isVisible() && await page.getByRole("tab", { name: "Recent" }).isVisible());
   check("page title is Vyomi branded", (await page.title()) === "Vyomi · Azure", await page.title());
   await shot("01-home");

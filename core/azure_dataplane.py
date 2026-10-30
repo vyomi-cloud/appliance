@@ -20,6 +20,8 @@ All planes ignore credentials and never raise into the control plane.
 """
 from __future__ import annotations
 
+import re
+
 import email.utils
 import hashlib
 import json
@@ -169,7 +171,25 @@ async def _blob_handle(account: str, rest: str, request: Request) -> Response:
             "x-ms-blob-type": "BlockBlob", "x-ms-creation-time": g["mtime"]})
         for mk, mv in (g.get("meta") or {}).items():
             hdrs["x-ms-meta-" + mk] = mv
-        return Response(content=g["data"], media_type=g["ct"], headers=hdrs)
+        # Ranged GET: the azure-storage-blob SDK always downloads with x-ms-range (or Range)
+        # and requires 206 + Content-Range (same semantics as core/azure_blob_core).
+        rng = request.headers.get("x-ms-range") or request.headers.get("range") or ""
+        m = re.match(r"\s*bytes=(\d*)-(\d*)\s*$", rng)
+        data, total = g["data"], len(g["data"])
+        if m and (m.group(1) or m.group(2)):
+            if m.group(1):
+                start = int(m.group(1))
+                end = min(int(m.group(2)) if m.group(2) else total - 1, total - 1)
+            else:                                   # suffix range: last N bytes
+                start, end = max(total - int(m.group(2)), 0), total - 1
+            if start >= total and total > 0:
+                return Response(status_code=416, content="", headers=_blob_headers(
+                    {"x-ms-error-code": "InvalidRange", "Content-Range": f"bytes */{total}"}))
+            part = data[start:end + 1] if total else b""
+            hdrs["Content-Length"] = str(len(part))
+            hdrs["Content-Range"] = f"bytes {start}-{max(end, start)}/{total}" if total else "bytes */0"
+            return Response(status_code=206, content=part, media_type=g["ct"], headers=hdrs)
+        return Response(content=data, media_type=g["ct"], headers=hdrs)
     if method == "DELETE":
         existed = delete_blob(account, container, blob)
         return Response(status_code=202 if existed else 404, content="", headers=_blob_headers())
