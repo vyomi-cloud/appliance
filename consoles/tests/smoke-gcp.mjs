@@ -157,6 +157,45 @@ try {
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete bucket via UI → gone over native wire", (await wire(`/storage/v1/b/${B}`)).status === 404);
 
+  // Artifact Registry: create repository via UI → native wire, push sample package
+  // (Vyomi's own quickstart — no real AR method creates package data), settings, delete
+  const R = `v4-gcp-ar-smoke-${Date.now() % 100000}`;
+  await page.goto(UI + "#/artifacts/create-repo");
+  await page.getByLabel("Name").fill(R);
+  await page.getByRole("radio", { name: "npm" }).check();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(R, { exact: true }).waitFor({ timeout: 10000 });
+  const repos = await wjson("/v1/projects/vyomi-project/locations/-/repositories");
+  const nr = (repos.repositories || []).find((x) => x.name.endsWith(`/repositories/${R}`));
+  check("create repository → visible over native wire (repositories.list, locations/-)", !!nr);
+  check("repository format applied", nr?.format === "NPM", JSON.stringify(nr || {}).slice(0, 160));
+  await shot("12-repo-detail");
+
+  await page.getByRole("button", { name: "Push sample package" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByRole("link", { name: "sample-package" }).waitFor({ timeout: 10000 });
+  check("push sample package via UI → visible in packages table", true);
+  await shot("13-repo-packages");
+
+  await page.goto(UI + "#/artifacts");
+  await page.getByRole("link", { name: R }).waitFor({ timeout: 10000 });
+  check("repositories list shows new repository", true);
+  await page.getByRole("checkbox", { name: `Select ${R}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(R);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  const reposAfter = await wjson("/v1/projects/vyomi-project/locations/-/repositories");
+  check("delete repository via UI → gone over native wire", !(reposAfter.repositories || []).some((x) => x.name.endsWith(`/repositories/${R}`)));
+
+  // Settings: toggle redirection → native projectSettings round-trip
+  await page.goto(UI + "#/artifacts/settings");
+  await page.getByRole("button", { name: "Enable redirection" }).click();
+  await page.getByText("Redirection is enabled for this project.").waitFor({ timeout: 10000 });
+  const settings = await wjson("/v1/projects/vyomi-project/projectSettings");
+  check("settings toggle via UI → native projectSettings shows it", settings.legacyRedirectionState === "REDIRECTION_FROM_GCR_IO_ENABLED");
+  await shot("14-artifacts-settings");
+
   // Not-simulated gaps carry the conformance attribute
   await page.goto(UI + "#/storage/monitoring");
   await page.locator("[data-vyomi-not-simulated]").first().waitFor({ timeout: 5000 });

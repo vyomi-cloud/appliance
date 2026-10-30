@@ -60,12 +60,13 @@ class GcpResponse:
 
 
 class ArtifactRegistryStore:
-    """Plain, JSON-safe state: repositories (with their packages) and operations."""
+    """Plain, JSON-safe state: repositories (with their packages), operations, project settings."""
 
     def __init__(self) -> None:
         self.repos: dict[str, dict] = {}
         self.operations: dict[str, dict] = {}
         self.iam: dict[str, dict] = {}
+        self.settings: dict[str, dict] = {}
 
     def persist(self) -> None:
         """Hook: the offline appliance flushes the space slot, Nano snapshots to IDB."""
@@ -258,8 +259,15 @@ def _get_repo(store, name) -> GcpResponse:
 
 
 def _list_repos(store, project, loc, query) -> GcpResponse:
-    prefix = f"projects/{project}/locations/{loc}/repositories/"
-    repos = [_repo_view(r) for n, r in sorted(store.repos.items()) if n.startswith(prefix)]
+    # loc == "-": aggregate across every location, same as the real API's "-" wildcard
+    # (the console's Repositories page lists repos regardless of region).
+    if loc == "-":
+        base = f"projects/{project}/locations/"
+        pred = lambda n: n.startswith(base) and "/repositories/" in n[len(base):]
+    else:
+        prefix = f"projects/{project}/locations/{loc}/repositories/"
+        pred = lambda n: n.startswith(prefix)
+    repos = [_repo_view(r) for n, r in sorted(store.repos.items()) if pred(n)]
     return _json(200, _with_page("repositories", repos, query))
 
 
@@ -534,6 +542,30 @@ def _files(store, method, repo_name, rest, query) -> GcpResponse:
     return _json(200, {k: f[k] for k in ("name", "sizeBytes", "hashes", "createTime", "updateTime", "owner")})
 
 
+# ── project settings (the console's Settings page: gcr.io redirection) ────
+_REDIRECTION_STATES = ("REDIRECTION_FROM_GCR_IO_UNSPECIFIED", "REDIRECTION_FROM_GCR_IO_ENABLED",
+                       "REDIRECTION_FROM_GCR_IO_DISABLED", "REDIRECTION_FROM_GCR_IO_FINALIZED")
+
+
+def _project_settings_view(store, project: str) -> dict:
+    s = store.settings.get(project) or {}
+    return {"name": f"projects/{project}/projectSettings",
+            "legacyRedirectionState": s.get("legacyRedirectionState", "REDIRECTION_FROM_GCR_IO_UNSPECIFIED")}
+
+
+def _project_settings(store, method, project, body) -> GcpResponse:
+    if method == "GET":
+        return _json(200, _project_settings_view(store, project))
+    if method == "PATCH":
+        state = body.get("legacyRedirectionState")
+        if state not in _REDIRECTION_STATES:
+            return _err(400, f"Invalid legacyRedirectionState \"{state}\".")
+        store.settings.setdefault(project, {})["legacyRedirectionState"] = state
+        store.persist()
+        return _json(200, _project_settings_view(store, project))
+    return _err(400, f"Unsupported method {method} on projectSettings.")
+
+
 # ── locations / operations ────────────────────────────────────────────────
 def _location(project: str, loc: str) -> dict:
     return {"name": f"projects/{project}/locations/{loc}", "locationId": loc,
@@ -647,7 +679,10 @@ def console_push_sample(store: ArtifactRegistryStore, name: str, body: dict | No
     return {"ok": True, "name": name, "version": ver["name"]}
 
 
-_VERBS = ("getIamPolicy", "setIamPolicy", "testIamPermissions", "batchDelete")
+# pushSample is Vyomi-only (no real AR REST method creates package data — a real `docker
+# push`/`mvn deploy`/etc. does; this is the console's "Push sample image/package" quickstart
+# the module docstring calls out). It rides the same custom-method syntax as the real verbs.
+_VERBS = ("getIamPolicy", "setIamPolicy", "testIamPermissions", "batchDelete", "pushSample")
 
 
 # ── dispatch ──────────────────────────────────────────────────────────────
@@ -683,6 +718,8 @@ def dispatch(store: ArtifactRegistryStore, method: str, path: str,
     if len(segs) < 2 or segs[0] != "projects":
         return _err(404, f"Unknown path: {path}")
     project = segs[1]
+    if len(segs) == 3 and segs[2] == "projectSettings":
+        return _project_settings(store, method, project, payload)
     if len(segs) == 2:
         return _err(404, f"Unknown path: {path}")
     if segs[2] != "locations":
@@ -714,6 +751,11 @@ def dispatch(store: ArtifactRegistryStore, method: str, path: str,
     if not rest:
         if verb in ("getIamPolicy", "setIamPolicy", "testIamPermissions"):
             return _iam(store, method, rname, verb, payload)
+        if verb == "pushSample":
+            res = console_push_sample(store, rname, payload)
+            if not res["ok"]:
+                return _err(404, f"Repository \"{rname}\" not found.")
+            return _json(200, {"name": res["name"], "version": res["version"]})
         if method == "GET":
             return _get_repo(store, rname)
         if method == "PATCH":
