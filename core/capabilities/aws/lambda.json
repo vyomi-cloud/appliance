@@ -151,13 +151,104 @@
   ]
  },
  "lambda.code-signing": {
-  "title": "Code signing configurations",
+  "title": "Code signing (deploy-time enforcement)",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "Code signing (AWS Signer integration, signature-validation policies) isn't modeled. The Code signing configurations page and a function's Code signing section are both declared gaps."
+   "A code signing configuration's AllowedPublishers / validation policy is stored and returned for real (see lambda.code-signing-configs), but Vyomi never checks a deployment's signature against it — UpdateFunctionCode always succeeds regardless of signing policy."
+  ]
+ },
+ "lambda.code-signing-configs": {
+  "title": "Code signing configurations (create, list, update, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The configuration resource (allowed signing profiles, validation policy) is stored and returned for real; it is never enforced against a deployment (see lambda.code-signing)."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.capacity-providers": {
+  "title": "Capacity providers",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The capacity provider resource (name, architectures, max vCPU, scaling mode, VPC) is stored and returned for real. It never actually schedules a function onto reserved EC2 instances — Vyomi's Lambda core only has one runtime, the sandboxed serverless one; attaching a capacity provider doesn't change where Invoke runs."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.network-connectors": {
+  "title": "Network connectors",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The connector resource (VPC, protocol, compute type) is stored and returned for real. It never actually bridges network traffic — there is no MicroVM runtime on the other end of the connection (see lambda.microvms)."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.microvms": {
+  "title": "MicroVM Images and MicroVMs",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "MicroVM images and running MicroVMs are stored and returned for real (name, state, version, status). There is no Firecracker runtime underneath — a MicroVM never actually boots or runs code; it is a tracked resource record only."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.applications": {
+  "title": "Applications",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "An application is a tracked deployment record (name, description, status, template) stored and returned for real. Vyomi has no CloudFormation/SAM core, so creating one never actually provisions the underlying Lambda functions, APIs or tables a template would describe — Status always reads CREATE_COMPLETE immediately."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.replicas": {
+  "title": "Replicas (Lambda@Edge)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A replica record is derived directly from the function it replicates (same Description/Runtime/LastModified) and the region list is stored for real. Vyomi has no CloudFront distribution to deploy a replica to, so a replica is never actually invoked at an edge location — the record is bookkeeping only."
+  ],
+  "tests": [
+   "tests/conformance/test_lambda_console_v4_core.py"
+  ]
+ },
+ "lambda.state-machines-link": {
+  "title": "Step Functions state machines (cross-link)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Not a Lambda resource — this page lists real Step Functions state machines (core/stepfunctions_core.py) for the console cross-link real AWS Lambda shows; create/execute them for real in the Step Functions console."
+  ],
+  "tests": [
+   "tests/conformance/test_stepfunctions_core.py"
   ]
  }
 }

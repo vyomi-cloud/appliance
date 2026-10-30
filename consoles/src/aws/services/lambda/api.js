@@ -2,7 +2,7 @@
  * /2015-03-31/functions/{name}). Routed by PATH on the Vyomi relay (core/aws_wire_router.py),
  * so restJson() — the shared generic-REST-JSON helper — is the right fit; see
  * core/lambda_core.py for the full path map. */
-import { restJson } from "../../../common/wire.js";
+import { restJson, awsJson } from "../../../common/wire.js";
 
 const F = "/2015-03-31/functions";
 const enc = encodeURIComponent;
@@ -92,3 +92,39 @@ export async function listFunctionsSplit() {
   }));
   return { eventFunctions: withUrl.filter((f) => !f._hasUrl), webFunctions: withUrl.filter((f) => f._hasUrl) };
 }
+
+// ── Vyomi-exclusive console surfaces — real named-resource CRUD, no simulated runtime
+// underneath (see core/lambda_core.py module note above _capacity_providers). ───────────
+export const listCapacityProviders = async () => (await restJson("GET", "/2015-03-31/capacity-providers")).CapacityProviders || [];
+export const createCapacityProvider = (body) => restJson("POST", "/2015-03-31/capacity-providers", { body });
+export const deleteCapacityProvider = (name) => restJson("DELETE", `/2015-03-31/capacity-providers/${enc(name)}`);
+
+export const listCodeSigningConfigs = async () => (await restJson("GET", "/2015-03-31/code-signing-configs")).CodeSigningConfigs || [];
+export const createCodeSigningConfig = (body) => restJson("POST", "/2015-03-31/code-signing-configs", { body });
+export const deleteCodeSigningConfig = (id) => restJson("DELETE", `/2015-03-31/code-signing-configs/${enc(id)}`);
+
+export const listNetworkConnectors = async () => (await restJson("GET", "/2015-03-31/network-connectors")).NetworkConnectors || [];
+export const createNetworkConnector = (body) => restJson("POST", "/2015-03-31/network-connectors", { body });
+export const deleteNetworkConnector = (name) => restJson("DELETE", `/2015-03-31/network-connectors/${enc(name)}`);
+
+export const listMicrovmImages = async () => (await restJson("GET", "/2015-03-31/microvm-images")).MicrovmImages || [];
+export const createMicrovmImage = (body) => restJson("POST", "/2015-03-31/microvm-images", { body });
+export const deleteMicrovmImage = (name) => restJson("DELETE", `/2015-03-31/microvm-images/${enc(name)}`);
+
+export const listMicrovms = async () => (await restJson("GET", "/2015-03-31/microvms")).Microvms || [];
+export const runMicrovm = (body) => restJson("POST", "/2015-03-31/microvms", { body });
+export const deleteMicrovm = (id) => restJson("DELETE", `/2015-03-31/microvms/${enc(id)}`);
+
+export const listApplications = async () => (await restJson("GET", "/2015-03-31/applications")).Applications || [];
+export const createApplication = (body) => restJson("POST", "/2015-03-31/applications", { body });
+export const deleteApplication = (name) => restJson("DELETE", `/2015-03-31/applications/${enc(name)}`);
+
+// Replicas are derived from the function they replicate — never a separate store.
+export const listReplicas = async () => (await restJson("GET", "/2015-03-31/replicas")).Replicas || [];
+export const replicateFunction = (name, regions) => restJson("PUT", `${F}/${enc(name)}/replication`, { body: { Regions: regions } });
+
+// ── Step Functions state machines (cross-link; real core/stepfunctions_core.py) ────────
+const SFN_ROLE_ARN = `arn:aws:iam::${"123456789012"}:role/service-role/StepFunctions-vyomi-role`;
+const sfn = (action, body) => awsJson("stepfunctions", `AWSStepFunctions.${action}`, body);
+export const listStateMachines = async () => (await sfn("ListStateMachines", {})).stateMachines || [];
+export const createStateMachine = (name, definition) => sfn("CreateStateMachine", { name, roleArn: SFN_ROLE_ARN, definition: JSON.stringify(definition) });

@@ -125,6 +125,59 @@ def _esms(store) -> dict:
     return m
 
 
+# Vyomi-exclusive console surfaces (EC2 capacity providers, code signing, MicroVMs +
+# their network connectors, applications): the deep runtime behavior these names imply
+# in the real console (EC2-backed execution, cryptographic signing, Firecracker VMs) is
+# NOT simulated, but the resource itself — create, list, delete, the fields the console
+# shows — is real, stored state round-tripping over the native wire, same as Layers.
+def _capacity_providers(store) -> dict:
+    m = getattr(store, "_lambda_capacity_providers", None)
+    if m is None:
+        m = {}
+        store._lambda_capacity_providers = m
+    return m
+
+
+def _code_signing_configs(store) -> dict:
+    m = getattr(store, "_lambda_code_signing_configs", None)
+    if m is None:
+        m = {}
+        store._lambda_code_signing_configs = m
+    return m
+
+
+def _network_connectors(store) -> dict:
+    m = getattr(store, "_lambda_network_connectors", None)
+    if m is None:
+        m = {}
+        store._lambda_network_connectors = m
+    return m
+
+
+def _microvm_images(store) -> dict:
+    m = getattr(store, "_lambda_microvm_images", None)
+    if m is None:
+        m = {}
+        store._lambda_microvm_images = m
+    return m
+
+
+def _microvms(store) -> dict:
+    m = getattr(store, "_lambda_microvms", None)
+    if m is None:
+        m = {}
+        store._lambda_microvms = m
+    return m
+
+
+def _applications(store) -> dict:
+    m = getattr(store, "_lambda_applications", None)
+    if m is None:
+        m = {}
+        store._lambda_applications = m
+    return m
+
+
 def _persist(store):
     if hasattr(store, "persist"):
         try:
@@ -668,6 +721,255 @@ def _delete_event_source_mapping(store, uid):
     return _json(200, _esm_view(e))
 
 
+# ── Capacity providers (Vyomi-exclusive; see module note above _capacity_providers) ────
+def _capacity_provider_view(cp):
+    return {"Name": cp["name"], "State": cp["state"], "Architectures": cp["architectures"],
+            "MaximumVcpu": cp["max_vcpu"], "ScalingMode": cp["scaling_mode"],
+            "VpcId": cp.get("vpc_id", ""), "LastModified": cp["last_modified"]}
+
+
+def _create_capacity_provider(store, body):
+    name = str(body.get("Name", "")).strip()
+    if not name:
+        return _err(400, "ValidationException", "Name is required")
+    store_m = _capacity_providers(store)
+    if name in store_m:
+        return _err(409, "ResourceConflictException", f"Capacity provider already exists: {name}")
+    cp = {"name": name, "state": "ACTIVE", "architectures": body.get("Architectures") or ["x86_64"],
+          "max_vcpu": int(body.get("MaximumVcpu") or 4), "scaling_mode": body.get("ScalingMode") or "Managed scaling",
+          "vpc_id": body.get("VpcId", ""), "last_modified": _now_iso()}
+    store_m[name] = cp
+    _persist(store)
+    return _json(201, _capacity_provider_view(cp))
+
+
+def _list_capacity_providers(store):
+    rows = sorted(_capacity_providers(store).values(), key=lambda c: c["name"])
+    return _json(200, {"CapacityProviders": [_capacity_provider_view(c) for c in rows]})
+
+
+def _delete_capacity_provider(store, name):
+    cp = _capacity_providers(store).pop(name, None)
+    if not cp:
+        return _err(404, "ResourceNotFoundException", f"Capacity provider not found: {name}")
+    _persist(store)
+    return _json(200, _capacity_provider_view(cp))
+
+
+# ── Code signing configurations (Vyomi-exclusive) ───────────────────────────────────────
+def _csc_view(c):
+    return {"CodeSigningConfigId": c["id"], "CodeSigningConfigArn": f"arn:aws:lambda:{REGION}:{ACCOUNT_ID}:code-signing-config:{c['id']}",
+            "Description": c.get("description", ""),
+            "AllowedPublishers": {"SigningProfileVersionArns": c.get("signing_profiles", [])},
+            "CodeSigningPolicies": {"UntrustedArtifactOnDeployment": c.get("policy", "Warn")},
+            "LastModified": c["last_modified"]}
+
+
+def _create_csc(store, body):
+    cid = f"csc-{uuid.uuid4().hex[:17]}"
+    c = {"id": cid, "description": body.get("Description", ""),
+         "signing_profiles": (body.get("AllowedPublishers") or {}).get("SigningProfileVersionArns", []),
+         "policy": (body.get("CodeSigningPolicies") or {}).get("UntrustedArtifactOnDeployment", "Warn"),
+         "last_modified": _now_iso()}
+    _code_signing_configs(store)[cid] = c
+    _persist(store)
+    return _json(201, _csc_view(c))
+
+
+def _list_cscs(store):
+    rows = sorted(_code_signing_configs(store).values(), key=lambda c: c["last_modified"])
+    return _json(200, {"CodeSigningConfigs": [_csc_view(c) for c in rows]})
+
+
+def _update_csc(store, cid, body):
+    c = _code_signing_configs(store).get(cid)
+    if not c:
+        return _err(404, "ResourceNotFoundException", f"Code signing config not found: {cid}")
+    if "Description" in body:
+        c["description"] = body["Description"]
+    if "AllowedPublishers" in body:
+        c["signing_profiles"] = (body["AllowedPublishers"] or {}).get("SigningProfileVersionArns", [])
+    if "CodeSigningPolicies" in body:
+        c["policy"] = (body["CodeSigningPolicies"] or {}).get("UntrustedArtifactOnDeployment", c["policy"])
+    c["last_modified"] = _now_iso()
+    _persist(store)
+    return _json(200, _csc_view(c))
+
+
+def _delete_csc(store, cid):
+    c = _code_signing_configs(store).pop(cid, None)
+    if not c:
+        return _err(404, "ResourceNotFoundException", f"Code signing config not found: {cid}")
+    _persist(store)
+    return _json(200, {})
+
+
+# ── Network connectors (Vyomi-exclusive; bridge a MicroVM into a VPC) ──────────────────
+def _nc_view(n):
+    return {"Name": n["name"], "Id": n["id"],
+            "Arn": f"arn:aws:lambda:{REGION}:{ACCOUNT_ID}:network-connector:{n['name']}",
+            "Type": n.get("compute_type", "MicroVm"), "VpcId": n.get("vpc_id", ""),
+            "NetworkProtocol": n.get("protocol", ""), "State": n["state"], "LastModified": n["last_modified"]}
+
+
+def _create_network_connector(store, body):
+    name = str(body.get("Name", "")).strip()
+    if not name:
+        return _err(400, "ValidationException", "Name is required")
+    store_m = _network_connectors(store)
+    if name in store_m:
+        return _err(409, "ResourceConflictException", f"Network connector already exists: {name}")
+    n = {"name": name, "id": f"ncr-{uuid.uuid4().hex[:12]}", "vpc_id": body.get("VpcId", ""),
+         "compute_type": body.get("AssociatedComputeType") or "MicroVm", "protocol": body.get("NetworkProtocol", ""),
+         "state": "AVAILABLE", "last_modified": _now_iso()}
+    store_m[name] = n
+    _persist(store)
+    return _json(201, _nc_view(n))
+
+
+def _list_network_connectors(store):
+    rows = sorted(_network_connectors(store).values(), key=lambda n: n["name"])
+    return _json(200, {"NetworkConnectors": [_nc_view(n) for n in rows]})
+
+
+def _delete_network_connector(store, name):
+    n = _network_connectors(store).pop(name, None)
+    if not n:
+        return _err(404, "ResourceNotFoundException", f"Network connector not found: {name}")
+    _persist(store)
+    return _json(200, _nc_view(n))
+
+
+# ── MicroVM images (Vyomi-exclusive; Firecracker VM images layered on Lambda) ──────────
+def _microvm_image_view(i):
+    return {"Name": i["name"], "Description": i.get("description", ""), "State": i["state"],
+            "ActiveVersion": i.get("active_version", 1), "FailedVersion": i.get("failed_version"),
+            "Created": i["created"], "ImageArn": f"arn:aws:lambda:{REGION}:{ACCOUNT_ID}:microvm-image:{i['name']}"}
+
+
+def _create_microvm_image(store, body):
+    name = str(body.get("Name", "")).strip()
+    if not name:
+        return _err(400, "ValidationException", "Name is required")
+    store_m = _microvm_images(store)
+    if name in store_m:
+        return _err(409, "ResourceConflictException", f"MicroVM image already exists: {name}")
+    i = {"name": name, "description": body.get("Description", ""), "state": "ACTIVE",
+         "active_version": 1, "failed_version": None, "created": _now_iso()}
+    store_m[name] = i
+    _persist(store)
+    return _json(201, _microvm_image_view(i))
+
+
+def _list_microvm_images(store):
+    rows = sorted(_microvm_images(store).values(), key=lambda i: i["name"])
+    return _json(200, {"MicrovmImages": [_microvm_image_view(i) for i in rows]})
+
+
+def _delete_microvm_image(store, name):
+    i = _microvm_images(store).pop(name, None)
+    if not i:
+        return _err(404, "ResourceNotFoundException", f"MicroVM image not found: {name}")
+    _persist(store)
+    return _json(200, _microvm_image_view(i))
+
+
+# ── MicroVMs (Vyomi-exclusive; a running instance of a MicroVM image) ──────────────────
+def _microvm_view(m):
+    return {"Id": m["id"], "Status": m["status"], "MicrovmImage": m.get("microvm_image", ""),
+            "Version": m.get("version", 1), "CreationTime": m["creation_time"]}
+
+
+def _run_microvm(store, body):
+    image = str(body.get("MicrovmImage", "")).strip()
+    if not image:
+        return _err(400, "ValidationException", "MicrovmImage is required")
+    if image not in _microvm_images(store):
+        return _err(404, "ResourceNotFoundException", f"MicroVM image not found: {image}")
+    mid = f"mvm-{uuid.uuid4().hex[:12]}"
+    m = {"id": mid, "status": "RUNNING", "microvm_image": image, "version": body.get("Version") or 1,
+         "creation_time": _now_iso()}
+    _microvms(store)[mid] = m
+    _persist(store)
+    return _json(201, _microvm_view(m))
+
+
+def _list_microvms(store):
+    rows = sorted(_microvms(store).values(), key=lambda m: m["creation_time"])
+    return _json(200, {"Microvms": [_microvm_view(m) for m in rows]})
+
+
+def _delete_microvm(store, mid):
+    m = _microvms(store).pop(mid, None)
+    if not m:
+        return _err(404, "ResourceNotFoundException", f"MicroVM not found: {mid}")
+    _persist(store)
+    return _json(200, _microvm_view(m))
+
+
+# ── Applications (Vyomi-exclusive; a tracked deployment record, not a real
+#    CloudFormation/SAM stack — Vyomi has no CloudFormation core to provision one) ──────
+def _application_view(a):
+    return {"Name": a["name"], "Description": a.get("description", ""), "Status": a["status"],
+            "LastModified": a["last_modified"], "Template": a.get("template", "From scratch")}
+
+
+def _create_application(store, body):
+    name = str(body.get("Name", "")).strip()
+    if not name:
+        return _err(400, "ValidationException", "Name is required")
+    store_m = _applications(store)
+    if name in store_m:
+        return _err(409, "ResourceConflictException", f"Application already exists: {name}")
+    a = {"name": name, "description": body.get("Description", ""), "status": "CREATE_COMPLETE",
+         "template": body.get("Template", "From scratch"), "last_modified": _now_iso()}
+    store_m[name] = a
+    _persist(store)
+    return _json(201, _application_view(a))
+
+
+def _list_applications(store):
+    rows = sorted(_applications(store).values(), key=lambda a: a["name"])
+    return _json(200, {"Applications": [_application_view(a) for a in rows]})
+
+
+def _delete_application(store, name):
+    a = _applications(store).pop(name, None)
+    if not a:
+        return _err(404, "ResourceNotFoundException", f"Application not found: {name}")
+    _persist(store)
+    return _json(200, _application_view(a))
+
+
+# ── Replicas (Vyomi-exclusive; Lambda@Edge copies of a function). Derived directly from
+#    the function record it replicates — never a separate fabricated store — so a replica
+#    always reflects that function's real Description/Runtime/LastModified. ────────────
+def _replica_view(fn, region):
+    return {"FunctionName": fn["name"], "Description": fn.get("description", ""),
+            "Runtime": fn.get("runtime", "python3.12"), "Region": region,
+            "LastModified": fn.get("last_modified", "")}
+
+
+def _replicate_function(store, name, body):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    regions = [r for r in (body.get("Regions") or []) if r]
+    fn["replicated_regions"] = sorted(set(fn.get("replicated_regions") or []) | set(regions))
+    _persist(store)
+    return _json(200, {"FunctionName": name, "Regions": fn["replicated_regions"]})
+
+
+def _list_replicas(store):
+    rows = []
+    for fn in _functions(store).values():
+        for region in fn.get("replicated_regions") or []:
+            rows.append(_replica_view(fn, region))
+    rows.sort(key=lambda r: r["FunctionName"])
+    return _json(200, {"Replicas": rows})
+
+
 # ── resource policy (AddPermission / GetPolicy / RemovePermission) ─────────────────────
 def _add_permission(store, name, body):
     try:
@@ -863,6 +1165,13 @@ def dispatch(store, method: str, path: str,
         /2015-03-31/functions/{name}/event-invoke-config
         /2015-03-31/layers[...]                    PublishLayerVersion / List* / Get* / Delete*
         /2015-03-31/event-source-mappings[...]     Triggers (see module docstring)
+        /2015-03-31/capacity-providers[...]        Vyomi extension — see module note above
+        /2015-03-31/code-signing-configs[...]      _capacity_providers (named-resource CRUD;
+        /2015-03-31/network-connectors[...]        the real console's underlying runtime —
+        /2015-03-31/microvm-images[...]             EC2, AWS Signer, Firecracker — isn't
+        /2015-03-31/microvms[...]                   simulated, only the resource & its fields).
+        /2015-03-31/applications[...]
+        /2015-03-31/replicas                       Derived from functions' replicated_regions
     """
     method = (method or "GET").upper()
     query = query or {}
@@ -881,7 +1190,98 @@ def dispatch(store, method: str, path: str,
         return _dispatch_esms(store, method, tail, query, body)
     if kind == "functions":
         return _dispatch_functions(store, method, tail, query, body)
+    if kind == "capacity-providers":
+        return _dispatch_capacity_providers(store, method, tail, body)
+    if kind == "code-signing-configs":
+        return _dispatch_cscs(store, method, tail, body)
+    if kind == "network-connectors":
+        return _dispatch_network_connectors(store, method, tail, body)
+    if kind == "microvm-images":
+        return _dispatch_microvm_images(store, method, tail, body)
+    if kind == "microvms":
+        return _dispatch_microvms(store, method, tail, body)
+    if kind == "applications":
+        return _dispatch_applications(store, method, tail, body)
+    if kind == "replicas" and not tail:
+        if method == "GET":
+            return _list_replicas(store)
+        return _err(405, "MethodNotAllowed", "Unsupported method on replicas")
     return _err(404, "ResourceNotFoundException", f"Unknown path: {path}")
+
+
+def _dispatch_capacity_providers(store, method, tail, body):
+    if not tail:
+        if method == "POST":
+            return _create_capacity_provider(store, _parse(body))
+        if method == "GET":
+            return _list_capacity_providers(store)
+        return _err(405, "MethodNotAllowed", "Unsupported method on capacity-providers")
+    if method == "DELETE":
+        return _delete_capacity_provider(store, tail[0])
+    return _err(404, "ResourceNotFoundException", "Unknown capacity-providers path")
+
+
+def _dispatch_cscs(store, method, tail, body):
+    if not tail:
+        if method == "POST":
+            return _create_csc(store, _parse(body))
+        if method == "GET":
+            return _list_cscs(store)
+        return _err(405, "MethodNotAllowed", "Unsupported method on code-signing-configs")
+    cid = tail[0]
+    if method == "PUT":
+        return _update_csc(store, cid, _parse(body))
+    if method == "DELETE":
+        return _delete_csc(store, cid)
+    return _err(404, "ResourceNotFoundException", "Unknown code-signing-configs path")
+
+
+def _dispatch_network_connectors(store, method, tail, body):
+    if not tail:
+        if method == "POST":
+            return _create_network_connector(store, _parse(body))
+        if method == "GET":
+            return _list_network_connectors(store)
+        return _err(405, "MethodNotAllowed", "Unsupported method on network-connectors")
+    if method == "DELETE":
+        return _delete_network_connector(store, tail[0])
+    return _err(404, "ResourceNotFoundException", "Unknown network-connectors path")
+
+
+def _dispatch_microvm_images(store, method, tail, body):
+    if not tail:
+        if method == "POST":
+            return _create_microvm_image(store, _parse(body))
+        if method == "GET":
+            return _list_microvm_images(store)
+        return _err(405, "MethodNotAllowed", "Unsupported method on microvm-images")
+    if method == "DELETE":
+        return _delete_microvm_image(store, tail[0])
+    return _err(404, "ResourceNotFoundException", "Unknown microvm-images path")
+
+
+def _dispatch_microvms(store, method, tail, body):
+    if not tail:
+        if method == "POST":
+            return _run_microvm(store, _parse(body))
+        if method == "GET":
+            return _list_microvms(store)
+        return _err(405, "MethodNotAllowed", "Unsupported method on microvms")
+    if method == "DELETE":
+        return _delete_microvm(store, tail[0])
+    return _err(404, "ResourceNotFoundException", "Unknown microvms path")
+
+
+def _dispatch_applications(store, method, tail, body):
+    if not tail:
+        if method == "POST":
+            return _create_application(store, _parse(body))
+        if method == "GET":
+            return _list_applications(store)
+        return _err(405, "MethodNotAllowed", "Unsupported method on applications")
+    if method == "DELETE":
+        return _delete_application(store, tail[0])
+    return _err(404, "ResourceNotFoundException", "Unknown applications path")
 
 
 def _dispatch_layers(store, method, tail, body):
@@ -1019,6 +1419,9 @@ def _dispatch_functions(store, method, tail, query, body):
             return _publish_version(store, name, _parse(body))
         if method == "GET":
             return _list_versions_by_function(store, name)
+
+    if sub == "replication" and not rest and method == "PUT":
+        return _replicate_function(store, name, _parse(body))
 
     if sub == "policy":
         if not rest:

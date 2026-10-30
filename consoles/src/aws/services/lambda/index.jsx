@@ -11,11 +11,19 @@ import Layers from "./Layers.jsx";
 import CreateLayer from "./CreateLayer.jsx";
 import EventSourceMappings from "./EventSourceMappings.jsx";
 import Extensions from "./Extensions.jsx";
-import {
-  Applications, CapacityProviders, CodeSigningConfigurations, CreateApplication, CreateCapacityProvider,
-  CreateMicrovmImage, CreateNetworkConnector, MicrovmImages, Microvms, NetworkConnectors, Replicas,
-  RunMicrovm, StepFunctionsStateMachines,
-} from "./HonestPages.jsx";
+import Applications from "./Applications.jsx";
+import CreateApplication from "./CreateApplication.jsx";
+import CapacityProviders from "./CapacityProviders.jsx";
+import CreateCapacityProvider from "./CreateCapacityProvider.jsx";
+import CodeSigningConfigurations from "./CodeSigningConfigurations.jsx";
+import Replicas from "./Replicas.jsx";
+import MicrovmImages from "./MicrovmImages.jsx";
+import CreateMicrovmImage from "./CreateMicrovmImage.jsx";
+import Microvms from "./Microvms.jsx";
+import RunMicrovm from "./RunMicrovm.jsx";
+import NetworkConnectors from "./NetworkConnectors.jsx";
+import CreateNetworkConnector from "./CreateNetworkConnector.jsx";
+import StepFunctionsStateMachines from "./StepFunctionsStateMachines.jsx";
 
 export default {
   nav: [
