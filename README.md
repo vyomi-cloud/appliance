@@ -1,13 +1,13 @@
 # Release checks — v3.0.35
 
-Generated 2026-10-30 21:20 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/41127943889) for tag `v3.0.35`.
+Generated 2026-10-30 22:18 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/41136276280) for tag `v3.0.35`.
 
 | Package / check | Platform | Result |
 |---|---|---|
 | DEB: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | ✅ passed |
 | RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | ✅ passed |
 | Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | ✅ passed |
-| CLI: aws / gcloud / az suites + CLI ↔ console both ways (74/74 checks passed) | Linux, release images | ✅ passed |
+| CLI: aws / gcloud / az suites + CLI ↔ console both ways (73/74 checks passed) | Linux, release images | ❌ failure |
 | Nano CLI: aws / gcloud / az through the tunnel + CLI ↔ console both ways (73/74 checks passed) | Chromium, release wasm bundle | ❌ failure |
 | MSI: install, upgrade, uninstall (+ signing) | Windows (GitHub) | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/41127943844)) |
 | Startup: all services + UI status | Linux, release images | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/41128763273)) |
@@ -41,7 +41,7 @@ Generated 2026-10-30 21:20 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker_3.0.35_all.deb | 2s |
+| ✅ | install vyomi-docker_3.0.35_all.deb | 3s |
 | ✅ | package manager reports version 3.0.35 | found '3.0.35' |
 | ✅ | ships docker-compose.cloudlite.yml | /usr/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -57,7 +57,7 @@ Generated 2026-10-30 21:20 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.35 | exit 0; compose v3.0.35; ==> Vyomi 3.0.35 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.35 (SHA256-checked) | exit 0; cached compose v3.0.35 |
-| ✅ | after update, vyomi runs the cached v3.0.35 |   compose   : v3.0.35 (/tmp/tmp.J9NTmqkkjQ/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.35 |   compose   : v3.0.35 (/tmp/tmp.GflUPREJdz/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Removing vyomi-docker (3.0.35) ... |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -68,7 +68,7 @@ Generated 2026-10-30 21:20 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-3.0.35-1.noarch.rpm | 2s |
+| ✅ | install vyomi-3.0.35-1.noarch.rpm | 1s |
 | ✅ | package manager reports version 3.0.35 | found '3.0.35' |
 | ✅ | bundled VERSION is 3.0.35 | /usr/lib/cloud-learn/VERSION = 3.0.35 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -106,7 +106,7 @@ Generated 2026-10-30 21:20 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.35 | exit 0; compose v3.0.35; ==> Vyomi 3.0.35 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.35 (SHA256-checked) | exit 0; cached compose v3.0.35 |
-| ✅ | after update, vyomi runs the cached v3.0.35 |   compose   : v3.0.35 (/tmp/tmp.Gim14TVuF6/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.35 |   compose   : v3.0.35 (/tmp/tmp.yRI0nwquo7/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Complete! |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -117,7 +117,7 @@ Generated 2026-10-30 21:20 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi | 18s |
+| ✅ | install vyomi | 8s |
 | ✅ | package manager reports version 3.0.35 | found '3.0.35' |
 | ✅ | bundled VERSION is 3.0.35 | /opt/homebrew/opt/vyomi/libexec/VERSION = 3.0.35 |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -140,7 +140,7 @@ Generated 2026-10-30 21:20 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker | 8s |
+| ✅ | install vyomi-docker | 6s |
 | ✅ | package manager reports version 3.0.35 | found '3.0.35' |
 | ✅ | ships docker-compose.cloudlite.yml | /opt/homebrew/opt/vyomi-docker/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -156,7 +156,7 @@ Generated 2026-10-30 21:20 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.35 | exit 0; compose v3.0.35; ==> Vyomi 3.0.35 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.35 (SHA256-checked) | exit 0; cached compose v3.0.35 |
-| ✅ | after update, vyomi runs the cached v3.0.35 |   compose   : v3.0.35 (/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/tmp.qM2oSBCAsp/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.35 |   compose   : v3.0.35 (/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/tmp.7zH33zEb2q/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | brew test vyomi-docker | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi-docker/3.0.35/bin/vyomi --help[0m |
 | ✅ | uninstall vyomi-docker | Uninstalling /opt/homebrew/Cellar/vyomi-docker/3.0.35... (8 files, 322.2KB) |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
@@ -164,7 +164,7 @@ Generated 2026-10-30 21:20 UTC by [Release checks report](https://github.com/vyo
 
 ## CLI (aws / gcloud / az) and CLI ↔ console
 
-**74/74 checks passed** against `http://localhost:9000`.
+**73/74 checks passed** against `http://localhost:9000`.
 
 ### CLIs (4/4)
 
@@ -232,13 +232,13 @@ Generated 2026-10-30 21:20 UTC by [Release checks report](https://github.com/vyo
 | ✅ | Azure: virtual network created in the console |  |
 | ✅ | Azure: virtual network created in the console shows in the CLI |  |
 
-### CLI suites, each on its own (23/23)
+### CLI suites, each on its own (22/23)
 
 | | Check | Detail |
 |---|---|---|
 | ✅ | aws-apigatewayv2: 40 passed, 0 failed |  |
 | ✅ | aws: 15 passed, 0 failed |  |
-| ✅ | aws-cloudwatch: 31 passed, 0 failed |  |
+| ❌ | aws-cloudwatch: 29 passed, 2 failed | alarm evaluated against existing data → ALARM; describe-alarm-history |
 | ✅ | aws-elbv2: 27 passed, 0 failed |  |
 | ✅ | aws-kinesis: 20 passed, 0 failed |  |
 | ✅ | aws-logs: 19 passed, 0 failed |  |
@@ -340,8 +340,8 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 | | Check | Detail |
 |---|---|---|
 | ✅ | aws-apigatewayv2: 40 passed, 0 failed |  |
-| ❌ | aws: 14 passed, 1 failed | s3 cp (download to stdout) |
-| ✅ | aws-cloudwatch: 31 passed, 0 failed |  |
+| ✅ | aws: 15 passed, 0 failed |  |
+| ❌ | aws-cloudwatch: 29 passed, 2 failed | alarm evaluated against existing data → ALARM; describe-alarm-history |
 | ✅ | aws-elbv2: 27 passed, 0 failed |  |
 | ✅ | aws-kinesis: 20 passed, 0 failed |  |
 | ✅ | aws-logs: 19 passed, 0 failed |  |
