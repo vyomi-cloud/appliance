@@ -765,7 +765,7 @@ class AwsWireRouter:
         if svc == "iam":
             r = iam.dispatch(self.iam, params)
         elif svc == "rds":
-            r = rds.dispatch(self.rds, params)
+            r = rds.dispatch(self.rds, params, msg_store=self.msg, s3_store=self.s3)
         elif svc == "vpc":
             r = vpc.dispatch(self.vpc, params)
         elif svc == "elbv2":

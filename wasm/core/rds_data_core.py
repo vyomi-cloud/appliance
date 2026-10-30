@@ -22,9 +22,14 @@ SqlStore seam only) so it loads on host CPython AND Pyodide, and is provable on
 both. Errors use rest-json shape (`{"message": ...}` + `x-amzn-errortype` header),
 which botocore surfaces as the typed exception.
 
-Honest boundary: BeginTransaction/Commit/Rollback are accepted and well-shaped, but
-each ExecuteStatement autocommits (no cross-call transactional isolation yet) — so
-don't rely on rollback. ExecuteStatement + BatchExecuteStatement are the real path.
+BeginTransaction/CommitTransaction/RollbackTransaction are REAL cross-call
+transactions (core/sql_store.py): a statement that carries the returned
+`transactionId` runs against a connection held open since BeginTransaction and is
+not committed until CommitTransaction (or discarded on Rollback). A statement
+WITHOUT a transactionId still autocommits exactly as before — existing callers are
+unaffected. How many transactions can be open at once on one instance is the
+instance's own max_connections (its attached DB parameter group) — ModifyDBParameterGroup
+genuinely changes that ceiling, not just a stored number.
 """
 from __future__ import annotations
 
@@ -123,10 +128,14 @@ def _rewrite(store, sql: str, params_list) -> tuple[str, list]:
 
 
 def _data_error(res: dict) -> RdsDataResponse:
+    code = res.get("code", "SQLError")
+    if code in ("TransactionNotFoundException", "BadRequestException"):
+        # Already a real Data API exception type (transaction lookup / connection
+        # limit) — surface it as-is rather than wrapping it a second time.
+        return _error(400, code, res.get("message", ""))
     # The data plane already classified the failure; surface it as the Data API's
     # catch-all BadRequestException (what botocore raises for these).
-    return _error(400, "BadRequestException",
-                  f"{res.get('code', 'SQLError')}: {res.get('message', '')}")
+    return _error(400, "BadRequestException", f"{code}: {res.get('message', '')}")
 
 
 def _shape_result(res: dict, include_metadata: bool) -> dict:
@@ -141,9 +150,15 @@ def _shape_result(res: dict, include_metadata: bool) -> dict:
     return out
 
 
+async def _run_statement(store, db_id: str, transaction_id: str | None, sql: str, params: list) -> dict:
+    if transaction_id:
+        return await rds.aexecute_in_transaction(store, transaction_id, sql, params)
+    return await rds.aexecute_sql(store, db_id, sql, params)
+
+
 async def _execute_statement(store, body: dict) -> RdsDataResponse:
     new_sql, params = _rewrite(store, body.get("sql") or "", body.get("parameters"))
-    res = await rds.aexecute_sql(store, _db_id(body), new_sql, params)
+    res = await _run_statement(store, _db_id(body), body.get("transactionId"), new_sql, params)
     if not res.get("ok"):
         return _data_error(res)
     return _ok(_shape_result(res, bool(body.get("includeResultMetadata"))))
@@ -151,11 +166,12 @@ async def _execute_statement(store, body: dict) -> RdsDataResponse:
 
 async def _batch_execute(store, body: dict) -> RdsDataResponse:
     db_id = _db_id(body)
+    tx_id = body.get("transactionId")
     sql = body.get("sql") or ""
     results = []
     for pset in (body.get("parameterSets") or [[]]):
         new_sql, params = _rewrite(store, sql, pset)
-        res = await rds.aexecute_sql(store, db_id, new_sql, params)
+        res = await _run_statement(store, db_id, tx_id, new_sql, params)
         if not res.get("ok"):
             return _data_error(res)
         results.append({"generatedFields": []})
@@ -173,11 +189,19 @@ async def dispatch(store, path: str, payload: dict | None = None) -> RdsDataResp
         if action == "batchexecute":
             return await _batch_execute(store, body)
         if action == "begintransaction":
-            # autocommit: a token so the SDK is satisfied (see module docstring).
-            return _ok({"transactionId": "nano-tx-" + (_db_id(body) or "default")})
+            res = await rds.abegin_transaction(store, _db_id(body))
+            if not res.get("ok"):
+                return _data_error(res)
+            return _ok({"transactionId": res["transactionId"]})
         if action == "committransaction":
+            res = await rds.acommit_transaction(store, body.get("transactionId") or "")
+            if not res.get("ok"):
+                return _data_error(res)
             return _ok({"transactionStatus": "Transaction Committed"})
         if action == "rollbacktransaction":
+            res = await rds.arollback_transaction(store, body.get("transactionId") or "")
+            if not res.get("ok"):
+                return _data_error(res)
             return _ok({"transactionStatus": "Rollback Complete"})
         return _error(404, "BadRequestException", f"Unknown Data API action: {action}")
     except Exception as e:  # pragma: no cover - defensive

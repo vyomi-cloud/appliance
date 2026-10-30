@@ -197,6 +197,10 @@ export async function describeDBEngineVersions() {
   const r = await call("DescribeDBEngineVersions", {});
   return asList(r.DBEngineVersions?.DBEngineVersion);
 }
+export async function describeCertificates() {
+  const r = await call("DescribeCertificates", {});
+  return asList(r.Certificates?.Certificate);
+}
 
 // ── RDS Data API (Query editor) — REST-JSON, routed by path alone ──────────
 export async function executeStatement(dbInstanceIdentifier, sql, { parameters, includeResultMetadata = true } = {}) {

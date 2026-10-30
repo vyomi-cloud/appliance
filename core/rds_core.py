@@ -24,12 +24,13 @@ next.
 """
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from xml.sax.saxutils import escape as _xml_escape
 
-from core.sql_store import SqlStore
+from core.sql_store import SqlStore, TransactionError, TransactionLimitError
 
 RDS_NS = "http://rds.amazonaws.com/doc/2014-10-31/"
 _ENGINE_PORT = {"postgres": 5432, "postgresql": 5432, "aurora-postgresql": 5432,
@@ -93,7 +94,22 @@ def _integration_arn(store: SqlStore, name: str) -> str:
     return f"arn:aws:rds:us-east-1:{store.account_id}:integration:{name}"
 
 
+def _certificate_arn(store: SqlStore, cert_id: str) -> str:
+    return f"arn:aws:rds:us-east-1:{store.account_id}:cert:{cert_id}"
+
+
 DEFAULT_CA = "rds-ca-rsa2048-g1"  # the current (non-expiring) CA; anything else needs updating
+
+# Real AWS RDS CA catalog (DescribeCertificates) — the actual identifiers + validity
+# windows AWS publishes. CACertificateIdentifier is validated against this list
+# (CreateDBInstance/ModifyDBInstance reject anything else), and it's what the
+# certificate-update page's "CA expiration date" is derived from, instead of "-".
+CERTIFICATE_CATALOG: dict[str, dict] = {
+    "rds-ca-2019": {"type": "CA", "valid_from": "2019-09-19", "valid_till": "2024-08-22"},
+    "rds-ca-rsa2048-g1": {"type": "CA", "valid_from": "2021-06-28", "valid_till": "2061-06-28"},
+    "rds-ca-rsa4096-g1": {"type": "CA", "valid_from": "2021-06-28", "valid_till": "2121-06-28"},
+    "rds-ca-ecc384-g1": {"type": "CA", "valid_from": "2021-06-28", "valid_till": "2121-06-28"},
+}
 
 
 def _engine_port(engine: str) -> int:
@@ -131,12 +147,42 @@ def _tag_list_xml(tags: dict[str, str]) -> str:
 
 
 def _log_event(store: SqlStore, source_id: str, source_type: str, message: str,
-               categories: list[str] | None = None) -> None:
+               categories: list[str] | None = None, msg_store=None) -> None:
+    categories = categories or ["notification"]
     store.add_event({
         "source_identifier": source_id, "source_type": source_type,
         "message": message, "date": _now(),
-        "event_categories": categories or ["notification"],
+        "event_categories": categories,
     })
+    if msg_store is not None:
+        _notify_subscribers(store, msg_store, source_id, source_type, categories, message)
+
+
+def _notify_subscribers(store: SqlStore, msg_store, source_id: str, source_type: str,
+                        categories: list[str], message: str) -> None:
+    """Real fan-out: every ENABLED event subscription whose SourceType matches (or
+    is unset — "all sources") and whose EventCategories overlaps (or is empty —
+    "all categories") gets this event delivered to its SNS topic, through the
+    SAME sns_core.publish_arn seam EventBridge targets use. A topic that doesn't
+    exist (or no SnsTopicArn at all) is silently skipped — publish_arn()'s own
+    contract — matching a subscription that was never confirmed in real SNS."""
+    try:
+        from core import sns_core as sns_mod
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import sns_core as sns_mod  # type: ignore
+    for name in store.event_subscription_names():
+        sub = store.get_event_subscription(name)
+        if not sub or not sub.get("enabled", True):
+            continue
+        sub_source = sub.get("source_type") or ""
+        if sub_source and sub_source != source_type:
+            continue
+        sub_cats = sub.get("event_categories") or []
+        if sub_cats and not (set(sub_cats) & set(categories)):
+            continue
+        arn = sub.get("sns_topic_arn")
+        if arn:
+            sns_mod.publish_arn(msg_store, arn, f"RDS event for {source_id} ({source_type}): {message}")
 
 
 # ── response builders (native RDS Query-protocol XML) ──────────────────────
@@ -295,12 +341,14 @@ def _option_group_xml(og: dict) -> str:
 
 
 def _event_subscription_xml(es: dict) -> str:
+    cats = "".join(_el("EventCategory", c) for c in es.get("event_categories", []))
     return "".join([
         "<EventSubscription>",
         _el("CustSubscriptionId", es["cust_subscription_id"]),
         _el("SnsTopicArn", es.get("sns_topic_arn", "")),
         _el("Status", es.get("status", "active")),
         _el("SourceType", es.get("source_type", "db-instance")),
+        f"<EventCategoriesList>{cats}</EventCategoriesList>",
         _el("Enabled", str(es.get("enabled", True)).lower()),
         _el("CustomerAwsId", es.get("customer_aws_id", "")),
         _el("SubscriptionCreationTime", es.get("created", "")),
@@ -369,6 +417,7 @@ def _export_task_xml(et: dict) -> str:
         _el("SnapshotTime", et.get("created", "")),
         _el("TaskStartTime", et.get("created", "")),
         _el("TaskEndTime", et.get("task_end_time", "")),
+        _el("FailureCause", et.get("failure_cause", "")) if et.get("failure_cause") else "",
         "</ExportTask>",
     ])
 
@@ -416,6 +465,41 @@ def _db_recommendation_xml(rec: dict) -> str:
     ])
 
 
+def _certificate_xml(store: SqlStore, cert_id: str, info: dict) -> str:
+    return "".join([
+        "<Certificate>",
+        _el("CertificateIdentifier", cert_id),
+        _el("CertificateType", info.get("type", "CA")),
+        _el("ValidFrom", f"{info['valid_from']}T00:00:00Z"),
+        _el("ValidTill", f"{info['valid_till']}T00:00:00Z"),
+        _el("CertificateArn", _certificate_arn(store, cert_id)),
+        _el("CustomerOverride", "false"),
+        "</Certificate>",
+    ])
+
+
+def _describe_certificates(store: SqlStore, params: dict) -> RdsResponse:
+    cert_id = str(params.get("CertificateIdentifier", "")).strip()
+    if cert_id:
+        info = CERTIFICATE_CATALOG.get(cert_id)
+        if not info:
+            raise RdsError("CertificateNotFound", f"Certificate {cert_id} not found.", 404)
+        ids = [cert_id]
+    else:
+        ids = sorted(CERTIFICATE_CATALOG)
+    inner = ("<Certificates>" + "".join(_certificate_xml(store, i, CERTIFICATE_CATALOG[i]) for i in ids)
+             + "</Certificates>")
+    return _success("DescribeCertificates", inner)
+
+
+def _validate_ca_certificate(cert_id: str) -> None:
+    """CACertificateIdentifier is only ever one of the real CA ids RDS actually
+    issues (DescribeCertificates) — CreateDBInstance/ModifyDBInstance reject
+    anything else, the way AWS does, instead of storing an arbitrary string."""
+    if cert_id not in CERTIFICATE_CATALOG:
+        raise RdsError("CertificateNotFound", f"Certificate {cert_id} not found.", 404)
+
+
 # ── helpers ────────────────────────────────────────────────────────────────
 def _require_instance(store: SqlStore, db_id: str) -> dict:
     db = store.get_instance(db_id)
@@ -432,13 +516,15 @@ def _int(params: dict, key: str, default: int) -> int:
 
 
 # ── control-plane operations ────────────────────────────────────────────────
-def _create_db_instance(store: SqlStore, params: dict) -> RdsResponse:
+def _create_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsResponse:
     db_id = str(params.get("DBInstanceIdentifier", "")).strip()
     if not db_id:
         raise RdsError("InvalidParameterValue", "DBInstanceIdentifier is required.", 400)
     if store.instance_exists(db_id):
         raise RdsError("DBInstanceAlreadyExists", f"DBInstance {db_id} already exists.", 400)
     engine = str(params.get("Engine", "postgres")).lower()
+    ca_cert = str(params.get("CACertificateIdentifier", DEFAULT_CA))
+    _validate_ca_certificate(ca_cert)
     record = {
         "db_instance_identifier": db_id,
         "db_instance_class": str(params.get("DBInstanceClass", "db.t3.micro")),
@@ -460,7 +546,7 @@ def _create_db_instance(store: SqlStore, params: dict) -> RdsResponse:
         "db_parameter_group_name": str(params.get("DBParameterGroupName", "default")),
         "vpc_security_group_ids": _members(params, "VpcSecurityGroupIds") or ["sg-default"],
         "deletion_protection": str(params.get("DeletionProtection", "false")).lower() == "true",
-        "ca_certificate_identifier": str(params.get("CACertificateIdentifier", DEFAULT_CA)),
+        "ca_certificate_identifier": ca_cert,
         "created": _now(),
         "updated": _now(),
         "runtime_backend": "sqlite",  # Nano data-plane engine
@@ -473,7 +559,7 @@ def _create_db_instance(store: SqlStore, params: dict) -> RdsResponse:
     # needs no sqlite3 (a loadable Pyodide package), only the data plane does.
     store.mirror_create_instance(db_id, record)
     store.persist()
-    _log_event(store, db_id, "db-instance", f"DB instance {db_id} created.", ["creation"])
+    _log_event(store, db_id, "db-instance", f"DB instance {db_id} created.", ["creation"], msg_store)
     return _success("CreateDBInstance", _db_instance_xml(record))
 
 
@@ -489,8 +575,10 @@ def _describe_db_instances(store: SqlStore, params: dict) -> RdsResponse:
     return _success("DescribeDBInstances", inner)
 
 
-def _modify_db_instance(store: SqlStore, params: dict) -> RdsResponse:
+def _modify_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsResponse:
     db = _require_instance(store, str(params.get("DBInstanceIdentifier", "")).strip())
+    if params.get("CACertificateIdentifier") is not None:
+        _validate_ca_certificate(str(params["CACertificateIdentifier"]))
     for param, field_name, caster in (
         ("DBInstanceClass", "db_instance_class", str),
         ("AllocatedStorage", "allocated_storage", int),
@@ -506,11 +594,11 @@ def _modify_db_instance(store: SqlStore, params: dict) -> RdsResponse:
                 pass
     db["updated"] = _now()
     store.persist()
-    _log_event(store, db["db_instance_identifier"], "db-instance", "DB instance modified.", ["configuration change"])
+    _log_event(store, db["db_instance_identifier"], "db-instance", "DB instance modified.", ["configuration change"], msg_store)
     return _success("ModifyDBInstance", _db_instance_xml(db))
 
 
-def _set_status(store: SqlStore, params: dict, action: str, status: str) -> RdsResponse:
+def _set_status(store: SqlStore, params: dict, action: str, status: str, msg_store=None) -> RdsResponse:
     db = _require_instance(store, str(params.get("DBInstanceIdentifier", "")).strip())
     if db.get("deletion_protection") and action == "DeleteDBInstance":
         raise RdsError("InvalidParameterCombination",
@@ -518,11 +606,11 @@ def _set_status(store: SqlStore, params: dict, action: str, status: str) -> RdsR
     db["db_instance_status"] = status
     db["updated"] = _now()
     store.persist()
-    _log_event(store, db["db_instance_identifier"], "db-instance", f"DB instance status set to {status}.")
+    _log_event(store, db["db_instance_identifier"], "db-instance", f"DB instance status set to {status}.", msg_store=msg_store)
     return _success(action, _db_instance_xml(db))
 
 
-def _delete_db_instance(store: SqlStore, params: dict) -> RdsResponse:
+def _delete_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsResponse:
     db_id = str(params.get("DBInstanceIdentifier", "")).strip()
     db = _require_instance(store, db_id)
     if db.get("deletion_protection"):
@@ -536,7 +624,7 @@ def _delete_db_instance(store: SqlStore, params: dict) -> RdsResponse:
     store.drop_instance(db_id)
     store.mirror_delete_instance(db_id)
     store.persist()
-    _log_event(store, db_id, "db-instance", f"DB instance {db_id} deleted.", ["deletion"])
+    _log_event(store, db_id, "db-instance", f"DB instance {db_id} deleted.", ["deletion"], msg_store)
     return _success("DeleteDBInstance", _db_instance_xml(db))
 
 
@@ -555,7 +643,7 @@ def _make_snapshot(store: SqlStore, db: dict, snap_id: str, snapshot_type: str =
     return snap
 
 
-def _create_db_snapshot(store: SqlStore, params: dict) -> RdsResponse:
+def _create_db_snapshot(store: SqlStore, params: dict, msg_store=None) -> RdsResponse:
     db = _require_instance(store, str(params.get("DBInstanceIdentifier", "")).strip())
     snap_id = str(params.get("DBSnapshotIdentifier", "")).strip()
     if not snap_id:
@@ -567,7 +655,7 @@ def _create_db_snapshot(store: SqlStore, params: dict) -> RdsResponse:
     if tags:
         store.set_tags(_snapshot_arn(store, snap_id), tags)
     store.persist()
-    _log_event(store, db["db_instance_identifier"], "db-instance", f"Snapshot {snap_id} created.", ["backup"])
+    _log_event(store, db["db_instance_identifier"], "db-instance", f"Snapshot {snap_id} created.", ["backup"], msg_store)
     return _success("CreateDBSnapshot", _db_snapshot_xml(snap))
 
 
@@ -581,7 +669,7 @@ def _delete_db_snapshot(store: SqlStore, params: dict) -> RdsResponse:
     return _success("DeleteDBSnapshot", _db_snapshot_xml(snap))
 
 
-def _restore_db_instance_from_db_snapshot(store: SqlStore, params: dict) -> RdsResponse:
+def _restore_db_instance_from_db_snapshot(store: SqlStore, params: dict, msg_store=None) -> RdsResponse:
     snap_id = str(params.get("DBSnapshotIdentifier", "")).strip()
     snap = store.get_snapshot(snap_id)
     if not snap:
@@ -621,7 +709,7 @@ def _restore_db_instance_from_db_snapshot(store: SqlStore, params: dict) -> RdsR
     store.put_instance(db_id, record)
     store.mirror_create_instance(db_id, record)
     store.persist()
-    _log_event(store, db_id, "db-instance", f"DB instance {db_id} restored from snapshot {snap_id}.", ["creation"])
+    _log_event(store, db_id, "db-instance", f"DB instance {db_id} restored from snapshot {snap_id}.", ["creation"], msg_store)
     return _success("RestoreDBInstanceFromDBSnapshot", _db_instance_xml(record))
 
 
@@ -901,6 +989,7 @@ def _create_event_subscription(store: SqlStore, params: dict) -> RdsResponse:
         "cust_subscription_id": name,
         "sns_topic_arn": str(params.get("SnsTopicArn", "")),
         "source_type": str(params.get("SourceType", "db-instance")),
+        "event_categories": _members(params, "EventCategories"),
         "enabled": str(params.get("Enabled", "true")).lower() == "true",
         "status": "active",
         "customer_aws_id": store.account_id,
@@ -986,23 +1075,49 @@ def _describe_db_instance_automated_backups(store: SqlStore, params: dict) -> Rd
 
 
 # ── exports to S3 (a snapshot export is a status record; Nano has no
-# provisioning lag so it completes immediately) ─────────────────────────────
-def _start_export_task(store: SqlStore, params: dict) -> RdsResponse:
+# provisioning lag so it completes immediately) — REAL bytes land in the named
+# bucket (a manifest describing the export), so a bucket that doesn't exist
+# makes the task genuinely FAIL, the way a bad IAM role / bucket does in AWS. ─
+def _export_manifest_key(task_id: str, prefix: str) -> str:
+    key_prefix = f"{prefix.rstrip('/')}/" if prefix else ""
+    return f"{key_prefix}{task_id}/export_manifest.json"
+
+
+def _write_export_manifest(s3_store, task_id: str, source_arn: str, bucket: str, prefix: str) -> str:
+    """Returns "" on success, else a human-readable FailureCause."""
+    try:
+        from core import s3_object_core as s3c
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import s3_object_core as s3c  # type: ignore
+    manifest = {"exportTaskIdentifier": task_id, "sourceArn": source_arn, "exportTime": _now()}
+    body = json.dumps(manifest, indent=2).encode()
+    key = _export_manifest_key(task_id, prefix)
+    r = s3c.put_object(s3_store, bucket, key, body, {"content-type": "application/json"})
+    if r.status != 200:
+        return f"Unable to write to s3://{bucket}/{key}: the bucket does not exist."
+    return ""
+
+
+def _start_export_task(store: SqlStore, params: dict, s3_store=None) -> RdsResponse:
     task_id = str(params.get("ExportTaskIdentifier", "")).strip()
     if not task_id:
         raise RdsError("InvalidParameterValue", "ExportTaskIdentifier is required.", 400)
     if store.get_export_task(task_id):
         raise RdsError("ExportTaskAlreadyExistsFault", f"Export task {task_id} already exists.", 400)
     source_arn = str(params.get("SourceArn", ""))
+    bucket = str(params.get("S3BucketName", ""))
+    prefix = str(params.get("S3Prefix", ""))
+    failure_cause = _write_export_manifest(s3_store, task_id, source_arn, bucket, prefix) if s3_store is not None else ""
     record = {
         "export_task_identifier": task_id,
         "source_arn": source_arn,
         "source_type": "CLUSTER_SNAPSHOT" if ":cluster-snapshot:" in source_arn else "SNAPSHOT",
-        "s3_bucket": str(params.get("S3BucketName", "")),
-        "s3_prefix": str(params.get("S3Prefix", "")),
+        "s3_bucket": bucket,
+        "s3_prefix": prefix,
         "iam_role_arn": str(params.get("IamRoleArn", "")),
         "kms_key_id": str(params.get("KmsKeyId", "")),
-        "status": "COMPLETE",
+        "status": "FAILED" if failure_cause else "COMPLETE",
+        "failure_cause": failure_cause,
         "percent_progress": 100,
         "created": _now(),
         "task_end_time": _now(),
@@ -1146,6 +1261,22 @@ def _recommendations_for(store: SqlStore) -> list[dict]:
                 "recommendation": f"Update the CA certificate (currently {db.get('ca_certificate_identifier')}).",
                 "impact": "Security", "resource_arn": arn, "created": db.get("created", ""),
             })
+        if not db.get("backup_retention_period"):
+            recs.append({
+                "recommendation_id": f"rec-nobackup-{db_id}",
+                "severity": "high", "category": "reliability",
+                "detection": "Automated backups disabled",
+                "recommendation": "Set a backup retention period greater than 0 to enable automated backups.",
+                "impact": "Reliability", "resource_arn": arn, "created": db.get("created", ""),
+            })
+        if not db.get("deletion_protection"):
+            recs.append({
+                "recommendation_id": f"rec-delprot-{db_id}",
+                "severity": "medium", "category": "reliability",
+                "detection": "Deletion protection disabled",
+                "recommendation": "Enable deletion protection to guard against accidental deletion.",
+                "impact": "Reliability", "resource_arn": arn, "created": db.get("created", ""),
+            })
     return recs
 
 
@@ -1159,34 +1290,39 @@ def _describe_db_recommendations(store: SqlStore, params: dict) -> RdsResponse:
 # The single routing point for the native AWS RDS Query protocol — what an
 # unmodified aws-cli / boto3 RDS client speaks. `params` is the parsed
 # form-encoded body ({"Action": "CreateDBInstance", "DBInstanceIdentifier": ...}).
-def dispatch(store: SqlStore, params: dict | None = None) -> RdsResponse:
+def dispatch(store: SqlStore, params: dict | None = None, msg_store=None, s3_store=None) -> RdsResponse:
+    """`msg_store` (the shared SNS/SQS store) delivers real event-subscription
+    notifications; `s3_store` lets StartExportTask write a real object. Both
+    optional — omitting them keeps every action working, just without that
+    cross-service fan-out (e.g. the conformance tests that construct a bare
+    SqlStore)."""
     params = params if isinstance(params, dict) else {}
     action = str(params.get("Action", "")).strip()
     if not action:
         return _error("MissingAction", "The request must include an Action.", 400)
     try:
         if action == "CreateDBInstance":
-            return _create_db_instance(store, params)
+            return _create_db_instance(store, params, msg_store)
         if action == "DescribeDBInstances":
             return _describe_db_instances(store, params)
         if action == "ModifyDBInstance":
-            return _modify_db_instance(store, params)
+            return _modify_db_instance(store, params, msg_store)
         if action == "DeleteDBInstance":
-            return _delete_db_instance(store, params)
+            return _delete_db_instance(store, params, msg_store)
         if action == "StartDBInstance":
-            return _set_status(store, params, "StartDBInstance", "available")
+            return _set_status(store, params, "StartDBInstance", "available", msg_store)
         if action == "StopDBInstance":
-            return _set_status(store, params, "StopDBInstance", "stopped")
+            return _set_status(store, params, "StopDBInstance", "stopped", msg_store)
         if action == "RebootDBInstance":
-            return _set_status(store, params, "RebootDBInstance", "available")
+            return _set_status(store, params, "RebootDBInstance", "available", msg_store)
         if action == "CreateDBSnapshot":
-            return _create_db_snapshot(store, params)
+            return _create_db_snapshot(store, params, msg_store)
         if action == "DescribeDBSnapshots":
             return _describe_db_snapshots(store, params)
         if action == "DeleteDBSnapshot":
             return _delete_db_snapshot(store, params)
         if action == "RestoreDBInstanceFromDBSnapshot":
-            return _restore_db_instance_from_db_snapshot(store, params)
+            return _restore_db_instance_from_db_snapshot(store, params, msg_store)
         if action == "CreateDBSubnetGroup":
             return _create_db_subnet_group(store, params)
         if action == "DescribeDBSubnetGroups":
@@ -1236,7 +1372,7 @@ def dispatch(store: SqlStore, params: dict | None = None) -> RdsResponse:
         if action == "DescribeDBInstanceAutomatedBackups":
             return _describe_db_instance_automated_backups(store, params)
         if action == "StartExportTask":
-            return _start_export_task(store, params)
+            return _start_export_task(store, params, s3_store)
         if action == "CancelExportTask":
             return _cancel_export_task(store, params)
         if action == "DescribeExportTasks":
@@ -1255,6 +1391,8 @@ def dispatch(store: SqlStore, params: dict | None = None) -> RdsResponse:
             return _describe_db_engine_versions(store, params)
         if action == "DescribeDBRecommendations":
             return _describe_db_recommendations(store, params)
+        if action == "DescribeCertificates":
+            return _describe_certificates(store, params)
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)
     except RdsError as e:
         return _error(e.code, e.message, e.status)
@@ -1302,3 +1440,65 @@ async def aexecute_sql(store: SqlStore, db_instance_identifier: str, sql: str,
         return {"ok": True, **result}
     except Exception as e:
         return {"ok": False, "code": "SQLError", "message": str(e)}
+
+
+# ── explicit transactions (RDS Data API Begin/Execute/Commit/RollbackTransaction)
+# — a REAL cross-call transaction: statements run through a transaction id are
+# not autocommitted until CommitTransaction (or discarded on Rollback). The
+# connection limit enforced here is the instance's OWN max_connections, read
+# live from its attached DB parameter group — so raising/lowering that
+# parameter in the console genuinely changes how many transactions can be open
+# at once (ModifyDBParameterGroup round-trips into real enforcement, not just
+# storage). ───────────────────────────────────────────────────────────────
+def _max_connections_for(store: SqlStore, db: dict) -> int | None:
+    pg = store.get_parameter_group(db.get("db_parameter_group_name", ""))
+    if not pg:
+        return None
+    p = (pg.get("parameters") or {}).get("max_connections")
+    if not p:
+        return None
+    try:
+        return int(p.get("parameter_value"))
+    except (TypeError, ValueError):
+        return None
+
+
+async def abegin_transaction(store: SqlStore, db_instance_identifier: str) -> dict:
+    """Returns {ok, transactionId} or {ok:False, code, message}."""
+    err = _dataplane_precheck(store, db_instance_identifier)
+    if err:
+        return err
+    db = store.get_instance(db_instance_identifier)
+    limit = _max_connections_for(store, db)
+    try:
+        tx_id = await store.abegin_transaction(db_instance_identifier, limit=limit)
+        return {"ok": True, "transactionId": tx_id}
+    except TransactionLimitError as e:
+        return {"ok": False, "code": "BadRequestException", "message": str(e)}
+
+
+async def aexecute_in_transaction(store: SqlStore, transaction_id: str, sql: str,
+                                  params: list | None = None) -> dict:
+    try:
+        result = await store.aexecute_in_transaction(transaction_id, sql, params)
+        return {"ok": True, **result}
+    except TransactionError as e:
+        return {"ok": False, "code": "TransactionNotFoundException", "message": str(e)}
+    except Exception as e:
+        return {"ok": False, "code": "SQLError", "message": str(e)}
+
+
+async def acommit_transaction(store: SqlStore, transaction_id: str) -> dict:
+    ok = await store.acommit_transaction(transaction_id)
+    if not ok:
+        return {"ok": False, "code": "TransactionNotFoundException",
+                "message": f"Transaction {transaction_id} is not found or has expired."}
+    return {"ok": True}
+
+
+async def arollback_transaction(store: SqlStore, transaction_id: str) -> dict:
+    ok = await store.arollback_transaction(transaction_id)
+    if not ok:
+        return {"ok": False, "code": "TransactionNotFoundException",
+                "message": f"Transaction {transaction_id} is not found or has expired."}
+    return {"ok": True}

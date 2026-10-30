@@ -77,7 +77,7 @@
   },
   "limitations": [
    "The data plane is a real engine (sqlite3 by default, PGlite real Postgres on Nano) reached only through the RDS Data API (ExecuteStatement/BatchExecuteStatement) — Vyomi does not expose the Postgres/MySQL wire protocol directly, so an unmodified psycopg2/mysqlclient TCP connection cannot reach it.",
-   "Transactions are accepted (BeginTransaction/CommitTransaction/RollbackTransaction) for SDK compatibility, but each statement autocommits — there is no cross-call rollback yet."
+   "BeginTransaction/ExecuteStatement(transactionId)/CommitTransaction/RollbackTransaction are REAL cross-call transactions — a statement that carries the transaction id runs against a connection held open since BeginTransaction and is not committed until CommitTransaction (discarded on Rollback); how many can be open at once is capped by the instance's own max_connections. A statement reading a different connection while a transaction is uncommitted can see a 'database is locked' error on the sqlite engine (Nano's default) instead of Postgres-style MVCC snapshot isolation — a sqlite-specific gap, not present on the PGlite (real Postgres) engine."
   ],
   "tests": [
    "tests/conformance/test_rds_data_core.py",
@@ -104,10 +104,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "Parameters are stored and returned exactly as modified (ModifyDBParameterGroup round-trips through DescribeDBParameters), but Vyomi does not apply them to the SQL engine — the data plane's real behaviour (e.g. max_connections) is unaffected."
+   "Parameters are stored and returned exactly as modified (ModifyDBParameterGroup round-trips through DescribeDBParameters). max_connections is ENFORCED against the RDS Data API's real transactions (rds.data-api) — BeginTransaction on an instance already at its parameter group's max_connections is rejected, not silently accepted; lowering/raising the value genuinely changes that ceiling. Every other parameter (shared_buffers, log_min_duration_statement, innodb_buffer_pool_size, …) remains stored/returned only, with no effect on the underlying SQL engine."
   ],
   "tests": [
-   "tests/conformance/test_rds_console_v4_core.py"
+   "tests/conformance/test_rds_console_v4_core.py",
+   "tests/conformance/test_rds_data_core.py"
   ]
  },
  "rds.events": {
@@ -152,11 +153,11 @@
  "rds.event-subscriptions": {
   "title": "Event subscriptions",
   "level": {
-   "nano": "limited",
-   "offline": "limited"
+   "nano": "full",
+   "offline": "full"
   },
   "limitations": [
-   "Subscription metadata CRUD is real; Vyomi never actually publishes a notification to the SNS topic when a matching event occurs."
+   "An enabled subscription whose SourceType/EventCategories match really publishes to its SnsTopicArn (through the same sns_core.publish_arn seam EventBridge targets use) when the matching RDS control-plane event fires — not just a stored record. Delivery covers the same control-plane events rds.events logs (create/modify/delete/lifecycle/snapshot); AWS's fuller category list (e.g. failover, low-storage) isn't generated, matching rds.events' own scope."
   ],
   "tests": [
    "tests/conformance/test_rds_console_v4_core.py"
@@ -261,7 +262,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "DescribeDBRecommendations derives real advisories from each instance's own live configuration (no Multi-AZ, an outdated CA certificate); Vyomi has no general analysis engine, so it does not generate the full category of recommendations AWS's own monitoring produces (e.g. storage autoscaling, parameter tuning)."
+   "DescribeDBRecommendations derives four real advisories from each instance's own live configuration (no Multi-AZ, an outdated CA certificate, automated backups disabled, deletion protection disabled); Vyomi has no general analysis engine, so it does not generate the full category of recommendations AWS's own monitoring produces (e.g. storage autoscaling, parameter tuning)."
   ],
   "tests": [
    "tests/conformance/test_rds_console_v4_core.py"
@@ -274,7 +275,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "StartExportTask/CancelExportTask/DescribeExportTasks is real, stateful metadata CRUD; Nano has no provisioning lag so a started export completes immediately, and no bytes are actually written to the named S3 bucket."
+   "StartExportTask/CancelExportTask/DescribeExportTasks is real, stateful metadata CRUD that now writes a real manifest object into the named S3 bucket (through the same s3_object_core.put_object every S3 PutObject uses) — a bucket that doesn't exist makes the task genuinely FAIL (Status=FAILED + FailureCause), not silently succeed. Nano has no provisioning lag so a started export completes immediately, and the manifest doesn't carry the snapshot's actual table data — no per-table Parquet dump is produced."
   ],
   "tests": [
    "tests/conformance/test_rds_console_v4_core.py"
@@ -287,7 +288,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "CACertificateIdentifier is a real, settable field (CreateDBInstance/ModifyDBInstance); any instance whose CA differs from the current default (rds-ca-rsa2048-g1) is flagged on the certificate-update page. Vyomi does not model real CA expiry dates or actually rotate the certificate a connection presents."
+   "CACertificateIdentifier is validated on CreateDBInstance/ModifyDBInstance against a real, small CA catalog (DescribeCertificates) — the same identifiers and validity windows AWS publishes (rds-ca-rsa2048-g1, rds-ca-rsa4096-g1, rds-ca-ecc384-g1, the retired rds-ca-2019); an unknown id is rejected (CertificateNotFound), and any instance whose CA differs from the current default is flagged on the certificate-update page with its REAL ValidFrom/ValidTill (no more placeholder dates), with a working 'Apply update now' that really calls ModifyDBInstance. Vyomi does not enforce wall-clock cert expiry at connection time — a cert past its ValidTill doesn't actually block anything."
   ],
   "tests": [
    "tests/conformance/test_rds_console_v4_core.py"

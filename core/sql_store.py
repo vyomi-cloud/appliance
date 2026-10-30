@@ -25,9 +25,19 @@ State shapes:
 from __future__ import annotations
 
 import threading
+import uuid
 from typing import Any
 
 DEFAULT_ACCOUNT_ID = "123456789012"  # matches core.app_context.AWS_ACCOUNT_ID
+
+
+class TransactionError(Exception):
+    """An RDS Data API transaction op (Begin/Execute/Commit/Rollback) referenced
+    an id that isn't open."""
+
+
+class TransactionLimitError(TransactionError):
+    """BeginTransaction would exceed the instance's max_connections."""
 
 
 class SqlStore:
@@ -51,6 +61,10 @@ class SqlStore:
         self.account_id = account_id
         self._conns: dict[str, Any] = {}  # instance_id -> live DB connection
         self._lock = threading.RLock()    # serializes sqlite3 access across request threads
+        self._tx_ns = uuid.uuid4().hex    # disambiguates shared-cache sqlite URIs between store instances
+        self._tx_conns: dict[str, Any] = {}   # transaction_id -> its own held-open connection
+        self._tx_db: dict[str, str] = {}      # transaction_id -> instance id
+        self._tx_count: dict[str, int] = {}   # instance id -> count of open explicit transactions
 
     # ── instance metadata accessors ───────────────────────────────────
     def instance_exists(self, db_id: str) -> bool:
@@ -230,19 +244,28 @@ class SqlStore:
         return "?"
 
     # ── the SQL engine (data plane) ───────────────────────────────────
-    def _connect(self):
-        """Open a fresh DB connection. Override to back the engine with a real
-        Postgres/MySQL or PGlite. Default: an in-memory sqlite3 database.
+    def _connect(self, db_id: str):
+        """Open a fresh DB connection onto the instance's data. Override to back
+        the engine with a real Postgres/MySQL or PGlite. Default: a shared-cache
+        sqlite3 in-memory database keyed by instance id + this store's identity
+        (`_tx_ns`) — "shared-cache" so a SECOND connection (held open for an
+        explicit Data API transaction, see begin_transaction()) sees the SAME
+        data as the one-shot connection open_engine() keeps for execute_sql().
+        `isolation_level=None` puts sqlite in pure passthrough mode: statements
+        commit immediately UNLESS an explicit BEGIN is outstanding on that
+        connection, which is exactly the autocommit-by-default / explicit-
+        transaction-when-asked contract the RDS Data API needs.
         `check_same_thread=False` because a threading HTTP server (dev_server.py, the
         offline appliance) may service the request that opens an instance and the request
         that later queries it on two different worker threads; `self._lock` below is what
         actually serializes access, the same pairing core/vyomi_platform.py uses."""
         import sqlite3  # lazy: a loadable package under Pyodide, stdlib on host
-        return sqlite3.connect(":memory:", check_same_thread=False)
+        uri = f"file:nano-rds-{self._tx_ns}-{db_id}?mode=memory&cache=shared"
+        return sqlite3.connect(uri, uri=True, check_same_thread=False, isolation_level=None)
 
     def open_engine(self, db_id: str):
         if db_id not in self._conns:
-            self._conns[db_id] = self._connect()
+            self._conns[db_id] = self._connect(db_id)
         return self._conns[db_id]
 
     def close_engine(self, db_id: str) -> None:
@@ -252,21 +275,35 @@ class SqlStore:
                 conn.close()
             except Exception:
                 pass
+        for tx_id in [t for t, d in self._tx_db.items() if d == db_id]:
+            self._tx_db.pop(tx_id, None)
+            tconn = self._tx_conns.pop(tx_id, None)
+            if tconn is not None:
+                try:
+                    tconn.close()
+                except Exception:
+                    pass
+        self._tx_count.pop(db_id, None)
+
+    @staticmethod
+    def _run_cursor(cur, sql: str, params: list | None) -> dict:
+        cur.execute(sql, list(params or []))
+        if cur.description:
+            columns = [d[0] for d in cur.description]
+            rows = [list(r) for r in cur.fetchall()]
+            return {"columns": columns, "rows": rows, "rowcount": len(rows)}
+        return {"columns": [], "rows": [], "rowcount": cur.rowcount}
 
     def execute_sql(self, db_id: str, sql: str, params: list | None = None) -> dict:
         """Run ONE SQL statement against the instance's real engine. Returns
-        {columns, rows, rowcount} — rows for a SELECT, rowcount for DML."""
+        {columns, rows, rowcount} — rows for a SELECT, rowcount for DML. Always
+        autocommits (no outstanding explicit BEGIN on this connection) — use
+        begin_transaction()/execute_in_transaction() for cross-call atomicity."""
         with self._lock:
             conn = self.open_engine(db_id)
             cur = conn.cursor()
             try:
-                cur.execute(sql, list(params or []))
-                if cur.description:
-                    columns = [d[0] for d in cur.description]
-                    rows = [list(r) for r in cur.fetchall()]
-                    result = {"columns": columns, "rows": rows, "rowcount": len(rows)}
-                else:
-                    result = {"columns": [], "rows": [], "rowcount": cur.rowcount}
+                result = self._run_cursor(cur, sql, params)
                 conn.commit()
                 return result
             finally:
@@ -278,6 +315,72 @@ class SqlStore:
         real Postgres/MySQL in Pro/Max) work unchanged through the async path. An
         ASYNC engine — PGlite over the real Postgres wire — overrides ONLY this."""
         return self.execute_sql(db_id, sql, params)
+
+    # ── explicit, cross-call transactions (RDS Data API Begin/Execute/Commit/
+    # RollbackTransaction) — a SECOND connection onto the SAME instance data,
+    # held open across calls instead of the one-shot autocommit connection
+    # above. Default (sqlite shared-cache): ONE open transaction at a time is
+    # unlimited by the engine itself; `limit` (the instance's max_connections,
+    # resolved by rds_core from its DB parameter group) is what RDS enforces. ─
+    def begin_transaction(self, db_id: str, limit: int | None = None) -> str:
+        with self._lock:
+            if limit is not None and self._tx_count.get(db_id, 0) >= limit:
+                raise TransactionLimitError(
+                    f"DB instance {db_id} already has {limit} open connection(s) "
+                    "(max_connections) — close one before starting another transaction.")
+            self.open_engine(db_id)  # make sure the instance's data/engine already exists
+            conn = self._connect(db_id)
+            cur = conn.cursor()
+            cur.execute("BEGIN")
+            cur.close()
+            tx_id = f"tx-{uuid.uuid4().hex[:24]}"
+            self._tx_conns[tx_id] = conn
+            self._tx_db[tx_id] = db_id
+            self._tx_count[db_id] = self._tx_count.get(db_id, 0) + 1
+            return tx_id
+
+    def execute_in_transaction(self, tx_id: str, sql: str, params: list | None = None) -> dict:
+        with self._lock:
+            conn = self._tx_conns.get(tx_id)
+            if conn is None:
+                raise TransactionError(f"Invalid transaction ID: {tx_id}")
+            cur = conn.cursor()
+            try:
+                return self._run_cursor(cur, sql, params)
+            finally:
+                cur.close()
+
+    def _end_transaction(self, tx_id: str, commit: bool) -> bool:
+        with self._lock:
+            conn = self._tx_conns.pop(tx_id, None)
+            db_id = self._tx_db.pop(tx_id, None)
+            if conn is None or db_id is None:
+                return False
+            try:
+                conn.commit() if commit else conn.rollback()
+            finally:
+                conn.close()
+                self._tx_count[db_id] = max(0, self._tx_count.get(db_id, 1) - 1)
+            return True
+
+    def commit_transaction(self, tx_id: str) -> bool:
+        return self._end_transaction(tx_id, commit=True)
+
+    def rollback_transaction(self, tx_id: str) -> bool:
+        return self._end_transaction(tx_id, commit=False)
+
+    async def abegin_transaction(self, db_id: str, limit: int | None = None) -> str:
+        """Async twin — see aexecute_sql. Overridden by PGliteSqlStore."""
+        return self.begin_transaction(db_id, limit=limit)
+
+    async def aexecute_in_transaction(self, tx_id: str, sql: str, params: list | None = None) -> dict:
+        return self.execute_in_transaction(tx_id, sql, params)
+
+    async def acommit_transaction(self, tx_id: str) -> bool:
+        return self.commit_transaction(tx_id)
+
+    async def arollback_transaction(self, tx_id: str) -> bool:
+        return self.rollback_transaction(tx_id)
 
     # ── optional hooks (no-ops in the base) ───────────────────────────
     def persist(self) -> None:
@@ -326,10 +429,10 @@ class PGliteSqlStore(SqlStore):
             self._aconns[db_id] = await factory()
         return self._aconns[db_id]
 
-    async def aexecute_sql(self, db_id: str, sql: str, params: list | None = None) -> dict:
+    @staticmethod
+    async def _arun(db, sql: str, params: list | None) -> dict:
         from pyodide.ffi import to_js  # lazy: Pyodide-only
         from js import Object
-        db = await self._aopen(db_id)
         opts = to_js({"rowMode": "array"}, dict_converter=Object.fromEntries)
         res = await db.query(sql, to_js(list(params or [])), opts)
         columns = [f.name for f in res.fields]
@@ -338,6 +441,53 @@ class PGliteSqlStore(SqlStore):
         rowcount = int(affected) if affected is not None else len(rows)
         return {"columns": columns, "rows": rows, "rowcount": rowcount}
 
+    async def aexecute_sql(self, db_id: str, sql: str, params: list | None = None) -> dict:
+        db = await self._aopen(db_id)
+        return await self._arun(db, sql, params)
+
     def close_engine(self, db_id: str) -> None:
         super().close_engine(db_id)
         self._aconns.pop(db_id, None)
+        self._tx_db = {t: d for t, d in self._tx_db.items() if d != db_id}
+        self._tx_count.pop(db_id, None)
+
+    # ── explicit transactions — ONE PGlite connection per instance, so only
+    # ONE open explicit transaction at a time is possible (there is no second
+    # connection to hold open); `limit` (max_connections) can only ever shrink
+    # that to zero, never raise it above one. ──────────────────────────────
+    async def abegin_transaction(self, db_id: str, limit: int | None = None) -> str:
+        if limit is not None and limit < 1:
+            raise TransactionLimitError(
+                f"DB instance {db_id} has max_connections={limit} — no connection available.")
+        if self._tx_count.get(db_id, 0) > 0:
+            raise TransactionLimitError(
+                f"DB instance {db_id} already has an open transaction "
+                "(the PGlite engine holds a single connection per instance).")
+        db = await self._aopen(db_id)
+        await db.query("BEGIN")
+        tx_id = f"tx-{uuid.uuid4().hex[:24]}"
+        self._tx_db[tx_id] = db_id
+        self._tx_count[db_id] = 1
+        return tx_id
+
+    async def aexecute_in_transaction(self, tx_id: str, sql: str, params: list | None = None) -> dict:
+        db_id = self._tx_db.get(tx_id)
+        if db_id is None:
+            raise TransactionError(f"Invalid transaction ID: {tx_id}")
+        db = await self._aopen(db_id)
+        return await self._arun(db, sql, params)
+
+    async def _aend_transaction(self, tx_id: str, commit: bool) -> bool:
+        db_id = self._tx_db.pop(tx_id, None)
+        if db_id is None:
+            return False
+        self._tx_count[db_id] = max(0, self._tx_count.get(db_id, 1) - 1)
+        db = await self._aopen(db_id)
+        await db.query("COMMIT" if commit else "ROLLBACK")
+        return True
+
+    async def acommit_transaction(self, tx_id: str) -> bool:
+        return await self._aend_transaction(tx_id, commit=True)
+
+    async def arollback_transaction(self, tx_id: str) -> bool:
+        return await self._aend_transaction(tx_id, commit=False)
