@@ -12,6 +12,16 @@ space-scoped state (core.app_context `_SpaceScopedDictProxy`):
     GCS       buckets / objects              -> service_states["gcp_gcp_storage"]{buckets,objects}
     DynamoDB  tables                         -> service_states["dynamodb"]{tables}
 
+  v4 C0b adds (new state — the pre-v4 handlers kept these in memory / Vault / Azurite):
+    Azure Blob      containers / blobs       -> service_states["azure_azure_blob"]{containers,blobs}
+                    (container keys are "{account}/{container}"; bytes inline, mirrored to
+                     Azurite when CLOUDLEARN_AZURITE_URL is reachable; pre-v4 Azurite blobs
+                     are adopted lazily — metadata imported, bytes fetched on read)
+    Secret Manager  secrets                  -> service_states["gcp_gcp_secretmanager"]{secrets}
+    Cloud KMS       keys / material / rings  -> service_states["gcp_gcp_kms"]{keys,material,aliases,rings}
+                    (pre-v4 Vault-backed secrets / key index are adopted on first use; Vault
+                     transit ciphertext still decrypts through `legacy_decrypt`)
+
 The cores were extracted from the appliance handlers, so the shapes are identical.
 Consequences:
   * every v3 consumer of that state — the classic console REST (/api/s3/*,
@@ -34,6 +44,9 @@ import logging
 import threading
 import time
 
+from core.azure_blob_core import AzureBlobStore
+from core.kms_keystore import InMemoryKmsEngine, KeyStore
+from core.kv_store import KvStore
 from core.nosql_store import NoSqlStore
 from core.object_store import ObjectStore
 
@@ -152,8 +165,236 @@ class AppStateNoSqlStore(NoSqlStore):
     backups = property(lambda self: self._b)
 
 
+def _active_space_id() -> str:
+    """The active space id (the namespace the pre-v4 Vault / Azurite handlers used)."""
+    try:
+        from core.app_context import STATE
+        return (STATE.get("spaces") or {}).get("active_space_id", "") or "global"
+    except Exception:
+        return "global"
+
+
+def _http_date() -> str:
+    import email.utils
+    return email.utils.formatdate(usegmt=True)
+
+
+class AppStateAzureBlobStore(AzureBlobStore):
+    """azure_blob_core store over the appliance's space-scoped Azure state."""
+
+    def __init__(self, containers, blobs, *, azurite=None):
+        # NB: no super().__init__() — the dicts are the shared, persisted proxies.
+        self._c, self._bl = containers, blobs
+        self._az = azurite          # module with the core.azure_blob_store API, or None
+        self._adopted: set = set()
+
+    containers = property(lambda self: self._c)
+    blobs = property(lambda self: self._bl)
+
+    @staticmethod
+    def _split(container_key: str) -> tuple[str, str]:
+        acct, _, cont = container_key.partition("/")
+        return (acct, cont) if cont else ("devstoreaccount1", acct)
+
+    def _azurite(self):
+        try:
+            return self._az if (self._az and self._az.available()) else None
+        except Exception:
+            return None
+
+    def mirror_put(self, container, blob, entry):
+        az = self._azurite()
+        if az:
+            try:
+                acct, cont = self._split(container)
+                az.put_blob(_active_space_id(), acct, cont, blob, bytes(entry.get("data") or b""),
+                            entry.get("content_type"), entry.get("metadata") or {})
+            except Exception:
+                pass
+
+    def mirror_delete(self, container, blob):
+        az = self._azurite()
+        if az:
+            try:
+                acct, cont = self._split(container)
+                az.delete_blob(_active_space_id(), acct, cont, blob)
+            except Exception:
+                pass
+
+    def mirror_delete_container(self, container):
+        az = self._azurite()
+        if az:
+            try:
+                acct, cont = self._split(container)
+                az.delete_container(_active_space_id(), acct, cont)
+            except Exception:
+                pass
+
+    def fetch_bytes(self, container, blob):
+        az = self._azurite()
+        if not az:
+            return None
+        try:
+            acct, cont = self._split(container)
+            rec = az.get_blob(_active_space_id(), acct, cont, blob)
+            return rec.get("data") if rec else None
+        except Exception:
+            return None
+
+    def adopt(self, account: str) -> None:
+        """Import (once per space+account) the blobs a pre-v4 appliance stored in
+        Azurite, so an upgrade keeps them visible. Metadata only — bytes are read
+        through `fetch_bytes` on first GET."""
+        key = (_active_space_id(), account)
+        if key in self._adopted:
+            return
+        self._adopted.add(key)
+        az = self._azurite()
+        if not az:
+            return
+        try:
+            sid = key[0]
+            for cont in az.list_containers(sid, account):
+                ck = f"{account}/{cont}"
+                if ck not in self.containers:
+                    self.containers[ck] = {"created": _http_date()}
+                objs = self.container_blobs(ck)
+                for o in az.list_blobs(sid, account, cont):
+                    if o["name"] in objs:
+                        continue
+                    objs[o["name"]] = {
+                        "data": None, "size": int(o.get("size") or 0),
+                        "content_type": o.get("contentType") or "application/octet-stream",
+                        "blob_type": "BlockBlob", "etag": o.get("etag") or '"0x0"',
+                        "last_modified": o.get("lastModified") or _http_date(),
+                        "created": o.get("lastModified") or _http_date(),
+                        "md5": "", "metadata": {}}
+        except Exception as exc:   # never break the data plane over a migration
+            _log.warning("azure blob: Azurite adoption skipped: %s", exc)
+
+
+class AppStateKvStore(KvStore):
+    """gcp_secretmanager_core store over the appliance's space-scoped GCP state."""
+
+    def __init__(self, secrets, account_id: str = ""):
+        self._s = secrets
+        self.account_id = account_id
+        self._adopted: set = set()
+
+    secrets = property(lambda self: self._s)
+
+    def adopt(self, project: str) -> None:
+        """Import (once per space) the secrets a pre-v4 appliance kept in Vault KV
+        (name index + every version) into `project`, so an upgrade keeps them."""
+        sid = _active_space_id()
+        if sid in self._adopted:
+            return
+        self._adopted.add(sid)
+        try:
+            from core import vault_client as vc
+            from core import vault_routes as vr
+            if not vc.available():
+                return
+            import base64 as _b64
+            for name in vr._gcp_idx_get(sid, "secrets"):
+                key = f"{project}/{name}"
+                if key in self.secrets:
+                    continue
+                created = vr._gcp_idx_created(sid, "secrets").get(name) or ""
+                versions, n = {}, 0
+                for meta in vc.kv_list_versions("gcp", sid, name):
+                    v = int(meta.get("version") or 0)
+                    got = vc.kv_get("gcp", sid, name, version=v) or {}
+                    data = (got.get("data") or {})
+                    raw = data.get("value") if "value" in data else None
+                    destroyed = bool(meta.get("destroyed")) or raw is None
+                    versions[v] = {"data": None if destroyed else _b64.b64encode(str(raw).encode()).decode(),
+                                   "state": "DESTROYED" if destroyed else "ENABLED",
+                                   "createTime": meta.get("created_time") or created}
+                    n = max(n, v)
+                self.secrets[key] = {"name": f"projects/{project}/secrets/{name}", "project": project,
+                                     "secretId": name, "createTime": created or _http_date(),
+                                     "replication": {"automatic": {}}, "labels": {},
+                                     "versions": versions, "version_counter": n}
+        except Exception as exc:
+            _log.warning("gcp secret manager: Vault adoption skipped: %s", exc)
+
+
+class AppStateKeyStore(KeyStore):
+    """gcp_kms_core store over the appliance's space-scoped GCP state. Key material
+    lives in that (persisted) state, so keys survive a restart and encrypt/decrypt
+    round-trips across it; the crypto is the shared core's KmsEngine."""
+
+    def __init__(self, keys, material, aliases, rings, account_id: str = ""):
+        self._k, self._m, self._a, self._r = keys, material, aliases, rings
+        self.engine = InMemoryKmsEngine()
+        self.account_id = account_id
+        self._adopted: set = set()
+
+    keys = property(lambda self: self._k)
+    material = property(lambda self: self._m)
+    aliases = property(lambda self: self._a)
+    gcp_key_rings = property(lambda self: self._r)
+
+    def get_material(self, key_id):
+        m = self._m.get(key_id)
+        return m.encode("latin-1") if isinstance(m, str) else m
+
+    def legacy_decrypt(self, name: str, blob: bytes):
+        """Ciphertext minted by the pre-v4 Vault-transit handler (`vault:v1:…`)."""
+        try:
+            text = blob.decode("ascii")
+        except Exception:
+            return None
+        if not text.startswith("vault:"):
+            return None
+        try:
+            import base64 as _b64
+            from core import vault_client as vc
+            segs = name.split("/")
+            pt = vc.transit_decrypt("gcp", _active_space_id(), f"{segs[5]}__{segs[7]}", text)
+            return _b64.b64decode(pt) if pt is not None else None
+        except Exception:
+            return None
+
+    def adopt(self, project: str) -> None:
+        """Register (once per space) the key rings / crypto keys a pre-v4 appliance
+        indexed in Vault, so an upgrade keeps them listed. Fresh material is minted
+        for new encrypts; old Vault ciphertext still decrypts via legacy_decrypt."""
+        sid = _active_space_id()
+        if sid in self._adopted:
+            return
+        self._adopted.add(sid)
+        try:
+            from core import vault_client as vc
+            from core import vault_routes as vr
+            if not vc.available():
+                return
+            created = vr._gcp_idx_created(sid, "kms")
+            for entry in vr._gcp_idx_get(sid, "kms"):
+                ring, _, key = entry.partition("/")
+                if not key:
+                    continue
+                rname = f"projects/{project}/locations/global/keyRings/{ring}"
+                when = created.get(entry) or _http_date()
+                if rname not in self._r:
+                    self._r[rname] = {"createTime": when}
+                kname = f"{rname}/cryptoKeys/{key}"
+                if kname not in self._k:
+                    meta = (vc.kv_get("gcp", sid, f"__kmsmeta__{key}") or {}).get("data") or {}
+                    self.put_key(kname, {
+                        "purpose": "ENCRYPT_DECRYPT", "algorithm": "GOOGLE_SYMMETRIC_ENCRYPTION",
+                        "createTime": when, "primary": "1",
+                        "versions": {"1": {"state": "ENABLED", "createTime": when}},
+                        **({"labels": meta["labels"]} if isinstance(meta, dict) and meta.get("labels") else {}),
+                        **({"rotationPeriod": meta["rotation_period"]} if isinstance(meta, dict) and meta.get("rotation_period") else {}),
+                    }, self.engine.new_key_material())
+        except Exception as exc:
+            _log.warning("gcp kms: Vault adoption skipped: %s", exc)
+
+
 # ── singletons ─────────────────────────────────────────────────────────────
-_S3 = _GCS = _DDB = None
+_S3 = _GCS = _DDB = _AZB = _GSEC = _GKMS = None
 
 
 def s3_store() -> AppStateObjectStore:
@@ -229,3 +470,36 @@ def ddb_store() -> AppStateNoSqlStore:
                                   account_id=ctx.AWS_ACCOUNT_ID,
                                   backups=_proxy("dynamodb", ctx.ddb_state.default_factory, "backups"))
     return _DDB
+
+
+def az_blob_store() -> AppStateAzureBlobStore:
+    global _AZB
+    if _AZB is None:
+        factory = lambda: {"containers": {}, "blobs": {}}   # noqa: E731
+        try:
+            from core import azure_blob_store as azurite
+        except Exception:
+            azurite = None
+        _AZB = AppStateAzureBlobStore(_proxy("azure_blob", factory, "containers"),
+                                      _proxy("azure_blob", factory, "blobs"), azurite=azurite)
+    return _AZB
+
+
+def gcp_secrets_store() -> AppStateKvStore:
+    global _GSEC
+    if _GSEC is None:
+        from core import app_context as ctx
+        _GSEC = AppStateKvStore(_proxy("gcp_secretmanager", lambda: {"secrets": {}}, "secrets"),
+                                account_id=ctx.AWS_ACCOUNT_ID)
+    return _GSEC
+
+
+def gcp_kms_store() -> AppStateKeyStore:
+    global _GKMS
+    if _GKMS is None:
+        from core import app_context as ctx
+        factory = lambda: {"keys": {}, "material": {}, "aliases": {}, "rings": {}}   # noqa: E731
+        _GKMS = AppStateKeyStore(_proxy("gcp_kms", factory, "keys"), _proxy("gcp_kms", factory, "material"),
+                                 _proxy("gcp_kms", factory, "aliases"), _proxy("gcp_kms", factory, "rings"),
+                                 account_id=ctx.AWS_ACCOUNT_ID)
+    return _GKMS

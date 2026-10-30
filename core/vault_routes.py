@@ -1164,9 +1164,38 @@ def _register_aws_console(app: FastAPI) -> None:
         return {"ok": True, "scheduled": True, "key_id": key_id}
 
 
+class _SkipRoutes:
+    """Proxy `app` for a legacy registrar: route decorators whose path starts with
+    one of `prefixes` become no-ops (that surface is served by the shared cores)."""
+
+    def __init__(self, app, prefixes):
+        self._app, self._prefixes = app, tuple(prefixes)
+
+    def __getattr__(self, name):
+        attr = getattr(self._app, name)
+        if name not in ("get", "post", "put", "patch", "delete", "api_route"):
+            return attr
+
+        def deco_factory(path, *a, **kw):
+            if path.startswith(self._prefixes):
+                return lambda fn: fn
+            return attr(path, *a, **kw)
+        return deco_factory
+
+
 def register(app: FastAPI, aws_dispatchers: dict | None = None) -> None:
-    """Mount GCP + Azure routes and expose AWS dispatchers for server.py to wire."""
-    _register_gcp(app)
+    """Mount GCP + Azure routes and expose AWS dispatchers for server.py to wire.
+
+    v4 C0b: GCP Secret Manager / Cloud KMS (native + classic console REST) are served by
+    the shared cores (routes/gcp_secrets_kms_unified.py) unless opted out; the Vault
+    handlers below are then not registered for those paths."""
+    skip: set = set()
+    try:
+        from routes import gcp_secrets_kms_unified as _gsk
+        skip = _gsk.register(app)
+    except Exception as exc:   # never let this break appliance boot — legacy stays
+        print(f"[wire_ingress] GCP secrets/KMS core mount skipped: {exc}")
+    _register_gcp(_SkipRoutes(app, skip) if skip else app)
     _register_azure(app)
     _register_aws_console(app)
     if aws_dispatchers is not None:

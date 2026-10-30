@@ -85,7 +85,8 @@ def run() -> int:
                         json.dumps({"plaintext": base64.b64encode(secret).decode()}).encode())
     _check("encrypt 200", enc.status == 200)
     eo = _jbody(enc)
-    _check("encrypt name is cryptoKey", eo["name"] == key_name)
+    # EncryptResponse.name is the CryptoKeyVersion used (real Cloud KMS wire).
+    _check("encrypt name is the primary cryptoKeyVersion", eo["name"] == key_name + "/cryptoKeyVersions/1")
     _check("encrypt returns ciphertext", bool(eo.get("ciphertext")))
     ciphertext = base64.b64decode(eo["ciphertext"])
     _check("ciphertext != plaintext", ciphertext != secret)
