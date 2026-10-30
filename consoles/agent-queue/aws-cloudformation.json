@@ -1,0 +1,18 @@
+{
+ "cloud": "aws",
+ "service": "cloudformation",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Every page in ui-spec/aws/cloudformation.json (17 pages; nav: Stacks, Stack refactors, StackSets, Exports, IaC generator, Template studio, Hooks overview, Invocation summary, Hooks, Registry, Spotlight)",
+  "Backend: grep core/ providers/ server.py for CloudFormation (stacks, change sets, templates); if no engine exists, add a self-contained core with conformance tests that creates/updates/deletes stacks by provisioning the template's resources through the existing cores, and render anything it can't model as NotSimulated",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/aws/cloudformation.json: one entry per console section, ids start with 'aws.cloudformation.'; tests/conformance/test_capabilities.py must pass",
+  "Keep consoles/src/aws/kit/Capability.jsx as on base (add your JSON import), list the service ONCE in registry.js",
+  "Register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py — tests/conformance/test_nano_core_manifest.py checks this",
+  "Use unique variable names in consoles/tests/smoke-aws.mjs (other blocks already use R, RDB, ROLE, …); write 'Vyomi' as plain text; commit your source"
+ ],
+ "attempt": 1
+}

@@ -1,0 +1,18 @@
+{
+ "cloud": "aws",
+ "service": "vpc",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Every page in ui-spec/aws/vpc.json (65 pages; nav: VPC dashboard, AWS Global View, Virtual private cloud, Security, PrivateLink and Lattice, DNS firewall, Network Firewall, Virtual private network (VPN), AWS Verified Access, Transit gateways, Traffic Mirroring, Network Manager, Cloud WAN, VPC IP Address Manager)",
+  "Backend: core/vpc_core.py (VPC network simulation) + the EC2 Query API Vyomi serves for VPCs, subnets, route tables, internet/NAT gateways, security groups, NACLs, endpoints (see consoles/src/aws/services/ec2 api.js for the Query wire)",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/aws/vpc.json: one entry per console section, ids start with 'aws.vpc.'; tests/conformance/test_capabilities.py must pass",
+  "Keep consoles/src/aws/kit/Capability.jsx as on base (add your JSON import), list the service ONCE in registry.js",
+  "Register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py — tests/conformance/test_nano_core_manifest.py checks this",
+  "Use unique variable names in consoles/tests/smoke-aws.mjs (other blocks already use R, RDB, ROLE, …); write 'Vyomi' as plain text; commit your source"
+ ],
+ "attempt": 1
+}

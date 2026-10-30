@@ -1,0 +1,18 @@
+{
+ "cloud": "aws",
+ "service": "cloudwatch",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Every page in ui-spec/aws/cloudwatch.json (16 pages; nav: Favorites and recents, Dashboards, Alarms, Logs, Metrics, Application Signals (APM), Network Monitoring, Insights, Settings, Getting Started)",
+  "Backend: core/cloudwatch_core.py (metrics, alarms, dashboards) + core/logs_core.py (CloudWatch Logs groups/streams/events, Logs Insights if modeled)",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/aws/cloudwatch.json: one entry per console section, ids start with 'aws.cloudwatch.'; tests/conformance/test_capabilities.py must pass",
+  "Keep consoles/src/aws/kit/Capability.jsx as on base (add your JSON import), list the service ONCE in registry.js",
+  "Register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py — tests/conformance/test_nano_core_manifest.py checks this",
+  "Use unique variable names in consoles/tests/smoke-aws.mjs (other blocks already use R, RDB, ROLE, …); write 'Vyomi' as plain text; commit your source"
+ ],
+ "attempt": 1
+}
