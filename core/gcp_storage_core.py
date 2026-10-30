@@ -315,21 +315,28 @@ def _parse_multipart_related(body: bytes, content_type: str) -> tuple[dict, byte
     for seg in content_type.split(";"):
         seg = seg.strip()
         if seg.startswith("boundary="):
-            boundary = seg[len("boundary="):].strip().strip('"')
+            # gcloud sends boundary='===…==' (single quotes); most clients use double quotes.
+            boundary = seg[len("boundary="):].strip().strip('"').strip("'")
     if not boundary:
         return {}, body, "application/octet-stream"
     delim = ("--" + boundary).encode()
-    parts = [p for p in body.split(delim) if p not in (b"", b"--", b"--\r\n", b"\r\n")]
+    parts = [p for p in body.split(delim) if p not in (b"", b"--", b"--\r\n", b"--\n", b"\r\n", b"\n")]
     meta: dict = {}
     media = b""
     media_ct = "application/octet-stream"
     for idx, part in enumerate(parts):
         part = part.lstrip(b"\r\n")
-        if b"\r\n\r\n" in part:
-            head, payload = part.split(b"\r\n\r\n", 1)
+        # Header/body separator: CRLF CRLF per RFC 2046; Python's email generator (gcloud) emits LF LF.
+        sep = b"\r\n\r\n" if b"\r\n\r\n" in part else b"\n\n"
+        if sep in part:
+            head, payload = part.split(sep, 1)
         else:
             head, payload = b"", part
-        payload = payload.rstrip(b"\r\n")
+        # Only the single line break before the next delimiter is framing — keep the media's own bytes.
+        if payload.endswith(b"\r\n"):
+            payload = payload[:-2]
+        elif payload.endswith(b"\n"):
+            payload = payload[:-1]
         head_l = head.decode("latin-1").lower()
         if idx == 0 and (not head or "application/json" in head_l):
             try:
@@ -338,7 +345,7 @@ def _parse_multipart_related(body: bytes, content_type: str) -> tuple[dict, byte
                 meta = {}
         else:
             media = payload
-            for line in head.decode("latin-1").split("\r\n"):
+            for line in head.decode("latin-1").splitlines():
                 if line.lower().startswith("content-type:"):
                     media_ct = line.split(":", 1)[1].strip()
     return meta, media, media_ct

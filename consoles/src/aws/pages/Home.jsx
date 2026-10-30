@@ -20,6 +20,9 @@ import { follow } from "../../common/router.js";
 import { awsJson, awsQuery, asList, getRegion, s3, WIRE_BASE } from "../../common/wire.js";
 import { useAsync } from "../../common/useAsync.js";
 import { fmtDate } from "../kit/common.jsx";
+import Tabs from "@cloudscape-design/components/tabs";
+import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
+import { sdkEndpoint } from "../../common/connect.js";
 
 const store = {
   get: (k, d) => { try { return JSON.parse(localStorage.getItem(`vyomi.v4.${k}`)) ?? d; } catch { return d; } },
@@ -152,17 +155,46 @@ function ActivityWidget() {
   );
 }
 
-function ConnectWidget() {
-  const endpoint = location.origin + (WIRE_BASE.startsWith("/nano") ? " (via the Nano relay: vyomi-tunnel)" : "");
+function Snippet({ code, label }) {
   return (
-    <Widget title="Connect your SDK or CLI">
-      <SpaceBetween size="xs">
-        <Box variant="awsui-key-label">Endpoint</Box><Box variant="code">{endpoint}</Box>
-        <Box variant="awsui-key-label">Region</Box><Box variant="code">{getRegion()}</Box>
-        <Box variant="awsui-key-label">Example</Box>
-        <Box variant="code">aws --endpoint-url {location.origin} s3 ls</Box>
-      </SpaceBetween>
-    </Widget>
+    <div style={{ position: "relative" }}>
+      <Box variant="code" display="block" padding="s">
+        <pre style={{ margin: 0, whiteSpace: "pre", overflowX: "auto", fontSize: 12, lineHeight: 1.5, paddingRight: 28 }}>{code}</pre>
+      </Box>
+      <div style={{ position: "absolute", top: 4, right: 4 }}>
+        <CopyToClipboard variant="icon" textToCopy={code} copyButtonAriaLabel={`Copy ${label}`} copySuccessText="Copied" copyErrorText="Couldn't copy" />
+      </div>
+    </div>
+  );
+}
+
+function ConnectWidget() {
+  const ep = sdkEndpoint();
+  const region = getRegion();
+  const cli = [
+    "export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test",
+    `export AWS_DEFAULT_REGION=${region}`,
+    `aws --endpoint-url ${ep.url} s3 ls`,
+    `aws --endpoint-url ${ep.url} dynamodb list-tables`,
+  ].join("\n");
+  const sdk = [
+    "import boto3",
+    "",
+    `session = boto3.Session(aws_access_key_id="test", aws_secret_access_key="test", region_name="${region}")`,
+    `s3 = session.client("s3", endpoint_url="${ep.url}")`,
+    `ddb = session.client("dynamodb", endpoint_url="${ep.url}")`,
+    "",
+    'print([b["Name"] for b in s3.list_buckets()["Buckets"]])',
+    'print(ddb.list_tables()["TableNames"])',
+  ].join("\n");
+  return (
+    <SpaceBetween size="xs">
+      <Tabs variant="default" tabs={[
+        { id: "cli", label: "AWS CLI", content: <Snippet code={cli} label="AWS CLI commands" /> },
+        { id: "sdk", label: "Python (boto3)", content: <Snippet code={sdk} label="Python snippet" /> },
+      ]} />
+      {ep.note && <Box variant="small" color="text-body-secondary">{ep.note}</Box>}
+    </SpaceBetween>
   );
 }
 
@@ -183,10 +215,12 @@ const CATALOG = {
   activity: { title: "Recent activity", columnSpan: 2, rowSpan: 4 },
   explore: { title: "Explore Vyomi", columnSpan: 1, rowSpan: 3 },
   security: { title: "Security", columnSpan: 1, rowSpan: 3 },
-  connect: { title: "Connect your SDK or CLI", columnSpan: 2, rowSpan: 3 },
+  connect: { title: "Connect your SDK or CLI", columnSpan: 2, rowSpan: 4 },
 };
 const DEFAULT_ITEMS = ["recent", "welcome", "health", "cost", "resources", "activity", "explore", "security", "connect"]
   .map((id) => ({ id, columnSpan: CATALOG[id].columnSpan, rowSpan: CATALOG[id].rowSpan, data: { id } }));
+// Saved layouts from before a widget changed size keep working; bump to re-apply defaults.
+const LAYOUT_VERSION = 2;
 
 const boardI18n = {
   liveAnnouncementDndStarted: (op) => (op === "resize" ? "Resizing" : "Dragging"),
@@ -263,11 +297,11 @@ function HealthBody({ probes }) {
 }
 
 export default function Home() {
-  const [items, setItems] = useState(() => store.get("home.board", DEFAULT_ITEMS));
+  const [items, setItems] = useState(() => (store.get("home.boardVersion", 0) === LAYOUT_VERSION ? store.get("home.board", DEFAULT_ITEMS) : DEFAULT_ITEMS));
   const [palette, setPalette] = useState(false);
   const [banner, setBanner] = useState(() => !store.get("home.bannerDismissed", false));
   const probes = useProbes();
-  const save = (xs) => { setItems(xs); store.set("home.board", xs); };
+  const save = (xs) => { setItems(xs); store.set("home.board", xs); store.set("home.boardVersion", LAYOUT_VERSION); };
   const content = {
     recent: <RecentBody />, welcome: <WelcomeBody />, health: <HealthBody probes={probes} />, cost: <Cost />,
     resources: <ResourcesBody probes={probes} />, activity: <ActivityBody />, explore: <Explore />, security: <Security />, connect: <ConnectBody />,

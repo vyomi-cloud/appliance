@@ -5,7 +5,7 @@
 import { useMemo, useState } from "react";
 import {
   Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, IconButton,
-  Link, Menu, MenuItem, Paper, Stack, Tab, Tabs, Typography,
+  Link, Menu, MenuItem, Paper, Stack, Tab, Tabs, Tooltip, Typography,
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/esm/MoreVert.js";
 import ArrowForwardIcon from "@mui/icons-material/esm/ArrowForward.js";
@@ -18,6 +18,8 @@ import ErrorIcon from "@mui/icons-material/esm/ErrorOutline.js";
 import InsightsIcon from "@mui/icons-material/esm/Insights.js";
 import CategoryIcon from "@mui/icons-material/esm/CategoryOutlined.js";
 import TerminalIcon from "@mui/icons-material/esm/Terminal.js";
+import ContentCopyIcon from "@mui/icons-material/esm/ContentCopy.js";
+import { sdkEndpoint } from "../../common/connect.js";
 import { restJson, WIRE_BASE } from "../../common/wire.js";
 import { useAsync } from "../../common/useAsync.js";
 import { useProject } from "../project.js";
@@ -119,6 +121,52 @@ function RequestsChart({ events }) {
   );
 }
 
+function CodeBlock({ code, label }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Box sx={{ position: "relative", bgcolor: "action.hover", borderRadius: 1, p: 1.5, pr: 5 }}>
+      <Box component="pre" sx={{ m: 0, fontFamily: "monospace", fontSize: 12, lineHeight: 1.5, whiteSpace: "pre", overflowX: "auto" }}>{code}</Box>
+      <Tooltip title={copied ? "Copied" : `Copy ${label}`}>
+        <IconButton size="small" aria-label={`Copy ${label}`} sx={{ position: "absolute", top: 4, right: 4 }}
+          onClick={async () => { try { await navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {} }}>
+          <ContentCopyIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    </Box>
+  );
+}
+
+/** "Connect gcloud or an SDK": tabbed, ready-to-run snippets for this environment. */
+function ConnectTabs({ project }) {
+  const [tab, setTab] = useState(0);
+  const ep = sdkEndpoint();
+  const cli = [
+    "# Vyomi doesn't check credentials; gcloud just needs a token to send",
+    "export CLOUDSDK_AUTH_ACCESS_TOKEN=vyomi",
+    `gcloud config set project ${project}`,
+    `gcloud config set api_endpoint_overrides/storage ${ep.url}/storage/v1/`,
+    "gcloud storage buckets list",
+    `gcloud storage cp ./hello.txt gs://<bucket>/`,
+  ].join("\n");
+  const sdk = [
+    "import os",
+    `os.environ["STORAGE_EMULATOR_HOST"] = "${ep.url}"`,
+    "",
+    "from google.cloud import storage",
+    `client = storage.Client(project="${project}")`,
+    "print([b.name for b in client.list_buckets()])",
+  ].join("\n");
+  return (
+    <Box>
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 36, mb: 1, "& .MuiTab-root": { minHeight: 36, py: 0.5 } }}>
+        <Tab label="gcloud CLI" /><Tab label="Python" />
+      </Tabs>
+      {tab === 0 ? <CodeBlock code={cli} label="gcloud commands" /> : <CodeBlock code={sdk} label="Python snippet" />}
+      {ep.note && <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>{ep.note}</Typography>}
+    </Box>
+  );
+}
+
 export default function Home() {
   const project = useProject();
   const [tab, setTab] = useState(0);
@@ -189,14 +237,7 @@ export default function Home() {
     ),
     "getting-started": (
       <Card icon={TerminalIcon} title="Connect gcloud or an SDK" onHide={() => hide("getting-started")}>
-        <Stack spacing={0.75}>
-          <Typography variant="body2" color="text.secondary">Endpoint</Typography>
-          <Typography variant="body2" sx={{ fontFamily: "monospace" }}>{location.origin}</Typography>
-          <Typography variant="body2" color="text.secondary">Example</Typography>
-          <Typography variant="body2" sx={{ fontFamily: "monospace", wordBreak: "break-all" }}>
-            STORAGE_EMULATOR_HOST={location.origin} gsutil ls -p {project}
-          </Typography>
-        </Stack>
+        <ConnectTabs project={project} />
       </Card>
     ),
   };
