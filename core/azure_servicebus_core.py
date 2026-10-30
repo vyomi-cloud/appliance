@@ -18,9 +18,27 @@ subscription — receive-and-delete (DELETE …/messages/head) pops the head; pe
 (POST …/messages/head) hands out the head under a lock token, DELETE …/messages/{seq}/{lock}
 completes (removes) it, PUT unlocks (abandon).
 
+Queues (the entity itself has no subscriptions): every entity ALSO keeps its own
+direct backlog (`messages`), independent of any fan-out copies handed to
+subscriptions — a real Service Bus queue has exactly one such backlog, so a plain
+`PUT /{name}` + direct message ops models a queue; adding `subscriptions` on top of
+the SAME entity is how a topic is modelled. Direct ops (no `/subscriptions/{sub}`
+segment) are the Vyomi console's Service Bus Explorer surface — not strict Azure
+wire shapes (that console UI isn't an SDK), so the batch peek/receive endpoints
+return a plain JSON array rather than the single-message BrokerProperties shape the
+SDK-facing subscription endpoints below return:
+    GET    /{name}/messages                        batch peek (non-destructive)
+    DELETE /{name}/messages?max=N                   batch receive-and-delete
+    POST   /{name}/messages/{seq}/complete          remove a specific message
+    POST   /{name}/messages/{seq}/defer             mark deferred (hidden from receive)
+    POST   /{name}/messages/{seq}/deadletter        move to the $deadletterqueue sub-queue
+    GET    /{name}/$deadletterqueue/messages        batch peek the dead-letter sub-queue
+    POST   /{name}/$deadletterqueue/messages/{seq}/complete   remove a dead-lettered message
+
 Scope (v1 slice): create/get/delete topic, create/get/delete subscription, send
-(fan-out), receive-and-delete, peek-lock + complete/abandon. Sessions, dead-letter,
-SQL filter rules, and scheduled messages reuse the same helpers and slot in next.
+(fan-out), receive-and-delete, peek-lock + complete/abandon, plus the queue direct-
+backlog + dead-letter ops above. Sessions, SQL filter rules, and scheduled messages
+reuse the same helpers and slot in next.
 """
 from __future__ import annotations
 
@@ -89,7 +107,8 @@ def _require_subscription(topic: dict, sub_name: str) -> dict:
 # ── topic operations ────────────────────────────────────────────────────────
 def _create_topic(store, name: str) -> ServiceBusResponse:
     if not store.get_topic(name):
-        store.put_topic(name, {"name": name, "subscriptions": {}, "created": _now_iso()})
+        store.put_topic(name, {"name": name, "subscriptions": {}, "messages": [],
+                               "dead_letter": [], "created": _now_iso()})
         store.persist()
     return _empty(201)
 
@@ -134,24 +153,36 @@ def _broker_props(headers: dict) -> dict:
         return {}
 
 
+def _make_message(message_id: str, body: bytes, content_type: str, props: dict) -> dict:
+    return {
+        "_id": uuid.uuid4().hex,
+        "SequenceNumber": None,   # assigned per-destination by the caller (_next_seq)
+        "MessageId": message_id,
+        "body": body,
+        "content_type": content_type,
+        "properties": {k: v for k, v in props.items() if k != "MessageId"},
+        "EnqueuedTimeUtc": _now_iso(),
+        "DeliveryCount": 0,
+        "_locked": None,
+        "_deferred": False,
+    }
+
+
 def _send(store, topic_name: str, body: bytes, headers: dict) -> ServiceBusResponse:
     topic = _require_topic(store, topic_name)
     props = _broker_props(headers)
     message_id = str(props.get("MessageId") or uuid.uuid4())
     content_type = headers.get("content-type", "application/octet-stream")
-    # Fan out an INDEPENDENT copy into every subscription backlog.
+    # The entity's OWN backlog (a queue's single backlog, or a topic's "if anyone
+    # peeks the topic directly" copy) ...
+    own = _make_message(message_id, body, content_type, props)
+    own["SequenceNumber"] = _next_seq(store)
+    topic.setdefault("messages", []).append(own)
+    # ... AND an INDEPENDENT copy fanned out into every subscription backlog.
     for sub in topic.get("subscriptions", {}).values():
-        seq = _next_seq(store)
-        sub.setdefault("messages", []).append({
-            "_id": uuid.uuid4().hex,
-            "SequenceNumber": seq,
-            "MessageId": message_id,
-            "body": body,
-            "content_type": content_type,
-            "properties": {k: v for k, v in props.items() if k != "MessageId"},
-            "EnqueuedTimeUtc": _now_iso(),
-            "_locked": None,
-        })
+        copy = _make_message(message_id, body, content_type, props)
+        copy["SequenceNumber"] = _next_seq(store)
+        sub.setdefault("messages", []).append(copy)
     store.persist()
     return _empty(201)
 
@@ -170,9 +201,9 @@ def _msg_response(msg: dict, lock_token: str | None = None) -> ServiceBusRespons
 
 
 def _head_message(sub: dict):
-    """The first message not currently locked, or None."""
+    """The first message not currently locked/deferred, or None."""
     for m in sub.get("messages", []):
-        if not m.get("_locked"):
+        if not m.get("_locked") and not m.get("_deferred"):
             return m
     return None
 
@@ -183,6 +214,7 @@ def _receive_and_delete(store, topic_name: str, sub_name: str) -> ServiceBusResp
     msg = _head_message(sub)
     if msg is None:
         return _empty(204)   # empty subscription — no message available
+    msg["DeliveryCount"] = msg.get("DeliveryCount", 0) + 1
     sub["messages"] = [m for m in sub["messages"] if m["_id"] != msg["_id"]]
     store.persist()
     return _msg_response(msg)
@@ -196,6 +228,7 @@ def _peek_lock(store, topic_name: str, sub_name: str) -> ServiceBusResponse:
         return _empty(204)
     lock_token = str(uuid.uuid4())
     msg["_locked"] = lock_token
+    msg["DeliveryCount"] = msg.get("DeliveryCount", 0) + 1
     store.persist()
     return _msg_response(msg, lock_token=lock_token)
 
@@ -225,6 +258,112 @@ def _abandon(store, topic_name: str, sub_name: str, seq: str, lock: str) -> Serv
                           "The lock supplied is invalid or has expired.", 410)
 
 
+# ── direct queue backlog ops (the console's Service Bus Explorer; JSON-shaped,
+#    not an SDK wire format — see the module docstring) ─────────────────────
+def _message_view(m: dict, state: str) -> dict:
+    body = m.get("body") or b""
+    return {
+        "SequenceNumber": m["SequenceNumber"],
+        "MessageId": m["MessageId"],
+        "EnqueuedTimeUtc": m["EnqueuedTimeUtc"],
+        "DeliveryCount": m.get("DeliveryCount", 0),
+        "Label": (m.get("properties") or {}).get("Label"),
+        "ContentType": m.get("content_type", "application/octet-stream"),
+        "BodySize": len(body),
+        "State": state,
+        "Body": body.decode("utf-8", "replace"),
+    }
+
+
+def _entity_state(m: dict) -> str:
+    if m.get("_deferred"):
+        return "Deferred"
+    if m.get("_locked"):
+        return "Locked"
+    return "Active"
+
+
+def _json_list(messages: list) -> ServiceBusResponse:
+    body = json.dumps({"messages": messages}).encode()
+    return ServiceBusResponse(status=200, body=body, media_type="application/json")
+
+
+def _peek_batch(store, topic_name: str) -> ServiceBusResponse:
+    topic = _require_topic(store, topic_name)
+    msgs = [_message_view(m, _entity_state(m)) for m in topic.get("messages", [])]
+    return _json_list(msgs)
+
+
+def _receive_batch(store, topic_name: str, max_n: int) -> ServiceBusResponse:
+    topic = _require_topic(store, topic_name)
+    taken, rest = [], []
+    for m in topic.get("messages", []):
+        if len(taken) < max_n and not m.get("_locked") and not m.get("_deferred"):
+            m["DeliveryCount"] = m.get("DeliveryCount", 0) + 1
+            taken.append(m)
+        else:
+            rest.append(m)
+    topic["messages"] = rest
+    store.persist()
+    return _json_list([_message_view(m, "Active") for m in taken])
+
+
+def _find_own_message(topic: dict, seq: str) -> dict:
+    for m in topic.get("messages", []):
+        if str(m["SequenceNumber"]) == str(seq):
+            return m
+    raise ServiceBusError("MessageNotFound", f"No message with sequence number '{seq}'.", 404)
+
+
+def _complete_own(store, topic_name: str, seq: str) -> ServiceBusResponse:
+    topic = _require_topic(store, topic_name)
+    _find_own_message(topic, seq)
+    topic["messages"] = [m for m in topic["messages"] if str(m["SequenceNumber"]) != str(seq)]
+    store.persist()
+    return _empty(200)
+
+
+def _defer_own(store, topic_name: str, seq: str) -> ServiceBusResponse:
+    topic = _require_topic(store, topic_name)
+    m = _find_own_message(topic, seq)
+    m["_deferred"] = True
+    m["_locked"] = None
+    store.persist()
+    return _empty(200)
+
+
+def _deadletter_own(store, topic_name: str, seq: str, body: bytes) -> ServiceBusResponse:
+    topic = _require_topic(store, topic_name)
+    m = _find_own_message(topic, seq)
+    try:
+        reason = (json.loads(body) if body else {}).get("DeadLetterReason")
+    except Exception:
+        reason = None
+    topic["messages"] = [x for x in topic["messages"] if x["_id"] != m["_id"]]
+    m["_locked"] = None
+    m["_deferred"] = False
+    m["DeadLetterReason"] = reason
+    topic.setdefault("dead_letter", []).append(m)
+    store.persist()
+    return _empty(200)
+
+
+def _peek_deadletter(store, topic_name: str) -> ServiceBusResponse:
+    topic = _require_topic(store, topic_name)
+    msgs = [_message_view(m, "Dead-lettered") for m in topic.get("dead_letter", [])]
+    return _json_list(msgs)
+
+
+def _complete_deadletter(store, topic_name: str, seq: str) -> ServiceBusResponse:
+    topic = _require_topic(store, topic_name)
+    dl = topic.get("dead_letter", [])
+    if not any(str(m["SequenceNumber"]) == str(seq) for m in dl):
+        raise ServiceBusError("MessageNotFound", f"No dead-lettered message with sequence number '{seq}'.", 404)
+    topic["dead_letter"] = [m for m in dl if str(m["SequenceNumber"]) != str(seq)]
+    store.persist()
+    return _empty(200)
+
+
 # ── dispatch ────────────────────────────────────────────────────────────────
 def dispatch(store: MessagingStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
@@ -235,13 +374,21 @@ def dispatch(store: MessagingStore, method: str, path: str,
         DELETE /{topic}                                        delete topic
         PUT    /{topic}/subscriptions/{sub}                    create subscription
         DELETE /{topic}/subscriptions/{sub}                    delete subscription
-        POST   /{topic}/messages                               send (fan-out)
+        POST   /{topic}/messages                               send (fan-out + own backlog)
+        GET    /{topic}/messages                               batch peek, own backlog (console)
+        DELETE /{topic}/messages?max=N                         batch receive-and-delete (console)
+        POST   /{topic}/messages/{seq}/complete                remove a message (console)
+        POST   /{topic}/messages/{seq}/defer                   defer a message (console)
+        POST   /{topic}/messages/{seq}/deadletter               move to $deadletterqueue (console)
+        GET    /{topic}/$deadletterqueue/messages              batch peek dead-letter (console)
+        POST   /{topic}/$deadletterqueue/messages/{seq}/complete  remove dead-lettered (console)
         DELETE /{topic}/subscriptions/{sub}/messages/head      receive-and-delete
         POST   /{topic}/subscriptions/{sub}/messages/head      peek-lock
         DELETE /{topic}/subscriptions/{sub}/messages/{seq}/{lock}  complete (lock)
         PUT    /{topic}/subscriptions/{sub}/messages/{seq}/{lock}  abandon (unlock)
     """
     method = (method or "GET").upper()
+    query = query or {}
     headers = {k.lower(): v for k, v in (headers or {}).items()}
     p = path.split("?", 1)[0].strip("/")
     segs = [s for s in p.split("/") if s != ""]
@@ -260,11 +407,32 @@ def dispatch(store: MessagingStore, method: str, path: str,
                 return _delete_topic(store, topic)
             return _error("BadRequest", f"Unsupported method {method} on topic.", 400)
 
-        # send: /{topic}/messages
+        # dead-letter sub-queue (console): /{topic}/$deadletterqueue/messages[/{seq}/complete]
+        if len(segs) >= 3 and segs[1] == "$deadletterqueue" and segs[2] == "messages":
+            if len(segs) == 3 and method == "GET":
+                return _peek_deadletter(store, topic)
+            if len(segs) == 5 and segs[4] == "complete" and method == "POST":
+                return _complete_deadletter(store, topic, segs[3])
+            return _error("BadRequest", f"Unsupported dead-letter operation {method} {path}.", 400)
+
+        # send / batch peek / batch receive: /{topic}/messages
         if len(segs) == 2 and segs[1] == "messages":
             if method == "POST":
                 return _send(store, topic, body, headers)
+            if method == "GET":
+                return _peek_batch(store, topic)
+            if method == "DELETE":
+                return _receive_batch(store, topic, int(query.get("max") or 32))
             return _error("BadRequest", f"Unsupported method {method} on messages.", 400)
+
+        # per-message action by sequence number (console): /{topic}/messages/{seq}/{action}
+        if len(segs) == 4 and segs[1] == "messages" and segs[3] in ("complete", "defer", "deadletter") and method == "POST":
+            action, seq = segs[3], segs[2]
+            if action == "complete":
+                return _complete_own(store, topic, seq)
+            if action == "defer":
+                return _defer_own(store, topic, seq)
+            return _deadletter_own(store, topic, seq, body)
 
         # subscription-scoped: /{topic}/subscriptions/{sub}[...]
         if len(segs) >= 3 and segs[1] == "subscriptions":

@@ -99,6 +99,40 @@ def run(store=None):
     _check("delete topic 200", call("DELETE", "/orders").status == 200)
     _check("deleted topic gone 404", call("GET", "/orders").status == 404)
 
+    # ── queue direct backlog (console Service Bus Explorer; no subscription) ──
+    _check("create queue 201", call("PUT", "/invoices").status == 201)
+    call("POST", "/invoices/messages", b"hello-1", {"content-type": "text/plain",
+         "BrokerProperties": json.dumps({"Label": "first"})})
+    call("POST", "/invoices/messages", b"hello-2", {"content-type": "text/plain"})
+    peeked = json.loads(call("GET", "/invoices/messages").body)["messages"]
+    _check("peek batch returns both, non-destructively", len(peeked) == 2)
+    _check("peek batch is non-mutating", len(json.loads(call("GET", "/invoices/messages").body)["messages"]) == 2)
+    _check("peek batch exposes Label", peeked[0]["Label"] == "first")
+    _check("peek batch exposes BodySize", peeked[0]["BodySize"] == len(b"hello-1"))
+    seq1, seq2 = peeked[0]["SequenceNumber"], peeked[1]["SequenceNumber"]
+
+    _check("defer by sequence 200", call("POST", f"/invoices/messages/{seq1}/defer").status == 200)
+    deferred_state = next(m for m in json.loads(call("GET", "/invoices/messages").body)["messages"] if m["SequenceNumber"] == seq1)
+    _check("deferred message shows State=Deferred", deferred_state["State"] == "Deferred")
+
+    received = json.loads(call("DELETE", "/invoices/messages?max=10").body)["messages"]
+    _check("batch receive skips the deferred message", len(received) == 1 and received[0]["SequenceNumber"] == seq2)
+    _check("batch receive drains the backlog (deferred stays)", len(json.loads(call("GET", "/invoices/messages").body)["messages"]) == 1)
+
+    _check("deadletter by sequence 200", call("POST", f"/invoices/messages/{seq1}/deadletter", b'{"DeadLetterReason":"stale"}').status == 200)
+    _check("message left the main backlog", len(json.loads(call("GET", "/invoices/messages").body)["messages"]) == 0)
+    dlq = json.loads(call("GET", "/invoices/$deadletterqueue/messages").body)["messages"]
+    _check("dead-lettered message appears in $deadletterqueue", len(dlq) == 1 and dlq[0]["SequenceNumber"] == seq1)
+    _check("dead-lettered message is State=Dead-lettered", dlq[0]["State"] == "Dead-lettered")
+    _check("complete dead-lettered message 200", call("POST", f"/invoices/$deadletterqueue/messages/{seq1}/complete").status == 200)
+    _check("$deadletterqueue drained", json.loads(call("GET", "/invoices/$deadletterqueue/messages").body)["messages"] == [])
+
+    call("POST", "/invoices/messages", b"to-complete")
+    seq3 = json.loads(call("GET", "/invoices/messages").body)["messages"][0]["SequenceNumber"]
+    _check("complete by sequence 200", call("POST", f"/invoices/messages/{seq3}/complete").status == 200)
+    _check("completed message is gone", json.loads(call("GET", "/invoices/messages").body)["messages"] == [])
+    _check("complete unknown sequence 404", call("POST", "/invoices/messages/999999/complete").status == 404)
+
     print("\nAzure Service Bus (topics) core conformance: ALL GREEN")
     return store
 

@@ -461,6 +461,63 @@ try {
   await page.getByRole("heading", { name: "Event Grid Topics" }).waitFor({ timeout: 10000 });
   const egGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}`);
   check("UI delete topic → ARM GET 404", egGone.status === 404, `HTTP ${egGone.status}`);
+
+  // ── Service Bus: namespace created through the UI → visible over native ARM ────────────
+  const SBNS = `vysbns${n}`;
+  const SBQ = `vysbq${n}`;
+  const SBT2 = `vysbtwire${n}`;
+  const sbArm = `/resourceGroups/${RG}/providers/Microsoft.ServiceBus/namespaces/${SBNS}`;
+  await page.goto(UI + "#/servicebus/create");
+  await page.getByLabel("Namespace name", { exact: true }).fill(SBNS);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: SBNS, exact: true }).waitFor({ timeout: 10000 });
+  const gotSbNs = await arm("GET", sbArm);
+  check("UI create Service Bus namespace → visible over native ARM", gotSbNs.status === 200, `HTTP ${gotSbNs.status}`);
+  await shot("24-servicebus-namespace-overview");
+
+  // ── Queue created through the UI → visible over ARM; Explorer round-trips over the data plane wire ──
+  await openPanel("Queues");
+  await page.getByRole("button", { name: "Queue", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill(SBQ);
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByRole("link", { name: SBQ, exact: true }).waitFor({ timeout: 10000 });
+  const gotSbQ = await arm("GET", `${sbArm}/queues/${SBQ}`);
+  check("UI create queue → visible over native ARM", gotSbQ.status === 200, `HTTP ${gotSbQ.status}`);
+  await shot("25-servicebus-queues");
+
+  await page.getByRole("link", { name: SBQ, exact: true }).click();
+  await openPanel("Service Bus Explorer");
+  await page.getByLabel("Message body", { exact: true }).fill("smoke-message");
+  await page.getByRole("button", { name: "Send messages", exact: true }).click();
+  const peeked = await wire(`/${SBQ}/messages`);
+  const peekedBody = peeked.status === 200 ? JSON.parse(peeked.text) : { messages: [] };
+  check("UI send → readable over the Service Bus data plane wire", peekedBody.messages.some((m) => m.Body === "smoke-message"), `HTTP ${peeked.status}`);
+  await page.getByRole("button", { name: "Peek from start" }).click();
+  await page.getByRole("cell", { name: "Active" }).first().waitFor({ timeout: 10000 });
+  check("sent message shown in Service Bus Explorer", true);
+  await shot("26-servicebus-explorer");
+
+  // ── Topic created over the wire → visible in the UI (CLI → UI) ──────────────────────────
+  const putTopic = await arm("PUT", `${sbArm}/topics/${SBT2}`, { properties: { maxSizeInMegabytes: 1024 } });
+  check("ARM PUT Service Bus topic over wire", putTopic.status === 200 || putTopic.status === 201, `HTTP ${putTopic.status}`);
+  await page.goto(UI + `#/servicebus/${RG}/${SBNS}/topics`);
+  await page.getByText(SBT2, { exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created topic shown in Topics grid", true);
+  await shot("27-servicebus-topics");
+
+  // ── Delete the queue through the grid → gone over both ARM and the data plane ──────────
+  await page.goto(UI + `#/servicebus/${RG}/${SBNS}/queues`);
+  await page.getByRole("checkbox", { name: `Select ${SBQ}` }).click();
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(SBQ);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("link", { name: SBQ, exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  const sbQGone = await arm("GET", `${sbArm}/queues/${SBQ}`);
+  check("UI delete queue → ARM GET 404", sbQGone.status === 404, `HTTP ${sbQGone.status}`);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});
