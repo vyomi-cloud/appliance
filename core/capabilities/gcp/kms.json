@@ -1,0 +1,99 @@
+{
+ "$doc": "Vyomi capability registry — Cloud KMS. See s3.json for the contract. Feature ids share one namespace with AWS; GCP ids start with 'gcp.'.",
+ "gcp.kms.keyring.crud": {
+  "title": "Key rings (create, get, list across locations)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py"
+  ]
+ },
+ "gcp.kms.key.crud": {
+  "title": "Keys (create, get, list, labels)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py",
+   "tests/conformance/test_c0b_legacy_parity_core.py"
+  ]
+ },
+ "gcp.kms.key.rotation": {
+  "title": "Key rotation (rotation period + manual Rotate key)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The rotation period and next rotation time are stored and returned exactly as configured, but Vyomi has no background scheduler — it never rotates a key on its own.",
+   "\"Rotate key\" creates a new primary CryptoKeyVersion for real, but every version of a CryptoKey shares the same underlying key material in Vyomi (there is no per-version crypto); rotating is a bookkeeping change, not a new encryption key."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py"
+  ]
+ },
+ "gcp.kms.key.versions": {
+  "title": "Key versions (create, make primary, enable, disable, destroy, restore)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Version state is enforced for Encrypt (it fails with FAILED_PRECONDITION unless the primary version is ENABLED), but Decrypt does not re-check the state of the version that originally produced a ciphertext — only the CryptoKey itself must still exist."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py"
+  ]
+ },
+ "gcp.kms.key.permissions": {
+  "title": "Permissions (IAM policy on a key)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "getIamPolicy/setIamPolicy store and return the policy exactly as written, but Vyomi does not evaluate it — it never denies or allows a KMS call based on policy content."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py"
+  ]
+ },
+ "gcp.kms.crypto.symmetric": {
+  "title": "Encrypt / Decrypt",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py",
+   "tests/conformance/test_c0b_legacy_parity_core.py"
+  ]
+ },
+ "gcp.kms.inventory": {
+  "title": "Key inventory (project-wide key search across all key rings and locations)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_gcp_kms_core.py"
+  ]
+ },
+ "gcp.kms.autokey": {
+  "title": "Autokey (automatic per-resource key ring/key provisioning)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Autokey provisions key rings and keys automatically when a resource is created, gated by an organization/folder policy and a dedicated key project. Vyomi doesn't model org policy or cross-project key provisioning, so there is nothing to wire this to."
+  ]
+ }
+}

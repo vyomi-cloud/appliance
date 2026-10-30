@@ -1,0 +1,10 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page is never used here: gcp isn't on the base consoles/honest-allowlist.json, so every page is either built for real or an honest in-page NotSimulated gap (no whole-page flag). Unlisted spec pages count as missing.",
+  "key-rings": { "route": "#/security/kms/keyrings", "fixtures": ["kms-keyring"], "live": "live-key-ring" },
+  "create-key-ring": { "route": "#/security/kms/keyring/create" },
+  "create-key": { "route": "#/security/kms/key/create?location=us-central1&keyring=uic-keyring", "fixtures": ["kms-keyring"] },
+  "key-ring-details": { "route": "#/security/kms/keyring/manage/us-central1/uic-keyring", "fixtures": ["kms-keyring"], "vars": { "resource-name": "uic-keyring" }, "live": "live-key" },
+  "key-details": { "route": "#/security/kms/key/manage/us-central1/uic-keyring/uic-key", "fixtures": ["kms-key"], "vars": { "resource-name": "uic-key" }, "live": "live-key-label" },
+  "key-inventory": { "route": "#/security/kms/key-inventory", "fixtures": ["kms-key"], "live": "live-key" },
+  "autokey": { "route": "#/security/kms/autokey" }
+}

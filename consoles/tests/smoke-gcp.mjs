@@ -524,6 +524,123 @@ try {
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete database via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/databases/${FSDB}`)).status === 404);
 
+  // Cloud KMS: create a key ring + key through the UI → native Cloud KMS REST wire, then
+  // version lifecycle (rotate, disable, make primary, destroy, restore), labels, rotation
+  // period and IAM permissions — all round-tripped back over the wire.
+  const KR = `v4-gcp-kms-ring-${Date.now() % 100000}`;
+  await page.goto(UI + "#/security/kms/keyring/create");
+  await page.getByLabel("Key ring name").fill(KR);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: KR }).waitFor({ timeout: 10000 });
+  const krWire = await wjson(`/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}`);
+  check("create key ring via UI → visible over native wire (keyRings.get)", krWire.name?.endsWith(`/keyRings/${KR}`));
+  await shot("15-kms-keyring-created");
+
+  const KK = `v4-gcp-kms-key-${Date.now() % 100000}`;
+  await page.goto(UI + `#/security/kms/key/create?location=us-central1&keyring=${KR}`);
+  await page.getByLabel("Key name").fill(KK);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: KK }).waitFor({ timeout: 10000 });
+  const keyWire = await wjson(`/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`);
+  check("create key via UI → visible over native wire (cryptoKeys.get)",
+    keyWire.name?.endsWith(`/cryptoKeys/${KK}`) && keyWire.purpose === "ENCRYPT_DECRYPT"
+      && keyWire.versionTemplate?.algorithm === "GOOGLE_SYMMETRIC_ENCRYPTION" && keyWire.rotationPeriod === "2592000s",
+    JSON.stringify(keyWire).slice(0, 200));
+  await shot("16-kms-key-created");
+
+  // Reverse direction: a key created over the wire shows up in the Key inventory UI.
+  const KK2 = `v4-gcp-kms-key2-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys?cryptoKeyId=${KK2}`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ purpose: "ENCRYPT_DECRYPT", versionTemplate: { algorithm: "GOOGLE_SYMMETRIC_ENCRYPTION" } }),
+  });
+  await page.goto(UI + "#/security/kms/key-inventory");
+  await page.getByRole("link", { name: KK2 }).waitFor({ timeout: 10000 });
+  check("key created over wire → shown in Key inventory UI", true);
+  await shot("17-kms-inventory");
+
+  await page.goto(UI + "#/security/kms/keyrings");
+  await page.getByRole("link", { name: KR }).waitFor({ timeout: 10000 });
+  check("key ring list shows new key ring", true);
+
+  // Key detail: rotate (new primary version), disable/make-primary/destroy/restore versions.
+  await page.goto(UI + `#/security/kms/key/manage/us-central1/${KR}/${KK}`);
+  await page.getByRole("heading", { name: KK }).waitFor({ timeout: 10000 });
+  await shot("18-kms-key-detail");
+
+  await page.getByRole("button", { name: "Rotate key" }).click();
+  await page.waitForFunction(
+    async (url) => (await (await fetch(url)).json()).primary?.name?.endsWith("/cryptoKeyVersions/2"),
+    `${WIRE}/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`, { timeout: 10000 },
+  );
+  check("rotate key via UI → primary version advances to 2", true);
+
+  await page.getByRole("button", { name: "Actions for version 2" }).click();
+  await page.getByRole("menuitem", { name: "Disable" }).click();
+  await page.waitForFunction(
+    async (url) => (await (await fetch(url)).json()).state === "DISABLED",
+    `${WIRE}/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}/cryptoKeyVersions/2`, { timeout: 10000 },
+  );
+  check("disable version via UI → cryptoKeyVersions.get shows DISABLED", true);
+
+  await page.getByRole("button", { name: "Actions for version 1" }).click();
+  await page.getByRole("menuitem", { name: "Make primary" }).click();
+  await page.waitForFunction(
+    async (url) => (await (await fetch(url)).json()).primary?.name?.endsWith("/cryptoKeyVersions/1"),
+    `${WIRE}/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`, { timeout: 10000 },
+  );
+  check("make primary via UI → primary is version 1", true);
+
+  await page.getByRole("button", { name: "Actions for version 2" }).click();
+  await page.getByRole("menuitem", { name: "Destroy" }).click();
+  await page.waitForFunction(
+    async (url) => (await (await fetch(url)).json()).state === "DESTROY_SCHEDULED",
+    `${WIRE}/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}/cryptoKeyVersions/2`, { timeout: 10000 },
+  );
+  check("destroy version via UI → DESTROY_SCHEDULED", true);
+  await shot("19-kms-versions");
+
+  await page.getByRole("checkbox", { name: "Select 2" }).check();
+  await page.getByRole("button", { name: "Restore", exact: true }).click();
+  await page.waitForFunction(
+    async (url) => (await (await fetch(url)).json()).state === "DISABLED",
+    `${WIRE}/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}/cryptoKeyVersions/2`, { timeout: 10000 },
+  );
+  check("restore version via UI (bulk) → DISABLED", true);
+
+  // Overview: edit labels + rotation period
+  await page.getByRole("tab", { name: "Overview" }).click();
+  await page.getByRole("button", { name: "Edit labels" }).click();
+  await page.getByRole("button", { name: "Add label" }).click();
+  await page.getByLabel("Key 1").fill("env");
+  await page.getByLabel("Value 1").fill("smoke");
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByText("env: smoke").waitFor({ timeout: 10000 });
+  let kv = await wjson(`/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`);
+  check("edit labels via UI → cryptoKeys.get shows label", kv.labels?.env === "smoke");
+
+  await page.getByRole("button", { name: "Edit rotation period" }).click();
+  await page.getByLabel("Key rotation period").click();
+  await page.getByRole("option", { name: "365 days" }).click();
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.waitForFunction(
+    async (url) => (await (await fetch(url)).json()).rotationPeriod === "31536000s",
+    `${WIRE}/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}`, { timeout: 10000 },
+  );
+  check("edit rotation period via UI → cryptoKeys.get shows new period", true);
+  await shot("20-kms-overview");
+
+  // Permissions: grant access via UI → native getIamPolicy shows the binding
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  await page.getByRole("button", { name: "Grant access" }).click();
+  await page.getByLabel("New principals").fill("user:dev@example.com");
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByText("user:dev@example.com").waitFor({ timeout: 10000 });
+  const kmsPol = await wjson(`/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}:getIamPolicy`);
+  check("grant access via UI → getIamPolicy shows binding",
+    (kmsPol.bindings || []).some((b) => b.role === "roles/cloudkms.cryptoKeyEncrypterDecrypter" && b.members.includes("user:dev@example.com")));
+  await shot("21-kms-permissions");
+
   // Dark mode
   await page.goto(UI + "#/storage/browser");
   await page.getByRole("button", { name: "More options" }).click();          // ⋮ menu, as in the native top bar

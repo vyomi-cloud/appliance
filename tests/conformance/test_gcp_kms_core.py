@@ -123,6 +123,72 @@ def run() -> int:
                             json.dumps({"plaintext": base64.b64encode(b"x").decode()}).encode())
     _check("encrypt unknown key 404", missenc.status == 404)
 
+    # 8. version lifecycle: create a 2nd version, make it primary, disable/enable,
+    #    destroy + restore, and confirm Encrypt is blocked while the primary is disabled.
+    v2 = gkms.dispatch(st, "POST", f"{KEY}/cryptoKeyVersions", {}, {}, b"{}")
+    _check("create version 200", v2.status == 200)
+    v2o = _jbody(v2)
+    _check("create version id", v2o["name"] == key_name + "/cryptoKeyVersions/2")
+    _check("create version enabled", v2o["state"] == "ENABLED")
+
+    setprim = gkms.dispatch(st, "POST", f"{KEY}:updateCryptoKeyPrimaryVersion", {},
+                            {"content-type": "application/json"}, json.dumps({"cryptoKeyVersionId": "2"}).encode())
+    _check("updateCryptoKeyPrimaryVersion 200", setprim.status == 200)
+    _check("primary is now v2", _jbody(setprim)["primary"]["name"].endswith("/cryptoKeyVersions/2"))
+
+    badprim = gkms.dispatch(st, "POST", f"{KEY}:updateCryptoKeyPrimaryVersion", {},
+                            {"content-type": "application/json"}, json.dumps({"cryptoKeyVersionId": "99"}).encode())
+    _check("updateCryptoKeyPrimaryVersion unknown version 400", badprim.status == 400)
+
+    dis = gkms.dispatch(st, "PATCH", f"{KEY}/cryptoKeyVersions/2", {}, {"content-type": "application/json"},
+                        json.dumps({"state": "DISABLED"}).encode())
+    _check("disable version 200", dis.status == 200 and _jbody(dis)["state"] == "DISABLED")
+
+    blocked = gkms.dispatch(st, "POST", f"{KEY}:encrypt", {}, {"content-type": "application/json"},
+                            json.dumps({"plaintext": base64.b64encode(b"x").decode()}).encode())
+    _check("encrypt with disabled primary → 400 FAILED_PRECONDITION", blocked.status == 400 and
+           _jbody(blocked)["error"]["status"] == "FAILED_PRECONDITION")
+
+    en = gkms.dispatch(st, "PATCH", f"{KEY}/cryptoKeyVersions/2", {}, {"content-type": "application/json"},
+                       json.dumps({"state": "ENABLED"}).encode())
+    _check("re-enable version 200", en.status == 200 and _jbody(en)["state"] == "ENABLED")
+    again = gkms.dispatch(st, "POST", f"{KEY}:encrypt", {}, {"content-type": "application/json"},
+                          json.dumps({"plaintext": base64.b64encode(b"y").decode()}).encode())
+    _check("encrypt with re-enabled primary 200", again.status == 200)
+
+    destroy = gkms.dispatch(st, "POST", f"{KEY}/cryptoKeyVersions/1:destroy", {}, {}, b"{}")
+    _check("destroy version 200", destroy.status == 200)
+    dobj = _jbody(destroy)
+    _check("destroy sets DESTROY_SCHEDULED", dobj["state"] == "DESTROY_SCHEDULED")
+    _check("destroy sets destroyTime", "destroyTime" in dobj)
+    dup_destroy = gkms.dispatch(st, "POST", f"{KEY}/cryptoKeyVersions/1:destroy", {}, {}, b"{}")
+    _check("double destroy → 400 FAILED_PRECONDITION", dup_destroy.status == 400)
+
+    restore = gkms.dispatch(st, "POST", f"{KEY}/cryptoKeyVersions/1:restore", {}, {}, b"{}")
+    _check("restore version 200", restore.status == 200 and _jbody(restore)["state"] == "DISABLED")
+    bad_restore = gkms.dispatch(st, "POST", f"{KEY}/cryptoKeyVersions/1:restore", {}, {}, b"{}")
+    _check("restore a non-scheduled version → 400", bad_restore.status == 400)
+
+    listv = gkms.dispatch(st, "GET", f"{KEY}/cryptoKeyVersions", {}, {}, b"")
+    _check("list versions has both", len(_jbody(listv)["cryptoKeyVersions"]) == 2)
+
+    # 9. IAM policy on a crypto key: getIamPolicy / setIamPolicy round-trip.
+    pol0 = gkms.dispatch(st, "GET", f"{KEY}:getIamPolicy", {}, {}, b"")
+    _check("getIamPolicy default empty", pol0.status == 200 and _jbody(pol0)["bindings"] == [])
+    setpol = gkms.dispatch(st, "POST", f"{KEY}:setIamPolicy", {}, {"content-type": "application/json"},
+                           json.dumps({"policy": {"bindings": [{"role": "roles/cloudkms.cryptoKeyEncrypterDecrypter",
+                                                                  "members": ["user:dev@example.com"]}]}}).encode())
+    _check("setIamPolicy 200", setpol.status == 200)
+    pol1 = gkms.dispatch(st, "GET", f"{KEY}:getIamPolicy", {}, {}, b"")
+    _check("getIamPolicy round-trips the binding", _jbody(pol1)["bindings"][0]["members"] == ["user:dev@example.com"])
+
+    # 10. project-wide aggregated listing (locations/-/keyRings/-) — the "Key inventory" page.
+    agg = gkms.dispatch(st, "GET", "/v1/projects/demo/locations/-/keyRings/-/cryptoKeys", {}, {}, b"")
+    _check("aggregated cryptoKeys list 200", agg.status == 200)
+    _check("aggregated list includes the key", any(k["name"] == key_name for k in _jbody(agg)["cryptoKeys"]))
+    aggrings = gkms.dispatch(st, "GET", "/v1/projects/demo/locations/-/keyRings", {}, {}, b"")
+    _check("aggregated keyRings list includes the ring", any(k["name"] == ring_name for k in _jbody(aggrings)["keyRings"]))
+
     print("\nGCP Cloud KMS core conformance: ALL GREEN")
     return 0
 
