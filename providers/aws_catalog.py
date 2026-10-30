@@ -164,6 +164,7 @@ RESOURCE_CATALOG_AWS = [
         ],
         "api_paths": {
             "users":      {"method": "GET",    "path": "/api/iam/users"},
+            "providers":  {"method": "GET",    "path": "/api/iam/identity-providers"},
             "groups":     {"method": "GET",    "path": "/api/iam/groups"},
             "roles":      {"method": "GET",    "path": "/api/iam/roles"},
             "policies":   {"method": "GET",    "path": "/api/iam/policies"},
@@ -435,6 +436,8 @@ RESOURCE_CATALOG_AWS = [
             "createResource":{"method":"POST","path":"/api/apigateway/apis/{name}/resources"},
             "putMethod":   {"method": "PUT",  "path": "/api/apigateway/apis/{name}/resources/{rid}/methods/{verb}"},
             "stages":      {"method": "GET",  "path": "/api/apigateway/apis/{name}/stages"},
+            "deployments": {"method": "GET",  "path": "/api/apigateway/apis/{name}/deployments"},
+            "logs":        {"method": "GET",  "path": "/api/apigateway/apis/{name}/logs"},
             "createStage": {"method": "POST", "path": "/api/apigateway/apis/{name}/stages"},
             "createDeploy":{"method": "POST", "path": "/api/apigateway/apis/{name}/deployments"},
             "delete":      {"method": "DELETE","path": "/api/apigateway/apis/{name}"},

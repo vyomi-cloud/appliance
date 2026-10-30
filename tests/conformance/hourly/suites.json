@@ -737,6 +737,14 @@
       "timeout": 300
     },
     {
+      "id": "offline-ui-aws-apigw-deployments",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/aws node wasm/ui-tests/validate-aws-apigw-deployments.mjs",
+      "timeout": 300
+    },
+    {
       "id": "offline-ui-aws-apigw-tabs",
       "target": "offline",
       "cloud": "aws",

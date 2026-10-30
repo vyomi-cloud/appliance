@@ -3004,7 +3004,7 @@ SUB_RENDERERS.apitable = async function(svc, full, host, tab){
   const ap = (svc.api_paths || {})[tab.api];
   if (!ap) { host.append(el("div",{class:"empty"}, "Path not configured.")); return; }
   const r = await api(ap.method, fillPath(ap.path, {name: itemKey(svc, full)}));
-  const items = (r.json || {}).items || (r.json || {}).value || [];
+  const items = (r.json || {})[tab.list_key || "items"] || (r.json || {}).items || (r.json || {}).value || [];
   if (!r.ok) { host.append(el("div",{class:"empty"}, ...loadFailMsg(r))); return; }
   if (!items.length) { host.append(el("div",{class:"empty"}, tab.empty || "No items.")); return; }
   const cols = tab.columns || [];

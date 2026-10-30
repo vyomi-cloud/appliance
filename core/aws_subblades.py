@@ -115,7 +115,9 @@ _IAM_SUB = [
         {"key": "groups",      "label": "User groups",           "icon": "group",           "type": "iamGroups"},
         {"key": "roles",       "label": "Roles",                 "icon": "badge",           "type": "iamRoles"},
         {"key": "policies",    "label": "Policies",              "icon": "policy",          "type": "iamPolicies"},
-        {"key": "providers",   "label": "Identity providers",    "icon": "verified_user",   "type": "stub"},
+        {"key": "providers",   "label": "Identity providers",    "icon": "verified_user",   "type": "apitable", "api": "providers", "list_key": "identity_providers",
+         "columns": [["provider_name", "Provider"], ["provider_type", "Type"], ["url", "URL"], ["provider_id", "ID"], ["created", "Created"]],
+         "empty": "No identity providers configured."},
     ]},
     {"group": "Account settings", "items": [
         {"key": "passwordPolicy","label":"Password policy",       "icon": "vpn_key",         "type": "stub"},
@@ -239,7 +241,9 @@ _APIGW_SUB = [
     ]},
     {"group": "Publishing", "items": [
         {"key": "stages",      "label": "Stages",              "icon": "rocket_launch","type": "apiStages"},
-        {"key": "deployments", "label": "Deployments",         "icon": "history",     "type": "stub"},
+        {"key": "deployments", "label": "Deployments",         "icon": "history",     "type": "apitable", "api": "deployments", "list_key": "deployments",
+         "columns": [["deployment_id", "Deployment ID"], ["description", "Description"], ["created", "Created"]],
+         "empty": "No deployments. Deploy the API to a stage to create one."},
     ]},
     {"group": "Settings", "items": [
         {"key": "settings",    "label": "Settings",            "icon": "settings",    "type": "properties"},
@@ -247,7 +251,9 @@ _APIGW_SUB = [
     ]},
     {"group": "Monitoring", "items": [
         {"key": "monitoring",  "label": "Dashboard",           "icon": "show_chart",  "type": "metrics"},
-        {"key": "logs",        "label": "Logs/Tracing",        "icon": "list_alt",    "type": "stub"},
+        {"key": "logs",        "label": "Logs/Tracing",        "icon": "list_alt",    "type": "apitable", "api": "logs", "list_key": "logs",
+         "columns": [["at", "Time"], ["stage", "Stage"], ["method", "Method"], ["path", "Path"], ["status", "Status"], ["integration_type", "Integration"]],
+         "empty": "No execution logs yet. Invoke a deployed stage to see requests here."},
     ]},
 ]
 
