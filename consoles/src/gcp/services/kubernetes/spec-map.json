@@ -1,0 +1,15 @@
+{
+  "_doc": "ui-spec page id → v4 route. Every page here renders for real — no honest_page shortcuts (gcp/kubernetes isn't on the base-branch allowlist). Honest gaps are real NotSimulated panels rendered by the page itself.",
+  "clusters": { "route": "#/kubernetes/clusters", "fixtures": ["gke-cluster"], "live": "live-cluster" },
+  "create-autopilot-cluster": { "route": "#/kubernetes/clusters/create" },
+  "cluster-details": { "route": "#/kubernetes/clusters/us-central1/uic-cluster", "fixtures": ["gke-cluster"], "vars": { "resource-name": "uic-cluster" }, "live": "live-pool" },
+  "workloads": { "route": "#/kubernetes/workloads" },
+  "gateways-services-ingress": { "route": "#/kubernetes/discovery" },
+  "secrets-configmaps": { "route": "#/kubernetes/secrets-configmaps" },
+  "overview": { "route": "#/kubernetes/overview", "fixtures": ["gke-cluster"] },
+  "applications": { "route": "#/kubernetes/applications" },
+  "storage": { "route": "#/kubernetes/storage" },
+  "object-browser": { "route": "#/kubernetes/object-browser" },
+  "backup-for-gke": { "route": "#/kubernetes/backup" },
+  "config": { "route": "#/kubernetes/config" }
+}

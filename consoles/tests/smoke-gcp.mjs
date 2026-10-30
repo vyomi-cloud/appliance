@@ -340,6 +340,42 @@ try {
   check("service account created over wire → shown in UI list", true);
   await shot("13-service-accounts");
 
+  // Kubernetes Engine: create an Autopilot cluster through the UI, cross-check over the
+  // native Kubernetes Engine REST API, add a node pool over the wire and see it in the UI.
+  const K = `v4-gcp-smoke-k8s-${Date.now() % 100000}`;
+  const KL = "/v1/projects/vyomi-project/locations/us-central1";
+  await page.goto(UI + "#/kubernetes/clusters/create");
+  await page.getByLabel("Name").fill(K);
+  await page.getByRole("radio", { name: "Stable channel" }).check();
+  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("heading", { name: K }).waitFor({ timeout: 10000 });
+  const cl = await wjson(`${KL}/clusters/${K}`);
+  check("create cluster via UI → visible over native wire (clusters.get)", cl.name === K && cl.autopilot?.enabled === true);
+  check("release channel applied", cl.releaseChannel?.channel === "STABLE");
+  await shot("12-cluster-details");
+
+  // A Standard cluster with a node pool, created directly over the wire (the console only
+  // builds the Autopilot create form — Standard clusters still render the same detail page).
+  const K2 = `v4-gcp-smoke-std-${Date.now() % 100000}`;
+  await wire(`${KL}/clusters`, { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ cluster: { name: K2, nodePools: [{ name: "wire-pool", initialNodeCount: 2, config: { machineType: "e2-medium" } }] } }) });
+  await page.goto(UI + `#/kubernetes/clusters/us-central1/${K2}`);
+  await page.getByRole("tab", { name: "Nodes" }).click();
+  await page.getByRole("cell", { name: "wire-pool", exact: true }).waitFor({ timeout: 10000 });
+  check("cluster + node pool created over wire → shown in UI", true);
+  await shot("13-cluster-nodes");
+  await wire(`${KL}/clusters/${K2}`, { method: "DELETE" });
+
+  await page.goto(UI + "#/kubernetes/clusters");
+  await page.getByRole("link", { name: K }).waitFor({ timeout: 10000 });
+  check("cluster list shows new cluster", true);
+  await page.getByRole("checkbox", { name: `Select us-central1/${K}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(K);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  check("delete cluster via UI → gone over native wire", (await wire(`${KL}/clusters/${K}`)).status === 404);
+
   // Not-simulated gaps carry the conformance attribute
   await page.goto(UI + "#/storage/monitoring");
   await page.locator("[data-vyomi-not-simulated]").first().waitFor({ timeout: 5000 });
