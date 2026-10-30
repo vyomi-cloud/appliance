@@ -1,0 +1,218 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "sqs",
+  "console_path": "/sqs/",
+  "status": "draft",
+  "nav": [],
+  "pages": [
+    {
+      "id": "landing",
+      "kind": "other",
+      "title": "Simple Queue Service",
+      "route": "/sqs/v3/home",
+      "captures": [
+        "A-sqs/001-L1-landing"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "amazon-sqs",
+      "kind": "other",
+      "title": "Simple Queue Service",
+      "route": "/sqs/v3/home#/homepage",
+      "captures": [
+        "A-sqs/002-L2-amazon-sqs"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "queues",
+      "kind": "list",
+      "title": "Queues",
+      "route": "/sqs/v3/home#/queues",
+      "breadcrumbs": [
+        "Amazon SQS",
+        "Queues"
+      ],
+      "captures": [
+        "A-sqs/003-L2-queues"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Queues",
+        "columns": [
+          "Type",
+          "Created",
+          "Messages available",
+          "Messages in flight",
+          "Encryption",
+          "Content-based deduplication"
+        ],
+        "header_actions": [
+          "Queues table is refreshed",
+          "Edit",
+          "Delete",
+          "Send and receive messages",
+          "Actions",
+          "Create queue"
+        ],
+        "empty_state": "No queues",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-queue",
+      "kind": "create",
+      "title": "Create queue",
+      "route": "/sqs/v3/home#/create-queue",
+      "breadcrumbs": [
+        "Amazon SQS",
+        "Queues",
+        "Create queue"
+      ],
+      "captures": [
+        "A-sqs/004-L2-create-queue"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "Type",
+              "type": "radio",
+              "options": [
+                "Standard Info",
+                "At-least-once delivery, message ordering isn't preserved",
+                "At-least once delivery",
+                "Best-effort ordering",
+                "FIFO Info",
+                "First-in-first-out delivery, message ordering is preserved",
+                "First-in-first-out delivery"
+              ],
+              "default": "Standard Info",
+              "required": true,
+              "help": "Choose the queue type for your application or cloud infrastructure.",
+              "confidence": "low"
+            },
+            {
+              "label": "Exactly-once processing",
+              "type": "select",
+              "required": true,
+              "help": "You can't change the queue type after you create a queue.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Configuration",
+          "fields": [
+            {
+              "label": "Visibility timeout",
+              "type": "select",
+              "default": "Seconds",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Message retention period",
+              "type": "select",
+              "default": "Days",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Delivery delay",
+              "type": "select",
+              "default": "Seconds",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Maximum message size",
+              "type": "select",
+              "default": "KiB",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Receive message wait time",
+              "type": "select",
+              "default": "Seconds",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Encryption",
+          "fields": [
+            {
+              "label": "Amazon SQS key (SSE-SQS)",
+              "type": "select",
+              "default": "AWS Key Management Service key (SSE-KMS)",
+              "required": true,
+              "help": "An encryption key that Amazon SQS creates, manages, and uses for you.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Access policy",
+          "fields": [
+            {
+              "label": "Basic",
+              "type": "radio",
+              "options": [
+                "Advanced",
+                "Define who can send messages to the queue"
+              ],
+              "default": "Advanced",
+              "required": true,
+              "help": "Use simple criteria to define a basic access policy.",
+              "confidence": "low"
+            },
+            {
+              "label": "Only the queue owner",
+              "type": "radio",
+              "options": [
+                "Only the specified AWS accounts, IAM users and roles",
+                "Define who can receive messages from the queue"
+              ],
+              "default": "Only the specified AWS accounts, IAM users and roles",
+              "required": true,
+              "help": "Only the owner of the queue can send messages to the queue.",
+              "confidence": "low"
+            },
+            {
+              "label": "Only the queue owner",
+              "type": "radio",
+              "options": [
+                "Only the specified AWS accounts, IAM users and roles",
+                "JSON (read-only)",
+                "{"
+              ],
+              "default": "Only the specified AWS accounts, IAM users and roles",
+              "required": true,
+              "help": "Only the owner of the queue can receive messages from the queue.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Tags - Optional",
+          "fields": [
+            {
+              "label": "Value",
+              "type": "text",
+              "required": false,
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+}

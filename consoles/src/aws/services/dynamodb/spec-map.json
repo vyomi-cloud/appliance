@@ -1,0 +1,73 @@
+{
+  "_doc": "ui-spec page id \u2192 v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "tables": {
+    "route": "#/dynamodb/tables",
+    "fixtures": [
+      "ddb-table"
+    ]
+  },
+  "table-detail": {
+    "route": "#/dynamodb/tables/uic-table",
+    "fixtures": [
+      "ddb-table"
+    ],
+    "vars": {
+      "resource-name": "uic-table"
+    }
+  },
+  "create-table": {
+    "route": "#/dynamodb/create-table",
+    "expand": [
+      "text=Customize settings"
+    ]
+  },
+  "explore-items": {
+    "route": "#/dynamodb/tables/uic-table/items",
+    "fixtures": [
+      "ddb-table"
+    ],
+    "vars": {
+      "resource-name": "uic-table"
+    }
+  },
+  "reserved-capacity": {
+    "route": "#/dynamodb/reserved-capacity",
+    "honest_page": true
+  },
+  "purchase-reserved-capacity": {
+    "route": "#/dynamodb/reserved-capacity",
+    "honest_page": true
+  },
+  "integrations": {
+    "route": "#/dynamodb/integrations",
+    "honest_page": true
+  },
+  "dax-clusters": {
+    "route": "#/dynamodb/dax/clusters",
+    "honest_page": true
+  },
+  "dax-create-cluster": {
+    "route": "#/dynamodb/dax/clusters",
+    "honest_page": true
+  },
+  "dax-subnet-groups": {
+    "route": "#/dynamodb/dax/subnet-groups",
+    "honest_page": true
+  },
+  "dax-create-subnet-group": {
+    "route": "#/dynamodb/dax/subnet-groups",
+    "honest_page": true
+  },
+  "dax-parameter-groups": {
+    "route": "#/dynamodb/dax/parameter-groups",
+    "honest_page": true
+  },
+  "dax-create-parameter-group": {
+    "route": "#/dynamodb/dax/parameter-groups",
+    "honest_page": true
+  },
+  "dax-events": {
+    "route": "#/dynamodb/dax/events",
+    "honest_page": true
+  }
+}

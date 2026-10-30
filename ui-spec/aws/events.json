@@ -1,0 +1,1494 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "events",
+  "console_path": "/events/",
+  "status": "draft",
+  "nav": [
+    {
+      "label": "Amazon EventBridge",
+      "page_id": "amazon-eventbridge"
+    },
+    {
+      "label": "Dashboard",
+      "page_id": "dashboard"
+    },
+    {
+      "label": "Custom event buses",
+      "page_id": "custom-event-buses"
+    }
+  ],
+  "pages": [
+    {
+      "id": "landing",
+      "kind": "other",
+      "title": "Home",
+      "route": "/events/home",
+      "captures": [
+        "A-events/001-L1-landing"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "amazon-eventbridge",
+      "kind": "other",
+      "title": "Home",
+      "route": "/events/home#/home",
+      "captures": [
+        "A-events/002-L2-amazon-eventbridge"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "dashboard",
+      "kind": "dashboard",
+      "title": "Dashboard",
+      "route": "/events/home#/dashboard",
+      "captures": [
+        "A-events/003-L2-dashboard",
+        "A-events/003-L2-dashboard--tab-02-classic-default-bus",
+        "A-events/003-L2-dashboard--tab-03-pipes",
+        "A-events/003-L2-dashboard--tab-04-scheduler"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "{resource-name}-level metrics",
+        "columns": [
+          "Quota name",
+          "Applied account-level quota value",
+          "AWS {resource-name} quota value",
+          "Adjustability"
+        ],
+        "header_actions": [
+          "Request quota increase"
+        ],
+        "confidence": "medium"
+      },
+      "extra_tables": [
+        {
+          "resource_label": "Adjustability",
+          "columns": [
+            "1,500 per second",
+            "Not adjustable"
+          ],
+          "header_actions": [],
+          "confidence": "low"
+        }
+      ],
+      "tabs": [
+        "Custom event buses - new",
+        "Classic & {resource-name} bus",
+        "Pipes",
+        "Scheduler"
+      ]
+    },
+    {
+      "id": "custom-event-buses",
+      "kind": "list",
+      "title": "Event buses",
+      "route": "/events/home#/eventbuses",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Custom event buses"
+      ],
+      "captures": [
+        "A-events/004-L2-custom-event-buses"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Event buses",
+        "columns": [
+          "Type",
+          "Status",
+          "Amazon Resource {resource-name} (ARN)",
+          "Schema discovery"
+        ],
+        "header_actions": [
+          "Actions",
+          "Send events",
+          "Create",
+          "All types"
+        ],
+        "empty_state": "No event buses",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "{resource-name}-event-bus",
+      "kind": "list",
+      "title": "Amazon EventBridge",
+      "route": "/events/home#/eventbus/{resource-name}",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "{resource-name} event bus"
+      ],
+      "captures": [
+        "A-events/005-L2-default-event-bus",
+        "A-events/005-L2-default-event-bus--tab-02-encryption",
+        "A-events/005-L2-default-event-bus--tab-03-permissions",
+        "A-events/005-L2-default-event-bus--tab-04-monitoring",
+        "A-events/005-L2-default-event-bus--tab-05-logs",
+        "A-events/005-L2-default-event-bus--tab-06-archives-replays",
+        "A-events/005-L2-default-event-bus--tab-07-tags"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Any status",
+        "columns": [
+          "Status",
+          "Type",
+          "Event bus",
+          "ARN",
+          "Description"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      },
+      "tabs": [
+        "Rules",
+        "Encryption",
+        "Permissions",
+        "Monitoring",
+        "Logs",
+        "Archives & Replays",
+        "Tags"
+      ]
+    },
+    {
+      "id": "rules",
+      "kind": "list",
+      "title": "Rules",
+      "route": "/events/home#/rules",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "{resource-name} event bus",
+        "Rules"
+      ],
+      "captures": [
+        "A-events/006-L2-rules"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Any status",
+        "columns": [
+          "Status",
+          "Type",
+          "Event bus",
+          "ARN",
+          "Description"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      }
+    },
+    {
+      "id": "archives",
+      "kind": "list",
+      "title": "Archives",
+      "route": "/events/home#/archives",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "{resource-name} event bus",
+        "Archives"
+      ],
+      "captures": [
+        "A-events/007-L2-archives"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Any status",
+        "columns": [
+          "Status",
+          "Source",
+          "Created on",
+          "Size in bytes",
+          "Retention days"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      }
+    },
+    {
+      "id": "pipes",
+      "kind": "list",
+      "title": "Pipes",
+      "route": "/events/home#/pipes",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Pipes"
+      ],
+      "captures": [
+        "A-events/008-L2-pipes"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Any Status",
+        "columns": [
+          "Status",
+          "Source",
+          "Enrichment",
+          "Target",
+          "Last modified"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      }
+    },
+    {
+      "id": "scheduled-rules-legacy",
+      "kind": "list",
+      "title": "Scheduled rules",
+      "route": "/events/home#/scheduled-rules",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Scheduled rules"
+      ],
+      "captures": [
+        "A-events/009-L2-scheduled-rules-legacy"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Any status",
+        "columns": [
+          "Status",
+          "Type",
+          "Event bus",
+          "ARN",
+          "Description"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      }
+    },
+    {
+      "id": "partner-event-sources",
+      "kind": "other",
+      "title": "Partner event sources",
+      "route": "/events/home#/partners",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Partner event sources"
+      ],
+      "captures": [
+        "A-events/010-L2-partner-event-sources"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "api-destinations",
+      "kind": "list",
+      "title": "API destinations",
+      "route": "/events/home#/apidestinations",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "API destinations"
+      ],
+      "captures": [
+        "A-events/011-L2-api-destinations"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Any status",
+        "columns": [
+          "Status",
+          "Connection",
+          "Created on"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      }
+    },
+    {
+      "id": "connections",
+      "kind": "list",
+      "title": "{resource-name}",
+      "route": "/events/home#/connections",
+      "breadcrumbs": [
+        "Amazon EventBridge"
+      ],
+      "captures": [
+        "A-events/012-L2-connections"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Any status",
+        "columns": [
+          "Status",
+          "Authorization type",
+          "Created on"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      }
+    },
+    {
+      "id": "schemas",
+      "kind": "other",
+      "title": "Schemas",
+      "route": "/events/home#/schemas",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Schemas"
+      ],
+      "captures": [
+        "A-events/013-L2-schemas",
+        "A-events/013-L2-schemas--tab-02-aws-event-schema-registry",
+        "A-events/013-L2-schemas--tab-03-discovered-schema-registry",
+        "A-events/013-L2-schemas--tab-04-custom-schema-registry"
+      ],
+      "provenance": "capture",
+      "tabs": [
+        "All schemas",
+        "AWS event schema registry",
+        "Discovered schema registry",
+        "Custom schema registry"
+      ]
+    },
+    {
+      "id": "global-endpoints",
+      "kind": "list",
+      "title": "Global endpoints",
+      "route": "/events/home#/global-endpoints",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Global endpoints"
+      ],
+      "captures": [
+        "A-events/014-L2-global-endpoints"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Any status",
+        "columns": [
+          "Home",
+          "Endpoint Id",
+          "Event replication",
+          "Status",
+          "Endpoint ARN",
+          "Last modified"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      }
+    },
+    {
+      "id": "learn",
+      "kind": "other",
+      "title": "Learn",
+      "route": "/events/home#/learn",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Learn"
+      ],
+      "captures": [
+        "A-events/015-L2-learn",
+        "A-events/015-L2-learn--tab-02-buses",
+        "A-events/015-L2-learn--tab-03-pipes",
+        "A-events/015-L2-learn--tab-04-scheduler"
+      ],
+      "provenance": "capture",
+      "tabs": [
+        "Event Driven Architecture",
+        "Buses",
+        "Pipes",
+        "Scheduler"
+      ]
+    },
+    {
+      "id": "sandbox",
+      "kind": "other",
+      "title": "Sandbox > Event pattern",
+      "route": "/events/home#/explore",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Sandbox"
+      ],
+      "captures": [
+        "A-events/016-L2-sandbox",
+        "A-events/016-L2-sandbox--tab-02-target-input-transformer"
+      ],
+      "provenance": "capture",
+      "tabs": [
+        "Event pattern",
+        "Target input transformer"
+      ]
+    },
+    {
+      "id": "quick-starts",
+      "kind": "other",
+      "title": "Quick starts",
+      "route": "/events/home#/quick-start",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Quick starts"
+      ],
+      "captures": [
+        "A-events/017-L2-quick-starts"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "create-event-bus",
+      "kind": "create",
+      "title": "Amazon EventBridge",
+      "route": "/events/home#/eventbuses-v2/create",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Custom event buses",
+        "Create custom event bus"
+      ],
+      "captures": [
+        "A-events/018-L2-create-event-bus"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "Custom event bus (recommended) New",
+              "type": "radio",
+              "options": [
+                "Custom event bus - classic",
+                "How the new Custom event bus works",
+                "Copy agent prompt",
+                "Bus details"
+              ],
+              "default": "Custom event bus - classic",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Description",
+              "type": "text",
+              "required": false,
+              "help": "Maximum of 512 characters.",
+              "confidence": "low"
+            },
+            {
+              "label": "Additional configuration",
+              "type": "text",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Retention period",
+              "type": "radio",
+              "options": [
+                "AWS Key Management Service (KMS) key",
+                "Use AWS owned key"
+              ],
+              "default": "AWS Key Management Service (KMS) key",
+              "required": true,
+              "help": "Must be between 1 and 365 days. The {resource-name} value is 1 day.",
+              "confidence": "low"
+            },
+            {
+              "label": "Choose a different AWS KMS key (advanced)",
+              "type": "text",
+              "required": true,
+              "help": "Choose a key you have permission to use, or create a new one.",
+              "confidence": "low"
+            },
+            {
+              "label": "Resource sharing",
+              "type": "radio",
+              "options": [
+                "Enable event bus sharing",
+                "Tags"
+              ],
+              "default": "Enable event bus sharing",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edit",
+      "kind": "settings",
+      "title": "Edit event bus - {resource-name}",
+      "route": "/events/home#/eventbus/{resource-name}/edit",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "{resource-name} event bus",
+        "Edit event bus"
+      ],
+      "captures": [
+        "A-events/021-L3-edit"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "{resource-name}",
+              "type": "text",
+              "required": true,
+              "help": "Maximum of 256 characters consisting of numbers, lower/upper case letters, .,-,_.",
+              "confidence": "low"
+            },
+            {
+              "label": "Description",
+              "type": "select",
+              "default": "Encryption Info",
+              "required": false,
+              "help": "Maximum of 512 characters.",
+              "confidence": "low"
+            },
+            {
+              "label": "AWS Key Management Service (KMS) key",
+              "type": "radio",
+              "options": [
+                "Use AWS owned key",
+                "Choose a different AWS KMS key (advanced)"
+              ],
+              "default": "Use AWS owned key",
+              "required": true,
+              "help": "Choose the type of KMS key to encrypt and decrypt your resources.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Logs - new, optional",
+          "fields": [
+            {
+              "label": "Log destination",
+              "type": "radio",
+              "options": [
+                "{resource-name} logs",
+                "Amazon Data Firehose stream",
+                "S3 logs"
+              ],
+              "default": "{resource-name} logs",
+              "required": true,
+              "help": "Choose which destinations you want logs delivered to.",
+              "confidence": "low"
+            },
+            {
+              "label": "Resource-based policy",
+              "type": "text",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Archives",
+              "type": "radio",
+              "options": [
+                "Archive Info",
+                "Enabled"
+              ],
+              "default": "Archive Info",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Schema discovery",
+              "type": "radio",
+              "options": [
+                "Schema discovery Info",
+                "Enabled"
+              ],
+              "default": "Schema discovery Info",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Tags",
+              "type": "tags",
+              "required": false,
+              "help": "No tags associated with the resource.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "send-events",
+      "kind": "other",
+      "title": "Send events",
+      "route": "/events/home#/eventbuses/send-events?eventBus={resource-name}",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Custom event buses",
+        "Send events"
+      ],
+      "captures": [
+        "A-events/022-L3-send-events"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "create-rule",
+      "kind": "create",
+      "title": "Create rule",
+      "route": "/events/home#/rules/create?ruleType=standard",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Custom event buses",
+        "Create rule"
+      ],
+      "captures": [
+        "A-events/023-L3-create-rule",
+        "A-events/023-L3-create-rule--tab-02-targets",
+        "A-events/023-L3-create-rule--tab-03-build",
+        "A-events/023-L3-create-rule--tab-04-configure"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Triggering events",
+        "columns": [
+          "Events",
+          "0 Events"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      },
+      "tabs": [
+        "Targets",
+        "Build",
+        "Configure"
+      ],
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "AWS SERVICE EVENTS",
+              "type": "radio",
+              "options": [
+                "CUSTOM EVENTS",
+                "Build",
+                "Configure"
+              ],
+              "default": "CUSTOM EVENTS",
+              "required": true,
+              "help": "Events generated by over 200 AWS services, including events sent through CloudTrail.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Event pattern (filter)",
+          "fields": [
+            {
+              "label": "​",
+              "type": "radio",
+              "options": [
+                "Copy",
+                "Prettify"
+              ],
+              "default": "Copy",
+              "required": true,
+              "help": "Enter event pattern JSON or drag and drop an event or an event source to the canvas above to create pattern",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-archive",
+      "kind": "create",
+      "title": "Create archive - Step 1 of 2",
+      "route": "/events/home#/eventbus/{resource-name}/archives/create",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "{resource-name} event bus",
+        "Archives",
+        "Create archive"
+      ],
+      "captures": [
+        "A-events/024-L3-create-archive"
+      ],
+      "provenance": "capture",
+      "steps": [
+        {
+          "title": "Define archive details",
+          "optional": false,
+          "sections": [
+            {
+              "title": "(form)",
+              "fields": [
+                {
+                  "label": "Step 2",
+                  "type": "radio",
+                  "options": [
+                    "Filter events",
+                    "Define archive details"
+                  ],
+                  "default": "Filter events",
+                  "required": false,
+                  "confidence": "low"
+                },
+                {
+                  "label": "{resource-name}",
+                  "type": "text",
+                  "required": true,
+                  "confidence": "low"
+                },
+                {
+                  "label": "Description",
+                  "type": "radio",
+                  "options": [
+                    "Source",
+                    "Source event bus details",
+                    "Source event bus ARN"
+                  ],
+                  "default": "Source",
+                  "required": false,
+                  "help": "Maximum of 512 characters.",
+                  "confidence": "low"
+                },
+                {
+                  "label": "Source event bus AWS KMS key ARN",
+                  "type": "radio",
+                  "options": [
+                    "Retention period",
+                    "Indefinite",
+                    "Custom",
+                    "Custom Retention Period",
+                    "days"
+                  ],
+                  "default": "Retention period",
+                  "required": true,
+                  "confidence": "low"
+                }
+              ]
+            },
+            {
+              "title": "Encryption",
+              "fields": [
+                {
+                  "label": "Choose an AWS KMS key",
+                  "type": "radio",
+                  "options": [
+                    "Use AWS owned key",
+                    "Choose a different AWS KMS key (advanced)"
+                  ],
+                  "default": "Use AWS owned key",
+                  "required": true,
+                  "help": "This key will be used to encrypt and decrypt your resources.",
+                  "confidence": "low"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Filter events",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "id": "event-buses-page",
+      "kind": "list",
+      "title": "Event buses",
+      "route": "/events/home#/eventbus",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Custom event buses"
+      ],
+      "captures": [
+        "A-events/025-L3-event-buses-page"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Event buses",
+        "columns": [
+          "Type",
+          "Status",
+          "Amazon Resource {resource-name} (ARN)",
+          "Schema discovery"
+        ],
+        "header_actions": [
+          "Actions",
+          "Send events",
+          "Create",
+          "All types"
+        ],
+        "empty_state": "No event buses",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-pipe",
+      "kind": "create",
+      "title": "Amazon EventBridge",
+      "route": "/events/home#/pipes/create",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Pipes",
+        "Create pipe"
+      ],
+      "captures": [
+        "A-events/027-L3-create-pipe",
+        "A-events/027-L3-create-pipe--tab-02-pipe-settings"
+      ],
+      "provenance": "capture",
+      "tabs": [
+        "Build pipe",
+        "Pipe settings"
+      ],
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "Untitled pipe",
+              "type": "text",
+              "required": true,
+              "help": "{resource-name} cannot be empty.",
+              "confidence": "low"
+            },
+            {
+              "label": "Description",
+              "type": "text",
+              "required": false,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "Source",
+              "type": "select",
+              "default": "Select source",
+              "required": true,
+              "help": "Select a source for pipe.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-scheduled-rule",
+      "kind": "create",
+      "title": "Create rule > Rule detail",
+      "route": "/events/home#/scheduled-rules/create",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Scheduled rules",
+        "Create rule"
+      ],
+      "captures": [
+        "A-events/028-L3-create-scheduled-rule"
+      ],
+      "provenance": "capture",
+      "steps": [
+        {
+          "title": "Define rule detail",
+          "optional": false,
+          "sections": [
+            {
+              "title": "(form)",
+              "fields": [
+                {
+                  "label": "Step 4",
+                  "type": "radio",
+                  "options": [
+                    "Configure tags",
+                    "Step 5",
+                    "Review and create"
+                  ],
+                  "default": "Configure tags",
+                  "required": false,
+                  "confidence": "low"
+                }
+              ]
+            },
+            {
+              "title": "Define rule detail",
+              "fields": [
+                {
+                  "label": "{resource-name}",
+                  "type": "text",
+                  "required": true,
+                  "help": "Maximum of 64 characters consisting of numbers, lower/upper case letters, .,-,_.",
+                  "confidence": "low"
+                },
+                {
+                  "label": "Description",
+                  "type": "text",
+                  "required": false,
+                  "confidence": "low"
+                },
+                {
+                  "label": "Event bus",
+                  "type": "radio",
+                  "options": [
+                    "Enable the rule on the selected event bus",
+                    "EventBridge Scheduler - A new AWS scheduling capability!",
+                    "Continue in EventBridge Scheduler"
+                  ],
+                  "required": true,
+                  "help": "Custom or partner event bus is not supported when Schedule is selected.",
+                  "confidence": "low"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Define schedule",
+          "optional": false
+        },
+        {
+          "title": "Select target(s)",
+          "optional": false
+        },
+        {
+          "title": "Configure tags",
+          "optional": true
+        },
+        {
+          "title": "Review and create",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "id": "link-to-adobe-setup-page",
+      "kind": "other",
+      "title": "Overview",
+      "route": "/events/home#/partners/adobe.com?page=overview",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Partner event sources",
+        "adobe.com"
+      ],
+      "captures": [
+        "A-events/029-L3-*",
+        "A-events/029-L3-*--tab-02-set-up-event-source",
+        "A-events/031-L3-*",
+        "A-events/031-L3-*--tab-01-overview",
+        "A-events/031-L3-*--tab-02-set-up-event-source",
+        "A-events/032-L3-*",
+        "A-events/032-L3-*--tab-01-overview",
+        "A-events/032-L3-*--tab-02-set-up-event-source"
+      ],
+      "provenance": "capture",
+      "tabs": [
+        "Set up event source",
+        "Overview"
+      ]
+    },
+    {
+      "id": "create",
+      "kind": "create",
+      "title": "Create API destination",
+      "route": "/events/home#/apidestinations/create",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "API destinations",
+        "Create API destination"
+      ],
+      "captures": [
+        "A-events/033-L3-create"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "{resource-name}",
+              "type": "text",
+              "required": true,
+              "help": "Enter a name for the destination. The name must be unique for your account.",
+              "confidence": "low"
+            },
+            {
+              "label": "Description",
+              "type": "text",
+              "required": false,
+              "help": "Enter a description for the destination.",
+              "confidence": "low"
+            },
+            {
+              "label": "API destination endpoint",
+              "type": "radio",
+              "options": [
+                "HTTP method",
+                "GET"
+              ],
+              "default": "HTTP method",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Invocation rate limit per second",
+              "type": "text",
+              "required": false,
+              "help": "Enter the maximum number of invocations per second to allow for this destination.",
+              "confidence": "low"
+            },
+            {
+              "label": "Connection type",
+              "type": "radio",
+              "options": [
+                "Use an existing connection",
+                "Create a new connection",
+                "Select a connection"
+              ],
+              "default": "Use an existing connection",
+              "required": true,
+              "help": "Choose an existing connection, or create a new one to use for this destination.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-2",
+      "kind": "create",
+      "title": "Create connection",
+      "route": "/events/home#/connections/create",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Create connection"
+      ],
+      "captures": [
+        "A-events/034-L3-create"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "{resource-name} and description of the connection",
+          "fields": [
+            {
+              "label": "Connection name",
+              "type": "text",
+              "required": true,
+              "help": "Enter a name for the connection. The name must be unique for your account and Region.",
+              "confidence": "low"
+            },
+            {
+              "label": "Description",
+              "type": "text",
+              "required": false,
+              "help": "Enter a description for the connection.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Configure invocation",
+          "fields": [
+            {
+              "label": "API type",
+              "type": "radio",
+              "options": [
+                "Public",
+                "Private - new"
+              ],
+              "default": "Public",
+              "required": true,
+              "help": "Define whether the invoked API is public or private.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Configure authorization",
+          "fields": [
+            {
+              "label": "Custom configuration",
+              "type": "select",
+              "default": "Use partner template",
+              "required": true,
+              "help": "Specify authorization type and parameters for the connection.",
+              "confidence": "low"
+            },
+            {
+              "label": "Authorization type",
+              "type": "radio",
+              "options": [
+                "Basic (Username/Password)",
+                "OAuth Client Credentials - Updated",
+                "API Key"
+              ],
+              "default": "Basic (Username/Password)",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Encryption",
+          "fields": [
+            {
+              "label": "Use AWS owned key",
+              "type": "select",
+              "default": "Choose a different AWS KMS key (advanced)",
+              "required": true,
+              "help": "A key that AWS owns and manages for you.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-endpoint",
+      "kind": "create",
+      "title": "Create global endpoint",
+      "route": "/events/home#/global-endpoints/create",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Global endpoints",
+        "Create global endpoint"
+      ],
+      "captures": [
+        "A-events/035-L3-create-endpoint"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "{resource-name}",
+              "type": "text",
+              "required": true,
+              "help": "Choose a name for the endpoint that's unique and descriptive. Example: us-east-2-{resource-name}.",
+              "confidence": "low"
+            },
+            {
+              "label": "Description",
+              "type": "text",
+              "required": false,
+              "help": "Enter a description for the endpoint.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Primary and secondary Region event bus detail",
+          "fields": [
+            {
+              "label": "Event bus in {resource-name} Region",
+              "type": "select",
+              "default": "Select event bus in {resource-name} Region",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Secondary Region",
+              "type": "radio",
+              "options": [
+                "Select the Secondary Region",
+                "Select Secondary Region"
+              ],
+              "default": "Select the Secondary Region",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Event bus in secondary Region",
+              "type": "text",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Event replication",
+          "fields": [
+            {
+              "label": "Execution role",
+              "type": "radio",
+              "options": [
+                "Create {resource-name} role",
+                "Use another role",
+                "CancelCreate"
+              ],
+              "default": "Create {resource-name} role",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inbound-webhooks-using-lambda-function-urls",
+      "kind": "list",
+      "title": "Amazon EventBridge",
+      "route": "/events/home#/quick-start/inbound-webhooks",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Quick starts",
+        "Inbound webhooks using Lambda function URLs"
+      ],
+      "captures": [
+        "A-events/037-L3-inbound-webhooks-using-lambda-function-urls"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Inbound webhooks using Lambda function URL CloudFormation Stacks",
+        "columns": [
+          "Stack {resource-name}",
+          "Status",
+          "Output Key",
+          "Output Value"
+        ],
+        "header_actions": [
+          "View in CloudFormation console"
+        ],
+        "empty_state": "No resources",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-3",
+      "kind": "create",
+      "title": "Create rule",
+      "route": "/events/home#/rules/create",
+      "breadcrumbs": [
+        "Amazon EventBridge",
+        "Custom event buses",
+        "Create rule"
+      ],
+      "captures": [
+        "C-events/01-create/step-1",
+        "C-events/01-create/step-1-expanded",
+        "C-events/01-create/step-2"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Triggering events",
+        "columns": [
+          "Events",
+          "0 Events"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      },
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "AWS SERVICE EVENTS",
+              "type": "radio",
+              "options": [
+                "CUSTOM EVENTS",
+                "Build",
+                "Configure"
+              ],
+              "default": "CUSTOM EVENTS",
+              "required": true,
+              "help": "Events generated by over 200 AWS services, including events sent through CloudTrail.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Event pattern (filter)",
+          "fields": [
+            {
+              "label": "​",
+              "type": "radio",
+              "options": [
+                "Copy",
+                "Prettify"
+              ],
+              "default": "Copy",
+              "required": true,
+              "help": "Enter event pattern JSON or drag and drop an event or an event source to the canvas above to create pattern",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Test event pattern - optional",
+          "fields": [
+            {
+              "label": "Test events",
+              "type": "text",
+              "required": true,
+              "help": "Use sample events provided.",
+              "confidence": "low"
+            },
+            {
+              "label": "Use your own event",
+              "type": "radio",
+              "options": [
+                "Sample triggering event",
+                "Select sample event",
+                "JSON editor",
+                "1",
+                "​",
+                "Sample event not found",
+                "Copy",
+                "Run Test"
+              ],
+              "default": "Sample triggering event",
+              "required": true,
+              "help": "Test against an event your create.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-4",
+      "kind": "create",
+      "title": "Create event bus",
+      "route": "/events/home#/eventbuses/create",
+      "captures": [
+        "C-events/02-create/step-1",
+        "C-events/02-create/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "Targets receive the matches",
+          "fields": [
+            {
+              "label": "{resource-name}",
+              "type": "text",
+              "required": true,
+              "help": "Maximum of 256 characters consisting of numbers, lower/upper case letters, .,-,_.",
+              "confidence": "low"
+            },
+            {
+              "label": "Description",
+              "type": "select",
+              "default": "Encryption Info",
+              "required": false,
+              "help": "Maximum of 512 characters.",
+              "confidence": "low"
+            },
+            {
+              "label": "AWS Key Management Service (KMS) key",
+              "type": "radio",
+              "options": [
+                "Use AWS owned key",
+                "Choose a different AWS KMS key (advanced)"
+              ],
+              "default": "Use AWS owned key",
+              "required": true,
+              "help": "Choose the type of KMS key to encrypt and decrypt your resources.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Logs - new, optional",
+          "fields": [
+            {
+              "label": "Log destination",
+              "type": "radio",
+              "options": [
+                "{resource-name} logs",
+                "Amazon Data Firehose stream",
+                "S3 logs"
+              ],
+              "default": "{resource-name} logs",
+              "required": true,
+              "help": "Choose which destinations you want logs delivered to.",
+              "confidence": "low"
+            },
+            {
+              "label": "Resource-based policy",
+              "type": "radio",
+              "options": [
+                "Load template",
+                "Resource-based policy",
+                "1",
+                "​",
+                "Copy",
+                "Prettify"
+              ],
+              "default": "Load template",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Archives",
+              "type": "radio",
+              "options": [
+                "Archive Info",
+                "Enabled"
+              ],
+              "default": "Archive Info",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Schema discovery",
+              "type": "radio",
+              "options": [
+                "Schema discovery Info",
+                "Enabled"
+              ],
+              "default": "Schema discovery Info",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Tags",
+              "type": "tags",
+              "required": false,
+              "help": "No tags associated with the resource.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-5",
+      "kind": "create",
+      "title": "Home",
+      "route": "/events/home#/schedules/create",
+      "captures": [
+        "C-events/03-create/step-1",
+        "C-events/03-create/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "Amazon SNS",
+          "fields": [
+            {
+              "label": "EventBridge event bus",
+              "type": "radio",
+              "options": [
+                "EventBridge Pipe",
+                "EventBridge Schedule",
+                "EventBridge Schema registry",
+                "Create event bus",
+                "Pricing",
+                "Cost calculator",
+                "Learn",
+                "Introduction to Amazon EventBridge",
+                "Amazon EventBridge Blog",
+                "FAQs",
+                "More resources",
+                "Documentation"
+              ],
+              "default": "EventBridge Pipe",
+              "required": true,
+              "help": "An event bus connects sources and subscribers across accounts to publish and receive events.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+}

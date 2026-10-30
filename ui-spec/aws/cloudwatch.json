@@ -1,0 +1,49 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "cloudwatch",
+  "console_path": "/cloudwatch/",
+  "status": "draft",
+  "nav": [],
+  "pages": [
+    {
+      "id": "landing",
+      "kind": "other",
+      "title": "{resource-name}",
+      "route": "/cloudwatch/home",
+      "captures": [
+        "A-cloudwatch/001-L1-landing"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "alarmsv2-create",
+      "kind": "create",
+      "title": "{resource-name}",
+      "route": "/cloudwatch/home#alarmsV2:create",
+      "captures": [
+        "C-cloudwatch/01-alarmsv2-create/step-1",
+        "C-cloudwatch/01-alarmsv2-create/step-1-expanded",
+        "C-cloudwatch/01-alarmsv2-create/step-2",
+        "C-cloudwatch/01-alarmsv2-create/step-3"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "create-log-group",
+      "kind": "create",
+      "title": "{resource-name}",
+      "route": "/cloudwatch/home#logsV2:log-groups/create-log-group",
+      "breadcrumbs": [
+        "Log management",
+        "Create log group"
+      ],
+      "captures": [
+        "C-cloudwatch/02-create-log-group/step-1",
+        "C-cloudwatch/02-create-log-group/step-1-expanded"
+      ],
+      "provenance": "capture"
+    }
+  ],
+  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+}

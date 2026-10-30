@@ -1,0 +1,184 @@
+# v4 console-UI agents: one Claude Code agent per <cloud>/<service>, building that service's
+# native-fidelity console pages on the real Vyomi backend (consoles/AGENT-UI.md), gated by
+# UI conformance against the spec from the real console. Each job opens a PR into
+# release/v4.0.0-dev; nothing here touches main.
+#
+# Trigger: commit a queue file consoles/agent-queue/<cloud>-<service>.json on
+# release/v4.0.0-dev (push triggers run from that branch, so this works before the workflow
+# exists on main), or workflow_dispatch once it is on main.
+name: console-ui-agent
+
+on:
+  push:
+    branches: [release/v4.0.0-dev]
+    paths: [consoles/agent-queue/*.json]
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Space-separated <cloud>-<service> list, e.g. "aws-sqs aws-sns"'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  BASE_BRANCH: release/v4.0.0-dev
+  MIN_FIDELITY: '0.90'
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.t.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
+      - id: t
+        run: |
+          if [ -n "${{ github.event.inputs.targets }}" ]; then
+            list="${{ github.event.inputs.targets }}"
+          else
+            list=$(git diff --name-only --diff-filter=AM HEAD~1 HEAD -- consoles/agent-queue/ | xargs -n1 basename 2>/dev/null | sed 's/\.json$//' | tr '\n' ' ')
+          fi
+          list=$(printf '%s\n' $list | grep -E '^(aws|gcp|azure)-[a-z0-9-]+$' || true)
+          echo "targets=$(printf '%s\n' $list | grep . | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
+          echo "Targets: $list"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.targets != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        target: ${{ fromJson(needs.plan.outputs.targets) }}
+    concurrency:
+      group: console-ui-${{ matrix.target }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASE_BRANCH }}
+          fetch-depth: 0
+
+      - name: Target
+        id: tg
+        run: |
+          t="${{ matrix.target }}"
+          echo "cloud=${t%%-*}" >> "$GITHUB_OUTPUT"
+          echo "service=${t#*-}" >> "$GITHUB_OUTPUT"
+          echo "branch=v4/ui-${t}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          git checkout -b "v4/ui-${t}-${{ github.run_id }}"
+
+      # Private reference captures (screenshots + page text). Optional: without the deploy
+      # key the agent works from the committed text spec alone.
+      - name: Reference captures (private, optional)
+        env:
+          KEY: ${{ secrets.CAPTURES_DEPLOY_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then echo "::notice::CAPTURES_DEPLOY_KEY not set — spec-only mode"; exit 0; fi
+          mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/captures && chmod 600 ~/.ssh/captures
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/captures -o StrictHostKeyChecking=accept-new" \
+            git clone --depth 1 --filter=blob:none --sparse git@github.com:vyomi-cloud/console-captures.git captures
+          cd captures && git sparse-checkout set "${{ steps.tg.outputs.cloud }}/live/A-${{ steps.tg.outputs.service }}*" "${{ steps.tg.outputs.cloud }}/live/C-${{ steps.tg.outputs.service }}*" "${{ steps.tg.outputs.cloud }}/live/manifest.jsonl" "aws/cloudscape"
+          cd .. && echo "captures/" >> .git/info/exclude
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Tooling
+        run: |
+          (cd consoles && npm ci)
+          npm i --no-save --prefix .ci-node playwright@1.48.2 && npx --prefix .ci-node playwright install --with-deps chromium
+          echo ".ci-node/" >> .git/info/exclude
+          echo "NODE_PATH=$PWD/.ci-node/node_modules" >> "$GITHUB_ENV"
+
+      - name: Draft spec if missing
+        run: |
+          s=ui-spec/${{ steps.tg.outputs.cloud }}/${{ steps.tg.outputs.service }}.json
+          if [ ! -f "$s" ] && [ -d captures ]; then
+            python3 tools/ui_spec/extract.py --captures captures/${{ steps.tg.outputs.cloud }}/live \
+              --out ui-spec/${{ steps.tg.outputs.cloud }} --service ${{ steps.tg.outputs.service }} || true
+          fi
+          ls -la ui-spec/${{ steps.tg.outputs.cloud }}/ || true
+
+      - name: Baseline UI conformance
+        continue-on-error: true
+        run: |
+          (cd consoles && node build.mjs)
+          python3 consoles/dev_server.py -q & for i in $(seq 60); do curl -sf localhost:8740/_wire/ >/dev/null && break; sleep 1; done
+          OUT=ui-out-before node consoles/tests/ui-conformance.mjs ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }} || true
+          pkill -f dev_server.py || true
+
+      - name: Console-UI agent — ${{ matrix.target }}
+        timeout-minutes: 100
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          allowed_bots: 'github-actions'
+          prompt: |
+            Follow consoles/AGENT-UI.md exactly.
+            Cloud lens: ${{ steps.tg.outputs.cloud }}. Service: ${{ steps.tg.outputs.service }}.
+            Spec: ui-spec/${{ steps.tg.outputs.cloud }}/${{ steps.tg.outputs.service }}.json.
+            Baseline UI conformance report: ui-out-before/${{ steps.tg.outputs.cloud }}.md (if present).
+            Reference captures: captures/ (present only if the private checkout succeeded).
+            Commit your work on the current branch ${{ steps.tg.outputs.branch }}; do not push.
+          claude_args: >-
+            --max-turns 250
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+
+      # Independent gate — the agent's own claims are not trusted.
+      - name: Gate — build, UI conformance, smoke, core conformance
+        id: gate
+        run: |
+          (cd consoles && node build.mjs)
+          python3 consoles/dev_server.py -q & for i in $(seq 60); do curl -sf localhost:8740/_wire/ >/dev/null && break; sleep 1; done
+          set +e
+          OUT=ui-out node consoles/tests/ui-conformance.mjs ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }}; ui=$?
+          node consoles/tests/smoke-aws.mjs; smoke=$?
+          core=0
+          for f in $(git diff --name-only origin/${{ env.BASE_BRANCH }}...HEAD -- tests/conformance/ | grep '\.py$'); do PYTHONPATH=. python3 "$f" || core=1; done
+          for f in tests/conformance/test_s3_core.py tests/conformance/test_aws_wire_router.py; do PYTHONPATH=. python3 "$f" >/dev/null || core=1; done
+          echo "ui=$ui smoke=$smoke core=$core"
+          echo "ok=$([ $ui -eq 0 ] && [ $smoke -eq 0 ] && [ $core -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Rebuild outputs + push branch + PR
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "vyomi-console-ui-agent"
+          git config user.email "console-ui-agent@users.noreply.github.com"
+          git add static/v4 wasm/v4 && git commit -qm "build(v4): rebuild console bundles" || true
+          if git diff --quiet origin/${{ env.BASE_BRANCH }}...HEAD; then echo "no changes"; exit 0; fi
+          git push -q origin HEAD
+          {
+            echo "Console-UI agent: \`${{ matrix.target }}\` (run ${{ github.run_id }})"; echo
+            echo "**Gate:** ${{ steps.gate.outputs.ok == 'true' && '✅ passed' || '❌ failed — do not merge' }}"; echo
+            echo "### UI conformance (before)"; cat ui-out-before/*.md 2>/dev/null | sed -n '1,8p'; echo
+            echo "### UI conformance (after)"; cat ui-out/*.md 2>/dev/null | sed -n '1,8p'; echo
+            echo "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+          } > pr.md
+          gh pr create --base ${{ env.BASE_BRANCH }} --head "${{ steps.tg.outputs.branch }}" \
+            --title "v4 UI: ${{ matrix.target }}" --body-file pr.md \
+            --label "v4-console-ui" 2>/dev/null || gh pr create --base ${{ env.BASE_BRANCH }} --head "${{ steps.tg.outputs.branch }}" --title "v4 UI: ${{ matrix.target }}" --body-file pr.md
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-conformance-${{ matrix.target }}
+          path: |
+            ui-out-before/
+            ui-out/
+            smoke-out/
+          if-no-files-found: ignore
+
+      - name: Fail if gate failed
+        if: steps.gate.outputs.ok != 'true'
+        run: exit 1

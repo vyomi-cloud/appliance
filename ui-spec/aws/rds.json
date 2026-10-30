@@ -1,0 +1,1747 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "rds",
+  "console_path": "/rds/",
+  "status": "draft",
+  "nav": [
+    {
+      "label": "Aurora and RDS",
+      "page_id": "aurora-and-rds"
+    },
+    {
+      "label": "Dashboard",
+      "children": [
+        {
+          "label": "Databases",
+          "page_id": "databases"
+        },
+        {
+          "label": "Query editor",
+          "page_id": "query-editor"
+        }
+      ]
+    },
+    {
+      "label": "CloudWatch Database Insights",
+      "children": [
+        {
+          "label": "Snapshots",
+          "page_id": "snapshots"
+        },
+        {
+          "label": "Exports in Amazon S3",
+          "page_id": "exports-in-amazon-s3"
+        },
+        {
+          "label": "Automated backups",
+          "page_id": "automated-backups"
+        },
+        {
+          "label": "Reserved instances",
+          "page_id": "reserved-instances"
+        },
+        {
+          "label": "Capacity reservations",
+          "page_id": "capacity-reservations"
+        }
+      ]
+    },
+    {
+      "label": "New",
+      "children": [
+        {
+          "label": "Proxies",
+          "page_id": "proxies"
+        },
+        {
+          "label": "Subnet groups",
+          "page_id": "subnet-groups"
+        },
+        {
+          "label": "Parameter groups",
+          "page_id": "parameter-groups"
+        },
+        {
+          "label": "Option groups",
+          "page_id": "option-groups"
+        },
+        {
+          "label": "Custom engine versions",
+          "page_id": "custom-engine-versions"
+        },
+        {
+          "label": "Zero-ETL integrations",
+          "page_id": "zero-etl-integrations"
+        },
+        {
+          "label": "Events",
+          "page_id": "events"
+        },
+        {
+          "label": "Event subscriptions",
+          "page_id": "event-subscriptions"
+        },
+        {
+          "label": "Recommendations",
+          "page_id": "recommendations"
+        }
+      ]
+    },
+    {
+      "label": "0",
+      "children": [
+        {
+          "label": "Certificate update",
+          "page_id": "certificate-update"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "landing",
+      "kind": "list",
+      "title": "Dashboard",
+      "route": "/rds/home",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Dashboard"
+      ],
+      "captures": [
+        "A-rds/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "View service health dashboard",
+        "columns": [
+          "Current status",
+          "Details"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      }
+    },
+    {
+      "id": "aurora-and-rds",
+      "kind": "other",
+      "title": "Getting Started",
+      "route": "/rds/home#GettingStarted:",
+      "captures": [
+        "A-rds/002-L2-aurora-and-rds"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "databases",
+      "kind": "list",
+      "title": "{resource-name}s",
+      "route": "/rds/home#databases:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "{resource-name}s"
+      ],
+      "captures": [
+        "A-rds/003-L2-databases"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "{resource-name}s",
+        "columns": [
+          "DB identifier",
+          "Status",
+          "Role",
+          "Engine",
+          "Upgrade rollout order",
+          "Region & AZ",
+          "Size",
+          "Recommendations",
+          "CPU",
+          "Current activity",
+          "Maintenance",
+          "VPC",
+          "Multi-AZ"
+        ],
+        "header_actions": [
+          "Group resources",
+          "Modify",
+          "Actions",
+          "Create database"
+        ],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "query-editor",
+      "kind": "list",
+      "title": "Query editor",
+      "route": "/rds/home#query-editor:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Query editor"
+      ],
+      "captures": [
+        "A-rds/004-L2-query-editor",
+        "A-rds/004-L2-query-editor--tab-02-recent",
+        "A-rds/004-L2-query-editor--tab-03-saved-queries",
+        "A-rds/004-L2-query-editor--tab-04-sample-queries",
+        "A-rds/004-L2-query-editor--tab-05-output"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Statements",
+        "columns": [
+          "Start",
+          "Statement",
+          "Status",
+          "Response",
+          "Duration"
+        ],
+        "header_actions": [
+          "Export to csv"
+        ],
+        "confidence": "medium"
+      },
+      "tabs": [
+        "Recent",
+        "Saved queries",
+        "Sample queries",
+        "Output"
+      ]
+    },
+    {
+      "id": "snapshots",
+      "kind": "list",
+      "title": "Snapshots",
+      "route": "/rds/home#snapshots-list:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Snapshots"
+      ],
+      "captures": [
+        "A-rds/005-L2-snapshots",
+        "A-rds/005-L2-snapshots--tab-02-system",
+        "A-rds/005-L2-snapshots--tab-03-shared-with-me",
+        "A-rds/005-L2-snapshots--tab-04-public",
+        "A-rds/005-L2-snapshots--tab-05-backup-service",
+        "A-rds/005-L2-snapshots--tab-06-exports-in-amazon-s3"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Manual snapshots",
+        "columns": [
+          "Snapshot name",
+          "Engine version",
+          "DB instance or cluster",
+          "Snapshot creation time",
+          "DB Instance created time",
+          "Status",
+          "Progress",
+          "VPC",
+          "Snapshot type",
+          "Storage",
+          "Storage Type",
+          "Zone",
+          "Owner",
+          "Port",
+          "Encrypted",
+          "Timezone",
+          "Engine",
+          "Snapshot database time",
+          "Full snapshot size"
+        ],
+        "header_actions": [
+          "Actions",
+          "Take snapshot"
+        ],
+        "empty_state": "No Snapshots found, you can take a snapshot using Take Snapshot button",
+        "confidence": "medium"
+      },
+      "tabs": [
+        "Manual",
+        "System",
+        "Shared with me",
+        "Public",
+        "Backup service",
+        "Exports in Amazon S3"
+      ]
+    },
+    {
+      "id": "exports-in-amazon-s3",
+      "kind": "list",
+      "title": "Exports in Amazon S3",
+      "route": "/rds/home#exports-in-s3:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Exports In Amazon S3"
+      ],
+      "captures": [
+        "A-rds/006-L2-exports-in-amazon-s3"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Exports In Amazon S3",
+        "columns": [
+          "Source type",
+          "Status",
+          "S3 bucket",
+          "Source",
+          "Source creation time",
+          "Export task start time",
+          "Export task end time"
+        ],
+        "header_actions": [
+          "Cancel",
+          "All Source Types"
+        ],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "automated-backups",
+      "kind": "list",
+      "title": "Automated Backup List",
+      "route": "/rds/home#automatedbackups:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Automated backups"
+      ],
+      "captures": [
+        "A-rds/007-L2-automated-backups",
+        "A-rds/007-L2-automated-backups--tab-02-replicated",
+        "A-rds/007-L2-automated-backups--tab-03-retained"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Current Region backups",
+        "columns": [
+          "DB instance or cluster",
+          "Earliest restorable time",
+          "Latest restorable time",
+          "Engine",
+          "Zone",
+          "Replicated to",
+          "Source Region",
+          "Encrypted"
+        ],
+        "header_actions": [
+          "Actions"
+        ],
+        "empty_state": "No current region backups found",
+        "confidence": "medium"
+      },
+      "tabs": [
+        "Current Region",
+        "Replicated",
+        "Retained"
+      ]
+    },
+    {
+      "id": "reserved-instances",
+      "kind": "list",
+      "title": "Reserved Instances",
+      "route": "/rds/home#reserved-instances:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Reserved instances"
+      ],
+      "captures": [
+        "A-rds/008-L2-reserved-instances"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Reserved instances",
+        "columns": [
+          "Reservation ID",
+          "Lease ID",
+          "Product",
+          "Region",
+          "Class",
+          "Offering Type",
+          "Status",
+          "Multi AZ",
+          "Start date",
+          "Remaining Days",
+          "Quantity"
+        ],
+        "header_actions": [
+          "Purchase Reserved DB Instance"
+        ],
+        "empty_state": "No reserved instance found",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "capacity-reservations",
+      "kind": "list",
+      "title": "Capacity reservations",
+      "route": "/rds/home#capacity-reservations:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Capacity reservations"
+      ],
+      "captures": [
+        "A-rds/009-L2-capacity-reservations"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Capacity reservations",
+        "columns": [
+          "Capacity reservations",
+          "ID",
+          "Status",
+          "Engine",
+          "DB instance class",
+          "Reserved capacity per AZ",
+          "Start date",
+          "End date"
+        ],
+        "header_actions": [
+          "Actions",
+          "Create capacity reservation",
+          "Show 'Cancelled/Expired' reservations"
+        ],
+        "filter_placeholder": "Filter engine",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "proxies",
+      "kind": "list",
+      "title": "Proxies",
+      "route": "/rds/home#proxies:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Proxies"
+      ],
+      "captures": [
+        "A-rds/010-L2-proxies"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Proxies",
+        "columns": [
+          "Proxy identifier",
+          "Status",
+          "Engine family"
+        ],
+        "header_actions": [
+          "Actions",
+          "Create proxy"
+        ],
+        "empty_state": "No proxies",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "subnet-groups",
+      "kind": "list",
+      "title": "Subnet Groups",
+      "route": "/rds/home#db-subnet-groups-list:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Subnet groups"
+      ],
+      "captures": [
+        "A-rds/011-L2-subnet-groups"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Subnet groups",
+        "columns": [
+          "Description",
+          "Status",
+          "VPC"
+        ],
+        "header_actions": [
+          "Edit",
+          "Delete",
+          "Create DB subnet group"
+        ],
+        "empty_state": "No db subnet groups",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "parameter-groups",
+      "kind": "list",
+      "title": "Parameter Groups",
+      "route": "/rds/home#parameter-group-list:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Parameter groups"
+      ],
+      "captures": [
+        "A-rds/012-L2-parameter-groups",
+        "A-rds/012-L2-parameter-groups--tab-02-default"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Custom parameter groups",
+        "columns": [
+          "Family",
+          "Type",
+          "Description",
+          "ARN"
+        ],
+        "header_actions": [
+          "Actions",
+          "Create parameter group"
+        ],
+        "empty_state": "No parameter group found",
+        "confidence": "medium"
+      },
+      "tabs": [
+        "Custom"
+      ]
+    },
+    {
+      "id": "option-groups",
+      "kind": "list",
+      "title": "Option Groups",
+      "route": "/rds/home#option-groups-list:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Option groups"
+      ],
+      "captures": [
+        "A-rds/013-L2-option-groups"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Option groups",
+        "columns": [
+          "Description",
+          "Engine",
+          "Engine version",
+          "Options"
+        ],
+        "header_actions": [
+          "Add option",
+          "Modify option",
+          "Delete option",
+          "Delete option group",
+          "Create group"
+        ],
+        "empty_state": "No option groups found",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "custom-engine-versions",
+      "kind": "other",
+      "title": "Custom Engine Versions",
+      "route": "/rds/home#custom-cevs:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Custom engine versions"
+      ],
+      "captures": [
+        "A-rds/014-L2-custom-engine-versions"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "zero-etl-integrations",
+      "kind": "list",
+      "title": "Zero-ETL integrations",
+      "route": "/rds/home#integrations:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Zero-ETL integrations"
+      ],
+      "captures": [
+        "A-rds/015-L2-zero-etl-integrations"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Zero-ETL integrations",
+        "columns": [
+          "Zero-ETL integrations",
+          "Integration name",
+          "Status",
+          "Creation date",
+          "Source ARN",
+          "Destination AWS account",
+          "Destination type",
+          "Destination ARN"
+        ],
+        "header_actions": [
+          "Modify",
+          "Delete",
+          "Create zero-ETL integration"
+        ],
+        "empty_state": "No integrations",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "events",
+      "kind": "list",
+      "title": "Event List",
+      "route": "/rds/home#event-list:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Events"
+      ],
+      "captures": [
+        "A-rds/016-L2-events"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Events",
+        "columns": [
+          "Source",
+          "Type",
+          "Time",
+          "Message"
+        ],
+        "header_actions": [],
+        "empty_state": "No event found",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "event-subscriptions",
+      "kind": "list",
+      "title": "Event Subscriptions",
+      "route": "/rds/home#event-subscriptions-list:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Event subscriptions"
+      ],
+      "captures": [
+        "A-rds/017-L2-event-subscriptions"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Event subscriptions",
+        "columns": [
+          "Status",
+          "Source Type",
+          "Enabled"
+        ],
+        "header_actions": [
+          "Edit",
+          "Delete",
+          "Create event subscription"
+        ],
+        "empty_state": "No event subscription found",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "recommendations",
+      "kind": "list",
+      "title": "Recommendations",
+      "route": "/rds/home#recommendations:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Recommendations"
+      ],
+      "captures": [
+        "A-rds/018-L2-recommendations"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Recommendations",
+        "columns": [
+          "Severity",
+          "Detection",
+          "Recommendation",
+          "Impact",
+          "Category",
+          "Start time",
+          "Last modified",
+          "Resource identifier"
+        ],
+        "header_actions": [
+          "View details",
+          "Apply",
+          "Dismiss",
+          "Status",
+          "Active",
+          "Last modified",
+          "Last 3 months"
+        ],
+        "empty_state": "No active recommendations",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "certificate-update",
+      "kind": "list",
+      "title": "Update Your Amazon RDS SSL/TLS Certificates",
+      "route": "/rds/home#ca-cert-update:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Certificate update"
+      ],
+      "captures": [
+        "A-rds/019-L2-certificate-update"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "{resource-name}s requiring certificate update",
+        "columns": [
+          "DB identifier",
+          "Status",
+          "Certificate authority",
+          "CA expiration date",
+          "Role",
+          "Restart required",
+          "Scheduled changes",
+          "Maintenance"
+        ],
+        "header_actions": [
+          "Export list",
+          "Schedule update",
+          "Apply update now"
+        ],
+        "empty_state": "No records found.",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create",
+      "kind": "create",
+      "title": "Create database",
+      "route": "/rds/home#launch-dbinstance:",
+      "captures": [
+        "A-rds/020-L2-create"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Add role",
+        "columns": [
+          "Feature",
+          "IAM role",
+          "Actions"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      },
+      "sections": [
+        {
+          "title": "Create database",
+          "fields": [
+            {
+              "label": "Engine type",
+              "type": "radio",
+              "options": [
+                "Aurora (MySQL Compatible)",
+                "Aurora (PostgreSQL Compatible)",
+                "MySQL",
+                "PostgreSQL",
+                "MariaDB",
+                "Oracle",
+                "Microsoft SQL Server",
+                "IBM Db2",
+                "Choose a database creation method",
+                "Full configuration",
+                "Express configuration",
+                "Templates"
+              ],
+              "default": "Aurora (MySQL Compatible)",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Production",
+              "type": "select",
+              "default": "Dev/Test",
+              "required": true,
+              "help": "Use {resource-name}s for high availability and fast, consistent performance.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Cluster scalability type",
+          "fields": [
+            {
+              "label": "Aurora serverless",
+              "type": "radio",
+              "options": [
+                "Limitless {resource-name}",
+                "Provisioned"
+              ],
+              "default": "Limitless {resource-name}",
+              "required": true,
+              "help": "Automated vertical scaling to meet the needs of your most demanding workloads.",
+              "confidence": "low"
+            },
+            {
+              "label": "Type of provisioned configuration",
+              "type": "radio",
+              "options": [
+                "Memory optimized classes (includes r classes)",
+                "Burstable classes (includes t classes)",
+                "Optimized Reads classes - new",
+                "db.r7g.large",
+                "2 vCPUs",
+                "16 GiB RAM",
+                "EBS Bandwidth: Up to 10,000 Mbps",
+                "Network: Up to 12.5 Gbps",
+                "Settings",
+                "Engine version",
+                "Choose an engine version"
+              ],
+              "default": "Memory optimized classes (includes r classes)",
+              "required": true,
+              "help": "Choose a configuration type that aligns with your workload requirements.",
+              "confidence": "low"
+            },
+            {
+              "label": "DB cluster identifier",
+              "type": "text",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Master username",
+              "type": "text",
+              "required": true,
+              "help": "Type a login ID for the master user of your DB instance.",
+              "confidence": "low"
+            },
+            {
+              "label": "Credentials management",
+              "type": "radio",
+              "options": [
+                "Managed in AWS Secrets Manager",
+                "Self managed"
+              ],
+              "default": "Managed in AWS Secrets Manager",
+              "required": true,
+              "help": "You can use AWS Secrets Manager or manage your master user credentials.",
+              "confidence": "low"
+            },
+            {
+              "label": "Select the encryption key",
+              "type": "radio",
+              "options": [
+                "aws/secretsmanager ({resource-name})",
+                "Add new key",
+                "Additional credentials settings",
+                "{resource-name} authentication"
+              ],
+              "default": "aws/secretsmanager ({resource-name})",
+              "required": true,
+              "help": "You can encrypt using the KMS key that Secrets Manager creates or a customer managed KMS key that you create.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Cluster storage configuration",
+          "fields": [
+            {
+              "label": "Configuration options",
+              "type": "select",
+              "default": "Aurora I/O-Optimized",
+              "required": true,
+              "help": "{resource-name} instance, storage, and I/O charges vary depending on the configuration. Learn more",
+              "confidence": "low"
+            },
+            {
+              "label": "Aurora Standard",
+              "type": "text",
+              "required": true,
+              "help": "Cost-effective pricing for many applications with moderate I/O usage (I/O costs less than 25% of total database costs).",
+              "confidence": "low"
+            },
+            {
+              "label": "Multi-AZ deployment",
+              "type": "text",
+              "required": true,
+              "help": "Create an Aurora Replica or Reader node in a different AZ (recommended for scaled availability)",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Connectivity",
+          "fields": [
+            {
+              "label": "{resource-name} resource",
+              "type": "radio",
+              "options": [
+                "Don’t connect to an EC2 compute resource",
+                "Connect to an EC2 compute resource"
+              ],
+              "default": "Don’t connect to an EC2 compute resource",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "{resource-name} private cloud (VPC)",
+              "type": "radio",
+              "options": [
+                "3 Subnets, 3 Availability Zones"
+              ],
+              "default": "3 Subnets, 3 Availability Zones",
+              "required": true,
+              "help": "The virtual networking environment for this DB cluster.",
+              "confidence": "low"
+            },
+            {
+              "label": "DB subnet group",
+              "type": "select",
+              "required": true,
+              "help": "Defines which subnets and IP ranges the DB cluster can use in the VPC that you selected.",
+              "confidence": "low"
+            },
+            {
+              "label": "Public access",
+              "type": "radio",
+              "options": [
+                "Yes",
+                "No"
+              ],
+              "default": "Yes",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "VPC security group (firewall)",
+              "type": "radio",
+              "options": [
+                "Choose existing",
+                "Create new",
+                "Create new VPC security group",
+                "Existing VPC security groups",
+                "Choose one or more options",
+                "Additional configuration"
+              ],
+              "default": "Choose existing",
+              "required": true,
+              "help": "Allows access to your database. Make sure that the security group rules allow the appropriate incoming traffic.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Capacity reservations",
+          "fields": [
+            {
+              "label": "Specify capacity reservation",
+              "type": "select",
+              "default": "No capacity reservation",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Specify capacity reservation for Aurora Replica",
+              "type": "select",
+              "default": "No capacity reservation",
+              "required": false,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Babelfish settings",
+          "fields": [
+            {
+              "label": "Turn on Babelfish",
+              "type": "text",
+              "required": true,
+              "help": "Makes possible faster, cheaper, and lower-risk migrations from Microsoft SQL Server to Aurora PostgreSQL.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Monitoring",
+          "fields": [
+            {
+              "label": "Integration with {resource-name} Application Signals",
+              "type": "select",
+              "default": "{resource-name} Insights - Standard",
+              "required": true,
+              "help": "Detailed database and per-query metrics (extended retention at no additional charge)",
+              "confidence": "low"
+            },
+            {
+              "label": "Enable collecting detailed per-query and database counter metrics",
+              "type": "text",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Retention period",
+              "type": "select",
+              "default": "7 days (free)",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "AWS KMS key",
+              "type": "radio",
+              "options": [
+                "Alias",
+                "({resource-name}) aws/rds",
+                "KMS key ID"
+              ],
+              "default": "Alias",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "aws/rds",
+              "type": "select",
+              "default": "Additional monitoring settings",
+              "required": true,
+              "help": "You can't change the KMS key after you create your database.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Additional configuration",
+          "fields": [
+            {
+              "label": "-",
+              "type": "text",
+              "required": true,
+              "help": "This billing estimate is based on on-demand usage as described in Amazon Aurora Pricing",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "restore-from-s3",
+      "kind": "create",
+      "title": "Create database by restoring from S3",
+      "route": "/rds/home#restore-from-s3:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "{resource-name}s",
+        "Restore from S3"
+      ],
+      "captures": [
+        "A-rds/022-L3-restore-from-s3"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Add role",
+        "columns": [
+          "Feature",
+          "IAM role",
+          "Actions"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      },
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "S3 bucket",
+              "type": "select",
+              "required": true,
+              "help": "Choose the Amazon S3 bucket that contains your database backup files.",
+              "confidence": "low"
+            },
+            {
+              "label": "S3 prefix",
+              "type": "select",
+              "default": "Engine options",
+              "required": false,
+              "help": "Enter the file path prefix for the files stored in your Amazon S3 bucket.",
+              "confidence": "low"
+            },
+            {
+              "label": "Engine type",
+              "type": "radio",
+              "options": [
+                "Aurora (MySQL Compatible)",
+                "MySQL",
+                "IAM role",
+                "IAM permissions",
+                "Create {resource-name} role",
+                "Use another role",
+                "Allow access to KMS key",
+                "Yes",
+                "No"
+              ],
+              "default": "Aurora (MySQL Compatible)",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Cluster storage configuration",
+          "fields": [
+            {
+              "label": "Configuration options",
+              "type": "select",
+              "default": "Aurora I/O-Optimized",
+              "required": true,
+              "help": "{resource-name} instance, storage, and I/O charges vary depending on the configuration. Learn more",
+              "confidence": "low"
+            },
+            {
+              "label": "Aurora Standard",
+              "type": "text",
+              "required": true,
+              "help": "Cost-effective pricing for many applications with moderate I/O usage (I/O costs less than 25% of total database costs).",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Instance configuration",
+          "fields": [
+            {
+              "label": "DB instance class",
+              "type": "radio",
+              "options": [
+                "Hide filters",
+                "Include previous generation classes",
+                "Aurora serverless",
+                "Memory optimized classes (includes r classes)",
+                "Burstable classes (includes t classes)",
+                "Instance type",
+                "db.r7g.large",
+                "2 vCPUs",
+                "16 GiB RAM",
+                "EBS Bandwidth: Up to 10,000 Mbps",
+                "Network: Up to 12.5 Gbps",
+                "Settings"
+              ],
+              "default": "Hide filters",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Engine version",
+              "type": "text",
+              "required": true,
+              "help": "Aurora MySQL 3.10.3 (compatible with MySQL 8.0.42) - {resource-name} for major version 8.0",
+              "confidence": "low"
+            },
+            {
+              "label": "Enable RDS Extended Support",
+              "type": "select",
+              "default": "Amazon RDS Extended Support is a paid offering",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "DB cluster identifier",
+              "type": "text",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Master username",
+              "type": "text",
+              "required": true,
+              "help": "Type a login ID for the master user of your DB instance.",
+              "confidence": "low"
+            },
+            {
+              "label": "Credentials management",
+              "type": "radio",
+              "options": [
+                "Managed in AWS Secrets Manager - most secure",
+                "Self managed"
+              ],
+              "default": "Managed in AWS Secrets Manager - most secure",
+              "required": true,
+              "help": "You can use AWS Secrets Manager or manage your master user credentials.",
+              "confidence": "low"
+            },
+            {
+              "label": "Select the encryption key",
+              "type": "radio",
+              "options": [
+                "aws/secretsmanager ({resource-name})",
+                "Add new key",
+                "Availability & durability"
+              ],
+              "default": "aws/secretsmanager ({resource-name})",
+              "required": true,
+              "help": "You can encrypt using the KMS key that Secrets Manager creates or a customer managed KMS key that you create.",
+              "confidence": "low"
+            },
+            {
+              "label": "Multi-AZ deployment",
+              "type": "text",
+              "required": true,
+              "help": "Create an Aurora Replica or Reader node in a different AZ (recommended for scaled availability)",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Connectivity",
+          "fields": [
+            {
+              "label": "Network type",
+              "type": "radio",
+              "options": [
+                "IPv4",
+                "Dual-stack mode"
+              ],
+              "default": "IPv4",
+              "required": true,
+              "help": "To use dual-stack mode, make sure that you associate an IPv6 CIDR block with a subnet in the VPC you specify.",
+              "confidence": "low"
+            },
+            {
+              "label": "{resource-name} private cloud (VPC)",
+              "type": "radio",
+              "options": [
+                "3 Subnets, 3 Availability Zones"
+              ],
+              "default": "3 Subnets, 3 Availability Zones",
+              "required": true,
+              "help": "The virtual networking environment for this DB cluster.",
+              "confidence": "low"
+            },
+            {
+              "label": "DB subnet group",
+              "type": "select",
+              "required": true,
+              "help": "Defines which subnets and IP ranges the DB cluster can use in the VPC that you selected.",
+              "confidence": "low"
+            },
+            {
+              "label": "Public access",
+              "type": "radio",
+              "options": [
+                "Yes",
+                "No"
+              ],
+              "default": "Yes",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "VPC security group (firewall)",
+              "type": "radio",
+              "options": [
+                "Choose existing",
+                "Create new",
+                "Create new VPC security group",
+                "Existing VPC security groups",
+                "Choose one or more options"
+              ],
+              "default": "Choose existing",
+              "required": true,
+              "help": "Allows access to your database. Make sure that the security group rules allow the appropriate incoming traffic.",
+              "confidence": "low"
+            },
+            {
+              "label": "Availability Zone",
+              "type": "select",
+              "default": "No preference",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Certificate authority",
+              "type": "radio",
+              "options": [
+                "rds-ca-rsa2048-g1 ({resource-name})",
+                "Expiry: May 20, 2061",
+                "RDS Data API"
+              ],
+              "default": "rds-ca-rsa2048-g1 ({resource-name})",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Enable the RDS Data API",
+              "type": "select",
+              "default": "Additional configuration",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Capacity reservations",
+          "fields": [
+            {
+              "label": "Specify capacity reservation",
+              "type": "select",
+              "default": "No capacity reservations",
+              "required": false,
+              "help": "Specify a capacity reservation for your database.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "{resource-name} authentication",
+          "fields": [
+            {
+              "label": "IAM database authentication",
+              "type": "select",
+              "default": "Kerberos authentication",
+              "required": true,
+              "help": "Authenticates using IAM database authentication.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "IAM roles - optional",
+          "fields": [
+            {
+              "label": "Feature",
+              "type": "radio",
+              "options": [
+                "Choose a feature",
+                "IAM role"
+              ],
+              "default": "Choose a feature",
+              "required": false,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Monitoring",
+          "fields": [
+            {
+              "label": "Integration with {resource-name} Application Signals",
+              "type": "select",
+              "default": "{resource-name} Insights - Standard",
+              "required": true,
+              "help": "Detailed database and per-query metrics (extended retention at no additional charge)",
+              "confidence": "low"
+            },
+            {
+              "label": "AWS KMS key",
+              "type": "radio",
+              "options": [
+                "({resource-name}) aws/rds",
+                "123456789012",
+                "KMS key ID"
+              ],
+              "default": "({resource-name}) aws/rds",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "alias/aws/rds",
+              "type": "select",
+              "default": "Additional monitoring settings",
+              "required": true,
+              "help": "You can't change the KMS key after you create your database.",
+              "confidence": "low"
+            },
+            {
+              "label": "Enable Enhanced monitoring",
+              "type": "text",
+              "required": true,
+              "help": "Enabling Enhanced Monitoring metrics are useful when you want to see how different processes or threads use the CPU.",
+              "confidence": "low"
+            },
+            {
+              "label": "OS metrics granularity",
+              "type": "radio",
+              "options": [
+                "60 seconds",
+                "Monitoring role for OS metrics",
+                "Create {resource-name} role",
+                "Use another role",
+                "Log exports",
+                "Select the log types to publish to Amazon {resource-name} Logs",
+                "Audit log",
+                "Error log",
+                "General log",
+                "iam-db-auth-error log",
+                "instance log",
+                "Slow query log"
+              ],
+              "default": "60 seconds",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "IAM role",
+              "type": "select",
+              "default": "Additional configuration",
+              "required": true,
+              "help": "The following service-linked role is used for publishing logs to {resource-name} Logs.",
+              "confidence": "low"
+            },
+            {
+              "label": "221.92 USD",
+              "type": "text",
+              "required": true,
+              "help": "This billing estimate is based on on-demand usage as described in Amazon Aurora Pricing",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "recent",
+      "kind": "list",
+      "title": "Query History",
+      "route": "/rds/home#query-history:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Query editor"
+      ],
+      "captures": [
+        "A-rds/024-L3-*",
+        "A-rds/024-L3-*--tab-01-editor",
+        "A-rds/024-L3-*--tab-02-recent",
+        "A-rds/024-L3-*--tab-03-saved-queries",
+        "A-rds/024-L3-*--tab-04-sample-queries",
+        "A-rds/025-L3-*",
+        "A-rds/025-L3-*--tab-01-editor",
+        "A-rds/025-L3-*--tab-02-recent",
+        "A-rds/025-L3-*--tab-03-saved-queries",
+        "A-rds/025-L3-*--tab-04-sample-queries",
+        "A-rds/026-L3-*",
+        "A-rds/026-L3-*--tab-01-editor",
+        "A-rds/026-L3-*--tab-02-recent",
+        "A-rds/026-L3-*--tab-03-saved-queries",
+        "A-rds/026-L3-*--tab-04-sample-queries"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Recent",
+        "columns": [
+          "Query",
+          "Status",
+          "Created",
+          "Expiration"
+        ],
+        "header_actions": [
+          "Show all",
+          "Delete"
+        ],
+        "empty_state": "There are no recent queries. To get started, run a query.",
+        "confidence": "medium"
+      },
+      "tabs": [
+        "Query editor",
+        "Editor",
+        "Recent",
+        "Saved queries",
+        "Sample queries"
+      ]
+    },
+    {
+      "id": "create-capacity-reservation",
+      "kind": "create",
+      "title": "Create capacity reservation",
+      "route": "/rds/home#create-capacity-reservation:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Capacity reservations",
+        "Create capacity reservation"
+      ],
+      "captures": [
+        "A-rds/027-L3-create-capacity-reservation"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "Create capacity reservation",
+          "fields": [
+            {
+              "label": "Engine type",
+              "type": "radio",
+              "options": [
+                "Aurora (MySQL Compatible)",
+                "Aurora (PostgreSQL Compatible)",
+                "MySQL",
+                "PostgreSQL",
+                "MariaDB",
+                "Oracle",
+                "Microsoft SQL Server",
+                "IBM Db2",
+                "Instance configuration"
+              ],
+              "default": "Aurora (MySQL Compatible)",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "DB instance class",
+              "type": "radio",
+              "options": [
+                "Memory optimized classes (includes r classes)",
+                "Burstable classes (includes t classes)",
+                "Optimized Reads classes - new",
+                "db.r7g.large",
+                "2 vCPUs",
+                "16 GiB RAM",
+                "EBS Bandwidth: Up to 10,000 Mbps",
+                "Network: Up to 12.5 Gbps"
+              ],
+              "default": "Memory optimized classes (includes r classes)",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Editing restricted during reservation",
+              "type": "radio",
+              "options": [
+                "Capacity reservation details",
+                "DB capacity reservation name"
+              ],
+              "default": "Capacity reservation details",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Availability Zones",
+              "type": "radio",
+              "options": [
+                "Choose AZs",
+                "Reserved capacity per AZ"
+              ],
+              "default": "Choose AZs",
+              "required": true,
+              "help": "Select one or more Availability Zones your capacity reservation will be compatible with.",
+              "confidence": "low"
+            },
+            {
+              "label": "Capacity reservation starts",
+              "type": "radio",
+              "options": [
+                "Immediately",
+                "At a specific time"
+              ],
+              "default": "Immediately",
+              "required": true,
+              "help": "Specify when the capacity reservation should become available for use.",
+              "confidence": "low"
+            },
+            {
+              "label": "Capacity reservation ends",
+              "type": "radio",
+              "options": [
+                "No end time",
+                "At a specific time"
+              ],
+              "default": "No end time",
+              "required": true,
+              "help": "Select when you want your capacity reservation to end.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Tags - optional",
+          "fields": [
+            {
+              "label": "Price information",
+              "type": "text",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-zero-etl-integration",
+      "kind": "create",
+      "title": "Create Integration",
+      "route": "/rds/home#create-integration:prevRoute=%23integrations%3A",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Zero-ETL integrations",
+        "Create zero-ETL integration"
+      ],
+      "captures": [
+        "A-rds/030-L3-create-zero-etl-integration"
+      ],
+      "provenance": "capture",
+      "steps": [
+        {
+          "title": "Getting started",
+          "optional": false,
+          "sections": [
+            {
+              "title": "(form)",
+              "fields": [
+                {
+                  "label": "Step 4",
+                  "type": "radio",
+                  "options": [
+                    "Add tags and encryption",
+                    "Step 5",
+                    "Review and create",
+                    "Getting started",
+                    "Integration identifier"
+                  ],
+                  "default": "Add tags and encryption",
+                  "required": false,
+                  "confidence": "low"
+                },
+                {
+                  "label": "Integration identifier",
+                  "type": "text",
+                  "required": true,
+                  "help": "1-63 alphanumeric characters or hyphens. The first character must be a letter.",
+                  "confidence": "low"
+                },
+                {
+                  "label": "Integration description",
+                  "type": "text",
+                  "required": false,
+                  "help": "Enter a description for your integration.",
+                  "confidence": "low"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Select source",
+          "optional": false
+        },
+        {
+          "title": "Select target",
+          "optional": false
+        },
+        {
+          "title": "Add tags and encryption",
+          "optional": true
+        },
+        {
+          "title": "Review and create",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "id": "db-subnet-group-create",
+      "kind": "create",
+      "title": "Aurora and RDS",
+      "route": "/rds/home#db-subnet-group-create:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Dashboard"
+      ],
+      "captures": [
+        "C-rds/02-db-subnet-group-create/step-1",
+        "C-rds/02-db-subnet-group-create/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "View service health dashboard",
+        "columns": [
+          "Current status",
+          "Details"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      },
+      "sections": [
+        {
+          "title": "Welcome to Aurora and RDS",
+          "fields": [
+            {
+              "label": "Create with express configuration in seconds",
+              "type": "text",
+              "required": true,
+              "help": "Create and query an Aurora PostgreSQL serverless database with pre-configured settings to get started quickly.",
+              "confidence": "low"
+            },
+            {
+              "label": "Create with full configuration",
+              "type": "text",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Test Your DR Strategy in Minutes",
+          "fields": [
+            {
+              "label": "Explore Aurora & RDS",
+              "type": "radio",
+              "options": [
+                "Estimated duration",
+                "2-5 minutes",
+                "Start tutorial",
+                "RDS costs"
+              ],
+              "default": "Estimated duration",
+              "required": true,
+              "help": "In this activity, you will learn how to create a database. To begin, choose Start tutorial.",
+              "confidence": "low"
+            },
+            {
+              "label": "{resource-name} Preview Environment",
+              "type": "select",
+              "default": "Preview RDS for MySQL and PostgreSQL in US EAST (Ohio)",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-parameter-group",
+      "kind": "create",
+      "title": "Create Parameter Group",
+      "route": "/rds/home#create-parameter-group:",
+      "breadcrumbs": [
+        "Aurora and RDS",
+        "Parameter groups",
+        "Create parameter group"
+      ],
+      "captures": [
+        "C-rds/03-create-parameter-group/step-1",
+        "C-rds/03-create-parameter-group/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "Parameter group name",
+              "type": "radio",
+              "options": [
+                "Description",
+                "Engine type",
+                "Aurora MySQL"
+              ],
+              "default": "Description",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Parameter group family",
+              "type": "radio",
+              "options": [
+                "aurora-mysql5.7",
+                "Type",
+                "Type for the DB parameter group",
+                "DB Parameter Group"
+              ],
+              "default": "aurora-mysql5.7",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+}

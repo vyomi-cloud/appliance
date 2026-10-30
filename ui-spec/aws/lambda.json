@@ -1,0 +1,1138 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "lambda",
+  "console_path": "/lambda/",
+  "status": "draft",
+  "nav": [
+    {
+      "label": "Lambda",
+      "page_id": "lambda"
+    },
+    {
+      "label": "Dashboard",
+      "children": [
+        {
+          "label": "Applications",
+          "page_id": "applications"
+        },
+        {
+          "label": "Event Functions",
+          "page_id": "event-functions"
+        },
+        {
+          "label": "Web Functions",
+          "page_id": "web-functions"
+        }
+      ]
+    },
+    {
+      "label": "Event Function resources",
+      "children": [
+        {
+          "label": "Capacity providers",
+          "page_id": "capacity-providers"
+        },
+        {
+          "label": "Code signing configurations",
+          "page_id": "code-signing-configurations"
+        },
+        {
+          "label": "Event source mappings",
+          "page_id": "event-source-mappings"
+        },
+        {
+          "label": "Layers",
+          "page_id": "layers"
+        },
+        {
+          "label": "Replicas",
+          "page_id": "replicas"
+        },
+        {
+          "label": "MicroVMs",
+          "page_id": "microvms"
+        },
+        {
+          "label": "MicroVM Images",
+          "page_id": "microvm-images"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "landing",
+      "kind": "other",
+      "title": "AWS Lambda",
+      "route": "/lambda/home",
+      "captures": [
+        "A-lambda/001-L1-landing",
+        "A-lambda/001-L1-landing--tab-01-net",
+        "A-lambda/001-L1-landing--tab-02-java",
+        "A-lambda/001-L1-landing--tab-03-node-js",
+        "A-lambda/001-L1-landing--tab-04-python",
+        "A-lambda/001-L1-landing--tab-05-ruby",
+        "A-lambda/001-L1-landing--tab-06-customer-managed-runtime"
+      ],
+      "provenance": "capture",
+      "tabs": [
+        "Next: Lambda responds to events",
+        ".NET",
+        "Java",
+        "Node.js",
+        "Python",
+        "Ruby",
+        "Customer-managed runtime"
+      ]
+    },
+    {
+      "id": "lambda",
+      "kind": "other",
+      "title": "Dashboard",
+      "route": "/lambda/home#/discover",
+      "captures": [
+        "A-lambda/002-L2-lambda",
+        "A-lambda/002-L2-lambda--tab-02-web-functions"
+      ],
+      "provenance": "capture",
+      "tabs": [
+        "Event Functions",
+        "Web Functions"
+      ]
+    },
+    {
+      "id": "applications",
+      "kind": "list",
+      "title": "Applications",
+      "route": "/lambda/home#/applications",
+      "breadcrumbs": [
+        "Lambda",
+        "Applications"
+      ],
+      "captures": [
+        "A-lambda/004-L2-applications"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Applications",
+        "columns": [
+          "Description",
+          "Status",
+          "Last modified"
+        ],
+        "header_actions": [
+          "Delete",
+          "Create application"
+        ],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "event-functions",
+      "kind": "list",
+      "title": "Event Functions",
+      "route": "/lambda/home#/functions",
+      "breadcrumbs": [
+        "Lambda",
+        "Event Functions"
+      ],
+      "captures": [
+        "A-lambda/005-L2-event-functions"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Event Functions",
+        "columns": [
+          "Function name",
+          "Description",
+          "Package type",
+          "Runtime",
+          "Type",
+          "Last modified"
+        ],
+        "header_actions": [
+          "Actions",
+          "Create Event Function"
+        ],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "web-functions",
+      "kind": "list",
+      "title": "Web Functions",
+      "route": "/lambda/home#/web-functions",
+      "breadcrumbs": [
+        "Lambda",
+        "Web Functions"
+      ],
+      "captures": [
+        "A-lambda/006-L2-web-functions"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Web Functions",
+        "columns": [
+          "Function name",
+          "State",
+          "State reason",
+          "Created"
+        ],
+        "header_actions": [
+          "Delete",
+          "Create Web Function"
+        ],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "capacity-providers",
+      "kind": "list",
+      "title": "Capacity providers",
+      "route": "/lambda/home#/capacity-providers",
+      "breadcrumbs": [
+        "Lambda",
+        "Capacity providers"
+      ],
+      "captures": [
+        "A-lambda/007-L2-capacity-providers"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Capacity providers",
+        "columns": [
+          "State",
+          "Architectures",
+          "Maximum vCPU",
+          "Scaling mode",
+          "Last modified"
+        ],
+        "header_actions": [
+          "Delete",
+          "Create capacity provider"
+        ],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "code-signing-configurations",
+      "kind": "list",
+      "title": "Code signing configurations",
+      "route": "/lambda/home#/code-signing-configurations",
+      "breadcrumbs": [
+        "Lambda",
+        "Code signing configurations"
+      ],
+      "captures": [
+        "A-lambda/008-L2-code-signing-configurations"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Code signing configurations",
+        "columns": [
+          "ID",
+          "Description",
+          "Signing profiles",
+          "Signature validation policy",
+          "Last modified"
+        ],
+        "header_actions": [
+          "Edit",
+          "Delete",
+          "Create configuration"
+        ],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "event-source-mappings",
+      "kind": "list",
+      "title": "Event source mappings",
+      "route": "/lambda/home#/event-source-mappings",
+      "breadcrumbs": [
+        "Lambda",
+        "Event source mappings"
+      ],
+      "captures": [
+        "A-lambda/009-L2-event-source-mappings"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Event source mappings",
+        "columns": [
+          "UUID",
+          "Event source ARN",
+          "Event source type",
+          "Function",
+          "State",
+          "Last processing result",
+          "Last modified"
+        ],
+        "header_actions": [
+          "Delete"
+        ],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "layers",
+      "kind": "list",
+      "title": "Layers",
+      "route": "/lambda/home#/layers",
+      "breadcrumbs": [
+        "Lambda",
+        "Layers"
+      ],
+      "captures": [
+        "A-lambda/010-L2-layers"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Layers",
+        "columns": [
+          "Version",
+          "Description",
+          "Compatible runtimes",
+          "Compatible architectures",
+          "Created"
+        ],
+        "header_actions": [
+          "Create layer"
+        ],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "replicas",
+      "kind": "list",
+      "title": "Replicas",
+      "route": "/lambda/home#/replicas",
+      "breadcrumbs": [
+        "Lambda",
+        "Replicas"
+      ],
+      "captures": [
+        "A-lambda/011-L2-replicas"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Replicas",
+        "columns": [
+          "Function name",
+          "Description",
+          "Runtime",
+          "Last modified"
+        ],
+        "header_actions": [],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "microvm-images",
+      "kind": "list",
+      "title": "MicroVM Images",
+      "route": "/lambda/home#/microvm-images",
+      "breadcrumbs": [
+        "Lambda",
+        "MicroVM Images"
+      ],
+      "captures": [
+        "A-lambda/012-L2-microvm-images"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "MicroVM Images",
+        "columns": [
+          "State",
+          "Active version",
+          "Failed version",
+          "Created",
+          "Image ARN"
+        ],
+        "header_actions": [
+          "Last fetched 0 seconds ago",
+          "Actions",
+          "Create"
+        ],
+        "empty_state": "No data to display.",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "microvms",
+      "kind": "list",
+      "title": "MicroVMs",
+      "route": "/lambda/home#/microvms",
+      "breadcrumbs": [
+        "Lambda",
+        "MicroVMs"
+      ],
+      "captures": [
+        "A-lambda/013-L2-microvms"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "MicroVMs",
+        "columns": [
+          "ID",
+          "Status",
+          "MicroVM Image",
+          "Version",
+          "Creation time"
+        ],
+        "header_actions": [
+          "Last fetched 0 seconds ago",
+          "Actions",
+          "Connect",
+          "Run MicroVM"
+        ],
+        "empty_state": "No data to display.",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "network-connectors",
+      "kind": "list",
+      "title": "Network connectors",
+      "route": "/lambda/home#/network-connectors",
+      "breadcrumbs": [
+        "Lambda",
+        "Network connectors"
+      ],
+      "captures": [
+        "A-lambda/014-L2-network-connectors"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Network connectors",
+        "columns": [
+          "ID",
+          "ARN",
+          "Type",
+          "State",
+          "Last modified"
+        ],
+        "header_actions": [
+          "Create network connector"
+        ],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "step-functions-state-machines",
+      "kind": "list",
+      "title": "Step Functions state machines",
+      "route": "/lambda/home#/statemachines",
+      "breadcrumbs": [
+        "Lambda",
+        "Step Functions state machines"
+      ],
+      "captures": [
+        "A-lambda/015-L2-step-functions-state-machines"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "State machines",
+        "columns": [
+          "Type",
+          "Created"
+        ],
+        "header_actions": [
+          "Create state machine"
+        ],
+        "empty_state": "No state machines",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "search-functions-by-name",
+      "kind": "other",
+      "title": "AWS Lambda",
+      "route": "/lambda/home#/search",
+      "captures": [
+        "A-lambda/016-L2-search-functions-by-name",
+        "A-lambda/016-L2-search-functions-by-name--tab-01-net",
+        "A-lambda/016-L2-search-functions-by-name--tab-02-java",
+        "A-lambda/016-L2-search-functions-by-name--tab-03-node-js",
+        "A-lambda/016-L2-search-functions-by-name--tab-04-python",
+        "A-lambda/016-L2-search-functions-by-name--tab-05-ruby",
+        "A-lambda/016-L2-search-functions-by-name--tab-06-customer-managed-runtime"
+      ],
+      "provenance": "capture",
+      "tabs": [
+        "Next: Lambda responds to events",
+        ".NET",
+        "Java",
+        "Node.js",
+        "Python",
+        "Ruby",
+        "Customer-managed runtime"
+      ]
+    },
+    {
+      "id": "create-an-event-function",
+      "kind": "create",
+      "title": "Create function",
+      "route": "/lambda/home#/create/function?firstrun=true",
+      "breadcrumbs": [
+        "Lambda",
+        "Event Functions",
+        "Create function"
+      ],
+      "captures": [
+        "A-lambda/017-L2-create-an-event-function"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "Create Event Function",
+          "fields": [
+            {
+              "label": "Author from scratch",
+              "type": "radio",
+              "options": [
+                "Use a blueprint",
+                "Container image",
+                "Basic information"
+              ],
+              "default": "Use a blueprint",
+              "required": true,
+              "help": "Start with a simple Hello World example.",
+              "confidence": "low"
+            },
+            {
+              "label": "Function name",
+              "type": "text",
+              "required": true,
+              "help": "Enter a name that describes the purpose of your function.",
+              "confidence": "low"
+            },
+            {
+              "label": "Runtime",
+              "type": "radio",
+              "options": [
+                "Node.js 24.x",
+                "Permissions"
+              ],
+              "default": "Node.js 24.x",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Custom settings",
+          "fields": [
+            {
+              "label": "Durable execution",
+              "type": "radio",
+              "options": [
+                "EC2 capacity provider",
+                "Additional settings"
+              ],
+              "default": "EC2 capacity provider",
+              "required": true,
+              "help": "Build resilient, stateful applications with automatic failure recovery.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-a-web-function",
+      "kind": "create",
+      "title": "Create Web Function",
+      "route": "/lambda/home#/create/web-function",
+      "breadcrumbs": [
+        "Lambda",
+        "Web Functions",
+        "Create Web Function"
+      ],
+      "captures": [
+        "A-lambda/019-L2-create-a-web-function"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "Create Web Function",
+          "fields": [
+            {
+              "label": "Function name",
+              "type": "text",
+              "required": true,
+              "help": "Enter a name that describes the purpose of your function.",
+              "confidence": "low"
+            },
+            {
+              "label": "Runtime",
+              "type": "select",
+              "default": "Node.js 24.x",
+              "required": true,
+              "help": "Select the runtime environment for your function code.",
+              "confidence": "low"
+            },
+            {
+              "label": "Code source",
+              "type": "radio",
+              "options": [
+                "Hello World template",
+                "Upload ZIP file",
+                "Amazon S3",
+                "Hello World template"
+              ],
+              "default": "Hello World template",
+              "required": true,
+              "help": "Choose one of the following options to create your function.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Endpoint configuration",
+          "fields": [
+            {
+              "label": "Endpoint name",
+              "type": "text",
+              "required": true,
+              "help": "Enter a name that describes the purpose of this endpoint.",
+              "confidence": "low"
+            },
+            {
+              "label": "Description",
+              "type": "text",
+              "required": false,
+              "help": "Description must be 0 to 256 characters.",
+              "confidence": "low"
+            },
+            {
+              "label": "Type",
+              "type": "radio",
+              "options": [
+                "Home-Region",
+                "Multi-Region",
+                "Per-Region"
+              ],
+              "default": "Home-Region",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Authentication type",
+              "type": "select",
+              "default": "Select an authentication type",
+              "required": true,
+              "help": "Choose the authentication type for this Web Function endpoint.",
+              "confidence": "low"
+            },
+            {
+              "label": "Auto deployment",
+              "type": "radio",
+              "options": [
+                "Latest revision",
+                "Disabled"
+              ],
+              "default": "Latest revision",
+              "required": true,
+              "help": "Control how new revisions are routed to this endpoint.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aws-lambda-extensions",
+      "kind": "other",
+      "title": "Extensions",
+      "route": "/lambda/home#/extensions",
+      "breadcrumbs": [
+        "Lambda",
+        "Extensions"
+      ],
+      "captures": [
+        "A-lambda/020-L3-aws-lambda-extensions"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "create-application",
+      "kind": "create",
+      "title": "Create application",
+      "route": "/lambda/home#/create/application",
+      "breadcrumbs": [
+        "Lambda",
+        "Applications",
+        "Create application"
+      ],
+      "captures": [
+        "A-lambda/021-L3-create-application",
+        "A-lambda/021-L3-create-application--tab-02-serverless-application",
+        "A-lambda/021-L3-create-application--tab-03-build-with-infrastructure-composer"
+      ],
+      "provenance": "capture",
+      "tabs": [
+        "CI/CD pipeline application",
+        "Serverless application",
+        "Build with Infrastructure Composer"
+      ],
+      "sections": [
+        {
+          "title": "Create a Lambda application",
+          "fields": [
+            {
+              "label": "From scratch",
+              "type": "radio",
+              "options": [
+                "Runtime",
+                "Node.js 22.x",
+                "Uses",
+                "Lambda",
+                "Serverless API backend",
+                "Runtime",
+                "Node.js 22.x",
+                "Uses",
+                "API Gateway, DynamoDB, Lambda"
+              ],
+              "default": "Runtime",
+              "required": true,
+              "help": "Create a repository and pipeline to use with your own application.",
+              "confidence": "low"
+            },
+            {
+              "label": "File processing",
+              "type": "radio",
+              "options": [
+                "Runtime",
+                "Node.js 22.x",
+                "Uses",
+                "Lambda, S3",
+                "Scheduled job",
+                "Runtime",
+                "Node.js 22.x",
+                "Uses",
+                "EventBridge, Lambda"
+              ],
+              "default": "Runtime",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Notifications processing",
+              "type": "radio",
+              "options": [
+                "Runtime",
+                "Node.js 22.x",
+                "Uses",
+                "Lambda, SNS"
+              ],
+              "default": "Runtime",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Queue processing",
+              "type": "radio",
+              "options": [
+                "Runtime",
+                "Node.js 22.x",
+                "Uses",
+                "Lambda, SQS"
+              ],
+              "default": "Runtime",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-event-function",
+      "kind": "create",
+      "title": "Create function",
+      "route": "/lambda/home#/create/function",
+      "breadcrumbs": [
+        "Lambda",
+        "Event Functions",
+        "Create function"
+      ],
+      "captures": [
+        "A-lambda/022-L3-create-event-function"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "Create Event Function",
+          "fields": [
+            {
+              "label": "Author from scratch",
+              "type": "radio",
+              "options": [
+                "Use a blueprint",
+                "Container image",
+                "Basic information"
+              ],
+              "default": "Use a blueprint",
+              "required": true,
+              "help": "Start with a simple Hello World example.",
+              "confidence": "low"
+            },
+            {
+              "label": "Function name",
+              "type": "text",
+              "required": true,
+              "help": "Enter a name that describes the purpose of your function.",
+              "confidence": "low"
+            },
+            {
+              "label": "Runtime",
+              "type": "radio",
+              "options": [
+                "Node.js 24.x",
+                "Permissions"
+              ],
+              "default": "Node.js 24.x",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Custom settings",
+          "fields": [
+            {
+              "label": "Durable execution",
+              "type": "radio",
+              "options": [
+                "EC2 capacity provider",
+                "Additional settings"
+              ],
+              "default": "EC2 capacity provider",
+              "required": true,
+              "help": "Build resilient, stateful applications with automatic failure recovery.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-capacity-provider",
+      "kind": "create",
+      "title": "Create capacity provider",
+      "route": "/lambda/home#/create/capacity-provider",
+      "breadcrumbs": [
+        "Lambda",
+        "Capacity providers",
+        "Create capacity provider"
+      ],
+      "captures": [
+        "A-lambda/023-L3-create-capacity-provider"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "Capacity provider settings",
+          "fields": [
+            {
+              "label": "{resource-name}",
+              "type": "select",
+              "default": "Network Configuration",
+              "required": true,
+              "help": "Enter a name that describes your capacity provider.",
+              "confidence": "low"
+            },
+            {
+              "label": "VPC",
+              "type": "radio",
+              "options": [
+                "Choose VPC",
+                "Permissions"
+              ],
+              "default": "Choose VPC",
+              "required": true,
+              "help": "Select a VPC for your resource to access.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-layer",
+      "kind": "create",
+      "title": "Create layer",
+      "route": "/lambda/home#/create/layer",
+      "breadcrumbs": [
+        "Lambda",
+        "Layers",
+        "Create layer"
+      ],
+      "captures": [
+        "A-lambda/025-L3-create-layer"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "Description",
+              "type": "radio",
+              "options": [
+                "Source code",
+                "Create from a .zip file",
+                "Create from a file in Amazon S3",
+                "Choose file",
+                "Choose file"
+              ],
+              "default": "Source code",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Compatible architectures",
+              "type": "select",
+              "default": "Search Compatible architectures",
+              "required": false,
+              "help": "Choose the compatible instruction set architectures for your layer.",
+              "confidence": "low"
+            },
+            {
+              "label": "Compatible runtimes",
+              "type": "select",
+              "default": "Search Compatible runtimes",
+              "required": false,
+              "help": "Choose up to 15 runtimes.",
+              "confidence": "low"
+            },
+            {
+              "label": "License",
+              "type": "text",
+              "required": false,
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create",
+      "kind": "create",
+      "title": "Create MicroVM Image",
+      "route": "/lambda/home#/create/microvm-image",
+      "breadcrumbs": [
+        "Lambda",
+        "MicroVM Images",
+        "Create MicroVM Image"
+      ],
+      "captures": [
+        "A-lambda/026-L3-create"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "Create MicroVM Image",
+          "fields": [
+            {
+              "label": "{resource-name}",
+              "type": "select",
+              "default": "Character count: 0/64",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Description",
+              "type": "radio",
+              "options": [
+                "Character count: 0/2048",
+                "Character count: 0/2048"
+              ],
+              "default": "Character count: 0/2048",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Base MicroVM Image",
+              "type": "select",
+              "default": "al2023-1",
+              "required": true,
+              "help": "The platform base image used to create your MicroVM image.",
+              "confidence": "low"
+            },
+            {
+              "label": "Base Image version",
+              "type": "select",
+              "default": "Always use latest - recommended",
+              "required": true,
+              "help": "{resource-name}s to latest. Choose a specific version to test or rollback.",
+              "confidence": "low"
+            },
+            {
+              "label": "Instance size",
+              "type": "text",
+              "required": true,
+              "help": "Base and peak usage size. Usage exceeding the base is only billed during active use. For details, view pricing",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Code configuration",
+          "fields": [
+            {
+              "label": "Code package requirements",
+              "type": "text",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Environment variables",
+              "type": "text",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "MicroVM lifecycle hooks",
+              "type": "text",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Additional capabilities",
+              "type": "text",
+              "required": false,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Image build configuration",
+          "fields": [
+            {
+              "label": "IAM permissions",
+              "type": "radio",
+              "options": [
+                "Create {resource-name} role",
+                "Use another role"
+              ],
+              "default": "Create {resource-name} role",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Networking",
+              "type": "text",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Logging",
+              "type": "text",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Image build lifecycle hooks",
+              "type": "select",
+              "default": "Tags",
+              "required": false,
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "run-microvm",
+      "kind": "create",
+      "title": "Run MicroVM",
+      "route": "/lambda/home#/create/microvm",
+      "breadcrumbs": [
+        "Lambda",
+        "MicroVMs",
+        "Run MicroVM"
+      ],
+      "captures": [
+        "A-lambda/027-L3-run-microvm"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "Run MicroVM",
+          "fields": [
+            {
+              "label": "Base MicroVM Image",
+              "type": "select",
+              "default": "Version",
+              "required": true,
+              "help": "The MicroVM Image used as the base for your MicroVM.",
+              "confidence": "low"
+            },
+            {
+              "label": "Execution role",
+              "type": "radio",
+              "options": [
+                "No role",
+                "Use a role"
+              ],
+              "default": "No role",
+              "required": true,
+              "help": "The IAM role that defines the permissions for your MicroVM.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-network-connector",
+      "kind": "create",
+      "title": "Create network connector",
+      "route": "/lambda/home#/create/network-connector",
+      "breadcrumbs": [
+        "Lambda",
+        "Network connectors",
+        "Create network connector"
+      ],
+      "captures": [
+        "A-lambda/028-L3-create-network-connector"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "Network connector settings",
+          "fields": [
+            {
+              "label": "{resource-name}",
+              "type": "text",
+              "required": true,
+              "help": "Enter a name for your network connector.",
+              "confidence": "low"
+            },
+            {
+              "label": "VPC",
+              "type": "radio",
+              "options": [
+                "Choose VPC",
+                "Network protocol",
+                "Search Network protocol",
+                "Execution role",
+                "Choose an existing role",
+                "Create new role",
+                "Tags"
+              ],
+              "default": "Choose VPC",
+              "required": true,
+              "help": "Select a VPC for your resource to access.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+}

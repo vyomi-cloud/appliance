@@ -1,0 +1,21 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "vpc",
+  "console_path": "/vpc/",
+  "status": "draft",
+  "nav": [],
+  "pages": [
+    {
+      "id": "landing",
+      "kind": "other",
+      "title": "Home",
+      "route": "/vpc/home",
+      "captures": [
+        "A-vpc/001-L1-landing"
+      ],
+      "provenance": "capture"
+    }
+  ],
+  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+}

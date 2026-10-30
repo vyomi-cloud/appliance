@@ -1,0 +1,84 @@
+{
+  "_doc": "ui-spec page id \u2192 v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "general-purpose-buckets": {
+    "route": "#/s3",
+    "fixtures": [
+      "s3-bucket"
+    ]
+  },
+  "directory-buckets": {
+    "route": "#/s3/directory-buckets",
+    "honest_page": true
+  },
+  "bucket-detail": {
+    "route": "#/s3/buckets/uic-bucket",
+    "fixtures": [
+      "s3-bucket"
+    ],
+    "vars": {
+      "resource-name": "uic-bucket"
+    }
+  },
+  "create-bucket": {
+    "route": "#/s3/create",
+    "expand": [
+      "text=Advanced settings"
+    ]
+  },
+  "table-buckets": {
+    "route": "#/s3/table-buckets",
+    "honest_page": true
+  },
+  "vector-buckets": {
+    "route": "#/s3/vector-buckets",
+    "honest_page": true
+  },
+  "file-systems": {
+    "route": "#/s3/file-systems",
+    "honest_page": true
+  },
+  "access-points": {
+    "route": "#/s3/access-points",
+    "honest_page": true
+  },
+  "access-points-for-fsx": {
+    "route": "#/s3/access-points-fsx",
+    "honest_page": true
+  },
+  "access-grants": {
+    "route": "#/s3/access-grants",
+    "honest_page": true
+  },
+  "iam-access-analyzer": {
+    "route": "#/s3/access-analyzer",
+    "honest_page": true
+  },
+  "storage-lens": {
+    "route": "#/s3/lens/dashboards",
+    "honest_page": true
+  },
+  "batch-operations": {
+    "route": "#/s3/batch-operations",
+    "honest_page": true
+  },
+  "account-and-organization-settings": {
+    "route": "#/s3/settings",
+    "honest_page": true
+  },
+  "create-table-bucket": {
+    "route": "#/s3/table-buckets",
+    "honest_page": true
+  },
+  "create-file-system": {
+    "route": "#/s3/file-systems",
+    "honest_page": true
+  },
+  "create-storage-lens-group": {
+    "route": "#/s3/lens/groups",
+    "honest_page": true
+  },
+  "create-job": {
+    "route": "#/s3/batch-operations",
+    "honest_page": true
+  }
+}

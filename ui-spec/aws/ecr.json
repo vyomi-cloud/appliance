@@ -1,0 +1,236 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "ecr",
+  "console_path": "/ecr/",
+  "status": "draft",
+  "nav": [
+    {
+      "label": "Amazon Elastic Container Registry",
+      "page_id": "amazon-elastic-container-registry"
+    },
+    {
+      "label": "Private registry",
+      "children": [
+        {
+          "label": "Repositories",
+          "page_id": "repositories"
+        },
+        {
+          "label": "Features & Settings",
+          "page_id": "features-settings"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "landing",
+      "kind": "other",
+      "title": "Elastic Container Registry - Home",
+      "route": "/ecr/home",
+      "captures": [
+        "A-ecr/001-L1-landing"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "amazon-elastic-container-registry",
+      "kind": "other",
+      "title": "Elastic Container Registry",
+      "route": "/ecr/get-started",
+      "captures": [
+        "A-ecr/002-L2-amazon-elastic-container-registry"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "repositories",
+      "kind": "list",
+      "title": "Repositories",
+      "route": "/ecr/private-registry/repositories",
+      "breadcrumbs": [
+        "Amazon ECR",
+        "Private registry",
+        "Repositories"
+      ],
+      "captures": [
+        "A-ecr/003-L2-repositories"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Actions",
+        "columns": [
+          "Create repository",
+          "Repository name",
+          "URI",
+          "Created at",
+          "Tag immutability",
+          "Encryption type"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      }
+    },
+    {
+      "id": "features-settings",
+      "kind": "settings",
+      "title": "Private registry",
+      "route": "/ecr/private-registry",
+      "breadcrumbs": [
+        "Amazon ECR",
+        "Private registry"
+      ],
+      "captures": [
+        "A-ecr/004-L2-features-settings"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "repositories-2",
+      "kind": "list",
+      "title": "Elastic Container Registry",
+      "route": "/ecr/public-registry/repositories",
+      "breadcrumbs": [
+        "Amazon ECR",
+        "Public Registry",
+        "Repositories"
+      ],
+      "captures": [
+        "A-ecr/005-L2-repositories"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Create repository",
+        "columns": [
+          "Repository name",
+          "URI",
+          "Created at"
+        ],
+        "header_actions": [],
+        "confidence": "low"
+      }
+    },
+    {
+      "id": "settings",
+      "kind": "settings",
+      "title": "Elastic Container Registry",
+      "route": "/ecr/public-registry",
+      "breadcrumbs": [
+        "Amazon ECR",
+        "Public Registry"
+      ],
+      "captures": [
+        "A-ecr/006-L2-settings"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "Public registry",
+          "fields": [
+            {
+              "label": "{resource-name} alias",
+              "type": "select",
+              "default": "-",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Custom alias",
+              "type": "select",
+              "default": "-",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Verified account",
+              "type": "select",
+              "default": "Not verified",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Display name",
+              "type": "select",
+              "default": "-",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create",
+      "kind": "create",
+      "title": "Elastic Container Registry - Create Private Repository",
+      "route": "/ecr/private-registry/repositories/create",
+      "captures": [
+        "C-ecr/01-create/step-1",
+        "C-ecr/01-create/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "Repository name",
+              "type": "select",
+              "default": "{resource-name}.dkr.ecr.eu-west-1.amazonaws.com/",
+              "required": true,
+              "help": "Enter a concise name. Repositories support namespaces, which you can use to group similar repositories.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Image tag settings",
+          "fields": [
+            {
+              "label": "Image tag mutability",
+              "type": "radio",
+              "options": [
+                "Mutable",
+                "Immutable",
+                "Mutable tag exclusions",
+                "Add filter"
+              ],
+              "default": "Mutable",
+              "required": true,
+              "help": "Choose the tag mutability setting.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Encryption settings",
+          "fields": [
+            {
+              "label": "Encryption configuration",
+              "type": "radio",
+              "options": [
+                "AES-256",
+                "AWS KMS",
+                "AWS Key Management Service (KMS)",
+                "Image scanning settings - deprecated"
+              ],
+              "default": "AES-256",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Deprecation warning",
+              "type": "select",
+              "default": "Scan on push",
+              "required": true,
+              "help": "This setting has been moved to a registry level configuration with repository filtering. Learn more",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+}

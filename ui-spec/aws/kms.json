@@ -1,0 +1,341 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "kms",
+  "console_path": "/kms/",
+  "status": "draft",
+  "nav": [
+    {
+      "label": "Key Management Service (KMS)",
+      "page_id": "key-management-service-kms"
+    },
+    {
+      "label": "AWS managed keys",
+      "page_id": "aws-managed-keys"
+    },
+    {
+      "label": "Customer managed keys",
+      "page_id": "customer-managed-keys"
+    },
+    {
+      "label": "Custom key stores",
+      "children": [
+        {
+          "label": "AWS CloudHSM key stores",
+          "page_id": "aws-cloudhsm-key-stores"
+        },
+        {
+          "label": "External key stores",
+          "page_id": "external-key-stores"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "landing",
+      "kind": "other",
+      "title": "Key Management Service",
+      "route": "/kms/home",
+      "captures": [
+        "A-kms/001-L1-landing"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "key-management-service-kms",
+      "kind": "other",
+      "title": "Key Management Service",
+      "route": "/kms/home#/kms/home",
+      "captures": [
+        "A-kms/002-L2-key-management-service-kms"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "aws-managed-keys",
+      "kind": "list",
+      "title": "AWS managed keys",
+      "route": "/kms/home#/kms/{resource-name}Keys",
+      "breadcrumbs": [
+        "KMS",
+        "AWS managed keys"
+      ],
+      "captures": [
+        "A-kms/003-L2-aws-managed-keys"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "AWS managed keys",
+        "columns": [
+          "Aliases",
+          "Key ID",
+          "Status"
+        ],
+        "header_actions": [],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "customer-managed-keys",
+      "kind": "list",
+      "title": "Customer managed keys",
+      "route": "/kms/home#/kms/keys",
+      "breadcrumbs": [
+        "KMS",
+        "Customer managed keys"
+      ],
+      "captures": [
+        "A-kms/004-L2-customer-managed-keys"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Customer managed keys",
+        "columns": [
+          "Aliases",
+          "Key ID",
+          "Status",
+          "Key type",
+          "Key spec",
+          "Key usage"
+        ],
+        "header_actions": [
+          "Key actions",
+          "Create key"
+        ],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "aws-cloudhsm-key-stores",
+      "kind": "other",
+      "title": "AWS CloudHSM key stores",
+      "route": "/kms/home#/kms/custom-key-stores/cloudhsm",
+      "breadcrumbs": [
+        "KMS",
+        "AWS CloudHSM key stores"
+      ],
+      "captures": [
+        "A-kms/005-L2-aws-cloudhsm-key-stores"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "external-key-stores",
+      "kind": "list",
+      "title": "External key stores",
+      "route": "/kms/home#/kms/custom-key-stores/external",
+      "breadcrumbs": [
+        "KMS",
+        "External key stores"
+      ],
+      "captures": [
+        "A-kms/006-L2-external-key-stores"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "External key stores",
+        "columns": [
+          "Custom key store name",
+          "Custom key store ID",
+          "Proxy connectivity",
+          "Connection state"
+        ],
+        "header_actions": [
+          "Key store actions",
+          "Create external key store"
+        ],
+        "empty_state": "No external key stores",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "create-a-key",
+      "kind": "create",
+      "title": "Step 1",
+      "route": "/kms/home#/kms/keys/create",
+      "breadcrumbs": [
+        "KMS",
+        "Customer managed keys",
+        "Create key"
+      ],
+      "captures": [
+        "A-kms/007-L2-create-a-key"
+      ],
+      "provenance": "capture",
+      "steps": [
+        {
+          "title": "Configure key",
+          "optional": false,
+          "sections": [
+            {
+              "title": "(form)",
+              "fields": [
+                {
+                  "label": "Step 3",
+                  "type": "select",
+                  "default": "Define key administrative permissions",
+                  "required": false,
+                  "confidence": "low"
+                },
+                {
+                  "label": "Step 4",
+                  "type": "select",
+                  "default": "Define key usage permissions",
+                  "required": false,
+                  "confidence": "low"
+                },
+                {
+                  "label": "Step 5",
+                  "type": "radio",
+                  "options": [
+                    "Edit key policy",
+                    "Step 6",
+                    "Review",
+                    "Configure key",
+                    "Key typeHelp me choose",
+                    "Symmetric",
+                    "Asymmetric",
+                    "Key usageHelp me choose"
+                  ],
+                  "default": "Edit key policy",
+                  "required": false,
+                  "confidence": "low"
+                },
+                {
+                  "label": "Encrypt and decrypt",
+                  "type": "radio",
+                  "options": [
+                    "Generate and verify MAC",
+                    "Advanced options"
+                  ],
+                  "default": "Generate and verify MAC",
+                  "required": true,
+                  "help": "Use the key only to encrypt and decrypt data.",
+                  "confidence": "low"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Add labels",
+          "optional": false
+        },
+        {
+          "title": "Define key administrative permissions",
+          "optional": true
+        },
+        {
+          "title": "Define key usage permissions",
+          "optional": true
+        },
+        {
+          "title": "Edit key policy",
+          "optional": true
+        },
+        {
+          "title": "Review",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "id": "aws-ebs",
+      "kind": "other",
+      "title": "{resource-name}",
+      "breadcrumbs": [
+        "KMS",
+        "AWS managed keys"
+      ],
+      "captures": [
+        "A-kms/009-L3-*",
+        "A-kms/009-L3-*--tab-02-cryptographic-configuration",
+        "A-kms/011-L3-*",
+        "A-kms/011-L3-*--tab-02-cryptographic-configuration"
+      ],
+      "provenance": "capture",
+      "tabs": [
+        "Key policy",
+        "Cryptographic configuration"
+      ]
+    },
+    {
+      "id": "create-external-key-store",
+      "kind": "create",
+      "title": "Create external key store",
+      "route": "/kms/home#/kms/custom-key-stores/external/create",
+      "breadcrumbs": [
+        "KMS",
+        "External key stores",
+        "Create external key store"
+      ],
+      "captures": [
+        "A-kms/014-L3-create-external-key-store"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "Key store name",
+              "type": "text",
+              "required": true,
+              "help": "Key store name must be unique in your AWS account and Region.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Proxy connectivity",
+          "fields": [
+            {
+              "label": "Public endpoint",
+              "type": "radio",
+              "options": [
+                "VPC endpoint service",
+                "Proxy URI endpoint"
+              ],
+              "default": "VPC endpoint service",
+              "required": true,
+              "help": "Select this option to use a public endpoint to communicate with the external key store proxy.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Upload configuration file",
+          "fields": [
+            {
+              "label": "Proxy URI path prefix",
+              "type": "text",
+              "required": false,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "/kms/xks/v1",
+          "fields": [
+            {
+              "label": "Proxy credential: Access key ID",
+              "type": "text",
+              "required": true,
+              "help": "The ID of the secret access key in the authentication credential established on your external key store proxy.",
+              "confidence": "low"
+            },
+            {
+              "label": "Proxy credential: Secret access key",
+              "type": "text",
+              "required": true,
+              "help": "The secret access key in the authentication credential established on your external key store proxy.",
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+}

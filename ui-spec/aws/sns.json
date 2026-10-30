@@ -1,0 +1,401 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "sns",
+  "console_path": "/sns/",
+  "status": "draft",
+  "nav": [
+    {
+      "label": "Amazon SNS",
+      "page_id": "amazon-sns"
+    },
+    {
+      "label": "Dashboard",
+      "page_id": "dashboard"
+    },
+    {
+      "label": "Topics",
+      "page_id": "topics"
+    },
+    {
+      "label": "Subscriptions",
+      "page_id": "subscriptions"
+    },
+    {
+      "label": "Mobile",
+      "children": [
+        {
+          "label": "Push notifications",
+          "page_id": "push-notifications"
+        },
+        {
+          "label": "Text messaging (SMS)",
+          "page_id": "text-messaging-sms"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "landing",
+      "kind": "other",
+      "title": "Simple Notification Service",
+      "route": "/sns/v3/home",
+      "captures": [
+        "A-sns/001-L1-landing"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "amazon-sns",
+      "kind": "other",
+      "title": "Simple Notification Service",
+      "route": "/sns/v3/home#/homepage",
+      "captures": [
+        "A-sns/002-L2-amazon-sns"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "dashboard",
+      "kind": "dashboard",
+      "title": "Dashboard",
+      "route": "/sns/v3/home#/dashboard",
+      "breadcrumbs": [
+        "Amazon SNS",
+        "Dashboard"
+      ],
+      "captures": [
+        "A-sns/003-L2-dashboard"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "topics",
+      "kind": "list",
+      "title": "Topics",
+      "route": "/sns/v3/home#/topics",
+      "breadcrumbs": [
+        "Amazon SNS",
+        "Topics"
+      ],
+      "captures": [
+        "A-sns/004-L2-topics"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Topics",
+        "columns": [
+          "Type",
+          "ARN"
+        ],
+        "header_actions": [
+          "Edit",
+          "Delete",
+          "Publish message",
+          "Create topic"
+        ],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "subscriptions",
+      "kind": "list",
+      "title": "Subscriptions",
+      "route": "/sns/v3/home#/subscriptions",
+      "breadcrumbs": [
+        "Amazon SNS",
+        "Subscriptions"
+      ],
+      "captures": [
+        "A-sns/005-L2-subscriptions"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Subscriptions",
+        "columns": [
+          "ID",
+          "Endpoint",
+          "Status",
+          "Protocol",
+          "Topic"
+        ],
+        "header_actions": [
+          "Edit",
+          "Delete",
+          "Request confirmation",
+          "Confirm subscription",
+          "Create subscription"
+        ],
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "push-notifications",
+      "kind": "list",
+      "title": "Mobile: Push notifications",
+      "route": "/sns/v3/home#/mobile/push-notifications",
+      "breadcrumbs": [
+        "Amazon SNS",
+        "Mobile: Push notifications"
+      ],
+      "captures": [
+        "A-sns/006-L2-push-notifications"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Platform applications",
+        "columns": [
+          "Platform",
+          "ARN",
+          "Status"
+        ],
+        "header_actions": [
+          "Edit",
+          "Delete",
+          "Create platform application"
+        ],
+        "empty_state": "No platform applications",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "text-messaging-sms",
+      "kind": "list",
+      "title": "Text messaging (SMS)",
+      "route": "/sns/v3/home#/mobile/text-messaging",
+      "captures": [
+        "A-sns/007-L2-text-messaging-sms"
+      ],
+      "provenance": "capture",
+      "table": {
+        "resource_label": "Sandbox destination phone numbers",
+        "columns": [
+          "Verified phone number",
+          "Verification status"
+        ],
+        "header_actions": [
+          "Verify phone number",
+          "Delete phone number",
+          "Add phone number"
+        ],
+        "empty_state": "No phone numbers added",
+        "confidence": "medium"
+      },
+      "extra_tables": [
+        {
+          "resource_label": "Delivery statistics by country",
+          "columns": [
+            "Country",
+            "Sent",
+            "Failed",
+            "Delivery rate"
+          ],
+          "header_actions": [],
+          "confidence": "medium"
+        },
+        {
+          "resource_label": "Opted-out phone numbers",
+          "columns": [
+            "Number"
+          ],
+          "header_actions": [
+            "Opt in"
+          ],
+          "empty_state": "No numbers have been opted out.",
+          "confidence": "medium"
+        }
+      ]
+    },
+    {
+      "id": "create-topic",
+      "kind": "create",
+      "title": "Create topic",
+      "route": "/sns/v3/home#/create-topic",
+      "captures": [
+        "C-sns/01-create-topic/step-1",
+        "C-sns/01-create-topic/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "New Feature",
+              "type": "radio",
+              "options": [
+                "Create topic",
+                "Details"
+              ],
+              "default": "Create topic",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "Type",
+              "type": "radio",
+              "options": [
+                "Topic type cannot be modified after topic is created",
+                "FIFO (first-in, first-out)",
+                "Strictly-preserved message ordering",
+                "Exactly-once message delivery",
+                "Subscription protocols: SQS",
+                "Standard",
+                "Best-effort message ordering",
+                "At-least once message delivery",
+                ".fifo"
+              ],
+              "default": "Topic type cannot be modified after topic is created",
+              "required": true,
+              "confidence": "low"
+            },
+            {
+              "label": "High throughput",
+              "type": "select",
+              "default": "Message group scope (Recommended for highest throughput)",
+              "required": true,
+              "help": "Configure your FIFO topic for maximum throughput. Once enabled, this configuration cannot be modified.",
+              "confidence": "low"
+            },
+            {
+              "label": "Topic scope",
+              "type": "text",
+              "required": true,
+              "help": "Throughput: 3000 message per second and a bandwidth of 20MB per second.",
+              "confidence": "low"
+            },
+            {
+              "label": "Display name",
+              "type": "text",
+              "required": false,
+              "confidence": "low"
+            },
+            {
+              "label": "Maximum message size",
+              "type": "select",
+              "default": "KiB",
+              "required": true,
+              "help": "The largest message size this topic accepts.",
+              "confidence": "low"
+            },
+            {
+              "label": "Content-based message deduplication",
+              "type": "select",
+              "default": "Turn on message deduplication",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Encryption - optional",
+          "fields": [
+            {
+              "label": "EncryptionLearn more",
+              "type": "text",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Access policy - optional",
+          "fields": [
+            {
+              "label": "Basic",
+              "type": "radio",
+              "options": [
+                "Advanced",
+                "Publishers",
+                "Only the topic owner",
+                "Only the owner of the topic can publish to the topic"
+              ],
+              "default": "Advanced",
+              "required": true,
+              "help": "Use simple criteria to define a basic access policy.",
+              "confidence": "low"
+            },
+            {
+              "label": "Subscribers",
+              "type": "radio",
+              "options": [
+                "Only the topic owner",
+                "Only the owner of the topic can subscribe to the topic",
+                "JSON preview",
+                "{"
+              ],
+              "default": "Only the topic owner",
+              "required": true,
+              "help": "Specify who can subscribe to this topic.",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Archive policy - new, optional",
+          "fields": [
+            {
+              "label": "Archive policy",
+              "type": "text",
+              "required": true,
+              "help": "Activate archive policy and select the desired retention period. Archive policy has additional pricing",
+              "confidence": "low"
+            }
+          ]
+        },
+        {
+          "title": "Active tracing - optional",
+          "fields": [
+            {
+              "label": "Use active tracingLearn more",
+              "type": "select",
+              "default": "Don't use active tracing",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-subscription",
+      "kind": "create",
+      "title": "Create subscription",
+      "route": "/sns/v3/home#/create-subscription",
+      "breadcrumbs": [
+        "Amazon SNS",
+        "Subscriptions",
+        "Create subscription"
+      ],
+      "captures": [
+        "C-sns/02-create-subscription/step-1",
+        "C-sns/02-create-subscription/step-1-expanded"
+      ],
+      "provenance": "capture",
+      "sections": [
+        {
+          "title": "(form)",
+          "fields": [
+            {
+              "label": "New Feature",
+              "type": "radio",
+              "options": [
+                "Create subscription",
+                "Details",
+                "Topic ARN",
+                "Protocol",
+                "The type of endpoint to subscribe",
+                "Select protocol"
+              ],
+              "default": "Create subscription",
+              "required": true,
+              "confidence": "low"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+}

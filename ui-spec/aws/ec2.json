@@ -1,0 +1,655 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "aws",
+  "service": "ec2",
+  "console_path": "/ec2/",
+  "status": "draft",
+  "nav": [
+    {
+      "label": "EC2",
+      "page_id": "ec2"
+    },
+    {
+      "label": "Dashboard",
+      "page_id": "dashboard"
+    },
+    {
+      "label": "AWS Global View",
+      "children": [
+        {
+          "label": "Events",
+          "page_id": "events"
+        },
+        {
+          "label": "Instances",
+          "page_id": "instances"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "landing",
+      "kind": "other",
+      "title": "Dashboard",
+      "route": "/ec2/home",
+      "captures": [
+        "A-ec2/001-L1-landing"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "ec2",
+      "kind": "other",
+      "title": "Home",
+      "route": "/ec2/home#Overview:",
+      "captures": [
+        "A-ec2/002-L2-ec2"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "dashboard",
+      "kind": "dashboard",
+      "title": "Dashboard",
+      "route": "/ec2/home#Home:",
+      "captures": [
+        "A-ec2/003-L2-dashboard"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "events",
+      "kind": "other",
+      "title": "Events",
+      "route": "/ec2/home#Events:",
+      "breadcrumbs": [
+        "EC2",
+        "Events"
+      ],
+      "captures": [
+        "A-ec2/004-L2-events"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "instances",
+      "kind": "other",
+      "title": "Instances",
+      "route": "/ec2/home#Instances:",
+      "breadcrumbs": [
+        "EC2",
+        "Instances"
+      ],
+      "captures": [
+        "A-ec2/005-L2-instances"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "instance-types",
+      "kind": "other",
+      "title": "InstanceTypes",
+      "route": "/ec2/home#InstanceTypes:",
+      "breadcrumbs": [
+        "EC2",
+        "Instance types"
+      ],
+      "captures": [
+        "A-ec2/006-L2-instance-types"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "launch-templates",
+      "kind": "other",
+      "title": "Launch templates",
+      "route": "/ec2/home#LaunchTemplates:",
+      "captures": [
+        "A-ec2/007-L2-launch-templates"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "spot-requests",
+      "kind": "other",
+      "title": "Spot Requests",
+      "route": "/ec2/home#SpotInstances:",
+      "breadcrumbs": [
+        "EC2",
+        "Spot Requests"
+      ],
+      "captures": [
+        "A-ec2/008-L2-spot-requests"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "savings-plans",
+      "kind": "other",
+      "title": "Savings Plans",
+      "route": "/ec2/home#SavingsPlans:",
+      "breadcrumbs": [
+        "EC2",
+        "Savings Plans"
+      ],
+      "captures": [
+        "A-ec2/009-L2-savings-plans"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "reserved-instances",
+      "kind": "other",
+      "title": "Reserved Instances",
+      "route": "/ec2/home#ReservedInstances:",
+      "breadcrumbs": [
+        "EC2",
+        "Reserved Instances"
+      ],
+      "captures": [
+        "A-ec2/010-L2-reserved-instances"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "dedicated-hosts",
+      "kind": "other",
+      "title": "Dedicated Hosts",
+      "route": "/ec2/home#Hosts:",
+      "breadcrumbs": [
+        "EC2",
+        "Dedicated Hosts"
+      ],
+      "captures": [
+        "A-ec2/011-L2-dedicated-hosts"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "capacity-reservations",
+      "kind": "other",
+      "title": "Capacity reservations",
+      "route": "/ec2/home#Capacity{resource-name}:",
+      "breadcrumbs": [
+        "EC2",
+        "Capacity {resource-name}"
+      ],
+      "captures": [
+        "A-ec2/012-L2-capacity-reservations"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "ultraservers",
+      "kind": "other",
+      "title": "UltraServers",
+      "route": "/ec2/home#UltraServers:",
+      "breadcrumbs": [
+        "EC2",
+        "UltraServers"
+      ],
+      "captures": [
+        "A-ec2/013-L2-ultraservers"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "capacity-manager",
+      "kind": "other",
+      "title": "Capacity Manager",
+      "route": "/ec2/home#CapacityManagerHome:",
+      "breadcrumbs": [
+        "EC2",
+        "Capacity Manager"
+      ],
+      "captures": [
+        "A-ec2/014-L2-capacity-manager"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "amis",
+      "kind": "other",
+      "title": "Images",
+      "route": "/ec2/home#Images:",
+      "breadcrumbs": [
+        "EC2",
+        "AMIs"
+      ],
+      "captures": [
+        "A-ec2/015-L2-amis"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "ami-catalog",
+      "kind": "other",
+      "title": "AMI Catalog",
+      "route": "/ec2/home#AMICatalog:",
+      "breadcrumbs": [
+        "EC2",
+        "AMI Catalog"
+      ],
+      "captures": [
+        "A-ec2/016-L2-ami-catalog",
+        "A-ec2/016-L2-ami-catalog--tab-02-my-amis-0",
+        "A-ec2/016-L2-ami-catalog--tab-03-aws-marketplace-amis-5482",
+        "A-ec2/016-L2-ami-catalog--tab-04-community-amis-500"
+      ],
+      "provenance": "capture",
+      "tabs": [
+        "My AMIs",
+        "AWS Marketplace AMIs",
+        "Community AMIs"
+      ]
+    },
+    {
+      "id": "volumes",
+      "kind": "other",
+      "title": "Volumes",
+      "route": "/ec2/home#Volumes:",
+      "captures": [
+        "A-ec2/017-L2-volumes"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "snapshots",
+      "kind": "other",
+      "title": "Snapshots",
+      "route": "/ec2/home#Snapshots:",
+      "captures": [
+        "A-ec2/018-L2-snapshots"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "lifecycle-manager",
+      "kind": "other",
+      "title": "Lifecycle Manager",
+      "route": "/ec2/home#Lifecycle:",
+      "captures": [
+        "A-ec2/019-L2-lifecycle-manager"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "security-groups",
+      "kind": "other",
+      "title": "Security groups",
+      "route": "/ec2/home#SecurityGroups:",
+      "breadcrumbs": [
+        "EC2",
+        "Security Groups"
+      ],
+      "captures": [
+        "A-ec2/020-L2-security-groups"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "elastic-ips",
+      "kind": "other",
+      "title": "Elastic IP addresses",
+      "route": "/ec2/home#Addresses:",
+      "breadcrumbs": [
+        "EC2",
+        "Elastic IP addresses"
+      ],
+      "captures": [
+        "A-ec2/021-L2-elastic-ips"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "placement-groups",
+      "kind": "other",
+      "title": "Placement groups",
+      "route": "/ec2/home#PlacementGroups:",
+      "breadcrumbs": [
+        "EC2",
+        "Placement groups"
+      ],
+      "captures": [
+        "A-ec2/022-L2-placement-groups"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "key-pairs",
+      "kind": "other",
+      "title": "Key pairs",
+      "route": "/ec2/home#KeyPairs:",
+      "breadcrumbs": [
+        "EC2",
+        "Key pairs"
+      ],
+      "captures": [
+        "A-ec2/023-L2-key-pairs"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "network-interfaces",
+      "kind": "other",
+      "title": "Network interfaces",
+      "route": "/ec2/home#NIC:",
+      "breadcrumbs": [
+        "EC2",
+        "Network interfaces"
+      ],
+      "captures": [
+        "A-ec2/024-L2-network-interfaces"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "load-balancers",
+      "kind": "other",
+      "title": "Load balancers",
+      "route": "/ec2/home#LoadBalancers:",
+      "breadcrumbs": [
+        "EC2",
+        "Load balancers"
+      ],
+      "captures": [
+        "A-ec2/025-L2-load-balancers"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "target-groups",
+      "kind": "other",
+      "title": "Target groups",
+      "route": "/ec2/home#TargetGroups:",
+      "breadcrumbs": [
+        "EC2",
+        "Target groups"
+      ],
+      "captures": [
+        "A-ec2/026-L2-target-groups"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "trust-stores",
+      "kind": "other",
+      "title": "Trust stores",
+      "route": "/ec2/home#TrustStores:",
+      "breadcrumbs": [
+        "EC2",
+        "Trust stores"
+      ],
+      "captures": [
+        "A-ec2/027-L2-trust-stores"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "auto-scaling-groups",
+      "kind": "other",
+      "title": "Auto Scaling groups",
+      "route": "/ec2/home#AutoScalingGroups:",
+      "breadcrumbs": [
+        "EC2",
+        "Auto Scaling groups"
+      ],
+      "captures": [
+        "A-ec2/028-L2-auto-scaling-groups"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "settings",
+      "kind": "settings",
+      "title": "Settings",
+      "route": "/ec2/home#Settings:",
+      "breadcrumbs": [
+        "EC2",
+        "Settings"
+      ],
+      "captures": [
+        "A-ec2/029-L2-settings",
+        "A-ec2/029-L2-settings--tab-02-allowed-amis",
+        "A-ec2/029-L2-settings--tab-03-managed-resources-new",
+        "A-ec2/029-L2-settings--tab-04-zones",
+        "A-ec2/029-L2-settings--tab-05-default-credit-specification",
+        "A-ec2/029-L2-settings--tab-06-ec2-serial-console",
+        "A-ec2/029-L2-settings--tab-07-auto-scaling-groups",
+        "A-ec2/029-L2-settings--tab-08-ec2-console-preferences"
+      ],
+      "provenance": "capture",
+      "tabs": [
+        "Allowed AMIs",
+        "Managed resources - new",
+        "Zones",
+        "{resource-name} credit specification",
+        "EC2 Serial Console",
+        "Auto Scaling groups",
+        "EC2 console preferences"
+      ]
+    },
+    {
+      "id": "launch-instance",
+      "kind": "other",
+      "title": "Launch an instance",
+      "route": "/ec2/home#LaunchInstances:",
+      "breadcrumbs": [
+        "EC2",
+        "Instances",
+        "Launch an instance"
+      ],
+      "captures": [
+        "A-ec2/030-L2-launch-instance"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "launch-instance-2",
+      "kind": "other",
+      "title": "Get started",
+      "route": "/ec2/home#GetStarted:",
+      "breadcrumbs": [
+        "EC2",
+        "Getting started"
+      ],
+      "captures": [
+        "A-ec2/031-L3-launch-instance"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "view-running-instances",
+      "kind": "other",
+      "title": "Instances",
+      "route": "/ec2/home#Instances:instanceState=running",
+      "breadcrumbs": [
+        "EC2",
+        "Instances"
+      ],
+      "captures": [
+        "A-ec2/033-L3-view-running-instances"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "instance-types-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/ec2/home#InstanceTypeDetails:instanceType={resource-name}",
+      "breadcrumbs": [
+        "EC2",
+        "Instance types",
+        "{resource-name}"
+      ],
+      "captures": [
+        "A-ec2/039-L3-*",
+        "A-ec2/040-L3-*",
+        "A-ec2/041-L3-*",
+        "A-ec2/042-L3-*"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "create-policy",
+      "kind": "create",
+      "title": "Create {resource-name} lifecycle policy",
+      "route": "/ec2/home#Create{resource-name}LifecyclePolicy:policyType=EBS_SNAPSHOT_MANAGEMENT",
+      "breadcrumbs": [
+        "EC2",
+        "Lifecycle Manager",
+        "Select policy type",
+        "Create {resource-name} policy for EBS snapshots"
+      ],
+      "captures": [
+        "A-ec2/060-L3-create-policy"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "sg-083d2889674d28ddd",
+      "kind": "other",
+      "title": "SecurityGroup",
+      "breadcrumbs": [
+        "EC2",
+        "Security Groups"
+      ],
+      "captures": [
+        "A-ec2/061-L3-*",
+        "A-ec2/061-L3-*--tab-02-outbound-rules",
+        "A-ec2/061-L3-*--tab-03-sharing",
+        "A-ec2/061-L3-*--tab-04-vpc-associations",
+        "A-ec2/061-L3-*--tab-05-related-resources-new",
+        "A-ec2/061-L3-*--tab-06-tags"
+      ],
+      "provenance": "capture",
+      "tabs": [
+        "Outbound rules",
+        "Sharing",
+        "VPC associations",
+        "Related resources - new",
+        "Tags"
+      ]
+    },
+    {
+      "id": "create-trust-store",
+      "kind": "create",
+      "title": "Create trust store",
+      "route": "/ec2/home#CreateTrustStore",
+      "breadcrumbs": [
+        "EC2",
+        "Trust stores",
+        "Create trust store"
+      ],
+      "captures": [
+        "A-ec2/069-L3-create-trust-store"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "create-new-placement-group",
+      "kind": "create",
+      "title": "Placement groups",
+      "route": "/ec2/home#PlacementGroups",
+      "breadcrumbs": [
+        "EC2",
+        "Placement groups"
+      ],
+      "captures": [
+        "A-ec2/078-L3-create-new-placement-group"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "create-and-attach-additional-ebs-volumes",
+      "kind": "create",
+      "title": "Volumes",
+      "route": "/ec2/home#Volumes",
+      "captures": [
+        "A-ec2/080-L3-create-and-attach-additional-ebs-volumes"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "createsecuritygroup",
+      "kind": "create",
+      "title": "CreateSecurityGroup",
+      "route": "/ec2/home#CreateSecurityGroup:",
+      "breadcrumbs": [
+        "EC2",
+        "Security Groups",
+        "Create security group"
+      ],
+      "captures": [
+        "C-ec2/02-createsecuritygroup/step-1",
+        "C-ec2/02-createsecuritygroup/step-1-expanded"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "createkeypair",
+      "kind": "create",
+      "title": "Create key pair",
+      "route": "/ec2/home#CreateKeyPair:",
+      "breadcrumbs": [
+        "EC2",
+        "Key pairs",
+        "Create key pair"
+      ],
+      "captures": [
+        "C-ec2/03-createkeypair/step-1",
+        "C-ec2/03-createkeypair/step-1-expanded"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "createvolume",
+      "kind": "create",
+      "title": "Create volume",
+      "route": "/ec2/home#CreateVolume:",
+      "breadcrumbs": [
+        "EC2",
+        "Volumes",
+        "Create volume"
+      ],
+      "captures": [
+        "C-ec2/04-createvolume/step-1",
+        "C-ec2/04-createvolume/step-1-expanded"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "createtemplate",
+      "kind": "create",
+      "title": "Create launch template",
+      "route": "/ec2/home#CreateTemplate:",
+      "breadcrumbs": [
+        "EC2",
+        "Launch templates",
+        "Create launch template"
+      ],
+      "captures": [
+        "C-ec2/05-createtemplate/step-1",
+        "C-ec2/05-createtemplate/step-1-expanded"
+      ],
+      "provenance": "capture"
+    },
+    {
+      "id": "createimage",
+      "kind": "create",
+      "title": "Instances",
+      "route": "/ec2/home#CreateImage:",
+      "breadcrumbs": [
+        "EC2",
+        "Instances"
+      ],
+      "captures": [
+        "C-ec2/06-createimage/step-1",
+        "C-ec2/06-createimage/step-1-expanded"
+      ],
+      "provenance": "capture"
+    }
+  ],
+  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+}
