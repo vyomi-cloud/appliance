@@ -2,6 +2,7 @@
  * notifications / settings / help, directory + user chip), breadcrumbs, toasts, and the
  * service router. Theme (light/dark) and the subscription filter live in Settings. */
 import { wordmark } from "../common/brand.js";
+import { VyomiMark, vy } from "../common/VyomiMark.jsx";
 const AZ_BRAND = wordmark("Azure");
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -108,17 +109,17 @@ export default function App() {
             <Menu>
               <MenuTrigger disableButtonEnhancement>
                 <button className="vy-account" aria-label="Account and directory">
-                  <span className="vy-acct-text"><b>vyomi@simulator.local</b><small>Vyomi simulator (default directory)</small></span>
+                  <span className="vy-acct-text"><b>vyomi@simulator.local</b><small><VyomiMark /> simulator (default directory)</small></span>
                   <Avatar size={28} name="Vyomi" color="neutral" />
                 </button>
               </MenuTrigger>
               <MenuPopover>
                 <MenuList>
-                  <MenuGroupHeader>Directory: Vyomi simulator</MenuGroupHeader>
+                  <MenuGroupHeader>Directory: <VyomiMark /> simulator</MenuGroupHeader>
                   <MenuItem disabled>Subscription: {sub.displayName || sub.id}</MenuItem>
                   <MenuItem onClick={() => setDrawer("settings")}>Switch directory or subscription</MenuItem>
                   <MenuDivider />
-                  <MenuItem onClick={() => { location.href = classicHref(); }}>Open the classic Vyomi console</MenuItem>
+                  <MenuItem onClick={() => { location.href = classicHref(); }}><span>Open the classic <VyomiMark /> console</span></MenuItem>
                 </MenuList>
               </MenuPopover>
             </Menu>
@@ -150,7 +151,7 @@ export default function App() {
               )) : <div className="vy-muted">No new notifications from this session.</div>)}
               {drawer === "settings" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  <Field label="Default subscription filter" hint="Vyomi simulates one subscription; its id is what your SDK and CLI use.">
+                  <Field label="Default subscription filter" hint={vy("Vyomi simulates one subscription; its id is what your SDK and CLI use.")}>
                     <Select value={sub.id} onChange={(_, d) => setSub({ id: d.value, displayName: subs.find((s) => s.subscriptionId === d.value)?.displayName || "" })} aria-label="Subscription">
                       {(subs.length ? subs : [{ subscriptionId: DEFAULT_SUBSCRIPTION, displayName: DEFAULT_SUBSCRIPTION }]).map((s) => (
                         <option key={s.subscriptionId} value={s.subscriptionId}>{s.displayName} ({s.subscriptionId})</option>
@@ -168,13 +169,13 @@ export default function App() {
               )}
               {drawer === "help" && (
                 <div style={{ fontSize: 13, lineHeight: 1.5 }}>
-                  <p>Vyomi simulates this portal against local backends. Storage accounts are created over native Azure Resource Manager (ARM) and blobs over the native Blob REST API — the same endpoints your azure-* SDKs and the az CLI use, so both always see the same state.</p>
-                  <p>Services without a Vyomi v4 page open in the <a href={classicHref()}>classic Vyomi console</a>.</p>
+                  <p><VyomiMark /> simulates this portal against local backends. Storage accounts are created over native Azure Resource Manager (ARM) and blobs over the native Blob REST API — the same endpoints your azure-* SDKs and the az CLI use, so both always see the same state.</p>
+                  <p>Services without a <VyomiMark /> v4 page open in the <a href={classicHref()}>classic <VyomiMark /> console</a>.</p>
                   <NotSimulated feature="Support requests, service health and the documentation search" />
                 </div>
               )}
               {drawer === "copilot" && <NotSimulated feature="Copilot" />}
-              {drawer === "shell" && <NotSimulated feature="Cloud Shell" note="Use the az CLI or the azure-* SDKs on your machine against the Vyomi endpoints instead." />}
+              {drawer === "shell" && <NotSimulated feature="Cloud Shell" note={vy("Use the az CLI or the azure-* SDKs on your machine against the Vyomi endpoints instead.")} />}
             </aside>
           )}
 

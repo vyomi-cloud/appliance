@@ -152,8 +152,9 @@ try {
 
   // ── Shell: unbacked service is honest; dark mode ───────────────────────────────────────
   await page.goto(UI + "#/vms");
+  await page.getByRole("link", { name: /in the classic Vyomi console/ }).first().waitFor({ timeout: 10000 }).catch(() => {});
   check("service without a v4 module → NotSimulated + classic link",
-    await page.locator("[data-vyomi-not-simulated]").first().isVisible() && await page.getByText(/in the classic Vyomi console/).first().isVisible());
+    await page.locator("[data-vyomi-not-simulated]").first().isVisible() && await page.getByRole("link", { name: /in the classic Vyomi console/ }).first().isVisible());
   await shot("15-vms-not-simulated");
   await page.evaluate(() => localStorage.setItem("vyomi.v4.azure.mode", "dark"));
   await page.goto(UI + `#/storage/${RG}/${SA}`);

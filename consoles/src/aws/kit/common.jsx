@@ -7,6 +7,7 @@ import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Alert from "@cloudscape-design/components/alert";
 import Badge from "@cloudscape-design/components/badge";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import { VyomiMark } from "../../common/VyomiMark.jsx";
 
 /** A feature the real console has but Vyomi does not back with a real backend.
  *  Rendered visibly — a fake success would be a UI-conformance failure. */
@@ -14,8 +15,8 @@ export function NotSimulated({ feature, note }) {
   return (
     <Box padding="l" textAlign="center" color="text-body-secondary" data-vyomi-not-simulated={feature}>
       <SpaceBetween size="xs">
-        <Badge color="grey">Not simulated in Vyomi</Badge>
-        <Box variant="p" color="inherit">{feature} isn't backed by a Vyomi backend yet.</Box>
+        <Badge color="grey">Not simulated in <VyomiMark /></Badge>
+        <Box variant="p" color="inherit">{feature} isn't backed by a <VyomiMark /> backend yet.</Box>
         {note && <Box variant="small" color="inherit">{note}</Box>}
       </SpaceBetween>
     </Box>

@@ -24,6 +24,7 @@ import { restJson, WIRE_BASE } from "../../common/wire.js";
 import { useAsync } from "../../common/useAsync.js";
 import { useProject } from "../project.js";
 import { PRODUCTS, classicHref } from "../services/registry.js";
+import { VyomiMark, vy } from "../../common/VyomiMark.jsx";
 
 const store = {
   get: (k, d) => { try { return JSON.parse(localStorage.getItem(`vyomi.v4.gcp.${k}`)) ?? d; } catch { return d; } },
@@ -66,7 +67,7 @@ function Card({ icon: Icon, title, onHide, footer, accent, children }) {
     <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden", borderTop: accent ? `4px solid ${accent}` : undefined, breakInside: "avoid", mb: 2 }}>
       <Stack direction="row" alignItems="center" spacing={1.5} sx={{ px: 2, pt: 1.5, pb: 1 }}>
         <Icon fontSize="small" sx={{ color: "text.secondary" }} />
-        <Typography variant="h3" component="h2" sx={{ flex: 1, fontSize: 18 }}>{title}</Typography>
+        <Typography variant="h3" component="h2" sx={{ flex: 1, fontSize: 18 }}>{vy(title)}</Typography>
         <IconButton size="small" aria-label={`${title} options`} onClick={(e) => setAnchor(e.currentTarget)}><MoreVertIcon fontSize="small" /></IconButton>
         <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
           <MenuItem onClick={() => { setAnchor(null); onHide(); }}>Remove card</MenuItem>
@@ -186,7 +187,7 @@ export default function Home() {
         <Stack spacing={1.25}>
           <Box><Typography variant="body2" color="text.secondary">Project name</Typography><Typography variant="body2">{project}</Typography></Box>
           <Box><Typography variant="body2" color="text.secondary">Project ID</Typography><Typography variant="body2">{project}</Typography></Box>
-          <Box><Typography variant="body2" color="text.secondary">Backend</Typography><Typography variant="body2">Vyomi simulator (local)</Typography></Box>
+          <Box><Typography variant="body2" color="text.secondary">Backend</Typography><Typography variant="body2"><VyomiMark /> simulator (local)</Typography></Box>
         </Stack>
       </Card>
     ),
@@ -257,9 +258,9 @@ export default function Home() {
           {promo && (
             <Paper variant="outlined" sx={{ borderRadius: 3, p: 3, mb: 2, position: "relative", bgcolor: "action.hover" }}>
               <IconButton aria-label="Dismiss" onClick={() => { setPromo(false); store.set("home.promoDismissed", true); }} sx={{ position: "absolute", top: 8, right: 8 }}><CloseIcon /></IconButton>
-              <Typography variant="h2" sx={{ fontSize: 22, mb: 1 }}>Welcome to Vyomi Google Cloud</Typography>
+              <Typography variant="h2" sx={{ fontSize: 22, mb: 1 }}>Welcome to <VyomiMark /> Google Cloud</Typography>
               <Typography variant="body2" sx={{ mb: 2, maxWidth: 820 }}>
-                Everything in this console runs against your local Vyomi simulator — the same native APIs gcloud, gsutil and the client libraries call. Products without a v4 page open in the classic Vyomi console.
+                Everything in this console runs against your local <VyomiMark /> simulator — the same native APIs gcloud, gsutil and the client libraries call. Products without a v4 page open in the classic <VyomiMark /> console.
               </Typography>
               <Stack direction="row" spacing={1}>
                 <Button variant="outlined" href="#/storage">Go to Cloud Storage</Button>
@@ -292,7 +293,7 @@ export default function Home() {
       {tab === 2 && (
         <Paper variant="outlined" sx={{ borderRadius: 2, p: 3, textAlign: "center" }} data-vyomi-not-simulated="Recommender">
           <Typography variant="h3" sx={{ fontSize: 18, mb: 1 }}>No recommendations</Typography>
-          <Typography variant="body2" color="text.secondary">Recommender isn't simulated in Vyomi.</Typography>
+          <Typography variant="body2" color="text.secondary">Recommender isn't simulated in <VyomiMark />.</Typography>
         </Paper>
       )}
 

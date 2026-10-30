@@ -21,6 +21,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { follow, navigate } from "../../../common/router.js";
 import { ErrorAlert, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import { vy } from "../../../common/VyomiMark.jsx";
 
 const TYPES = [{ value: "S", label: "String" }, { value: "N", label: "Number" }, { value: "B", label: "Binary" }];
 const PROJECTIONS = [{ value: "ALL", label: "All attributes" }, { value: "KEYS_ONLY", label: "Only keys" }];
@@ -169,7 +170,7 @@ export default function CreateTable() {
                           <FormField label="Maximum table throughput">
                             <SpaceBetween size="xs">
                               <Checkbox checked={false} disabled>Set maximum table throughput</Checkbox>
-                              <NotSimulated feature="Maximum table throughput" note="On-demand throughput caps aren't enforced by Vyomi." />
+                              <NotSimulated feature="Maximum table throughput" note={vy("On-demand throughput caps aren't enforced by Vyomi.")} />
                             </SpaceBetween>
                           </FormField>
                         ) : (
@@ -183,18 +184,18 @@ export default function CreateTable() {
                             <SpaceBetween size="xs">
                               <Toggle checked disabled>Read capacity auto scaling</Toggle>
                               <Toggle checked disabled>Write capacity auto scaling</Toggle>
-                              <NotSimulated feature="Auto scaling" note="Application Auto Scaling for provisioned capacity isn't modeled by Vyomi; set fixed units above." />
+                              <NotSimulated feature="Auto scaling" note={vy("Application Auto Scaling for provisioned capacity isn't modeled by Vyomi; set fixed units above.")} />
                             </SpaceBetween>
                           </SpaceBetween>
                         )}
                       </SpaceBetween>
                     </Container>
 
-                    <NotSimulatedContainer title="Warm throughput" note="Computed warm-throughput values aren't modeled by Vyomi." />
+                    <NotSimulatedContainer title="Warm throughput" note={vy("Computed warm-throughput values aren't modeled by Vyomi.")} />
 
                     <Container header={<Header variant="h3">Secondary indexes</Header>}>
                       <SpaceBetween size="l">
-                        <NotSimulatedContainer title="Local indexes" note="LSIs must be declared at table creation and aren't modeled by Vyomi." />
+                        <NotSimulatedContainer title="Local indexes" note={vy("LSIs must be declared at table creation and aren't modeled by Vyomi.")} />
                         <Table variant="embedded" items={gsis} selectionType="single" selectedItems={gsiSel} onSelectionChange={({ detail }) => setGsiSel(detail.selectedItems)}
                           trackBy="name"
                           header={<Header variant="h3" counter={`(${gsis.length})`} actions={

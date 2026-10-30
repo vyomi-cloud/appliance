@@ -16,6 +16,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import s3 from "../../../../core/capabilities/aws/s3.json";
 import dynamodb from "../../../../core/capabilities/aws/dynamodb.json";
 import { NotSimulatedContainer } from "./common.jsx";
+import { VyomiMark } from "../../common/VyomiMark.jsx";
 
 const REGISTRY = { ...s3, ...dynamodb };
 
@@ -50,7 +51,7 @@ export function CapabilityBadge({ id }) {
           <SpaceBetween size="xs">
             <Box variant="p">{DEFAULT_NOTE[c.level]}</Box>
             {c.limitations?.length > 0 && <ul style={{ margin: 0, paddingLeft: 18 }}>{c.limitations.map((l) => <li key={l}>{l}</li>)}</ul>}
-            <Box variant="small" color="text-body-secondary">Applies to this Vyomi environment ({SUBSTRATE}).</Box>
+            <Box variant="small" color="text-body-secondary">Applies to this <VyomiMark /> environment ({SUBSTRATE}).</Box>
           </SpaceBetween>
         }
       >

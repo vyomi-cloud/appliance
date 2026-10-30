@@ -14,6 +14,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { follow, href } from "../../../common/router.js";
 import { ErrorAlert } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import { vy } from "../../../common/VyomiMark.jsx";
 
 export default function CreateFolderPage({ params, query }) {
   const bucket = params.bucket;
@@ -56,10 +57,10 @@ export default function CreateFolderPage({ params, query }) {
             </FormField>
           </Container>
           <Container header={<Header variant="h2">Server-side encryption</Header>}>
-            <FormField label="Server-side encryption" description="Folders don't hold data, so Vyomi doesn't apply a per-folder encryption key — new objects placed in it still use the bucket's default encryption.">
+            <FormField label="Server-side encryption" description={vy("Folders don't hold data, so Vyomi doesn't apply a per-folder encryption key — new objects placed in it still use the bucket's default encryption.")}>
               <RadioGroup value={sse} onChange={({ detail }) => setSse(detail.value)} items={[
                 { value: "none", label: "Don't specify an encryption key" },
-                { value: "key", label: "Specify an encryption key", disabled: true, description: "Not available in Vyomi yet." },
+                { value: "key", label: "Specify an encryption key", disabled: true, description: vy("Not available in Vyomi yet.") },
               ]} />
             </FormField>
           </Container>

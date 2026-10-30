@@ -19,6 +19,7 @@ import TopBar from "./pages/TopBar.jsx";
 import { applyAwsTheme } from "./kit/theme.js";
 import ServicesMenu from "./pages/ServicesMenu.jsx";
 import { NotSimulated } from "./kit/common.jsx";
+import { VyomiMark } from "../common/VyomiMark.jsx";
 
 const REGIONS = [
   ["us-east-1", "US East (N. Virginia)"], ["us-east-2", "US East (Ohio)"], ["us-west-2", "US West (Oregon)"],
@@ -71,7 +72,7 @@ export default function App() {
   else if (svcId === "services") { content = <AllServices />; }
   else if (!svc) { content = <NotSimulated feature={`The service "${svcId}"`} />; }
   else if (!svc.load) {
-    content = <NotSimulated feature={`The v4 ${svc.title} console`} note={<a href={classicHref(svc.classic)}>Open {svc.title} in the classic Vyomi console</a>} />;
+    content = <NotSimulated feature={`The v4 ${svc.title} console`} note={<a href={classicHref(svc.classic)}>Open {svc.title} in the classic <VyomiMark /> console</a>} />;
   } else if (!loaded[svcId]) { content = <Box textAlign="center" padding="xxl"><Spinner size="large" /></Box>; }
   else ({ content, nav, crumbs, help } = resolve(loaded[svcId], route));
 
@@ -108,7 +109,7 @@ export default function App() {
           <BreadcrumbGroup items={[{ text: "Console Home", href: "#/" }, { text: svc?.title || (svcId === "services" ? "All services" : svcId), href: `#/${svcId}` }, ...crumbs]} onFollow={follow} ariaLabel="Breadcrumbs" />
         )}
         notifications={<Flashbar items={notify.items} stackItems />}
-        tools={<HelpPanel header={<h2>{help?.title || svc?.title || "Vyomi"}</h2>}>{help?.body || <p>Vyomi simulates this console against local backends. Everything you do here is real in the simulator and visible to your SDKs and CLI.</p>}</HelpPanel>}
+        tools={<HelpPanel header={<h2>{help?.title || svc?.title || "Vyomi"}</h2>}>{help?.body || <p><VyomiMark /> simulates this console against local backends. Everything you do here is real in the simulator and visible to your SDKs and CLI.</p>}</HelpPanel>}
         toolsOpen={toolsOpen}
         onToolsChange={({ detail }) => setToolsOpen(detail.open)}
         content={<Suspense fallback={<Spinner />}>{content}</Suspense>}
@@ -117,7 +118,7 @@ export default function App() {
         <a href="#/" style={{ color: "inherit", textDecoration: "none" }}>Console Home</a>
         <a href={classicHref("")} style={{ color: "inherit", textDecoration: "none" }}>Classic console</a>
         <a href="https://github.com/vyomi-cloud/appliance/issues" target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "none" }}>Feedback</a>
-        <span style={{ marginLeft: "auto" }}>Vyomi — local cloud simulator · not affiliated with Amazon Web Services</span>
+        <span style={{ marginLeft: "auto" }}><VyomiMark /> — local cloud simulator · not affiliated with Amazon Web Services</span>
       </footer>
     </>
   );

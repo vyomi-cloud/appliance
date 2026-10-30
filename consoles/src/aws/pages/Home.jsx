@@ -17,6 +17,7 @@ import Checkbox from "@cloudscape-design/components/checkbox";
 import Table from "@cloudscape-design/components/table";
 import { byId, SERVICES } from "../services/registry.js";
 import ServiceIcon from "../../common/icons/ServiceIcon.jsx";
+import { VyomiMark, vy } from "../../common/VyomiMark.jsx";
 
 /** A service's icon followed by its console link (Console Home lists, All services). */
 const SvcLink = ({ s, size = 20, fontSize }) => (
@@ -98,7 +99,7 @@ function WelcomeWidget() {
   return (
     <Widget title="Welcome to Vyomi">
       <SpaceBetween size="s">
-        <Box variant="p">Everything here runs against your local Vyomi simulator — the same native APIs your SDKs and CLI use.</Box>
+        <Box variant="p">Everything here runs against your local <VyomiMark /> simulator — the same native APIs your SDKs and CLI use.</Box>
         <Link href="#/s3/create" onFollow={follow}>Create an S3 bucket</Link>
         <Link href="#/dynamodb/create-table" onFollow={follow}>Create a DynamoDB table</Link>
         <Link href="#/services" onFollow={follow}>Browse all services</Link>
@@ -268,7 +269,7 @@ function Cost() {
     <SpaceBetween size="s">
       <div><Box variant="awsui-key-label">Current month</Box><Box fontSize="heading-xl" color="text-status-info">$0.00</Box></div>
       <div><Box variant="awsui-key-label">Forecasted month end</Box><Box fontSize="heading-xl" color="text-status-info">$0.00</Box></div>
-      <Box variant="small" color="text-body-secondary">Resources in Vyomi are free. Estimating what they would cost on AWS is not simulated.</Box>
+      <Box variant="small" color="text-body-secondary">Resources in <VyomiMark /> are free. Estimating what they would cost on AWS is not simulated.</Box>
     </SpaceBetween>
   );
 }
@@ -276,9 +277,9 @@ function Cost() {
 function Explore() {
   return (
     <SpaceBetween size="s">
-      <div><Link href="https://vyomi.cloud" external>Vyomi documentation</Link><Box variant="small" display="block" color="text-body-secondary">Guides for every simulated service.</Box></div>
+      <div><Link href="https://vyomi.cloud" external><VyomiMark /> documentation</Link><Box variant="small" display="block" color="text-body-secondary">Guides for every simulated service.</Box></div>
       <div><Link href="#/services" onFollow={follow}>All services</Link><Box variant="small" display="block" color="text-body-secondary">What this console can open.</Box></div>
-      <div><Link href={`${location.pathname.split("/v4/")[0]}/console/aws`}>Classic Vyomi console</Link><Box variant="small" display="block" color="text-body-secondary">Services without a v4 page yet.</Box></div>
+      <div><Link href={`${location.pathname.split("/v4/")[0]}/console/aws`}>Classic <VyomiMark /> console</Link><Box variant="small" display="block" color="text-body-secondary">Services without a v4 page yet.</Box></div>
     </SpaceBetween>
   );
 }
@@ -287,7 +288,7 @@ function Security() {
   return (
     <Box textAlign="center" color="text-body-secondary" padding={{ top: "l" }}>
       <Box variant="strong" color="inherit">No security data</Box>
-      <Box variant="p" color="inherit">Security Hub findings are not simulated in Vyomi.</Box>
+      <Box variant="p" color="inherit">Security Hub findings are not simulated in <VyomiMark />.</Box>
     </Box>
   );
 }
@@ -326,7 +327,7 @@ export default function Home() {
     return (
       <BoardItem
         i18nStrings={itemI18n}
-        header={<Header variant="h2" actions={actions[id]}>{CATALOG[id].title}</Header>}
+        header={<Header variant="h2" actions={actions[id]}>{vy(CATALOG[id].title)}</Header>}
         settings={a && <ButtonDropdown variant="icon" ariaLabel={`${CATALOG[id].title} settings`} items={[{ id: "remove", text: "Remove" }]} onItemClick={() => a.removeItem()} />}
         footer={footers[id]}
       >
@@ -341,8 +342,8 @@ export default function Home() {
     <ContentLayout header={
       <SpaceBetween size="m">
         {banner && (
-          <Alert type="info" dismissible onDismiss={() => { setBanner(false); store.set("home.bannerDismissed", true); }} header="Welcome to the Vyomi AWS console">
-            Everything here runs against your local Vyomi simulator, using the same native APIs your SDKs and CLI call. Features Vyomi doesn't simulate are marked.
+          <Alert type="info" dismissible onDismiss={() => { setBanner(false); store.set("home.bannerDismissed", true); }} header={vy("Welcome to the Vyomi AWS console")}>
+            Everything here runs against your local <VyomiMark /> simulator, using the same native APIs your SDKs and CLI call. Features <VyomiMark /> doesn't simulate are marked.
           </Alert>
         )}
         <Header variant="h1" actions={
@@ -364,7 +365,7 @@ export default function Home() {
             <Container header={<Header variant="h2" actions={<Button variant="icon" iconName="close" ariaLabel="Close" onClick={() => setPalette(false)} />} description="Drag a widget onto the board.">Add widgets</Header>}>
               {hidden.length ? (
                 <ItemsPalette items={hidden} i18nStrings={paletteI18n}
-                  renderItem={(item) => <BoardItem i18nStrings={itemI18n} header={<Header variant="h3">{CATALOG[item.data.id].title}</Header>}><Box variant="small" color="text-body-secondary">Drag onto the board</Box></BoardItem>} />
+                  renderItem={(item) => <BoardItem i18nStrings={itemI18n} header={<Header variant="h3">{vy(CATALOG[item.data.id].title)}</Header>}><Box variant="small" color="text-body-secondary">Drag onto the board</Box></BoardItem>} />
               ) : <Box color="text-body-secondary">All widgets are on the board.</Box>}
             </Container>
           </div>

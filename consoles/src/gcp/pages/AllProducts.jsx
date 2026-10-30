@@ -10,6 +10,7 @@ import ArticleIcon from "@mui/icons-material/esm/ArticleOutlined.js";
 import ExpandMoreIcon from "@mui/icons-material/esm/ExpandMore.js";
 import { CATEGORIES, PRODUCTS, classicHref } from "../services/registry.js";
 import SUBPAGES from "../services/subpages.json";
+import { VyomiMark } from "../../common/VyomiMark.jsx";
 
 // Our own one-line summaries of each category (what Vyomi offers in it).
 const BLURBS = {
@@ -51,11 +52,11 @@ export default function AllProducts() {
         <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={2} sx={{ mb: 4, mt: 1 }}>
           <Box>
             <Typography variant="h1" component="h1" sx={{ fontSize: 28, fontWeight: 400, mb: 1 }}>All products</Typography>
-            <Typography variant="body1" color="text.secondary">Explore the Google Cloud products Vyomi simulates at a glance</Typography>
+            <Typography variant="body1" color="text.secondary">Explore the Google Cloud products <VyomiMark /> simulates at a glance</Typography>
           </Box>
           <Paper variant="outlined" sx={{ p: 2, maxWidth: 260, bgcolor: "action.hover", borderRadius: 2 }} data-vyomi-not-simulated="Marketplace">
             <Typography variant="body2" sx={{ fontWeight: 500 }}>Marketplace</Typography>
-            <Typography variant="caption" color="text.secondary">Third-party Marketplace products aren't simulated in Vyomi.</Typography>
+            <Typography variant="caption" color="text.secondary">Third-party Marketplace products aren't simulated in <VyomiMark />.</Typography>
           </Paper>
         </Stack>
 

@@ -23,6 +23,7 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, fmtDuration, KeyValue, NotSimulated, NotSimulatedContainer, PageHeader, Section } from "../../kit/common.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import * as api from "./api.js";
+import { vy } from "../../../common/VyomiMark.jsx";
 
 const TABS = [
   ["objects", "Objects"], ["configuration", "Configuration"], ["permissions", "Permissions"], ["protection", "Protection"],
@@ -318,7 +319,7 @@ function Permissions({ bucket, policy, reload }) {
             { id: "role", header: "Role", sortValue: (r) => roleName(r.role), cell: (r) => roleName(r.role) },
             { id: "roleId", header: "Role ID", cell: (r) => r.role, hidden: true },
           ]} />
-        <Box sx={{ mt: 1.5 }}><NotSimulated compact feature="IAM and ACL enforcement on data access" note="Policies are stored and returned to SDKs (getIamPolicy / setIamPolicy), but Vyomi doesn't check them on requests." /></Box>
+        <Box sx={{ mt: 1.5 }}><NotSimulated compact feature="IAM and ACL enforcement on data access" note={vy("Policies are stored and returned to SDKs (getIamPolicy / setIamPolicy), but Vyomi doesn't check them on requests.")} /></Box>
       </Box>
       {grant && <GrantDialog onClose={() => setGrant(false)} onSave={async (member, role) => {
         const bs = (policy.data?.bindings || []).map((b) => ({ ...b, members: [...b.members] }));
@@ -357,7 +358,7 @@ function Protection({ bucket, reload }) {
     <Stack spacing={2}>
       <NotSimulatedContainer title="Soft delete policy (for data recovery)" feature="Soft delete" />
       <NotSimulatedContainer title="Object versioning (for version control)" feature="Object versioning" />
-      <Section title="Bucket retention policy" description="Objects can't be deleted or replaced until they reach the age you set. Enforced by Vyomi."
+      <Section title="Bucket retention policy" description={vy("Objects can't be deleted or replaced until they reach the age you set. Enforced by Vyomi.")}
         actions={<>
           <Button variant="outlined" startIcon={rp ? <EditIcon /> : <AddIcon />} onClick={() => setEdit(true)}>{rp ? "Edit retention policy" : "Set retention policy"}</Button>
           {rp && <Button startIcon={<DeleteIcon />} onClick={() => setRemove(true)}>Remove</Button>}
@@ -432,7 +433,7 @@ function Lifecycle({ bucket, reload }) {
           { id: "condition", header: "Object condition", wrap: true, cell: (r) => condText(r.condition || {}) },
         ]}
         empty={<Typography variant="body2" color="text.secondary">No lifecycle rules have been added to this bucket.</Typography>} />
-      <NotSimulated compact feature="Lifecycle rule execution" note="Rules are stored on the bucket and returned to SDKs, but Vyomi does not run them against objects." />
+      <NotSimulated compact feature="Lifecycle rule execution" note={vy("Rules are stored on the bucket and returned to SDKs, but Vyomi does not run them against objects.")} />
       {add && <RuleDialog onClose={() => setAdd(false)} onSave={async (rule) => { await save([...rules, rule]); notify.success("Lifecycle rule added"); reload(); }} />}
       <DeleteDialog open={delAll} onClose={() => setDelAll(false)} title="Delete all lifecycle rules?" confirmText="DELETE"
         onConfirm={async () => { await save([]); notify.success("Deleted all lifecycle rules"); setSel([]); reload(); }}>
