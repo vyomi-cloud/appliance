@@ -181,6 +181,7 @@ _SIGNING = {
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
     "ssm": "ssm",
+    "apigateway": "apigateway",   # v1 REST control plane paths with no "/restapis" segment (apikeys, usageplans, clientcertificates, account)
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
@@ -359,7 +360,7 @@ class AwsWireRouter:
         if "/2015-03-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
             return "lambda"
         if path.startswith("/v2/") and path[4:].split("/", 1)[0] in (   # API Gateway V2 control plane
-                "apis", "domainnames", "vpclinks", "tags", "portals", "portalproducts"):
+                "apis", "domainnames", "vpclinks", "tags", "portals", "portalproducts", "domainnameaccessassociations"):
             return "apigatewayv2"
         if "/restapis" in path:               # API Gateway v1 control plane
             return "apigateway"

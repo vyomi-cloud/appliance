@@ -99,6 +99,23 @@ def run(store=None):
     _check("CreateVpcLink AVAILABLE", st == 201 and vl["vpcLinkStatus"] == "AVAILABLE")
     _check("DeleteVpcLink 202", call("DELETE", f"/v2/vpclinks/{vl['vpcLinkId']}")[0] == 202)
 
+    # domain name access association (private custom domain ↔ VPC endpoint)
+    st, assoc, _ = call("POST", "/v2/domainnameaccessassociations",
+                        {"domainNameArn": dom["domainNameArn"], "accessAssociationSourceType": "VPCE", "accessAssociationSource": "vpce-123"})
+    _check("CreateDomainNameAccessAssociation", st == 201 and assoc["domainNameAccessAssociationArn"])
+    aaid = assoc["domainNameAccessAssociationArn"]
+    _check("bad source type rejected", call("POST", "/v2/domainnameaccessassociations",
+           {"domainNameArn": dom["domainNameArn"], "accessAssociationSourceType": "X", "accessAssociationSource": "y"})[0] == 400)
+    _check("unknown domain rejected", call("POST", "/v2/domainnameaccessassociations",
+           {"domainNameArn": "arn:aws:apigateway:us-east-1::/domainnames/nope", "accessAssociationSourceType": "VPCE", "accessAssociationSource": "y"})[0] == 404)
+    st, lst, _ = call("GET", "/v2/domainnameaccessassociations", None, {"domainNameArn": dom["domainNameArn"]})
+    _check("GetDomainNameAccessAssociations filters by domain", st == 200 and len(lst["items"]) == 1)
+    from urllib.parse import quote as _q
+    st, got, _ = call("GET", f"/v2/domainnameaccessassociations/{_q(aaid, safe='')}")
+    _check("GetDomainNameAccessAssociation", st == 200 and got["accessAssociationSource"] == "vpce-123")
+    _check("DeleteDomainNameAccessAssociation", call("DELETE", f"/v2/domainnameaccessassociations/{_q(aaid, safe='')}")[0] == 202)
+    _check("gone after delete", call("GET", f"/v2/domainnameaccessassociations/{_q(aaid, safe='')}")[0] == 404)
+
     # pagination
     for i in range(3):
         call("POST", "/v2/apis", {"name": f"p{i}", "protocolType": "WEBSOCKET", "routeSelectionExpression": "$request.body.action"})

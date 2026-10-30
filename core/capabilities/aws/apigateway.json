@@ -1,0 +1,113 @@
+{
+ "$doc": "Vyomi capability registry — API Gateway (v1 REST + v2 HTTP/WebSocket). See s3.json for the contract.",
+ "apigateway.rest.api": {
+  "title": "REST APIs (create, describe, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_apigateway_core.py", "tests/conformance/test_apigateway_console_v4_core.py"]
+ },
+ "apigateway.rest.resources-methods": {
+  "title": "Resources, methods and integrations (Lambda, HTTP, Mock)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "AWS_IAM and COGNITO_USER_POOLS authorization types are stored and returned but not enforced; only NONE is evaluated on invoke/test."
+  ],
+  "tests": ["tests/conformance/test_apigateway_core.py", "tests/conformance/test_apigateway_console_v4_core.py"]
+ },
+ "apigateway.rest.test-invoke": {
+  "title": "Test a method (TestInvokeMethod)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_apigateway_console_v4_core.py"]
+ },
+ "apigateway.rest.deploy-stages": {
+  "title": "Deploy to a stage; stage variables, throttling, invoke URL",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "The invoke URL is well-formed and the stage's deployed integration chain truly executes (via Test), but the host-based execute-api endpoint isn't reachable by DNS from outside Vyomi — use Test or the CLI/SDK against the appliance's own address."
+  ],
+  "tests": ["tests/conformance/test_apigateway_console_v4_core.py"]
+ },
+ "apigateway.rest.cors": {
+  "title": "Enable CORS (console convenience: adds an OPTIONS mock method + headers)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_apigateway_core.py"]
+ },
+ "apigateway.account": {
+  "title": "Account settings (CloudWatch role ARN, account-level throttling)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_apigateway_console_v4_core.py"]
+ },
+ "apigateway.apikeys": {
+  "title": "API keys",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_apigateway_console_v4_core.py"]
+ },
+ "apigateway.usageplans": {
+  "title": "Usage plans (throttle, quota, API-stage and API-key association)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_apigateway_console_v4_core.py"]
+ },
+ "apigateway.client-certificates": {
+  "title": "Client certificates",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "The certificate is a real, uniquely-generated PEM-shaped credential stored and returned by the API, but nothing in Vyomi validates it against an actual mTLS handshake."
+  ],
+  "tests": ["tests/conformance/test_apigateway_console_v4_core.py"]
+ },
+ "apigateway.http.api": {
+  "title": "HTTP APIs (routes, integrations, authorizers, stages)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_apigatewayv2_core.py", "tests/conformance/test_apigatewayv2_gateway_core.py"]
+ },
+ "apigateway.websocket.api": {
+  "title": "WebSocket APIs (routes, integrations, stages)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "$connect/$disconnect/$default routes and Lambda integrations are modeled like HTTP routes; there is no persistent WebSocket connection registry (@connections management API) in Vyomi."
+  ],
+  "tests": ["tests/conformance/test_apigatewayv2_core.py"]
+ },
+ "apigateway.custom-domain-names": {
+  "title": "Custom domain names",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "The domain resource, its endpoint configuration and API mappings are stored and returned exactly as configured, but no certificate validation or DNS provisioning happens — there is no real ACM/Route 53 behind it."
+  ],
+  "tests": ["tests/conformance/test_apigatewayv2_core.py"]
+ },
+ "apigateway.domain-name-access-associations": {
+  "title": "Domain name access associations (VPC endpoint ↔ private custom domain)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_apigatewayv2_core.py"]
+ },
+ "apigateway.vpc-links": {
+  "title": "VPC links (v2)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "VpcLinkStatus always reports AVAILABLE; Vyomi has no real NLB/VPC to actually attach to."
+  ],
+  "tests": ["tests/conformance/test_apigatewayv2_core.py"]
+ },
+ "apigateway.agentcore-targets": {
+  "title": "AgentCore targets (MCP access via Bedrock AgentCore)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Bedrock AgentCore is a separate AWS product Vyomi does not implement at all; declared in the nav for completeness only."
+  ]
+ },
+ "apigateway.developer-portals": {
+  "title": "Developer portals and portal products",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "The API Gateway developer portal is a separate hosted product Vyomi does not implement; declared in the nav for completeness only."
+  ]
+ }
+}
