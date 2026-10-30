@@ -1,13 +1,13 @@
 # Release checks — v3.0.33
 
-Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/41003514406) for tag `v3.0.33`.
+Generated 2026-10-30 04:49 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/41004236516) for tag `v3.0.33`.
 
 | Package / check | Platform | Result |
 |---|---|---|
 | DEB: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | ✅ passed |
 | RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | ✅ passed |
 | Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | ❌ failure |
-| CLI: aws / gcloud / az suites + CLI ↔ console both ways (48/72 checks passed) | Linux, release images | ❌ failure |
+| CLI: aws / gcloud / az suites + CLI ↔ console both ways (52/74 checks passed) | Linux, release images | ❌ failure |
 | MSI: install, upgrade, uninstall (+ signing) | Windows (GitHub) | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/40934343357)) |
 | Startup: all services + UI status | Linux, release images | ❌ failure ([run](https://github.com/vyomi-cloud/appliance/actions/runs/40935785259)) |
 | Windows E2E: MSI → vyomi up → services + UI | Windows laptop (private runner) | ❌ failure |
@@ -18,7 +18,7 @@ Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi_3.0.33_all.deb | 4s |
+| ✅ | install vyomi_3.0.33_all.deb | 7s |
 | ✅ | package manager reports version 3.0.33 | found '3.0.33' |
 | ✅ | bundled VERSION is 3.0.33 | /usr/share/vyomi/packaging/common/VERSION = 3.0.33 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -40,7 +40,7 @@ Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker_3.0.33_all.deb | 2s |
+| ✅ | install vyomi-docker_3.0.33_all.deb | 3s |
 | ✅ | package manager reports version 3.0.33 | found '3.0.33' |
 | ✅ | ships docker-compose.cloudlite.yml | /usr/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -56,7 +56,7 @@ Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33; ==> Vyomi 3.0.33 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.33 (SHA256-checked) | exit 0; cached compose v3.0.33 |
-| ✅ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.33 (/tmp/tmp.0DCl4W0aph/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.33 (/tmp/tmp.SgdLiy0vrM/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Removing vyomi-docker (3.0.33) ... |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -67,7 +67,7 @@ Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-3.0.33-1.noarch.rpm | 1s |
+| ✅ | install vyomi-3.0.33-1.noarch.rpm | 2s |
 | ✅ | package manager reports version 3.0.33 | found '3.0.33' |
 | ✅ | bundled VERSION is 3.0.33 | /usr/lib/cloud-learn/VERSION = 3.0.33 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -105,7 +105,7 @@ Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33; ==> Vyomi 3.0.33 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.33 (SHA256-checked) | exit 0; cached compose v3.0.33 |
-| ✅ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.33 (/tmp/tmp.9aGkOfK3H7/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.33 (/tmp/tmp.LfGzoSuixM/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Complete! |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -116,7 +116,7 @@ Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi | 12s |
+| ✅ | install vyomi | 8s |
 | ✅ | package manager reports version 3.0.33 | found '3.0.33' |
 | ✅ | bundled VERSION is 3.0.33 | /opt/homebrew/opt/vyomi/libexec/VERSION = 3.0.33 |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -139,7 +139,7 @@ Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker | 4s |
+| ✅ | install vyomi-docker | 2s |
 | ✅ | package manager reports version 3.0.33 | found '3.0.33' |
 | ✅ | ships docker-compose.cloudlite.yml | /opt/homebrew/opt/vyomi-docker/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -155,7 +155,7 @@ Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33; ==> Vyomi 3.0.33 is the latest release. |
 | ❌ | vyomi update from v3.0.0 → v3.0.33 (SHA256-checked) | exit 0; cached compose vnone |
-| ❌ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.0 (/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/tmp.2mDVkOMOsw/old.yml) |
+| ❌ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.0 (/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/tmp.n8aULdiqn1/old.yml) |
 | ✅ | brew test vyomi-docker | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi-docker/3.0.33/bin/vyomi --help[0m |
 | ✅ | uninstall vyomi-docker | Uninstalling /opt/homebrew/Cellar/vyomi-docker/3.0.33... (8 files, 314.8KB) |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
@@ -163,7 +163,7 @@ Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyo
 
 ## CLI (aws / gcloud / az) and CLI ↔ console
 
-**48/72 checks passed** against `http://localhost:9000`.
+**52/74 checks passed** against `http://localhost:9000`.
 
 ### CLIs (4/4)
 
@@ -179,10 +179,10 @@ Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyo
 | | Check | Detail |
 |---|---|---|
 | ✅ | AWS: `aws sts get-caller-identity` account is the console's account |  |
-| ❌ | GCP: `gcloud projects list` returns the console's project | CLI=4: <?xml version="1.0" encoding="UTF-8"?><Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist.</Message><Resource>/v1</Resource><RequestId>74A8639197FE4C2E</RequestId></Error>  console=123456789012 |
-| ❌ | Azure: `az account list` (GET /subscriptions) returns the console's subscription | "1.0" encoding="UTF-8"?><Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist.</Message><Resource>/subscriptions</Resource><RequestId>E5336CB7F165417D</RequestId></Error>)  console=00000000-0000-0000-0000-cloudlearn01 |
+| ❌ | GCP: `gcloud projects list` returns the console's project | CLI=4: <?xml version="1.0" encoding="UTF-8"?><Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist.</Message><Resource>/v1</Resource><RequestId>95BB92327C354D16</RequestId></Error>  console=123456789012 |
+| ❌ | Azure: `az account list` (GET /subscriptions) returns the console's subscription | "1.0" encoding="UTF-8"?><Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist.</Message><Resource>/subscriptions</Resource><RequestId>F257CAEAA4BE451D</RequestId></Error>)  console=00000000-0000-0000-0000-cloudlearn01 |
 
-### Both directions: CLI → console and console → CLI (28/42)
+### Both directions: CLI → console and console → CLI (31/44)
 
 | | Check | Detail |
 |---|---|---|
@@ -194,8 +194,10 @@ Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyo
 | ✅ | AWS: SQS queue created with the CLI shows in the console |  |
 | ✅ | AWS: SQS queue created in the console |  |
 | ✅ | AWS: SQS queue created in the console shows in the CLI |  |
-| ❌ | AWS: DynamoDB table created with the CLI | aws: [ERROR]: An error occurred (403) when calling the CreateTable operation: |
-| ❌ | AWS: DynamoDB table created in the console | , 'reason': 'dynamodb (nosql) requires Max tier or higher', 'upgrade_to': 'max', 'service': 'dynamodb', 'category': 'nosql', 'active_tier': 'free', 'provider': 'aws', 'detail': 'CapabilityLockedByTier', 'pack': 'cloudlearn.dynamodb.basic'}} |
+| ✅ | AWS: DynamoDB table created with the CLI |  |
+| ❌ | AWS: DynamoDB table created with the CLI shows in the console | console lists [] |
+| ✅ | AWS: DynamoDB table created in the console |  |
+| ✅ | AWS: DynamoDB table created in the console shows in the CLI |  |
 | ✅ | AWS: SNS topic created with the CLI |  |
 | ✅ | AWS: SNS topic created with the CLI shows in the console |  |
 | ✅ | AWS: SNS topic created in the console |  |
@@ -207,11 +209,11 @@ Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyo
 | ✅ | GCP: Cloud Storage bucket created with the CLI |  |
 | ❌ | GCP: Cloud Storage bucket created with the CLI shows in the console | console lists [] |
 | ✅ | GCP: Cloud Storage bucket created in the console |  |
-| ❌ | GCP: Cloud Storage bucket created in the console shows in the CLI | CLI lists ['cliclou3334878'] |
+| ❌ | GCP: Cloud Storage bucket created in the console shows in the CLI | CLI lists ['cliclou3335374'] |
 | ✅ | GCP: Pub/Sub topic created with the CLI |  |
 | ❌ | GCP: Pub/Sub topic created with the CLI shows in the console | console lists [] |
 | ✅ | GCP: Pub/Sub topic created in the console |  |
-| ❌ | GCP: Pub/Sub topic created in the console shows in the CLI | CLI lists ['clipubs3334878', 'projects/gcp-dev/topics/clipubs3334878'] |
+| ❌ | GCP: Pub/Sub topic created in the console shows in the CLI | CLI lists ['clipubs3335374', 'projects/gcp-dev/topics/clipubs3335374'] |
 | ✅ | GCP: Secret Manager secret created with the CLI |  |
 | ✅ | GCP: Secret Manager secret created with the CLI shows in the console |  |
 | ✅ | GCP: Secret Manager secret created in the console |  |
@@ -223,18 +225,18 @@ Generated 2026-10-30 04:41 UTC by [Release checks report](https://github.com/vyo
 | ✅ | Azure: storage account created with the CLI |  |
 | ❌ | Azure: storage account created with the CLI shows in the console | console lists [] |
 | ✅ | Azure: storage account created in the console |  |
-| ❌ | Azure: storage account created in the console shows in the CLI | CLI lists ['/subscriptions/sub-001/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/clistor3334878', 'Standard_LRS', 'clistor3334878'] |
+| ❌ | Azure: storage account created in the console shows in the CLI | CLI lists ['/subscriptions/sub-001/resourceGroups/cloudlearn-rg/providers/Microsoft.Storage/storageAccounts/clistor3335374', 'Standard_LRS', 'clistor3335374'] |
 | ✅ | Azure: virtual network created with the CLI |  |
 | ❌ | Azure: virtual network created with the CLI shows in the console | console lists [] |
 | ✅ | Azure: virtual network created in the console |  |
-| ❌ | Azure: virtual network created in the console shows in the CLI | CLI lists ['/subscriptions/sub-001/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/clivirt3334878', 'clivirt3334878'] |
+| ❌ | Azure: virtual network created in the console shows in the CLI | CLI lists ['/subscriptions/sub-001/resourceGroups/cloudlearn-rg/providers/Microsoft.Network/virtualNetworks/clivirt3335374', 'clivirt3335374'] |
 
-### CLI suites, each on its own (15/23)
+### CLI suites, each on its own (16/23)
 
 | | Check | Detail |
 |---|---|---|
 | ✅ | aws-apigatewayv2: 40 passed, 0 failed |  |
-| ❌ | aws: 12 passed, 3 failed | dynamodb create-table (via DDB Local proxy); dynamodb put-item; dynamodb get-item round-trip |
+| ✅ | aws: 15 passed, 0 failed |  |
 | ❌ | aws-cloudwatch: 17 passed, 14 failed | tric-statistics Sum=350; get-metric-statistics SampleCount=3; put-metric-alarm; set-alarm-state; disable-alarm-actions; enable-alarm-actions; tag-resource; untag-resource; put-composite-alarm; put-dashboard; delete-dashboards; delete-alarms |
 | ✅ | aws-elbv2: 27 passed, 0 failed |  |
 | ✅ | aws-kinesis: 20 passed, 0 failed |  |
