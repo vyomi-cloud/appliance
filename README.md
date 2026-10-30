@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-30 00:00 UTC · refreshes after every pipeline run_
+_Updated 2026-10-30 00:52 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -9,7 +9,7 @@ _Updated 2026-10-30 00:00 UTC · refreshes after every pipeline run_
 - **In the gate / releasing:** nothing
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 65% · Nano 74%
-- **Hourly tests:** 215 of 223 suites passing (run 22:06 UTC)
+- **Hourly tests:** 215 of 223 suites passing (run 23:56 UTC)
 - **Upstream watch:** 60 open changes from the real clouds to adopt
 
 ## By cloud
@@ -1351,7 +1351,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 | Suite | Result | Checks |
 |---|---|---|
-| offline-ui-crawl | ❌ | 39/58 |
+| offline-ui-crawl | ❌ | 46/58 |
 | offline-console-actions | ❌ | 367/369 |
 | offline-api-ec2-instance-detail | ✅ | 3/3 |
 | offline-api-s3-bucket-creation-date | ✅ | 3/3 |
@@ -1380,7 +1380,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-cli-gcp | ✅ | 6/6 |
 | offline-cli-azure | ✅ | 6/6 |
 | offline-ui-core | ✅ | 9/9 |
-| nano-ui-crawl | ❌ | 45/63 |
+| nano-ui-crawl | ❌ | 51/63 |
 | nano-cores | ✅ | 344/344 |
 | nano-aws-iam-detail | ✅ | 8/8 |
 | nano-aws-ec2-launch | ✅ | 13/13 |
