@@ -155,5 +155,20 @@ check("function app writes land on the same Activity log feed, newest first, lab
       and fn_feed[1]["operationName"]["value"] == "Microsoft.Web/sites/locks/short/write", [e["operationName"] for e in fn_feed])
 check("plan-in-use guard counts both kinds", call(st3, "DELETE", ["serverfarms", "p3"])["body"]["error"]["code"] == "ServerFarmInUse")
 
+# ── AzureArm (Nano): native Microsoft.Authorization/locks on a site goes to the generic locks
+#    engine; the site's short locks/{n} path reads the SAME store; writes reach the ONE feed ──
+from core.azure_arm_core import AzureArm  # noqa: E402
+arm = AzureArm()
+wb = "/subscriptions/s/resourceGroups/g/providers/Microsoft.Web"
+arm.handle("PUT", wb + "/sites/w1", {"api-version": "2023-12-01"}, {"location": "eastus", "kind": "app"})
+arm.handle("PUT", wb + "/sites/w1/providers/Microsoft.Authorization/locks/native1", {"api-version": "2016-09-01"}, {"properties": {"level": "ReadOnly"}})
+short = arm.handle("GET", wb + "/sites/w1/locks", {"api-version": "2023-12-01"}, {})["body"]["value"]
+check("AzureArm: a native lock on a site is visible on the site's short locks path", [l["name"] for l in short] == ["native1"], short)
+feed = arm.handle("GET", "/subscriptions/s/providers/Microsoft.Insights/eventtypes/management/values",
+                  {"$filter": f"resourceUri eq '/subscriptions/s/resourceGroups/g/providers/Microsoft.Web/sites/w1'"}, {})["body"]["value"]
+check("AzureArm: web-app create + lock both appear in the one activity feed",
+      any(e["operationName"]["value"] == "Microsoft.Web/sites/write" for e in feed) and any("lock" in e["operationName"]["localizedValue"].lower() for e in feed),
+      [e["operationName"] for e in feed])
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

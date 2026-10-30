@@ -164,6 +164,15 @@ def run() -> int:
     r = arm.handle("GET", pol, {"api-version": "2023-05-01-preview"})
     _check("apim saved policy persists", r["body"]["properties"]["value"] == "<policies><inbound /></policies>")
 
+    # 18. Generic top-level "identity" block merges like tags/sku (any catalog resource type).
+    topic = _p(RG, "Microsoft.EventGrid", "topics", "eg-identity")
+    r = arm.handle("PUT", topic, {"api-version": "2024-06-01-preview"}, {"location": "eastus",
+                   "identity": {"type": "SystemAssigned"}})
+    _check("identity stored on create", r["body"]["identity"]["type"] == "SystemAssigned")
+    r = arm.handle("PATCH", topic, {"api-version": "2024-06-01-preview"}, {"identity": {"principalId": "p1"}})
+    _check("identity merges without wiping type",
+           r["body"]["identity"]["type"] == "SystemAssigned" and r["body"]["identity"]["principalId"] == "p1")
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 

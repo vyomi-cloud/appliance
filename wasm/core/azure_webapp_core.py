@@ -25,13 +25,13 @@ Resource types
     Microsoft.Web/sites         both kinds:
         shared       start/stop/restart, publishxml/resetpublishxml,
                      config/web|appsettings|connectionstrings|logs (GET, POST [.../list], PUT, PATCH),
-                     providers/Microsoft.Authorization/locks/{name} (resource-scoped locks; the
-                     legacy ``locks/{name}`` short path is an alias of the same store)
+                     providers/Microsoft.Authorization/locks/{name} and the short ``locks/{name}``
+                     form — both stored by core/azure_locks_core.py (one lock store for all of ARM)
         web apps     slots/{name} (+ start/stop/restart), slotsswap, hostNameBindings/{host}
         functionapp  functions/{name} (+ listkeys, keys/{name}, invoke), host/default/listkeys,
                      host/default/functionkeys|systemkeys/{name}
 
-App settings, connection strings, functions, keys, slots, custom domains and locks live
+App settings, connection strings, functions, keys, slots and custom domains live
 INSIDE the site record (underscore keys, never serialised to clients) — on the wire they
 are separate sub-resources; GET on the site itself never returns them.
 
@@ -433,17 +433,12 @@ def _ensure(rec):
     """Every site carries every store (records written by older builds are upgraded in place)."""
     if "_connstrings" in rec and "_connectionstrings" not in rec:
         rec["_connectionstrings"] = rec.pop("_connstrings")
-    for k, v in (("_appsettings", {}), ("_connectionstrings", {}), ("_logs", None), ("_locks", {}),
+    for k, v in (("_appsettings", {}), ("_connectionstrings", {}), ("_logs", None),
                  ("_slots", {}), ("_hostnamebindings", {}), ("_functions", {}), ("_host", None)):
         if k not in rec:
             rec[k] = dict(DEFAULT_LOGS) if k == "_logs" else (
                 {"masterKey": _h(rec["id"], "master", n=40), "functionKeys": {"default": _h(rec["id"], "default", n=40)},
                  "systemKeys": {}} if k == "_host" else dict(v))
-    for lk in rec["_locks"].values():   # older function-app builds stored the full lock document
-        if isinstance(lk, dict) and "properties" in lk:
-            lk.update(lk.pop("properties"))
-            for k in ("id", "name", "type"):
-                lk.pop(k, None)
     return rec
 
 
@@ -543,6 +538,7 @@ def _site_ops(state, sub, rg, chain, method, payload):
         if rec is None:
             raise _not_found("sites", name, rg)
         _ensure(rec)
+        _migrate_locks(state, rec)
         resp = _site_subresource(state, rec, rest, method, payload)
         _log_site_call(state, rec, rest, method, resp, True)
         return resp
@@ -588,9 +584,9 @@ def _site_subresource(state, rec, rest, method, payload):
     if r0 == "config":
         return _config_ops(rec, rest[1:], method, payload)
     if r0 == "locks":
-        return _lock_ops(rec, rest[1:], method, payload)
+        return _lock_ops(state, rec, rest[1:], method, payload)
     if r0 == "providers" and len(rest) >= 3 and rest[1].lower() == "microsoft.authorization" and rest[2].lower() == "locks":
-        return _lock_ops(rec, rest[3:], method, payload)
+        return _lock_ops(state, rec, rest[3:], method, payload)
     if r0 == "functions":
         return _functions_ops(rec, rest[1:], method, payload)
     if r0 == "host":
@@ -660,35 +656,47 @@ def _config_ops(rec, rest, method, payload):
     return _err(405, "MethodNotAllowed", f"{method} not supported on config/{kind}.")
 
 
-# ── shared: resource-scoped locks ─────────────────────────────────────────────
-def _lock_doc(rec, name):
-    return {"id": f"{rec['id']}/providers/Microsoft.Authorization/locks/{name}", "name": name,
-            "type": "Microsoft.Authorization/locks", "properties": dict(rec["_locks"][name])}
+# ── shared: resource-scoped locks (stored by the generic Microsoft.Authorization/locks engine) ──
+def _locks_engine():
+    try:
+        from core import azure_locks_core as m
+    except ImportError:
+        import azure_locks_core as m      # type: ignore  (Nano: flat module path)
+    return m
 
 
-def _lock_ops(rec, rest, method, payload):
-    locks = rec["_locks"]
+def _migrate_locks(state, rec):
+    """Site records from older builds kept locks inside the site; move them to the locks engine."""
+    old = rec.pop("_locks", None) or {}
+    for name, lk in old.items():
+        props = lk.get("properties", lk) if isinstance(lk, dict) else {}
+        _locks_engine().upsert(state, rec["id"], name, {"properties": {"level": props.get("level"), "notes": props.get("notes", "")}})
+
+
+def _lock_ops(state, rec, rest, method, payload):
+    """Both ``sites/{n}/locks/{lock}`` (short form the Function App blade uses) and the native
+    ``sites/{n}/providers/Microsoft.Authorization/locks/{lock}`` land in ONE store: the generic
+    locks engine (core/azure_locks_core.py), scoped to the site id — the same records AzureArm
+    serves for Microsoft.Authorization/locks on any resource."""
+    lk = _locks_engine()
     if not rest:
         if method != "GET":
             return _err(405, "MethodNotAllowed", "Collection supports GET only.")
-        return _ok({"value": [_lock_doc(rec, n) for n in locks]})
-    name = rest[0]
-    if method == "GET":
-        if name not in locks:
-            raise _E(404, "LockNotFound", f"Lock '{name}' was not found.")
-        return _ok(_lock_doc(rec, name))
-    if method in ("PUT", "PATCH"):
-        props = _props(payload)
-        level = props.get("level") or "CanNotDelete"
-        if level not in LOCK_LEVELS:
-            return _err(400, "InvalidLockLevel", f"Invalid lock level '{level}'; use one of {', '.join(LOCK_LEVELS)}.")
-        existed = name in locks
-        locks[name] = {"level": level, "notes": props.get("notes", "")}
-        return _ok(_lock_doc(rec, name), 200 if existed else 201)
-    if method == "DELETE":
-        had = locks.pop(name, None)
-        return _ok(None, 200 if had is not None else 204)
-    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+        r = lk.list_for(state, rec["id"])
+    else:
+        name = rest[0]
+        if method == "GET":
+            r = lk.get(state, rec["id"], name)
+        elif method in ("PUT", "PATCH"):
+            level = _props(payload).get("level") or "CanNotDelete"
+            if level not in LOCK_LEVELS:
+                return _err(400, "InvalidLockLevel", f"Invalid lock level '{level}'; use one of {', '.join(LOCK_LEVELS)}.")
+            r = lk.upsert(state, rec["id"], name, {"properties": {"level": level, "notes": _props(payload).get("notes", "")}})
+        elif method == "DELETE":
+            r = lk.remove(state, rec["id"], name)
+        else:
+            return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+    return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
 
 
 # ── web apps: deployment slots + swap, custom domains ─────────────────────────

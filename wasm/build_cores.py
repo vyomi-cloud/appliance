@@ -72,6 +72,7 @@ CORES = [
     "gcp_monitoring_core.py",                      # expansion GCP: Cloud Monitoring (alert policies, channels, metrics, time series, uptime checks)
     "gcp_container_core.py",                       # expansion GCP: Kubernetes Engine (clusters, node pools, operations)
     "gcp_logging_core.py",                         # GCP: Cloud Logging REST v2 (entries, sinks, log-based metrics, log buckets/views)
+    "gcp_run_core.py",                             # GCP: Cloud Run Admin API v2 (services, jobs, worker pools, domain mappings) — backs /functions
     "stepfunctions_core.py",                       # AWS: Step Functions (ASL interpreter, executions, activities)
     "cloudwatch_core.py",                          # AWS CloudWatch: metrics / alarms / dashboards (rpc-v2-cbor + JSON + Query wire)
     "vpc_core.py",                                 # v2.8.0 AWS: VPC network-simulation data plane (reachability analyzer)
@@ -86,6 +87,8 @@ CORES = [
     "azure_app_core.py",                            # expansion Azure: Container Apps (Microsoft.App: environments, apps, revisions, jobs) — vendored VERBATIM
     "azure_cost_core.py",                          # expansion Azure: Cost Management + Consumption (query/alerts/exports/budgets over real inventory) — vendored VERBATIM
     "azure_webapp_core.py",                         # Azure: App Service (Microsoft.Web: web apps + function apps by kind, serverfarms) — vendored VERBATIM
+    "azure_eventgrid_core.py",                      # v4: Azure Event Grid event subscriptions (topic-scoped extension resource)
+    "azure_locks_core.py",                          # v4: Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
     "console_conformance.py",                       # console-next capability manifest: per-service conformance signal (pure, `os` only)
     "nano_events.py",                               # per-resource cloudsim event/activity log (recorded on every mutating dispatch; MUST precede nano_registry which imports it)

@@ -25,6 +25,10 @@ const SA2 = `vywire${n}`;          // created over the wire (CLI → UI directio
 const C = `smoke-${n}`;
 const APP = `vysmokeapp${n}`;      // app service created through the UI
 const APP2 = `vywireapp${n}`;      // app service created over the wire (CLI → UI direction)
+const EGT = `vyegtopic${n}`;       // Event Grid topic created through the UI
+const EGT2 = `vyegwire${n}`;       // Event Grid topic created over the wire
+const ES = `vyeges${n}`;           // event subscription created over the wire
+const LOCK = `vyeglock${n}`;       // management lock created through the UI
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -318,6 +322,71 @@ try {
   check("Home → Resources → Recent lists viewed account", true);
   await shot("17-home-dark-recent");
   await page.evaluate(() => localStorage.removeItem("vyomi.v4.azure.mode"));
+
+  // ── Event Grid: topic created through the UI → visible over native ARM ─────────────────
+  await page.goto(UI + "#/eventgrid/topics/create");
+  await page.getByLabel("Name", { exact: true }).fill(EGT);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await page.getByRole("tab", { name: "Security" }).click();
+  await page.getByLabel("Minimum TLS version", { exact: true }).selectOption("1.1");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await shot("18-eventgrid-create-review");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: EGT, exact: true }).waitFor({ timeout: 10000 });
+  const egot = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}`);
+  const egtopic = egot.status === 200 ? JSON.parse(egot.text) : {};
+  check("UI create Event Grid topic → visible over native ARM", egot.status === 200, `HTTP ${egot.status}`);
+  check("topic gets an endpoint + TLS setting reached ARM", (egtopic.properties?.endpoint || "").includes(EGT) && egtopic.properties?.minimumTlsVersionAllowed === "1.1", JSON.stringify(egtopic.properties));
+  await shot("19-eventgrid-topic-overview");
+
+  // ── Event subscription created through the UI → visible over native ARM (scoped) ───────
+  await page.getByRole("link", { name: "Event Subscription", exact: true }).or(page.getByRole("button", { name: "Event Subscription", exact: true })).first().click();
+  await page.getByLabel("Name", { exact: true }).fill(ES);
+  await page.getByLabel("Endpoint", { exact: true }).fill("https://example.com/hook");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: EGT, exact: true }).waitFor({ timeout: 10000 });
+  const esr = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}/providers/Microsoft.EventGrid/eventSubscriptions/${ES}`);
+  const essub = esr.status === 200 ? JSON.parse(esr.text) : {};
+  check("UI create event subscription → visible over native ARM (extension resource)",
+    esr.status === 200 && essub.properties?.destination?.properties?.endpointUrl === "https://example.com/hook", `HTTP ${esr.status}`);
+  await page.getByText(ES).waitFor({ timeout: 10000 });
+  check("event subscription listed on the topic overview", true);
+  await shot("20-eventgrid-event-subscriptions");
+
+  // ── Activity log: real, backed by the cloudsim event log recorded on every ARM mutation ──
+  await openPanel("Activity log");
+  await page.getByText(ES).first().waitFor({ timeout: 10000 });
+  check("Event Grid activity log shows the event subscription create", true);
+
+  // ── Locks: real extension resource (Microsoft.Authorization/locks), scoped to the topic ──
+  await openPanel("Locks");
+  await page.getByRole("toolbar", { name: "Locks commands" }).getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Lock name", { exact: true }).fill(LOCK);
+  await page.getByRole("button", { name: "OK" }).click();
+  await page.getByText(LOCK).waitFor({ timeout: 10000 });
+  const lockGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}/providers/Microsoft.Authorization/locks/${LOCK}`);
+  check("UI add lock → visible over native ARM (extension resource)", lockGet.status === 200, `HTTP ${lockGet.status}`);
+
+  // ── Resource created over the wire → visible in the UI (CLI → UI) ──────────────────────
+  const egput = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT2}`, { location: "eastus" });
+  check("ARM PUT Event Grid topic over wire", egput.status === 200 || egput.status === 201, `HTTP ${egput.status}`);
+  await page.goto(UI + "#/eventgrid/topics");
+  await page.getByRole("link", { name: EGT2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created topic shown in browse grid", true);
+  await shot("21-eventgrid-topics");
+
+  // ── Delete through the topic overview → gone over ARM ──────────────────────────────────
+  await page.goto(UI + `#/eventgrid/topics/${RG}/${EGT}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(EGT);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "Event Grid Topics" }).waitFor({ timeout: 10000 });
+  const egGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}`);
+  check("UI delete topic → ARM GET 404", egGone.status === 404, `HTTP ${egGone.status}`);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});
