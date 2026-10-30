@@ -1879,6 +1879,14 @@
       "timeout": 600
     },
     {
+      "id": "nano-ui-gcp-apigw-monitoring-tabs",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-apigw-monitoring-tabs.mjs",
+      "timeout": 300
+    },
+    {
       "id": "offline-sdk-java-gcp-monitoring",
       "target": "offline",
       "cloud": "gcp",
