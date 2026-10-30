@@ -67,8 +67,71 @@ def _instance_arn(store: SqlStore, db_id: str) -> str:
     return f"arn:aws:rds:us-east-1:{store.account_id}:db:{db_id}"
 
 
+def _snapshot_arn(store: SqlStore, snap_id: str) -> str:
+    return f"arn:aws:rds:us-east-1:{store.account_id}:snapshot:{snap_id}"
+
+
+def _subnet_group_arn(store: SqlStore, name: str) -> str:
+    return f"arn:aws:rds:us-east-1:{store.account_id}:subgrp:{name}"
+
+
+def _parameter_group_arn(store: SqlStore, name: str) -> str:
+    return f"arn:aws:rds:us-east-1:{store.account_id}:pg:{name}"
+
+
+def _proxy_arn(store: SqlStore, name: str) -> str:
+    return f"arn:aws:rds:us-east-1:{store.account_id}:db-proxy:{name}"
+
+
+def _option_group_arn(store: SqlStore, name: str) -> str:
+    return f"arn:aws:rds:us-east-1:{store.account_id}:og:{name}"
+
+
+def _event_subscription_arn(store: SqlStore, name: str) -> str:
+    return f"arn:aws:rds:us-east-1:{store.account_id}:es:{name}"
+
+
 def _engine_port(engine: str) -> int:
     return _ENGINE_PORT.get(engine.lower(), 5432)
+
+
+def _members(params: dict, prefix: str) -> list:
+    """Collect an AWS Query-protocol list parameter: `{prefix}.member.{i}` (scalar)
+    or `{prefix}.member.{i}.{field}` (structured, e.g. Tags.member.1.Key). Returns
+    a list of strings for a scalar list, dicts for a structured one."""
+    out: list = []
+    i = 1
+    while True:
+        scalar_key = f"{prefix}.member.{i}"
+        if scalar_key in params:
+            out.append(params[scalar_key])
+            i += 1
+            continue
+        struct_prefix = scalar_key + "."
+        sub = {k[len(struct_prefix):]: v for k, v in params.items() if k.startswith(struct_prefix)}
+        if not sub:
+            break
+        out.append(sub)
+        i += 1
+    return out
+
+
+def _tags_from_params(params: dict) -> dict[str, str]:
+    return {str(t.get("Key", "")): str(t.get("Value", "")) for t in _members(params, "Tags") if t.get("Key")}
+
+
+def _tag_list_xml(tags: dict[str, str]) -> str:
+    inner = "".join(f"<Tag>{_el('Key', k)}{_el('Value', v)}</Tag>" for k, v in tags.items())
+    return f"<TagList>{inner}</TagList>"
+
+
+def _log_event(store: SqlStore, source_id: str, source_type: str, message: str,
+               categories: list[str] | None = None) -> None:
+    store.add_event({
+        "source_identifier": source_id, "source_type": source_type,
+        "message": message, "date": _now(),
+        "event_categories": categories or ["notification"],
+    })
 
 
 # ── response builders (native RDS Query-protocol XML) ──────────────────────
@@ -110,11 +173,26 @@ def _db_instance_xml(db: dict) -> str:
         _el("PubliclyAccessible", str(db.get("publicly_accessible", False)).lower()),
         _el("DBInstanceArn", db.get("db_instance_arn", "")),
         _el("InstanceCreateTime", db.get("created", "")),
+        _el("DbInstancePort", db.get("endpoint_port", 5432)),
+        _el("BackupRetentionPeriod", db.get("backup_retention_period", 7)),
+        _el("DeletionProtection", str(db.get("deletion_protection", False)).lower()),
+        _el("LatestRestorableTime", db.get("updated", db.get("created", ""))),
         "<Endpoint>",
         _el("Address", db.get("endpoint_address", "")),
         _el("Port", db.get("endpoint_port", 5432)),
         _el("HostedZoneId", "Z1PVIF0B656C1W"),
         "</Endpoint>",
+        "<DBSubnetGroup>",
+        _el("DBSubnetGroupName", db.get("db_subnet_group_name", "default")),
+        _el("VpcId", "vpc-default"),
+        "</DBSubnetGroup>",
+        "<VpcSecurityGroups>",
+        "".join(f"<VpcSecurityGroupMembership>{_el('VpcSecurityGroupId', sg)}{_el('Status', 'active')}</VpcSecurityGroupMembership>"
+               for sg in db.get("vpc_security_group_ids", ["sg-default"])),
+        "</VpcSecurityGroups>",
+        "<DBParameterGroups>",
+        f"<DBParameterGroupStatus>{_el('DBParameterGroupName', db.get('db_parameter_group_name', 'default'))}{_el('ParameterApplyStatus', 'in-sync')}</DBParameterGroupStatus>",
+        "</DBParameterGroups>",
         "</DBInstance>",
     ]
     return "".join(parts)
@@ -132,6 +210,122 @@ def _db_snapshot_xml(snap: dict) -> str:
         _el("SnapshotCreateTime", snap.get("created", "")),
         _el("SnapshotType", snap.get("snapshot_type", "manual")),
         "</DBSnapshot>",
+    ])
+
+
+def _subnet_xml(sn: dict) -> str:
+    return "".join([
+        "<Subnet>",
+        _el("SubnetIdentifier", sn.get("subnet_identifier", "")),
+        f"<SubnetAvailabilityZone>{_el('Name', sn.get('availability_zone', 'us-east-1a'))}</SubnetAvailabilityZone>",
+        _el("SubnetStatus", "Active"),
+        "</Subnet>",
+    ])
+
+
+def _subnet_group_xml(sg: dict) -> str:
+    subnets = "".join(_subnet_xml(s) for s in sg.get("subnets", []))
+    return "".join([
+        "<DBSubnetGroup>",
+        _el("DBSubnetGroupName", sg["db_subnet_group_name"]),
+        _el("DBSubnetGroupDescription", sg.get("db_subnet_group_description", "")),
+        _el("VpcId", sg.get("vpc_id", "vpc-default")),
+        _el("SubnetGroupStatus", sg.get("subnet_group_status", "Complete")),
+        _el("DBSubnetGroupArn", sg.get("db_subnet_group_arn", "")),
+        f"<Subnets>{subnets}</Subnets>",
+        "</DBSubnetGroup>",
+    ])
+
+
+def _parameter_xml(name: str, p: dict) -> str:
+    return "".join([
+        "<Parameter>",
+        _el("ParameterName", name),
+        _el("ParameterValue", p.get("parameter_value", "")),
+        _el("AllowedValues", p.get("allowed_values", "")),
+        _el("IsModifiable", str(p.get("is_modifiable", True)).lower()),
+        _el("Source", p.get("source", "engine-default")),
+        _el("ApplyType", p.get("apply_type", "dynamic")),
+        _el("DataType", p.get("data_type", "string")),
+        _el("Description", p.get("description", "")),
+        "</Parameter>",
+    ])
+
+
+def _parameter_group_xml(pg: dict) -> str:
+    return "".join([
+        "<DBParameterGroup>",
+        _el("DBParameterGroupName", pg["db_parameter_group_name"]),
+        _el("DBParameterGroupFamily", pg.get("db_parameter_group_family", "")),
+        _el("Description", pg.get("description", "")),
+        _el("DBParameterGroupArn", pg.get("db_parameter_group_arn", "")),
+        "</DBParameterGroup>",
+    ])
+
+
+def _proxy_xml(px: dict) -> str:
+    return "".join([
+        "<DBProxy>",
+        _el("DBProxyName", px["db_proxy_name"]),
+        _el("DBProxyArn", px.get("db_proxy_arn", "")),
+        _el("EngineFamily", px.get("engine_family", "POSTGRESQL")),
+        _el("Status", px.get("status", "available")),
+        _el("CreatedDate", px.get("created", "")),
+        "</DBProxy>",
+    ])
+
+
+def _option_group_xml(og: dict) -> str:
+    return "".join([
+        "<OptionGroup>",
+        _el("OptionGroupName", og["option_group_name"]),
+        _el("OptionGroupDescription", og.get("option_group_description", "")),
+        _el("EngineName", og.get("engine_name", "")),
+        _el("MajorEngineVersion", og.get("major_engine_version", "")),
+        _el("OptionGroupArn", og.get("option_group_arn", "")),
+        "<Options></Options>",
+        "</OptionGroup>",
+    ])
+
+
+def _event_subscription_xml(es: dict) -> str:
+    return "".join([
+        "<EventSubscription>",
+        _el("CustSubscriptionId", es["cust_subscription_id"]),
+        _el("SnsTopicArn", es.get("sns_topic_arn", "")),
+        _el("Status", es.get("status", "active")),
+        _el("SourceType", es.get("source_type", "db-instance")),
+        _el("Enabled", str(es.get("enabled", True)).lower()),
+        _el("CustomerAwsId", es.get("customer_aws_id", "")),
+        _el("SubscriptionCreationTime", es.get("created", "")),
+        "</EventSubscription>",
+    ])
+
+
+def _event_xml(ev: dict) -> str:
+    cats = "".join(_el("EventCategory", c) for c in ev.get("event_categories", []))
+    return "".join([
+        "<Event>",
+        _el("SourceIdentifier", ev.get("source_identifier", "")),
+        _el("SourceType", ev.get("source_type", "db-instance")),
+        _el("Message", ev.get("message", "")),
+        _el("Date", ev.get("date", "")),
+        f"<EventCategories>{cats}</EventCategories>",
+        "</Event>",
+    ])
+
+
+def _automated_backup_xml(db: dict) -> str:
+    return "".join([
+        "<DBInstanceAutomatedBackup>",
+        _el("DBInstanceIdentifier", db["db_instance_identifier"]),
+        _el("Region", "us-east-1"),
+        _el("Engine", db.get("engine", "postgres")),
+        _el("Status", "replicating" if db.get("db_instance_status") == "available" else "retained"),
+        _el("EarliestRestorableTime", db.get("created", "")),
+        _el("LatestRestorableTime", db.get("updated", db.get("created", ""))),
+        _el("Encrypted", "true"),
+        "</DBInstanceAutomatedBackup>",
     ])
 
 
@@ -175,15 +369,23 @@ def _create_db_instance(store: SqlStore, params: dict) -> RdsResponse:
         "endpoint_address": f"{db_id}.nano-rds.local",
         "endpoint_port": _int(params, "Port", _engine_port(engine)),
         "db_instance_arn": _instance_arn(store, db_id),
+        "db_subnet_group_name": str(params.get("DBSubnetGroupName", "default")),
+        "db_parameter_group_name": str(params.get("DBParameterGroupName", "default")),
+        "vpc_security_group_ids": _members(params, "VpcSecurityGroupIds") or ["sg-default"],
+        "deletion_protection": str(params.get("DeletionProtection", "false")).lower() == "true",
         "created": _now(),
         "updated": _now(),
         "runtime_backend": "sqlite",  # Nano data-plane engine
     }
     store.put_instance(db_id, record)
+    tags = _tags_from_params(params)
+    if tags:
+        store.set_tags(record["db_instance_arn"], tags)
     # The SQL engine opens LAZILY on first execute_sql — so the control plane
     # needs no sqlite3 (a loadable Pyodide package), only the data plane does.
     store.mirror_create_instance(db_id, record)
     store.persist()
+    _log_event(store, db_id, "db-instance", f"DB instance {db_id} created.", ["creation"])
     return _success("CreateDBInstance", _db_instance_xml(record))
 
 
@@ -215,20 +417,28 @@ def _modify_db_instance(store: SqlStore, params: dict) -> RdsResponse:
                 pass
     db["updated"] = _now()
     store.persist()
+    _log_event(store, db["db_instance_identifier"], "db-instance", "DB instance modified.", ["configuration change"])
     return _success("ModifyDBInstance", _db_instance_xml(db))
 
 
 def _set_status(store: SqlStore, params: dict, action: str, status: str) -> RdsResponse:
     db = _require_instance(store, str(params.get("DBInstanceIdentifier", "")).strip())
+    if db.get("deletion_protection") and action == "DeleteDBInstance":
+        raise RdsError("InvalidParameterCombination",
+                       "Cannot delete a DB instance with deletion protection enabled.", 400)
     db["db_instance_status"] = status
     db["updated"] = _now()
     store.persist()
+    _log_event(store, db["db_instance_identifier"], "db-instance", f"DB instance status set to {status}.")
     return _success(action, _db_instance_xml(db))
 
 
 def _delete_db_instance(store: SqlStore, params: dict) -> RdsResponse:
     db_id = str(params.get("DBInstanceIdentifier", "")).strip()
     db = _require_instance(store, db_id)
+    if db.get("deletion_protection"):
+        raise RdsError("InvalidParameterCombination",
+                       "Cannot delete a DB instance with deletion protection enabled.", 400)
     if str(params.get("SkipFinalSnapshot", "true")).lower() != "true":
         snap_id = str(params.get("FinalDBSnapshotIdentifier", f"{db_id}-final"))
         _make_snapshot(store, db, snap_id, snapshot_type="automated")
@@ -237,6 +447,7 @@ def _delete_db_instance(store: SqlStore, params: dict) -> RdsResponse:
     store.drop_instance(db_id)
     store.mirror_delete_instance(db_id)
     store.persist()
+    _log_event(store, db_id, "db-instance", f"DB instance {db_id} deleted.", ["deletion"])
     return _success("DeleteDBInstance", _db_instance_xml(db))
 
 
@@ -260,9 +471,69 @@ def _create_db_snapshot(store: SqlStore, params: dict) -> RdsResponse:
     snap_id = str(params.get("DBSnapshotIdentifier", "")).strip()
     if not snap_id:
         raise RdsError("InvalidParameterValue", "DBSnapshotIdentifier is required.", 400)
+    if store.get_snapshot(snap_id):
+        raise RdsError("DBSnapshotAlreadyExists", f"Snapshot {snap_id} already exists.", 400)
     snap = _make_snapshot(store, db, snap_id, snapshot_type="manual")
+    tags = _tags_from_params(params)
+    if tags:
+        store.set_tags(_snapshot_arn(store, snap_id), tags)
     store.persist()
+    _log_event(store, db["db_instance_identifier"], "db-instance", f"Snapshot {snap_id} created.", ["backup"])
     return _success("CreateDBSnapshot", _db_snapshot_xml(snap))
+
+
+def _delete_db_snapshot(store: SqlStore, params: dict) -> RdsResponse:
+    snap_id = str(params.get("DBSnapshotIdentifier", "")).strip()
+    snap = store.get_snapshot(snap_id)
+    if not snap:
+        raise RdsError("DBSnapshotNotFound", f"Snapshot {snap_id} not found.", 404)
+    store.drop_snapshot(snap_id)
+    store.persist()
+    return _success("DeleteDBSnapshot", _db_snapshot_xml(snap))
+
+
+def _restore_db_instance_from_db_snapshot(store: SqlStore, params: dict) -> RdsResponse:
+    snap_id = str(params.get("DBSnapshotIdentifier", "")).strip()
+    snap = store.get_snapshot(snap_id)
+    if not snap:
+        raise RdsError("DBSnapshotNotFound", f"Snapshot {snap_id} not found.", 404)
+    db_id = str(params.get("DBInstanceIdentifier", "")).strip()
+    if not db_id:
+        raise RdsError("InvalidParameterValue", "DBInstanceIdentifier is required.", 400)
+    if store.instance_exists(db_id):
+        raise RdsError("DBInstanceAlreadyExists", f"DBInstance {db_id} already exists.", 400)
+    engine = snap.get("engine", "postgres")
+    record = {
+        "db_instance_identifier": db_id,
+        "db_instance_class": str(params.get("DBInstanceClass", "db.t3.micro")),
+        "engine": engine,
+        "engine_version": snap.get("engine_version", "16.4"),
+        "db_instance_status": "available",
+        "master_username": "admin",
+        "master_user_password": "",
+        "allocated_storage": snap.get("allocated_storage", 20),
+        "storage_type": str(params.get("StorageType", "gp3")),
+        "availability_zone": str(params.get("AvailabilityZone", "us-east-1a")),
+        "multi_az": str(params.get("MultiAZ", "false")).lower() == "true",
+        "publicly_accessible": str(params.get("PubliclyAccessible", "false")).lower() == "true",
+        "backup_retention_period": 7,
+        "endpoint_address": f"{db_id}.nano-rds.local",
+        "endpoint_port": _engine_port(engine),
+        "db_instance_arn": _instance_arn(store, db_id),
+        "db_subnet_group_name": str(params.get("DBSubnetGroupName", "default")),
+        "db_parameter_group_name": "default",
+        "vpc_security_group_ids": ["sg-default"],
+        "deletion_protection": False,
+        "created": _now(),
+        "updated": _now(),
+        "runtime_backend": "sqlite",
+        "restored_from": snap_id,
+    }
+    store.put_instance(db_id, record)
+    store.mirror_create_instance(db_id, record)
+    store.persist()
+    _log_event(store, db_id, "db-instance", f"DB instance {db_id} restored from snapshot {snap_id}.", ["creation"])
+    return _success("RestoreDBInstanceFromDBSnapshot", _db_instance_xml(record))
 
 
 def _describe_db_snapshots(store: SqlStore, params: dict) -> RdsResponse:
@@ -272,6 +543,334 @@ def _describe_db_snapshots(store: SqlStore, params: dict) -> RdsResponse:
         snaps = [s for s in snaps if s.get("db_instance_identifier") == db_id]
     inner = "<DBSnapshots>" + "".join(_db_snapshot_xml(s) for s in snaps) + "</DBSnapshots>"
     return _success("DescribeDBSnapshots", inner)
+
+
+_PARAM_FAMILIES = {
+    "mysql": {
+        "max_connections": ("151", "integer", "1-100000"),
+        "innodb_buffer_pool_size": ("134217728", "integer", "5242880-18446744073709551615"),
+        "slow_query_log": ("0", "boolean", "0,1"),
+        "character_set_server": ("utf8mb4", "string", ""),
+    },
+    "postgres": {
+        "max_connections": ("100", "integer", "1-262143"),
+        "shared_buffers": ("16384", "integer", "16-1073741823"),
+        "log_min_duration_statement": ("-1", "integer", "-1-2147483647"),
+        "rds.force_ssl": ("1", "boolean", "0,1"),
+    },
+}
+
+
+def _default_parameters(family: str) -> dict:
+    key = "mysql" if any(s in family.lower() for s in ("mysql", "maria")) else "postgres"
+    return {name: {"parameter_value": val, "data_type": dtype, "allowed_values": allowed,
+                   "is_modifiable": True, "source": "engine-default", "apply_type": "dynamic",
+                   "description": f"{name} (engine default)"}
+            for name, (val, dtype, allowed) in _PARAM_FAMILIES[key].items()}
+
+
+# ── DB subnet groups ─────────────────────────────────────────────────────────
+def _create_db_subnet_group(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBSubnetGroupName", "")).strip()
+    if not name:
+        raise RdsError("InvalidParameterValue", "DBSubnetGroupName is required.", 400)
+    if store.get_subnet_group(name):
+        raise RdsError("DBSubnetGroupAlreadyExists", f"DB subnet group {name} already exists.", 400)
+    subnet_ids = _members(params, "SubnetIds")
+    if not subnet_ids:
+        raise RdsError("InvalidParameterValue", "SubnetIds is required.", 400)
+    azs = ["us-east-1a", "us-east-1b", "us-east-1c"]
+    record = {
+        "db_subnet_group_name": name,
+        "db_subnet_group_description": str(params.get("DBSubnetGroupDescription", "")),
+        "vpc_id": str(params.get("VpcId", "vpc-default")),
+        "subnet_group_status": "Complete",
+        "subnets": [{"subnet_identifier": sid, "availability_zone": azs[i % len(azs)]}
+                   for i, sid in enumerate(subnet_ids)],
+        "db_subnet_group_arn": _subnet_group_arn(store, name),
+        "created": _now(),
+    }
+    store.put_subnet_group(name, record)
+    store.persist()
+    return _success("CreateDBSubnetGroup", _subnet_group_xml(record))
+
+
+def _describe_db_subnet_groups(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBSubnetGroupName", "")).strip()
+    if name:
+        if not store.get_subnet_group(name):
+            raise RdsError("DBSubnetGroupNotFoundFault", f"DB subnet group {name} not found.", 404)
+        names = [name]
+    else:
+        names = store.subnet_group_names()
+    inner = "<DBSubnetGroups>" + "".join(_subnet_group_xml(store.get_subnet_group(n)) for n in names) + "</DBSubnetGroups>"
+    return _success("DescribeDBSubnetGroups", inner)
+
+
+def _delete_db_subnet_group(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBSubnetGroupName", "")).strip()
+    if not store.get_subnet_group(name):
+        raise RdsError("DBSubnetGroupNotFoundFault", f"DB subnet group {name} not found.", 404)
+    store.drop_subnet_group(name)
+    store.persist()
+    return _success("DeleteDBSubnetGroup", "")
+
+
+# ── DB parameter groups ──────────────────────────────────────────────────────
+def _create_db_parameter_group(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBParameterGroupName", "")).strip()
+    if not name:
+        raise RdsError("InvalidParameterValue", "DBParameterGroupName is required.", 400)
+    if store.get_parameter_group(name):
+        raise RdsError("DBParameterGroupAlreadyExists", f"DB parameter group {name} already exists.", 400)
+    family = str(params.get("DBParameterGroupFamily", "postgres16"))
+    record = {
+        "db_parameter_group_name": name,
+        "db_parameter_group_family": family,
+        "description": str(params.get("Description", "")),
+        "type": str(params.get("Type", "DB Parameter Group")),
+        "db_parameter_group_arn": _parameter_group_arn(store, name),
+        "parameters": _default_parameters(family),
+    }
+    store.put_parameter_group(name, record)
+    store.persist()
+    return _success("CreateDBParameterGroup", _parameter_group_xml(record))
+
+
+def _describe_db_parameter_groups(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBParameterGroupName", "")).strip()
+    if name:
+        if not store.get_parameter_group(name):
+            raise RdsError("DBParameterGroupNotFound", f"DB parameter group {name} not found.", 404)
+        names = [name]
+    else:
+        names = store.parameter_group_names()
+    inner = "<DBParameterGroups>" + "".join(_parameter_group_xml(store.get_parameter_group(n)) for n in names) + "</DBParameterGroups>"
+    return _success("DescribeDBParameterGroups", inner)
+
+
+def _delete_db_parameter_group(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBParameterGroupName", "")).strip()
+    if not store.get_parameter_group(name):
+        raise RdsError("DBParameterGroupNotFound", f"DB parameter group {name} not found.", 404)
+    store.drop_parameter_group(name)
+    store.persist()
+    return _success("DeleteDBParameterGroup", "")
+
+
+def _describe_db_parameters(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBParameterGroupName", "")).strip()
+    pg = store.get_parameter_group(name)
+    if not pg:
+        raise RdsError("DBParameterGroupNotFound", f"DB parameter group {name} not found.", 404)
+    inner = "<Parameters>" + "".join(_parameter_xml(n, p) for n, p in sorted(pg["parameters"].items())) + "</Parameters>"
+    return _success("DescribeDBParameters", inner)
+
+
+def _modify_db_parameter_group(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBParameterGroupName", "")).strip()
+    pg = store.get_parameter_group(name)
+    if not pg:
+        raise RdsError("DBParameterGroupNotFound", f"DB parameter group {name} not found.", 404)
+    for item in _members(params, "Parameters"):
+        pname = item.get("ParameterName")
+        if not pname:
+            continue
+        p = pg["parameters"].setdefault(pname, {"data_type": "string", "allowed_values": "",
+                                                "is_modifiable": True, "apply_type": "dynamic", "description": ""})
+        p["parameter_value"] = item.get("ParameterValue", "")
+        p["source"] = "user"
+    store.persist()
+    return _success("ModifyDBParameterGroup", _el("DBParameterGroupName", name))
+
+
+# ── tags (ListTagsForResource / AddTagsToResource / RemoveTagsFromResource) ──
+def _list_tags_for_resource(store: SqlStore, params: dict) -> RdsResponse:
+    arn = str(params.get("ResourceName", "")).strip()
+    return _success("ListTagsForResource", _tag_list_xml(store.get_tags(arn)))
+
+
+def _add_tags_to_resource(store: SqlStore, params: dict) -> RdsResponse:
+    arn = str(params.get("ResourceName", "")).strip()
+    tags = store.get_tags(arn)
+    tags.update(_tags_from_params(params))
+    store.set_tags(arn, tags)
+    store.persist()
+    return _success("AddTagsToResource", "")
+
+
+def _remove_tags_from_resource(store: SqlStore, params: dict) -> RdsResponse:
+    arn = str(params.get("ResourceName", "")).strip()
+    tags = store.get_tags(arn)
+    for key in _members(params, "TagKeys"):
+        tags.pop(key, None)
+    store.set_tags(arn, tags)
+    store.persist()
+    return _success("RemoveTagsFromResource", "")
+
+
+# ── events ────────────────────────────────────────────────────────────────
+def _describe_events(store: SqlStore, params: dict) -> RdsResponse:
+    source_id = str(params.get("SourceIdentifier", "")).strip()
+    events = store.list_events()
+    if source_id:
+        events = [e for e in events if e.get("source_identifier") == source_id]
+    events = sorted(events, key=lambda e: e.get("date", ""), reverse=True)
+    inner = "<Events>" + "".join(_event_xml(e) for e in events) + "</Events>"
+    return _success("DescribeEvents", inner)
+
+
+# ── RDS Proxy ────────────────────────────────────────────────────────────────
+def _create_db_proxy(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBProxyName", "")).strip()
+    if not name:
+        raise RdsError("InvalidParameterValue", "DBProxyName is required.", 400)
+    if store.get_proxy(name):
+        raise RdsError("DBProxyAlreadyExistsFault", f"DB proxy {name} already exists.", 400)
+    record = {
+        "db_proxy_name": name,
+        "db_proxy_arn": _proxy_arn(store, name),
+        "engine_family": str(params.get("EngineFamily", "POSTGRESQL")),
+        "status": "available",
+        "created": _now(),
+    }
+    store.put_proxy(name, record)
+    store.persist()
+    return _success("CreateDBProxy", _proxy_xml(record))
+
+
+def _describe_db_proxies(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBProxyName", "")).strip()
+    if name:
+        if not store.get_proxy(name):
+            raise RdsError("DBProxyNotFoundFault", f"DB proxy {name} not found.", 404)
+        names = [name]
+    else:
+        names = store.proxy_names()
+    inner = "<DBProxies>" + "".join(_proxy_xml(store.get_proxy(n)) for n in names) + "</DBProxies>"
+    return _success("DescribeDBProxies", inner)
+
+
+def _delete_db_proxy(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("DBProxyName", "")).strip()
+    px = store.get_proxy(name)
+    if not px:
+        raise RdsError("DBProxyNotFoundFault", f"DB proxy {name} not found.", 404)
+    store.drop_proxy(name)
+    store.persist()
+    return _success("DeleteDBProxy", _proxy_xml(px))
+
+
+# ── option groups ────────────────────────────────────────────────────────────
+def _create_option_group(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("OptionGroupName", "")).strip()
+    if not name:
+        raise RdsError("InvalidParameterValue", "OptionGroupName is required.", 400)
+    if store.get_option_group(name):
+        raise RdsError("OptionGroupAlreadyExistsFault", f"Option group {name} already exists.", 400)
+    record = {
+        "option_group_name": name,
+        "option_group_description": str(params.get("OptionGroupDescription", "")),
+        "engine_name": str(params.get("EngineName", "mysql")),
+        "major_engine_version": str(params.get("MajorEngineVersion", "")),
+        "option_group_arn": _option_group_arn(store, name),
+    }
+    store.put_option_group(name, record)
+    store.persist()
+    return _success("CreateOptionGroup", _option_group_xml(record))
+
+
+def _describe_option_groups(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("OptionGroupName", "")).strip()
+    if name:
+        if not store.get_option_group(name):
+            raise RdsError("OptionGroupNotFoundFault", f"Option group {name} not found.", 404)
+        names = [name]
+    else:
+        names = store.option_group_names()
+    inner = "<OptionGroupsList>" + "".join(_option_group_xml(store.get_option_group(n)) for n in names) + "</OptionGroupsList>"
+    return _success("DescribeOptionGroups", inner)
+
+
+def _delete_option_group(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("OptionGroupName", "")).strip()
+    if not store.get_option_group(name):
+        raise RdsError("OptionGroupNotFoundFault", f"Option group {name} not found.", 404)
+    store.drop_option_group(name)
+    store.persist()
+    return _success("DeleteOptionGroup", "")
+
+
+# ── event subscriptions ──────────────────────────────────────────────────────
+def _create_event_subscription(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("SubscriptionName", "")).strip()
+    if not name:
+        raise RdsError("InvalidParameterValue", "SubscriptionName is required.", 400)
+    if store.get_event_subscription(name):
+        raise RdsError("SubscriptionAlreadyExistFault", f"Event subscription {name} already exists.", 400)
+    record = {
+        "cust_subscription_id": name,
+        "sns_topic_arn": str(params.get("SnsTopicArn", "")),
+        "source_type": str(params.get("SourceType", "db-instance")),
+        "enabled": str(params.get("Enabled", "true")).lower() == "true",
+        "status": "active",
+        "customer_aws_id": store.account_id,
+        "created": _now(),
+    }
+    store.put_event_subscription(name, record)
+    store.persist()
+    return _success("CreateEventSubscription", _event_subscription_xml(record))
+
+
+def _describe_event_subscriptions(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("SubscriptionName", "")).strip()
+    if name:
+        if not store.get_event_subscription(name):
+            raise RdsError("SubscriptionNotFoundFault", f"Event subscription {name} not found.", 404)
+        names = [name]
+    else:
+        names = store.event_subscription_names()
+    inner = ("<EventSubscriptionsList>"
+             + "".join(_event_subscription_xml(store.get_event_subscription(n)) for n in names)
+             + "</EventSubscriptionsList>")
+    return _success("DescribeEventSubscriptions", inner)
+
+
+def _delete_event_subscription(store: SqlStore, params: dict) -> RdsResponse:
+    name = str(params.get("SubscriptionName", "")).strip()
+    es = store.get_event_subscription(name)
+    if not es:
+        raise RdsError("SubscriptionNotFoundFault", f"Event subscription {name} not found.", 404)
+    store.drop_event_subscription(name)
+    store.persist()
+    return _success("DeleteEventSubscription", _event_subscription_xml(es))
+
+
+# ── honestly-empty describes (AWS features Vyomi does not generate data for) ─
+def _describe_reserved_db_instances(store: SqlStore, params: dict) -> RdsResponse:
+    return _success("DescribeReservedDBInstances", "<ReservedDBInstances></ReservedDBInstances>")
+
+
+def _describe_db_instance_automated_backups(store: SqlStore, params: dict) -> RdsResponse:
+    db_id = str(params.get("DBInstanceIdentifier", "")).strip()
+    ids = [db_id] if db_id else store.instance_ids()
+    dbs = [store.get_instance(i) for i in ids if store.get_instance(i)
+          and store.get_instance(i).get("backup_retention_period", 0) > 0]
+    inner = ("<DBInstanceAutomatedBackups>" + "".join(_automated_backup_xml(d) for d in dbs)
+             + "</DBInstanceAutomatedBackups>")
+    return _success("DescribeDBInstanceAutomatedBackups", inner)
+
+
+def _describe_export_tasks(store: SqlStore, params: dict) -> RdsResponse:
+    return _success("DescribeExportTasks", "<ExportTasks></ExportTasks>")
+
+
+def _describe_integrations(store: SqlStore, params: dict) -> RdsResponse:
+    return _success("DescribeIntegrations", "<Integrations></Integrations>")
+
+
+def _describe_db_recommendations(store: SqlStore, params: dict) -> RdsResponse:
+    return _success("DescribeDBRecommendations", "<DBRecommendations></DBRecommendations>")
 
 
 # ── native-wire dispatcher (Query-protocol Action → operation) ─────────────
@@ -302,6 +901,62 @@ def dispatch(store: SqlStore, params: dict | None = None) -> RdsResponse:
             return _create_db_snapshot(store, params)
         if action == "DescribeDBSnapshots":
             return _describe_db_snapshots(store, params)
+        if action == "DeleteDBSnapshot":
+            return _delete_db_snapshot(store, params)
+        if action == "RestoreDBInstanceFromDBSnapshot":
+            return _restore_db_instance_from_db_snapshot(store, params)
+        if action == "CreateDBSubnetGroup":
+            return _create_db_subnet_group(store, params)
+        if action == "DescribeDBSubnetGroups":
+            return _describe_db_subnet_groups(store, params)
+        if action == "DeleteDBSubnetGroup":
+            return _delete_db_subnet_group(store, params)
+        if action == "CreateDBParameterGroup":
+            return _create_db_parameter_group(store, params)
+        if action == "DescribeDBParameterGroups":
+            return _describe_db_parameter_groups(store, params)
+        if action == "DeleteDBParameterGroup":
+            return _delete_db_parameter_group(store, params)
+        if action == "DescribeDBParameters":
+            return _describe_db_parameters(store, params)
+        if action == "ModifyDBParameterGroup":
+            return _modify_db_parameter_group(store, params)
+        if action == "ListTagsForResource":
+            return _list_tags_for_resource(store, params)
+        if action == "AddTagsToResource":
+            return _add_tags_to_resource(store, params)
+        if action == "RemoveTagsFromResource":
+            return _remove_tags_from_resource(store, params)
+        if action == "DescribeEvents":
+            return _describe_events(store, params)
+        if action == "CreateDBProxy":
+            return _create_db_proxy(store, params)
+        if action == "DescribeDBProxies":
+            return _describe_db_proxies(store, params)
+        if action == "DeleteDBProxy":
+            return _delete_db_proxy(store, params)
+        if action == "CreateOptionGroup":
+            return _create_option_group(store, params)
+        if action == "DescribeOptionGroups":
+            return _describe_option_groups(store, params)
+        if action == "DeleteOptionGroup":
+            return _delete_option_group(store, params)
+        if action == "CreateEventSubscription":
+            return _create_event_subscription(store, params)
+        if action == "DescribeEventSubscriptions":
+            return _describe_event_subscriptions(store, params)
+        if action == "DeleteEventSubscription":
+            return _delete_event_subscription(store, params)
+        if action == "DescribeReservedDBInstances":
+            return _describe_reserved_db_instances(store, params)
+        if action == "DescribeDBInstanceAutomatedBackups":
+            return _describe_db_instance_automated_backups(store, params)
+        if action == "DescribeExportTasks":
+            return _describe_export_tasks(store, params)
+        if action == "DescribeIntegrations":
+            return _describe_integrations(store, params)
+        if action == "DescribeDBRecommendations":
+            return _describe_db_recommendations(store, params)
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)
     except RdsError as e:
         return _error(e.code, e.message, e.status)
