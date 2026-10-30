@@ -32,7 +32,7 @@ export function NotSimulatedContainer({ title, feature, note, description }) {
 /** Bordered content section with a title row, like the console's cards/sections. */
 export function Section({ title, description, actions, children, className, dataNs, noPad }) {
   return (
-    <Paper variant="outlined" className={className} {...(dataNs ? { "data-vyomi-not-simulated": dataNs } : {})}
+    <Paper variant="outlined" className={className} {...(dataNs ? { "data-vyomi-not-simulated": dataNs, "data-vyomi-gap-box": "" } : {})}
       sx={{ borderRadius: 2, overflow: "hidden" }}>
       {(title || actions) && (
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 2.5, pt: 2, pb: description ? 0.5 : 1.5 }} spacing={2}>

@@ -149,15 +149,26 @@ jobs:
           (cd consoles && node build.mjs)
           python3 consoles/dev_server.py -q --port 8790 & for i in $(seq 60); do curl -sf localhost:8790/_wire/ >/dev/null && break; sleep 1; done
           set +e
-          BASE=http://127.0.0.1:8790 OUT=$RUNNER_TEMP/ui-out node consoles/tests/ui-conformance.mjs ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }}
+          # Spec, smoke tests and allowlist come from the BASE branch — an agent cannot shrink them.
+          mkdir -p $RUNNER_TEMP/base && git archive origin/${{ env.BASE_BRANCH }} ui-spec consoles/tests | tar -x -C $RUNNER_TEMP/base
+          SPEC_DIR=$RUNNER_TEMP/base/ui-spec BASE=http://127.0.0.1:8790 OUT=$RUNNER_TEMP/ui-out node consoles/tests/ui-conformance.mjs ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }}
           git show origin/${{ env.BASE_BRANCH }}:consoles/honest-allowlist.json > $RUNNER_TEMP/allow.json 2>/dev/null || echo '{}' > $RUNNER_TEMP/allow.json
           node consoles/tests/gate-compare.mjs $RUNNER_TEMP/ui-out-before/${{ steps.tg.outputs.cloud }}.json $RUNNER_TEMP/ui-out/${{ steps.tg.outputs.cloud }}.json \
             ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }} $RUNNER_TEMP/allow.json \
             consoles/src/${{ steps.tg.outputs.cloud }}/services/${{ steps.tg.outputs.service }}/spec-map.json | tee $RUNNER_TEMP/gate.txt; ui=${PIPESTATUS[0]}
-          BASE=http://127.0.0.1:8790 OUT=$RUNNER_TEMP/smoke-out node consoles/tests/smoke-aws.mjs; smoke=$?
+          smoke=0
+          for c in aws gcp azure; do   # base smoke tests (existing checks) AND the branch's (new checks)
+            for t in $RUNNER_TEMP/base/consoles/tests/smoke-$c.mjs consoles/tests/smoke-$c.mjs; do
+              [ -f "$t" ] || continue
+              cp "$t" consoles/tests/.gate-smoke.mjs
+              BASE=http://127.0.0.1:8790 UI_PATH=/v4/$c/ OUT=$RUNNER_TEMP/smoke-out/$c node consoles/tests/.gate-smoke.mjs || smoke=1
+            done
+          done
+          rm -f consoles/tests/.gate-smoke.mjs
+          PYTHONPATH=. python3 tests/conformance/test_capabilities.py | tail -3 || smoke=1
           core=0
           for f in $(git diff --name-only origin/${{ env.BASE_BRANCH }}...HEAD -- tests/conformance/ | grep '\.py$'); do PYTHONPATH=. python3 "$f" || core=1; done
-          for f in tests/conformance/test_s3_core.py tests/conformance/test_dynamodb_core.py tests/conformance/test_aws_wire_router.py; do PYTHONPATH=. python3 "$f" >/dev/null || core=1; done
+          for f in tests/conformance/test_s3_core.py tests/conformance/test_dynamodb_core.py tests/conformance/test_aws_wire_router.py tests/conformance/test_capabilities.py; do PYTHONPATH=. python3 "$f" >/dev/null || core=1; done
           echo "ui=$ui smoke=$smoke core=$core"
           echo "ok=$([ $ui -eq 0 ] && [ $smoke -eq 0 ] && [ $core -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           cp -r $RUNNER_TEMP/ui-out ui-out 2>/dev/null; cp -r $RUNNER_TEMP/smoke-out smoke-out 2>/dev/null; cp $RUNNER_TEMP/gate.txt gate.txt 2>/dev/null

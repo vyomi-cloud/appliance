@@ -47,6 +47,13 @@ real Vyomi backend through the service's native API. Read first:
 ## The gate (run by the workflow, not by you — your own claims are not trusted)
 - fidelity ≥ 90 %; real coverage and the count of present elements must not drop;
 - no `honest_page` outside the base-branch allowlist;
+- **no statics**: every built list/detail page has a `"live"` check in `spec-map.json` backed by a
+  fixture in `consoles/src/<cloud>/services/<service>/fixtures.mjs` that creates a uniquely named
+  resource over the native wire; the page must then show it (see the S3/DynamoDB fixtures);
+- the spec and the smoke tests are taken from the BASE branch (you can add checks, not remove);
+- `tests/conformance/test_capabilities.py` passes: update `core/capabilities/<cloud>/<service>.json`
+  for every feature you wire (level per substrate, limitations, a probe) and render sections with
+  `<CapabilityContainer id=…>` — never hand-written disclaimers;
 - smoke tests and every core conformance test you touched pass.
 
 ## Verify (all must pass before you push)

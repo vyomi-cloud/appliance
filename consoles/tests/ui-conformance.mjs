@@ -46,6 +46,16 @@ const FIXTURES = {
   },
 };
 
+/** Native-wire helper handed to per-service fixtures. */
+async function wire(method, path, { headers = {}, body, svc = "s3", target } = {}) {
+  const h = { authorization: sig(svc), ...headers };
+  if (target) Object.assign(h, { "x-amz-target": target, "content-type": "application/x-amz-json-1.0" });
+  const r = await fetch(`${WIRE}${path}`, { method, headers: h, body: body && typeof body !== "string" && !(body instanceof Uint8Array) ? JSON.stringify(body) : body });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`${method} ${path} → ${r.status} ${text.slice(0, 160)}`);
+  try { return JSON.parse(text); } catch { return text; }
+}
+
 /** Flatten a spec page into checkable elements: [{kind, text}]. */
 function elements(page) {
   const els = [];
@@ -76,7 +86,9 @@ function elements(page) {
 async function snapshot(page) {
   return page.evaluate(() => {
     const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-    const gapBoxes = [...document.querySelectorAll("[data-vyomi-not-simulated]")].map((e) => e.closest("[class*=container]") || e.parentElement || e);
+    // A gap's boundary is the element marked data-vyomi-gap-box (the Not-simulated section),
+    // else the Not-simulated element itself — never a broad ancestor like a tab set.
+    const gapBoxes = [...document.querySelectorAll("[data-vyomi-not-simulated]")].map((e) => e.closest("[data-vyomi-gap-box]") || e);
     const inGap = (el) => gapBoxes.some((g) => g.contains(el));
     // Real text: walk visible text nodes that are not inside a gap panel.
     const parts = [];
@@ -96,11 +108,14 @@ async function snapshot(page) {
 }
 
 async function checkService(browser, svc) {
-  const specPath = join(ROOT, "ui-spec", cloud, `${svc}.json`);
+  const specPath = join(process.env.SPEC_DIR || join(ROOT, "ui-spec"), cloud, `${svc}.json`);
   const mapPath = join(ROOT, "consoles", "src", cloud, "services", svc, "spec-map.json");
   if (!existsSync(specPath)) return { svc, error: `no spec ${specPath}` };
   const spec = JSON.parse(await readFile(specPath, "utf8"));
   const map = existsSync(mapPath) ? JSON.parse(await readFile(mapPath, "utf8")) : {};
+  // Per-service fixtures (consoles/src/<cloud>/services/<svc>/fixtures.mjs): async (wire, uniq) → text.
+  const fxPath = join(ROOT, "consoles", "src", cloud, "services", svc, "fixtures.mjs");
+  const svcFx = existsSync(fxPath) ? (await import(fxPath)).default || {} : {};
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const pages = [];
@@ -110,8 +125,17 @@ async function checkService(browser, svc) {
     const els = elements(sp).map((e) => ({ ...e, text: e.text.replace(/\{([\w-]+)\}/g, (x, k) => m?.vars?.[k] ?? x) }));
     const rec = { id: sp.id, kind: sp.kind, route: m?.route || null, total: els.length, present: [], honest: [], missing: [] };
     if (!m?.route) { rec.missing = els.map((e) => `${e.kind}: ${e.text}`); rec.unmapped = true; pages.push(rec); continue; }
-    for (const f of m.fixtures || []) await FIXTURES[f]?.();
-    await page.goto(`${UI}${cloud}/${m.route}`, { waitUntil: "networkidle" }).catch(() => {});
+    for (const f of m.fixtures || []) await (svcFx[f] ? svcFx[f](wire, "uic") : FIXTURES[f]?.());
+    // Liveness ("no statics"): create a uniquely named resource over the native wire right
+    // before loading the page; the page must show that exact name.
+    let liveText = null;
+    if (m.live) {
+      const uniq = `live${Math.random().toString(36).slice(2, 8)}`;
+      try { liveText = await svcFx[m.live](wire, uniq); } catch (e) { liveText = null; rec.liveError = e.message; }
+    }
+    // Detail routes may embed the live resource: "#/s3/object/uic-bucket?key={live}".
+    const route = liveText ? m.route.replaceAll("{live}", encodeURIComponent(liveText)) : m.route;
+    await page.goto(`${UI}${cloud}/${route}`, { waitUntil: "networkidle" }).catch(() => {});
     await page.waitForTimeout(900);
     const snaps = [await snapshot(page)];
     // Click every tab (top-level and nested) so their panels are inspected too.
@@ -123,6 +147,19 @@ async function checkService(browser, svc) {
     }
     for (const sel of m.expand || []) { await page.locator(sel).first().click().catch(() => {}); await page.waitForTimeout(400); snaps.push(await snapshot(page)); }
     const all = norm(snaps.map((s) => s.text + "\n" + s.attrs).join("\n"));
+    if (m.live) {
+      let ok = !!liveText && all.includes(norm(liveText));
+      if (liveText && !ok) {
+        // Paginated lists: search for it like a user would (text filter on the page).
+        await page.goto(`${UI}${cloud}/${route}`, { waitUntil: "networkidle" }).catch(() => {});
+        const box = page.locator('input[type="search"], input[placeholder^="Find"], input[placeholder^="Filter"], input[placeholder*="filter" i]').first();
+        if (await box.isVisible().catch(() => false)) {
+          await box.fill(liveText); await page.waitForTimeout(700);
+          ok = norm((await snapshot(page)).text).includes(norm(liveText));
+        }
+      }
+      rec.live = { ok, expected: liveText, error: rec.liveError };
+    }
     const honest = norm(snaps.map((s) => s.honest).join("\n"));
     for (const e of els) {
       const t = norm(e.text);
@@ -139,7 +176,9 @@ async function checkService(browser, svc) {
   await ctx.close();
   const sum = (k) => pages.reduce((a, p) => a + (Array.isArray(p[k]) ? p[k].length : p[k]), 0);
   const total = sum("total"), present = sum("present"), honest = sum("honest");
-  return { svc, total, present, honest, missing: total - present - honest, fidelity: total ? (present + honest) / total : 1, coverage: total ? present / total : 1, pages };
+  const live = pages.filter((p) => p.live);
+  return { svc, total, present, honest, missing: total - present - honest, fidelity: total ? (present + honest) / total : 1, coverage: total ? present / total : 1,
+    liveness: { checked: live.length, failed: live.filter((p) => !p.live.ok).map((p) => p.id) }, pages };
 }
 
 await mkdir(OUT, { recursive: true });
@@ -149,9 +188,9 @@ for (const svc of services) results.push(await checkService(browser, svc));
 await browser.close();
 
 const pct = (x) => `${(x * 100).toFixed(1)}%`;
-let md = `# UI conformance — ${cloud}\n\n| Service | Elements | Present | Not simulated | Missing | Fidelity | Real coverage |\n|---|---|---|---|---|---|---|\n`;
+let md = `# UI conformance — ${cloud}\n\n| Service | Elements | Present | Not simulated | Missing | Fidelity | Real coverage | Live pages |\n|---|---|---|---|---|---|---|---|\n`;
 for (const r of results) md += r.error ? `| ${r.svc} | — | — | — | — | error: ${r.error} | — |\n`
-  : `| ${r.svc} | ${r.total} | ${r.present} | ${r.honest} | ${r.missing} | ${pct(r.fidelity)} | ${pct(r.coverage)} |\n`;
+  : `| ${r.svc} | ${r.total} | ${r.present} | ${r.honest} | ${r.missing} | ${pct(r.fidelity)} | ${pct(r.coverage)} | ${r.liveness.checked - r.liveness.failed.length}/${r.liveness.checked} |\n`;
 for (const r of results.filter((x) => !x.error)) {
   md += `\n## ${r.svc}\n`;
   for (const p of r.pages.filter((p) => p.missing.length)) md += `\n- **${p.id}** (${p.kind}${p.unmapped ? ", no v4 route" : ""}): ${p.missing.length} missing — ${p.missing.slice(0, 12).join("; ")}${p.missing.length > 12 ? " …" : ""}\n`;
@@ -159,6 +198,6 @@ for (const r of results.filter((x) => !x.error)) {
 await writeFile(join(OUT, `${cloud}.json`), JSON.stringify(results, null, 2));
 await writeFile(join(OUT, `${cloud}.md`), md);
 console.log(md.split("\n## ")[0]);
-const bad = results.filter((r) => r.error || r.fidelity < MIN);
+const bad = results.filter((r) => r.error || r.fidelity < MIN || r.liveness?.failed.length);
 if (bad.length) console.log(`Below ${pct(MIN)} fidelity: ${bad.map((r) => r.svc).join(", ")}`);
 process.exit(bad.length ? 1 : 0);

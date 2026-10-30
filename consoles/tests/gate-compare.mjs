@@ -6,7 +6,10 @@
  *   - fidelity is below MIN_FIDELITY (default 0.90),
  *   - real coverage or the count of present elements went DOWN,
  *   - a page is declared wholly "Not simulated" (honest_page) without being on the
- *     allowlist taken from the BASE branch (agents cannot extend it).
+ *     allowlist taken from the BASE branch (agents cannot extend it),
+ *   - a built list/detail page has no liveness check, or a liveness check failed
+ *     ("no statics": the page must show a resource created over the native wire just
+ *     before it loaded).
  */
 import { readFile } from "node:fs/promises";
 
@@ -27,6 +30,9 @@ if (before.coverage !== undefined && after.coverage + 1e-9 < before.coverage)
   problems.push(`real coverage dropped ${(before.coverage * 100).toFixed(1)}% → ${(after.coverage * 100).toFixed(1)}%`);
 if (before.present !== undefined && after.present < before.present)
   problems.push(`present elements dropped ${before.present} → ${after.present}`);
+const needLive = (after.pages || []).filter((p) => ["list", "detail"].includes(p.kind) && p.route && !map[p.id]?.honest_page && !p.live).map((p) => p.id);
+if (needLive.length) problems.push(`list/detail pages without a liveness check (add "live" to spec-map + a fixture): ${needLive.join(", ")}`);
+if (after.liveness?.failed?.length) problems.push(`liveness failed (page did not show a resource created over the wire): ${after.liveness.failed.join(", ")}`);
 const unapproved = Object.entries(map).filter(([k, v]) => v && v.honest_page && !allow.has(k)).map(([k]) => k);
 if (unapproved.length) problems.push(`honest_page not on the base allowlist: ${unapproved.join(", ")} — build these pages`);
 

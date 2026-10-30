@@ -4,7 +4,8 @@
     "route": "#/s3",
     "fixtures": [
       "s3-bucket"
-    ]
+    ],
+    "live": "live-bucket"
   },
   "directory-buckets": {
     "route": "#/s3/directory-buckets",
@@ -17,16 +18,15 @@
     ],
     "vars": {
       "resource-name": "uic-bucket"
-    }
+    },
+    "live": "live-object"
   },
   "object-detail": {
-    "route": "#/s3/object/uic-bucket?prefix=uic-object.txt",
+    "route": "#/s3/object/uic-bucket?prefix={live}",
     "fixtures": [
       "s3-bucket"
     ],
-    "vars": {
-      "resource-name": "uic-object.txt"
-    }
+    "live": "live-object"
   },
   "create-bucket": {
     "route": "#/s3/create",
@@ -73,7 +73,8 @@
     "honest_page": true
   },
   "access-points": {
-    "route": "#/s3/access-points"
+    "route": "#/s3/access-points",
+    "honest_page": true
   },
   "access-points-for-fsx": {
     "route": "#/s3/access-points-fsx",

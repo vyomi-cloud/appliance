@@ -23,10 +23,13 @@ export function NotSimulated({ feature, note }) {
 }
 
 export function NotSimulatedContainer({ title, feature, note }) {
+  // data-vyomi-gap-box marks the exact boundary of a declared gap for the UI-conformance checker.
   return (
+    <div data-vyomi-gap-box="">
     <Container header={<Header variant="h2">{title}</Header>}>
       <NotSimulated feature={feature || title} note={note} />
     </Container>
+    </div>
   );
 }
 

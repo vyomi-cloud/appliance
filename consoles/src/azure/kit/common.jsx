@@ -19,7 +19,7 @@ export function NotSimulated({ feature, note }) {
 
 export function NotSimulatedContainer({ title, feature, note }) {
   return (
-    <section className="vy-ns-container">
+    <section className="vy-ns-container" data-vyomi-gap-box="">
       {title && <h3>{title}</h3>}
       <NotSimulated feature={feature || title} note={note} />
     </section>

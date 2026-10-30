@@ -37,7 +37,8 @@
     "route": "#/dynamodb/tables",
     "fixtures": [
       "ddb-table"
-    ]
+    ],
+    "live": "live-table"
   },
   "table-detail": {
     "route": "#/dynamodb/tables/uic-table",
@@ -62,7 +63,8 @@
     ],
     "vars": {
       "resource-name": "uic-table"
-    }
+    },
+    "live": "live-item"
   },
   "reserved-capacity": {
     "route": "#/dynamodb/reserved-capacity",
