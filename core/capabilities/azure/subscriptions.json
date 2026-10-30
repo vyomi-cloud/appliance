@@ -1,0 +1,144 @@
+{
+ "$doc": "Vyomi capability registry — Azure Subscriptions. See aws/s3.json for the contract.",
+ "azure.subscriptions.overview": {
+  "title": "Subscription overview (get, rename) over ARM",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi simulates exactly one subscription — renaming it changes the one simulated subscription's display name rather than creating or listing an independent additional subscription. Offer, Offer ID, Parent management group and Secure score are not modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.subscriptions.tags": {
+  "title": "Tags (Microsoft.Resources/tags/default)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.subscriptions.activity_log": {
+  "title": "Activity log",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded, and `caller` is a fixed placeholder identity."
+  ],
+  "api": [
+   "ActivityLogs_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.subscriptions.access_control_iam": {
+  "title": "Access control (IAM) — role assignments and definitions",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Role assignments/definitions are the generic ARM catalog store (Microsoft.Authorization/roleAssignments, roleDefinitions) and no access decisions are evaluated — every data-plane call succeeds regardless of what is assigned. Deny assignments and classic administrators are always empty."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.subscriptions.resource_groups": {
+  "title": "Resource groups (Settings > Resource groups)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.subscriptions.resources": {
+  "title": "Resources (Settings > Resources — every resource group in the subscription, at once)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.subscriptions.resource_providers": {
+  "title": "Resource providers (list, register, unregister)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.subscriptions.deployments": {
+  "title": "Deployments (Microsoft.Resources/deployments) history, subscription scope",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Deployment creation stores whatever template/parameters/mode the client sends and returns Succeeded immediately — there is no template-language evaluation (no parameter/variable resolution, no dependsOn ordering) and nothing is actually provisioned from it; the underlying resources still need their own PUT calls. Cancel and Redeploy are not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.subscriptions.resource_locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to the subscription itself",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.subscriptions.usage_quotas": {
+  "title": "Usage + quotas",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Per-resource-type, per-location compute/network quota (Microsoft.Compute usages) is not modeled — Vyomi has no fixed quantity caps to report against."
+  ]
+ },
+ "azure.subscriptions.menu_gaps": {
+  "title": "Diagnose and solve problems, Security, Events, Advisor recommendations, Invoices, Partner information, Programmatic deployment, Billing properties, Preview features, Policies, Management certificates, My permissions, Deployment stacks, Support + Troubleshooting",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "These subscription blade menu items are billing-account, Microsoft Defender, Azure Policy, Microsoft Entra or classic Service Management features with no Vyomi backend."
+  ]
+ },
+ "azure.subscriptions.cost_management": {
+  "title": "Cost analysis, budgets and cost alerts, subscription scope",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_cost_core.py"
+  ]
+ }
+}

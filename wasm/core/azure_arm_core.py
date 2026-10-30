@@ -268,6 +268,9 @@ class AzureArm:
         self.state: dict = {}
         self.operations: dict = {}
         self._base = base                       # endpoint/LRO URL prefix (relative by default)
+        self.sub_names: dict = {}               # subscription id (lower) -> displayName (Microsoft.Subscription/rename)
+        self.sub_tags: dict = {}                # subscription id (lower) -> tags (Microsoft.Resources/tags/default)
+        self.providers: dict = {}               # namespace (lower) -> "Registered" | "NotRegistered"
 
     # ── per-resource ARM activity entries (Microsoft.Insights/eventtypes rows) ──
     # Kept IN self.state (so they persist with the rest of ARM, offline and Nano alike) by the one
@@ -313,7 +316,8 @@ class AzureArm:
 
         if not rest_segs:
             return _ok({"id": f"/subscriptions/{sub}", "subscriptionId": sub,
-                        "displayName": "CloudLearn Subscription", "state": "Enabled"})
+                        "displayName": self.sub_names.get(sub.lower(), "CloudLearn Subscription"),
+                        "state": "Enabled", "tags": self.sub_tags.get(sub.lower(), {})})
 
         # resource groups
         if rest_segs[0].lower() == "resourcegroups" and len(rest_segs) <= 2:
@@ -343,22 +347,69 @@ class AzureArm:
                      and r.get("_type", "").lower() != "microsoft.resources/resourcegroups"]
             return _ok({"value": items})
 
+        # GET /subscriptions/{sub}/resources — every resource across every resource group in
+        # the subscription (az resource list / Resources.list), the Subscription blade's
+        # Settings > Resources panel.
+        if rg is None and idx < len(rest_segs) and rest_segs[idx].lower() == "resources" and len(rest_segs) == idx + 1:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Use GET to list resources in a subscription.")
+            items = [_view(r) for r in self.state.values()
+                     if r.get("_sub") == sub and r.get("_type", "").lower() != "microsoft.resources/resourcegroups"]
+            return _ok({"value": items})
+
         if idx >= len(rest_segs) or rest_segs[idx].lower() != "providers":
             return _err(400, "BadRequest", f"Unrecognized ARM path: /subscriptions/{rest}")
         after = rest_segs[idx + 1:]
 
-        # provider registration probes
+        # provider registration probes (Settings > Resource providers: Register/Unregister/Refresh)
         if len(after) == 0 and method == "GET":
             return _ok({"value": [self._provider_info(n) for n in sorted({c["namespace"] for c in CATALOG})]})
         if len(after) == 1 and method == "GET":
             return _ok(self._provider_info(after[0]))
         if len(after) == 2 and after[1].lower() == "register" and method == "POST":
+            self.providers[after[0].lower()] = "Registered"
+            return _ok(self._provider_info(after[0]))
+        if len(after) == 2 and after[1].lower() == "unregister" and method == "POST":
+            self.providers[after[0].lower()] = "NotRegistered"
             return _ok(self._provider_info(after[0]))
         if len(after) < 2:
             return _err(400, "BadRequest", "Missing provider namespace/type.")
 
         namespace = after[0]
         chain = after[1:]
+
+        # Microsoft.Subscription/rename: the subscription blade's "Rename" header action.
+        if namespace.lower() == "microsoft.subscription" and chain and chain[0].lower() == "rename":
+            if method != "POST":
+                return _err(405, "MethodNotAllowed", "Use POST to rename a subscription.")
+            name = (payload or {}).get("subscriptionName")
+            if not name:
+                return _err(400, "BadRequest", "subscriptionName is required.")
+            self.sub_names[sub.lower()] = name
+            _record_activity(sub, "Update", f"Microsoft.Subscription rename to '{name}'")
+            return _ok({"id": f"/subscriptions/{sub}", "subscriptionId": sub, "displayName": name,
+                        "state": "Enabled", "tags": self.sub_tags.get(sub.lower(), {})})
+
+        # Microsoft.Resources/tags/default: tags at subscription scope (Tags - CreateOrUpdateAtScope),
+        # the subscription blade's Tags panel (Microsoft.Authorization/locks aside, subscriptions
+        # aren't a PUT/PATCH-able catalog resource, so tags live on this generic extension instead).
+        if namespace.lower() == "microsoft.resources" and chain[:1] == ["tags"] and chain[1:2] == ["default"] and len(chain) == 2:
+            key = sub.lower()
+            if method == "GET":
+                return _ok({"id": f"/subscriptions/{sub}/providers/Microsoft.Resources/tags/default",
+                            "type": "Microsoft.Resources/tags", "properties": {"tags": self.sub_tags.get(key, {})}})
+            if method in ("PUT", "PATCH"):
+                tags = (payload or {}).get("properties", {}).get("tags")
+                if not isinstance(tags, dict):
+                    return _err(400, "BadRequest", "properties.tags is required.")
+                self.sub_tags[key] = dict(tags) if method == "PUT" else _merge(self.sub_tags.get(key, {}), tags)
+                _record_activity(sub, "Update", "Microsoft.Resources/tags 'default'")
+                return _ok({"id": f"/subscriptions/{sub}/providers/Microsoft.Resources/tags/default",
+                            "type": "Microsoft.Resources/tags", "properties": {"tags": self.sub_tags[key]}})
+            if method == "DELETE":
+                self.sub_tags.pop(key, None)
+                return _ok(None, status=200)
+            return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
         # Microsoft.Insights/eventtypes/management/values: the subscription-wide ARM activity
         # log read API (not resource-scoped — no "providers" re-entry — so it must be caught
@@ -376,13 +427,16 @@ class AzureArm:
             events.sort(key=lambda e: str(e.get("eventTimestamp") or ""), reverse=True)
             return _ok({"value": events})
 
-        # Microsoft.Authorization/locks scoped directly to the RESOURCE GROUP itself (not a
-        # resource inside it): .../resourceGroups/{rg}/providers/Microsoft.Authorization/locks
-        # — namespace IS Microsoft.Authorization already (no resource type precedes it), so
-        # the marker search below (which looks for a re-entrant "providers" INSIDE chain)
-        # never fires; caught here instead, scope_rid = the resource group's own id.
-        if namespace.lower() == "microsoft.authorization" and chain and chain[0].lower() == "locks" and rg is not None:
-            return self._locks_crud(method, f"/subscriptions/{sub}/resourceGroups/{rg}", chain[1:], payload, rg)
+        # Microsoft.Authorization/locks scoped directly to the RESOURCE GROUP (or, with no
+        # resourceGroups segment, the SUBSCRIPTION) itself — not a resource inside it:
+        # .../resourceGroups/{rg}/providers/Microsoft.Authorization/locks or
+        # .../subscriptions/{sub}/providers/Microsoft.Authorization/locks — namespace IS
+        # Microsoft.Authorization already (no resource type precedes it), so the marker search
+        # below (which looks for a re-entrant "providers" INSIDE chain) never fires; caught
+        # here instead, scope_rid = the resource group's (or subscription's) own id.
+        if namespace.lower() == "microsoft.authorization" and chain and chain[0].lower() == "locks":
+            scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else f"/subscriptions/{sub}"
+            return self._locks_crud(method, scope_rid, chain[1:], payload, rg or sub)
 
         # Microsoft.Authorization/locks: a real ARM extension resource scoped to ANY other
         # resource's own id (the chain re-enters "providers", like Event Grid's event
@@ -802,7 +856,7 @@ class AzureArm:
                   "locations": [DEFAULT_LOCATION], "capabilities": "None"}
                  for c in CATALOG if c["namespace"].lower() == namespace.lower()]
         return {"id": f"/subscriptions/{DEFAULT_SUBSCRIPTION}/providers/{namespace}",
-                "namespace": namespace, "registrationState": "Registered",
+                "namespace": namespace, "registrationState": self.providers.get(namespace.lower(), "Registered"),
                 "registrationPolicy": "RegistrationRequired", "resourceTypes": types}
 
     def _rg_key(self, sub, rg):

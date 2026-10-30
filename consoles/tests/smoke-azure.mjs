@@ -39,6 +39,11 @@ const AKS2 = `vywireaks${n}`;      // AKS cluster created over the wire
 const POOL = `pool${n}`;           // node pool created through the UI (AKS pool names are short: <=12 chars)
 const EUSR = `vysmokeuser${n}`;    // Entra ID user created through the UI
 const EUSR2 = `vywireuser${n}`;    // Entra ID user created over the wire
+const SUBNAME = `Vyomi Smoke Subscription ${n}`;  // subscription renamed through the UI
+const SUBLOCK = `vysublock${n}`;   // subscription-scoped lock created through the UI
+const SUBRG = `vysubrg${n}`;       // resource group created over the wire (shown in the Subscription's Resource groups panel)
+const SUBSA = `vysubsa${n}`;       // storage account created over the wire, inside SUBRG (shown in the Subscription's Resources panel)
+const SUBDEP = `vysubdep${n}`;     // subscription-scoped deployment created over the wire
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -973,6 +978,7 @@ try {
   await shot("25-nsg-inbound-rules");
 
   // ── Lock created in the UI → visible over the native ARM wire ─────────────────────────
+  // ── Lock created on the NSG through the UI → visible over the native ARM wire ──────────
   await openPanel("Locks");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await page.getByLabel("Lock name", { exact: true }).fill(NSGLOCK);
@@ -1192,6 +1198,83 @@ try {
     if (vnetGone.status !== 404) await page.waitForTimeout(500);
   }
   check("UI delete virtual network → ARM GET 404", vnetGone.status === 404, `HTTP ${vnetGone.status}`);
+  // ── Subscriptions: the one simulated subscription, renamed through the UI → visible over ARM ──
+  await page.goto(UI + "#/subscriptions");
+  await page.getByRole("heading", { name: "Subscriptions", exact: true }).waitFor({ timeout: 10000 });
+  await page.getByRole("link", { name: "CloudLearn Subscription", exact: true }).waitFor({ timeout: 10000 });
+  await shot("30-subscriptions-list");
+  await page.getByRole("link", { name: "CloudLearn Subscription", exact: true }).click();
+  await page.getByRole("heading", { name: "CloudLearn Subscription", exact: true }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Rename", exact: true }).click();
+  await page.getByLabel("Subscription name", { exact: true }).fill(SUBNAME);
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByRole("heading", { name: SUBNAME, exact: true }).waitFor({ timeout: 10000 });
+  const subscriptionGot = await arm("GET", "");
+  check("UI rename subscription → visible over native ARM", JSON.parse(subscriptionGot.text).displayName === SUBNAME, subscriptionGot.text);
+  await shot("31-subscription-overview");
+
+  // ── Tags applied in the UI → persisted over ARM (Microsoft.Resources/tags/default) ──
+  await openPanel("Tags");
+  await page.getByLabel("Tag name 1", { exact: true }).fill("env");
+  await page.getByLabel("Tag value 1", { exact: true }).fill("smoke");
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await page.waitForTimeout(600);
+  const subTags = await wire(`/subscriptions/${SUB}/providers/Microsoft.Resources/tags/default?api-version=2021-04-01`);
+  check("UI tag apply → persisted on the subscription over ARM", JSON.parse(subTags.text).properties?.tags?.env === "smoke", subTags.text);
+
+  // ── Lock created in the UI, scoped to the subscription itself → visible over ARM ──
+  await openPanel("Resource locks");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByLabel("Lock name", { exact: true }).fill(SUBLOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByText(SUBLOCK, { exact: true }).waitFor({ timeout: 10000 });
+  const subLockGet = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/locks/${SUBLOCK}?api-version=2016-09-01`);
+  check("UI add subscription-scoped lock → visible over native ARM", subLockGet.status === 200, `HTTP ${subLockGet.status}`);
+  await shot("32-subscription-locks");
+
+  // ── Resource group + resource + deployment created over the wire → shown in the Subscription's ──
+  // Resource groups / Resources / Deployments panels (CLI → UI direction) ───────────────────────
+  const subRgPut = await arm("PUT", `/resourceGroups/${SUBRG}`, { location: "eastus" });
+  check("ARM PUT resource group over wire", subRgPut.status === 200, `HTTP ${subRgPut.status}`);
+  await wire(`/subscriptions/${SUB}/resourceGroups/${SUBRG}/providers/Microsoft.Storage/storageAccounts/${SUBSA}`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ location: "eastus" }) });
+  const subDepPut = await wire(`/subscriptions/${SUB}/providers/Microsoft.Resources/deployments/${SUBDEP}?api-version=2021-04-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties: { mode: "Incremental", template: {} } }) });
+  check("ARM PUT subscription-scoped deployment over wire", subDepPut.status === 200, `HTTP ${subDepPut.status}`);
+
+  await openPanel("Resource groups");
+  await page.getByRole("link", { name: SUBRG, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created resource group shown in the Subscription's Resource groups panel", true);
+
+  await openPanel("Resources");
+  await page.getByText(SUBSA, { exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created resource shown in the Subscription's Resources panel", true);
+
+  await openPanel("Deployments");
+  await page.getByText(SUBDEP, { exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created deployment shown in the Subscription's Deployments panel", true);
+  await shot("33-subscription-deployments");
+
+  // ── Resource providers: unregister then re-register through the UI → reflected over ARM ──
+  await openPanel("Resource providers");
+  await page.getByRole("row", { name: /Microsoft\.Storage/ }).getByRole("button", { name: "Unregister" }).click();
+  await page.waitForTimeout(500);
+  const unregistered = await arm("GET", "/providers/Microsoft.Storage");
+  check("UI unregister provider → ARM reflects NotRegistered", JSON.parse(unregistered.text).registrationState === "NotRegistered", unregistered.text);
+  await page.getByRole("row", { name: /Microsoft\.Storage/ }).getByRole("button", { name: "Register" }).click();
+  await page.waitForTimeout(500);
+  const registered = await arm("GET", "/providers/Microsoft.Storage");
+  check("UI register provider → ARM reflects Registered", JSON.parse(registered.text).registrationState === "Registered", registered.text);
+
+  // ── Create a subscription (renames the one simulated subscription, the honest Vyomi gap) ──
+  await page.goto(UI + "#/subscriptions/create");
+  await page.getByLabel("Subscription name", { exact: true }).fill(`${SUBNAME}-2`);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: `${SUBNAME}-2`, exact: true }).waitFor({ timeout: 10000 });
+  const subscriptionGot2 = await arm("GET", "");
+  check("UI create-subscription wizard → renames the one simulated subscription over ARM", JSON.parse(subscriptionGot2.text).displayName === `${SUBNAME}-2`, subscriptionGot2.text);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});

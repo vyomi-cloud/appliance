@@ -470,6 +470,59 @@ def run() -> int:
     arm.handle("DELETE", vnet2, {"api-version": "2023-11-01"})
     r = arm.handle("GET", vnet2 + "/virtualNetworkPeerings", {"api-version": "2023-11-01"})
     _check("peerings cascade-deleted with their vnet", r["body"]["value"] == [])
+    # 23. Subscription-scope: rename, tags-at-scope, resource-provider unregister, locks
+    # scoped directly to the subscription itself, and the subscription-wide resources list —
+    # the Subscriptions service's Overview / Tags / Resource providers / Resource locks / Resources panels.
+    r = arm.handle("POST", f"/subscriptions/{SUB}/providers/Microsoft.Subscription/rename", {"api-version": "2021-10-01"}, {"subscriptionName": "CloudLearn Prod"})
+    _check("subscription rename 200", r["status"] == 200 and r["body"]["displayName"] == "CloudLearn Prod")
+    r = arm.handle("GET", f"/subscriptions/{SUB}")
+    _check("renamed subscription persists on GET", r["body"]["displayName"] == "CloudLearn Prod")
+    r = arm.handle("POST", f"/subscriptions/{SUB}/providers/Microsoft.Subscription/rename", {"api-version": "2021-10-01"}, {})
+    _check("rename without a name 400s", r["status"] == 400)
+
+    tagspath = f"/subscriptions/{SUB}/providers/Microsoft.Resources/tags/default"
+    r = arm.handle("GET", tagspath, {"api-version": "2021-04-01"})
+    _check("subscription tags starts empty", r["status"] == 200 and r["body"]["properties"]["tags"] == {})
+    r = arm.handle("PATCH", tagspath, {"api-version": "2021-04-01"}, {"properties": {"tags": {"env": "prod"}}})
+    _check("subscription tags PATCH 200", r["status"] == 200 and r["body"]["properties"]["tags"] == {"env": "prod"})
+    r = arm.handle("PATCH", tagspath, {"api-version": "2021-04-01"}, {"properties": {"tags": {"team": "platform"}}})
+    _check("subscription tags PATCH merges", r["body"]["properties"]["tags"] == {"env": "prod", "team": "platform"})
+    r = arm.handle("PUT", tagspath, {"api-version": "2021-04-01"}, {"properties": {"tags": {"only": "this"}}})
+    _check("subscription tags PUT replaces", r["body"]["properties"]["tags"] == {"only": "this"})
+    r = arm.handle("GET", f"/subscriptions/{SUB}")
+    _check("subscription GET reflects its tags", r["body"]["tags"] == {"only": "this"})
+
+    r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Storage")
+    _check("provider registered by default", r["body"]["registrationState"] == "Registered")
+    r = arm.handle("POST", f"/subscriptions/{SUB}/providers/Microsoft.Storage/unregister")
+    _check("provider unregister 200", r["status"] == 200 and r["body"]["registrationState"] == "NotRegistered")
+    r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Storage")
+    _check("unregistered provider state persists on GET", r["body"]["registrationState"] == "NotRegistered")
+    r = arm.handle("POST", f"/subscriptions/{SUB}/providers/Microsoft.Storage/register")
+    _check("provider re-register 200", r["body"]["registrationState"] == "Registered")
+
+    sublock = f"/subscriptions/{SUB}/providers/Microsoft.Authorization/locks/sublock"
+    r = arm.handle("PUT", sublock, {"api-version": "2016-09-01"}, {"properties": {"level": "CanNotDelete"}})
+    _check("subscription-scoped lock put 201", r["status"] == 201 and r["body"]["name"] == "sublock")
+    r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Authorization/locks", {"api-version": "2016-09-01"})
+    _check("subscription-scoped locks list has it", [x["name"] for x in r["body"]["value"]] == ["sublock"])
+    r = arm.handle("DELETE", sublock, {"api-version": "2016-09-01"})
+    _check("subscription-scoped lock delete 200", r["status"] == 200)
+
+    deployment = f"/subscriptions/{SUB}/providers/Microsoft.Resources/deployments/subdeploy1"
+    r = arm.handle("PUT", deployment, {"api-version": "2021-04-01"}, {"properties": {"mode": "Incremental", "template": {}}})
+    _check("subscription-scoped deployment put 200 (LRO)", r["status"] == 200 and r["body"]["name"] == "subdeploy1")
+    r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Resources/deployments", {"api-version": "2021-04-01"})
+    _check("subscription-scoped deployments list has it", "subdeploy1" in [x["name"] for x in r["body"]["value"]])
+
+    rg2 = "subscope-rg"
+    storage2 = _p(rg2, "Microsoft.Storage", "storageAccounts", "subscopesa")
+    arm.handle("PUT", storage2, {"api-version": "2023-01-01"}, {"location": "eastus"})
+    r = arm.handle("GET", f"/subscriptions/{SUB}/resources", {"api-version": "2021-04-01"})
+    _check("subscription-wide resources list spans every resource group",
+           "subscopesa" in [x["name"] for x in r["body"]["value"]])
+    _check("subscription-wide resources list excludes resource groups themselves",
+           not any(x["type"].lower() == "microsoft.resources/resourcegroups" for x in r["body"]["value"]))
 
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
