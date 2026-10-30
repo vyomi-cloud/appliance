@@ -4,6 +4,32 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.35] — 2026-10-30
+
+Daily conformance release. **5 product fixes** (GCP 2, all clouds 3); 5 reach Nano and 5 reach the offline appliance.
+
+### Highlights
+
+- **GCP projects now work the same in gcloud and the console.** Each GCP space has a single project, which you can address by ID or number, and gcloud and the console both show it. The old project ids (cloudlearn, demo, gcp-dev) now refer to other projects.
+- **The CLI works more fully through the Nano tunnel.** STS, gcloud uploads to GCS, time zone data, and the App Config and DNS data planes now work. Azure ARM requests also go through the tunnel.
+- **DynamoDB and Secrets work offline in both directions.** The Nano CLI checks now pass 74 of 74 through the tunnel.
+
+### Fixes — GCP
+
+- **[Nano + offline]** The old project ids (cloudlearn / demo / gcp-dev) are other projects now
+- **[Nano + offline]** One project per GCP space, by ID or number — gcloud and the console now share it
+
+### Fixes — all clouds
+
+- **[Nano + offline]** Nano CLI checks 74/74 through the tunnel; offline DynamoDB + Secrets both ways
+- **[Nano + offline]** Tunnel CLI parity — STS, GCS gcloud uploads, tzdata, App Config/DNS data planes; per-cloud console bridge (WIP)
+- **[Nano + offline]** Route Azure ARM through the tunnel; add the Nano CLI release check (WIP: 28/62)
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.35`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.34] — 2026-10-30
 
 Daily conformance release. **36 product fixes** (AWS 14, GCP 12, Azure 9, all clouds 1); 35 reach Nano and 36 reach the offline appliance; 3 test and harness improvements.
