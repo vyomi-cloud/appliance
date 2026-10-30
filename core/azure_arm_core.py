@@ -429,16 +429,20 @@ class AzureArm:
         if namespace.lower() == "microsoft.app":
             return self._app(method, sub, rg, chain, payload, query)
 
-        # POST action verbs (listKeys / start / powerOff / …)
+        # POST action verbs (listKeys / start / powerOff / runCommand / …)
         if method == "POST" and is_collection and len(type_chain) >= 3 and names:
             parent_rid = _canonical_id(sub, rg, type_chain[:-1], names)
-            return self._arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid)
+            return self._arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid, payload)
 
         full_type = "/".join(type_chain)
         if is_collection:
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "Collection supports GET only.")
-            return self._list(sub, rg, full_type)
+            # A nested collection (e.g. .../managedClusters/{cluster}/agentPools) must be scoped
+            # to its parent resource, not every resource of that type in the resource group —
+            # the generic type/name alternation above only tells us the TYPE matches.
+            parent_prefix = _canonical_id(sub, rg, type_chain[:-1], names).lower() + "/" if len(type_chain) > 2 else None
+            return self._list(sub, rg, full_type, parent_prefix)
 
         rid = _canonical_id(sub, rg, type_chain, names)
         key = rid.lower()
@@ -467,12 +471,12 @@ class AzureArm:
             rec = self.state.pop(key, None)
             if rec is not None:
                 _record_activity(leaf_name, "Delete", f"{full_type} '{leaf_name}'")
-                # Extension resources (locks, …) are stored under the SAME flat state map,
-                # keyed "{parent id}/providers/<ext ns>/<ext type>/<name>" — real ARM cascades
-                # their deletion with the parent, so sweep them here too.
-                prefix = key + "/providers/"
-                for ext_key in [k for k in self.state if k.startswith(prefix)]:
-                    del self.state[ext_key]
+                # Both extension resources (locks, … keyed "{parent id}/providers/<ext ns>/…")
+                # and plain nested children (e.g. managedClusters/{c}/agentPools/{p}, keyed
+                # "{parent id}/agentPools/{p}") cascade-delete with their parent in real ARM.
+                prefix = key + "/"
+                for child_key in [k for k in self.state if k.startswith(prefix)]:
+                    del self.state[child_key]
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
@@ -591,7 +595,7 @@ class AzureArm:
         return resp
 
     # ── CRUD primitives ───────────────────────────────────────────────────
-    def _list(self, sub, rg, full_type):
+    def _list(self, sub, rg, full_type, parent_prefix=None):
         ft = full_type.lower()
         items = []
         for rec in self.state.values():
@@ -600,6 +604,8 @@ class AzureArm:
             if rec.get("_sub") != sub:
                 continue
             if rg is not None and (rec.get("_rg") or "").lower() != rg.lower():
+                continue
+            if parent_prefix is not None and not rec.get("id", "").lower().startswith(parent_prefix):
                 continue
             items.append(_view(rec))
         return _ok({"value": items})
@@ -642,10 +648,12 @@ class AzureArm:
         self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)
 
-    def _arm_action(self, action, type_chain, resource_name, parent_rid=""):
+    def _arm_action(self, action, type_chain, resource_name, parent_rid="", payload=None):
+        ns = type_chain[0].lower() if type_chain else ""
+        typ = type_chain[1].lower() if len(type_chain) > 1 else ""
+        if ns == "microsoft.containerservice" and typ == "managedclusters":
+            return self._aks_action(action, resource_name, parent_rid, payload or {})
         if action in ("start", "poweroff", "restart", "deallocate"):
-            ns = type_chain[0].lower() if type_chain else ""
-            typ = type_chain[1].lower() if len(type_chain) > 1 else ""
             if ns != "microsoft.compute" or typ != "virtualmachines":
                 return _err(400, "ActionNotSupported",
                             f"Action '{action}' is only supported on Microsoft.Compute/virtualMachines.")
@@ -666,6 +674,43 @@ class AzureArm:
             return _ok({"connectionStrings": []})
         if action == "listsecrets":
             return _ok({})
+        return _ok({})
+
+    def _aks_action(self, action, cluster_name, parent_rid, payload):
+        """POST actions on Microsoft.ContainerService/managedClusters/{name}/<action> — start/stop
+        (metadata-only power state, same convention as VM start/poweroff), runCommand (the AKS
+        `az aks command invoke` action: no live kubelet in-browser, so it returns an honest
+        canned acknowledgement rather than real command output) and the two
+        listCluster*Credential actions (a deterministic, clearly-fake kubeconfig — enough for the
+        "Connect" blade to show *something* shaped like the real response)."""
+        rec = self.state.get(parent_rid.lower()) if parent_rid else None
+        if not rec:
+            return _err(404, "ResourceNotFound", f"Managed cluster '{cluster_name}' not found.")
+        props = rec.setdefault("properties", {})
+        if action in ("start", "stop"):
+            props["powerState"] = {"code": "Running" if action == "start" else "Stopped"}
+            return _ok({"status": "Succeeded", "action": action, "powerState": props["powerState"],
+                        "note": "metadata-only (no node VMs backing this cluster in-browser); logical state updated"})
+        if action == "runcommand":
+            command = (payload or {}).get("command", "")
+            return _ok({"id": str(uuid.uuid4()), "provisioningState": "Succeeded",
+                        "exitCode": 0, "startedAt": _now(), "finishedAt": _now(),
+                        "logs": (f"$ {command}\n" if command else "") +
+                                "Vyomi does not run a real kubelet, so runCommand is simulated: "
+                                "the command was accepted but not executed against a live API server."})
+        if action in ("listclusterusercredential", "listclusteradmincredential"):
+            user = "clusterUser" if action == "listclusterusercredential" else "clusterAdmin"
+            fqdn = props.get("fqdn") or f"{cluster_name}.hcp.azmk8s.io"
+            kubeconfig = (
+                "apiVersion: v1\nkind: Config\nclusters:\n- name: " + cluster_name +
+                "\n  cluster:\n    server: https://" + fqdn + ":443\n    certificate-authority-data: c2ltdWxhdGVk\n"
+                "users:\n- name: " + user + "_" + cluster_name +
+                "\n  user:\n    token: c2ltdWxhdGVk-not-a-real-credential\n"
+                "contexts:\n- name: " + cluster_name + "\n  context:\n    cluster: " + cluster_name +
+                "\n    user: " + user + "_" + cluster_name + "\ncurrent-context: " + cluster_name + "\n"
+            )
+            import base64
+            return _ok({"kubeconfigs": [{"name": user, "value": base64.b64encode(kubeconfig.encode()).decode()}]})
         return _ok({})
 
     def _provider_info(self, namespace):
