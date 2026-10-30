@@ -295,7 +295,7 @@ try {
   const essub = esr.status === 200 ? JSON.parse(esr.text) : {};
   check("UI create event subscription → visible over native ARM (extension resource)",
     esr.status === 200 && essub.properties?.destination?.properties?.endpointUrl === "https://example.com/hook", `HTTP ${esr.status}`);
-  await page.getByText(ES).waitFor({ timeout: 10000 });
+  await page.getByText(ES).first().waitFor({ timeout: 10000 });
   check("event subscription listed on the topic overview", true);
   await shot("20-eventgrid-event-subscriptions");
 
@@ -309,7 +309,7 @@ try {
   await page.getByRole("toolbar", { name: "Locks commands" }).getByRole("button", { name: "Add" }).click();
   await page.getByLabel("Lock name", { exact: true }).fill(LOCK);
   await page.getByRole("button", { name: "OK" }).click();
-  await page.getByText(LOCK).waitFor({ timeout: 10000 });
+  await page.getByText(LOCK).first().waitFor({ timeout: 10000 });
   const lockGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}/providers/Microsoft.Authorization/locks/${LOCK}`);
   check("UI add lock → visible over native ARM (extension resource)", lockGet.status === 200, `HTTP ${lockGet.status}`);
 
