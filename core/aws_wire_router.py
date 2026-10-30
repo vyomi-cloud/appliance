@@ -626,7 +626,8 @@ class AwsWireRouter:
             return cw.wire(self.cw, method, path, headers or {}, bytes(body), query or {})
 
         if svc == "lambda":   # native Lambda REST (function mgmt + sandboxed invoke)
-            r = lam.dispatch(self.lam, method, path, query or {}, headers or {}, bytes(body))
+            r = lam.dispatch(self.lam, method, path, query or {}, headers or {}, bytes(body),
+                              msg_store=self.msg, lam_store=self.lam)
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type

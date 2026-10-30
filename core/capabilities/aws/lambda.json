@@ -13,17 +13,18 @@
   ]
  },
  "lambda.invoke": {
-  "title": "Invoke (synchronous)",
+  "title": "Invoke (synchronous and asynchronous)",
   "level": {
    "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
    "Only the Python runtime actually executes: the handler's source runs in a sandboxed interpreter (curated builtins, a stdlib allow-list, no filesystem/network/process access). Node.js/.NET/Java/Ruby runtimes can be selected and stored, but Invoke always runs the stored source as Python.",
-   "Asynchronous invocation (Event) and the Destinations/DLQ delivery that follows it are not modeled — every Invoke runs synchronously regardless of the requested invocation type."
+   "Event (async) invocation runs the handler immediately rather than queuing it for later delivery — there is no retry/backoff window, so a destination or DLQ always sees the FIRST (and only) attempt's outcome, reported as condition \"RetriesExhausted\" on failure."
   ],
   "tests": [
-   "tests/conformance/test_lambda_core.py"
+   "tests/conformance/test_lambda_core.py",
+   "tests/conformance/test_lambda_console_v4_core.py"
   ]
  },
  "lambda.tags": {
@@ -94,7 +95,7 @@
    "offline": "full"
   },
   "limitations": [
-   "The reserved value is stored and returned for real, but Vyomi never actually throttles — nothing enforces the limit because every Invoke is synchronous and instant. Throttles always reads 0."
+   "Setting ReservedConcurrentExecutions to 0 really throttles — every Invoke is rejected with TooManyRequestsException and Throttles increments, exactly as real Lambda does. A positive reservation is stored and returned, but never enforced against concurrent callers — Vyomi runs every Invoke synchronously (nothing to run concurrently), so no invoke is ever rejected for exceeding a nonzero reservation."
   ],
   "tests": [
    "tests/conformance/test_lambda_console_v4_core.py"
@@ -114,11 +115,11 @@
  "lambda.destinations": {
   "title": "Asynchronous invocation destinations",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "full",
+   "offline": "full"
   },
   "limitations": [
-   "On-success/on-failure destinations are stored and returned exactly as configured, but never delivered to — async invocation itself isn't modeled (see lambda.invoke)."
+   "On a real async (Event) Invoke, the OnSuccess/OnFailure destination (SQS queue, SNS topic or another Lambda function) really receives the invocation envelope, and a legacy DeadLetterConfig really receives the raw event on failure when no OnFailure destination is set — same precedence and envelope shape as real Lambda. An EventBridge event-bus destination is accepted and stored but never delivered to (counts toward AsyncDeliveryFailures) — Vyomi's cross-core delivery seam only reaches SQS/SNS/Lambda targets."
   ],
   "tests": [
    "tests/conformance/test_lambda_console_v4_core.py"
@@ -144,7 +145,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Invocations/Duration/Error metrics and the recent-invocations list are real — computed from the function's actual last 20 Invoke calls — but this is Vyomi's own lightweight read, not a real CloudWatch Logs Insights / X-Ray integration. Throttles, async delivery failures and concurrent executions always read 0 (see lambda.concurrency / lambda.invoke)."
+   "Invocations/Duration/Error metrics and the recent-invocations list are real — computed from the function's actual last 20 Invoke calls — but this is Vyomi's own lightweight read, not a real CloudWatch Logs Insights / X-Ray integration. Throttles and AsyncDeliveryFailures are real running counters (see lambda.concurrency / lambda.destinations); ConcurrentExecutions always reads 0 — Vyomi never runs two invocations of a function at once."
   ],
   "tests": [
    "tests/conformance/test_lambda_console_v4_core.py"

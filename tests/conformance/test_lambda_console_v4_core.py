@@ -9,8 +9,12 @@ import types
 
 try:
     from core import lambda_core as lam
+    from core.messaging_store import InMemoryMessagingStore
+    from core import sqs_core as sqs
 except ImportError:  # pragma: no cover - Pyodide flat layout
     import lambda_core as lam  # type: ignore
+    from messaging_store import InMemoryMessagingStore  # type: ignore
+    import sqs_core as sqs  # type: ignore
 
 F = "/2015-03-31/functions"
 
@@ -71,12 +75,79 @@ def run(store=None):
     _check("PutFunctionRecursionConfig", j(call("PUT", f"{F}/{name}/recursion-config", {"RecursiveLoop": "Allow"}))["RecursiveLoop"] == "Allow")
     _check("GetFunctionRecursionConfig", j(call("GET", f"{F}/{name}/recursion-config"))["RecursiveLoop"] == "Allow")
 
-    # Destinations (event invoke config) — config_only round-trip.
+    # Destinations (event invoke config) — stored config round-trip.
     dest = {"DestinationConfig": {"OnSuccess": {"Destination": "arn:aws:sqs:us-east-1:123456789012:q"}}}
     _check("PutFunctionEventInvokeConfig", call("PUT", f"{F}/{name}/event-invoke-config", dest).status == 200)
     _check("GetFunctionEventInvokeConfig round-trips",
           j(call("GET", f"{F}/{name}/event-invoke-config"))["DestinationConfig"] == dest["DestinationConfig"])
     _check("DeleteFunctionEventInvokeConfig", call("DELETE", f"{F}/{name}/event-invoke-config").status == 204)
+
+    # Async (Event) Invoke → Destinations really deliver (lambda.invoke / lambda.destinations).
+    msg = InMemoryMessagingStore()
+    ok_url = sqs.dispatch(msg, "AmazonSQS.CreateQueue", {"QueueName": "lambda-ok-q"}).body["QueueUrl"]
+    ok_arn = sqs.dispatch(msg, "AmazonSQS.GetQueueAttributes", {"QueueUrl": ok_url}).body["Attributes"]["QueueArn"]
+    fail_url = sqs.dispatch(msg, "AmazonSQS.CreateQueue", {"QueueName": "lambda-fail-q"}).body["QueueUrl"]
+    fail_arn = sqs.dispatch(msg, "AmazonSQS.GetQueueAttributes", {"QueueUrl": fail_url}).body["Attributes"]["QueueArn"]
+    dlq_url = sqs.dispatch(msg, "AmazonSQS.CreateQueue", {"QueueName": "lambda-dlq"}).body["QueueUrl"]
+    dlq_arn = sqs.dispatch(msg, "AmazonSQS.GetQueueAttributes", {"QueueUrl": dlq_url}).body["Attributes"]["QueueArn"]
+
+    def acall(fn_name, body):
+        return lam.dispatch(s, "POST", f"{F}/{fn_name}/invocations", {}, {"X-Amz-Invocation-Type": "Event"},
+                            json.dumps(body).encode(), msg_store=msg, lam_store=s)
+
+    def received(url):
+        return sqs.dispatch(msg, "AmazonSQS.ReceiveMessage", {"QueueUrl": url, "MaxNumberOfMessages": 10}).body.get("Messages", [])
+
+    okfn = "okfn"
+    call("POST", F, {"FunctionName": okfn, "Code": {"Source": "def handler(e, c):\n    return {'ok': True, 'n': e.get('n', 0)}\n"}})
+    call("PUT", f"{F}/{okfn}/event-invoke-config", {"DestinationConfig": {"OnSuccess": {"Destination": ok_arn}}})
+    r = acall(okfn, {"n": 9})
+    _check("async Invoke returns 202 Accepted", r.status == 202 and r.body == b"")
+    rows = received(ok_url)
+    _check("OnSuccess destination really receives the invocation envelope", len(rows) == 1)
+    env = json.loads(rows[0]["Body"])
+    _check("success envelope carries the real request/response payloads",
+          env["requestContext"]["condition"] == "Success" and env["requestPayload"] == {"n": 9}
+          and env["responsePayload"] == {"ok": True, "n": 9})
+
+    boom = "boomfn"
+    call("POST", F, {"FunctionName": boom, "Code": {"Source": "def handler(e, c):\n    raise ValueError('nope')\n"}})
+    call("PUT", f"{F}/{boom}/event-invoke-config", {"DestinationConfig": {"OnFailure": {"Destination": fail_arn}}})
+    acall(boom, {})
+    frows = received(fail_url)
+    _check("OnFailure destination really receives the failure envelope", len(frows) == 1)
+    fenv = json.loads(frows[0]["Body"])
+    _check("failure envelope reports the real error", fenv["requestContext"]["condition"] == "RetriesExhausted"
+          and fenv["responsePayload"]["errorType"] == "ValueError")
+
+    dlqfn = "dlqfn"
+    call("POST", F, {"FunctionName": dlqfn, "Code": {"Source": "def handler(e, c):\n    raise ValueError('x')\n"},
+                     "DeadLetterConfig": {"TargetArn": dlq_arn}})
+    acall(dlqfn, {"raw": "payload"})
+    _check("legacy DLQ receives the raw event when no OnFailure destination is set",
+          json.loads(received(dlq_url)[0]["Body"]) == {"raw": "payload"})
+
+    nodestfn = "nodestfn"
+    call("POST", F, {"FunctionName": nodestfn, "Code": {"Source": "def handler(e, c):\n    raise ValueError('x')\n"}})
+    acall(nodestfn, {})
+    _check("async delivery failure counted when no destination/DLQ is configured",
+          j(call("GET", f"{F}/{nodestfn}/invocations"))["Metrics"]["AsyncDeliveryFailures"] == 0)
+    call("PUT", f"{F}/{nodestfn}/event-invoke-config", {"DestinationConfig": {"OnFailure": {"Destination": "arn:aws:events:us-east-1:123456789012:event-bus/default"}}})
+    acall(nodestfn, {})
+    _check("an undeliverable destination ARN (event bus) increments AsyncDeliveryFailures",
+          j(call("GET", f"{F}/{nodestfn}/invocations"))["Metrics"]["AsyncDeliveryFailures"] == 1)
+
+    # Reserved concurrency of 0 really throttles (lambda.concurrency).
+    concfn = "concfn"
+    call("POST", F, {"FunctionName": concfn, "Code": {"Source": "def handler(e, c):\n    return {'ok': True}\n"}})
+    call("PUT", f"{F}/{concfn}/concurrency", {"ReservedConcurrentExecutions": 0})
+    r = call("POST", f"{F}/{concfn}/invocations", {"n": 1})
+    _check("ReservedConcurrentExecutions=0 really blocks Invoke", r.status == 429
+          and json.loads(r.body)["error"]["code"] == "TooManyRequestsException")
+    _check("the blocked invoke counts as a real Throttle",
+          j(call("GET", f"{F}/{concfn}/invocations"))["Metrics"]["Throttles"] == 1)
+    call("DELETE", f"{F}/{concfn}/concurrency")
+    _check("removing the reservation unblocks Invoke", call("POST", f"{F}/{concfn}/invocations", {"n": 1}).status == 200)
 
     # Resource policy.
     r = call("POST", f"{F}/{name}/policy", {"StatementId": "trigger1", "Action": "lambda:InvokeFunction", "Principal": "s3.amazonaws.com"})

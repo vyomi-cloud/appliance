@@ -160,8 +160,13 @@ function TestTab({ name }) {
     setBusy(true); setError(null); setResult(null);
     try {
       const payload = JSON.parse(json);
-      const r = await api.invoke(name, payload);
-      setResult(r);
+      if (invocationType === "Asynchronous") {
+        await api.invoke(name, payload, "Event");
+        setResult({ _async: true, message: "Asynchronous invocation accepted (202). The function ran; see Monitor for the outcome, or the configured destination/DLQ." });
+      } else {
+        const r = await api.invoke(name, payload, "RequestResponse");
+        setResult(r);
+      }
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
 
@@ -200,8 +205,8 @@ function TestTab({ name }) {
       {error && <ErrorAlert error={error} />}
       {result && (
         <Box variant="div">
-          <Header variant="h3">Execution result: {result.errorType ? "failed" : "succeeded"}</Header>
-          <Box variant="code"><pre>{JSON.stringify(result, null, 2)}</pre></Box>
+          <Header variant="h3">{result._async ? "Asynchronous invocation accepted" : `Execution result: ${result.errorType ? "failed" : "succeeded"}`}</Header>
+          <Box variant="code"><pre>{result._async ? result.message : JSON.stringify(result, null, 2)}</pre></Box>
         </Box>
       )}
     </SpaceBetween>
@@ -297,6 +302,8 @@ function ConfigurationTab({ name, cfg, reload }) {
   const [maxAge, setMaxAge] = useState(String(eic.data?.MaximumEventAgeInSeconds ?? 21600));
   const [retries, setRetries] = useState(String(eic.data?.MaximumRetryAttempts ?? 2));
   const [dlq, setDlq] = useState(cfg.DeadLetterConfig?.TargetArn || "");
+  const [onSuccess, setOnSuccess] = useState(eic.data?.DestinationConfig?.OnSuccess?.Destination || "");
+  const [onFailure, setOnFailure] = useState(eic.data?.DestinationConfig?.OnFailure?.Destination || "");
 
   const [addFs, setAddFs] = useState(false);
   const [fsArn, setFsArn] = useState(""); const [apArn, setApArn] = useState(""); const [mount, setMount] = useState("/mnt/efs");
@@ -434,12 +441,24 @@ function ConfigurationTab({ name, cfg, reload }) {
       <KeyValue title="Asynchronous invocation" actions={<Button onClick={() => setEditAsync(true)}>Edit</Button>}
         columns={3} items={[["Maximum age of event", `${eic.data?.MaximumEventAgeInSeconds ?? 21600} sec`], ["Retry attempts", eic.data?.MaximumRetryAttempts ?? 2], ["Dead-letter queue service", cfg.DeadLetterConfig?.TargetArn ? "Configured" : "None"]]} />
       <EditModal visible={editAsync} onDismiss={() => setEditAsync(false)} header="Edit asynchronous invocation" onSave={async () => {
-        await api.putFunctionEventInvokeConfig(name, { MaximumEventAgeInSeconds: Number(maxAge), MaximumRetryAttempts: Number(retries), DestinationConfig: eic.data?.DestinationConfig || {} });
+        await api.putFunctionEventInvokeConfig(name, {
+          MaximumEventAgeInSeconds: Number(maxAge), MaximumRetryAttempts: Number(retries),
+          DestinationConfig: {
+            ...(onSuccess.trim() ? { OnSuccess: { Destination: onSuccess.trim() } } : {}),
+            ...(onFailure.trim() ? { OnFailure: { Destination: onFailure.trim() } } : {}),
+          },
+        });
         await api.updateFunctionConfiguration(name, { DeadLetterConfig: dlq.trim() ? { TargetArn: dlq } : null });
-        notify.success("Asynchronous invocation updated."); reload();
+        notify.success("Asynchronous invocation updated."); reload(); eic.reload();
       }}>
         <FormField label="Maximum age of event (sec)"><Input type="number" value={maxAge} onChange={({ detail }) => setMaxAge(detail.value)} /></FormField>
         <FormField label="Retry attempts"><Input type="number" value={retries} onChange={({ detail }) => setRetries(detail.value)} /></FormField>
+        <FormField label="On success destination ARN - optional" description="An SQS queue, SNS topic or Lambda function that receives the real result of every successful async (Event) invoke.">
+          <Input value={onSuccess} onChange={({ detail }) => setOnSuccess(detail.value)} placeholder="arn:aws:sqs:..." />
+        </FormField>
+        <FormField label="On failure destination ARN - optional" description="Receives the real error of every failed async (Event) invoke; takes precedence over the dead-letter queue below.">
+          <Input value={onFailure} onChange={({ detail }) => setOnFailure(detail.value)} placeholder="arn:aws:sqs:..." />
+        </FormField>
         <FormField label="Dead-letter queue ARN - optional"><Input value={dlq} onChange={({ detail }) => setDlq(detail.value)} placeholder="arn:aws:sqs:..." /></FormField>
       </EditModal>
 

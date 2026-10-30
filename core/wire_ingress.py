@@ -261,7 +261,8 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         st = r.lam
         if hasattr(st, "adopt"):
             st.adopt()                   # pre-v4 functions / layers → the core shape (once per space)
-        resp = lambda_core.dispatch(st, method, path, query or {}, headers or {}, body or b"")
+        resp = lambda_core.dispatch(st, method, path, query or {}, headers or {}, body or b"",
+                                    msg_store=r.msg, lam_store=r.lam)
         hdrs = dict(resp.headers or {})
         if resp.media_type and resp.body and not any(k.lower() == "content-type" for k in hdrs):
             hdrs["content-type"] = resp.media_type

@@ -362,6 +362,23 @@ try {
   await page.getByRole("link", { name: FN2 }).waitFor({ timeout: 10000 });
   check("Lambda function created over wire (CLI) → shown in Functions list", true);
   await shot("17-lambda-functions");
+
+  // Lambda: an async (Event) Test invoke really delivers to the function's configured
+  // OnSuccess destination — the "Asynchronous" radio used to be wired to nothing.
+  const DESTQ = `v4smoke-lambda-dest-${Date.now() % 100000}`;
+  const destQ = await sqs("CreateQueue", { QueueName: DESTQ });
+  const destAttrs = await sqs("GetQueueAttributes", { QueueUrl: destQ.QueueUrl });
+  await lam("PUT", `/2015-03-31/functions/${FN2}/event-invoke-config`,
+    { DestinationConfig: { OnSuccess: { Destination: destAttrs.Attributes.QueueArn } } });
+  await page.goto(UI + `#/lambda/functions/${FN2}`);
+  await page.getByRole("tab", { name: "Test" }).click();
+  await page.getByRole("radio", { name: "Asynchronous" }).check();
+  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByText("Asynchronous invocation accepted").first().waitFor({ timeout: 10000 });
+  const destMsgs = await sqs("ReceiveMessage", { QueueUrl: destQ.QueueUrl, MaxNumberOfMessages: 10 });
+  check("Lambda async Test invoke (UI) → really delivered to the OnSuccess destination over the wire",
+    (destMsgs.Messages || []).length > 0, JSON.stringify(destMsgs));
+  await shot("17b-lambda-async-destination");
   // RDS: create a database through the UI (UI → CLI direction)
   const RDB = `v4smoke-db-${Date.now() % 100000}`;
   await page.goto(UI + "#/rds/create-database");

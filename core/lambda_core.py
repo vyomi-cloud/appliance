@@ -27,8 +27,11 @@ Honest scope (declared in core/capabilities/aws/lambda.json, not hidden):
     trigger ever actually invokes the function on its own. Only direct Invoke (Test tab /
     native API) runs code.
   * Code signing configurations are not modeled (no cryptographic signing pipeline).
-  * VPC / file-system / destination config is stored and returned exactly as configured
-    (config_only) — Vyomi doesn't attach a real ENI, mount EFS, or deliver async failures.
+  * VPC / file-system config is stored and returned exactly as configured (config_only) —
+    Vyomi doesn't attach a real ENI or mount EFS. Async-invoke Destinations and the legacy
+    DeadLetterConfig DO deliver for real (SQS/SNS/Lambda targets) — see `_deliver_async_result`.
+  * Reserved concurrency of 0 really throttles (TooManyRequestsException); a positive value
+    is stored but not enforced (every Invoke is synchronous, so nothing runs concurrently).
   * "Recent invocations" / Metrics are Vyomi's own lightweight read of the last invocations
     the sandbox actually ran — not a real CloudWatch Logs Insights / X-Ray integration.
 """
@@ -341,6 +344,7 @@ def _create_function(store, body):
         "aliases": {},
         "versions": {}, "next_version": 1,
         "invocations": [],
+        "throttles": 0, "async_delivery_failures": 0,
         "last_modified": _now_iso(), "revision_id": uuid.uuid4().hex,
     }
     _functions(store)[name] = fn
@@ -1198,7 +1202,62 @@ def can_invoke(fn: dict, principal: str = "", source_arn: str = "", source_accou
     return False
 
 
-def _invoke(store, name, body, headers=None, query=None):
+def _event_invoke_envelope(name: str, request_id: str, event, out: dict) -> dict:
+    """The envelope a real async-invoke Destination (or, raw `event` instead, a legacy
+    DLQ) receives — see `_deliver_async_result`."""
+    ok = bool(out.get("ok"))
+    envelope = {
+        "version": "1.0", "timestamp": _now_iso(),
+        "requestContext": {"requestId": request_id, "functionArn": _fn_arn(name, "$LATEST"),
+                           "condition": "Success" if ok else "RetriesExhausted",
+                           "approximateInvokeCount": 1},
+        "requestPayload": event,
+        "responseContext": {"statusCode": 200, "executedVersion": "$LATEST"},
+    }
+    if ok:
+        envelope["responsePayload"] = out.get("result")
+    else:
+        envelope["responseContext"]["functionError"] = "Unhandled"
+        envelope["responsePayload"] = {"errorType": out.get("errorType") or "Exception",
+                                       "errorMessage": str(out.get("error") or "")}
+    return envelope
+
+
+def _deliver_to_arn(arn: str, payload: dict, msg_store, lam_store) -> bool:
+    """Real delivery to an async-invoke target (SQS queue / SNS topic / another Lambda
+    function) — reuses EventBridge's cross-core `deliver` (same 3 target types, same
+    ARN-sniffing). Local import: eventbridge_core imports lambda_core, so this must stay
+    a function-local import to avoid a circular top-level import."""
+    from core import eventbridge_core as _eb
+    try:
+        return bool(_eb.deliver(msg_store, lam_store, arn, json.dumps(payload), payload))
+    except Exception:
+        return False
+
+
+def _deliver_async_result(fn: dict, name: str, event, out: dict, request_id: str,
+                          msg_store, lam_store) -> None:
+    """Fire-and-forget delivery of an Event (async) Invoke's outcome to the function's
+    configured Destinations (OnSuccess/OnFailure), falling back to the legacy
+    DeadLetterConfig on failure when no OnFailure destination is set — same precedence
+    real Lambda uses. No-op if the caller is a synchronous integration path that never
+    supplies msg_store (API Gateway / Step Functions / EventBridge targets, which only
+    ever reach here with itype == RequestResponse anyway)."""
+    if msg_store is None:
+        return
+    ok = bool(out.get("ok"))
+    cfg = (fn.get("event_invoke_config") or {}).get("DestinationConfig") or {}
+    dest = ((cfg.get("OnSuccess") if ok else cfg.get("OnFailure")) or {}).get("Destination")
+    delivered = True
+    if dest:
+        delivered = _deliver_to_arn(dest, _event_invoke_envelope(name, request_id, event, out), msg_store, lam_store)
+    elif not ok and (fn.get("dead_letter_config") or {}).get("TargetArn"):
+        delivered = _deliver_to_arn(fn["dead_letter_config"]["TargetArn"], event, msg_store, lam_store)
+    if not delivered:
+        fn["async_delivery_failures"] = fn.get("async_delivery_failures", 0) + 1
+
+
+def _invoke(store, name, body, headers=None, query=None, msg_store=None, lam_store=None):
     fn = _functions(store).get(name)
     if not fn:
         return _err(404, "ResourceNotFoundException", f"Function not found: {_fn_arn(name)}")
@@ -1206,6 +1265,15 @@ def _invoke(store, name, body, headers=None, query=None):
     itype = str(lh.get("x-amz-invocation-type") or (query or {}).get("InvocationType") or "RequestResponse")
     if itype == "DryRun":
         return LambdaResponse(status=204, body=b"", media_type=None)
+    if fn.get("reserved_concurrency") == 0:
+        # Real Lambda: reserving ZERO concurrency blocks every Invoke outright. Vyomi
+        # doesn't simulate concurrent execution (every Invoke is synchronous and instant),
+        # so this is the one throttle condition it CAN enforce faithfully — see
+        # core/capabilities/aws/lambda.json's lambda.concurrency entry.
+        fn["throttles"] = fn.get("throttles", 0) + 1
+        _persist(store)
+        return _err(429, "TooManyRequestsException",
+                    "Rate Exceeded. Reason: ReservedFunctionConcurrentInvocationLimitExceeded")
     try:
         event = json.loads(body.decode("utf-8")) if body else {}
     except Exception:
@@ -1231,6 +1299,8 @@ def _invoke(store, name, body, headers=None, query=None):
     if not out.get("ok"):
         extra["ErrorMessage"] = str(out.get("error") or "")[:1024]
     _record_invocation(fn, request_id, duration_ms, error=not out.get("ok"), extra=extra)
+    if itype == "Event":
+        _deliver_async_result(fn, name, event, out, request_id, msg_store, lam_store)
     _persist(store)
     hdrs = {"X-Amz-Executed-Version": "$LATEST", "x-amzn-RequestId": request_id}
     if str(lh.get("x-amz-log-type") or "").lower() == "tail":
@@ -1279,7 +1349,8 @@ def _recent_invocations(store, name):
     metrics = {
         "Invocations": n, "AvgDurationMs": avg_ms,
         "ErrorCount": errors, "SuccessRatePct": round((n - errors) / n * 100, 1) if n else 100.0,
-        "Throttles": 0, "AsyncDeliveryFailures": 0, "ConcurrentExecutions": 0,
+        "Throttles": fn.get("throttles", 0), "AsyncDeliveryFailures": fn.get("async_delivery_failures", 0),
+        "ConcurrentExecutions": 0,
     }
     return _json(200, {"Invocations": rows, "Metrics": metrics})
 
@@ -1287,7 +1358,7 @@ def _recent_invocations(store, name):
 # ── dispatch ────────────────────────────────────────────────────────────────────────────
 def dispatch(store, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"") -> LambdaResponse:
+             body: bytes = b"", msg_store=None, lam_store=None) -> LambdaResponse:
     """Native Lambda REST router. Paths are versioned like real Lambda:
         /2015-03-31/functions[...]                CRUD, code, configuration, invoke(s),
                                                     aliases, versions, policy, tags
@@ -1321,7 +1392,7 @@ def dispatch(store, method: str, path: str,
     if kind == "event-source-mappings":
         return _dispatch_esms(store, method, tail, query, body)
     if kind == "functions":
-        return _dispatch_functions(store, method, tail, query, body, headers)
+        return _dispatch_functions(store, method, tail, query, body, headers, msg_store, lam_store)
     if kind == "capacity-providers":
         return _dispatch_capacity_providers(store, method, tail, body)
     if kind == "code-signing-configs":
@@ -1454,7 +1525,7 @@ def _dispatch_esms(store, method, tail, query, body):
     return _err(405, "MethodNotAllowed", "Unsupported method on event-source-mapping")
 
 
-def _dispatch_functions(store, method, tail, query, body, headers=None):
+def _dispatch_functions(store, method, tail, query, body, headers=None, msg_store=None, lam_store=None):
     if not tail:
         if method == "POST":
             return _create_function(store, _parse(body))
@@ -1477,7 +1548,7 @@ def _dispatch_functions(store, method, tail, query, body, headers=None):
 
     if sub == "invocations" and not rest:
         if method == "POST":
-            return _invoke(store, name, body, headers, query)
+            return _invoke(store, name, body, headers, query, msg_store, lam_store)
         if method == "GET":
             return _recent_invocations(store, name)
 
