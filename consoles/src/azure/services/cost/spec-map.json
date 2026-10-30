@@ -1,0 +1,22 @@
+{
+  "_doc": "ui-spec page id → v4 route (same contract as consoles/src/aws/services/*/spec-map.json). Fixtures create real resources over the native ARM wire (consoles/src/azure/services/cost/fixtures.mjs); 'live' additionally checks a freshly created, uniquely named resource shows on the page.",
+  "cost-overview": { "route": "#/cost/overview" },
+  "cost-change-scope": { "route": "#/cost/changescope" },
+  "cost-diagnose-and-solve-problems": { "route": "#/cost/diagnose" },
+  "cost-cost-analysis": { "route": "#/cost/analysis" },
+  "cost-exports": { "route": "#/cost/exports" },
+  "cost-cost-alerts": { "route": "#/cost/alerts", "live": "az-cost-budget" },
+  "cost-alert-rules": { "route": "#/cost/alertrules", "live": "az-cost-budget" },
+  "cost-budgets": { "route": "#/cost/budgets", "live": "az-cost-budget" },
+  "cost-advisor-recommendations": { "route": "#/cost/advisor", "live": "az-cost-resource" },
+  "cost-reservations-hybrid-benefit": { "route": "#/cost/reservations" },
+  "cost-savings-plans": { "route": "#/cost/savingsplans", "live": "az-cost-savingsplan" },
+  "cost-cost-allocation": { "route": "#/cost/allocation" },
+  "cost-configuration": { "route": "#/cost/configuration" },
+  "cost-preview-features": { "route": "#/cost/previewfeatures" },
+  "cost-invoices": { "route": "#/cost/invoices" },
+  "cost-payment-methods": { "route": "#/cost/paymentmethods" },
+  "cost-azure-subscriptions": { "route": "#/cost/subscriptions" },
+  "cost-new-support-request": { "route": "#/cost/support" },
+  "cost-create-budget": { "route": "#/cost/budgets/create" }
+}
