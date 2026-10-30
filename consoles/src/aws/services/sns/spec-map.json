@@ -1,0 +1,57 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "landing": {
+    "route": "#/sns"
+  },
+  "dashboard": {
+    "route": "#/sns/dashboard",
+    "vars": { "region": "us-east-1" }
+  },
+  "topics": {
+    "route": "#/sns/topics",
+    "live": "live-topic"
+  },
+  "create-topic": {
+    "route": "#/sns/create-topic",
+    "expand": [
+      "text=FIFO (first-in, first-out)",
+      "text=Encryption - optional",
+      "text=Access policy - optional",
+      "text=Archive policy - new, optional",
+      "text=Message delivery status logging - optional",
+      "text=Active tracing - optional"
+    ]
+  },
+  "topic-detail": {
+    "route": "#/sns/topics/{live}",
+    "live": "live-topic"
+  },
+  "edit-topic": {
+    "route": "#/sns/topics/uic-topic/edit",
+    "fixtures": ["sns-topic"],
+    "vars": { "resource-name": "uic-topic" }
+  },
+  "publish-message": {
+    "route": "#/sns/topics/uic-topic/publish",
+    "fixtures": ["sns-topic"]
+  },
+  "subscriptions": {
+    "route": "#/sns/subscriptions",
+    "live": "live-subscription"
+  },
+  "create-subscription": {
+    "route": "#/sns/create-subscription",
+    "fixtures": ["sns-topic"]
+  },
+  "subscription-detail": {
+    "route": "#/sns/subscriptions/{live}",
+    "live": "live-subscription"
+  },
+  "push-notifications": {
+    "route": "#/sns/mobile/push-notifications",
+    "live": "live-platform-app"
+  },
+  "text-messaging-sms": {
+    "route": "#/sns/mobile/text-messaging"
+  }
+}

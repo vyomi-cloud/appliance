@@ -1,0 +1,132 @@
+{
+  "$doc": "Vyomi capability registry — SNS. See s3.json for the contract.",
+  "sns.topic.crud": {
+    "title": "Topics (create, describe, list, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.topic.tags": {
+    "title": "Tags",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.topic.access-policy": {
+    "title": "Access policy (basic / advanced JSON, AddPermission/RemovePermission)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "The policy document (and AddPermission/RemovePermission statements) is stored and returned exactly as written, but Vyomi never evaluates it — it is never consulted to allow or deny a Publish, Subscribe, or management call."
+    ],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.topic.data-protection-policy": {
+    "title": "Data protection policy",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "Vyomi stores and returns the data protection policy exactly as written, but never scans published message bodies against it — no PII is ever masked, audited, or denied."
+    ],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.topic.delivery-policy": {
+    "title": "Delivery policy (HTTP/S retry policy) and delivery status logging feedback attributes",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "The per-topic/per-subscription retry policy and the {Protocol}SuccessFeedbackRoleArn / SampleRate / FailureFeedbackRoleArn attributes round-trip through SetTopicAttributes/GetTopicAttributes exactly as set, but Vyomi never emits the corresponding CloudWatch delivery-status logs."
+    ],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.topic.encryption": {
+    "title": "Server-side encryption (KmsMasterKeyId)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "The KmsMasterKeyId attribute round-trips through SetTopicAttributes/GetTopicAttributes, but Vyomi does not actually encrypt stored message bodies with it, and the console only offers the default AWS managed key — there is no customer-key picker."
+    ],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.subscription.crud": {
+    "title": "Subscriptions (Subscribe, ConfirmSubscription, Unsubscribe, List*)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.subscription.filter-policy": {
+    "title": "Subscription filter policies (message attributes and message body scope)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_sns_filter_policy_core.py", "tests/conformance/test_sns_core.py"]
+  },
+  "sns.subscription.raw-delivery": {
+    "title": "Raw message delivery",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.subscription.redrive-policy": {
+    "title": "Redrive policy (dead-letter queue)",
+    "level": { "nano": "limited", "offline": "full" },
+    "limitations": [
+      "The RedrivePolicy attribute round-trips and is honoured for SQS/HTTP/Lambda/email push failures, but on Nano (no durable delivery workers) only SQS subscriptions can actually exhaust retries and land in the dead-letter queue within a single session; HTTP/Lambda/email redrive requires the offline appliance's delivery workers."
+    ],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.publish.fanout-sqs": {
+    "title": "Publish fan-out to subscribed Amazon SQS queues (filter policies, raw delivery, FIFO)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_sns_core.py", "tests/conformance/test_sns_filter_policy_core.py"]
+  },
+  "sns.publish.other-protocols": {
+    "title": "Publish fan-out to HTTP/S, AWS Lambda, and email subscriptions",
+    "level": { "nano": "limited", "offline": "full" },
+    "limitations": [
+      "On Nano (and the dev server) there is no durable delivery worker, so deliveries to HTTP/S, Lambda, and email endpoints are recorded in the subscription's retry-policy accounting but never actually sent — only the native SubscriptionConfirmation/Notification shape is proven. The offline appliance really performs the HTTP POST (with the SNS signature and SubscribeURL handshake), invokes the Lambda function, and sends the email through its local SMTP relay."
+    ],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.publish.sms": {
+    "title": "Publish to a phone number",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Vyomi has no real carrier/SMPP gateway, so SMS is never actually delivered — Publish only succeeds against a phone number that has gone through the sandbox verification flow, and the send is recorded, not transmitted."
+    ],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.mobile.platform-apps": {
+    "title": "Mobile push platform applications and endpoints",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Creating, listing, updating and deleting platform applications and endpoints is real and stateful (tokens, attributes, enablement), but Vyomi has no real APNS/FCM/ADM gateway to reach, so no push notification is ever actually delivered to a device."
+    ],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.mobile.push-delivery": {
+    "title": "Mobile push delivery to a real device",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Publishing to a platform endpoint is recorded in the delivery log; it is never sent to APNS, FCM, ADM, or any other real push gateway."
+    ]
+  },
+  "sns.sms.preferences": {
+    "title": "SMS account attributes (default type, spend limit, sample rate, logging role, usage report bucket, sender ID)",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "SetSMSAttributes/GetSMSAttributes round-trip exactly as set, but Vyomi never enforces the monthly spend limit and never writes delivery-status logs or S3 usage reports."
+    ],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.sms.sandbox": {
+    "title": "SMS sandbox destination numbers",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Adding, listing, and deleting sandbox numbers is real and stateful, and a number must be verified before Publish will send to it — but Vyomi can't deliver the real verification SMS, so the one-time code has to be read from the backend state rather than a text message."
+    ],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.sms.opt-out": {
+    "title": "SMS opt-out list",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  }
+}

@@ -330,8 +330,10 @@ def _set_topic_attributes(store, params):
         raise _invalid("Invalid parameter: AttributeName")
     raw = params.get("AttributeValue")
     raw = "" if raw is None else str(raw)
-    if name in ("Policy", "DeliveryPolicy", "ArchivePolicy", "TracingConfig") and raw:
+    if name in ("Policy", "DeliveryPolicy", "ArchivePolicy") and raw:
         _json_attr(name, raw)
+    if name == "TracingConfig" and raw not in ("", "Active", "PassThrough"):
+        raise _invalid("Invalid parameter: TracingConfig")
     if name == "SignatureVersion" and raw not in ("1", "2"):
         raise _invalid("Invalid parameter: SignatureVersion")
     if name == "ContentBasedDeduplication" and not _is_fifo(topic):

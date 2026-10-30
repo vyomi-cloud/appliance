@@ -16,7 +16,7 @@ export const SERVICES = [
   { id: "kms", title: "Key Management Service", description: "Create and control encryption keys", category: "Security, Identity, & Compliance", load: () => import("./kms/index.jsx") },
   { id: "secretsmanager", title: "Secrets Manager", description: "Store, manage, and retrieve secrets", category: "Security, Identity, & Compliance", classic: "secretsmanager" },
   { id: "sqs", title: "Simple Queue Service", description: "Managed message queues", category: "Application Integration", classic: "sqs" },
-  { id: "sns", title: "Simple Notification Service", description: "Pub/sub, SMS, email, and mobile push", category: "Application Integration", classic: "sns" },
+  { id: "sns", title: "Simple Notification Service", description: "Pub/sub, SMS, email, and mobile push", category: "Application Integration", load: () => import("./sns/index.jsx") },
   { id: "eventbridge", title: "EventBridge", description: "Serverless event bus", category: "Application Integration", classic: "eventbridge" },
   { id: "cloudwatch", title: "CloudWatch", description: "Monitor resources and applications", category: "Management & Governance", classic: "cloudwatch" },
   { id: "cloudformation", title: "CloudFormation", description: "Create and manage resources with templates", category: "Management & Governance", classic: "cloudformation" },
