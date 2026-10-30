@@ -33,6 +33,9 @@ const events = async (target, body) => JSON.parse(await wire("/", { method: "POS
 const lam = async (method, path, body) => { const t = await wire(path, { method, body: body === undefined ? undefined : JSON.stringify(body) }); try { return JSON.parse(t); } catch { return t; } };
 const rds = async (action, body = {}) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/rds/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...body }).toString() });
 const iamXml = async (body) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/iam/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams(body).toString() });
+// EC2 Query protocol: form-encoded Action=..., XML response — extract tags with a small regex (no DOMParser in this context).
+const ec2 = async (action, params = {}) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/ec2/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...params }).toString() });
+const xtag = (xml, tag) => { const m = xml.match(new RegExp(`<${tag}>(.*?)</${tag}>`)); return m ? m[1] : null; };
 
 await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch();
@@ -394,6 +397,32 @@ try {
   await page.getByText(R).first().waitFor({ timeout: 10000 });
   check("IAM role created over wire → shown in Roles list", true);
   await shot("17-iam-roles");
+  // EC2: launch an instance through the wizard (UI → CLI direction)
+  const EN = `v4-smoke-instance-${Date.now() % 100000}`;
+  await page.goto(UI + "#/ec2/launch-instance");
+  await page.getByLabel("Name", { exact: true }).fill(EN);
+  await page.getByRole("button", { name: "Launch instance", exact: true }).click();
+  await page.getByRole("heading", { name: "Instances" }).first().waitFor({ timeout: 10000 });
+  const described = await ec2("DescribeInstances", {});
+  const nameIdx = described.indexOf(`<value>${EN}</value>`);
+  check("EC2 launch instance (UI wizard) → visible over native wire", nameIdx >= 0, described.slice(0, 200));
+  const before = described.slice(0, nameIdx);
+  const instanceId = nameIdx >= 0 ? xtag(before.slice(before.lastIndexOf("<instanceId>")), "instanceId") : null;
+  await shot("15-ec2-instances");
+
+  // EC2: create a security group over the wire, verify it shows up in the UI (CLI → UI direction)
+  const SG = `v4-smoke-sg-${Date.now() % 100000}`;
+  const sgCreated = await ec2("CreateSecurityGroup", { GroupName: SG, GroupDescription: "v4 smoke test" });
+  const sgId = xtag(sgCreated, "groupId");
+  await page.goto(UI + "#/ec2/security-groups");
+  await page.getByPlaceholder("Find security groups by attribute or tag").fill(sgId);
+  await page.getByText(sgId).waitFor({ timeout: 10000 });
+  check("EC2 create security group over wire → visible in UI", true, sgId);
+  await shot("16-ec2-security-groups");
+
+  // EC2: terminate the smoke instance and clean up the security group over the wire.
+  if (instanceId) await ec2("TerminateInstances", { "InstanceId.1": instanceId });
+  await ec2("DeleteSecurityGroup", { GroupId: sgId });
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));

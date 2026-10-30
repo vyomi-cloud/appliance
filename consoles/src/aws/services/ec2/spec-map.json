@@ -1,0 +1,169 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap (not usable here — ec2 isn't in consoles/honest-allowlist.json). Unlisted spec pages count as missing.",
+  "dashboard": {
+    "route": "#/ec2/dashboard"
+  },
+  "events": {
+    "route": "#/ec2/events",
+    "honest_page": true
+  },
+  "instances": {
+    "route": "#/ec2/instances",
+    "live": "live-instance"
+  },
+  "instance-detail": {
+    "route": "#/ec2/instances/{live}",
+    "live": "live-instance"
+  },
+  "launch-instance": {
+    "route": "#/ec2/launch-instance",
+    "expand": [
+      "text=Select existing security group"
+    ]
+  },
+  "instance-types": {
+    "route": "#/ec2/instance-types"
+  },
+  "instance-type-detail": {
+    "route": "#/ec2/instance-types/t3.micro",
+    "vars": {
+      "resource-name": "t3.micro"
+    }
+  },
+  "launch-templates": {
+    "route": "#/ec2/launch-templates",
+    "live": "live-launch-template"
+  },
+  "create-launch-template": {
+    "route": "#/ec2/create-launch-template"
+  },
+  "spot-requests": {
+    "route": "#/ec2/spot-requests"
+  },
+  "savings-plans": {
+    "route": "#/ec2/savings-plans"
+  },
+  "reserved-instances": {
+    "route": "#/ec2/reserved-instances"
+  },
+  "dedicated-hosts": {
+    "route": "#/ec2/dedicated-hosts"
+  },
+  "capacity-reservations": {
+    "route": "#/ec2/capacity-reservations"
+  },
+  "ultraservers": {
+    "route": "#/ec2/ultraservers"
+  },
+  "capacity-manager": {
+    "route": "#/ec2/capacity-manager"
+  },
+  "amis": {
+    "route": "#/ec2/amis",
+    "live": "live-ami"
+  },
+  "ami-detail": {
+    "route": "#/ec2/amis/{live}",
+    "live": "live-ami"
+  },
+  "create-image": {
+    "route": "#/ec2/instances/{live}/create-image",
+    "live": "live-instance"
+  },
+  "ami-catalog": {
+    "route": "#/ec2/ami-catalog",
+    "live": "live-ami"
+  },
+  "volumes": {
+    "route": "#/ec2/volumes",
+    "live": "live-volume"
+  },
+  "volume-detail": {
+    "route": "#/ec2/volumes/{live}",
+    "live": "live-volume"
+  },
+  "create-volume": {
+    "route": "#/ec2/create-volume",
+    "expand": [
+      "text=Encrypt this volume"
+    ]
+  },
+  "snapshots": {
+    "route": "#/ec2/snapshots",
+    "live": "live-snapshot"
+  },
+  "create-snapshot": {
+    "route": "#/ec2/create-snapshot"
+  },
+  "lifecycle-manager": {
+    "route": "#/ec2/lifecycle-manager"
+  },
+  "create-lifecycle-policy": {
+    "route": "#/ec2/create-lifecycle-policy"
+  },
+  "security-groups": {
+    "route": "#/ec2/security-groups",
+    "live": "live-sg"
+  },
+  "security-group-detail": {
+    "route": "#/ec2/security-groups/{live}",
+    "live": "live-sg"
+  },
+  "create-security-group": {
+    "route": "#/ec2/create-security-group"
+  },
+  "edit-inbound-rules": {
+    "route": "#/ec2/security-groups/{live}/edit-inbound-rules",
+    "live": "live-sg"
+  },
+  "elastic-ips": {
+    "route": "#/ec2/elastic-ips",
+    "live": "live-eip"
+  },
+  "allocate-elastic-ip": {
+    "route": "#/ec2/allocate-elastic-ip"
+  },
+  "placement-groups": {
+    "route": "#/ec2/placement-groups",
+    "live": "live-placement-group"
+  },
+  "create-placement-group": {
+    "route": "#/ec2/create-placement-group",
+    "expand": [
+      "text=Spread",
+      "text=Partition"
+    ]
+  },
+  "key-pairs": {
+    "route": "#/ec2/key-pairs",
+    "live": "live-keypair"
+  },
+  "create-key-pair": {
+    "route": "#/ec2/create-key-pair"
+  },
+  "import-key-pair": {
+    "route": "#/ec2/import-key-pair"
+  },
+  "network-interfaces": {
+    "route": "#/ec2/network-interfaces",
+    "live": "live-eni"
+  },
+  "load-balancers": {
+    "route": "#/ec2/load-balancers"
+  },
+  "target-groups": {
+    "route": "#/ec2/target-groups"
+  },
+  "trust-stores": {
+    "route": "#/ec2/trust-stores"
+  },
+  "create-trust-store": {
+    "route": "#/ec2/create-trust-store"
+  },
+  "auto-scaling-groups": {
+    "route": "#/ec2/auto-scaling-groups"
+  },
+  "settings": {
+    "route": "#/ec2/settings"
+  }
+}
