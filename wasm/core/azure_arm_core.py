@@ -183,6 +183,19 @@ def resource_group_item(state, method: str, rg: str, payload: dict) -> tuple[int
         return 200, None
     return 405, {"error": {"code": "MethodNotAllowed", "message": "Use PUT, GET or DELETE on a resource group."}}
 
+def list_group_resources(state, rg: str) -> list[dict] | None:
+    """GET /resourceGroups/{rg}/resources: generic id/name/type/location/tags of
+    every resource in the group (None when the group doesn't exist)."""
+    if rg.lower() not in {g["name"].lower() for g in list_resource_groups(state)}:
+        return None
+    out = []
+    for rec in state.values():
+        if isinstance(rec, dict) and rec.get("type") != "Microsoft.Resources/resourceGroups" \
+                and (rec.get("_rg") or "").lower() == rg.lower():
+            out.append({k: rec[k] for k in ("id", "name", "type", "location", "tags", "kind", "sku") if k in rec})
+    return sorted(out, key=lambda r: (r.get("type", "").lower(), r.get("name", "").lower()))
+
+
 _BY_TYPE = {(c["namespace"].lower(), c["type"].lower()): c for c in CATALOG}
 
 
@@ -391,6 +404,13 @@ class AzureArm:
                 return _err(405, "MethodNotAllowed", "Use PUT /resourcegroups/{name}.")
             code, body = resource_group_item(self.state, method, rest_segs[1], payload)
             return {"status": code, "headers": {}, "body": body}
+        if len(rest_segs) == 3 and rest_segs[0].lower() == "resourcegroups" \
+                and rest_segs[2].lower() == "resources" and method == "GET":
+            res = list_group_resources(self.state, rest_segs[1])
+            if res is None:
+                code, body = resource_group_item(self.state, "GET", rest_segs[1], {})
+                return {"status": code, "headers": {}, "body": body}
+            return _ok({"value": res})
 
         rg = None
         idx = 0
