@@ -56,6 +56,12 @@ export const listActivityLog = async (resourceId) =>
   (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/eventtypes/management/values`,
     { query: { "api-version": "2015-04-01", "$filter": `resourceUri eq '${resourceId}'` } })).value || [];
 
+// ── Access control (IAM): real ARM resources, subscription-wide (see capabilities.json,
+// same honest scoping as the Cosmos DB account blade) ───────────────────────────────────
+const AUTHZ_API = "2022-04-01";
+export const listRoleAssignments = async (sub) => (await restJson("GET", `/subscriptions/${sub}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": AUTHZ_API } })).value || [];
+export const listRoleDefinitions = async (sub) => (await restJson("GET", `/subscriptions/${sub}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": AUTHZ_API } })).value || [];
+
 // ── Create-form model → ARM body ────────────────────────────────────────────────────────
 export const ENDPOINT_TYPES = [
   ["WebHook", "Web Hook"], ["EventHub", "Event Hubs"], ["StorageQueue", "Storage Queues"],

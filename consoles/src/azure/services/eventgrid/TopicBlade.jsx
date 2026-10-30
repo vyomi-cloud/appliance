@@ -1,21 +1,24 @@
 /* Event Grid topic resource blade: left resource menu + panels. Overview, Tags, Access keys,
- * Event Subscriptions, Networking, Identity, Configuration, Properties, Activity log and Locks
- * are backed by native ARM calls; Access control (IAM) and the monitoring/automation/support
- * menu items are honest NotSimulated panels (core/capabilities/azure/eventgrid.json). */
+ * Event Subscriptions, Networking, Identity, Configuration, Properties, Activity log, Locks,
+ * Access control (IAM) and the ARM Template tab of Export template are backed by native ARM
+ * calls (the Access control/Export template pattern mirrors the Cosmos DB account blade); the
+ * remaining monitoring/automation/support menu items are honest NotSimulated panels
+ * (core/capabilities/azure/eventgrid.json). */
 import { useEffect, useState } from "react";
 import {
-  Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
-  Radio, RadioGroup, Select, ToolbarButton,
+  Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
+  Radio, RadioGroup, Select, Tab, TabList, Textarea, ToolbarButton,
 } from "@fluentui/react-components";
-import { ArrowClockwise20Regular, Copy16Regular, Delete20Regular, Eye16Regular, EyeOff16Regular, ArrowRight20Regular, Save20Regular, Dismiss20Regular, Add20Regular } from "@fluentui/react-icons";
+import { ArrowClockwise20Regular, ArrowDownload20Regular, Copy16Regular, Delete20Regular, Eye16Regular, EyeOff16Regular, ArrowRight20Regular, Save20Regular, Dismiss20Regular, Add20Regular } from "@fluentui/react-icons";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { locationLabel } from "../../kit/arm.js";
+import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
-import { Essentials, fmtDate, Glyph, InfoBar, KV, Loading, ErrorBar } from "../../kit/common.jsx";
+import { Essentials, fmtDate, Glyph, InfoBar, KV, Loading, ErrorBar, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import { TagRows } from "./TagRows.jsx";
@@ -57,8 +60,7 @@ export default function TopicBlade({ params, query }) {
       accesskeys: () => <AccessKeys t={t} />,
       properties: () => <Properties t={t} />,
       activitylog: () => <ActivityLog t={t} name={name} />,
-      accesscontrol: () => <CapabilityContainer id="azure.eventgrid.topic.iam" title={`${name} | Access control (IAM)`}
-        note="Tabs: Check access, Role assignments, Roles, Deny assignments, Classic administrators. My access and Check access actions (View my access) live on the Check access tab." />,
+      accesscontrol: () => <Iam name={name} />,
       locks: () => <Locks rg={rg} topic={name} />,
       diagnose: () => <CapabilityContainer id="azure.eventgrid.topic.tools" title={`${name} | Diagnose and solve problems`} />,
       tasks: () => <CapabilityContainer id="azure.eventgrid.topic.tools" title={`${name} | Tasks`} />,
@@ -67,8 +69,7 @@ export default function TopicBlade({ params, query }) {
       metrics: () => <CapabilityContainer id="azure.eventgrid.topic.monitoring" title={`${name} | Metrics`} />,
       diagnosticsettings: () => <CapabilityContainer id="azure.eventgrid.topic.monitoring" title={`${name} | Diagnostic settings`} />,
       logs: () => <CapabilityContainer id="azure.eventgrid.topic.monitoring" title={`${name} | Logs`} />,
-      exporttemplate: () => <CapabilityContainer id="azure.eventgrid.topic.exporttemplate" title={`${name} | Export template`}
-        note="Tabs: ARM Template, Bicep, Terraform. Template section field: Include parameters." />,
+      exporttemplate: () => <ExportTemplate t={t} />,
     }[panel];
     body = P ? P() : <><div className="vy-panel-title">{LABEL[panel] || panel}</div><CapabilityContainer id="azure.eventgrid.topic.tools" title={LABEL[panel] || panel} /></>;
   }
@@ -422,6 +423,113 @@ function ActivityLog({ t, name }) {
         </DialogSurface>
       </Dialog>
     </CapabilityContainer>
+  );
+}
+
+// ── Access control (IAM): real ARM resources (Microsoft.Authorization/roleAssignments,
+// roleDefinitions), subscription-wide rather than scoped to this one topic — same honest
+// shape as the Cosmos DB account blade (core/capabilities/azure/eventgrid.json) ───────────
+function Iam({ name }) {
+  const sub = useSubscription();
+  const [tab, setTab] = useState("checkaccess");
+  const [gap, setGap] = useState(null);
+  const roleAssignments = useAsync(() => api.listRoleAssignments(sub.id), [sub.id]);
+  const roleDefinitions = useAsync(() => api.listRoleDefinitions(sub.id), [sub.id]);
+  return (
+    <>
+      <div className="vy-panel-title">{name} | Access control (IAM)</div>
+      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control tabs">
+        <Tab value="checkaccess">Check access</Tab>
+        <Tab value="roleassignments">Role assignments</Tab>
+        <Tab value="roles">Roles</Tab>
+        <Tab value="denyassignments">Deny assignments</Tab>
+        <Tab value="classicadmins">Classic administrators</Tab>
+      </TabList>
+      {tab === "checkaccess" && (
+        <div style={{ display: "flex", gap: 24, marginTop: 12 }}>
+          <section className="vy-section"><h3>My access</h3><Button onClick={() => setGap("View my access")}>View my access</Button></section>
+          <section className="vy-section"><h3>Check access</h3><Button onClick={() => setGap("Check access")}>Check access</Button></section>
+        </div>
+      )}
+      {tab === "roleassignments" && (
+        <section className="vy-section" style={{ marginTop: 12 }}><h3>Role assignments</h3>
+          <BrowseGrid resourceName="role assignment" rowKey={(r) => r.id} filterPlaceholder="Search by name or email"
+            items={roleAssignments.data || []} loading={roleAssignments.loading} error={roleAssignments.error} onRefresh={roleAssignments.reload}
+            columns={[
+              { key: "name", label: "Name", value: (r) => r.properties?.principalId },
+              { key: "type", label: "Type", value: (r) => r.properties?.principalType || "--" },
+              { key: "role", label: "Role", value: (r) => r.properties?.roleDefinitionId?.split("/").pop() },
+              { key: "scope", label: "Scope", value: (r) => r.properties?.scope || "/" },
+              { key: "condition", label: "Condition", value: () => "None" },
+            ]}
+          />
+        </section>
+      )}
+      {tab === "roles" && (
+        <section className="vy-section" style={{ marginTop: 12 }}><h3>Roles</h3>
+          <BrowseGrid resourceName="role" rowKey={(r) => r.id} filterPlaceholder="Search by role name, description, permission, or ID"
+            items={roleDefinitions.data || []} loading={roleDefinitions.loading} error={roleDefinitions.error} onRefresh={roleDefinitions.reload}
+            columns={[
+              { key: "name", label: "Name", value: (r) => r.properties?.roleName || r.name },
+              { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
+              { key: "type", label: "Type", value: (r) => r.properties?.type || "BuiltInRole" },
+              { key: "category", label: "Category", value: () => "General" },
+              { key: "details", label: "Details", value: () => "View" },
+            ]}
+          />
+        </section>
+      )}
+      {tab === "denyassignments" && <NotSimulatedContainer title="Deny assignments" feature="Deny assignments" />}
+      {tab === "classicadmins" && <div style={{ marginTop: 12 }} />}
+      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
+        <DialogSurface aria-label={gap || "Not simulated"}>
+          <DialogBody>
+            <DialogTitle>{gap}</DialogTitle>
+            <DialogContent><NotSimulated feature={`${gap} evaluation`} /></DialogContent>
+            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </>
+  );
+}
+
+// ── Export template (ARM Template tab reflects this topic's own live resource JSON; Bicep
+// and Terraform output are an honest gap, same as the Cosmos DB account blade) ────────────
+function ExportTemplate({ t }) {
+  const [tab, setTab] = useState("arm");
+  const [params, setParams] = useState(true);
+  const template = {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    contentVersion: "1.0.0.0",
+    ...(params ? { parameters: { topicName: { type: "string", defaultValue: t.name } } } : {}),
+    resources: [{ type: "Microsoft.EventGrid/topics", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('topicName')]" : t.name, location: t.location, properties: t.properties }],
+  };
+  const text = JSON.stringify(template, null, 2);
+  const download = () => {
+    const el = document.createElement("a");
+    el.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+    el.download = `${t.name}.json`;
+    document.body.appendChild(el); el.click(); el.remove();
+  };
+  return (
+    <>
+      <div className="vy-panel-title">{t.name} | Export template</div>
+      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
+        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={download}>Download</ToolbarButton>
+        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
+        <ToolbarButton disabled>Deploy</ToolbarButton>
+        <ToolbarButton disabled>Visualize template</ToolbarButton>
+      </div>
+      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
+        <Tab value="arm">ARM Template</Tab><Tab value="bicep">Bicep</Tab><Tab value="terraform">Terraform</Tab>
+      </TabList>
+      <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
+        <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
+        {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
+        {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
+      </section>
+    </>
   );
 }
 
