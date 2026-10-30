@@ -43,7 +43,7 @@ try {
 
   // Navigation menu lists products; an unbuilt product is an honest gap.
   await page.getByRole("button", { name: "Navigation menu" }).click();
-  await page.getByRole("button", { name: /Pub\/Sub/ }).click();
+  await page.locator(".MuiDrawer-paper").getByText("Pub/Sub", { exact: true }).click();
   await page.locator("[data-vyomi-not-simulated]").first().waitFor({ timeout: 5000 });
   check("non-v4 product → NotSimulated panel with classic link", await page.getByRole("link", { name: /classic Vyomi console/ }).isVisible());
   await shot("02-notsimulated-product");
@@ -164,7 +164,8 @@ try {
 
   // Dark mode
   await page.goto(UI + "#/storage/browser");
-  await page.getByRole("button", { name: "Toggle dark theme" }).click();
+  await page.getByRole("button", { name: "More options" }).click();          // ⋮ menu, as in the native top bar
+  await page.getByRole("menuitem", { name: "Use dark theme" }).click();
   await page.waitForTimeout(500);
   check("dark mode persisted", (await page.evaluate(() => localStorage.getItem("vyomi.v4.mode"))) === "dark");
   await shot("11-dark");

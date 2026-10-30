@@ -11,6 +11,10 @@ import SearchIcon from "@mui/icons-material/esm/Search.js";
 import DarkModeIcon from "@mui/icons-material/esm/DarkMode.js";
 import LightModeIcon from "@mui/icons-material/esm/LightMode.js";
 import HelpOutlineIcon from "@mui/icons-material/esm/HelpOutline.js";
+import TerminalIcon from "@mui/icons-material/esm/Terminal.js";
+import NotificationsIcon from "@mui/icons-material/esm/NotificationsNone.js";
+import MoreVertIcon from "@mui/icons-material/esm/MoreVert.js";
+import { Badge, Menu, MenuItem, Divider as MDivider } from "@mui/material";
 import AccountTreeIcon from "@mui/icons-material/esm/AccountTree.js";
 import KeyboardArrowDownIcon from "@mui/icons-material/esm/KeyboardArrowDown.js";
 import ChevronLeftIcon from "@mui/icons-material/esm/ChevronLeft.js";
@@ -22,7 +26,8 @@ import { PRODUCTS, classicHref, productFor } from "./services/registry.js";
 import { useProject } from "./project.js";
 import { NotSimulated } from "./kit/common.jsx";
 import Home from "./pages/Home.jsx";
-import ProductMenu from "./pages/ProductMenu.jsx";
+import ProductMenu, { recordVisit } from "./pages/ProductMenu.jsx";
+import AllProducts from "./pages/AllProducts.jsx";
 import ProjectPicker from "./pages/ProjectPicker.jsx";
 import { Brand } from "./pages/Brand.jsx";
 
@@ -49,7 +54,8 @@ export default function App() {
   useEffect(() => { savePref("gcp.navCollapsed", navCollapsed ? "1" : ""); }, [navCollapsed]);
   useEffect(() => { document.title = `${prod ? prod.title + " – " : ""}${project} – Vyomi · Google Cloud`; });
 
-  const prod = productFor(route.parts);
+  const prod = route.parts[0] === "products" ? null : productFor(route.parts);
+  useEffect(() => { if (prod) recordVisit(prod.id); }, [prod?.id]);
   const [loaded, setLoaded] = useState({});
   const [loadErr, setLoadErr] = useState(null);
   useEffect(() => {
@@ -58,7 +64,8 @@ export default function App() {
 
   let content, nav;
   if (!route.parts.length) content = <Home />;
-  else if (!prod) content = <NotSimulated feature={`The product "${route.parts[0]}"`} />;
+  else if (route.parts[0] === "products") content = <AllProducts />;
+  else if (!prod && route.parts[0] !== "products") content = <NotSimulated feature={`The product "${route.parts[0]}"`} />;
   else if (!prod.load) {
     content = (
       <Box>
@@ -123,12 +130,47 @@ function TopBar({ onMenu, onPicker, project, mode, onMode }) {
           )}
         />
       </Box>
-      <Tooltip title={mode === "dark" ? "Use light theme" : "Use dark theme"}>
-        <IconButton aria-label="Toggle dark theme" onClick={onMode}>{mode === "dark" ? <LightModeIcon /> : <DarkModeIcon />}</IconButton>
-      </Tooltip>
-      <Tooltip title="Classic Vyomi console"><IconButton aria-label="Help" href={classicHref("")}><HelpOutlineIcon /></IconButton></Tooltip>
+      <TopBarActions mode={mode} onMode={onMode} />
       <Tooltip title="Vyomi · local simulator"><Avatar sx={{ width: 32, height: 32, bgcolor: "primary.main", color: "primary.contrastText", fontSize: 15, ml: 0.5, mr: 1 }}>V</Avatar></Tooltip>
     </Box>
+  );
+}
+
+/** Right side of the top bar, as in the native console: Cloud Shell · notifications · ⋮ menu. */
+function TopBarActions({ mode, onMode }) {
+  const notify = useNotify();
+  const [bell, setBell] = useState(null);
+  const [more, setMore] = useState(null);
+  const history = notify.history || [];
+  return (
+    <>
+      <Tooltip title="Activate Cloud Shell">
+        <IconButton aria-label="Activate Cloud Shell" onClick={() => notify.info("Cloud Shell isn't simulated in Vyomi. Use your own terminal: gcloud, gsutil and the client libraries work against this endpoint.", "Cloud Shell")}><TerminalIcon /></IconButton>
+      </Tooltip>
+      <Tooltip title="Notifications">
+        <IconButton aria-label="Notifications" onClick={(e) => setBell(e.currentTarget)}>
+          <Badge badgeContent={history.length} color="error" max={99}><NotificationsIcon /></Badge>
+        </IconButton>
+      </Tooltip>
+      <Menu anchorEl={bell} open={!!bell} onClose={() => setBell(null)} PaperProps={{ sx: { width: 360, maxHeight: 420 } }}>
+        <Typography variant="subtitle2" sx={{ px: 2, py: 1 }}>Notifications</Typography>
+        <MDivider />
+        {history.length ? history.slice(0, 15).map((n) => (
+          <MenuItem key={n.id} onClick={() => setBell(null)} sx={{ whiteSpace: "normal", display: "block" }}>
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>{n.header || n.type}</Typography>
+            <Typography variant="body2" color="text.secondary">{String(n.content)}</Typography>
+            <Typography variant="caption" color="text.secondary">{n.at.toLocaleTimeString()}</Typography>
+          </MenuItem>
+        )) : <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1.5 }}>No notifications in this session</Typography>}
+      </Menu>
+      <Tooltip title="More options">
+        <IconButton aria-label="More options" onClick={(e) => setMore(e.currentTarget)}><MoreVertIcon /></IconButton>
+      </Tooltip>
+      <Menu anchorEl={more} open={!!more} onClose={() => setMore(null)}>
+        <MenuItem onClick={() => { onMode(); setMore(null); }}>{mode === "dark" ? <LightModeIcon fontSize="small" sx={{ mr: 1.5 }} /> : <DarkModeIcon fontSize="small" sx={{ mr: 1.5 }} />}{mode === "dark" ? "Use light theme" : "Use dark theme"}</MenuItem>
+        <MenuItem component="a" href={classicHref("")}><HelpOutlineIcon fontSize="small" sx={{ mr: 1.5 }} />Classic Vyomi console</MenuItem>
+      </Menu>
+    </>
   );
 }
 
