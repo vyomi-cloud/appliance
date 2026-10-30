@@ -1,0 +1,58 @@
+{
+  "_doc": "ui-spec page id -> v4 route. honest_page is never set here: gcp/firestore is not on the base branch's consoles/honest-allowlist.json, so every gap is an in-page NotSimulated/CapabilityContainer panel, not a whole honest page.",
+  "databases": { "route": "#/firestore/databases", "live": "live-database" },
+  "create-database": { "route": "#/firestore/create-database" },
+  "firestore-studio": {
+    "route": "#/firestore/databases/uic-firestore-db/studio",
+    "vars": { "resource-name": "uic-firestore-db" },
+    "fixtures": ["firestore-database"],
+    "live": "live-studio-collection",
+    "expand": ["button:has-text('Start collection')"]
+  },
+  "indexes": {
+    "route": "#/firestore/databases/uic-firestore-db/indexes",
+    "vars": { "resource-name": "uic-firestore-db" },
+    "fixtures": ["firestore-database"],
+    "live": "live-index"
+  },
+  "create-index": {
+    "route": "#/firestore/databases/uic-firestore-db/create-index",
+    "vars": { "resource-name": "uic-firestore-db" },
+    "fixtures": ["firestore-database"]
+  },
+  "ttl": {
+    "route": "#/firestore/databases/uic-firestore-db/ttl",
+    "vars": { "resource-name": "uic-firestore-db" },
+    "fixtures": ["firestore-database"],
+    "live": "live-ttl"
+  },
+  "security-rules": {
+    "route": "#/firestore/databases/uic-firestore-db/rules",
+    "vars": { "resource-name": "uic-firestore-db" },
+    "fixtures": ["firestore-database"]
+  },
+  "import-export": {
+    "route": "#/firestore/databases/uic-firestore-db/import-export",
+    "vars": { "resource-name": "uic-firestore-db" },
+    "fixtures": ["firestore-database"],
+    "live": "live-export"
+  },
+  "disaster-recovery": {
+    "route": "#/firestore/databases/uic-firestore-db/disaster-recovery",
+    "vars": { "resource-name": "uic-firestore-db" },
+    "fixtures": ["firestore-database"],
+    "live": "live-backup"
+  },
+  "insights": {
+    "route": "#/firestore/databases/uic-firestore-db/insights",
+    "vars": { "resource-name": "uic-firestore-db" }
+  },
+  "usage": {
+    "route": "#/firestore/databases/uic-firestore-db/usage",
+    "vars": { "resource-name": "uic-firestore-db" }
+  },
+  "key-visualizer": {
+    "route": "#/firestore/databases/uic-firestore-db/key-visualizer",
+    "vars": { "resource-name": "uic-firestore-db" }
+  }
+}

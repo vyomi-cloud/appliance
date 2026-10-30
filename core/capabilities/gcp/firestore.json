@@ -1,0 +1,107 @@
+{
+  "$doc": "Vyomi capability registry — GCP Firestore. See aws/s3.json for the contract. Feature ids share one namespace with the AWS registry, so they are prefixed gcp.firestore.*",
+  "gcp.firestore.databases": {
+    "title": "Databases (list, create, get, update, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Database create/update/delete complete synchronously in Vyomi; the real API returns a long-running operation to poll."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.documents": {
+    "title": "Collections and documents (create, get, list, merge, delete) and the Firestore Studio data viewer",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_gcp_firestore_core.py"]
+  },
+  "gcp.firestore.query-builder": {
+    "title": "Query builder (structured queries: field filters, composite AND/OR, orderBy, limit)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_firestore_query_core.py"]
+  },
+  "gcp.firestore.indexes": {
+    "title": "Composite indexes (create, list, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Indexes report state READY immediately; Vyomi does not model the real console's transient BUILDING phase, and it does not reject queries that would need a missing index."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.single-field-exemptions": {
+    "title": "Single-field index exemptions",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Per-field index-exemption overrides round-trip through the fields API, but Vyomi always indexes every field automatically regardless of an exemption — the override is stored, not enforced."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.vector-indexes": {
+    "title": "Vector indexes (for vector-similarity search)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Vyomi has no vector field type or similarity search engine, so vector indexes cannot be created or used."
+    ]
+  },
+  "gcp.firestore.ttl": {
+    "title": "Time-to-live (TTL) policies",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Setting a field's ttlConfig is real and round-trips, but Vyomi never runs the background sweep that deletes expired documents — documents past their TTL timestamp are not actually removed."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.security-rules": {
+    "title": "Security rules editor",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "Vyomi stores and returns the rules source exactly as written through its own getSecurityRules/updateSecurityRules endpoints (real Firestore security rules are managed by the separate Firebase Rules API), but it never evaluates the rules against a request — every document read/write Vyomi allows is unconditional."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.import-export": {
+    "title": "Import / Export (exportDocuments / importDocuments)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Export/import calls are accepted and recorded as completed operations on the Import/Export page exactly like the real console, but Vyomi does not actually read or write Cloud Storage objects — no real file transfer happens."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.backups": {
+    "title": "Backup schedules and backups",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Creating a backup schedule is real and immediately takes one backup (there is no background scheduler in Vyomi to fire later ticks on the daily/weekly recurrence), and a backup cannot be restored into a new database."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.point-in-time-recovery": {
+    "title": "Point-in-time recovery (PITR)",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "The pointInTimeRecoveryEnablement setting round-trips on the database resource, but Vyomi keeps no change history to recover from — enabling it does not let you actually restore an earlier version of a document."
+    ],
+    "tests": ["tests/conformance/test_gcp_firestore_admin_core.py"]
+  },
+  "gcp.firestore.insights": {
+    "title": "Insights (query and index usage recommendations)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Vyomi collects no query-performance telemetry, so it has nothing to generate index or query insights from."
+    ]
+  },
+  "gcp.firestore.usage": {
+    "title": "Usage dashboard (reads/writes/deletes/storage charts)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Vyomi does not meter per-operation usage over time, so it cannot render the usage charts the real console builds from Cloud Monitoring metrics."
+    ]
+  },
+  "gcp.firestore.key-visualizer": {
+    "title": "Key Visualizer",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Key Visualizer renders a heatmap of real production key-access load; Vyomi records no per-key traffic histograms to visualize."
+    ]
+  }
+}
