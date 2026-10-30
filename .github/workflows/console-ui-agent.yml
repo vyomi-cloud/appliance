@@ -140,9 +140,22 @@ jobs:
             --permission-mode acceptEdits \
             --output-format text 2>&1 | tee $RUNNER_TEMP/agent-summary.txt | tail -60
 
+      # The agents share the owner's Claude subscription: if the agent stopped on a usage
+      # limit, postpone (no gate, no PR) instead of reporting a meaningless 0 % failure.
+      - name: Usage-limit check
+        id: limit
+        run: |
+          if grep -qiE "hit your (session|usage|weekly) limit|usage limit reached|rate limit exceeded" $RUNNER_TEMP/agent-summary.txt 2>/dev/null; then
+            echo "::warning::agent stopped on a Claude usage limit — re-queue ${{ matrix.target }} after it resets: $(grep -oiE 'resets [^·]*' $RUNNER_TEMP/agent-summary.txt | head -1)"
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hit=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # Independent gate — the agent's own claims are not trusted.
       - name: Gate — build, UI conformance (no gaming), smoke, core conformance
         id: gate
+        if: steps.limit.outputs.hit != 'true'
         run: |
           pkill -f dev_server.py || true     # never score against a server the agent left running
           # No statics: a Not-simulated feature renders its title + note only, never a disabled
@@ -179,7 +192,7 @@ jobs:
           printf 'ui-out/\nsmoke-out/\ngate.txt\n' >> .git/info/exclude
 
       - name: Rebuild outputs + push branch + PR
-        if: always()
+        if: always() && steps.limit.outputs.hit != 'true'
         env:
           # The repo forbids GITHUB_TOKEN from opening PRs; the conformance bot account can.
           GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN || secrets.GITHUB_TOKEN }}
@@ -214,5 +227,5 @@ jobs:
           if-no-files-found: ignore
 
       - name: Fail if gate failed
-        if: steps.gate.outputs.ok != 'true'
+        if: steps.limit.outputs.hit != 'true' && steps.gate.outputs.ok != 'true'
         run: exit 1
