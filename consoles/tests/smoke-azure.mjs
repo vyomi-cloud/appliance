@@ -150,6 +150,33 @@ try {
   const gone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SA2}`);
   check("UI delete → ARM GET 404", gone.status === 404, `HTTP ${gone.status}`);
 
+  // ── Cost Management: budget created through the UI → visible over native Consumption wire,
+  //    and (against the real spend of the storage account created above) raises a Cost alert ──
+  const BUDGET = `vysmoke-budget-${n}`;
+  await page.goto(UI + "#/cost/budgets/create");
+  await page.getByLabel("Name", { exact: true }).fill(BUDGET);
+  await page.getByLabel("Amount", { exact: true }).fill("0.01");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(BUDGET, { exact: true }).first().waitFor({ timeout: 10000 });
+  await shot("18-budget-created");
+  const budgetWire = await wire(`/subscriptions/${SUB}/providers/Microsoft.Consumption/budgets/${BUDGET}?api-version=2023-11-01`);
+  check("UI create budget → visible over native Consumption wire", budgetWire.status === 200, `HTTP ${budgetWire.status}`);
+
+  await page.goto(UI + "#/cost/alerts");
+  await page.getByText(BUDGET, { exact: false }).first().waitFor({ timeout: 10000 });
+  check("over-threshold budget → Cost alerts shows a derived alert", true);
+  await shot("19-cost-alerts");
+
+  // ── Resource created over the native ARM wire → Advisor recommendations (real inventory) ──
+  const CR = `vywirecost${n}`;
+  await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${CR}`, { location: "eastus", kind: "StorageV2", sku: { name: "Standard_LRS" } });
+  await page.goto(UI + "#/cost/advisor");
+  await page.getByText(CR, { exact: true }).first().waitFor({ timeout: 10000 });
+  check("wire-created resource shown in Advisor recommendations", true);
+  await shot("20-advisor-recommendations");
+
   // ── Shell: unbacked service is honest; dark mode ───────────────────────────────────────
   await page.goto(UI + "#/vms");
   await page.getByRole("link", { name: /in the classic Vyomi console/ }).first().waitFor({ timeout: 10000 }).catch(() => {});

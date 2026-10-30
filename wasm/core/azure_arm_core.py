@@ -62,6 +62,11 @@ try:                                              # Azure Log Analytics engine (
 except ImportError:
     import azure_operationalinsights_core as oi_engine   # type: ignore
 
+try:                                              # Azure Cost Management + Consumption engine
+    from core import azure_cost_core as cost_engine
+except ImportError:
+    import azure_cost_core as cost_engine          # type: ignore
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -292,6 +297,14 @@ class AzureArm:
         if namespace.lower() == "microsoft.cognitiveservices":
             return self._cogs(method, sub, rg, chain, payload, query)
 
+        # Microsoft.CostManagement (cost query, alerts, exports) / Microsoft.Consumption
+        # (budgets): the Cost Management engine owns both namespaces, sub/RG scoped, no
+        # per-resource-group catalog entry (real Cost Management has none either).
+        if namespace.lower() == "microsoft.costmanagement":
+            return self._cost_cm(method, sub, rg, chain, payload, query)
+        if namespace.lower() == "microsoft.consumption":
+            return self._cost_consumption(method, sub, rg, chain, payload, query)
+
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
             supported = ", ".join(sorted(c["namespace"] + "/" + c["type"] for c in CATALOG))
@@ -396,6 +409,14 @@ class AzureArm:
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or app.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
+
+    def _cost_cm(self, method, sub, rg, chain, payload, query):
+        r = cost_engine.dispatch_costmanagement(self.state, method, sub, rg, chain, payload, query, base=self._base)
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
+    def _cost_consumption(self, method, sub, rg, chain, payload, query):
+        r = cost_engine.dispatch_consumption(self.state, method, sub, rg, chain, payload, query, base=self._base)
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
 
     # ── CRUD primitives ───────────────────────────────────────────────────
     def _list(self, sub, rg, full_type):
