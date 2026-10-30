@@ -8,7 +8,10 @@ NO fastapi / google-cloud / socket / subprocess imports → loads under Pyodide.
 Persists through the SAME ObjectStore seam as S3 (core/object_store.py); GCP
 just gets its own store instance, so buckets/objects are cloud-namespaced.
 
-Scope (v1 slice): bucket insert/list/get/delete; object insert (media +
+Scope (v1 slice): bucket insert/list/get/patch/update/delete (labels, placement,
+access-control mode, lifecycle rule definitions, retention policy — enforced on
+object delete/overwrite); bucket IAM policy get/set; objects list with
+prefix + delimiter (`prefixes`); object insert (media +
 multipart upload), get (metadata + ?alt=media download), list, delete. Object
 generations are modeled as a monotonic counter; a correct md5Hash and CRC32C are
 returned so the SDK's client-side integrity check passes. Resumable uploads and
@@ -80,21 +83,138 @@ def _json(status: int, obj: dict) -> GcsResponse:
 
 
 # ── resource views ────────────────────────────────────────────────────────
+# Bucket fields a client may set on insert / PATCH and read back. Only fields Vyomi
+# either enforces (retentionPolicy) or that are pure metadata (labels, placement,
+# access-control mode, lifecycle rule definitions) are kept. Behaviour Vyomi does not
+# model (object versioning, soft delete, autoclass) is deliberately NOT echoed back, so
+# a client never reads a setting that has no effect.
+_BUCKET_SETTABLE = ("labels", "iamConfiguration", "lifecycle", "retentionPolicy",
+                    "rpo", "customPlacementConfig", "storageClass")
+_MULTI_REGIONS = {"US", "EU", "ASIA"}
+_DUAL_REGIONS = {"NAM4", "EUR4", "EUR5", "EUR7", "EUR8", "ASIA1"}
+
+
+def _location_type(loc: str) -> str:
+    loc = (loc or "US").upper()
+    if loc in _MULTI_REGIONS:
+        return "multi-region"
+    if loc in _DUAL_REGIONS:
+        return "dual-region"
+    return "region"
+
+
+def _norm_iam_config(v: dict | None) -> dict:
+    v = v or {}
+    ubla = bool((v.get("uniformBucketLevelAccess") or v.get("bucketPolicyOnly") or {}).get("enabled", False))
+    pap = v.get("publicAccessPrevention") or "inherited"
+    if pap == "unspecified":
+        pap = "inherited"
+    return {"bucketPolicyOnly": {"enabled": ubla}, "uniformBucketLevelAccess": {"enabled": ubla},
+            "publicAccessPrevention": pap}
+
+
+def _apply_bucket_fields(meta: dict, body: dict, patch: bool) -> GcsResponse | None:
+    """Merge settable fields from an insert/patch body into the bucket meta.
+    Returns an error response for an invalid value, else None."""
+    for k in _BUCKET_SETTABLE:
+        if k not in body:
+            continue
+        v = body[k]
+        if v is None:                                   # PATCH null clears the field
+            meta.pop(k, None)
+            continue
+        if k == "labels":
+            if not isinstance(v, dict):
+                return _err(400, "invalid", "Invalid labels.")
+            cur = dict(meta.get("labels") or {}) if patch else {}
+            for lk, lv in v.items():
+                if lv is None:
+                    cur.pop(lk, None)
+                else:
+                    cur[str(lk)] = str(lv)
+            meta["labels"] = cur
+        elif k == "iamConfiguration":
+            meta[k] = _norm_iam_config(v)
+        elif k == "retentionPolicy":
+            if (meta.get("retentionPolicy") or {}).get("isLocked"):
+                return _err(403, "retentionPolicyNotMet", "Cannot modify a locked retention policy.")
+            try:
+                period = int(v.get("retentionPeriod", 0))
+            except (TypeError, ValueError):
+                return _err(400, "invalid", "Invalid argument: retentionPeriod.")
+            if period <= 0:
+                meta.pop(k, None)
+                continue
+            meta[k] = {"retentionPeriod": str(period), "effectiveTime": _now(), "isLocked": False}
+        elif k == "lifecycle":
+            rules = (v or {}).get("rule") or []
+            if not isinstance(rules, list):
+                return _err(400, "invalid", "Invalid lifecycle configuration.")
+            meta[k] = {"rule": rules}
+        else:
+            meta[k] = v
+    return None
+
+
 def _bucket_view(store: ObjectStore, name: str) -> dict:
     meta = store.buckets.get(name, {})
-    return {
+    loc = (meta.get("location") or "US").upper()
+    view = {
         "kind": "storage#bucket",
         "id": name,
         "name": name,
         "selfLink": f"https://www.googleapis.com/storage/v1/b/{name}",
         "projectNumber": "000000000000",
-        "metageneration": "1",
-        "location": meta.get("location", "US"),
+        "metageneration": str(meta.get("metageneration", 1)),
+        "location": loc,
+        "locationType": _location_type(loc),
         "storageClass": meta.get("storageClass", "STANDARD"),
         "etag": "CAE=",
         "timeCreated": meta.get("timeCreated", _now()),
         "updated": meta.get("updated", _now()),
+        "iamConfiguration": _norm_iam_config(meta.get("iamConfiguration")),
+        "rpo": meta.get("rpo", "DEFAULT") if _location_type(loc) == "dual-region" else None,
     }
+    if view["rpo"] is None:
+        view.pop("rpo")
+    for k in ("labels", "lifecycle", "retentionPolicy", "customPlacementConfig"):
+        if meta.get(k):
+            view[k] = meta[k]
+    return view
+
+
+def _default_policy(store: ObjectStore, name: str) -> dict:
+    proj = store.buckets.get(name, {}).get("project") or "vyomi-project"
+    return {"kind": "storage#policy", "resourceId": f"projects/_/buckets/{name}", "version": 1,
+            "etag": "CAE=",
+            "bindings": [
+                {"role": "roles/storage.legacyBucketOwner", "members": [f"projectEditor:{proj}", f"projectOwner:{proj}"]},
+                {"role": "roles/storage.legacyBucketReader", "members": [f"projectViewer:{proj}"]},
+                {"role": "roles/storage.legacyObjectOwner", "members": [f"projectEditor:{proj}", f"projectOwner:{proj}"]},
+                {"role": "roles/storage.legacyObjectReader", "members": [f"projectViewer:{proj}"]},
+            ]}
+
+
+def _parse_ts(ts: str) -> float:
+    try:
+        return datetime.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+    except Exception:
+        return 0.0
+
+
+def _retention_block(store: ObjectStore, bucket: str, name: str, entry: dict | None) -> GcsResponse | None:
+    """Bucket retention policy: an object can't be deleted or overwritten until it is
+    older than the retention period (the native 403 retentionPolicyNotMet)."""
+    rp = store.buckets.get(bucket, {}).get("retentionPolicy")
+    if not rp or entry is None:
+        return None
+    until = _parse_ts(entry.get("updated") or entry.get("timeCreated") or "") + int(rp.get("retentionPeriod", 0))
+    if datetime.now(timezone.utc).timestamp() < until:
+        when = datetime.fromtimestamp(until, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        return _err(403, "retentionPolicyNotMet",
+                    f"Object '{bucket}/{name}' is subject to bucket's retention policy or object "
+                    f"retention and cannot be deleted or overwritten until {when}")
+    return None
 
 
 def _object_view(bucket: str, name: str, entry: dict) -> dict:
@@ -205,10 +325,15 @@ def dispatch(store: ObjectStore, method: str, path: str,
                 return _err(400, "required", "Bucket name is required.")
             if store.bucket_exists(name):
                 return _err(409, "conflict", f"You already own this bucket. Please select another name.")
+            bmeta = {"timeCreated": _now(), "updated": _now(), "metageneration": 1,
+                     "location": (meta.get("location") or "US").upper(),
+                     "storageClass": meta.get("storageClass", "STANDARD"),
+                     "project": query.get("project") or ""}
+            bad = _apply_bucket_fields(bmeta, meta, patch=False)
+            if bad:
+                return bad
             store.create_bucket(name)
-            store.buckets[name].update({"timeCreated": _now(), "updated": _now(),
-                                        "location": meta.get("location", "US"),
-                                        "storageClass": meta.get("storageClass", "STANDARD")})
+            store.buckets[name].update(bmeta)
             return _json(200, _bucket_view(store, name))
         if method == "GET":             # list buckets
             items = [_bucket_view(store, n) for n in sorted(store.buckets)]
@@ -231,7 +356,50 @@ def dispatch(store: ObjectStore, method: str, path: str,
             store.buckets.pop(bucket, None)
             store.objects.pop(bucket, None)
             return GcsResponse(status=204, body=b"", media_type=None)
+        if method in ("PATCH", "PUT"):     # buckets.patch / buckets.update
+            if not store.bucket_exists(bucket):
+                return _err(404, "notFound", f"The specified bucket does not exist.")
+            try:
+                patch = json.loads(body.decode("utf-8")) if body else {}
+            except Exception:
+                return _err(400, "parseError", "Parse Error")
+            bmeta = store.buckets[bucket]
+            staged = dict(bmeta)
+            bad = _apply_bucket_fields(staged, patch, patch=(method == "PATCH"))
+            if bad:
+                return bad
+            staged["metageneration"] = int(bmeta.get("metageneration", 1)) + 1
+            staged["updated"] = _now()
+            bmeta.clear()
+            bmeta.update(staged)
+            return _json(200, _bucket_view(store, bucket))
         return _err(400, "invalid", f"Unsupported method {method} on bucket")
+
+    # ---- bucket IAM policy: /b/{bucket}/iam ----
+    if len(segs) == 3 and segs[2] == "iam":
+        if not store.bucket_exists(bucket):
+            return _err(404, "notFound", f"The specified bucket does not exist.")
+        bmeta = store.buckets[bucket]
+        if method == "GET":
+            return _json(200, bmeta.get("iamPolicy") or _default_policy(store, bucket))
+        if method == "PUT":
+            try:
+                pol = json.loads(body.decode("utf-8")) if body else {}
+            except Exception:
+                return _err(400, "parseError", "Parse Error")
+            bindings = []
+            for b in pol.get("bindings") or []:
+                if not isinstance(b, dict) or not b.get("role"):
+                    return _err(400, "invalid", "Invalid policy binding.")
+                members = [str(m) for m in (b.get("members") or [])]
+                if members:
+                    bindings.append({"role": str(b["role"]), "members": members})
+            stored = {"kind": "storage#policy", "resourceId": f"projects/_/buckets/{bucket}",
+                      "version": int(pol.get("version") or 1), "etag": base64.b64encode(uuid.uuid4().bytes[:6]).decode(),
+                      "bindings": bindings}
+            bmeta["iamPolicy"] = stored
+            return _json(200, stored)
+        return _err(400, "invalid", f"Unsupported method {method} on bucket IAM policy")
 
     # ---- objects ----
     if segs[2] == "o":
@@ -246,6 +414,9 @@ def dispatch(store: ObjectStore, method: str, path: str,
                     return _err(404, "notFound", "No such upload session.")
                 media = bytes(body or b"")
                 name = sess["name"]
+                blocked = _retention_block(store, bucket, name, objs.get(name))
+                if blocked:
+                    return blocked
                 content_type = sess.get("content_type") or headers.get("content-type") or "application/octet-stream"
                 custom = sess.get("metadata") or {}
                 gen = int(objs.get(name, {}).get("generation", "0")) + 1
@@ -294,6 +465,9 @@ def dispatch(store: ObjectStore, method: str, path: str,
                     custom = {}
                 if not name:
                     return _err(400, "required", "Object name is required.")
+                blocked = _retention_block(store, bucket, name, objs.get(name))
+                if blocked:
+                    return blocked
                 gen = int(objs.get(name, {}).get("generation", "0")) + 1
                 entry = {
                     "data": media, "size": len(media), "contentType": content_type,
@@ -309,9 +483,22 @@ def dispatch(store: ObjectStore, method: str, path: str,
                 if not store.bucket_exists(bucket):
                     return _err(404, "notFound", "The specified bucket does not exist.")
                 prefix = query.get("prefix", "")
-                items = [_object_view(bucket, k, v) for k, v in sorted(objs.items())
-                         if k.startswith(prefix)]
+                delim = query.get("delimiter", "")
+                items, prefixes = [], []
+                for k, v in sorted(objs.items()):
+                    if not k.startswith(prefix):
+                        continue
+                    if delim:
+                        cut = k.find(delim, len(prefix))
+                        if cut >= 0:           # rolled up into a "directory" prefix
+                            p = k[:cut + len(delim)]
+                            if p not in prefixes:
+                                prefixes.append(p)
+                            continue
+                    items.append(_object_view(bucket, k, v))
                 out = {"kind": "storage#objects"}
+                if prefixes:
+                    out["prefixes"] = prefixes
                 if items:
                     out["items"] = items
                 return _json(200, out)
@@ -333,6 +520,9 @@ def dispatch(store: ObjectStore, method: str, path: str,
         if method == "DELETE":
             if entry is None:
                 return _err(404, "notFound", f"No such object: {bucket}/{name}")
+            blocked = _retention_block(store, bucket, name, entry)
+            if blocked:
+                return blocked
             objs.pop(name, None)
             store.mirror_delete(bucket, name)
             return GcsResponse(status=204, body=b"", media_type=None)

@@ -1,0 +1,14 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing. (ui-spec/gcp/storage.json not extracted yet; ids follow the console's page names.)",
+  "buckets": { "route": "#/storage/browser", "fixtures": ["gcs-bucket"] },
+  "create-bucket": { "route": "#/storage/create-bucket" },
+  "bucket-details": { "route": "#/storage/browser/uic-bucket", "fixtures": ["gcs-bucket"], "vars": { "resource-name": "uic-bucket" } },
+  "object-details": { "route": "#/storage/browser/uic-bucket/object?name=uic-object.txt", "fixtures": ["gcs-bucket"] },
+  "overview": { "route": "#/storage/overview", "honest_page": true },
+  "monitoring": { "route": "#/storage/monitoring", "honest_page": true },
+  "settings": { "route": "#/storage/settings", "honest_page": true },
+  "advisor": { "route": "#/storage/advisor", "honest_page": true },
+  "batch-operations": { "route": "#/storage/batch-operations", "honest_page": true },
+  "insights-datasets": { "route": "#/storage/insights-datasets", "honest_page": true },
+  "storage-intelligence-configuration": { "route": "#/storage/intelligence-configuration", "honest_page": true }
+}
