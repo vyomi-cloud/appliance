@@ -18,6 +18,7 @@ const WIRE = `${BASE}${process.env.WIRE_PATH || "/_wire"}`;
 const OUT = process.env.OUT || "smoke-out";
 const B = `v4-smoke-${Date.now() % 100000}`;
 const T = `v4smoke${Date.now() % 100000}`;
+const T2 = `v4smokelsi${Date.now() % 100000}`;
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -178,6 +179,29 @@ try {
   const backups = await ddb("ListBackups", { TableName: T });
   check("DynamoDB create backup (UI) → visible over native wire", (backups.BackupSummaries || []).some((b) => b.TableName === T), JSON.stringify(backups));
   await shot("12-ddb-backups");
+
+  // Local secondary index: create a table with a sort key + LSI through the UI, verify over the wire
+  await page.goto(UI + "#/dynamodb/create-table");
+  await page.getByLabel("Table name").fill(T2);
+  await page.getByRole("textbox", { name: "Partition key", exact: true }).fill("cust");
+  await page.getByRole("textbox", { name: "Sort key - optional", exact: true }).fill("id");
+  await page.getByRole("radio", { name: "Customize settings" }).check();
+  await page.getByRole("button", { name: "Create local index" }).first().click();
+  const lsiDialog = page.getByRole("dialog", { name: "Create local index" });
+  await lsiDialog.getByLabel("Index name").fill("by-status");
+  await lsiDialog.getByRole("textbox", { name: "Sort key", exact: true }).fill("status");
+  await lsiDialog.getByRole("button", { name: "Create local index" }).click();
+  await page.getByRole("button", { name: "Create table" }).last().click();
+  await page.getByPlaceholder("Find tables by table name").fill(T2);
+  await page.getByRole("link", { name: T2 }).waitFor({ timeout: 10000 });
+  const t2 = await ddb("DescribeTable", { TableName: T2 });
+  check("DynamoDB local secondary index (UI) → visible over native wire",
+        (t2.Table?.LocalSecondaryIndexes || []).some((l) => l.IndexName === "by-status"), JSON.stringify(t2.Table?.LocalSecondaryIndexes));
+  await page.goto(UI + `#/dynamodb/tables/${T2}`);
+  await page.getByRole("tab", { name: "Indexes" }).click();
+  await page.getByText("by-status").first().waitFor({ timeout: 10000 });
+  check("DynamoDB local secondary index → shown on table detail Indexes tab", true);
+  await shot("12b-ddb-lsi");
 
   // KMS: create a customer managed key through the wizard (UI → CLI direction)
   const K = `v4smoke-key-${Date.now() % 100000}`;

@@ -611,6 +611,55 @@ def _create_backup_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
     return backup
 
 
+def _parse_restore_datetime(v: Any) -> datetime:
+    if isinstance(v, (int, float)):
+        return datetime.fromtimestamp(float(v), tz=timezone.utc)
+    try:
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except ValueError:
+        raise _validation(f"Invalid RestoreDateTime: {v}")
+
+
+def _restore_table_to_point_in_time(store: NoSqlStore, payload: dict[str, Any]) -> dict:
+    source = str(payload.get("SourceTableName") or "").strip()
+    target = str(payload.get("TargetTableName") or "").strip()
+    table = _require_table(store, source)
+    if not table.get("pitr_enabled"):
+        raise DdbError("InvalidRestoreTimeException",
+                       f"Point in time recovery is not enabled for table: {source}", 400)
+    if not target:
+        raise DdbError("ValidationException", "TargetTableName is required.", 400)
+    if store.table_exists(target):
+        raise DdbError("TableAlreadyExistsException", f"Table already exists: {target}", 400)
+    use_latest = bool(payload.get("UseLatestRestorableTime"))
+    restore_dt = payload.get("RestoreDateTime")
+    if not use_latest:
+        if restore_dt is None:
+            raise _validation("Either RestoreDateTime or UseLatestRestorableTime must be specified.")
+        earliest = _parse_restore_datetime(table.get("pitr_earliest") or _now())
+        latest = datetime.now(timezone.utc)
+        when = _parse_restore_datetime(restore_dt)
+        if when < earliest or when > latest:
+            raise DdbError("InvalidRestoreTimeException",
+                           "RestoreDateTime must be between EarliestRestorableDateTime and "
+                           "LatestRestorableDateTime.", 400)
+    # Vyomi keeps no change history, so any point within the PITR window restores the
+    # table's current (latest) state — see core/capabilities/aws/dynamodb.json.
+    _refresh_table_metrics(table)
+    restored = copy.deepcopy(table)
+    restored["table_name"] = target
+    restored["table_arn"] = _table_arn(store, target)
+    restored["table_status"] = "ACTIVE"
+    restored["created"] = _now()
+    restored["last_modified"] = _now()
+    restored["pitr_enabled"] = False
+    restored.pop("pitr_earliest", None)
+    store.put_table(target, restored)
+    store.mirror_create_table(target, restored)
+    store.persist()
+    return restored
+
+
 def _restore_table_from_backup(store: NoSqlStore, payload: dict[str, Any]) -> dict:
     arn = str(payload.get("BackupArn") or "").strip()
     target = str(payload.get("TargetTableName") or "").strip()
@@ -1983,6 +2032,10 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None) -> Ddb
 
         if action == "RestoreTableFromBackup":
             restored = _restore_table_from_backup(store, payload)
+            return _ok({"TableDescription": _table_view(store, restored, include_items=False)})
+
+        if action == "RestoreTableToPointInTime":
+            restored = _restore_table_to_point_in_time(store, payload)
             return _ok({"TableDescription": _table_view(store, restored, include_items=False)})
 
         if action == "ExecuteStatement":

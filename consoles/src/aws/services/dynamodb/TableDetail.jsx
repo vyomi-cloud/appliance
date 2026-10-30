@@ -40,7 +40,7 @@ export default function TableDetail({ params, query }) {
         { id: "overview", label: "Overview", content: <Overview d={d} reload={t.reload} /> },
         { id: "indexes", label: "Indexes", content: <SpaceBetween size="l">
             <Indexes d={d} />
-            <NotSimulatedContainer title="Local secondary indexes" feature="DynamoDB local secondary indexes" note="LSIs must be declared at table creation and aren't modeled; this table is always empty." />
+            <LocalIndexes d={d} />
           </SpaceBetween> },
         { id: "monitor", label: "Monitor", content: <SpaceBetween size="l">
             <NotSimulatedContainer title="CloudWatch alarms" feature="DynamoDB CloudWatch alarms" />
@@ -143,6 +143,23 @@ function Indexes({ d }) {
         { id: "ic", header: "Item count", cell: (i) => i.ItemCount ?? 0 },
       ]}
       empty={<Box textAlign="center" color="inherit"><b>No global secondary indexes</b><Box variant="p" color="inherit">You have not created any global secondary indexes for this table.</Box></Box>} />
+  );
+}
+
+function LocalIndexes({ d }) {
+  const rows = d.LocalSecondaryIndexes || [];
+  return (
+    <Table variant="container" header={<Header variant="h2" counter={`(${rows.length})`}>Local secondary indexes</Header>} items={rows}
+      columnDefinitions={[
+        { id: "n", header: "Name", cell: (i) => i.IndexName },
+        { id: "s", header: "Status", cell: () => statusOf(d.TableStatus) },
+        { id: "pk", header: "Partition key", cell: (i) => i.KeySchema?.find((k) => k.KeyType === "HASH")?.AttributeName },
+        { id: "sk", header: "Sort key", cell: (i) => i.KeySchema?.find((k) => k.KeyType === "RANGE")?.AttributeName || "-" },
+        { id: "p", header: "Projected attributes", cell: (i) => i.Projection?.ProjectionType || "-" },
+        { id: "sz", header: "Size", cell: () => `${d.TableSizeBytes ?? 0} bytes` },
+        { id: "ic", header: "Item count", cell: (i) => i.ItemCount ?? 0 },
+      ]}
+      empty={<Box textAlign="center" color="inherit"><b>No local secondary indexes</b><Box variant="p" color="inherit">Local secondary indexes must be created when the table is created.</Box></Box>} />
   );
 }
 

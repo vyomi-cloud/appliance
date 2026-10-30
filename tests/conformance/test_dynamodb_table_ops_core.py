@@ -102,6 +102,26 @@ def run(store=None):
     _check("PITR now enabled", body["ContinuousBackupsDescription"]["PointInTimeRecoveryDescription"]["PointInTimeRecoveryStatus"] == "ENABLED")
     _check("PITR has earliest restorable time", bool(body["ContinuousBackupsDescription"]["PointInTimeRecoveryDescription"].get("EarliestRestorableDateTime")))
 
+    # ── RestoreTableToPointInTime (requires PITR enabled on the source) ──
+    call("CreateTable", {"TableName": "no-pitr",
+        "KeySchema": [{"AttributeName": "id", "KeyType": "HASH"}],
+        "AttributeDefinitions": [{"AttributeName": "id", "AttributeType": "S"}]})
+    status, body = call("RestoreTableToPointInTime", {"SourceTableName": "no-pitr", "TargetTableName": "no-pitr-restored",
+                                                       "UseLatestRestorableTime": True})
+    _check("RestoreTableToPointInTime blocked without PITR", status == 400 and body["__type"] == "InvalidRestoreTimeException")
+
+    status, body = call("RestoreTableToPointInTime", {"SourceTableName": "sessions", "TargetTableName": "sessions-pitr",
+                                                       "UseLatestRestorableTime": True})
+    _check("RestoreTableToPointInTime 200", status == 200)
+    _check("RestoreTableToPointInTime restored table is ACTIVE", body["TableDescription"]["TableStatus"] == "ACTIVE")
+    _, body = call("Scan", {"TableName": "sessions-pitr"})
+    _check("RestoreTableToPointInTime carries over current items", [i["id"]["S"] for i in body["Items"]] == ["live"])
+
+    status, body = call("RestoreTableToPointInTime", {"SourceTableName": "sessions", "TargetTableName": "sessions-pitr-2",
+                                                       "RestoreDateTime": time.time() + 3600})
+    _check("RestoreTableToPointInTime rejects a time outside the PITR window",
+           status == 400 and body["__type"] == "InvalidRestoreTimeException")
+
     # ── On-demand backups: Create / List / Describe / Delete / Restore ──
     call("CreateTable", {"TableName": "catalog",
         "KeySchema": [{"AttributeName": "sku", "KeyType": "HASH"}],
