@@ -24,8 +24,9 @@ import cap_nsgs from "../../../../core/capabilities/azure/nsgs.json";
 import cap_resourcegroups from "../../../../core/capabilities/azure/resourcegroups.json";
 import cap_servicebus from "../../../../core/capabilities/azure/servicebus.json";
 import cap_sql from "../../../../core/capabilities/azure/sql.json";
+import cap_vms from "../../../../core/capabilities/azure/vms.json";
 
-const REGISTRY = { ...cap_acr, ...cap_aks, ...cap_apim, ...cap_appservices, ...cap_cosmos, ...cap_cost, ...cap_entra, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_monitor, ...cap_nsgs, ...cap_resourcegroups, ...cap_servicebus, ...cap_sql };
+const REGISTRY = { ...cap_acr, ...cap_aks, ...cap_apim, ...cap_appservices, ...cap_cosmos, ...cap_cost, ...cap_entra, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_monitor, ...cap_nsgs, ...cap_resourcegroups, ...cap_servicebus, ...cap_sql, ...cap_vms };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 
