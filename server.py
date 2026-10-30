@@ -14134,7 +14134,35 @@ async def api_ec2_query(request: Request):
         message = str(exc.detail)
         return _ec2_error_response(code, message, exc.status_code)
 
+    # Actions this legacy handler doesn't implement (key pairs, launch templates, ENIs, EBS
+    # extras, …) are served by the shared EC2/VPC core Nano uses (core/vpc_core.py), with its
+    # model in the active space's persisted slot — so e.g. CreateKeyPair works offline too.
+    from core import vpc_core as _vpc_core
+    if action in _vpc_core._OPS:
+        r = _vpc_core.dispatch(_Ec2CoreSpaceStore(), dict(params))
+        if r.status < 300 and not action.startswith(("Describe", "Get", "List")):
+            _persist_state()
+        return Response(content=r.body, status_code=r.status, media_type=r.media_type, headers=r.headers or None)
     return _ec2_error_response("InvalidAction", f"The action '{action}' is not implemented by the simulator.", 400)
+
+
+class _Ec2CoreSpaceStore:
+    """vpc_core keeps its whole model in `store._vpc_model`; point it at the active space's
+    service_states["ec2_vpc_core"] slot, which persists with the appliance state."""
+
+    @staticmethod
+    def _slot_owner() -> dict:
+        spaces = PLATFORM.kernel.state.setdefault("spaces", {"spaces": {}, "active_space_id": "", "settings": {}})
+        sid = spaces.get("active_space_id", "") or "default"
+        return spaces.setdefault("spaces", {}).setdefault(sid, {}).setdefault("service_states", {})
+
+    @property
+    def _vpc_model(self):
+        return self._slot_owner().get("ec2_vpc_core")
+
+    @_vpc_model.setter
+    def _vpc_model(self, model):
+        self._slot_owner()["ec2_vpc_core"] = model
 
 
 def api_gcp_compute_list_instances(project: str, zone: str):
