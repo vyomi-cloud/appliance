@@ -50,7 +50,7 @@ try {
   await shot("02-s3-create-filled");
   await page.getByRole("button", { name: "Create bucket" }).last().click();
   await page.getByRole("heading", { name: B }).waitFor({ timeout: 10000 });
-  const list = await wire("/");
+  const list = await wire("/", { headers: { authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=0" } });
   check("S3 create bucket → visible over native wire", list.includes(`<Name>${B}</Name>`));
   const ver = await wire(`/${B}?versioning=`);
   check("S3 versioning applied (native GetBucketVersioning)", /<Status>Enabled<\/Status>/.test(ver), ver.slice(0, 120));

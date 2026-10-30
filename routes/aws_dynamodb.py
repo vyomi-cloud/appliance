@@ -6,6 +6,8 @@ endpoint used by real AWS SDK/CLI clients.
 """
 from __future__ import annotations
 
+import os
+
 import copy
 import json
 import re
@@ -673,9 +675,38 @@ async def api_dynamodb_aws(request: Request):
             return Response(content=body, status_code=status, media_type=ctype)
     except Exception:
         pass
-    # Fall back to the provider-level handler.
+    # DDB Local unreachable → serve the NATIVE wire from the shared conformance core (the
+    # same dynamodb_core Nano and the unified ingress use), persisted next to the appliance
+    # state. The legacy provider handler answered SDKs in the console-REST shape
+    # ({"table_names": …}) and ignored KeySchema; it stays only for VYOMI_DDB_LEGACY_FALLBACK=1.
+    if os.environ.get("VYOMI_DDB_LEGACY_FALLBACK", "").strip() not in ("1", "true", "yes"):
+        return _ddb_native_fallback(request.headers.get("x-amz-target", ""), await request.body())
     import providers.aws_services as _aws_svc
     return await _aws_svc._ddb_api_aws(request)
+
+
+_DDB_NATIVE_STORE = None
+
+
+def _ddb_native_store():
+    global _DDB_NATIVE_STORE
+    if _DDB_NATIVE_STORE is None:
+        from core.persistent_store import PersistentNoSqlStore, SqliteStateBackend
+        state = os.environ.get("CLOUDLEARN_STATE_FILE", "/tmp/vyomi-state.sqlite3")
+        path = os.environ.get("VYOMI_DDB_DB") or os.path.join(os.path.dirname(os.path.abspath(state)), "vyomi-ddb.sqlite")
+        _DDB_NATIVE_STORE = PersistentNoSqlStore(SqliteStateBackend(path))
+    return _DDB_NATIVE_STORE
+
+
+def _ddb_native_fallback(target: str, body: bytes) -> Response:
+    from core import dynamodb_core as _ddbc
+    try:
+        payload = json.loads(body or b"{}")
+    except Exception:
+        return _ddb_error_response("SerializationException", "Request body is not valid JSON.", 400)
+    r = _ddbc.dispatch(_ddb_native_store(), target, payload if isinstance(payload, dict) else {})
+    return Response(content=r.json_bytes(), status_code=r.status, media_type="application/x-amz-json-1.0",
+                    headers={"x-amzn-requestid": _req_id(), **(r.headers or {})})
 
 
 # ---------------------------------------------------------------------------

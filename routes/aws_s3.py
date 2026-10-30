@@ -1100,6 +1100,23 @@ _UNSIGNED_QUERY_ACTION = {
 # ---------------------------------------------------------------------------
 
 
+# Bucket sub-resources stored verbatim (S3 round-trips the document). Anything listed in
+# _S3_SUB_UNSUPPORTED answers 501 NotImplemented — it must never fall through to
+# CreateBucket (PUT → 409) or DeleteBucket (DELETE → bucket gone).
+_S3_SUB_STORED = {
+    "encryption": ("ServerSideEncryptionConfigurationNotFoundError", "The server side encryption configuration was not found."),
+    "publicAccessBlock": ("NoSuchPublicAccessBlockConfiguration", "The public access block configuration was not found."),
+    "policy": ("NoSuchBucketPolicy", "The bucket policy does not exist."),
+    "ownershipControls": ("OwnershipControlsNotFoundError", "The bucket ownership controls were not found."),
+}
+_S3_SUB_UNSUPPORTED = ("website", "logging", "replication", "accelerate", "requestPayment", "object-lock",
+                       "intelligent-tiering", "inventory", "analytics", "metrics")
+
+
+def _s3_sub_unsupported(params: dict) -> str | None:
+    return next((k for k in _S3_SUB_UNSUPPORTED if k in params), None)
+
+
 def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
     """Register S3 REST API routes and the root AWS query-protocol dispatcher.
 
@@ -1242,7 +1259,10 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return await aws_query_root(request)
         accept = request.headers.get("accept", "")
         user_agent = request.headers.get("user-agent", "")
-        if "text/html" in accept or "Mozilla" in user_agent:
+        # A SigV4-signed request (or one the v4 console sent through /_wire) is an S3 call even
+        # from a browser; only an unsigned browser navigation gets the launch page.
+        signed = "AWS4-HMAC-SHA256" in request.headers.get("authorization", "") or request.scope.get("vyomi.wire_prefix")
+        if not signed and ("text/html" in accept or "Mozilla" in user_agent):
             with open(_PRICING_HTML, "rb") as f:
                 return Response(content=f.read(), media_type="text/html", headers={"Cache-Control": "no-store, max-age=0"})
 
@@ -1352,10 +1372,18 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             return _empty_response(200)
 
         # Encryption
-        if "encryption" in params:
+        sub = next((k for k in _S3_SUB_STORED if k in params), None)
+        if sub:
             if not _bucket_exists(bucket):
                 return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
-            return _empty_response(200)
+            body = (await request.body()).decode("utf-8", errors="replace").strip()
+            if not body:
+                return _error_xml("MalformedXML" if sub != "policy" else "MalformedPolicy", "The request body is empty.", f"/{bucket}", 400)
+            buckets[bucket].setdefault("cfg", {})[sub] = body
+            return _empty_response(204 if sub == "policy" else 200)
+        unsupported = _s3_sub_unsupported(params)
+        if unsupported:
+            return _error_xml("NotImplemented", f"Vyomi does not implement the bucket {unsupported} sub-resource yet.", f"/{bucket}?{unsupported}", 501)
 
         # CreateBucket
         err = _validate_bucket_name(bucket)
@@ -1502,9 +1530,18 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             )
             return _xml_response(xml)
 
-        if "encryption" in params:
-            return _error_xml("ServerSideEncryptionConfigurationNotFoundError",
-                              "The server side encryption configuration was not found.", f"/{bucket}", 404)
+        sub = next((k for k in _S3_SUB_STORED if k in params), None)
+        if sub:
+            doc = buckets[bucket].get("cfg", {}).get(sub)
+            if doc is None:
+                code, msg = _S3_SUB_STORED[sub]
+                return _error_xml(code, msg, f"/{bucket}", 404)
+            if sub == "policy":
+                return Response(content=doc, status_code=200, media_type="application/json")
+            return _xml_response(doc)
+        unsupported = _s3_sub_unsupported(params)
+        if unsupported:
+            return _error_xml("NotImplemented", f"Vyomi does not implement the bucket {unsupported} sub-resource yet.", f"/{bucket}?{unsupported}", 501)
 
         if "lifecycle" in params:
             stored_lifecycle = buckets[bucket].get("lifecycle")
@@ -1574,6 +1611,13 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if "tagging" in params:
             buckets[bucket].pop("tags", None)
             return _empty_response(204)
+        sub = next((k for k in _S3_SUB_STORED if k in params), None)
+        if sub:
+            buckets[bucket].get("cfg", {}).pop(sub, None)
+            return _empty_response(204)
+        unsupported = _s3_sub_unsupported(params)
+        if unsupported:
+            return _error_xml("NotImplemented", f"Vyomi does not implement the bucket {unsupported} sub-resource yet.", f"/{bucket}?{unsupported}", 501)
         if objects.get(bucket):
             return _error_xml("BucketNotEmpty", "The bucket you tried to delete is not empty.", f"/{bucket}", 409)
         del buckets[bucket]
