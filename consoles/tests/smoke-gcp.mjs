@@ -195,6 +195,40 @@ try {
   const settings = await wjson("/v1/projects/vyomi-project/projectSettings");
   check("settings toggle via UI → native projectSettings shows it", settings.legacyRedirectionState === "REDIRECTION_FROM_GCR_IO_ENABLED");
   await shot("14-artifacts-settings");
+  // Cloud Logging: create a log bucket through the UI → visible over the native entries/buckets wire
+  const LB = `v4-gcp-smoke-lb-${Date.now() % 100000}`;
+  await page.goto(UI + "#/logs/storage/bucket");
+  await page.getByLabel("Name").fill(LB);
+  await page.getByRole("button", { name: "Create bucket" }).click();
+  await page.getByRole("heading", { name: LB }).waitFor({ timeout: 10000 });
+  const buckets = await wjson(`/v2/projects/vyomi-project/locations/-/buckets`);
+  check("create log bucket via UI → visible over native wire (buckets.list)", (buckets.buckets || []).some((b) => b.name.endsWith(`/${LB}`)));
+  await shot("12-log-bucket-details");
+
+  // Reverse direction: write a log entry over the native wire → shown in the Logs Explorer
+  const MSG = `v4 gcp smoke entry ${Date.now() % 100000}`;
+  await wire("/v2/entries:write", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ logName: "projects/vyomi-project/logs/smoke", resource: { type: "global" }, entries: [{ severity: "ERROR", textPayload: MSG }] }),
+  });
+  await page.goto(UI + "#/logs/query");
+  await page.getByText(MSG).waitFor({ timeout: 10000 });
+  check("entry written over native wire → shown in Logs Explorer", true);
+  await shot("13-logs-explorer");
+
+  // Create a sink via the UI → visible over the native sinks wire
+  const SINK = `v4-gcp-smoke-sink-${Date.now() % 100000}`;
+  await page.goto(UI + "#/logs/router/sink");
+  await page.getByLabel("Sink name").fill(SINK);
+  await page.getByLabel("Select sink service").click();
+  await page.getByRole("option", { name: "Cloud Storage bucket" }).click();
+  await page.getByLabel("Sink destination").fill("v4-smoke-sink-bucket");
+  await page.getByLabel("Build inclusion filter").fill('severity>="ERROR"');
+  await page.getByRole("button", { name: "Create sink" }).click();
+  await page.getByRole("link", { name: SINK }).waitFor({ timeout: 10000 });
+  const sinks = await wjson(`/v2/projects/vyomi-project/sinks`);
+  check("create sink via UI → visible over native wire (sinks.list)", (sinks.sinks || []).some((s) => s.name.endsWith(`/${SINK}`) && s.destination === "storage.googleapis.com/v4-smoke-sink-bucket"));
+  await shot("14-log-router");
 
   // Not-simulated gaps carry the conformance attribute
   await page.goto(UI + "#/storage/monitoring");

@@ -64,6 +64,7 @@ from core import gcp_iamcredentials_core as gcp_iamc
 from core import gcp_monitoring_core as gcp_mon
 from core import gcp_redis_core as gcp_redis
 from core import gcp_artifactregistry_core as gcp_ar
+from core import gcp_logging_core as gcp_logging
 
 
 def _gcp_service(path):
@@ -71,6 +72,12 @@ def _gcp_service(path):
     client is pointed at the relay and the path is the service discriminator)."""
     if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1")):
         return "gcp-gcs"
+    if path.startswith("/v2/entries"):   # Cloud Logging: entries:write / entries:list
+        return "gcp-logging"
+    if re.match(r"^/v2/projects/[^/]+/(sinks|metrics|logs)([/:]|$)", path):
+        return "gcp-logging"
+    if re.match(r"^/v2/projects/[^/]+/locations/[^/]+/buckets", path):
+        return "gcp-logging"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
         return "gcp-cloudsql"
     if path.startswith("/v3/projects/") or path == "/v3/uptimeCheckIps":   # Cloud Monitoring API v3
@@ -274,6 +281,7 @@ class AwsWireRouter:
         self.gcp_iamc = s.get("gcp_iamc") or gcp_iamc.IamCredentialsStore()   # IAM Service Account Credentials issue log
         self.gcp_mon = s.get("gcp_mon") or gcp_mon.MonitoringStore()   # Cloud Monitoring (policies, channels, metrics, series)
         self.gcp_ar = s.get("gcp_ar") or gcp_ar.ArtifactRegistryStore()
+        self.gcp_logging = s.get("gcp_logging") or gcp_logging.LoggingStore()   # Cloud Logging
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -507,6 +515,7 @@ class AwsWireRouter:
                 "gcp-monitoring": (gcp_mon, self.gcp_mon),
                 "gcp-redis": (gcp_redis, self.gcp_redis),
                 "gcp-artifactregistry": (gcp_ar, self.gcp_ar),
+                "gcp-logging": (gcp_logging, self.gcp_logging),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store

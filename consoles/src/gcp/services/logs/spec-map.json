@@ -1,0 +1,12 @@
+{
+  "_doc": "ui-spec page id -> v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap (none here — gcp/logs isn't on the base-branch honest-allowlist).",
+  "logs-explorer": { "route": "#/logs/query", "fixtures": ["logs-seed"], "live": "logs-live-entry" },
+  "observability-analytics": { "route": "#/logs/analytics", "fixtures": ["logs-seed"], "live": "logs-live-entry" },
+  "log-based-metrics": { "route": "#/logs/metrics", "live": "metric-live" },
+  "create-metric": { "route": "#/logs/metrics/edit" },
+  "log-router": { "route": "#/logs/router", "live": "sink-live" },
+  "create-sink": { "route": "#/logs/router/sink" },
+  "logs-storage": { "route": "#/logs/storage", "live": "bucket-live" },
+  "create-log-bucket": { "route": "#/logs/storage/bucket" },
+  "log-bucket-details": { "route": "#/logs/storage/bucket/uic-log-bucket?loc=global", "live": "view-live", "vars": { "resource-name": "uic-log-bucket" } }
+}
