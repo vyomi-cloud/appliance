@@ -335,7 +335,12 @@ async function crawlConsole(browser, base, con, needsSW) {
   });
   const calls = () => {
     const now = Date.now();
-    const bg = new Set(log.filter((x) => x.t >= t0 - 2500 && x.t < t0).map((x) => x.p));
+    // Background polling = a path requested repeatedly just before this step. One earlier
+    // request is the previous tab's own call (two tabs can load the same endpoint, e.g.
+    // /api/metrics/series), which must still count for the tab that loads it again.
+    const pre = new Map();
+    for (const x of log) if (x.t >= t0 - 2500 && x.t < t0) pre.set(x.p, (pre.get(x.p) || 0) + 1);
+    const bg = new Set([...pre].filter(([, c]) => c > 1).map(([p]) => p));
     const n = new Set(log.filter((x) => x.t >= t0 && x.t <= now && !bg.has(x.p)).map((x) => x.p)).size;
     t0 = now;
     return n;
