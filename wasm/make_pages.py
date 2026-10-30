@@ -21,6 +21,11 @@ STATIC = os.path.join(ROOT, "static")
 # inter-page nav works whether the bundle is served at the web root or under a
 # subpath (the portal's /nano/).
 LINKS = {
+    # Nano opens the v4 native-fidelity consoles from the launcher (cloud cards + space clicks);
+    # the v3 consoles stay reachable as each v4 lens's "classic console" link. Must precede
+    # the "/console/<cloud>" rewrites below.
+    "const PROVIDER_PATHS = { aws: '/console/aws', gcp: '/console/gcp', azure: '/console/azure' };":
+        "const PROVIDER_PATHS = { aws: 'v4/aws/', gcp: 'v4/gcp/', azure: 'v4/azure/' };",
     "/console/aws": "aws-console.html",
     "/console/gcp": "gcp-console.html",
     "/console/azure": "azure-console.html",

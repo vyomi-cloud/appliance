@@ -15,7 +15,7 @@ import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Modal from "@cloudscape-design/components/modal";
 import Checkbox from "@cloudscape-design/components/checkbox";
 import Table from "@cloudscape-design/components/table";
-import { byId, SERVICES } from "../services/registry.js";
+import { byId, SERVICES, classicHref } from "../services/registry.js";
 import ServiceIcon from "../../common/icons/ServiceIcon.jsx";
 import { VyomiMark, vy } from "../../common/VyomiMark.jsx";
 
@@ -279,7 +279,7 @@ function Explore() {
     <SpaceBetween size="s">
       <div><Link href="https://vyomi.cloud" external><VyomiMark /> documentation</Link><Box variant="small" display="block" color="text-body-secondary">Guides for every simulated service.</Box></div>
       <div><Link href="#/services" onFollow={follow}>All services</Link><Box variant="small" display="block" color="text-body-secondary">What this console can open.</Box></div>
-      <div><Link href={`${location.pathname.split("/v4/")[0]}/console/aws`}>Classic <VyomiMark /> console</Link><Box variant="small" display="block" color="text-body-secondary">Services without a v4 page yet.</Box></div>
+      <div><Link href={classicHref("")}>Classic <VyomiMark /> console</Link><Box variant="small" display="block" color="text-body-secondary">Services without a v4 page yet.</Box></div>
     </SpaceBetween>
   );
 }

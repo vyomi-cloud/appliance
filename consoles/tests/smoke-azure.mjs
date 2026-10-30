@@ -147,7 +147,13 @@ try {
   await shot("14-delete-confirm");
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("link", { name: SA2, exact: true }).waitFor({ state: "detached", timeout: 10000 });
-  const gone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SA2}`);
+  // The row can leave the grid before the DELETE round-trip settles on a slow substrate (Nano
+  // runs the engine in the tab) — poll the ARM read-back briefly instead of reading once.
+  let gone = { status: 0 };
+  for (let i = 0; i < 20 && gone.status !== 404; i++) {
+    gone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${SA2}`);
+    if (gone.status !== 404) await page.waitForTimeout(500);
+  }
   check("UI delete → ARM GET 404", gone.status === 404, `HTTP ${gone.status}`);
 
   // ── Shell: unbacked service is honest; dark mode ───────────────────────────────────────

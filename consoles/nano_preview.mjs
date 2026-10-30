@@ -1,7 +1,7 @@
 /* Preview the Nano bundle exactly as the portal serves it — under /nano/ — straight from
  * this checkout's wasm/ (no portal, no login gate, no sync into portal/app/nano).
  *
- *   node consoles/nano_preview.mjs [--port 8743]   →  http://127.0.0.1:8743/nano/v4/aws/
+ *   node consoles/nano_preview.mjs [--port 8743]   →  http://127.0.0.1:8743/nano/  (launcher → v4 consoles)
  */
 import http from "node:http";
 import { readFile, stat } from "node:fs/promises";
@@ -19,7 +19,7 @@ const MIME = {
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
-  if (url.pathname === "/" || url.pathname === "/nano") { res.writeHead(302, { location: "/nano/v4/aws/" }); return res.end(); }
+  if (url.pathname === "/" || url.pathname === "/nano") { res.writeHead(302, { location: "/nano/" }); return res.end(); }
   if (!url.pathname.startsWith("/nano/")) { res.writeHead(404); return res.end(); }
   let f = normalize(join(ROOT, decodeURIComponent(url.pathname.slice("/nano/".length))));
   if (!f.startsWith(ROOT)) { res.writeHead(403); return res.end(); }

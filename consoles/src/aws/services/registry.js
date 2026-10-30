@@ -3,6 +3,8 @@
  * Services without a v4 module yet stay reachable through the classic (v3) console.
  * `icon` names Vyomi's own original tile (common/icons/aws.js) — no AWS Architecture Icons. */
 
+import { classicUrl } from "../../common/classic.js";
+
 export const CATEGORIES = ["Compute", "Storage", "Database", "Networking & Content Delivery", "Security, Identity, & Compliance", "Application Integration", "Management & Governance"];
 
 export const SERVICES = [
@@ -26,4 +28,4 @@ export const SERVICES = [
 export const byId = Object.fromEntries(SERVICES.map((s) => [s.id, s]));
 
 /** Classic (v3) console deep link, used until a service has its v4 module. */
-export const classicHref = (svc) => `${location.pathname.split("/v4/")[0]}/console/aws#${svc}`;
+export const classicHref = (svc) => classicUrl("aws", svc);

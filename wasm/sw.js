@@ -928,9 +928,11 @@ async function handleWire(request, url) {
     { method, path: wirePath, query, headers, body_b64: raw.byteLength ? b64FromBuf(raw) : "" }]);
   if (!res || typeof res.status !== "number") return json({ ok: false, error: (res && res.error) || "bad /_wire response" }, 500);
   const h = new Headers();
-  for (const [k, v] of Object.entries(res.headers || {}))
-    if (!/^(content-length|transfer-encoding|connection|set-cookie)$/i.test(k)) { try { h.set(k, v); } catch (_) {} }
   const nullBody = method === "HEAD" || [101, 204, 205, 304].includes(res.status);
+  // A bodied response gets its length from the body; a HEAD has none, so keep the engine's
+  // Content-Length (HeadObject / GetBlobProperties sizes would otherwise read as 0).
+  for (const [k, v] of Object.entries(res.headers || {}))
+    if (!/^(transfer-encoding|connection|set-cookie)$/i.test(k) && (method === "HEAD" || !/^content-length$/i.test(k))) { try { h.set(k, v); } catch (_) {} }
   return new Response(nullBody ? null : bufFromB64(res.body_b64), { status: res.status, headers: h });
 }
 
