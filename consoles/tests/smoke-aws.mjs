@@ -28,6 +28,7 @@ const ddb = async (target, body) => JSON.parse(await wire("/", { method: "POST",
 const kms = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `TrentService.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/kms/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const sm = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `secretsmanager.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/secretsmanager/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const sqs = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `AmazonSQS.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/sqs/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
+const sns = async (action, body) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/sns/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...body }).toString() });
 
 await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch();
@@ -230,6 +231,40 @@ try {
   const afterPoll = await sqs("GetQueueAttributes", { QueueUrl: qUrl, AttributeNames: ["All"] });
   check("SQS SendMessage over wire → received via UI poll (now in-flight)", afterPoll.Attributes?.ApproximateNumberOfMessagesNotVisible === "1", JSON.stringify(afterPoll.Attributes));
   await shot("16-sqs-send-receive");
+  // SNS: create a topic through the UI, subscribe an SQS queue through the UI, publish
+  // through the UI — then verify the queue really received the fanned-out notification
+  // over the native wire (the P2 queue's mandatory real SNS→SQS fan-out).
+  const SN = `v4smoke-topic-${Date.now() % 100000}`;
+  const SQ = `v4smoke-sns-queue-${Date.now() % 100000}`;
+  const q = await sqs("CreateQueue", { QueueName: SQ });
+  const qAttrs = await sqs("GetQueueAttributes", { QueueUrl: q.QueueUrl, AttributeNames: ["QueueArn"] });
+  const queueArn = qAttrs.Attributes.QueueArn;
+
+  await page.goto(UI + "#/sns/create-topic");
+  await page.getByLabel("Name", { exact: true }).fill(SN);
+  await page.getByRole("button", { name: "Create topic" }).click();
+  await page.getByRole("heading", { name: SN }).first().waitFor({ timeout: 10000 });
+  const topicsXml = await sns("ListTopics", {});
+  check("SNS create topic (UI) → visible over native wire", topicsXml.includes(`:${SN}</TopicArn>`));
+  await shot("15-sns-topic-detail");
+
+  await page.goto(UI + `#/sns/create-subscription?topic=${encodeURIComponent(SN)}`);
+  await page.getByLabel("Protocol", { exact: true }).click();
+  await page.getByRole("option", { name: "Amazon SQS" }).click();
+  await page.getByLabel("Endpoint", { exact: true }).fill(queueArn);
+  await page.getByRole("button", { name: "Create subscription" }).click();
+  await page.getByRole("heading", { name: /^Subscription:/ }).waitFor({ timeout: 10000 });
+  await shot("16-sns-subscription-detail");
+
+  await page.goto(UI + `#/sns/topics/${SN}/publish`);
+  await page.getByLabel("Message body to send to the endpoint", { exact: true }).fill("hello from v4 smoke");
+  await page.getByRole("button", { name: "Publish message" }).click();
+  await page.getByRole("heading", { name: SN }).first().waitFor({ timeout: 10000 });
+  await page.waitForTimeout(500);
+  const received = await sqs("ReceiveMessage", { QueueUrl: q.QueueUrl, MaxNumberOfMessages: 1 });
+  const fanned = (received.Messages || [])[0]?.Body || "";
+  check("SNS Publish (UI) → fanned out to the subscribed SQS queue over native wire", fanned.includes("hello from v4 smoke"), fanned.slice(0, 160));
+  await shot("17-sns-fanout-sqs");
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));

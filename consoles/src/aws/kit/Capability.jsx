@@ -16,10 +16,11 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import s3 from "../../../../core/capabilities/aws/s3.json";
 import dynamodb from "../../../../core/capabilities/aws/dynamodb.json";
 import sqs from "../../../../core/capabilities/aws/sqs.json";
+import sns from "../../../../core/capabilities/aws/sns.json";
 import { NotSimulatedContainer } from "./common.jsx";
 import { VyomiMark } from "../../common/VyomiMark.jsx";
 
-const REGISTRY = { ...s3, ...dynamodb, ...sqs };
+const REGISTRY = { ...s3, ...dynamodb, ...sqs, ...sns };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 
