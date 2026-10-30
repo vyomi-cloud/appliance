@@ -1,0 +1,43 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "landing": {
+    "route": "#/kms/home"
+  },
+  "aws-managed-keys": {
+    "route": "#/kms/aws-managed-keys",
+    "live": "live-aws-managed-key"
+  },
+  "aws-managed-key-detail": {
+    "route": "#/kms/aws-managed-keys/{live}",
+    "live": "live-aws-managed-key"
+  },
+  "customer-managed-keys": {
+    "route": "#/kms/customer-managed-keys",
+    "live": "live-customer-key"
+  },
+  "customer-managed-key-detail": {
+    "route": "#/kms/customer-managed-keys/{live}",
+    "live": "live-customer-key"
+  },
+  "create-key": {
+    "route": "#/kms/create-key",
+    "expand": [
+      "text=Asymmetric",
+      "role=button[name=\"Next\"]",
+      "role=button[name=\"Next\"]",
+      "role=button[name=\"Next\"]",
+      "role=button[name=\"Next\"]",
+      "role=button[name=\"Next\"]"
+    ]
+  },
+  "aws-cloudhsm-key-stores": {
+    "route": "#/kms/cloudhsm-key-stores"
+  },
+  "external-key-stores": {
+    "route": "#/kms/external-key-stores",
+    "live": "live-external-key-store"
+  },
+  "create-external-key-store": {
+    "route": "#/kms/external-key-stores/create"
+  }
+}

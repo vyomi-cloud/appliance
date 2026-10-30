@@ -25,6 +25,7 @@ let page;
 // worker answers /_wire, and it only sees requests from pages it controls.
 const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return r.text(); }, [WIRE + path, init]);
 const ddb = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `DynamoDB_20120810.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/dynamodb/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
+const kms = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `TrentService.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/kms/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 
 await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch();
@@ -159,6 +160,31 @@ try {
   const backups = await ddb("ListBackups", { TableName: T });
   check("DynamoDB create backup (UI) → visible over native wire", (backups.BackupSummaries || []).some((b) => b.TableName === T), JSON.stringify(backups));
   await shot("12-ddb-backups");
+
+  // KMS: create a customer managed key through the wizard (UI → CLI direction)
+  const K = `v4smoke-key-${Date.now() % 100000}`;
+  await page.goto(UI + "#/kms/create-key");
+  await page.getByRole("radio", { name: "Asymmetric", exact: true }).check();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByLabel("Alias", { exact: true }).fill(K);
+  for (let i = 0; i < 4; i++) await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Finish" }).click();
+  await page.getByRole("heading", { level: 1 }).filter({ hasText: /^[0-9a-f]{32}$/ }).waitFor({ timeout: 10000 });
+  const aliases = await kms("ListAliases", {});
+  const createdAlias = (aliases.Aliases || []).find((a) => a.AliasName === `alias/${K}`);
+  check("KMS create key (UI wizard) → visible over native wire", !!createdAlias, JSON.stringify(aliases.Aliases?.slice(-1)));
+  const createdMd = createdAlias && (await kms("DescribeKey", { KeyId: createdAlias.TargetKeyId })).KeyMetadata;
+  check("KMS created key is asymmetric (RSA/ECC) as configured in the wizard", /^(RSA_|ECC_)/.test(createdMd?.KeySpec || ""), createdMd?.KeySpec);
+  await shot("13-kms-key-detail");
+
+  // KMS: Encrypt against an unseen alias/aws/<service> over the wire auto-provisions the
+  // AWS-managed key (CLI → UI direction) — the AWS-managed-key liveness goal.
+  const svc = `v4smokesvc${Date.now() % 100000}`;
+  await kms("Encrypt", { KeyId: `alias/aws/${svc}`, Plaintext: Buffer.from("x").toString("base64") });
+  await page.goto(UI + "#/kms/aws-managed-keys");
+  await page.getByText(`aws/${svc}`).waitFor({ timeout: 10000 });
+  check("KMS Encrypt over wire against an unseen aws/ alias → AWS managed key shown in UI", true);
+  await shot("14-kms-aws-managed-keys");
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));
