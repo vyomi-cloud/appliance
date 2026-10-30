@@ -56,6 +56,7 @@ CORES = [
     "azure_keyvault_certificates_core.py",          # Azure: Key Vault certificates (native azure-keyvault-certificates)
     "scheduler_core.py",                            # AWS: EventBridge Scheduler (schedules, schedule groups) — the router imports it
     "azure_queue_core.py",                          # Azure: Storage Queue (native azure-storage-queue)
+    "azure_table_core.py",                          # Azure: Table Storage (native azure-data-tables)
     "azure_servicebus_core.py",                     # v2.5.0 Azure: Service Bus topics (pub/sub fan-out — SNS/Pub-Sub peer)
     "azure_sql_core.py",                            # v2.6.0 Azure: SQL data plane on the SqlStore seam (RDS/Cloud SQL peer)
     "azure_iam_core.py",                            # v2.6.0 Azure: RBAC checkAccess decision core (IAM/testIamPermissions peer)

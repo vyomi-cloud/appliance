@@ -24,12 +24,14 @@ from core.aws_wire_router import AwsWireRouter  # noqa: E402
 from core.azure_arm_core import AzureArm  # noqa: E402
 
 STATIC = ROOT / "static"
-ROUTER = AwsWireRouter()
 # Azure ARM (/subscriptions/*) is not in AwsWireRouter. Nano sends /_wire/subscriptions/* to
 # the same substrate-free AzureArm core (wasm/sw.js handleWire → the azure/_arm tuple) and the
 # appliance serves it with providers/azure_services.handle_arm (which AzureArm ports), so the
 # dev server does the same — the Azure lens's control plane, in-memory like the rest.
 ARM = AzureArm()
+# Shared with the router (stores= seam) so the Blob core can read CORS/lifecycle/static-website
+# config back out of ARM's `blobServices/default` / `managementPolicies/default` records.
+ROUTER = AwsWireRouter(stores={"az_arm": ARM})
 
 
 class Handler(BaseHTTPRequestHandler):
