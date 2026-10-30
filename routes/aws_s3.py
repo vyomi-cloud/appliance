@@ -1245,6 +1245,11 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
             _srv()._ssm_usage(_tgt, _payload, _r)
             return Response(content=json.dumps(_r.body), status_code=_r.status,
                             media_type="application/x-amz-json-1.1", headers=dict(_r.headers or {}))
+        if service in ("kms", "secretsmanager") and _wi.is_unified(service):
+            # v4 C0c — AWS KMS / Secrets Manager on the shared cores (core/kms_core.py,
+            # core/secrets_core.py) over the space-scoped appliance state; the classic
+            # console REST (routes/aws_secrets_kms_unified.py) reads the same stores.
+            return await _wi.serve_service(service, request)
         if service in ("kms", "secretsmanager", "events"):
             target = request.headers.get("x-amz-target", "")
             prefix = target.split(".", 1)[0] if "." in target else ""

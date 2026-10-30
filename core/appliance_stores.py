@@ -22,6 +22,14 @@ space-scoped state (core.app_context `_SpaceScopedDictProxy`):
                     (pre-v4 Vault-backed secrets / key index are adopted on first use; Vault
                      transit ciphertext still decrypts through `legacy_decrypt`)
 
+  v4 C0c adds (the pre-v4 handlers kept these in Vault + a process-local dict):
+    AWS KMS         keys / material / aliases / custom key stores
+                                             -> service_states["kms"]{keys,material,aliases,custom_key_stores}
+    Secrets Manager secrets (+ every version) -> service_states["secretsmanager"]{secrets}
+                    (pre-v4 Vault KV secrets and Vault transit keys are adopted once per space
+                     when Vault is reachable; `vault:v1:` ciphertext still decrypts through
+                     `legacy_decrypt`)
+
 The cores were extracted from the appliance handlers, so the shapes are identical.
 Consequences:
   * every v3 consumer of that state — the classic console REST (/api/s3/*,
@@ -393,8 +401,182 @@ class AppStateKeyStore(KeyStore):
             _log.warning("gcp kms: Vault adoption skipped: %s", exc)
 
 
+def _epoch(ts) -> float:
+    """RFC3339 (Vault / the pre-v4 index) → epoch seconds; best effort."""
+    if isinstance(ts, (int, float)):
+        return float(ts)
+    from datetime import datetime
+    s = str(ts or "").strip()
+    if not s:
+        return time.time()
+    s = s.replace("Z", "+00:00")
+    if "." in s:   # Vault returns nanoseconds; fromisoformat takes ≤ 6 fraction digits
+        head, _, rest = s.partition(".")
+        import itertools
+        frac = "".join(itertools.takewhile(str.isdigit, rest))
+        tz = rest[len(frac):]
+        s = f"{head}.{frac[:6]}{tz}"
+    try:
+        return datetime.fromisoformat(s).timestamp()
+    except Exception:
+        return time.time()
+
+
+_HEX32 = frozenset("0123456789abcdef")
+
+
+class AppStateAwsKeyStore(KeyStore):
+    """kms_core (AWS KMS) store over the appliance's space-scoped AWS state. Key
+    material lives in that persisted state, so keys survive a restart and ciphertext
+    made before it still decrypts; the crypto is the shared core's KmsEngine."""
+
+    def __init__(self, keys, material, aliases, custom_key_stores, account_id: str = ""):
+        # NB: no super().__init__() — the dicts are the shared, persisted proxies.
+        self._k, self._m, self._a, self._c = keys, material, aliases, custom_key_stores
+        self.engine = InMemoryKmsEngine()
+        self.account_id = account_id
+        self._adopted: set = set()
+
+    keys = property(lambda self: self._k)
+    material = property(lambda self: self._m)
+    aliases = property(lambda self: self._a)
+    custom_key_stores = property(lambda self: self._c)
+
+    def get_material(self, key_id):
+        m = self._m.get(key_id)
+        return m.encode("latin-1") if isinstance(m, str) else m
+
+    def _vault(self):
+        from core import vault_client as vc
+        return vc if vc.available() else None
+
+    def legacy_decrypt(self, key_ref: str, blob: bytes):
+        """Ciphertext minted by the pre-v4 Vault-transit handler (`vault:v1:…`).
+        That handler named the transit key after the request's KeyId (a key id, or
+        the tail of an ARN / unresolved alias, or "default"); try those, then every
+        key of the space. Returns (key_id, plaintext) or None."""
+        try:
+            text = bytes(blob).decode("ascii")
+        except Exception:
+            return None
+        if not text.startswith("vault:"):
+            return None
+        vc = self._vault()
+        if vc is None:
+            return None
+        from core import kms_core as _kc
+        cands: list[str] = []
+        ref = (key_ref or "").strip()
+        if ref:
+            resolved = _kc._resolve_key_id(self, ref)
+            if resolved:
+                cands.append(resolved)
+            cands.append(ref.rsplit("/", 1)[-1])
+        else:
+            cands += list(self.key_ids()) + ["default"]
+        import base64 as _b64
+        sid = _active_space_id()
+        for name in dict.fromkeys(c for c in cands if c):
+            pt = vc.transit_decrypt("aws", sid, name, text)
+            if pt is not None:
+                return name, _b64.b64decode(pt)
+        return None
+
+    def adopt(self) -> None:
+        """Register (once per space) the KMS keys a pre-v4 appliance created in Vault
+        transit (CreateKey ids — 32 hex), so their KeyIds keep describing and their
+        old ciphertext keeps decrypting (legacy_decrypt). Fresh material is minted
+        for new encrypts. Pre-v4 key metadata / aliases lived in process memory only
+        and did not survive a restart, so there is nothing else to adopt."""
+        sid = _active_space_id()
+        if sid in self._adopted:
+            return
+        self._adopted.add(sid)
+        try:
+            vc = self._vault()
+            if vc is None:
+                return
+            import uuid as _uuid
+            for name in vc.transit_list_keys("aws", sid):
+                if len(name) != 32 or not set(name) <= _HEX32 or name in self._k:
+                    continue
+                self.put_key(name, {
+                    "KeyState": "Enabled", "Description": "", "KeyUsage": "ENCRYPT_DECRYPT",
+                    "KeySpec": "SYMMETRIC_DEFAULT", "Origin": "AWS_KMS", "KeyManager": "CUSTOMER",
+                    "CreationDate": time.time(), "MaterialId": _uuid.uuid4().hex, "Tags": {},
+                }, self.engine.new_key_material())
+        except Exception as exc:
+            _log.warning("aws kms: Vault adoption skipped: %s", exc)
+
+
+class AppStateAwsKvStore(KvStore):
+    """secrets_core (AWS Secrets Manager) store over the appliance's space-scoped
+    AWS state."""
+
+    def __init__(self, secrets, account_id: str = ""):
+        self._s = secrets
+        self.account_id = account_id
+        self._adopted: set = set()
+
+    secrets = property(lambda self: self._s)
+
+    def adopt(self) -> None:
+        """Import (once per space) the secrets a pre-v4 appliance kept in Vault KV
+        (its name index + every live version + the console's metadata), so an
+        upgrade keeps them. The newest version is AWSCURRENT, the one before it
+        AWSPREVIOUS; VersionIds are stable UUIDs derived from the Vault version."""
+        sid = _active_space_id()
+        if sid in self._adopted:
+            return
+        self._adopted.add(sid)
+        try:
+            from core import vault_client as vc
+            from core import vault_routes as vr
+            if not vc.available():
+                return
+            import json as _json
+            import uuid as _uuid
+            from core import secrets_core as _sc
+            created_idx = vr._aws_secret_created(sid)
+            for name in vr._aws_secret_index_get(sid):
+                if name in self._s:
+                    continue
+                meta = vr._aws_secret_meta(sid, name)
+                versions = {}
+                for vmeta in vc.kv_list_versions("aws", sid, name):
+                    if vmeta.get("destroyed") or vmeta.get("deletion_time"):
+                        continue
+                    v = int(vmeta.get("version") or 0)
+                    got = vc.kv_get("aws", sid, name, version=v)
+                    if not got:
+                        continue
+                    data = got.get("data") or {}
+                    value = data.get("value") if "value" in data else _json.dumps(data)
+                    vid = _uuid.uuid5(_uuid.NAMESPACE_URL, f"vyomi:aws-sec:{sid}:{name}:{v}").hex
+                    versions[vid] = {"SecretString": None if value is None else str(value),
+                                     "SecretBinary": None, "stages": [], "_n": v,
+                                     "CreatedDate": _epoch(vmeta.get("created_time"))}
+                if not versions:
+                    continue
+                order = sorted(versions, key=lambda k: versions[k].pop("_n"))
+                versions[order[-1]]["stages"] = [_sc.CURRENT]
+                if len(order) > 1:
+                    versions[order[-2]]["stages"] = [_sc.PREVIOUS]
+                created = _epoch(created_idx.get(name) or meta.get("created"))
+                sec = {"name": name, "arn": _sc._secret_arn(self, name),
+                       "description": str(meta.get("description") or ""),
+                       "created": created, "last_changed": versions[order[-1]]["CreatedDate"],
+                       "versions": versions, "deleted_date": None}
+                kms_key = str(meta.get("kms_key_id") or "")
+                if kms_key and kms_key not in ("aws/secretsmanager", "alias/aws/secretsmanager"):
+                    sec["kms_key_id"] = kms_key
+                self._s[name] = sec
+        except Exception as exc:
+            _log.warning("aws secrets manager: Vault adoption skipped: %s", exc)
+
+
 # ── singletons ─────────────────────────────────────────────────────────────
-_S3 = _GCS = _DDB = _AZB = _GSEC = _GKMS = None
+_S3 = _GCS = _DDB = _AZB = _GSEC = _GKMS = _AKMS = _ASEC = None
 
 
 def s3_store() -> AppStateObjectStore:
@@ -503,3 +685,24 @@ def gcp_kms_store() -> AppStateKeyStore:
                                  _proxy("gcp_kms", factory, "aliases"), _proxy("gcp_kms", factory, "rings"),
                                  account_id=ctx.AWS_ACCOUNT_ID)
     return _GKMS
+
+
+def aws_kms_store() -> AppStateAwsKeyStore:
+    global _AKMS
+    if _AKMS is None:
+        from core import app_context as ctx
+        factory = lambda: {"keys": {}, "material": {}, "aliases": {}, "custom_key_stores": {}}   # noqa: E731
+        _AKMS = AppStateAwsKeyStore(_proxy("kms", factory, "keys"), _proxy("kms", factory, "material"),
+                                    _proxy("kms", factory, "aliases"),
+                                    _proxy("kms", factory, "custom_key_stores"),
+                                    account_id=ctx.AWS_ACCOUNT_ID)
+    return _AKMS
+
+
+def aws_secrets_store() -> AppStateAwsKvStore:
+    global _ASEC
+    if _ASEC is None:
+        from core import app_context as ctx
+        _ASEC = AppStateAwsKvStore(_proxy("secretsmanager", lambda: {"secrets": {}}, "secrets"),
+                                   account_id=ctx.AWS_ACCOUNT_ID)
+    return _ASEC

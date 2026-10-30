@@ -26,6 +26,12 @@ x-ms-version path rewrite — core/azure_blob_core.py), "gcp_secrets" (/v1/proje
 — core/gcp_secretmanager_core.py) and "gcp_kms" (/v1/projects/{p}/locations/{l}/keyRings… —
 core/gcp_kms_core.py), each over core/appliance_stores.py; the classic console REST of each
 (/api/azure/storage/*, /api/gcp/secrets*, /api/gcp/kms/keys*) reads/writes the same stores.
+
+v4 C0c adds "kms" (AWS KMS, X-Amz-Target TrentService.* — core/kms_core.py) and
+"secretsmanager" (AWS Secrets Manager, secretsmanager.* — core/secrets_core.py), served on
+POST / (and /_wire/) by routes/aws_s3.aws_query_root over core/appliance_stores.py; the
+classic console REST (/api/aws/kms/keys*, /api/aws/secrets*) is re-implemented on the same
+stores (routes/aws_secrets_kms_unified.py). Pre-v4 they were Vault-only handlers.
 """
 from __future__ import annotations
 
@@ -38,8 +44,9 @@ def _cfg(key: str, default: str) -> str:
     return os.environ.get(key, default)
 
 
-_DEFAULT_SERVICES = "s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms"
-_KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms")
+_DEFAULT_SERVICES = "s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager"
+_KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
+                   "kms", "secretsmanager")
 
 
 def unified_services() -> frozenset:
@@ -62,17 +69,19 @@ _APPLIANCE_ROUTER: AwsWireRouter | None = None
 
 
 def appliance_stores() -> dict:
-    """The C0/C0b stores (S3 / GCS / DynamoDB / Azure Blob / GCP Secret Manager / Cloud
-    KMS over the appliance's own state)."""
+    """The C0/C0b/C0c stores (S3 / GCS / DynamoDB / Azure Blob / GCP Secret Manager / Cloud
+    KMS / AWS KMS / AWS Secrets Manager over the appliance's own state)."""
     from core import appliance_stores as aps
     return {"s3": aps.s3_store(), "gcs": aps.gcs_store(), "ddb": aps.ddb_store(),
             "az_blob": aps.az_blob_store(), "gcp_sec": aps.gcp_secrets_store(),
-            "gcp_kms": aps.gcp_kms_store()}
+            "gcp_kms": aps.gcp_kms_store(), "kms": aps.aws_kms_store(),
+            "sec": aps.aws_secrets_store()}
 
 
 # router store key -> unified service name (which stores a full-ingress router overrides)
 STORE_SERVICE = {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb", "az_blob": "azure_blob",
-                 "gcp_sec": "gcp_secrets", "gcp_kms": "gcp_kms"}
+                 "gcp_sec": "gcp_secrets", "gcp_kms": "gcp_kms", "kms": "kms",
+                 "sec": "secretsmanager"}
 
 
 def appliance_router() -> AwsWireRouter:
@@ -158,6 +167,23 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         hdrs = dict(resp.headers or {})
         hdrs.setdefault("content-type", resp.media_type or "application/json")
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
+    if service in ("kms", "secretsmanager"):
+        import uuid as _uuid
+        from core import kms_core, secrets_core
+        mod, st = (kms_core, r.kms) if service == "kms" else (secrets_core, r.sec)
+        target = next((v for k, v in headers.items() if k.lower() == "x-amz-target"), "") or ""
+        try:
+            payload = _json.loads(body or b"{}")
+        except Exception:
+            return {"status": 400, "headers": {"content-type": "application/x-amz-json-1.1"},
+                    "body": _json.dumps({"__type": "SerializationException",
+                                         "message": "Request body is not valid JSON."}).encode()}
+        if hasattr(st, "adopt"):
+            st.adopt()                   # pre-v4 Vault keys / secrets → this state (once per space)
+        resp = mod.dispatch(st, target, payload if isinstance(payload, dict) else {})
+        hdrs = {"x-amzn-requestid": str(_uuid.uuid4()), **dict(resp.headers or {})}
+        hdrs.setdefault("content-type", "application/x-amz-json-1.1")
+        return {"status": resp.status, "headers": hdrs, "body": _json.dumps(resp.body).encode()}
     raise ValueError(f"not a unified service: {service}")
 
 

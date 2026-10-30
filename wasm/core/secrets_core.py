@@ -20,6 +20,15 @@ DescribeSecret/ListSecrets, and real scheduled-deletion semantics (a deleted
 secret blocks GetSecretValue until restored or the window elapses). All errors use
 the native {"__type","message"} shape.
 
+v4 C0c (the offline appliance now serves Secrets Manager through this core — see
+tests/conformance/test_c0c_legacy_parity_core.py): ClientRequestToken is the new
+version's VersionId and makes CreateSecret / PutSecretValue idempotent (boto3 and
+the CLI always send one); UpdateSecret without a value changes metadata only (no
+new version); KmsKeyId and Tags are kept (CreateSecret / UpdateSecret /
+TagResource / UntagResource) and returned by DescribeSecret / ListSecrets;
+ListSecrets carries SecretVersionsToStages; creating a name that is scheduled for
+deletion fails with InvalidRequestException, as in real AWS.
+
 Scope (v1 slice): CreateSecret, GetSecretValue, PutSecretValue, UpdateSecret,
 DescribeSecret, ListSecrets, ListSecretVersionIds, DeleteSecret, RestoreSecret.
 Rotation / resource policies / replication reuse the same helpers and slot in next.
@@ -78,8 +87,9 @@ def _require_secret(store: KvStore, ref: str) -> dict:
     return store.get_secret(name)
 
 
-def _new_version(value_str: str | None, value_bin: str | None, stages: list[str]) -> tuple[str, dict]:
-    vid = uuid.uuid4().hex
+def _new_version(value_str: str | None, value_bin: str | None, stages: list[str],
+                 token: str | None = None) -> tuple[str, dict]:
+    vid = str(token) if token else uuid.uuid4().hex
     return vid, {"SecretString": value_str, "SecretBinary": value_bin,
                  "CreatedDate": time.time(), "stages": list(stages)}
 
@@ -89,6 +99,28 @@ def _stage_to_version(secret: dict, stage: str) -> str | None:
         if stage in v.get("stages", []):
             return vid
     return None
+
+
+def _idempotent_version(secret: dict, body: dict) -> str | None:
+    """Real AWS: a ClientRequestToken that already names a version is a retry —
+    same value → return that version, different value → ResourceExistsException."""
+    token = body.get("ClientRequestToken")
+    if not token or token not in secret.get("versions", {}):
+        return None
+    v = secret["versions"][token]
+    s_str, s_bin = _values_from_body(body)
+    if v.get("SecretString") != s_str or v.get("SecretBinary") != s_bin:
+        raise SecretsError("ResourceExistsException",
+                           "A version with this ClientRequestToken already exists with a different value.", 400)
+    return token
+
+
+def _tags_in(body: dict) -> dict:
+    return {str(t["Key"]): str(t.get("Value", "")) for t in body.get("Tags") or [] if t.get("Key")}
+
+
+def _tags_out(secret: dict) -> list:
+    return [{"Key": k, "Value": v} for k, v in (secret.get("tags") or {}).items()]
 
 
 def _values_from_body(body: dict) -> tuple[str | None, str | None]:
@@ -102,18 +134,35 @@ def _create_secret(store: KvStore, body: dict) -> dict:
     name = str(body.get("Name") or "").strip()
     if not name:
         raise SecretsError("ValidationException", "Name is required.", 400)
-    if store.secret_exists(name) and not store.get_secret(name).get("deleted_date"):
+    if store.secret_exists(name):
+        existing = store.get_secret(name)
+        if existing.get("deleted_date"):
+            raise SecretsError("InvalidRequestException",
+                               f"You can't create this secret because a secret with this name ({name}) "
+                               "is already scheduled for deletion.", 400)
+        vid = _idempotent_version(existing, body)
+        if vid:
+            return {"ARN": existing["arn"], "Name": name, "VersionId": vid}
         raise SecretsError("ResourceExistsException",
                            f"The operation failed because the secret {name} already exists.", 400)
     s_str, s_bin = _values_from_body(body)
-    vid, version = _new_version(s_str, s_bin, [CURRENT])
+    has_value = s_str is not None or s_bin is not None
+    vid, version = _new_version(s_str, s_bin, [CURRENT], body.get("ClientRequestToken"))
     now = time.time()
     secret = {"name": name, "arn": _secret_arn(store, name), "description": str(body.get("Description", "")),
-              "created": now, "last_changed": now, "versions": {vid: version}, "deleted_date": None}
+              "created": now, "last_changed": now, "versions": {vid: version} if has_value else {},
+              "deleted_date": None}
+    if body.get("KmsKeyId"):
+        secret["kms_key_id"] = str(body["KmsKeyId"])
+    if body.get("Tags"):
+        secret["tags"] = _tags_in(body)
     store.put_secret(name, secret)
     store.mirror_put(name, secret)
     store.persist()
-    return {"ARN": secret["arn"], "Name": name, "VersionId": vid}
+    out = {"ARN": secret["arn"], "Name": name}
+    if has_value:
+        out["VersionId"] = vid
+    return out
 
 
 def _put_value(store: KvStore, body: dict, update: bool = False) -> dict:
@@ -122,6 +171,24 @@ def _put_value(store: KvStore, body: dict, update: bool = False) -> dict:
         raise SecretsError("InvalidRequestException",
                            "You can't perform this operation on the secret because it was marked for deletion.", 400)
     s_str, s_bin = _values_from_body(body)
+    if update:
+        # UpdateSecret: metadata always; a new version only when a value is given.
+        if body.get("Description") is not None:
+            secret["description"] = str(body.get("Description"))
+        if body.get("KmsKeyId"):
+            secret["kms_key_id"] = str(body["KmsKeyId"])
+        if s_str is None and s_bin is None:
+            secret["last_changed"] = time.time()
+            store.mirror_put(secret["name"], secret)
+            store.persist()
+            return {"ARN": secret["arn"], "Name": secret["name"]}
+    elif s_str is None and s_bin is None:
+        raise SecretsError("InvalidRequestException",
+                           "You must provide either SecretString or SecretBinary.", 400)
+    same = _idempotent_version(secret, body)
+    if same:
+        return {"ARN": secret["arn"], "Name": secret["name"], "VersionId": same,
+                "VersionStages": secret["versions"][same].get("stages", [])}
     requested = body.get("VersionStages") or [CURRENT]
     # The new version takes AWSCURRENT; demote whoever currently holds it to AWSPREVIOUS.
     if CURRENT in requested:
@@ -133,11 +200,9 @@ def _put_value(store: KvStore, body: dict, update: bool = False) -> dict:
             for v in secret["versions"].values():
                 v["stages"] = [st for st in v.get("stages", []) if st != PREVIOUS]
             secret["versions"][prev]["stages"].append(PREVIOUS)
-    vid, version = _new_version(s_str, s_bin, requested)
+    vid, version = _new_version(s_str, s_bin, requested, body.get("ClientRequestToken"))
     secret["versions"][vid] = version
     secret["last_changed"] = time.time()
-    if update and body.get("Description") is not None:
-        secret["description"] = str(body.get("Description"))
     store.mirror_put(secret["name"], secret)
     store.persist()
     return {"ARN": secret["arn"], "Name": secret["name"], "VersionId": vid,
@@ -201,7 +266,35 @@ def _describe_secret(store: KvStore, body: dict) -> dict:
            "VersionIdsToStages": vids_to_stages}
     if secret.get("deleted_date"):
         out["DeletedDate"] = secret["deleted_date"]
+    if secret.get("kms_key_id"):
+        out["KmsKeyId"] = secret["kms_key_id"]
+    if secret.get("tags"):
+        out["Tags"] = _tags_out(secret)
+    if secret.get("rotation_enabled"):
+        out["RotationEnabled"] = True
+        if secret.get("rotation_lambda_arn"):
+            out["RotationLambdaARN"] = secret["rotation_lambda_arn"]
+        if secret.get("rotation_rules"):
+            out["RotationRules"] = secret["rotation_rules"]
     return out
+
+
+def _tag_resource(store: KvStore, body: dict) -> dict:
+    secret = _require_secret(store, body.get("SecretId") or "")
+    secret.setdefault("tags", {}).update(_tags_in(body))
+    store.mirror_put(secret["name"], secret)
+    store.persist()
+    return {}
+
+
+def _untag_resource(store: KvStore, body: dict) -> dict:
+    secret = _require_secret(store, body.get("SecretId") or "")
+    tags = secret.setdefault("tags", {})
+    for k in body.get("TagKeys") or []:
+        tags.pop(k, None)
+    store.mirror_put(secret["name"], secret)
+    store.persist()
+    return {}
 
 
 def _list_secrets(store: KvStore, body: dict) -> dict:
@@ -213,8 +306,13 @@ def _list_secrets(store: KvStore, body: dict) -> dict:
             continue
         entry = {"ARN": s["arn"], "Name": name, "Description": s.get("description", ""),
                  "CreatedDate": s.get("created"), "LastChangedDate": s.get("last_changed")}
+        entry["SecretVersionsToStages"] = {vid: v.get("stages", []) for vid, v in s["versions"].items()}
         if s.get("deleted_date"):
             entry["DeletedDate"] = s["deleted_date"]
+        if s.get("kms_key_id"):
+            entry["KmsKeyId"] = s["kms_key_id"]
+        if s.get("tags"):
+            entry["Tags"] = _tags_out(s)
         out.append(entry)
     return {"SecretList": out}
 
@@ -277,6 +375,10 @@ def dispatch(store: KvStore, target: str, payload: dict | None = None) -> Secret
             return _ok(_delete_secret(store, body))
         if action == "RestoreSecret":
             return _ok(_restore_secret(store, body))
+        if action == "TagResource":
+            return _ok(_tag_resource(store, body))
+        if action == "UntagResource":
+            return _ok(_untag_resource(store, body))
         if action == "RotateSecret":
             return _ok(_rotate_secret(store, body))
         return _error("UnknownOperationException", f"The action {action} is not implemented.", 400)

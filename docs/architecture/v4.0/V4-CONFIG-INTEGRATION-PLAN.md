@@ -97,6 +97,26 @@ After C0, each feature is implemented once and appears on every substrate.
   (`azure_blob`, `gcp_secrets`, `gcp_kms`) or `VYOMI_LEGACY_WIRE=1`.
 - The ported legacy behaviours are pinned by `tests/conformance/test_c0b_legacy_parity_core.py`.
 
+**Step C0c (done):** AWS KMS and Secrets Manager, the last two Vault-only AWS services.
+- Without Vault, offline `TrentService.Encrypt` returned an empty `CiphertextBlob` and
+  `secretsmanager.ListSecrets` returned 500. KMS key metadata and aliases lived in a
+  process-local dict, so they were lost on restart even with Vault.
+- Both now run on `core/kms_core.py` and `core/secrets_core.py`. `routes/aws_s3.aws_query_root`
+  sends `kms` and `secretsmanager` there, for `POST /` and `/_wire/`. Keys, key material
+  (including rotation history), aliases, custom key stores and secrets with every version live
+  in the space-scoped state (`service_states["kms"]`, `service_states["secretsmanager"]`), so
+  ciphertext made before a restart still decrypts.
+- The classic console REST (`/api/aws/kms/keys*`, `/api/aws/secrets*`) is re-implemented on the
+  same stores in `routes/aws_secrets_kms_unified.py`.
+- Upgrade path: once per space, when Vault is reachable, the appliance adopts the Vault KV
+  secrets a pre-v4 appliance indexed, with their versions, console description and encryption
+  key. It also adopts Vault transit keys created by `CreateKey`. `vault:v1:` ciphertext decrypts
+  through `legacy_decrypt`.
+- Opt out with `VYOMI_UNIFIED_INGRESS_SERVICES` without `kms` / `secretsmanager`, or with
+  `VYOMI_LEGACY_WIRE=1`.
+- The ported behaviours and the upgrade path, tested against a fake Vault, are pinned by
+  `tests/conformance/test_c0c_legacy_parity_core.py`.
+
 ## 5. Triage — S3
 
 | Feature | Today | Target | How (backend) |

@@ -2555,13 +2555,28 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             if isinstance(_iam_rec, dict):
                 add("aws", "iam", _iam_kind, str(_iam_id), _iam_rec)
 
-    try:   # Secrets Manager + KMS — the Vault-backed stores the console and SDK/CLI share
-        from core import vault_routes as _vr
-        for _sec_name in _vr._aws_secret_index_get(str(space.get("space_id") or _spaces_state().get("active_space_id") or "default")):
-            add("aws", "secretsmanager", "secret", _sec_name, {"name": _sec_name})
-        for _key_id, _key in list(_vr._kms_keys.items()):
-            if isinstance(_key, dict) and _key.get("KeyState") != "PendingDeletion":
+    try:   # Secrets Manager + KMS — v4 C0c: the shared cores' space state (console + SDK/CLI share it)
+        from core import wire_ingress as _wi_g
+        from routes import aws_secrets_kms_unified as _ask_g
+        _aws_core_inv = _ask_g.inventory(space)
+        if _wi_g.is_unified("secretsmanager"):
+            for _sec_name in _aws_core_inv[("secretsmanager", "secret")]:
+                add("aws", "secretsmanager", "secret", _sec_name, {"name": _sec_name})
+        if _wi_g.is_unified("kms"):
+            for _key_id in _aws_core_inv[("kms", "key")]:
                 add("aws", "kms", "key", _key_id, {"name": _key_id})
+    except Exception:
+        pass
+    try:   # … or, opted out, the pre-v4 Vault-backed stores
+        from core import vault_routes as _vr
+        from core import wire_ingress as _wi_g
+        if not _wi_g.is_unified("secretsmanager"):
+            for _sec_name in _vr._aws_secret_index_get(str(space.get("space_id") or _spaces_state().get("active_space_id") or "default")):
+                add("aws", "secretsmanager", "secret", _sec_name, {"name": _sec_name})
+        if not _wi_g.is_unified("kms"):
+            for _key_id, _key in list(_vr._kms_keys.items()):
+                if isinstance(_key, dict) and _key.get("KeyState") != "PendingDeletion":
+                    add("aws", "kms", "key", _key_id, {"name": _key_id})
     except Exception:
         pass
 
@@ -2811,14 +2826,30 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     except Exception:
         pass
 
-    # Vault-backed AWS Secrets Manager secrets / KMS keys (console + SDK write
-    # to Vault and _kms_keys, not to service_states["aws_extras"]).
+    # v4 C0c: AWS Secrets Manager secrets / customer managed KMS keys served by the
+    # shared cores live in the space's service_states (secretsmanager / kms).
+    try:
+        from routes import aws_secrets_kms_unified as _ask
+        from core import wire_ingress as _wi_inv
+        for (_svc, _kind), _items in _ask.inventory(space).items():
+            if not _wi_inv.is_unified(_svc):
+                continue
+            for _entry, _created in _items.items():
+                add("aws", _svc, _kind, f"core:{_svc}:{_entry}", {"name": _entry, "created": _created})
+    except Exception:
+        pass
+
+    # Vault-backed AWS Secrets Manager secrets / KMS keys (pre-v4 handlers, or opted
+    # out of the unified engine: Vault + _kms_keys, not service_states).
     try:
         from core import vault_routes as _vr
+        from core import wire_ingress as _wi_inv
         _sid = next((k for k, v in _spaces_state().get("spaces", {}).items() if v is space), "")
-        if _sid:
+        if _sid and not (_wi_inv.is_unified("secretsmanager") and _wi_inv.is_unified("kms")):
             _aws_v = _vr.aws_vault_resources(_sid)
             for _svc, _kind, _bucket in (("secretsmanager", "secret", "secrets"), ("kms", "key", "keys")):
+                if _wi_inv.is_unified(_svc):
+                    continue
                 for _name, _created in _aws_v[_bucket].items():
                     add("aws", _svc, _kind, f"vault:{_bucket}:{_name}", {"name": _name, "created": _created})
     except Exception:
