@@ -1,7 +1,8 @@
 /* Object detail — Properties come from a real HeadObject; Versions from a real
- * ListObjectVersions (the version chain Vyomi already keeps per key). ACL, per-object
- * tagging, additional checksums and Object Lock legal hold/retention aren't modeled by
- * the backend, so they render as declared gaps rather than fake success. */
+ * ListObjectVersions (the version chain Vyomi already keeps per key). ACL, server-side
+ * encryption and Object Lock legal hold/retention are real round trips through the
+ * native API (capability-gated); per-object tagging and additional checksums aren't
+ * modeled, so they render as declared gaps rather than fake success. */
 import { useState } from "react";
 import Header from "@cloudscape-design/components/header";
 import Tabs from "@cloudscape-design/components/tabs";
@@ -11,9 +12,16 @@ import Link from "@cloudscape-design/components/link";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import Table from "@cloudscape-design/components/table";
 import Box from "@cloudscape-design/components/box";
+import Modal from "@cloudscape-design/components/modal";
+import FormField from "@cloudscape-design/components/form-field";
+import Input from "@cloudscape-design/components/input";
+import Tiles from "@cloudscape-design/components/tiles";
+import ColumnLayout from "@cloudscape-design/components/column-layout";
+import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import { WIRE_BASE } from "../../../common/wire.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
+import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
 import * as api from "./api.js";
 
@@ -50,7 +58,7 @@ export default function ObjectDetail({ params, query }) {
           onChange={({ detail }) => setTab(detail.activeTabId)}
           tabs={[
             { id: "properties", label: "Properties", content: <Properties bucket={bucket} objectKey={objectKey} head={head} region={region.data} url={url} /> },
-            { id: "permissions", label: "Permissions", content: <NotSimulatedContainer title="Access control list (ACL)" /> },
+            { id: "permissions", label: "Permissions", content: <ObjectAcl bucket={bucket} objectKey={objectKey} /> },
             { id: "versions", label: "Versions", content: <Versions bucket={bucket} objectKey={objectKey} /> },
           ]}
         />
@@ -61,6 +69,7 @@ export default function ObjectDetail({ params, query }) {
 
 function Properties({ bucket, objectKey, head, region, url }) {
   const d = head.data;
+  const lock = useAsync(() => api.getObjectLock(bucket), [bucket]);
   return (
     <SpaceBetween size="l">
       <KeyValue title="Object overview" items={[
@@ -77,7 +86,12 @@ function Properties({ bucket, objectKey, head, region, url }) {
       ]} />
       <NotSimulatedContainer title="Object management overview" />
       <KeyValue title="Storage class" items={[["Storage class", d?.storageClass]]} />
-      <NotSimulatedContainer title="Server-side encryption settings" />
+      <CapabilityContainer id="s3.bucket.encryption" title="Server-side encryption settings">
+        <SpaceBetween size="s">
+          <div><Box variant="awsui-key-label">Encryption type</Box><div>{{ AES256: "Server-side encryption with Amazon S3 managed keys (SSE-S3)", "aws:kms": "Server-side encryption with AWS Key Management Service keys (SSE-KMS)", "aws:kms:dsse": "Dual-layer server-side encryption with AWS Key Management Service keys (DSSE-KMS)" }[d?.encryption] || d?.encryption}</div></div>
+          {d?.kmsKeyId && <div><Box variant="awsui-key-label">AWS KMS key</Box><div>{d.kmsKeyId}</div></div>}
+        </SpaceBetween>
+      </CapabilityContainer>
       <NotSimulatedContainer title="Additional checksums" />
       <NotSimulatedContainer title="Tags" />
       <Table
@@ -87,9 +101,108 @@ function Properties({ bucket, objectKey, head, region, url }) {
         columnDefinitions={[{ id: "type", header: "Type", cell: () => "System-defined" }, { id: "key", header: "Key", cell: (r) => `x-amz-meta-${r.k}` }, { id: "value", header: "Value", cell: (r) => r.v }]}
         empty={<Box textAlign="center" color="inherit"><b>No metadata</b></Box>}
       />
-      <NotSimulatedContainer title="Object Lock legal hold" />
-      <NotSimulatedContainer title="Object Lock retention" />
+      <LegalHold bucket={bucket} objectKey={objectKey} lockLoading={lock.loading} lockEnabled={!!lock.data?.enabled} />
+      <Retention bucket={bucket} objectKey={objectKey} lockLoading={lock.loading} lockEnabled={!!lock.data?.enabled} />
     </SpaceBetween>
+  );
+}
+
+function ObjectAcl({ bucket, objectKey }) {
+  const notify = useNotify();
+  const acl = useAsync(() => api.getObjectAcl(bucket, objectKey), [bucket, objectKey]);
+  const [edit, setEdit] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  return (
+    <CapabilityContainer id="s3.bucket.acl" title="Access control list (ACL)" description="Grant basic read/write permissions to other AWS accounts for this object."
+      actions={<Button onClick={() => { setError(null); setEdit("private"); }}>Edit</Button>}>
+      {acl.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
+        : acl.data?.error ? <ErrorAlert error={acl.data.error} />
+        : <Table variant="embedded" items={acl.data?.grants || []}
+            columnDefinitions={[{ id: "g", header: "Grantee", cell: (g) => g.grantee }, { id: "t", header: "Type", cell: (g) => g.type }, { id: "p", header: "Permission", cell: (g) => g.permission }]}
+            empty={<Box textAlign="center">No grants</Box>} />}
+      <Modal visible={!!edit} onDismiss={() => setEdit(null)} header="Edit access control list (ACL)"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setEdit(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={async () => {
+            setSaving(true);
+            try { await api.putObjectAcl(bucket, objectKey, edit); notify.success(`Successfully edited access control list (ACL).${saveNotice("s3.bucket.acl")}`); setEdit(null); acl.reload(); }
+            catch (e) { setError(e); } finally { setSaving(false); }
+          }}>Save changes</Button>
+        </SpaceBetween></Box>}>
+        <SpaceBetween size="m">
+          <Tiles value={edit} onChange={({ detail }) => setEdit(detail.value)} columns={1} items={[
+            { value: "private", label: "Private" }, { value: "public-read", label: "Public read" },
+            { value: "public-read-write", label: "Public read/write" }, { value: "authenticated-read", label: "Authenticated read" },
+          ]} />
+          {error && <ErrorAlert error={error} />}
+        </SpaceBetween>
+      </Modal>
+    </CapabilityContainer>
+  );
+}
+
+function LegalHold({ bucket, objectKey, lockLoading, lockEnabled }) {
+  const notify = useNotify();
+  const st = useAsync(() => lockEnabled ? api.getLegalHold(bucket, objectKey) : Promise.resolve({ unsupported: true }), [bucket, objectKey, lockEnabled]);
+  const [edit, setEdit] = useState(null);
+  const [saving, setSaving] = useState(false);
+  if (lockLoading || st.loading) return <CapabilityContainer id="s3.bucket.object-lock" title="Object Lock legal hold"><StatusIndicator type="loading">Loading</StatusIndicator></CapabilityContainer>;
+  if (st.data?.unsupported) return <NotSimulatedContainer title="Object Lock legal hold" note="Object Lock is disabled for this bucket." />;
+  return (
+    <CapabilityContainer id="s3.bucket.object-lock" title="Object Lock legal hold"
+      actions={<Button onClick={() => setEdit(st.data?.status === "ON" ? "OFF" : "ON")}>Edit</Button>}>
+      {st.data?.error ? <ErrorAlert error={st.data.error} />
+        : <div><Box variant="awsui-key-label">Legal hold</Box><div>{st.data?.status === "ON" ? "On" : "Off"}</div></div>}
+      <Modal visible={!!edit} onDismiss={() => setEdit(null)} header="Edit legal hold"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setEdit(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={async () => {
+            setSaving(true);
+            try { await api.putLegalHold(bucket, objectKey, edit); notify.success("Successfully edited legal hold."); setEdit(null); st.reload(); }
+            catch (e) { notify.error(e); } finally { setSaving(false); }
+          }}>Save changes</Button>
+        </SpaceBetween></Box>}>
+        Set legal hold status to <b>{edit === "ON" ? "On" : "Off"}</b>?
+      </Modal>
+    </CapabilityContainer>
+  );
+}
+
+function Retention({ bucket, objectKey, lockLoading, lockEnabled }) {
+  const notify = useNotify();
+  const st = useAsync(() => lockEnabled ? api.getRetention(bucket, objectKey) : Promise.resolve({ unsupported: true }), [bucket, objectKey, lockEnabled]);
+  const [edit, setEdit] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  if (lockLoading || st.loading) return <CapabilityContainer id="s3.bucket.object-lock" title="Object Lock retention"><StatusIndicator type="loading">Loading</StatusIndicator></CapabilityContainer>;
+  if (st.data?.unsupported) return <NotSimulatedContainer title="Object Lock retention" note="Object Lock is disabled for this bucket." />;
+  return (
+    <CapabilityContainer id="s3.bucket.object-lock" title="Object Lock retention"
+      actions={<Button onClick={() => { setError(null); setEdit({ mode: st.data?.mode || "GOVERNANCE", date: (st.data?.retainUntil || "").slice(0, 10) }); }}>Edit</Button>}>
+      {st.data?.error ? <ErrorAlert error={st.data.error} />
+        : st.data?.mode
+          ? <ColumnLayout columns={2}><div><Box variant="awsui-key-label">Retention mode</Box><div>{st.data.mode}</div></div><div><Box variant="awsui-key-label">Retain until date</Box><div>{fmtDate(st.data.retainUntil)}</div></div></ColumnLayout>
+          : <Box color="text-body-secondary">No retention period set.</Box>}
+      <Modal visible={!!edit} onDismiss={() => setEdit(null)} header="Edit retention"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setEdit(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={async () => {
+            setSaving(true);
+            try { await api.putRetention(bucket, objectKey, edit.mode, `${edit.date}T00:00:00.000Z`); notify.success("Successfully edited retention."); setEdit(null); st.reload(); }
+            catch (e) { setError(e); } finally { setSaving(false); }
+          }}>Save changes</Button>
+        </SpaceBetween></Box>}>
+        {edit && <SpaceBetween size="m">
+          <FormField label="Retention mode">
+            <Tiles value={edit.mode} onChange={({ detail }) => setEdit({ ...edit, mode: detail.value })} columns={2}
+              items={[{ value: "GOVERNANCE", label: "Governance" }, { value: "COMPLIANCE", label: "Compliance" }]} />
+          </FormField>
+          <FormField label="Retain until date"><Input type="date" value={edit.date} onChange={({ detail }) => setEdit({ ...edit, date: detail.value })} /></FormField>
+          {error && <ErrorAlert error={error} />}
+        </SpaceBetween>}
+      </Modal>
+    </CapabilityContainer>
   );
 }
 

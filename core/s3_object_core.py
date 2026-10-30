@@ -23,11 +23,12 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import re
 import urllib.parse
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from xml.etree import ElementTree as ET
 
@@ -416,6 +417,303 @@ def _default_acl_xml() -> str:
             '<DisplayName>cloudlearn-simulator</DisplayName></Grantee><Permission>FULL_CONTROL</Permission></Grant></AccessControlList></AccessControlPolicy>')
 
 
+# ── DEPTH pass: real enforcement for sub-resources that used to be config_only ────────
+_GROUP_ALL_USERS = "http://acs.amazonaws.com/groups/global/AllUsers"
+_GROUP_AUTH_USERS = "http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
+_CANNED_ACL_GRANTS = {
+    "private": [],
+    "public-read": [(_GROUP_ALL_USERS, "READ")],
+    "public-read-write": [(_GROUP_ALL_USERS, "READ"), (_GROUP_ALL_USERS, "WRITE")],
+    "authenticated-read": [(_GROUP_AUTH_USERS, "READ")],
+    "bucket-owner-read": [],
+    "bucket-owner-full-control": [],
+}
+_PUBLIC_CANNED_ACLS = ("public-read", "public-read-write", "authenticated-read")
+
+
+def _canned_acl_xml(canned: str) -> str:
+    """The AccessControlPolicy a canned `x-amz-acl` value grants — used so GetBucketAcl /
+    GetObjectAcl actually reflect a canned PUT instead of always echoing the default."""
+    grants = "".join(
+        '<Grant><Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Group">'
+        f"<URI>{uri}</URI></Grantee><Permission>{perm}</Permission></Grant>"
+        for uri, perm in _CANNED_ACL_GRANTS.get(canned, []))
+    owner_grant = ('<Grant><Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser">'
+                   "<ID>simulator</ID><DisplayName>cloudlearn-simulator</DisplayName></Grantee>"
+                   "<Permission>FULL_CONTROL</Permission></Grant>")
+    return (f'<?xml version="1.0" encoding="UTF-8"?><AccessControlPolicy xmlns="{S3_NS}">{_OWNER_XML}'
+            f"<AccessControlList>{owner_grant}{grants}</AccessControlList></AccessControlPolicy>")
+
+
+def _object_ownership(store: ObjectStore, bucket: str) -> str | None:
+    meta = store.buckets.get(bucket) or {}
+    doc = meta.get("cfg", {}).get("ownershipControls")
+    if not doc:
+        return None
+    try:
+        root = ET.fromstring(doc)
+    except ET.ParseError:
+        return None
+    rule = _child(root, "Rule")
+    return _child_text(rule, "ObjectOwnership") or None
+
+
+def _acl_blocked_by_ownership(store: ObjectStore, bucket: str) -> S3Response | None:
+    """BucketOwnerEnforced disables ACLs entirely — real S3 rejects every Put*Acl call,
+    not just public ones, once ownership is set this way."""
+    if _object_ownership(store, bucket) == "BucketOwnerEnforced":
+        return _error_xml("InvalidBucketAclWithObjectOwnership",
+                          "Bucket cannot have ACLs set with ObjectOwnership's BucketOwnerEnforced setting",
+                          f"/{bucket}", 400)
+    return None
+
+
+def _public_access_block(store: ObjectStore, bucket: str) -> dict:
+    meta = store.buckets.get(bucket) or {}
+    doc = meta.get("cfg", {}).get("publicAccessBlock")
+    flags = {"BlockPublicAcls": False, "IgnorePublicAcls": False,
+             "BlockPublicPolicy": False, "RestrictPublicBuckets": False}
+    if not doc:
+        return flags
+    try:
+        root = ET.fromstring(doc)
+    except ET.ParseError:
+        return flags
+    for k in flags:
+        flags[k] = _child_text(root, k).strip().lower() == "true"
+    return flags
+
+
+def _acl_blocked_by_pab(store: ObjectStore, bucket: str, canned: str | None) -> S3Response | None:
+    if canned in _PUBLIC_CANNED_ACLS and _public_access_block(store, bucket)["BlockPublicAcls"]:
+        return _error_xml("AccessDenied",
+                          "This request is not allowed because the bucket owner enforced the "
+                          "Block Public Access setting that disallows public ACLs.", f"/{bucket}", 403)
+    return None
+
+
+def _policy_is_public(policy: dict) -> bool:
+    for st in policy.get("Statement") or []:
+        if st.get("Effect") != "Allow":
+            continue
+        principal = st.get("Principal")
+        if principal == "*":
+            return True
+        if isinstance(principal, dict):
+            aws = principal.get("AWS")
+            if aws == "*" or (isinstance(aws, list) and "*" in aws):
+                return True
+    return False
+
+
+def _bucket_encryption(store: ObjectStore, bucket: str) -> dict:
+    """The bucket's default-encryption config — AES256 is the fallback because real S3
+    now encrypts every bucket by default even without an explicit PutBucketEncryption call."""
+    meta = store.buckets.get(bucket) or {}
+    doc = meta.get("cfg", {}).get("encryption")
+    out = {"algorithm": "AES256", "kms_key": None, "bucket_key": False}
+    if not doc:
+        return out
+    try:
+        root = ET.fromstring(doc)
+    except ET.ParseError:
+        return out
+    rule = _child(root, "Rule")
+    if rule is None:
+        return out
+    default = _child(rule, "ApplyServerSideEncryptionByDefault")
+    if default is not None:
+        out["algorithm"] = _child_text(default, "SSEAlgorithm") or "AES256"
+        out["kms_key"] = _child_text(default, "KMSMasterKeyID") or None
+    out["bucket_key"] = _child_text(rule, "BucketKeyEnabled").strip().lower() == "true"
+    return out
+
+
+def _sse_headers(store: ObjectStore, bucket: str) -> dict:
+    enc = _bucket_encryption(store, bucket)
+    h = {"x-amz-server-side-encryption": enc["algorithm"]}
+    if enc["algorithm"] != "AES256" and enc["kms_key"]:
+        h["x-amz-server-side-encryption-aws-kms-key-id"] = enc["kms_key"]
+    if enc["bucket_key"]:
+        h["x-amz-server-side-encryption-bucket-key-enabled"] = "true"
+    return h
+
+
+def _cors_rules(store: ObjectStore, bucket: str) -> list:
+    meta = store.buckets.get(bucket) or {}
+    doc = meta.get("cfg", {}).get("cors")
+    if not doc:
+        return []
+    try:
+        root = ET.fromstring(doc)
+    except ET.ParseError:
+        return []
+    rules = []
+    for r in _children(root, "CORSRule"):
+        rules.append({
+            "AllowedOrigins": [c.text.strip() for c in _children(r, "AllowedOrigin") if c.text],
+            "AllowedMethods": [c.text.strip() for c in _children(r, "AllowedMethod") if c.text],
+            "AllowedHeaders": [c.text.strip() for c in _children(r, "AllowedHeader") if c.text],
+            "ExposeHeaders": [c.text.strip() for c in _children(r, "ExposeHeader") if c.text],
+            "MaxAgeSeconds": int(_child_text(r, "MaxAgeSeconds") or 0) or None,
+        })
+    return rules
+
+
+def _matching_cors_rule(rules: list, origin: str, method: str) -> dict | None:
+    for r in rules:
+        origins = r.get("AllowedOrigins") or []
+        methods = [m.upper() for m in (r.get("AllowedMethods") or [])]
+        if ("*" in origins or origin in origins) and method.upper() in methods:
+            return r
+    return None
+
+
+def _cors_response_headers(store: ObjectStore, bucket: str, headers: dict, method: str) -> dict:
+    """Access-Control-* headers to merge into an actual (non-preflight) response, if the
+    request's Origin + method match a configured CORS rule."""
+    origin = {str(k).lower(): v for k, v in (headers or {}).items()}.get("origin")
+    if not origin:
+        return {}
+    rule = _matching_cors_rule(_cors_rules(store, bucket), origin, method)
+    if not rule:
+        return {}
+    out = {"Access-Control-Allow-Origin": origin if "*" not in rule["AllowedOrigins"] else "*"}
+    if rule.get("ExposeHeaders"):
+        out["Access-Control-Expose-Headers"] = ", ".join(rule["ExposeHeaders"])
+    return out
+
+
+def _cors_preflight(store: ObjectStore, bucket: str, headers: dict) -> S3Response:
+    origin = headers.get("origin")
+    req_method = headers.get("access-control-request-method", "GET")
+    if not origin:
+        return _error_xml("InvalidRequest", "Missing Origin header.", f"/{bucket}", 400)
+    if not store.bucket_exists(bucket):
+        return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    rule = _matching_cors_rule(_cors_rules(store, bucket), origin, req_method)
+    if not rule:
+        return _error_xml("AccessForbidden",
+                          "CORSResponse: This CORS request is not allowed because the evaluation of "
+                          "Origin, Access-Control-Request-Method or Access-Control-Request-Headers is "
+                          "not whitelisted by the bucket's CORS configuration.", f"/{bucket}", 403)
+    h = {"Access-Control-Allow-Origin": origin if "*" not in rule["AllowedOrigins"] else "*",
+         "Access-Control-Allow-Methods": ", ".join(rule["AllowedMethods"])}
+    if rule.get("AllowedHeaders"):
+        h["Access-Control-Allow-Headers"] = ", ".join(rule["AllowedHeaders"])
+    if rule.get("ExposeHeaders"):
+        h["Access-Control-Expose-Headers"] = ", ".join(rule["ExposeHeaders"])
+    if rule.get("MaxAgeSeconds"):
+        h["Access-Control-Max-Age"] = str(rule["MaxAgeSeconds"])
+    return _empty_response(200, h)
+
+
+def _parse_lifecycle_rules(doc: str) -> list:
+    try:
+        root = ET.fromstring(doc)
+    except ET.ParseError:
+        return []
+    rules = []
+    for r in _children(root, "Rule"):
+        if _child_text(r, "Status") != "Enabled":
+            continue
+        filt = _child(r, "Filter")
+        prefix = _child_text(filt, "Prefix") if filt is not None else _child_text(r, "Prefix")
+        exp = _child(r, "Expiration")
+        exp_days, exp_date = None, None
+        if exp is not None:
+            days = _child_text(exp, "Days")
+            if days:
+                try:
+                    exp_days = int(days)
+                except ValueError:
+                    exp_days = None
+            exp_date = _child_text(exp, "Date") or None
+        rules.append({"prefix": prefix or "", "expiration_days": exp_days, "expiration_date": exp_date})
+    return rules
+
+
+def _lifecycle_rules(store: ObjectStore, bucket: str) -> list:
+    meta = store.buckets.get(bucket) or {}
+    doc = meta.get("cfg", {}).get("lifecycle")
+    return _parse_lifecycle_rules(doc) if doc else []
+
+
+def _rule_expires(rule: dict, key: str, last_modified_iso: str) -> bool:
+    if not key.startswith(rule["prefix"]):
+        return False
+    now = datetime.now(timezone.utc)
+    if rule.get("expiration_date"):
+        try:
+            cutoff = datetime.fromisoformat(rule["expiration_date"].replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        return now >= cutoff
+    if rule.get("expiration_days") is not None:
+        try:
+            lm = datetime.fromisoformat(last_modified_iso.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        return now >= lm + timedelta(days=rule["expiration_days"])
+    return False
+
+
+def _apply_lifecycle(store: ObjectStore, bucket: str) -> None:
+    """Lazily evaluated on every read path (list/get/head) — Date-based Expiration rules
+    fire deterministically (testable without waiting real days); Days-based rules use the
+    real elapsed wall-clock, matching S3's own (non-accelerated) semantics."""
+    rules = _lifecycle_rules(store, bucket)
+    if not rules:
+        return
+    bucket_objects = store.bucket_objects(bucket)
+    vstatus = store.versioning_status(bucket)
+    expired_any = False
+    for key in list(bucket_objects.keys()):
+        entry = bucket_objects.get(key)
+        if not isinstance(entry, dict) or not entry.get("versions"):
+            continue
+        cur = entry["versions"][0]
+        if cur.get("is_delete_marker"):
+            continue
+        if any(_rule_expires(rule, key, cur.get("last_modified", _now())) for rule in rules):
+            expired_any = True
+            if vstatus in ("Enabled", "Suspended"):
+                _insert_simple_delete_marker(store, bucket, key)
+                _emit(store, bucket, key, "s3:LifecycleExpiration:DeleteMarkerCreated", None, "Lifecycle")
+            else:
+                bucket_objects.pop(key, None)
+                store.mirror_delete(bucket, key)
+                _emit(store, bucket, key, "s3:LifecycleExpiration:Delete", None, "Lifecycle")
+    if expired_any:
+        store.persist()
+
+
+def _lock_block(obj: dict | None, headers: dict | None) -> S3Response | None:
+    """Object Lock enforcement for a DELETE of a specific version — legal hold blocks
+    unconditionally; retention blocks unless GOVERNANCE mode is explicitly bypassed."""
+    if not obj:
+        return None
+    if obj.get("legal_hold") == "ON":
+        return _error_xml("AccessDenied", "Object is under a legal hold and cannot be deleted.", "/", 403)
+    ret = obj.get("retention")
+    if ret and ret.get("mode") and ret.get("retain_until"):
+        try:
+            until = datetime.fromisoformat(str(ret["retain_until"]).replace("Z", "+00:00"))
+        except ValueError:
+            until = None
+        if until and datetime.now(timezone.utc) < until:
+            if ret["mode"] == "COMPLIANCE":
+                return _error_xml("AccessDenied",
+                                  "Object is WORM-protected (Object Lock retention, COMPLIANCE mode) "
+                                  "until the retain-until date.", "/", 403)
+            bypass = str((headers or {}).get("x-amz-bypass-governance-retention", "")).lower() == "true"
+            if ret["mode"] == "GOVERNANCE" and not bypass:
+                return _error_xml("AccessDenied",
+                                  "Object is WORM-protected (Object Lock retention, GOVERNANCE mode); "
+                                  "retry with x-amz-bypass-governance-retention to override.", "/", 403)
+    return None
+
+
 def _done(store: ObjectStore, resp: S3Response) -> S3Response:
     """Flush the durable substrate after a mutation (success or not — cheap)."""
     store.persist()
@@ -448,8 +746,10 @@ def put_object(store: ObjectStore, bucket: str, key: str, body: bytes, headers: 
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
     _emit(store, bucket, key, "s3:ObjectCreated:Put", entry, "PutObject")
-    return _done(store, _empty_response(200, {"ETag": version["etag"],
-                                              "x-amz-version-id": entry.get("current_version_id", vid)}))
+    extra = {"ETag": version["etag"], "x-amz-version-id": entry.get("current_version_id", vid)}
+    extra.update(_sse_headers(store, bucket))
+    extra.update(_cors_response_headers(store, bucket, headers, "PUT"))
+    return _done(store, _empty_response(200, extra))
 
 
 def copy_object(store: ObjectStore, bucket: str, key: str, headers: dict) -> S3Response:
@@ -508,12 +808,14 @@ def copy_object(store: ObjectStore, bucket: str, key: str, headers: dict) -> S3R
     extra = {"x-amz-version-id": entry.get("current_version_id", vid)}
     if src_vid:
         extra["x-amz-copy-source-version-id"] = src_vid
+    extra.update(_sse_headers(store, bucket))
     return _xml_response(xml, status=200, extra=extra)
 
 
 def head_object(store: ObjectStore, bucket: str, key: str, query: dict, headers: dict) -> S3Response:
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}/{key}", 404)
+    _apply_lifecycle(store, bucket)
     entry = _ensure_object_entry(store, bucket, key, create=False)
     obj = _find_version(entry, (query or {}).get("versionId"))
     if obj and obj.get("is_delete_marker"):
@@ -528,6 +830,8 @@ def head_object(store: ObjectStore, bucket: str, key: str, query: dict, headers:
          "x-amz-version-id": obj.get("version_id", "null")}
     for k, v in obj.get("metadata", {}).items():
         h[f"x-amz-meta-{k}"] = v
+    h.update(_sse_headers(store, bucket))
+    h.update(_cors_response_headers(store, bucket, headers, "HEAD"))
     return _empty_response(200, h)
 
 
@@ -536,6 +840,7 @@ def get_object(store: ObjectStore, bucket: str, key: str, query: dict, headers: 
     query = query or {}
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    _apply_lifecycle(store, bucket)
     entry = _ensure_object_entry(store, bucket, key, create=False)
     obj = _find_version(entry, query.get("versionId"))
     if obj and obj.get("is_delete_marker"):
@@ -567,6 +872,8 @@ def get_object(store: ObjectStore, bucket: str, key: str, query: dict, headers: 
         h["Content-Range"] = content_range
     for k, v in obj.get("metadata", {}).items():
         h[f"x-amz-meta-{k}"] = v
+    h.update(_sse_headers(store, bucket))
+    h.update(_cors_response_headers(store, bucket, headers, "GET"))
     return S3Response(status=status, headers=h, body=data, media_type=obj["content_type"])
 
 
@@ -576,6 +883,10 @@ def delete_object(store: ObjectStore, bucket: str, key: str, query: dict, header
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
     vid = query.get("versionId")
     if vid:
+        target = _find_version(_ensure_object_entry(store, bucket, key, create=False), vid)
+        blocked = _lock_block(target, headers)
+        if blocked:
+            return blocked
         if not _delete_version(store, bucket, key, vid):
             return _error_xml("NoSuchVersion", "The specified version does not exist.", f"/{bucket}/{key}", 404)
         _mirror_current(store, bucket, key)
@@ -646,6 +957,7 @@ def list_objects_v2(store: ObjectStore, bucket: str, query: dict) -> S3Response:
     query = query or {}
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    _apply_lifecycle(store, bucket)
     prefix = query.get("prefix", "") or ""
     delimiter = query.get("delimiter", "") or ""
     token = query.get("continuation-token", "") or ""
@@ -672,6 +984,7 @@ def list_objects_v1(store: ObjectStore, bucket: str, query: dict) -> S3Response:
     query = query or {}
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    _apply_lifecycle(store, bucket)
     prefix = query.get("prefix", "") or ""
     delimiter = query.get("delimiter", "") or ""
     marker = query.get("marker", "") or ""
@@ -693,6 +1006,7 @@ def list_objects_v1(store: ObjectStore, bucket: str, query: dict) -> S3Response:
 def _list_object_versions(store: ObjectStore, bucket: str, query: dict) -> S3Response:
     """GET /{bucket}?versions — ListObjectVersions. The data is already there (every
     PUT/DELETE keeps its version chain in the object entry); this just walks it."""
+    _apply_lifecycle(store, bucket)
     prefix = (query or {}).get("prefix", "") or ""
     bucket_objects = store.bucket_objects(bucket)
     parts = ['<?xml version="1.0" encoding="UTF-8"?>', f'<ListVersionsResult xmlns="{S3_NS}">',
@@ -848,7 +1162,7 @@ def complete_multipart_upload(store, bucket, key, query, body) -> S3Response:
            f'<Location>/{bucket}/{_xml_escape(key)}</Location>'
            f'<Bucket>{bucket}</Bucket><Key>{_xml_escape(key)}</Key>'
            f'<ETag>{etag}</ETag></CompleteMultipartUploadResult>')
-    return _xml_response(xml, status=200)
+    return _xml_response(xml, status=200, extra=_sse_headers(store, bucket))
 
 
 def list_all_buckets(store: ObjectStore) -> S3Response:
@@ -943,14 +1257,20 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
         if method == "GET":
             return _xml_response(meta.get("acl") or _default_acl_xml())
         if method == "PUT":
+            canned = (headers or {}).get("x-amz-acl")
             text = (body or b"").decode("utf-8", "replace").strip()
+            if text or canned:
+                blocked = _acl_blocked_by_ownership(store, bucket) or _acl_blocked_by_pab(store, bucket, canned)
+                if blocked:
+                    return blocked
             if text:
                 try:
                     ET.fromstring(text)
                 except ET.ParseError:
                     return _error_xml("MalformedACLError", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
                 meta["acl"] = text
-            canned = (headers or {}).get("x-amz-acl")
+            elif canned:
+                meta["acl"] = _canned_acl_xml(canned)
             if canned:
                 meta["canned_acl"] = canned
             return _done(store, _empty_response(200))
@@ -972,9 +1292,17 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
         if method == "DELETE":
             meta["notifications"] = default_notifications()
             return _done(store, _empty_response(204))
-    elif sub == "object-lock" and meta.get("object_lock"):
-        if method == "GET":
-            return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><ObjectLockConfiguration {_NS}><ObjectLockEnabled>Enabled</ObjectLockEnabled></ObjectLockConfiguration>')
+    elif sub == "object-lock":
+        if not meta.get("object_lock"):
+            if method == "GET":
+                return _error_xml("ObjectLockConfigurationNotFoundError", "Object Lock configuration does not exist for this bucket", f"/{bucket}", 404)
+            if method == "PUT":
+                return _error_xml("InvalidBucketState", "Object Lock configuration cannot be enabled on a bucket that was not created with Object Lock enabled.", f"/{bucket}", 409)
+        else:
+            if method == "GET":
+                return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><ObjectLockConfiguration {_NS}><ObjectLockEnabled>Enabled</ObjectLockEnabled></ObjectLockConfiguration>')
+            if method == "PUT":
+                return _done(store, _empty_response(200))
     elif sub == "versions":
         if method == "GET":
             return _list_object_versions(store, bucket, query)
@@ -1001,6 +1329,15 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
                     ET.fromstring(text)
                 except ET.ParseError:
                     return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
+            if sub == "policy":
+                try:
+                    parsed_policy = json.loads(text)
+                except Exception:
+                    return _error_xml("MalformedPolicy", "Policy document must be valid JSON.", f"/{bucket}", 400)
+                if _policy_is_public(parsed_policy) and _public_access_block(store, bucket)["BlockPublicPolicy"]:
+                    return _error_xml("AccessDenied",
+                                      "This request is not allowed because the bucket owner enforced the "
+                                      "Block Public Access setting that disallows public bucket policies.", f"/{bucket}", 403)
             cfg[sub] = text
             if sub == "tagging":
                 meta["tags"] = parse_tagging_xml(text.encode("utf-8"))
@@ -1017,10 +1354,10 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
     return _error_xml("NotImplemented", f"Vyomi does not implement the bucket {sub} sub-resource yet.", f"/{bucket}?{sub}", 501)
 
 
-# ── object sub-resources (?tagging, ?acl) ─────────────────────────────────────────
+# ── object sub-resources (?tagging, ?acl, ?retention, ?legal-hold) ────────────────
 def _object_subresource(store: ObjectStore, method: str, bucket: str, key: str,
-                        query: dict, body: bytes) -> S3Response | None:
-    sub = "tagging" if "tagging" in query else ("acl" if "acl" in query else None)
+                        query: dict, headers: dict, body: bytes) -> S3Response | None:
+    sub = next((k for k in ("tagging", "acl", "retention", "legal-hold") if k in query), None)
     if sub is None:
         return None
     if not store.bucket_exists(bucket):
@@ -1031,6 +1368,8 @@ def _object_subresource(store: ObjectStore, method: str, bucket: str, key: str,
     if not obj or obj.get("is_delete_marker"):
         return _error_xml("NoSuchKey", "The specified key does not exist.", f"/{bucket}/{key}", 404)
     extra = {"x-amz-version-id": obj.get("version_id", "null")}
+    if sub in ("retention", "legal-hold") and not (store.buckets.get(bucket) or {}).get("object_lock"):
+        return _error_xml("InvalidRequest", "Bucket is missing Object Lock Configuration", f"/{bucket}/{key}", 400)
     if sub == "tagging":
         if method == "GET":
             return _xml_response(build_tagging_xml(obj.get("tags", {})), extra=extra)
@@ -1046,18 +1385,60 @@ def _object_subresource(store: ObjectStore, method: str, bucket: str, key: str,
             return _error_xml("MethodNotAllowed", method, f"/{bucket}/{key}", 405)
         _refresh_object_entry(entry)
         return _done(store, _empty_response(204 if method == "DELETE" else 200, extra))
+    if sub == "retention":
+        if method == "GET":
+            ret = obj.get("retention")
+            if not ret:
+                return _error_xml("NoSuchObjectLockConfiguration", "The specified object does not have a ObjectLockConfiguration set.", f"/{bucket}/{key}", 404)
+            return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><Retention {_NS}><Mode>{ret["mode"]}</Mode><RetainUntilDate>{ret["retain_until"]}</RetainUntilDate></Retention>', extra=extra)
+        if method == "PUT":
+            try:
+                root = ET.fromstring(body or b"")
+            except ET.ParseError:
+                return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}/{key}", 400)
+            mode = _child_text(root, "Mode")
+            until = _child_text(root, "RetainUntilDate")
+            if mode not in ("GOVERNANCE", "COMPLIANCE") or not until:
+                return _error_xml("MalformedXML", "Mode and RetainUntilDate are required.", f"/{bucket}/{key}", 400)
+            blocked = _lock_block(obj, headers)
+            if blocked:
+                return blocked
+            obj["retention"] = {"mode": mode, "retain_until": until}
+            return _done(store, _empty_response(200, extra))
+        return _error_xml("MethodNotAllowed", method, f"/{bucket}/{key}", 405)
+    if sub == "legal-hold":
+        if method == "GET":
+            return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><LegalHold {_NS}><Status>{obj.get("legal_hold", "OFF")}</Status></LegalHold>', extra=extra)
+        if method == "PUT":
+            try:
+                root = ET.fromstring(body or b"")
+            except ET.ParseError:
+                return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}/{key}", 400)
+            status = _child_text(root, "Status")
+            if status not in ("ON", "OFF"):
+                return _error_xml("MalformedXML", "Status must be ON or OFF.", f"/{bucket}/{key}", 400)
+            obj["legal_hold"] = status
+            return _done(store, _empty_response(200, extra))
+        return _error_xml("MethodNotAllowed", method, f"/{bucket}/{key}", 405)
     # acl
     if method == "GET":
         return _xml_response(obj.get("acl") or _default_acl_xml(), extra=extra)
     if method == "PUT":
+        canned = (headers or {}).get("x-amz-acl")
         text = (body or b"").decode("utf-8", "replace").strip()
+        if text or canned:
+            blocked = _acl_blocked_by_ownership(store, bucket) or _acl_blocked_by_pab(store, bucket, canned)
+            if blocked:
+                return blocked
         if text:
             obj["acl"] = text
+        elif canned:
+            obj["acl"] = _canned_acl_xml(canned)
         return _done(store, _empty_response(200, extra))
     return _error_xml("MethodNotAllowed", method, f"/{bucket}/{key}", 405)
 
 
-def delete_objects(store: ObjectStore, bucket: str, body: bytes) -> S3Response:
+def delete_objects(store: ObjectStore, bucket: str, body: bytes, headers: dict | None = None) -> S3Response:
     """POST /{bucket}?delete — DeleteObjects (what `aws s3 rm --recursive` sends)."""
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
@@ -1073,6 +1454,11 @@ def delete_objects(store: ObjectStore, bucket: str, body: bytes) -> S3Response:
             continue
         vid = _child_text(el, "VersionId")
         if vid:
+            blocked = _lock_block(_find_version(_ensure_object_entry(store, bucket, key, create=False), vid), headers)
+            if blocked:
+                out.append(f"<Error><Key>{_xml_escape(key)}</Key><VersionId>{_xml_escape(vid)}</VersionId>"
+                           "<Code>AccessDenied</Code><Message>Object is WORM-protected or under legal hold.</Message></Error>")
+                continue
             if not _delete_version(store, bucket, key, vid):
                 out.append(f"<Error><Key>{_xml_escape(key)}</Key><VersionId>{_xml_escape(vid)}</VersionId>"
                            "<Code>NoSuchVersion</Code><Message>The specified version does not exist.</Message></Error>")
@@ -1153,6 +1539,8 @@ def dispatch(store: ObjectStore, method: str, path: str,
     bucket, _, key = raw.partition("/")
     bucket = urllib.parse.unquote(bucket)
     method = (method or "GET").upper()
+    if method == "OPTIONS":
+        return _cors_preflight(store, bucket, lheaders)
     if not bucket:
         # Service-level root: GET / lists all buckets; others are genuinely invalid.
         if method == "GET":
@@ -1174,10 +1562,10 @@ def dispatch(store: ObjectStore, method: str, path: str,
         if method == "DELETE":
             return _delete_bucket(store, bucket)
         if method == "POST" and "delete" in query:
-            return delete_objects(store, bucket, body)
+            return delete_objects(store, bucket, body, lheaders)
         return _error_xml("MethodNotAllowed", "The specified method is not allowed against this resource.", f"/{bucket}", 405)
     # object-level
-    osr = _object_subresource(store, method, bucket, key, query, body)
+    osr = _object_subresource(store, method, bucket, key, query, lheaders, body)
     if osr is not None:
         return osr
     if method == "POST":
@@ -1201,5 +1589,5 @@ def dispatch(store: ObjectStore, method: str, path: str,
     if method == "DELETE":
         if query.get("uploadId"):
             return abort_multipart_upload(store, bucket, key, query)
-        return delete_object(store, bucket, key, query, headers)
+        return delete_object(store, bucket, key, query, lheaders)
     return _error_xml("MethodNotAllowed", "The specified method is not allowed against this resource.", f"/{bucket}/{key}", 405)

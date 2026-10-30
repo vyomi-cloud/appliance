@@ -104,7 +104,10 @@ try {
   await page.goto(UI + `#/s3/buckets/${B}`);
   await page.getByRole("tab", { name: "Permissions" }).click();
   await page.getByText("Object Ownership", { exact: true }).first().waitFor({ timeout: 10000 });
-  check("Permissions: config-only badges rendered from the registry", (await page.locator('[data-vyomi-capability="config_only"]').count()) >= 3);
+  // DEPTH pass: encryption/PAB/policy/lifecycle/cors/ownership moved config_only → limited
+  // (real enforcement — see core/capabilities/aws/s3.json), so the badges on this tab are
+  // now "limited" rather than "config_only".
+  check("Permissions: limited badges rendered from the registry", (await page.locator('[data-vyomi-capability="limited"]').count()) >= 3);
   const editIn = async (title) => page.getByRole("heading", { name: title }).first()
     .locator('xpath=ancestor::*[.//button[normalize-space()="Edit"]][1]').getByRole("button", { name: "Edit" }).first().click();
   await editIn("Object Ownership");
@@ -128,7 +131,28 @@ try {
   await page.getByRole("button", { name: "Save changes" }).click();
   await page.waitForTimeout(800);
   check("Permissions: Block Public Access saved (native GetPublicAccessBlock)", /<BlockPublicPolicy>false<\/BlockPublicPolicy>/.test(await wire(`/${B}?publicAccessBlock=`)));
+  // DEPTH pass: canned-ACL grants now round-trip for real (Block Public Access was just
+  // disabled above, so a public-read canned ACL is no longer rejected).
+  await editIn("Access control list (ACL)");
+  await page.getByText("Public read", { exact: true }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.waitForTimeout(800);
+  const aclXml = await wire(`/${B}?acl=`);
+  check("Permissions: canned ACL saved → real grant on native GetBucketAcl (DEPTH)", /AllUsers/.test(aclXml) && /<Permission>READ<\/Permission>/.test(aclXml), aclXml.slice(0, 200));
   await shot("05b-s3-permissions-edited");
+
+  // DEPTH pass: lifecycle rules are now a real create/enforce round trip, not a static list.
+  await page.getByRole("tab", { name: "Management" }).click();
+  await page.getByRole("button", { name: "Create lifecycle rule" }).click();
+  await page.getByLabel("Lifecycle rule name").fill("v4-smoke-rule");
+  await page.getByLabel("Prefix").fill("logs/");
+  await page.getByRole("radio", { name: "On a specific date" }).check();
+  await page.getByLabel("Expiration date").fill("2020-01-01T00:00:00.000Z");
+  await page.getByRole("button", { name: "Create rule" }).click();
+  await page.getByRole("cell", { name: "v4-smoke-rule" }).waitFor({ timeout: 10000 });
+  const lcXml = await wire(`/${B}?lifecycle=`);
+  check("Management: lifecycle rule created (native GetBucketLifecycleConfiguration)", /v4-smoke-rule/.test(lcXml) && /logs\//.test(lcXml), lcXml.slice(0, 200));
+  await shot("05c-s3-lifecycle-created");
 
   // Bucket list shows it
   await page.goto(UI + "#/s3");

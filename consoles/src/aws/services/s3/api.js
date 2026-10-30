@@ -70,6 +70,8 @@ export async function headObject(bucket, key) {
     lastModified: r.headers.get("last-modified") || "",
     storageClass: r.headers.get("x-amz-storage-class") || "STANDARD",
     versionId: r.headers.get("x-amz-version-id") || "null",
+    encryption: r.headers.get("x-amz-server-side-encryption") || null,
+    kmsKeyId: r.headers.get("x-amz-server-side-encryption-aws-kms-key-id") || null,
     metadata: meta,
   };
 }
@@ -156,8 +158,20 @@ export async function getLifecycle(b) {
   const r = await sub(b, "lifecycle");
   if (r.absent) return { rules: [] };
   if (!r.value) return r;
-  return { rules: asList(r.value.LifecycleConfiguration?.Rule).map((x) => ({ id: x.ID, status: x.Status, prefix: x.Filter?.Prefix ?? x.Prefix ?? "" })) };
+  return {
+    rules: asList(r.value.LifecycleConfiguration?.Rule).map((x) => ({
+      id: x.ID, status: x.Status, prefix: x.Filter?.Prefix ?? x.Prefix ?? "",
+      expirationDays: x.Expiration?.Days ? Number(x.Expiration.Days) : null,
+      expirationDate: x.Expiration?.Date || null,
+    })),
+  };
 }
+const lifecycleRuleXml = (r) => `<Rule><ID>${esc(r.id)}</ID><Status>${r.status}</Status><Filter><Prefix>${esc(r.prefix || "")}</Prefix></Filter>${
+  r.expirationDate ? `<Expiration><Date>${esc(r.expirationDate)}</Date></Expiration>`
+    : r.expirationDays ? `<Expiration><Days>${r.expirationDays}</Days></Expiration>` : ""}</Rule>`;
+export const putLifecycleRules = (b, rules) => rules.length
+  ? s3("PUT", `/${b}`, { query: { lifecycle: "" }, body: xml(`<LifecycleConfiguration ${NS}>${rules.map(lifecycleRuleXml).join("")}</LifecycleConfiguration>`) })
+  : s3("DELETE", `/${b}`, { query: { lifecycle: "" } });
 
 const esc = (s) => String(s).replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]));
 
@@ -189,6 +203,60 @@ export async function getAcl(b) {
     })),
   };
 }
+export const putAcl = (b, canned) => s3("PUT", `/${b}`, { query: { acl: "" }, headers: { "x-amz-acl": canned } });
+
+export async function getObjectAcl(b, key) {
+  try {
+    const r = await s3("GET", `/${b}/${enc(key)}`, { query: { acl: "" } });
+    const p = r.AccessControlPolicy || {};
+    return {
+      owner: p.Owner?.DisplayName || p.Owner?.ID,
+      grants: asList(p.AccessControlList?.Grant).map((g) => ({
+        grantee: g.Grantee?.DisplayName || g.Grantee?.URI || g.Grantee?.ID || "-",
+        type: g.Grantee?.URI ? "Group" : "Canonical user",
+        permission: g.Permission,
+      })),
+    };
+  } catch (e) { return { error: e }; }
+}
+export const putObjectAcl = (b, key, canned) => s3("PUT", `/${b}/${enc(key)}`, { query: { acl: "" }, headers: { "x-amz-acl": canned } });
+
+export async function getObjectLock(b) {
+  try {
+    const r = await s3("GET", `/${b}`, { query: { "object-lock": "" } });
+    return { enabled: r.ObjectLockConfiguration?.ObjectLockEnabled === "Enabled" };
+  } catch (e) {
+    if (e.status === 404) return { enabled: false };
+    return { error: e };
+  }
+}
+
+export async function getLegalHold(b, key) {
+  try {
+    const r = await s3("GET", `/${b}/${enc(key)}`, { query: { "legal-hold": "" } });
+    return { status: r.LegalHold?.Status || "OFF" };
+  } catch (e) {
+    if (e.status === 501 || e.status === 400) return { unsupported: true };
+    return { error: e };
+  }
+}
+export const putLegalHold = (b, key, status) => s3("PUT", `/${b}/${enc(key)}`, { query: { "legal-hold": "" }, body: xml(`<LegalHold ${NS}><Status>${status}</Status></LegalHold>`) });
+
+export async function getRetention(b, key) {
+  try {
+    const r = await s3("GET", `/${b}/${enc(key)}`, { query: { retention: "" } });
+    return { mode: r.Retention?.Mode || null, retainUntil: r.Retention?.RetainUntilDate || null };
+  } catch (e) {
+    if (e.status === 404) return { mode: null };
+    if (e.status === 501 || e.status === 400) return { unsupported: true };
+    return { error: e };
+  }
+}
+export const putRetention = (b, key, mode, retainUntil, bypass) => s3("PUT", `/${b}/${enc(key)}`, {
+  query: { retention: "" },
+  body: xml(`<Retention ${NS}><Mode>${mode}</Mode><RetainUntilDate>${retainUntil}</RetainUntilDate></Retention>`),
+  headers: bypass ? { "x-amz-bypass-governance-retention": "true" } : {},
+});
 
 export async function getCors(b) {
   const r = await sub(b, "cors");
