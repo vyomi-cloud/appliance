@@ -4,6 +4,89 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.34] — 2026-10-30
+
+Daily conformance release. **36 product fixes** (AWS 14, GCP 12, Azure 9, all clouds 1); 35 reach Nano and 36 reach the offline appliance; 3 test and harness improvements.
+
+### Highlights
+
+- **Detail tabs now show real data across all three clouds.** About 34 resource tabs and blades in AWS, GCP and Azure now read the resource's actual state instead of placeholder content, in both Nano and the offline appliance.
+- **AWS tabs are real for the core services.** S3, EC2, Lambda, DynamoDB, RDS, VPC, SQS, SNS, KMS, Secrets Manager, EventBridge, API Gateway, IAM, Step Functions, Systems Manager and CloudWatch now show each resource's real configuration, policies, subscriptions and settings.
+- **GCP tabs are real too.** Compute Engine, Cloud Storage, Cloud SQL, Cloud Functions, Firestore, Pub/Sub, Secret Manager, Cloud KMS, VPC networks, IAM service accounts, API Gateway and Eventarc show real versions, rules, routes, source and logs, and the Artifact Registry Labels tab is now real.
+- **Azure blades read real resource data.** Virtual Machines, Storage, SQL, Cosmos DB, Function Apps, Virtual Networks, Key Vault, Service Bus, Event Grid, API Management, Container Apps, DNS and RBAC now show the resource's real data.
+- **Azure CLI and the console now agree on the subscription.** Each space has a single subscription, so what `az` shows and what the console shows no longer drift apart.
+- **The offline appliance's startup check is more reliable.** It now starts the full profile, and the latest-release lookup is authenticated.
+
+### Fixes — AWS
+
+- **[Nano + offline]** Step Functions, Systems Manager and CloudWatch tabs read the resource's real data
+- **[Nano + offline]** API Gateway REST API tabs show the API's real configuration, offline and Nano
+- **[Nano + offline]** EventBridge rule tabs show the rule's real targets and pattern, offline and Nano
+- **[Nano + offline]** KMS key tabs show the key's real configuration and policy, offline and Nano
+- **[Nano + offline]** Secrets Manager secret tabs show the secret's real versions and settings, offline and Nano
+- **[Nano + offline]** SNS topic tabs read the topic's real subscriptions and message log
+- **[Nano + offline]** SQS queue tabs show the queue's real attributes, offline and Nano
+- **[Nano + offline]** VPC tabs (details, NAT gateways, endpoints, network ACLs, flow logs) are real, offline and Nano
+- **[Nano + offline]** IAM account tabs (identity providers, password policy, Access Analyzer) are real, offline and Nano
+- **[Nano + offline]** Lambda function tabs show the function's real code and configuration, offline and Nano
+- **[Nano + offline]** DynamoDB table tabs show the table's real settings, offline and Nano
+- **[Nano + offline]** RDS DB instance tabs show the instance's real configuration, offline and Nano
+- **[Nano + offline]** S3 bucket tabs show the bucket's real configuration, offline and Nano
+- **[Nano + offline]** EC2 detail tabs show the instance's real data, offline and Nano
+
+### Fixes — GCP
+
+- **[Nano + offline]** Newer services' key/value tabs each read the resource; Artifact Registry Labels tab is real
+- **[Nano + offline]** API Gateway and Eventarc tabs show the resource's real configs, routes, filters and destination
+- **[Nano + offline]** IAM service-account tabs show its real members, roles and keys
+- **[Nano + offline]** Cloud KMS tabs show the key's real versions, rotation and import jobs
+- **[Nano + offline]** Secret Manager tabs show the secret's real versions, value, rotation, replication and encryption
+- **[Nano + offline]** Firestore database tabs show the database's real documents, queries, indexes, rules and exports
+- **[Nano + offline]** Cloud Functions tabs show the function's real source, trigger, variables, runs and logs
+- **[Nano + offline]** VPC network tabs show the network's real subnets, firewalls, routes, peering and flow logs
+- **[Nano + offline]** Pub/Sub topic tabs show the topic's real data
+- **[Nano + offline]** Cloud SQL detail tabs show the instance's real data
+- **[Nano + offline]** Cloud Storage Lifecycle, Configuration, Encryption and Retention tabs are real
+- **[Nano + offline]** Compute Engine detail tabs show the instance's real data
+
+### Fixes — Azure
+
+- **[Nano + offline]** One subscription per space — az and the console no longer drift apart
+- **[Nano + offline]** Service Bus, Event Grid, API Management, Container Apps, DNS, Key Vault certificates, RBAC and VM disk blades read real data
+- **[Nano + offline]** Virtual network blades show the VNet's real ARM data, offline and in Nano
+- **[Nano + offline]** Key vault access blades read the vault's ARM state, offline and in Nano
+- **[Nano + offline]** Function app blades show the app's real ARM data, offline and in Nano
+- **[Nano + offline]** Cosmos DB blades show the account's real ARM data, offline and in Nano
+- **[Nano + offline]** SQL server blades show the server's real ARM data, offline and in Nano
+- **[Nano + offline]** Storage account blades show the account's real ARM data, offline and in Nano
+- **[Nano + offline]** Virtual Machines blades show the VM's real ARM data, offline and in Nano
+
+### Fixes — all clouds
+
+- **[offline]** Start the full profile in the startup check; authenticated latest-release lookup
+
+<details><summary>Platform and release pipeline (4)</summary>
+
+- CLI check runs with every tier unlocked
+- CLI check waits for readiness and starts on-demand backends
+- Aws / gcloud / az CLI conformance + CLI ↔ console both ways
+- VPC tab test uses unique firewall/route names (project-global) and cleans up
+
+</details>
+
+<details><summary>Test and harness improvements (3)</summary>
+
+- Upstream watch: stop re-filing the same change every hour
+- Pipeline page: show the backend each new service's code really uses
+- Azure NSG rules UI check polls for the listed rule instead of a fixed 1.5s wait (flaky under load)
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.34`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.33] — 2026-10-29
 
 Daily conformance release. **40 product fixes** (AWS 17, GCP 13, Azure 7, all clouds 3); 28 reach Nano and 26 reach the offline appliance; 18 test and harness improvements.
