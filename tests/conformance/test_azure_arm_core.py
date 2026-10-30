@@ -216,6 +216,43 @@ def run() -> int:
     r = arm.handle("GET", kv + "/providers/Microsoft.Authorization/locks", {"api-version": "2020-05-01"})
     _check("locks cascade-deleted with resource", r["body"]["value"] == [])
 
+    # 21. Microsoft.ContainerRegistry/registries — generic catalog CRUD + the admin-credentials
+    # POST actions (az acr credential show / renew) + nested child resources (webhooks).
+    AV_ACR = "2023-07-01"
+    acr = _p(RG, "Microsoft.ContainerRegistry", "registries", "uicacr")
+    r = arm.handle("PUT", acr, {"api-version": AV_ACR}, {"location": "eastus", "sku": {"name": "Standard"}})
+    _check("registry put 200 (LRO)", r["status"] == 200 and r["body"]["name"] == "uicacr")
+    _check("registry admin user off by default", r["body"]["properties"]["adminUserEnabled"] is False)
+    r = arm.handle("POST", acr + "/listCredentials", {"api-version": AV_ACR})
+    _check("listCredentials before admin user enabled -> 400", r["status"] == 400
+           and r["body"]["error"]["code"] == "AdminUserCredentialsNotEnabled")
+    arm.handle("PATCH", acr, {"api-version": AV_ACR}, {"properties": {"adminUserEnabled": True}})
+    r = arm.handle("POST", acr + "/listCredentials", {"api-version": AV_ACR})
+    _check("listCredentials returns username + two passwords", r["status"] == 200 and r["body"]["username"] == "uicacr"
+           and {p["name"] for p in r["body"]["passwords"]} == {"password", "password2"})
+    pw1 = next(p["value"] for p in r["body"]["passwords"] if p["name"] == "password")
+    r = arm.handle("POST", acr + "/regenerateCredential", {"api-version": AV_ACR}, {"name": "password"})
+    pw1b = next(p["value"] for p in r["body"]["passwords"] if p["name"] == "password")
+    pw2 = next(p["value"] for p in r["body"]["passwords"] if p["name"] == "password2")
+    _check("regenerateCredential rotates only the named password", r["status"] == 200 and pw1b != pw1)
+    r2 = arm.handle("POST", acr + "/listCredentials", {"api-version": AV_ACR})
+    _check("the other password is untouched", next(p["value"] for p in r2["body"]["passwords"] if p["name"] == "password2") == pw2)
+    _check("credentials never leak through GET", "password" not in json.dumps(arm.handle("GET", acr, {"api-version": AV_ACR})["body"]))
+
+    # Nested child resource (registries/{name}/webhooks/{name}) needs no catalog entry of its
+    # own — generic alternation — but its collection list MUST be scoped to this parent only.
+    acr2 = _p(RG, "Microsoft.ContainerRegistry", "registries", "uicacr2")
+    arm.handle("PUT", acr2, {"api-version": AV_ACR}, {"location": "eastus"})
+    arm.handle("PUT", acr + "/webhooks/wh1", {"api-version": AV_ACR}, {"location": "eastus", "properties": {"scope": "*", "serviceUri": "https://example.com"}})
+    arm.handle("PUT", acr2 + "/webhooks/wh2", {"api-version": AV_ACR}, {"location": "eastus", "properties": {"scope": "*"}})
+    r = arm.handle("GET", acr + "/webhooks", {"api-version": AV_ACR})
+    _check("nested child list is scoped to its own parent registry",
+           [w["name"] for w in r["body"]["value"]] == ["wh1"])
+    r = arm.handle("GET", acr2 + "/webhooks", {"api-version": AV_ACR})
+    _check("sibling registry's webhooks don't leak in", [w["name"] for w in r["body"]["value"]] == ["wh2"])
+    r = arm.handle("DELETE", acr, {"api-version": AV_ACR})
+    _check("registry delete 200", r["status"] == 200)
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 

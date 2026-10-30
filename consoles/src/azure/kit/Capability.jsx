@@ -9,13 +9,14 @@
  */
 import { Badge, Popover, PopoverSurface, PopoverTrigger } from "@fluentui/react-components";
 import { NotSimulatedContainer } from "./common.jsx";
+import cap_acr from "../../../../core/capabilities/azure/acr.json";
 import cap_appservices from "../../../../core/capabilities/azure/appservices.json";
 import cap_cost from "../../../../core/capabilities/azure/cost.json";
 import cap_eventgrid from "../../../../core/capabilities/azure/eventgrid.json";
 import cap_functionapp from "../../../../core/capabilities/azure/functionapp.json";
 import cap_keyvaults from "../../../../core/capabilities/azure/keyvaults.json";
 
-const REGISTRY = { ...cap_appservices, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults };
+const REGISTRY = { ...cap_acr, ...cap_appservices, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

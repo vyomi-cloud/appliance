@@ -461,6 +461,90 @@ try {
   await page.getByRole("heading", { name: "Event Grid Topics" }).waitFor({ timeout: 10000 });
   const egGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}`);
   check("UI delete topic → ARM GET 404", egGone.status === 404, `HTTP ${egGone.status}`);
+
+  // ── Container registry created through the wizard → visible over native ARM ───────────
+  const ACR = `vysmokeacr${n}`;
+  const ACR2 = `vywireacr${n}`;
+  await page.goto(UI + "#/acr/create");
+  await page.getByLabel("Registry name", { exact: true }).fill(ACR);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await shot("23-acr-create-review");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: ACR, exact: true }).waitFor({ timeout: 10000 });
+  const acrGot = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR}`);
+  check("UI create container registry → visible over native ARM", acrGot.status === 200, `HTTP ${acrGot.status}`);
+  await shot("24-acr-overview");
+
+  // ── Admin user + credentials: UI toggle → ARM round-trip, real listCredentials/regenerate ──
+  await openPanel("Access keys");
+  await page.getByRole("checkbox", { name: "Admin user" }).click();
+  await page.getByText("Username").waitFor({ timeout: 10000 });
+  const pwBefore = await page.getByLabel("password", { exact: true }).inputValue();
+  await page.getByRole("button", { name: "Regenerate" }).first().click();
+  await page.waitForTimeout(500);
+  const pwAfter = await page.getByLabel("password", { exact: true }).inputValue();
+  check("Access keys: admin user enable + regenerate rotates the password", !!pwBefore && pwBefore !== pwAfter, `${pwBefore} -> ${pwAfter}`);
+  await shot("25-acr-access-keys");
+
+  // ── A repository pushed over the real OCI v2 wire (CLI → UI) ───────────────────────────
+  const REPO = `smokerepo${n}`;
+  const push = await wire(`/v2/${REPO}/manifests/latest`, { method: "PUT", headers: { "content-type": "application/vnd.docker.distribution.manifest.v2+json" }, body: '{"schemaVersion":2}' });
+  check("docker-push-shaped manifest PUT → 201 + digest", push.status === 201, `HTTP ${push.status}`);
+  await openPanel("Repositories");
+  await page.getByRole("link", { name: REPO, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-pushed repository shown in Repositories grid", true);
+  await shot("26-acr-repositories");
+  await page.getByRole("link", { name: REPO, exact: true }).click();
+  await page.getByRole("cell", { name: "latest" }).waitFor({ timeout: 10000 });
+  check("repository detail shows the pushed tag + digest", true);
+  await shot("27-acr-repository-detail");
+
+  // ── Webhook created through the UI → visible over native ARM (nested resource) ─────────
+  const WH = `smokewh${n}`;
+  await openPanel("Webhooks");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill(WH);
+  await page.getByLabel("Service URI", { exact: true }).fill("https://example.com/acr-hook");
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByText(WH, { exact: true }).waitFor({ timeout: 10000 });
+  const whGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR}/webhooks/${WH}`);
+  check("UI create webhook → visible over native ARM (nested resource)", whGet.status === 200, `HTTP ${whGet.status}`);
+  await shot("28-acr-webhooks");
+
+  // ── Lock created through the UI → visible over native ARM (and the reverse) ────────────
+  await openPanel("Locks");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const ACRLOCK = `smoke-acrlock-${n}`;
+  await page.getByLabel("Lock name", { exact: true }).fill(ACRLOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByText(ACRLOCK, { exact: true }).waitFor({ timeout: 10000 });
+  const acrLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR}/providers/Microsoft.Authorization/locks/${ACRLOCK}?api-version=2020-05-01`);
+  check("UI create lock → visible over native ARM", acrLockGet.status === 200, `HTTP ${acrLockGet.status}`);
+  await shot("29-acr-locks");
+
+  // ── Resource created over the wire → visible in the UI (CLI → UI) ──────────────────────
+  const acrPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR2}`, { location: "eastus" });
+  check("ARM PUT container registry over wire", acrPut.status === 200 || acrPut.status === 201, `HTTP ${acrPut.status}`);
+  await page.goto(UI + "#/acr");
+  await page.getByRole("link", { name: ACR2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created registry shown in browse grid", true);
+  await shot("30-acr-browse");
+
+  // ── Delete through the browse grid → gone over ARM ──────────────────────────────────────
+  await page.getByRole("checkbox", { name: `Select /subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR2}` }).click();
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(ACR2);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("link", { name: ACR2, exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  let acrGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR2}`);
+  for (let i = 0; i < 20 && acrGone.status !== 404; i++) {
+    await page.waitForTimeout(500);
+    acrGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR2}`);
+  }
+  check("UI delete container registry → ARM GET 404", acrGone.status === 404, `HTTP ${acrGone.status}`);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});

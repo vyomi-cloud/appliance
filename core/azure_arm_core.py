@@ -196,7 +196,8 @@ def _expand_tokens(obj, name: str, base: str):
     if isinstance(obj, str):
         return (obj.replace("__UUID__", str(uuid.uuid4()))
                    .replace("__NAME__", name)
-                   .replace("__BASE__", base))
+                   .replace("__BASE__", base)
+                   .replace("__NOW__", _now()))
     if isinstance(obj, dict):
         return {k: _expand_tokens(v, name, base) for k, v in obj.items()}
     if isinstance(obj, list):
@@ -432,13 +433,17 @@ class AzureArm:
         # POST action verbs (listKeys / start / powerOff / …)
         if method == "POST" and is_collection and len(type_chain) >= 3 and names:
             parent_rid = _canonical_id(sub, rg, type_chain[:-1], names)
-            return self._arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid)
+            return self._arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid, payload)
 
         full_type = "/".join(type_chain)
         if is_collection:
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "Collection supports GET only.")
-            return self._list(sub, rg, full_type)
+            # Nested child resources (e.g. registries/{reg}/webhooks) alternate type/name one
+            # level deeper than their top catalog type — scope the list to the specific parent
+            # instance, else two sibling parents' children would bleed into each other's list.
+            parent_prefix = _canonical_id(sub, rg, type_chain[:-1], names).lower() + "/" if len(type_chain) > 2 else None
+            return self._list(sub, rg, full_type, parent_prefix)
 
         rid = _canonical_id(sub, rg, type_chain, names)
         key = rid.lower()
@@ -591,7 +596,7 @@ class AzureArm:
         return resp
 
     # ── CRUD primitives ───────────────────────────────────────────────────
-    def _list(self, sub, rg, full_type):
+    def _list(self, sub, rg, full_type, parent_prefix=None):
         ft = full_type.lower()
         items = []
         for rec in self.state.values():
@@ -600,6 +605,8 @@ class AzureArm:
             if rec.get("_sub") != sub:
                 continue
             if rg is not None and (rec.get("_rg") or "").lower() != rg.lower():
+                continue
+            if parent_prefix and not rec.get("id", "").lower().startswith(parent_prefix):
                 continue
             items.append(_view(rec))
         return _ok({"value": items})
@@ -642,10 +649,26 @@ class AzureArm:
         self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)
 
-    def _arm_action(self, action, type_chain, resource_name, parent_rid=""):
+    def _arm_action(self, action, type_chain, resource_name, parent_rid="", payload=None):
+        ns = type_chain[0].lower() if type_chain else ""
+        typ = type_chain[1].lower() if len(type_chain) > 1 else ""
+        if ns == "microsoft.containerregistry" and typ == "registries" and action in ("listcredentials", "regeneratecredential"):
+            rec = self.state.get(parent_rid.lower()) if parent_rid else None
+            if not rec:
+                return _err(404, "ResourceNotFound", f"Registry '{resource_name}' not found.")
+            if not rec.get("properties", {}).get("adminUserEnabled"):
+                return _err(400, "AdminUserCredentialsNotEnabled", "Admin user is not enabled on this registry.")
+            creds = rec.setdefault("_credentials", {"password": uuid.uuid4().hex, "password2": uuid.uuid4().hex})
+            if action == "regeneratecredential":
+                target = (payload or {}).get("name", "password")
+                if target not in creds:
+                    return _err(400, "BadRequest", f"Unknown credential name '{target}'.")
+                creds[target] = uuid.uuid4().hex
+            return _ok({"username": resource_name, "passwords": [
+                {"name": "password", "value": creds["password"]},
+                {"name": "password2", "value": creds["password2"]},
+            ]})
         if action in ("start", "poweroff", "restart", "deallocate"):
-            ns = type_chain[0].lower() if type_chain else ""
-            typ = type_chain[1].lower() if len(type_chain) > 1 else ""
             if ns != "microsoft.compute" or typ != "virtualmachines":
                 return _err(400, "ActionNotSupported",
                             f"Action '{action}' is only supported on Microsoft.Compute/virtualMachines.")
