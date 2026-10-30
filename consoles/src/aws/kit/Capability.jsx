@@ -15,6 +15,7 @@ import Popover from "@cloudscape-design/components/popover";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { NotSimulatedContainer } from "./common.jsx";
 import cap_apigateway from "../../../../core/capabilities/aws/apigateway.json";
+import cap_cloudformation from "../../../../core/capabilities/aws/cloudformation.json";
 import cap_dynamodb from "../../../../core/capabilities/aws/dynamodb.json";
 import cap_ec2 from "../../../../core/capabilities/aws/ec2.json";
 import cap_eventbridge from "../../../../core/capabilities/aws/eventbridge.json";
@@ -27,7 +28,7 @@ import cap_secretsmanager from "../../../../core/capabilities/aws/secretsmanager
 import cap_sns from "../../../../core/capabilities/aws/sns.json";
 import cap_sqs from "../../../../core/capabilities/aws/sqs.json";
 
-const REGISTRY = { ...cap_apigateway, ...cap_dynamodb, ...cap_ec2, ...cap_eventbridge, ...cap_iam, ...cap_kms, ...cap_lambda, ...cap_rds, ...cap_s3, ...cap_secretsmanager, ...cap_sns, ...cap_sqs };
+const REGISTRY = { ...cap_apigateway, ...cap_cloudformation, ...cap_dynamodb, ...cap_ec2, ...cap_eventbridge, ...cap_iam, ...cap_kms, ...cap_lambda, ...cap_rds, ...cap_s3, ...cap_secretsmanager, ...cap_sns, ...cap_sqs };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

@@ -49,6 +49,7 @@ from core.scheduler_core import SchedulerStore
 from core.azure_acr_core import AcrRegistryStore
 from core.gcp_run_core import RunStore
 from core.azure_arm_core import AzureArm
+from core.cloudformation_core import CloudFormationStore
 
 import types
 from core.cloudwatch_core import CloudWatchStore
@@ -84,6 +85,7 @@ def get() -> dict:
             "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
             "ssm": SsmStore(),
             "sfn": StepFunctionsStore(),
+            "cfn": CloudFormationStore(),   # CloudFormation (stacks, change sets, stack sets)
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)
             "gcs":     InMemoryObjectStore(),
             "gcp_fs":  FirestoreStore(),

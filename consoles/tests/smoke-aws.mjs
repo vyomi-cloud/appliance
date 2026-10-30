@@ -5,7 +5,7 @@
  *   BASE=http://127.0.0.1:8740 node consoles/tests/smoke-aws.mjs
  */
 import { createRequire } from "node:module";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 
 const require = createRequire(import.meta.url);
 let pw;
@@ -35,6 +35,7 @@ const rds = async (action, body = {}) => wire("/", { method: "POST", headers: { 
 const iamXml = async (body) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/iam/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams(body).toString() });
 // EC2 Query protocol: form-encoded Action=..., XML response — extract tags with a small regex (no DOMParser in this context).
 const ec2 = async (action, params = {}) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/ec2/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...params }).toString() });
+const cfn = async (action, params = {}) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/cloudformation/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...params }).toString() });
 const xtag = (xml, tag) => { const m = xml.match(new RegExp(`<${tag}>(.*?)</${tag}>`)); return m ? m[1] : null; };
 
 await mkdir(OUT, { recursive: true });
@@ -423,6 +424,34 @@ try {
   // EC2: terminate the smoke instance and clean up the security group over the wire.
   if (instanceId) await ec2("TerminateInstances", { "InstanceId.1": instanceId });
   await ec2("DeleteSecurityGroup", { GroupId: sgId });
+
+  // CloudFormation: create a stack through the 4-step wizard (UI → CLI direction) —
+  // uploads a template file (the real S3-URL path is proven separately by the core
+  // conformance suite), picks up the real per-template parameter from ValidateTemplate.
+  const CFN = `v4-smoke-stack-${Date.now() % 100000}`;
+  const tplPath = `${OUT}/${CFN}.json`;
+  await writeFile(tplPath, JSON.stringify({ Resources: { Q: { Type: "AWS::SQS::Queue", Properties: {} } } }));
+  await page.goto(UI + "#/cloudformation/create");
+  await page.getByRole("radio", { name: "Upload a template file" }).check();
+  await page.locator('input[type="file"]').setInputFiles(tplPath);
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByLabel("Stack name", { exact: true }).fill(CFN);
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Submit", exact: true }).click();
+  await page.getByRole("heading", { name: CFN }).waitFor({ timeout: 10000 });
+  const stackXml = await cfn("DescribeStacks", { StackName: CFN });
+  check("CloudFormation create stack (UI wizard) → visible over native wire", stackXml.includes(`<StackName>${CFN}</StackName>`) && stackXml.includes("CREATE_COMPLETE"), stackXml.slice(0, 200));
+  await shot("18-cloudformation-stack");
+
+  // CloudFormation: a stack created over the wire shows in the Stacks list (CLI → UI direction)
+  const CFN2 = `v4-smoke-stack2-${Date.now() % 100000}`;
+  await cfn("CreateStack", { StackName: CFN2, TemplateBody: JSON.stringify({ Resources: { B: { Type: "AWS::S3::Bucket", Properties: {} } } }) });
+  await page.goto(UI + "#/cloudformation/stacks");
+  await page.getByPlaceholder("Search by stack name").fill(CFN2);
+  await page.getByText(CFN2).first().waitFor({ timeout: 10000 });
+  check("CloudFormation stack created over wire → shown in Stacks list", true);
+  await shot("19-cloudformation-stacks");
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));
