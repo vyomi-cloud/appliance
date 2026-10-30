@@ -1,0 +1,721 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "logs",
+  "console_path": "/logs/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "external": true
+    },
+    {
+      "label": "Dashboards",
+      "external": true
+    },
+    {
+      "label": "Application monitoring",
+      "external": true
+    },
+    {
+      "label": "Explore",
+      "children": [
+        {
+          "label": "Metrics explorer",
+          "external": true
+        },
+        {
+          "label": "Logs explorer",
+          "page_id": "logs-explorer"
+        },
+        {
+          "label": "Observability analytics",
+          "page_id": "observability-analytics"
+        },
+        {
+          "label": "Trace explorer",
+          "external": true
+        },
+        {
+          "label": "Cost explorer",
+          "external": true
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Detect",
+      "children": [
+        {
+          "label": "Alerting",
+          "external": true
+        },
+        {
+          "label": "Error reporting",
+          "external": true
+        },
+        {
+          "label": "Uptime checks",
+          "external": true
+        },
+        {
+          "label": "Synthetic monitoring",
+          "external": true
+        },
+        {
+          "label": "SLOs",
+          "external": true
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Configure",
+      "children": [
+        {
+          "label": "Integrations",
+          "external": true
+        },
+        {
+          "label": "Log-based metrics",
+          "page_id": "log-based-metrics"
+        },
+        {
+          "label": "Log router",
+          "page_id": "log-router"
+        },
+        {
+          "label": "Logs storage",
+          "page_id": "logs-storage"
+        },
+        {
+          "label": "Metrics management",
+          "external": true
+        },
+        {
+          "label": "Groups",
+          "external": true
+        },
+        {
+          "label": "Settings",
+          "external": true
+        },
+        {
+          "label": "Permissions",
+          "external": true
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Observability Scopes",
+      "external": true
+    },
+    {
+      "label": "Release Notes",
+      "external": true
+    }
+  ],
+  "pages": [
+    {
+      "id": "logs-explorer",
+      "kind": "other",
+      "title": "Logs Explorer",
+      "route": "/logs/query",
+      "captures": [
+        "A-logs/001-L1-landing",
+        "A-logs/003-L2-logs-explorer"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Query library",
+        "Share link",
+        "Preferences",
+        "Learn"
+      ],
+      "sections": [
+        {
+          "title": "Query",
+          "fields": [
+            {
+              "label": "Scope",
+              "type": "select",
+              "default": "Project logs"
+            },
+            {
+              "label": "Search all fields",
+              "type": "text"
+            },
+            {
+              "label": "Time range",
+              "type": "select",
+              "default": "Last 5 minutes"
+            },
+            {
+              "label": "All resources",
+              "type": "select"
+            },
+            {
+              "label": "All log names",
+              "type": "select"
+            },
+            {
+              "label": "All severities",
+              "type": "select"
+            },
+            {
+              "label": "Correlate by",
+              "type": "select"
+            },
+            {
+              "label": "Show query",
+              "type": "toggle",
+              "default": true
+            },
+            {
+              "label": "Query",
+              "type": "textarea",
+              "placeholder": "Start writing a query using LQL (Logging query language)"
+            }
+          ],
+          "actions": [
+            "Run query"
+          ]
+        },
+        {
+          "title": "Fields",
+          "fields": [
+            {
+              "label": "Fields",
+              "type": "other"
+            }
+          ]
+        },
+        {
+          "title": "Timeline"
+        },
+        {
+          "title": "Query results",
+          "actions": [
+            "Actions"
+          ],
+          "table": {
+            "empty_state": "No data found",
+            "columns": [
+              "Severity",
+              "Time",
+              "Summary"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "observability-analytics",
+      "kind": "other",
+      "title": "Observability Analytics",
+      "route": "/logs/analytics",
+      "captures": [
+        "A-logs/004-L2-observability-analytics"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Share link",
+        "Save",
+        "Run query"
+      ],
+      "sections": [
+        {
+          "title": "Query",
+          "fields": [
+            {
+              "label": "Query mode",
+              "type": "radio",
+              "options": [
+                "Query Builder",
+                "SQL"
+              ]
+            },
+            {
+              "label": "Source",
+              "type": "select"
+            },
+            {
+              "label": "Columns",
+              "type": "other"
+            },
+            {
+              "label": "Filters",
+              "type": "other"
+            },
+            {
+              "label": "Sort By",
+              "type": "select"
+            },
+            {
+              "label": "Limit",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "title": "Results"
+        }
+      ]
+    },
+    {
+      "id": "log-based-metrics",
+      "kind": "list",
+      "title": "Log-based Metrics",
+      "route": "/logs/metrics",
+      "captures": [
+        "A-logs/005-L2-log-based-metrics"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Learn"
+      ],
+      "table": {
+        "resource_label": "User-defined metrics",
+        "selection": "multi",
+        "header_actions": [
+          "Create metric",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter",
+        "empty_state": "No rows to display",
+        "columns": [
+          "Enabled",
+          "Name",
+          "Type",
+          "Description",
+          "Previous month usage",
+          "Month-to-date usage (MTD)",
+          "Created",
+          "Last updated",
+          "Resource"
+        ]
+      },
+      "extra_tables": [
+        {
+          "resource_label": "System-defined metrics",
+          "confidence": "medium",
+          "columns": [
+            "Name",
+            "Description",
+            "Resource"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-metric",
+      "kind": "create",
+      "title": "Create log-based metric",
+      "route": "/logs/metrics/edit",
+      "captures": [
+        "A-logs/021-L3-create-metric"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create metric",
+      "sections": [
+        {
+          "title": "Metric Type",
+          "fields": [
+            {
+              "label": "Metric Type",
+              "type": "radio",
+              "default": "Counter",
+              "options": [
+                "Counter",
+                "Distribution"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "Log-based metric name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Description",
+              "type": "text",
+              "placeholder": "Enter a description for this metric (optional)"
+            },
+            {
+              "label": "Units",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "title": "Filter selection",
+          "fields": [
+            {
+              "label": "Select project or log bucket",
+              "type": "select",
+              "default": "Project logs"
+            },
+            {
+              "label": "Build filter",
+              "type": "textarea",
+              "required": true
+            }
+          ],
+          "actions": [
+            "Preview logs"
+          ]
+        },
+        {
+          "title": "Labels",
+          "fields": [
+            {
+              "label": "Labels",
+              "type": "button",
+              "actions": [
+                "Add label"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "log-router",
+      "kind": "list",
+      "title": "Log Router",
+      "route": "/logs/router",
+      "captures": [
+        "A-logs/006-L2-log-router"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create sink",
+        "Delete",
+        "Learn"
+      ],
+      "sections": [
+        {
+          "title": "Log Router Volume"
+        },
+        {
+          "title": "Volume by destination type"
+        }
+      ],
+      "table": {
+        "resource_label": "Log Router Sinks",
+        "selection": "multi",
+        "filter_placeholder": "Filter",
+        "columns": [
+          "Enabled",
+          "Type",
+          "Name",
+          "Description",
+          "Destination",
+          "Volume",
+          "Created",
+          "Last updated"
+        ]
+      }
+    },
+    {
+      "id": "create-sink",
+      "kind": "create",
+      "title": "Create logs routing sink",
+      "route": "/logs/router/sink",
+      "captures": [
+        "A-logs/025-L3-create-sink"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create sink",
+      "steps": [
+        {
+          "title": "Sink details",
+          "sections": [
+            {
+              "title": "Sink details",
+              "fields": [
+                {
+                  "label": "Sink name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Sink description",
+                  "type": "text"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Sink destination",
+          "sections": [
+            {
+              "title": "Sink destination",
+              "fields": [
+                {
+                  "label": "Select sink service",
+                  "type": "select",
+                  "required": true,
+                  "options": [
+                    "Cloud Logging bucket",
+                    "BigQuery dataset",
+                    "Cloud Storage bucket",
+                    "Pub/Sub topic",
+                    "Splunk",
+                    "Other project"
+                  ],
+                  "provenance": "reference",
+                  "confidence": "medium"
+                },
+                {
+                  "label": "Sink destination",
+                  "type": "select",
+                  "provenance": "reference",
+                  "confidence": "medium"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Choose logs to include in sink",
+          "sections": [
+            {
+              "title": "Inclusion filter",
+              "fields": [
+                {
+                  "label": "Build inclusion filter",
+                  "type": "textarea"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Choose logs to filter out of sink (optional)",
+          "sections": [
+            {
+              "title": "Exclusion filters",
+              "fields": [
+                {
+                  "label": "Exclusion filter name",
+                  "type": "text"
+                },
+                {
+                  "label": "Build an exclusion filter",
+                  "type": "textarea"
+                }
+              ],
+              "provenance": "reference",
+              "confidence": "medium"
+            }
+          ],
+          "optional": true
+        }
+      ]
+    },
+    {
+      "id": "logs-storage",
+      "kind": "list",
+      "title": "Logs Storage",
+      "route": "/logs/storage",
+      "captures": [
+        "A-logs/007-L2-logs-storage"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create log bucket",
+        "Create usage alert",
+        "Delete",
+        "Tags",
+        "Learn"
+      ],
+      "sections": [
+        {
+          "title": "Storage",
+          "fields": [
+            {
+              "label": "Current month storage",
+              "type": "readonly"
+            },
+            {
+              "label": "Previous month storage",
+              "type": "readonly"
+            },
+            {
+              "label": "Projected storage by EOM",
+              "type": "readonly"
+            },
+            {
+              "label": "Current month billable retention",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "table": {
+        "resource_label": "Log buckets",
+        "selection": "multi",
+        "filter_placeholder": "Filter",
+        "columns": [
+          "Name",
+          "Description",
+          "Observability Analytics available",
+          "BigQuery linked dataset",
+          "Retention period",
+          "Region",
+          "Status",
+          "Tags",
+          "Created",
+          "Last updated"
+        ]
+      }
+    },
+    {
+      "id": "create-log-bucket",
+      "kind": "create",
+      "title": "Create log bucket",
+      "route": "/logs/storage/bucket",
+      "captures": [
+        "A-logs/029-L3-create-log-bucket"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create bucket",
+      "steps": [
+        {
+          "title": "Bucket details",
+          "sections": [
+            {
+              "title": "Bucket details",
+              "fields": [
+                {
+                  "label": "Name",
+                  "type": "text",
+                  "required": true,
+                  "placeholder": "Ex. ‘example’ or ‘example_bucket-1’"
+                },
+                {
+                  "label": "Description",
+                  "type": "text"
+                },
+                {
+                  "label": "Upgrade to use Observability Analytics",
+                  "type": "checkbox",
+                  "default": false
+                },
+                {
+                  "label": "Region",
+                  "type": "select",
+                  "required": true,
+                  "default": "us-east1 (South Carolina)",
+                  "help": "Log bucket regions can't be changed later."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Set the retention period",
+          "sections": [
+            {
+              "title": "Retention",
+              "fields": [
+                {
+                  "label": "Retention period",
+                  "type": "number",
+                  "default": 30,
+                  "help": "days",
+                  "provenance": "reference",
+                  "confidence": "medium"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "log-bucket-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/logs/storage/bucket/{resource-name}",
+      "captures": [
+        "A-logs/030-L3-default",
+        "A-logs/031-L3-required"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Edit bucket",
+        "Delete bucket",
+        "View logs",
+        "View usage data"
+      ],
+      "sections": [
+        {
+          "title": "Bucket details",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "readonly"
+            },
+            {
+              "label": "Description",
+              "type": "readonly"
+            },
+            {
+              "label": "Retention period",
+              "type": "readonly"
+            },
+            {
+              "label": "Region",
+              "type": "readonly"
+            },
+            {
+              "label": "Observability Analytics",
+              "type": "readonly"
+            },
+            {
+              "label": "BigQuery analysis",
+              "type": "readonly"
+            },
+            {
+              "label": "Tags",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Log views",
+          "actions": [
+            "Create log view"
+          ],
+          "table": {
+            "filter_placeholder": "Filter",
+            "columns": [
+              "Name",
+              "Description",
+              "Last updated"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "gaps_note": "From capture (Logs Explorer, Observability Analytics, log-based metrics, router, storage, create metric/sink/log bucket, bucket details). Shared 'Observability' nav; Monitoring items are external here. Sink destination options and retention default are reference."
+}

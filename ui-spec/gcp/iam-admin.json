@@ -1,0 +1,1184 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "iam-admin",
+  "console_path": "/iam-admin/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Identity & Access",
+      "children": [
+        {
+          "label": "IAM",
+          "page_id": "iam"
+        },
+        {
+          "label": "Service Accounts",
+          "page_id": "service-accounts"
+        },
+        {
+          "label": "Groups",
+          "page_id": "groups"
+        },
+        {
+          "label": "Privileged Access Manager",
+          "page_id": "privileged-access-manager"
+        },
+        {
+          "label": "Roles",
+          "page_id": "roles"
+        },
+        {
+          "label": "Workload Identity Federation",
+          "page_id": "workload-identity-federation"
+        },
+        {
+          "label": "Workforce Identity Federation",
+          "page_id": "workforce-identity-federation"
+        },
+        {
+          "label": "Principal Access Boundary",
+          "page_id": "principal-access-boundary"
+        },
+        {
+          "label": "Managed Workload Identities",
+          "page_id": "managed-workload-identities"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Resource Management",
+      "children": [
+        {
+          "label": "Organization Policies",
+          "page_id": "organization-policies"
+        },
+        {
+          "label": "Asset Inventory",
+          "page_id": "asset-inventory"
+        },
+        {
+          "label": "Settings",
+          "page_id": "settings"
+        },
+        {
+          "label": "Labels",
+          "page_id": "labels"
+        },
+        {
+          "label": "Tags",
+          "page_id": "tags"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Diagnostic Tools",
+      "children": [
+        {
+          "label": "Security Insights",
+          "page_id": "security-insights"
+        },
+        {
+          "label": "Policy Analyzer",
+          "page_id": "policy-analyzer"
+        },
+        {
+          "label": "Policy Troubleshooter",
+          "page_id": "policy-troubleshooter"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Cloud Administration",
+      "children": [
+        {
+          "label": "Quotas & System Limits",
+          "page_id": "quotas-system-limits"
+        },
+        {
+          "label": "Audit logs",
+          "page_id": "audit-logs"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Identity & Organization",
+      "page_id": "identity-organization"
+    },
+    {
+      "label": "Essential Contacts",
+      "page_id": "essential-contacts"
+    },
+    {
+      "label": "Privacy & Security",
+      "page_id": "privacy-security"
+    },
+    {
+      "label": "Access Risk",
+      "external": true
+    },
+    {
+      "label": "Identity-Aware Proxy",
+      "page_id": "identity-aware-proxy"
+    },
+    {
+      "label": "Manage Resources",
+      "external": true
+    },
+    {
+      "label": "Release Notes",
+      "external": true
+    }
+  ],
+  "pages": [
+    {
+      "id": "iam",
+      "kind": "list",
+      "title": "IAM",
+      "route": "/iam-admin/iam",
+      "breadcrumbs": [
+        "IAM & Admin",
+        "IAM"
+      ],
+      "captures": [
+        "A-iam-admin/003-L2-iam",
+        "A-iam-admin/003-L2-iam--tab-02-deny",
+        "A-iam-admin/003-L2-iam--tab-03-recommendations-history"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Learn"
+      ],
+      "tabs": [
+        "Allow",
+        "Deny",
+        "Recommendations history"
+      ],
+      "notes": "Heading 'Permissions for project \"{project}\"'; sub-tabs View by principals / View by roles.",
+      "sections": [
+        {
+          "title": "Permissions for project",
+          "fields": [
+            {
+              "label": "Include Google-provided role grants",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        }
+      ],
+      "table": {
+        "selection": "multi",
+        "header_actions": [
+          "Grant access",
+          "Remove access"
+        ],
+        "filters": [
+          "View by principals",
+          "View by roles"
+        ],
+        "filter_placeholder": "Enter property name or value",
+        "preferences": true,
+        "columns": [
+          "Type",
+          "Principal",
+          "Name",
+          "Role",
+          "Security insights",
+          "Inheritance"
+        ]
+      }
+    },
+    {
+      "id": "grant-access",
+      "kind": "create",
+      "title": "Grant access",
+      "route": "/iam-admin/iam (side panel)",
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Side panel opened by 'Grant access' on the IAM page.",
+      "submit": "Save",
+      "sections": [
+        {
+          "title": "Add principals",
+          "fields": [
+            {
+              "label": "New principals",
+              "type": "tags",
+              "required": true
+            }
+          ]
+        },
+        {
+          "title": "Assign roles",
+          "fields": [
+            {
+              "label": "Select a role",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "IAM condition (optional)",
+              "type": "button",
+              "actions": [
+                "Add IAM condition"
+              ]
+            },
+            {
+              "label": "Add another role",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "deny",
+      "kind": "list",
+      "title": "IAM",
+      "route": "/iam-admin/iam/deny",
+      "captures": [
+        "A-iam-admin/030-L2-deny",
+        "A-iam-admin/003-L2-iam--tab-02-deny"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Allow",
+        "Deny",
+        "Recommendations history"
+      ],
+      "header_actions": [
+        "Create deny policy",
+        "Simulation history"
+      ],
+      "table": {
+        "filter_placeholder": "Filter",
+        "empty_state": "No deny policies are attached to this resource",
+        "empty_state_action": "Create",
+        "columns": [
+          "Policy ID",
+          "Display name",
+          "Last updated",
+          "Actions"
+        ]
+      }
+    },
+    {
+      "id": "recommendations-history",
+      "kind": "list",
+      "title": "IAM",
+      "route": "/iam-admin/iam/log",
+      "captures": [
+        "A-iam-admin/004-L2-recommendations-history"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Allow",
+        "Deny",
+        "Recommendations history"
+      ],
+      "sections": [
+        {
+          "title": "History of applied recommendations",
+          "fields": [
+            {
+              "label": "View by",
+              "type": "radio",
+              "options": [
+                "1 day",
+                "7 days",
+                "30 days",
+                "60 days",
+                "90 days"
+              ]
+            }
+          ]
+        }
+      ],
+      "notes": "Empty: 'There is no activity for the recommendations history at this time.'"
+    },
+    {
+      "id": "service-accounts",
+      "kind": "list",
+      "title": "Service accounts",
+      "route": "/iam-admin/serviceaccounts",
+      "breadcrumbs": [
+        "IAM & Admin",
+        "Service accounts"
+      ],
+      "captures": [
+        "A-iam-admin/007-L2-service-accounts"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create service account",
+        "Delete",
+        "Manage access",
+        "Refresh",
+        "Learn"
+      ],
+      "table": {
+        "selection": "multi",
+        "actions": [
+          "Manage details",
+          "Manage permissions",
+          "Manage keys",
+          "View metrics",
+          "View logs",
+          "Disable",
+          "Delete"
+        ],
+        "filter_placeholder": "Enter property name or value",
+        "empty_state": "No rows to display",
+        "preferences": true,
+        "columns": [
+          "Email",
+          "Status",
+          "Name",
+          "Description",
+          "Key ID",
+          "Key creation date",
+          "OAuth 2 Client ID",
+          "Actions"
+        ]
+      }
+    },
+    {
+      "id": "create-service-account",
+      "kind": "create",
+      "title": "Create service account",
+      "route": "/iam-admin/serviceaccounts/create",
+      "breadcrumbs": [
+        "IAM & Admin",
+        "Service accounts",
+        "Create service account"
+      ],
+      "captures": [
+        "C-forms/11-iam-admin-serviceaccounts-create/step-1"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Done",
+      "steps": [
+        {
+          "title": "Create service account",
+          "sections": [
+            {
+              "title": "Service account details",
+              "fields": [
+                {
+                  "label": "Service account name",
+                  "type": "text",
+                  "help": "Display name for this service account"
+                },
+                {
+                  "label": "Service account ID",
+                  "type": "text",
+                  "required": true,
+                  "help": "Email address: <id>@<project>.iam.gserviceaccount.com"
+                },
+                {
+                  "label": "Service account description",
+                  "type": "textarea",
+                  "placeholder": "Describe what this service account will do"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Permissions (optional)",
+          "sections": [
+            {
+              "title": "Permissions",
+              "fields": [
+                {
+                  "label": "Select a role",
+                  "type": "select"
+                },
+                {
+                  "label": "Add another role",
+                  "type": "button"
+                }
+              ]
+            }
+          ],
+          "optional": true
+        },
+        {
+          "title": "Principals with access (optional)",
+          "sections": [
+            {
+              "title": "Principals with access",
+              "fields": [
+                {
+                  "label": "Service account users role",
+                  "type": "tags"
+                },
+                {
+                  "label": "Service account admins role",
+                  "type": "tags"
+                }
+              ],
+              "provenance": "reference",
+              "confidence": "medium"
+            }
+          ],
+          "optional": true
+        }
+      ]
+    },
+    {
+      "id": "service-account-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/iam-admin/serviceaccounts/details/{resource-name}",
+      "breadcrumbs": [
+        "IAM & Admin",
+        "Service accounts",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Details",
+        "Principals with access",
+        "Keys",
+        "Metrics",
+        "Logs"
+      ],
+      "tab_panels": [
+        {
+          "label": "Details",
+          "sections": [
+            {
+              "title": "Service account details",
+              "fields": [
+                {
+                  "label": "Name",
+                  "type": "text"
+                },
+                {
+                  "label": "Description",
+                  "type": "textarea"
+                },
+                {
+                  "label": "Email",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Unique ID",
+                  "type": "readonly"
+                }
+              ],
+              "actions": [
+                "Save"
+              ]
+            },
+            {
+              "title": "Service account status",
+              "fields": [
+                {
+                  "label": "Status",
+                  "type": "readonly"
+                }
+              ],
+              "actions": [
+                "Disable service account"
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Principals with access",
+          "sections": [
+            {
+              "title": "Principals with access to this service account",
+              "table": {
+                "header_actions": [
+                  "Grant access",
+                  "Remove access"
+                ],
+                "columns": [
+                  "Principal",
+                  "Name",
+                  "Role",
+                  "Inheritance"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Keys",
+          "sections": [
+            {
+              "title": "Keys",
+              "table": {
+                "header_actions": [
+                  "Add key"
+                ],
+                "actions": [
+                  "Create new key",
+                  "Upload existing key"
+                ],
+                "columns": [
+                  "Type",
+                  "Status",
+                  "Key",
+                  "Key creation date",
+                  "Key expiration date"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "roles",
+      "kind": "list",
+      "title": "Roles",
+      "route": "/iam-admin/roles",
+      "breadcrumbs": [
+        "IAM & Admin",
+        "Roles"
+      ],
+      "captures": [
+        "A-iam-admin/010-L2-roles",
+        "A-iam-admin/010-L2-roles--tab-02-custom"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Learn"
+      ],
+      "tabs": [
+        "Predefined",
+        "Custom"
+      ],
+      "table": {
+        "resource_label": "Predefined roles",
+        "selection": "multi",
+        "header_actions": [
+          "Create custom role"
+        ],
+        "filter_placeholder": "Filter",
+        "pagination": true,
+        "columns": [
+          "Title",
+          "Product or service",
+          "Name",
+          "Actions"
+        ]
+      },
+      "extra_tables": [
+        {
+          "resource_label": "Custom roles",
+          "selection": "multi",
+          "header_actions": [
+            "Create custom role"
+          ],
+          "filter_placeholder": "Filter",
+          "empty_state": "No rows to display",
+          "columns": [
+            "Title",
+            "Name",
+            "Status",
+            "Actions"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-role",
+      "kind": "create",
+      "title": "Create role",
+      "route": "/iam-admin/roles/create",
+      "breadcrumbs": [
+        "IAM & Admin",
+        "Roles",
+        "Create role"
+      ],
+      "captures": [
+        "C-forms/12-iam-admin-roles-create/step-1",
+        "A-iam-admin/085-L3-create-custom-role"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Role",
+          "fields": [
+            {
+              "label": "Title",
+              "type": "text",
+              "required": true,
+              "default": "Custom Role",
+              "constraints": "100 characters max"
+            },
+            {
+              "label": "Description",
+              "type": "textarea",
+              "default": "Created on: {date}",
+              "constraints": "256 characters max"
+            },
+            {
+              "label": "ID",
+              "type": "text",
+              "required": true,
+              "default": "CustomRole"
+            },
+            {
+              "label": "Role launch stage",
+              "type": "select",
+              "default": "Alpha",
+              "options": [
+                "Alpha",
+                "Beta",
+                "General Availability",
+                "Disabled"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Assigned permissions",
+          "fields": [
+            {
+              "label": "Add permissions",
+              "type": "button"
+            }
+          ],
+          "table": {
+            "filter_placeholder": "Filter",
+            "empty_state": "No rows to display",
+            "columns": [
+              "Permission",
+              "Status"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "role-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/iam-admin/roles/details/{resource-name}",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Edit role",
+        "Create role from this role",
+        "Delete"
+      ],
+      "sections": [
+        {
+          "title": "Role",
+          "fields": [
+            {
+              "label": "ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Role launch stage",
+              "type": "readonly"
+            },
+            {
+              "label": "Description",
+              "type": "readonly"
+            },
+            {
+              "label": "Assigned permissions",
+              "type": "table",
+              "columns": [
+                "Permission"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "kind": "settings",
+      "title": "Settings",
+      "route": "/iam-admin/settings",
+      "captures": [
+        "A-iam-admin/017-L2-settings"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Move",
+        "Shut down"
+      ],
+      "sections": [
+        {
+          "title": "Project",
+          "fields": [
+            {
+              "label": "Project name",
+              "type": "text"
+            },
+            {
+              "label": "Project ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Project number",
+              "type": "readonly"
+            }
+          ],
+          "actions": [
+            "Save"
+          ]
+        },
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Environment tag",
+              "type": "readonly"
+            }
+          ],
+          "actions": [
+            "Manage tags"
+          ]
+        },
+        {
+          "title": "Location",
+          "fields": [
+            {
+              "label": "Location",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Billing Account",
+          "fields": [
+            {
+              "label": "Billing Account",
+              "type": "readonly"
+            }
+          ],
+          "actions": [
+            "Manage billing"
+          ]
+        },
+        {
+          "title": "Access Transparency"
+        }
+      ]
+    },
+    {
+      "id": "labels",
+      "kind": "settings",
+      "title": "Labels",
+      "route": "/iam-admin/labels",
+      "captures": [
+        "A-iam-admin/018-L2-labels"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Labels",
+          "fields": [
+            {
+              "label": "Key",
+              "type": "text"
+            },
+            {
+              "label": "Value",
+              "type": "text"
+            }
+          ],
+          "actions": [
+            "Add label",
+            "Save",
+            "Discard changes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tags",
+      "kind": "list",
+      "title": "Tags",
+      "route": "/iam-admin/tags",
+      "captures": [
+        "A-iam-admin/019-L2-tags"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "table": {
+        "resource_label": "Tag keys",
+        "selection": "multi",
+        "header_actions": [
+          "Create",
+          "Delete",
+          "Manage access"
+        ],
+        "filter_placeholder": "Filter",
+        "empty_state": "No tag keys to display",
+        "columns": [
+          "Tag key",
+          "Tag key ID",
+          "Description",
+          "Actions"
+        ]
+      }
+    },
+    {
+      "id": "audit-logs",
+      "kind": "list",
+      "title": "Audit logs",
+      "route": "/iam-admin/audit",
+      "captures": [
+        "A-iam-admin/024-L2-audit-logs"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Set default configuration",
+        "Hide info panel",
+        "Learn"
+      ],
+      "table": {
+        "resource_label": "Data access audit logs configuration",
+        "selection": "multi",
+        "filter_placeholder": "Filter",
+        "columns": [
+          "Service",
+          "Admin read",
+          "Data read",
+          "Data write",
+          "Exempted principals",
+          "Inherited exempted principals"
+        ]
+      }
+    },
+    {
+      "id": "organization-policies",
+      "kind": "list",
+      "title": "Organization policies",
+      "route": "/iam-admin/orgpolicies",
+      "captures": [
+        "A-iam-admin/015-L2-organization-policies"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Custom constraint",
+        "Simulate constraint",
+        "Simulation history"
+      ],
+      "table": {
+        "filter_placeholder": "Filter",
+        "columns": [
+          "Enforcement state",
+          "Name",
+          "ID",
+          "Security insights",
+          "Constraint type",
+          "Policy source",
+          "Actions"
+        ]
+      }
+    },
+    {
+      "id": "privileged-access-manager",
+      "kind": "list",
+      "title": "Privileged Access Manager",
+      "route": "/iam-admin/pam",
+      "captures": [
+        "A-iam-admin/009-L2-privileged-access-manager"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Entitlements",
+        "Grants",
+        "Approve grants",
+        "Audit Logs",
+        "Settings"
+      ],
+      "header_actions": [
+        "Create",
+        "Refresh"
+      ],
+      "table": {
+        "filters": [
+          "Entitlements for all users",
+          "My Entitlements"
+        ],
+        "filter_placeholder": "Filter",
+        "empty_state": "No entitlements",
+        "columns": [
+          "Entitlement name",
+          "Inheritance",
+          "Role(s) & condition(s)",
+          "Maximum duration",
+          "Approver(s)",
+          "Status"
+        ]
+      }
+    },
+    {
+      "id": "essential-contacts",
+      "kind": "list",
+      "title": "Essential Contacts",
+      "route": "/iam-admin/essential-contacts",
+      "captures": [
+        "A-iam-admin/026-L2-essential-contacts"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Add Contact",
+        "Learn"
+      ],
+      "table": {
+        "filters": [
+          "Category",
+          "Contact"
+        ],
+        "filter_placeholder": "Filter",
+        "empty_state": "No results to display",
+        "columns": [
+          "Contacts",
+          "Inheritance",
+          "Actions"
+        ]
+      }
+    },
+    {
+      "id": "policy-troubleshooter",
+      "kind": "other",
+      "title": "Policy Troubleshooter",
+      "route": "/iam-admin/troubleshooter",
+      "captures": [
+        "A-iam-admin/022-L2-policy-troubleshooter"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Check access",
+      "sections": [
+        {
+          "title": "Select a way to troubleshoot",
+          "fields": [
+            {
+              "label": "Troubleshoot",
+              "type": "radio",
+              "options": [
+                "Manual",
+                "Error ID"
+              ]
+            },
+            {
+              "label": "Principal",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Resource 1",
+              "type": "text",
+              "actions": [
+                "Browse"
+              ]
+            },
+            {
+              "label": "Permission 1",
+              "type": "select"
+            },
+            {
+              "label": "Add another pair",
+              "type": "button"
+            },
+            {
+              "label": "Clear form",
+              "type": "button"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "policy-analyzer",
+      "kind": "other",
+      "title": "Policy Analyzer",
+      "route": "/iam-admin/analyzer",
+      "captures": [
+        "A-iam-admin/021-L2-policy-analyzer"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Analyze policies",
+          "actions": [
+            "Create custom query",
+            "Create query"
+          ]
+        },
+        {
+          "title": "Analyze organization policies"
+        }
+      ]
+    },
+    {
+      "id": "workload-identity-federation",
+      "kind": "other",
+      "title": "Workload Identity Federation",
+      "route": "/iam-admin/workload-identity-pools",
+      "captures": [
+        "A-iam-admin/011-L2-workload-identity-federation"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "1. Create a workload identity pool"
+        },
+        {
+          "title": "2. Connect an identity provider"
+        },
+        {
+          "title": "3. Configure provider mapping"
+        },
+        {
+          "title": "4. Grant access",
+          "actions": [
+            "Get started"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "groups",
+      "kind": "other",
+      "title": "Groups",
+      "route": "/iam-admin/groups",
+      "captures": [
+        "A-iam-admin/008-L2-groups"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Project view: 'Page not viewable for projects. This feature requires an organization'."
+    },
+    {
+      "id": "workforce-identity-federation",
+      "kind": "other",
+      "title": "Workforce Identity Federation",
+      "route": "/iam-admin/workforce-identity-pools",
+      "captures": [
+        "A-iam-admin/012-L2-workforce-identity-federation"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "Project view: requires an organization."
+    },
+    {
+      "id": "principal-access-boundary",
+      "kind": "other",
+      "title": "Principal Access Boundary",
+      "captures": [
+        "A-iam-admin/013-L2-principal-access-boundary"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "route": "/iam-admin/principal-access-boundary"
+    },
+    {
+      "id": "managed-workload-identities",
+      "kind": "other",
+      "title": "Managed Workload Identities",
+      "captures": [
+        "A-iam-admin/014-L2-managed-workload-identities"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "route": "/iam-admin/managed-workload-identity-pools"
+    },
+    {
+      "id": "asset-inventory",
+      "kind": "other",
+      "title": "Asset Inventory",
+      "captures": [
+        "A-iam-admin/016-L2-asset-inventory"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "route": "/iam-admin/asset-inventory"
+    },
+    {
+      "id": "security-insights",
+      "kind": "other",
+      "title": "Security Insights",
+      "captures": [
+        "A-iam-admin/020-L2-security-insights"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "route": "/iam-admin/security-insights"
+    },
+    {
+      "id": "quotas-system-limits",
+      "kind": "other",
+      "title": "Quotas & System Limits",
+      "captures": [
+        "A-iam-admin/023-L2-quotas-system-limits"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "route": "/iam-admin/quotas"
+    },
+    {
+      "id": "identity-organization",
+      "kind": "other",
+      "title": "Identity & Organization",
+      "captures": [
+        "A-iam-admin/025-L2-identity-organization"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "route": "/iam-admin/cloudidentity/consumer"
+    },
+    {
+      "id": "privacy-security",
+      "kind": "other",
+      "title": "Privacy & Security",
+      "captures": [
+        "A-iam-admin/027-L2-privacy-security"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "route": "/iam-admin/privacy"
+    },
+    {
+      "id": "identity-aware-proxy",
+      "kind": "other",
+      "title": "Identity-Aware Proxy",
+      "captures": [
+        "A-iam-admin/028-L2-identity-aware-proxy"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "route": "/iam-admin/iap"
+    }
+  ],
+  "gaps_note": "Mostly from capture (IAM allow/deny, service accounts, roles, create SA/role, settings, tags, audit logs, PAM). Grant-access panel, service-account and role detail pages are reference. Account data (principals, project ids) dropped."
+}

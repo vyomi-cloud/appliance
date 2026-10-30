@@ -1,0 +1,1149 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "monitoring",
+  "console_path": "/monitoring/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Overview",
+      "page_id": "overview"
+    },
+    {
+      "label": "Dashboards",
+      "page_id": "dashboards"
+    },
+    {
+      "label": "Application monitoring",
+      "page_id": "application-monitoring"
+    },
+    {
+      "label": "Explore",
+      "children": [
+        {
+          "label": "Metrics explorer",
+          "page_id": "metrics-explorer"
+        },
+        {
+          "label": "Logs explorer",
+          "external": true
+        },
+        {
+          "label": "Observability analytics",
+          "external": true
+        },
+        {
+          "label": "Trace explorer",
+          "page_id": "trace-explorer"
+        },
+        {
+          "label": "Cost explorer",
+          "page_id": "cost-explorer"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Detect",
+      "children": [
+        {
+          "label": "Alerting",
+          "page_id": "alerting"
+        },
+        {
+          "label": "Error reporting",
+          "page_id": "error-reporting"
+        },
+        {
+          "label": "Uptime checks",
+          "page_id": "uptime-checks"
+        },
+        {
+          "label": "Synthetic monitoring",
+          "page_id": "synthetic-monitoring"
+        },
+        {
+          "label": "SLOs",
+          "page_id": "slos"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Configure",
+      "children": [
+        {
+          "label": "Integrations",
+          "page_id": "integrations"
+        },
+        {
+          "label": "Log-based metrics",
+          "external": true
+        },
+        {
+          "label": "Log router",
+          "external": true
+        },
+        {
+          "label": "Logs storage",
+          "external": true
+        },
+        {
+          "label": "Metrics management",
+          "page_id": "metrics-management"
+        },
+        {
+          "label": "Groups",
+          "page_id": "groups"
+        },
+        {
+          "label": "Settings",
+          "page_id": "settings"
+        },
+        {
+          "label": "Permissions",
+          "page_id": "permissions"
+        }
+      ],
+      "expandable": true
+    },
+    {
+      "label": "Observability Scopes",
+      "external": true
+    },
+    {
+      "label": "Release Notes",
+      "external": true
+    }
+  ],
+  "pages": [
+    {
+      "id": "overview",
+      "kind": "dashboard",
+      "title": "Overview",
+      "route": "/monitoring",
+      "captures": [
+        "A-monitoring/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Learn"
+      ],
+      "sections": [
+        {
+          "title": "Set up your project's observability"
+        },
+        {
+          "title": "Alerts",
+          "actions": [
+            "View alerts"
+          ]
+        },
+        {
+          "title": "Services with SLO out of budget",
+          "actions": [
+            "View services"
+          ]
+        },
+        {
+          "title": "Failed uptime checks",
+          "actions": [
+            "View checks"
+          ]
+        },
+        {
+          "title": "VMs with Ops Agent"
+        },
+        {
+          "title": "Get Started with Cloud Observability"
+        },
+        {
+          "title": "Dashboards and Integrations"
+        }
+      ]
+    },
+    {
+      "id": "dashboards",
+      "kind": "list",
+      "title": "Dashboards",
+      "route": "/monitoring/dashboards",
+      "captures": [
+        "A-monitoring/004-L2-dashboards"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Add or create more dashboards",
+          "actions": [
+            "Create Custom Dashboard",
+            "View Dashboard Templates",
+            "Import Grafana Dashboards"
+          ]
+        }
+      ],
+      "table": {
+        "resource_label": "My Dashboards",
+        "selection": "multi",
+        "header_actions": [
+          "Labels",
+          "Delete",
+          "Tags",
+          "Manage Labels"
+        ],
+        "filter_placeholder": "Filter",
+        "filters": [
+          "All",
+          "Recently Viewed",
+          "Favorites",
+          "Recommended",
+          "Integrations",
+          "Ops Agent",
+          "GMP",
+          "Custom",
+          "Playbook",
+          "Google Services"
+        ],
+        "columns": [
+          "Name",
+          "Type",
+          "Description",
+          "Actions"
+        ]
+      }
+    },
+    {
+      "id": "create-dashboard",
+      "kind": "create",
+      "title": "New dashboard",
+      "route": "/monitoring/dashboards/builder",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Add widget",
+        "Save",
+        "Dashboard settings"
+      ],
+      "sections": [
+        {
+          "title": "Dashboard",
+          "fields": [
+            {
+              "label": "Dashboard name",
+              "type": "text",
+              "required": true,
+              "default": "New Dashboard"
+            },
+            {
+              "label": "Widget type",
+              "type": "select",
+              "options": [
+                "Line chart",
+                "Stacked bar chart",
+                "Heatmap chart",
+                "Table",
+                "Scorecard",
+                "Text",
+                "Alert chart",
+                "Logs panel"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "metrics-explorer",
+      "kind": "other",
+      "title": "Metrics explorer",
+      "route": "/monitoring/metrics-explorer",
+      "captures": [
+        "A-monitoring/006-L2-metrics-explorer"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Save to dashboard"
+      ],
+      "sections": [
+        {
+          "title": "Query editor",
+          "fields": [
+            {
+              "label": "Time range",
+              "type": "select",
+              "default": "Last 5 minutes"
+            },
+            {
+              "label": "Metric",
+              "type": "select",
+              "required": true,
+              "placeholder": "Select a metric"
+            },
+            {
+              "label": "Filter",
+              "type": "text"
+            },
+            {
+              "label": "Aggregation",
+              "type": "select",
+              "default": "Unaggregated"
+            },
+            {
+              "label": "by",
+              "type": "select",
+              "default": "None"
+            },
+            {
+              "label": "Auto-Run",
+              "type": "toggle"
+            },
+            {
+              "label": "Query mode",
+              "type": "radio",
+              "options": [
+                "Builder",
+                "PromQL"
+              ]
+            }
+          ],
+          "actions": [
+            "Add query",
+            "Create ratio"
+          ]
+        },
+        {
+          "title": "Results",
+          "fields": [
+            {
+              "label": "View",
+              "type": "radio",
+              "options": [
+                "Chart",
+                "Table",
+                "Both"
+              ]
+            },
+            {
+              "label": "Show Breakdown",
+              "type": "toggle"
+            }
+          ]
+        },
+        {
+          "title": "Display",
+          "fields": [
+            {
+              "label": "Widget type",
+              "type": "select",
+              "default": "Line chart"
+            },
+            {
+              "label": "Analysis Mode",
+              "type": "select"
+            },
+            {
+              "label": "Compare to past",
+              "type": "select"
+            },
+            {
+              "label": "Threshold Line",
+              "type": "other"
+            },
+            {
+              "label": "Y-axis scale",
+              "type": "select"
+            },
+            {
+              "label": "Time Range Override",
+              "type": "select"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "alerting",
+      "kind": "dashboard",
+      "title": "Alerting",
+      "route": "/monitoring/alerting",
+      "captures": [
+        "A-monitoring/008-L2-alerting"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create policy",
+        "Edit notification channels",
+        "Learn"
+      ],
+      "sections": [
+        {
+          "title": "Summary",
+          "fields": [
+            {
+              "label": "Alerts firing",
+              "type": "readonly"
+            },
+            {
+              "label": "Alerts acknowledged",
+              "type": "readonly"
+            },
+            {
+              "label": "Alert policies",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Alerts",
+          "fields": [
+            {
+              "label": "Show closed alerts",
+              "type": "button"
+            }
+          ],
+          "table": {
+            "empty_state": "No rows to display",
+            "columns": [
+              "State",
+              "Severity",
+              "Policy name",
+              "Alert summary",
+              "Opened"
+            ]
+          }
+        },
+        {
+          "title": "Snoozes",
+          "fields": [
+            {
+              "label": "Show past snoozes",
+              "type": "toggle"
+            }
+          ],
+          "actions": [
+            "Create snooze"
+          ],
+          "table": {
+            "empty_state": "No rows to display",
+            "columns": [
+              "State",
+              "Name",
+              "Start time",
+              "End time"
+            ]
+          }
+        },
+        {
+          "title": "Policies",
+          "actions": [
+            "Create policy"
+          ],
+          "table": {
+            "columns": [
+              "Display name",
+              "Type",
+              "Last modified on",
+              "Labels",
+              "Enabled"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "alerts",
+      "kind": "list",
+      "title": "Alerts",
+      "route": "/monitoring/alerting/alerts",
+      "captures": [
+        "A-monitoring/046-L3-see-all-alerts"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create policy"
+      ],
+      "table": {
+        "filters": [
+          "Show closed alerts"
+        ],
+        "filter_placeholder": "Filter",
+        "empty_state": "No rows to display",
+        "columns": [
+          "State",
+          "Severity",
+          "Policy Name",
+          "Alert Summary",
+          "Opened",
+          "Labels"
+        ]
+      }
+    },
+    {
+      "id": "create-snooze",
+      "kind": "create",
+      "title": "Create snooze",
+      "route": "/monitoring/alerting/snooze/create",
+      "captures": [
+        "A-monitoring/047-L3-create-snooze"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Snooze name",
+          "fields": [
+            {
+              "label": "Snooze name",
+              "type": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "title": "Snooze duration",
+          "fields": [
+            {
+              "label": "Start time",
+              "type": "radio",
+              "required": true,
+              "options": [
+                "Start snooze now",
+                "Start snooze at defined time"
+              ]
+            },
+            {
+              "label": "Duration",
+              "type": "select",
+              "default": "1 hr"
+            }
+          ]
+        },
+        {
+          "title": "Snooze criteria",
+          "fields": [
+            {
+              "label": "Alert policies",
+              "type": "select",
+              "help": "Select up to 16 alert policies"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-alert-policy",
+      "kind": "create",
+      "title": "Create alerting policy",
+      "route": "/monitoring/alerting/policies/create",
+      "captures": [
+        "C-forms/18-monitoring-alerting-policies-create/step-1",
+        "C-forms/18-monitoring-alerting-policies-create/step-1--tab-02-configure-trigger",
+        "C-forms/18-monitoring-alerting-policies-create/step-1--tab-03-notifications-and-name",
+        "C-forms/18-monitoring-alerting-policies-create/step-1--tab-04-review-alert"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Add alert condition",
+        "Delete alert condition",
+        "View Code"
+      ],
+      "submit": "Create Policy",
+      "steps": [
+        {
+          "title": "New condition",
+          "sections": [
+            {
+              "title": "Policy configuration mode",
+              "fields": [
+                {
+                  "label": "Policy configuration mode",
+                  "type": "radio",
+                  "default": "Builder",
+                  "options": [
+                    "Builder",
+                    "PromQL"
+                  ]
+                },
+                {
+                  "label": "Select a metric",
+                  "type": "select",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "title": "Looking to alert on other types of data?",
+              "actions": [
+                "Create log-based alert",
+                "Create SQL alert"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Configure trigger",
+          "sections": [
+            {
+              "title": "Configure alert trigger",
+              "fields": [
+                {
+                  "label": "Condition Types",
+                  "type": "radio",
+                  "default": "Threshold",
+                  "options": [
+                    "Threshold",
+                    "Metric absence",
+                    "Forecast"
+                  ]
+                },
+                {
+                  "label": "Alert trigger",
+                  "type": "select",
+                  "default": "Any time series violates"
+                },
+                {
+                  "label": "Threshold position",
+                  "type": "select",
+                  "default": "Above threshold",
+                  "options": [
+                    "Above threshold",
+                    "Below threshold"
+                  ]
+                },
+                {
+                  "label": "Threshold value",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "label": "Advanced Options",
+                  "type": "other"
+                },
+                {
+                  "label": "Condition name",
+                  "type": "text"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Notifications and name",
+          "sections": [
+            {
+              "title": "Configure notifications and finalize alert",
+              "fields": [
+                {
+                  "label": "Use notification channel",
+                  "type": "toggle",
+                  "default": true
+                },
+                {
+                  "label": "Notification Channels",
+                  "type": "select"
+                },
+                {
+                  "label": "Notification subject line",
+                  "type": "text"
+                },
+                {
+                  "label": "Notify on alert closure",
+                  "type": "checkbox"
+                },
+                {
+                  "label": "Alert autoclose duration",
+                  "type": "select"
+                },
+                {
+                  "label": "Application labels",
+                  "type": "other",
+                  "children": [
+                    {
+                      "label": "Application",
+                      "type": "select"
+                    },
+                    {
+                      "label": "Service or Workload",
+                      "type": "select"
+                    }
+                  ]
+                },
+                {
+                  "label": "Policy user labels",
+                  "type": "tags",
+                  "actions": [
+                    "Add Label"
+                  ]
+                },
+                {
+                  "label": "Severity",
+                  "type": "select",
+                  "default": "No severity"
+                },
+                {
+                  "label": "Documentation",
+                  "type": "textarea"
+                },
+                {
+                  "label": "Alert policy name",
+                  "type": "text",
+                  "required": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review alert",
+          "sections": [
+            {
+              "title": "Policy Details",
+              "fields": [
+                {
+                  "label": "Alert Policy Name",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Severity",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Notification channels",
+                  "type": "table",
+                  "columns": [
+                    "Display name",
+                    "Type"
+                  ]
+                },
+                {
+                  "label": "Documentation",
+                  "type": "readonly"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "uptime-checks",
+      "kind": "list",
+      "title": "Uptime checks",
+      "route": "/monitoring/uptime",
+      "captures": [
+        "A-monitoring/009-L2-uptime-checks"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create uptime check",
+        "Learn"
+      ],
+      "table": {
+        "filter_placeholder": "Filter",
+        "empty_state": "No rows to display",
+        "columns": [
+          "Display Name",
+          "Asia Pacific",
+          "Europe",
+          "North America",
+          "South America",
+          "Policies"
+        ]
+      }
+    },
+    {
+      "id": "create-uptime-check",
+      "kind": "create",
+      "title": "Create uptime check",
+      "route": "/monitoring/uptime/create",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "steps": [
+        {
+          "title": "Target",
+          "sections": [
+            {
+              "title": "Target",
+              "fields": [
+                {
+                  "label": "Protocol",
+                  "type": "select",
+                  "default": "HTTP",
+                  "options": [
+                    "HTTP",
+                    "HTTPS",
+                    "TCP"
+                  ]
+                },
+                {
+                  "label": "Resource type",
+                  "type": "select",
+                  "default": "URL",
+                  "options": [
+                    "URL",
+                    "Kubernetes LB Service",
+                    "Instance",
+                    "App Engine",
+                    "Elastic Load Balancer"
+                  ]
+                },
+                {
+                  "label": "Hostname",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Path",
+                  "type": "text"
+                },
+                {
+                  "label": "Check frequency",
+                  "type": "select",
+                  "default": "1 minute"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Response Validation",
+          "sections": [
+            {
+              "title": "Response Validation",
+              "fields": [
+                {
+                  "label": "Response Timeout",
+                  "type": "number",
+                  "default": 10
+                },
+                {
+                  "label": "Content matching is enabled",
+                  "type": "toggle"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Alert & Notification",
+          "sections": [
+            {
+              "title": "Alert & Notification",
+              "fields": [
+                {
+                  "label": "Create an alert",
+                  "type": "toggle",
+                  "default": true
+                },
+                {
+                  "label": "Notification channels",
+                  "type": "select"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review",
+          "sections": [
+            {
+              "title": "Review",
+              "fields": [
+                {
+                  "label": "Title",
+                  "type": "text",
+                  "required": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "synthetic-monitoring",
+      "kind": "list",
+      "title": "Synthetic monitoring",
+      "route": "/monitoring/synthetic-monitoring",
+      "captures": [
+        "A-monitoring/010-L2-synthetic-monitoring"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create Synthetic Monitor"
+      ],
+      "table": {
+        "filter_placeholder": "Filter",
+        "empty_state": "No monitors configured",
+        "empty_state_action": "Create monitor",
+        "columns": [
+          "Status",
+          "Name",
+          "Success rate",
+          "Average Latency",
+          "Alert policies"
+        ]
+      }
+    },
+    {
+      "id": "slos",
+      "kind": "list",
+      "title": "SLOs Overview",
+      "route": "/monitoring/services",
+      "captures": [
+        "A-monitoring/011-L2-slos"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Define service",
+        "Send feedback",
+        "Auto refresh"
+      ],
+      "table": {
+        "resource_label": "Services",
+        "filter_placeholder": "Filter",
+        "empty_state": "No services",
+        "columns": [
+          "Name",
+          "Type",
+          "SLOs out of error budget",
+          "SLOs with firing alert",
+          "Labels"
+        ]
+      }
+    },
+    {
+      "id": "groups",
+      "kind": "list",
+      "title": "Groups",
+      "route": "/monitoring/groups",
+      "captures": [
+        "A-monitoring/014-L2-groups"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create Group"
+      ],
+      "table": {
+        "filter_placeholder": "Filter",
+        "empty_state": "No groups to display",
+        "columns": [
+          "Name",
+          "Instances",
+          "Resources"
+        ]
+      }
+    },
+    {
+      "id": "settings",
+      "kind": "settings",
+      "title": "Settings",
+      "route": "/monitoring/settings",
+      "captures": [
+        "A-monitoring/015-L2-settings"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Notification channels",
+        "Log Scopes",
+        "Metric Scope",
+        "Trace Scopes"
+      ],
+      "tab_panels": [
+        {
+          "label": "Log Scopes",
+          "sections": [
+            {
+              "title": "Log scopes",
+              "actions": [
+                "Create log scope"
+              ],
+              "table": {
+                "filter_placeholder": "Filter",
+                "columns": [
+                  "Name",
+                  "Description",
+                  "Type",
+                  "Resources"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "permissions",
+      "kind": "list",
+      "title": "Permissions",
+      "route": "/monitoring/permissions",
+      "captures": [
+        "A-monitoring/016-L2-permissions"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Permissions for project",
+          "fields": [
+            {
+              "label": "Include all roles with Monitoring permissions",
+              "type": "checkbox"
+            }
+          ]
+        }
+      ],
+      "table": {
+        "selection": "multi",
+        "header_actions": [
+          "Grant access",
+          "Remove access"
+        ],
+        "filters": [
+          "View by principals",
+          "View by roles"
+        ],
+        "filter_placeholder": "Filter",
+        "columns": [
+          "Type",
+          "Principal",
+          "Name",
+          "Role",
+          "Inheritance"
+        ]
+      }
+    },
+    {
+      "id": "metrics-management",
+      "kind": "dashboard",
+      "title": "Metrics Management",
+      "route": "/monitoring/metrics-management",
+      "captures": [
+        "A-monitoring/013-L2-metrics-management"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Send Feedback",
+        "View Audit Logs"
+      ],
+      "tabs": [
+        "Metrics",
+        "Excluded Metrics"
+      ],
+      "table": {
+        "header_actions": [
+          "Exclude metric"
+        ],
+        "filter_placeholder": "Filter",
+        "pagination": true,
+        "empty_state": "No rows to display",
+        "columns": [
+          "Metric",
+          "Bytes billable volume / Total",
+          "Samples billable volume / Total",
+          "Metric reads in the last 30 days",
+          "Alert Policies",
+          "Custom Dashboards",
+          "Domain",
+          "Labels",
+          "Project name",
+          "(Samples) Namespaces",
+          "Cardinality"
+        ]
+      }
+    },
+    {
+      "id": "integrations",
+      "kind": "list",
+      "title": "Integrations",
+      "route": "/monitoring/integrations",
+      "captures": [
+        "A-monitoring/012-L2-integrations"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Get started with Integrations"
+        },
+        {
+          "title": "Quick filters",
+          "fields": [
+            {
+              "label": "Deployment Platform",
+              "type": "checkbox"
+            },
+            {
+              "label": "Status",
+              "type": "checkbox"
+            },
+            {
+              "label": "Type",
+              "type": "checkbox"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cost-explorer",
+      "kind": "dashboard",
+      "title": "Cost Explorer",
+      "route": "/monitoring/cost-explorer",
+      "captures": [
+        "A-monitoring/007-L2-cost-explorer"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "application-monitoring",
+      "kind": "dashboard",
+      "title": "Application monitoring",
+      "route": "/monitoring/applications",
+      "captures": [
+        "A-monitoring/005-L2-application-monitoring"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "notes": "Capture body empty; title from nav."
+    },
+    {
+      "id": "trace-explorer",
+      "kind": "other",
+      "title": "Trace explorer",
+      "captures": [
+        "A-monitoring/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "route": "/traces/explorer"
+    },
+    {
+      "id": "error-reporting",
+      "kind": "list",
+      "title": "Error reporting",
+      "captures": [
+        "A-monitoring/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "route": "/errors"
+    }
+  ],
+  "gaps_note": "Monitoring and Logging share one captured 'Observability' nav (Explore/Detect/Configure); Logging items are external here. Create dashboard and create uptime check are reference; everything else is from capture."
+}

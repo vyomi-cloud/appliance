@@ -1,0 +1,252 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "artifacts",
+  "console_path": "/artifacts/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Repositories",
+      "page_id": "repositories"
+    },
+    {
+      "label": "Settings",
+      "page_id": "settings"
+    }
+  ],
+  "pages": [
+    {
+      "id": "repositories",
+      "kind": "list",
+      "title": "Repositories",
+      "route": "/artifacts",
+      "captures": [
+        "A-artifacts/001-L1-landing"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Capture shows the 'Enable Artifact Registry API' page.",
+      "header_actions": [
+        "Create repository",
+        "Refresh",
+        "Delete"
+      ],
+      "table": {
+        "selection": "multi",
+        "filter_placeholder": "Filter",
+        "preferences": true,
+        "confidence": "medium",
+        "columns": [
+          "Name",
+          "Format",
+          "Mode",
+          "Type",
+          "Location",
+          "Description",
+          "Labels",
+          "Encryption",
+          "Created",
+          "Updated"
+        ]
+      }
+    },
+    {
+      "id": "create-repository",
+      "kind": "create",
+      "title": "Create repository",
+      "route": "/artifacts/create-repo",
+      "captures": [
+        "C-forms/17-artifacts-create-repo/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "notes": "Capture blocked by 'Enable billing'.",
+      "sections": [
+        {
+          "title": "Repository",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Format",
+              "type": "radio",
+              "required": true,
+              "default": "Docker",
+              "options": [
+                "Docker",
+                "Maven",
+                "npm",
+                "Python",
+                "Apt",
+                "Yum",
+                "Go",
+                "Kubeflow Pipelines",
+                "Generic"
+              ]
+            },
+            {
+              "label": "Mode",
+              "type": "radio",
+              "default": "Standard",
+              "options": [
+                "Standard",
+                "Remote",
+                "Virtual"
+              ]
+            },
+            {
+              "label": "Location type",
+              "type": "radio",
+              "default": "Region",
+              "options": [
+                "Region",
+                "Multi-region"
+              ]
+            },
+            {
+              "label": "Region",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "Description",
+              "type": "text"
+            },
+            {
+              "label": "Labels",
+              "type": "tags",
+              "actions": [
+                "Add label"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Encryption",
+          "fields": [
+            {
+              "label": "Encryption",
+              "type": "radio",
+              "default": "Google-managed encryption key",
+              "options": [
+                "Google-managed encryption key",
+                "Customer-managed encryption key (CMEK)"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Immutable image tags",
+          "fields": [
+            {
+              "label": "Immutable image tags",
+              "type": "radio",
+              "default": "Disabled",
+              "options": [
+                "Enabled",
+                "Disabled"
+              ],
+              "visible_when": "Format = Docker"
+            }
+          ]
+        },
+        {
+          "title": "Cleanup policies",
+          "fields": [
+            {
+              "label": "Cleanup policies",
+              "type": "radio",
+              "default": "Delete artifacts",
+              "options": [
+                "Delete artifacts",
+                "Dry run"
+              ]
+            },
+            {
+              "label": "Add a cleanup policy",
+              "type": "button"
+            }
+          ]
+        },
+        {
+          "title": "Artifact Analysis",
+          "fields": [
+            {
+              "label": "Vulnerability scanning",
+              "type": "radio",
+              "default": "Enabled",
+              "options": [
+                "Enabled",
+                "Disabled"
+              ]
+            }
+          ],
+          "confidence": "low"
+        }
+      ]
+    },
+    {
+      "id": "repository-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/artifacts/{format}/{project}/{location}/{resource-name}",
+      "breadcrumbs": [
+        "Artifact Registry",
+        "Repositories",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Setup instructions",
+        "Edit repository",
+        "Delete",
+        "Refresh"
+      ],
+      "table": {
+        "selection": "multi",
+        "filter_placeholder": "Filter",
+        "confidence": "medium",
+        "columns": [
+          "Name",
+          "Created",
+          "Updated"
+        ]
+      }
+    },
+    {
+      "id": "image-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Digests",
+        "selection": "multi",
+        "confidence": "low",
+        "columns": [
+          "Name",
+          "Tags",
+          "Created",
+          "Uploaded",
+          "Updated",
+          "Virtual size"
+        ]
+      }
+    },
+    {
+      "id": "settings",
+      "kind": "settings",
+      "title": "Settings",
+      "route": "/artifacts/settings",
+      "provenance": "reference",
+      "confidence": "medium"
+    }
+  ],
+  "gaps_note": "Landing and create-repo captures show the API/billing gate: all reference (current console)."
+}

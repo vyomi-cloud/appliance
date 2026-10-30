@@ -1,0 +1,770 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "networking",
+  "console_path": "/networking/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "VPC networks",
+      "page_id": "vpc-networks"
+    },
+    {
+      "label": "IP addresses",
+      "page_id": "ip-addresses"
+    },
+    {
+      "label": "Internal ranges",
+      "page_id": "internal-ranges"
+    },
+    {
+      "label": "Bring your own IP",
+      "page_id": "bring-your-own-ip"
+    },
+    {
+      "label": "Firewall",
+      "page_id": "firewall"
+    },
+    {
+      "label": "Routes",
+      "page_id": "routes"
+    },
+    {
+      "label": "VPC connectivity",
+      "page_id": "vpc-connectivity"
+    },
+    {
+      "label": "Shared VPC",
+      "page_id": "shared-vpc"
+    },
+    {
+      "label": "Serverless VPC access",
+      "page_id": "serverless-vpc-access"
+    },
+    {
+      "label": "Packet mirroring",
+      "page_id": "packet-mirroring"
+    },
+    {
+      "label": "VPC Flow Logs",
+      "page_id": "vpc-flow-logs"
+    }
+  ],
+  "pages": [
+    {
+      "id": "vpc-networks",
+      "kind": "list",
+      "title": "VPC networks",
+      "route": "/networking/networks/list",
+      "breadcrumbs": [
+        "VPC Network",
+        "VPC networks"
+      ],
+      "captures": [
+        "A-networking/001-L1-landing",
+        "A-networking/003-L2-vpc-networks"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create VPC network",
+        "Refresh",
+        "Learn"
+      ],
+      "tabs": [
+        "Networks in current project",
+        "Subnets in current project"
+      ],
+      "table": {
+        "header_actions": [
+          "Manage flow logs"
+        ],
+        "filter_placeholder": "Filter",
+        "empty_state": "No rows to display",
+        "columns": [
+          "Name",
+          "Subnets",
+          "MTU",
+          "Mode",
+          "IPv6 ULA range",
+          "Gateways",
+          "Flow log configs",
+          "Firewall rules",
+          "Global dynamic routing",
+          "Network profile"
+        ]
+      }
+    },
+    {
+      "id": "create-vpc-network",
+      "kind": "create",
+      "title": "Create a VPC network",
+      "route": "/networking/networks/add",
+      "captures": [
+        "C-forms/13-networking-networks-add/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "notes": "Capture blocked by 'Enable billing'.",
+      "sections": [
+        {
+          "title": "Network",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Description",
+              "type": "text"
+            },
+            {
+              "label": "Maximum transmission unit (MTU)",
+              "type": "select",
+              "default": "1460"
+            },
+            {
+              "label": "VPC network ULA internal IPv6 range",
+              "type": "radio",
+              "default": "Disabled",
+              "options": [
+                "Disabled",
+                "Enabled"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Subnets",
+          "fields": [
+            {
+              "label": "Subnet creation mode",
+              "type": "radio",
+              "default": "Custom",
+              "options": [
+                "Custom",
+                "Automatic"
+              ]
+            },
+            {
+              "label": "New subnet",
+              "type": "other",
+              "children": [
+                {
+                  "label": "Name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Description",
+                  "type": "text"
+                },
+                {
+                  "label": "Region",
+                  "type": "select",
+                  "required": true
+                },
+                {
+                  "label": "IP stack type",
+                  "type": "radio",
+                  "default": "IPv4 (single-stack)",
+                  "options": [
+                    "IPv4 (single-stack)",
+                    "IPv4 and IPv6 (dual-stack)",
+                    "IPv6 (single-stack)"
+                  ]
+                },
+                {
+                  "label": "IPv4 range",
+                  "type": "text",
+                  "required": true,
+                  "placeholder": "10.0.0.0/24"
+                },
+                {
+                  "label": "Private Google Access",
+                  "type": "radio",
+                  "default": "Off",
+                  "options": [
+                    "On",
+                    "Off"
+                  ]
+                },
+                {
+                  "label": "Flow logs",
+                  "type": "radio",
+                  "default": "Off",
+                  "options": [
+                    "On",
+                    "Off"
+                  ]
+                }
+              ],
+              "visible_when": "Subnet creation mode = Custom",
+              "actions": [
+                "Done",
+                "Add subnet"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Firewall rules",
+          "fields": [
+            {
+              "label": "IPv4 firewall rules",
+              "type": "table",
+              "columns": [
+                "Name",
+                "Type",
+                "Targets",
+                "Filters",
+                "Protocols / ports",
+                "Action",
+                "Priority"
+              ]
+            }
+          ],
+          "confidence": "low"
+        },
+        {
+          "title": "Dynamic routing mode",
+          "fields": [
+            {
+              "label": "Dynamic routing mode",
+              "type": "radio",
+              "default": "Regional",
+              "options": [
+                "Regional",
+                "Global"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "DNS server policy",
+          "fields": [
+            {
+              "label": "DNS server policy",
+              "type": "select",
+              "default": "No server policy"
+            }
+          ],
+          "confidence": "low"
+        }
+      ]
+    },
+    {
+      "id": "vpc-network-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/networking/networks/details/{resource-name}",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Edit",
+        "Delete VPC network"
+      ],
+      "tabs": [
+        "Subnets",
+        "Static internal IP addresses",
+        "Firewalls",
+        "Routes",
+        "VPC network peering",
+        "Private service connection"
+      ],
+      "tab_panels": [
+        {
+          "label": "Subnets",
+          "sections": [
+            {
+              "title": "Subnets",
+              "table": {
+                "header_actions": [
+                  "Add subnet",
+                  "Delete"
+                ],
+                "columns": [
+                  "Name",
+                  "Region",
+                  "Stack type",
+                  "Primary IPv4 range",
+                  "Gateway",
+                  "Private Google Access",
+                  "Flow logs"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "firewall",
+      "kind": "list",
+      "title": "Firewall policies",
+      "route": "/net-security/firewall-manager/firewall-policies/list",
+      "captures": [
+        "A-networking/009-L2-firewall",
+        "A-net-security-firewall-manager/003-L2-firewall-policies",
+        "A-net-security-firewall-manager/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "notes": "VPC nav 'Firewall' opens Network Security > Cloud NGFW > Firewall policies (its own side nav).",
+      "header_actions": [
+        "Create firewall policy",
+        "Create firewall rule",
+        "Learn"
+      ],
+      "table": {
+        "resource_label": "VPC firewall rules",
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Configure logs",
+          "Delete"
+        ],
+        "filter_placeholder": "Filter",
+        "empty_state": "No rows to display",
+        "columns": [
+          "Name",
+          "Type",
+          "Targets",
+          "Filters",
+          "Protocols / ports",
+          "Action",
+          "Priority",
+          "Network",
+          "Logs",
+          "Hit count",
+          "Last hit",
+          "Insights"
+        ]
+      },
+      "extra_tables": [
+        {
+          "resource_label": "Network firewall policies",
+          "empty_state": "No rows to display",
+          "columns": [
+            "Policy name",
+            "Policy type",
+            "Firewall rules",
+            "Mirroring rules",
+            "Description",
+            "Deployment scope",
+            "Associated with"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "create-firewall-rule",
+      "kind": "create",
+      "title": "Create a firewall rule",
+      "route": "/net-security/firewall-manager/firewall-policies/add",
+      "captures": [
+        "C-forms/14-net-security-firewall-manager-firewall-policies-add/step-1"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "notes": "Capture blocked by 'Enable billing'.",
+      "sections": [
+        {
+          "title": "Rule",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Description",
+              "type": "text"
+            },
+            {
+              "label": "Logs",
+              "type": "radio",
+              "default": "Off",
+              "options": [
+                "On",
+                "Off"
+              ]
+            },
+            {
+              "label": "Network",
+              "type": "select",
+              "required": true,
+              "default": "default"
+            },
+            {
+              "label": "Priority",
+              "type": "number",
+              "default": 1000
+            },
+            {
+              "label": "Direction of traffic",
+              "type": "radio",
+              "default": "Ingress",
+              "options": [
+                "Ingress",
+                "Egress"
+              ]
+            },
+            {
+              "label": "Action on match",
+              "type": "radio",
+              "default": "Allow",
+              "options": [
+                "Allow",
+                "Deny"
+              ]
+            },
+            {
+              "label": "Targets",
+              "type": "select",
+              "default": "Specified target tags",
+              "options": [
+                "All instances in the network",
+                "Specified target tags",
+                "Specified service account"
+              ]
+            },
+            {
+              "label": "Target tags",
+              "type": "tags"
+            },
+            {
+              "label": "Source filter",
+              "type": "select",
+              "default": "IPv4 ranges"
+            },
+            {
+              "label": "Source IPv4 ranges",
+              "type": "tags"
+            },
+            {
+              "label": "Protocols and ports",
+              "type": "radio",
+              "default": "Allow all",
+              "options": [
+                "Allow all",
+                "Specified protocols and ports"
+              ],
+              "children": [
+                {
+                  "label": "TCP",
+                  "type": "checkbox"
+                },
+                {
+                  "label": "UDP",
+                  "type": "checkbox"
+                },
+                {
+                  "label": "Other",
+                  "type": "checkbox"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ip-addresses",
+      "kind": "list",
+      "title": "IP addresses",
+      "route": "/networking/addresses/list",
+      "captures": [
+        "A-networking/006-L2-ip-addresses"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Reserve external",
+        "Reserve internal",
+        "Refresh",
+        "Release static address",
+        "Hide info panel",
+        "Learn"
+      ],
+      "tabs": [
+        "All",
+        "Internal IP addresses",
+        "External IP addresses"
+      ],
+      "notes": "Second tab row: IPv4 addresses / IPv6 addresses.",
+      "table": {
+        "selection": "multi",
+        "filter_placeholder": "Filter",
+        "empty_state": "No rows to display",
+        "columns": [
+          "Name",
+          "IP address",
+          "Access type",
+          "Region",
+          "Type",
+          "Version",
+          "In use by",
+          "Source",
+          "Network Tier",
+          "Labels",
+          "Actions"
+        ]
+      }
+    },
+    {
+      "id": "reserve-external-address",
+      "kind": "create",
+      "title": "Reserve a static address",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Reserve",
+      "sections": [
+        {
+          "title": "Address",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Description",
+              "type": "text"
+            },
+            {
+              "label": "Network Service Tier",
+              "type": "radio",
+              "default": "Premium",
+              "options": [
+                "Premium",
+                "Standard"
+              ]
+            },
+            {
+              "label": "IP version",
+              "type": "radio",
+              "default": "IPv4",
+              "options": [
+                "IPv4",
+                "IPv6"
+              ]
+            },
+            {
+              "label": "Type",
+              "type": "radio",
+              "default": "Regional",
+              "options": [
+                "Regional",
+                "Global"
+              ]
+            },
+            {
+              "label": "Region",
+              "type": "select"
+            },
+            {
+              "label": "Attached to",
+              "type": "select",
+              "default": "None"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "routes",
+      "kind": "list",
+      "title": "Routes",
+      "route": "/networking/routes/list",
+      "captures": [
+        "A-networking/010-L2-routes"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Learn"
+      ],
+      "tabs": [
+        "Effective routes",
+        "Route management"
+      ],
+      "sections": [
+        {
+          "title": "Select the VPC network and region for which you want to view routes",
+          "fields": [
+            {
+              "label": "Network",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "Region",
+              "type": "select",
+              "required": true
+            }
+          ],
+          "actions": [
+            "View"
+          ]
+        }
+      ],
+      "table": {
+        "header_actions": [
+          "Refresh"
+        ],
+        "filters": [
+          "Show suppressed routes"
+        ],
+        "filter_placeholder": "Filter",
+        "empty_state": "No rows to display",
+        "columns": [
+          "Status",
+          "Name",
+          "Type",
+          "IP version",
+          "Destination IP range",
+          "Priority",
+          "Scope limits",
+          "Next hop"
+        ]
+      }
+    },
+    {
+      "id": "create-route",
+      "kind": "create",
+      "title": "Create a route",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Route",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Description",
+              "type": "text"
+            },
+            {
+              "label": "Network",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "Destination IPv4 range",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Priority",
+              "type": "number",
+              "default": 1000
+            },
+            {
+              "label": "Instance tags",
+              "type": "tags"
+            },
+            {
+              "label": "Next hop",
+              "type": "select",
+              "options": [
+                "Default internet gateway",
+                "Specify an instance",
+                "Specify IP address of an instance",
+                "Specify VPN tunnel",
+                "Specify a forwarding rule of internal TCP/UDP load balancer"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vpc-flow-logs",
+      "kind": "list",
+      "title": "VPC flow logs",
+      "route": "/networking/vpc-flow-logs",
+      "captures": [
+        "A-networking/015-L2-vpc-flow-logs"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "tabs": [
+        "Subnets",
+        "VLAN attachments",
+        "Cloud VPN tunnels"
+      ],
+      "notes": "Requires the Network Management API."
+    },
+    {
+      "id": "internal-ranges",
+      "kind": "other",
+      "title": "Internal ranges",
+      "captures": [
+        "A-networking/007-L2-internal-ranges"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "bring-your-own-ip",
+      "kind": "other",
+      "title": "Bring your own IP",
+      "captures": [
+        "A-networking/008-L2-bring-your-own-ip"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "vpc-connectivity",
+      "kind": "other",
+      "title": "VPC connectivity",
+      "captures": [
+        "A-networking/011-L2-vpc-connectivity"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "shared-vpc",
+      "kind": "other",
+      "title": "Shared VPC",
+      "captures": [
+        "A-networking/012-L2-shared-vpc"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "serverless-vpc-access",
+      "kind": "other",
+      "title": "Serverless VPC access",
+      "captures": [
+        "A-networking/013-L2-serverless-vpc-access"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    },
+    {
+      "id": "packet-mirroring",
+      "kind": "other",
+      "title": "Packet mirroring",
+      "captures": [
+        "A-networking/014-L2-packet-mirroring"
+      ],
+      "provenance": "capture",
+      "confidence": "high"
+    }
+  ],
+  "gaps_note": "Nav, VPC networks/IP addresses/routes lists and the Cloud NGFW firewall page are from capture. Create VPC network, create firewall rule, reserve address, create route and network details are reference (billing-gated / not reached)."
+}

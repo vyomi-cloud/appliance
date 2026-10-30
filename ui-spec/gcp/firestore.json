@@ -1,0 +1,456 @@
+{
+  "$schema": "../schema.json",
+  "cloud": "gcp",
+  "service": "firestore",
+  "console_path": "/firestore/",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "All databases",
+      "page_id": "databases"
+    },
+    {
+      "label": "{resource-name}",
+      "children": [
+        {
+          "label": "Firestore Studio",
+          "page_id": "firestore-studio"
+        },
+        {
+          "label": "Indexes",
+          "page_id": "indexes"
+        },
+        {
+          "label": "Import/Export",
+          "page_id": "import-export"
+        },
+        {
+          "label": "Disaster recovery",
+          "page_id": "disaster-recovery"
+        },
+        {
+          "label": "Time-to-live (TTL)",
+          "page_id": "ttl"
+        },
+        {
+          "label": "Security rules",
+          "page_id": "security-rules"
+        },
+        {
+          "label": "Insights",
+          "page_id": "insights"
+        },
+        {
+          "label": "Usage",
+          "page_id": "usage"
+        },
+        {
+          "label": "Key Visualizer",
+          "page_id": "key-visualizer"
+        }
+      ],
+      "expandable": true
+    }
+  ],
+  "pages": [
+    {
+      "id": "databases",
+      "kind": "list",
+      "title": "All databases",
+      "route": "/firestore/databases",
+      "breadcrumbs": [
+        "Firestore",
+        "All databases"
+      ],
+      "captures": [
+        "A-firestore/001-L1-landing",
+        "A-firestore/002-L2-all-databases",
+        "A-datastore/001-L1-landing"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create a Firestore database",
+        "View fleet health"
+      ],
+      "table": {
+        "filters": [
+          "Show deleted"
+        ],
+        "filter_placeholder": "Enter property name or value",
+        "preferences": true,
+        "actions": [
+          "View database",
+          "Delete"
+        ],
+        "empty_state": "You don't have any databases in this project yet.",
+        "empty_state_action": "Create a Firestore Database",
+        "columns": [
+          "Status",
+          "Database ID",
+          "Edition",
+          "Modes",
+          "Location",
+          "Creation time",
+          "Scheduled backups",
+          "Encryption type",
+          "Encryption key",
+          "Actions"
+        ]
+      },
+      "notes": "Creation time header carries the viewer's UTC offset, e.g. 'Creation time (UTC+5:30)'. /datastore lands here too."
+    },
+    {
+      "id": "create-database",
+      "kind": "create",
+      "title": "Create database",
+      "route": "/firestore/create-database",
+      "captures": [
+        "C-forms/15-firestore-create-database/step-1"
+      ],
+      "provenance": "capture",
+      "confidence": "high",
+      "submit": "Create Database",
+      "sections": [
+        {
+          "title": "Name your database",
+          "fields": [
+            {
+              "label": "Database ID",
+              "type": "text",
+              "required": true,
+              "default": "(default)",
+              "help": "Permanent choice"
+            }
+          ]
+        },
+        {
+          "title": "Select your edition",
+          "fields": [
+            {
+              "label": "Edition",
+              "type": "radio",
+              "default": "Standard Edition",
+              "options": [
+                "Enterprise Edition",
+                "Standard Edition"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Modes",
+          "fields": [
+            {
+              "label": "Mode",
+              "type": "radio",
+              "default": "Firestore in Native mode",
+              "options": [
+                "Firestore in Native mode",
+                "Firestore with MongoDB compatibility"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Location",
+          "fields": [
+            {
+              "label": "Location type",
+              "type": "radio",
+              "default": "Region",
+              "options": [
+                "Region",
+                "Multi-region"
+              ]
+            },
+            {
+              "label": "Region",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "Show disaster recovery settings",
+              "type": "button"
+            },
+            {
+              "label": "Show encryption options",
+              "type": "button"
+            }
+          ]
+        },
+        {
+          "title": "Security rules",
+          "fields": [
+            {
+              "label": "Security rules",
+              "type": "radio",
+              "options": [
+                "Restrictive",
+                "Open"
+              ],
+              "provenance": "reference",
+              "confidence": "low"
+            }
+          ],
+          "provenance": "reference",
+          "confidence": "low"
+        },
+        {
+          "title": "Pricing summary (Free-tier Eligible)",
+          "fields": [
+            {
+              "label": "Pricing details",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "firestore-studio",
+      "kind": "detail",
+      "title": "Firestore Studio",
+      "route": "/firestore/databases/{resource-name}/data/panel",
+      "breadcrumbs": [
+        "Firestore",
+        "{resource-name}",
+        "Firestore Studio"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "notes": "Panel view: collection > document > fields columns; Query builder alternative.",
+      "header_actions": [
+        "Start collection",
+        "Add document",
+        "Add field",
+        "Delete",
+        "Query builder",
+        "Panel view"
+      ],
+      "sections": [
+        {
+          "title": "Start a collection",
+          "fields": [
+            {
+              "label": "Parent path",
+              "type": "readonly"
+            },
+            {
+              "label": "Collection ID",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Document ID",
+              "type": "text",
+              "actions": [
+                "Auto-ID"
+              ]
+            },
+            {
+              "label": "Fields",
+              "type": "table",
+              "columns": [
+                "Field name",
+                "Field type",
+                "Field value"
+              ],
+              "options": [
+                "string",
+                "number",
+                "boolean",
+                "map",
+                "array",
+                "null",
+                "timestamp",
+                "geopoint",
+                "reference"
+              ],
+              "actions": [
+                "Add field"
+              ]
+            }
+          ],
+          "actions": [
+            "Save",
+            "Cancel"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "indexes",
+      "kind": "list",
+      "title": "Indexes",
+      "route": "/firestore/databases/{resource-name}/indexes",
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Composite",
+        "Single field",
+        "Vector"
+      ],
+      "header_actions": [
+        "Create index"
+      ],
+      "table": {
+        "filter_placeholder": "Filter indexes",
+        "confidence": "medium",
+        "columns": [
+          "Collection ID",
+          "Fields indexed",
+          "Query scope",
+          "Index ID",
+          "Status"
+        ]
+      }
+    },
+    {
+      "id": "create-index",
+      "kind": "create",
+      "title": "Create a composite index",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Index",
+          "fields": [
+            {
+              "label": "Collection ID",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Field path",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Index options",
+              "type": "select",
+              "options": [
+                "Ascending",
+                "Descending",
+                "Arrays"
+              ]
+            },
+            {
+              "label": "Query scope",
+              "type": "radio",
+              "options": [
+                "Collection",
+                "Collection group"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ttl",
+      "kind": "list",
+      "title": "Time-to-live (TTL)",
+      "route": "/firestore/databases/{resource-name}/ttl",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create policy"
+      ],
+      "table": {
+        "confidence": "medium",
+        "columns": [
+          "Collection group",
+          "Timestamp field",
+          "Status"
+        ]
+      }
+    },
+    {
+      "id": "security-rules",
+      "kind": "settings",
+      "title": "Security rules",
+      "route": "/firestore/databases/{resource-name}/rules",
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Rules",
+        "Development & test"
+      ],
+      "header_actions": [
+        "Publish"
+      ],
+      "sections": [
+        {
+          "title": "Rules",
+          "fields": [
+            {
+              "label": "Rules editor",
+              "type": "textarea"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "import-export",
+      "kind": "list",
+      "title": "Import/Export",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Import",
+        "Export"
+      ],
+      "table": {
+        "confidence": "low",
+        "columns": [
+          "Operation",
+          "Status",
+          "Start time",
+          "Collection IDs",
+          "Location"
+        ]
+      }
+    },
+    {
+      "id": "disaster-recovery",
+      "kind": "list",
+      "title": "Disaster recovery",
+      "provenance": "reference",
+      "confidence": "medium",
+      "tabs": [
+        "Backups",
+        "Backup schedules",
+        "Point-in-time recovery"
+      ],
+      "header_actions": [
+        "Create backup schedule"
+      ]
+    },
+    {
+      "id": "insights",
+      "kind": "other",
+      "title": "Insights",
+      "provenance": "reference",
+      "confidence": "medium"
+    },
+    {
+      "id": "usage",
+      "kind": "dashboard",
+      "title": "Usage",
+      "provenance": "reference",
+      "confidence": "medium"
+    },
+    {
+      "id": "key-visualizer",
+      "kind": "other",
+      "title": "Key Visualizer",
+      "provenance": "reference",
+      "confidence": "medium"
+    }
+  ],
+  "gaps_note": "All databases list + Create database are from capture. Per-database pages (Firestore Studio, Indexes, TTL, Rules, DR) were not reachable (no database, API disabled) and are reference; per-database nav group shows under the database id."
+}
