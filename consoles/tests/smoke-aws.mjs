@@ -45,7 +45,7 @@ try {
 
   // S3: create bucket through the form
   await page.goto(UI + "#/s3/create");
-  await page.getByLabel("Bucket name").fill(B);
+  await page.getByLabel("Bucket name", { exact: true }).fill(B);
   await page.getByRole("radio", { name: "Enable", exact: true }).first().check();   // Bucket Versioning
   await shot("02-s3-create-filled");
   await page.getByRole("button", { name: "Create bucket" }).last().click();
@@ -56,8 +56,11 @@ try {
   check("S3 versioning applied (native GetBucketVersioning)", /<Status>Enabled<\/Status>/.test(ver), ver.slice(0, 120));
   await shot("03-s3-bucket-objects");
 
-  // Upload via UI, verify via wire
-  await page.locator('input[type=file]').setInputFiles({ name: "hello.txt", mimeType: "text/plain", buffer: Buffer.from("hello v4") });
+  // Upload via its own page, verify via wire
+  await page.getByRole("link", { name: "Upload" }).first().click();
+  await page.getByRole("heading", { name: "Upload", exact: true }).waitFor({ timeout: 10000 });
+  await page.locator('input[type=file]:not([webkitdirectory])').setInputFiles({ name: "hello.txt", mimeType: "text/plain", buffer: Buffer.from("hello v4") });
+  await page.getByRole("button", { name: "Upload" }).click();
   await page.getByRole("link", { name: "hello.txt" }).waitFor({ timeout: 10000 });
   const obj = await wire(`/${B}/hello.txt`);
   check("S3 upload → object readable over native wire", obj === "hello v4", obj);
@@ -68,6 +71,17 @@ try {
     await shot(`05-s3-tab-${tab.toLowerCase()}`);
   }
   check("S3 detail tabs render", true);
+
+  // Object detail: HeadObject-backed Properties + a real ListObjectVersions round-trip
+  await page.getByRole("tab", { name: "Objects" }).click();
+  await page.getByRole("link", { name: "hello.txt" }).click();
+  await page.getByRole("heading", { name: "hello.txt" }).waitFor({ timeout: 10000 });
+  await page.getByText("8 B").waitFor({ timeout: 10000 });
+  await page.getByRole("tab", { name: "Versions" }).click();
+  await page.getByRole("cell", { name: "Latest version" }).waitFor({ timeout: 10000 });
+  await shot("04b-s3-object-detail");
+  check("S3 object detail shows real HeadObject + ListObjectVersions data", true);
+  await page.goBack();
 
   // Bucket list shows it
   await page.goto(UI + "#/s3");

@@ -4,17 +4,15 @@ import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Tabs from "@cloudscape-design/components/tabs";
 import ResourceTable from "../../kit/ResourceTable.jsx";
-import DeleteModal from "../../kit/DeleteModal.jsx";
-import { fmtDate, NotSimulated } from "../../kit/common.jsx";
+import { fmtDate, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
-import { follow, href, navigate } from "../../../common/router.js";
+import { follow, href } from "../../../common/router.js";
 import * as api from "./api.js";
 
 export default function Buckets() {
   const notify = useNotify();
   const [sel, setSel] = useState([]);
-  const [del, setDel] = useState(false);
   const { data = [], loading, error, reload } = useAsync(async () => {
     const bs = await api.listBuckets();
     const regions = await Promise.all(bs.map((b) => api.bucketRegion(b.name)));
@@ -22,7 +20,7 @@ export default function Buckets() {
   });
 
   return (
-    <>
+    <SpaceBetween size="l">
       <Tabs
         tabs={[
           {
@@ -49,7 +47,8 @@ export default function Buckets() {
                 actions={
                   <SpaceBetween direction="horizontal" size="xs">
                     <Button disabled={sel.length !== 1} onClick={async () => { try { await navigator.clipboard.writeText(`arn:aws:s3:::${sel[0].name}`); notify.success("ARN copied"); } catch { notify.info(`arn:aws:s3:::${sel[0].name}`, "ARN"); } }}>Copy ARN</Button>
-                    <Button disabled={sel.length !== 1} onClick={() => setDel(true)}>Delete</Button>
+                    <Button disabled={sel.length !== 1} href={sel.length === 1 ? href("s3", "bucket", sel[0].name, "empty") : undefined} onFollow={follow}>Empty</Button>
+                    <Button disabled={sel.length !== 1} href={sel.length === 1 ? href("s3", "bucket", sel[0].name, "delete") : undefined} onFollow={follow}>Delete</Button>
                     <Button variant="primary" href={href("s3", "create")} onFollow={follow}>Create bucket</Button>
                   </SpaceBetween>
                 }
@@ -60,19 +59,8 @@ export default function Buckets() {
           { id: "directory", label: "Directory buckets", content: <NotSimulated feature="Directory buckets (S3 Express One Zone)" /> },
         ]}
       />
-      <DeleteModal
-        visible={del}
-        resourceType="bucket"
-        names={sel.map((b) => b.name)}
-        warning="Buckets must be empty before they can be deleted."
-        onDismiss={() => setDel(false)}
-        onConfirm={async () => {
-          await api.deleteBucket(sel[0].name);
-          notify.success(`Successfully deleted bucket "${sel[0].name}".`);
-          setSel([]);
-          reload();
-        }}
-      />
-    </>
+      <NotSimulatedContainer title="Account snapshot" note="Storage/object counts and cost summaries aren't aggregated in Vyomi." />
+      <NotSimulatedContainer title="External access summary" note="IAM Access Analyzer findings for S3 aren't modeled in Vyomi." />
+    </SpaceBetween>
   );
 }

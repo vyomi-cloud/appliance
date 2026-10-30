@@ -27,6 +27,19 @@ export async function createBucket(name, { objectLock = false } = {}) {
 
 export const deleteBucket = (name) => s3("DELETE", `/${name}`);
 
+/** Every key in the bucket, recursively (no delimiter), across pages — used to empty a bucket. */
+export async function listAllObjectKeys(bucket) {
+  const keys = [];
+  let token;
+  do {
+    const r = await s3("GET", `/${bucket}`, { query: { "list-type": "2", "continuation-token": token } });
+    const res = r.ListBucketResult || {};
+    keys.push(...asList(res.Contents).map((o) => o.Key));
+    token = res.IsTruncated === "true" ? res.NextContinuationToken : null;
+  } while (token);
+  return keys;
+}
+
 export async function listObjects(bucket, prefix = "", token) {
   const r = await s3("GET", `/${bucket}`, { query: { "list-type": "2", prefix, delimiter: "/", "continuation-token": token } });
   const res = r.ListBucketResult || {};
@@ -39,11 +52,41 @@ export async function listObjects(bucket, prefix = "", token) {
   };
 }
 
-export const putObject = (bucket, key, body, type) =>
-  s3("PUT", `/${bucket}/${enc(key)}`, { body, headers: type ? { "content-type": type } : {} });
-export const deleteObject = (bucket, key) => s3("DELETE", `/${bucket}/${enc(key)}`);
+export const putObject = (bucket, key, body, type, extraHeaders) =>
+  s3("PUT", `/${bucket}/${enc(key)}`, { body, headers: { ...(type ? { "content-type": type } : {}), ...extraHeaders } });
+export const deleteObject = (bucket, key, versionId) => s3("DELETE", `/${bucket}/${enc(key)}`, { query: versionId ? { versionId } : undefined });
 export const createFolder = (bucket, key) => s3("PUT", `/${bucket}/${enc(key.endsWith("/") ? key : key + "/")}`, { body: "" });
 export const objectUrl = (bucket, key) => `/${bucket}/${enc(key)}`;
+
+/** HeadObject — real per-object metadata (size, type, etag, storage class, version, custom x-amz-meta-*). */
+export async function headObject(bucket, key) {
+  const r = await s3("HEAD", `/${bucket}/${enc(key)}`, { raw: true });
+  const meta = {};
+  for (const [k, v] of r.headers.entries()) if (k.startsWith("x-amz-meta-")) meta[k.slice(11)] = v;
+  return {
+    size: Number(r.headers.get("content-length") || 0),
+    contentType: r.headers.get("content-type") || "application/octet-stream",
+    etag: r.headers.get("etag") || "",
+    lastModified: r.headers.get("last-modified") || "",
+    storageClass: r.headers.get("x-amz-storage-class") || "STANDARD",
+    versionId: r.headers.get("x-amz-version-id") || "null",
+    metadata: meta,
+  };
+}
+
+/** ListObjectVersions scoped to a single key — every version this key has ever had. */
+export async function listObjectVersions(bucket, key) {
+  const r = await s3("GET", `/${bucket}`, { query: { versions: "", prefix: key } });
+  const res = r.ListVersionsResult || {};
+  const toRow = (v, deleteMarker) => ({
+    versionId: v.VersionId, deleteMarker, isLatest: v.IsLatest === "true",
+    modified: v.LastModified, size: Number(v.Size || 0), etag: v.ETag, storageClass: v.StorageClass || "STANDARD",
+  });
+  return [
+    ...asList(res.Version).map((v) => toRow(v, false)),
+    ...asList(res.DeleteMarker).map((v) => toRow(v, true)),
+  ].sort((a, b) => (a.modified < b.modified ? 1 : -1));
+}
 
 /** Sub-resource GET that may legitimately be absent (404 "no config") or unsupported (501). */
 async function sub(bucket, q) {

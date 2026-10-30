@@ -1,7 +1,35 @@
 {
   "_doc": "Pages that may be declared entirely 'Not simulated in Vyomi' (honest_page). Out-of-scope products/features only. The console-ui gate reads THIS FILE FROM THE BASE BRANCH, so agents cannot extend it; add entries by orchestrator review.",
   "aws": {
-    "s3": ["directory-buckets", "table-buckets", "vector-buckets", "file-systems", "access-points-for-fsx", "create-table-bucket", "create-file-system", "storage-lens", "create-storage-lens-group", "access-grants", "iam-access-analyzer", "batch-operations", "create-job"],
-    "dynamodb": ["reserved-capacity", "purchase-reserved-capacity", "integrations", "dax-clusters", "dax-create-cluster", "dax-subnet-groups", "dax-create-subnet-group", "dax-parameter-groups", "dax-create-parameter-group", "dax-events"]
+    "s3": [
+      "directory-buckets",
+      "table-buckets",
+      "vector-buckets",
+      "file-systems",
+      "access-points-for-fsx",
+      "create-table-bucket",
+      "create-file-system",
+      "storage-lens",
+      "create-storage-lens-group",
+      "access-grants",
+      "iam-access-analyzer",
+      "batch-operations",
+      "create-job",
+      "access-points",
+      "aws-marketplace-for-s3",
+      "amazon-s3"
+    ],
+    "dynamodb": [
+      "reserved-capacity",
+      "purchase-reserved-capacity",
+      "integrations",
+      "dax-clusters",
+      "dax-create-cluster",
+      "dax-subnet-groups",
+      "dax-create-subnet-group",
+      "dax-parameter-groups",
+      "dax-create-parameter-group",
+      "dax-events"
+    ]
   }
 }

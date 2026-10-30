@@ -444,6 +444,33 @@ def list_objects_v2(store: ObjectStore, bucket: str, query: dict) -> S3Response:
     return _xml_response("".join(parts))
 
 
+def _list_object_versions(store: ObjectStore, bucket: str, query: dict) -> S3Response:
+    """GET /{bucket}?versions — ListObjectVersions. The data is already there (every
+    PUT/DELETE keeps its version chain in the object entry); this just walks it."""
+    prefix = (query or {}).get("prefix", "") or ""
+    bucket_objects = store.bucket_objects(bucket)
+    parts = ['<?xml version="1.0" encoding="UTF-8"?>', f'<ListVersionsResult xmlns="{S3_NS}">',
+             f"<Name>{bucket}</Name>", f"<Prefix>{prefix}</Prefix>",
+             "<KeyMarker></KeyMarker>", "<VersionIdMarker></VersionIdMarker>", "<IsTruncated>false</IsTruncated>"]
+    owner = "<Owner><ID>simulator</ID><DisplayName>cloudlearn-simulator</DisplayName></Owner>"
+    for key in sorted(bucket_objects):
+        if prefix and not key.startswith(prefix):
+            continue
+        entry = bucket_objects[key]
+        for v in entry.get("versions", []) if isinstance(entry, dict) else []:
+            is_latest = f"<IsLatest>{'true' if v.get('is_latest') else 'false'}</IsLatest>"
+            last_modified = f"<LastModified>{v.get('last_modified', _now())}</LastModified>"
+            version_id = f"<VersionId>{v.get('version_id', 'null')}</VersionId>"
+            if v.get("is_delete_marker"):
+                parts += ["<DeleteMarker>", f"<Key>{key}</Key>", version_id, is_latest, last_modified, owner, "</DeleteMarker>"]
+            else:
+                parts += ["<Version>", f"<Key>{key}</Key>", version_id, is_latest, last_modified,
+                          f"<ETag>{v.get('etag', '')}</ETag>", f"<Size>{v.get('size', 0)}</Size>",
+                          f"<StorageClass>{v.get('storage_class', 'STANDARD')}</StorageClass>", owner, "</Version>"]
+    parts.append("</ListVersionsResult>")
+    return _xml_response("".join(parts))
+
+
 # ── native-S3 wire dispatcher (method + path → operation) ─────────────────
 # The single routing point for the native AWS S3 wire protocol — what an
 # unmodified aws-cli / SDK speaks. Shared by the Nano relay/bridge (tab side)
@@ -594,14 +621,14 @@ _SUBRESOURCES_STORED = {
 }
 _SUBRESOURCES_UNSUPPORTED = (
     "website", "logging", "notification", "replication", "accelerate", "requestPayment",
-    "inventory", "analytics", "metrics", "intelligent-tiering", "versions", "object-lock",
+    "inventory", "analytics", "metrics", "intelligent-tiering", "object-lock",
 )
 _NS = 'xmlns="http://s3.amazonaws.com/doc/2006-03-01/"'
 
 
 def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dict,
                         headers: dict, body: bytes) -> S3Response | None:
-    sub = next((k for k in ("versioning", "location", "acl", "object-lock", *_SUBRESOURCES_STORED)
+    sub = next((k for k in ("versioning", "location", "acl", "object-lock", "versions", *_SUBRESOURCES_STORED)
                 if k in query), None)
     if sub is None:
         sub = next((k for k in _SUBRESOURCES_UNSUPPORTED if k in query), None)
@@ -636,6 +663,9 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
     elif sub == "object-lock" and meta.get("object_lock"):
         if method == "GET":
             return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><ObjectLockConfiguration {_NS}><ObjectLockEnabled>Enabled</ObjectLockEnabled></ObjectLockConfiguration>')
+    elif sub == "versions":
+        if method == "GET":
+            return _list_object_versions(store, bucket, query)
     elif sub in _SUBRESOURCES_STORED:
         if method == "GET":
             doc = cfg.get(sub)

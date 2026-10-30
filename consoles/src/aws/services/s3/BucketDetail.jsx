@@ -1,18 +1,14 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Header from "@cloudscape-design/components/header";
 import Tabs from "@cloudscape-design/components/tabs";
 import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Link from "@cloudscape-design/components/link";
-import Modal from "@cloudscape-design/components/modal";
 import Box from "@cloudscape-design/components/box";
-import FormField from "@cloudscape-design/components/form-field";
-import Input from "@cloudscape-design/components/input";
 import Container from "@cloudscape-design/components/container";
 import Table from "@cloudscape-design/components/table";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import ContentLayout from "@cloudscape-design/components/content-layout";
-import { WIRE_BASE } from "../../../common/wire.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href } from "../../../common/router.js";
@@ -33,9 +29,10 @@ export default function BucketDetail({ params, query }) {
         onChange={({ detail }) => setTab(detail.activeTabId)}
         tabs={[
           { id: "objects", label: "Objects", content: <Objects bucket={bucket} prefix={query.prefix || ""} /> },
+          { id: "metadata", label: "Metadata", content: <NotSimulatedContainer title="Metadata configuration" note="S3 Metadata (the queryable metadata table for a bucket) isn't modeled in Vyomi." /> },
           { id: "properties", label: "Properties", content: <Properties bucket={bucket} /> },
           { id: "permissions", label: "Permissions", content: <Permissions bucket={bucket} /> },
-          { id: "metrics", label: "Metrics", content: <NotSimulatedContainer title="Bucket metrics" feature="CloudWatch storage metrics for S3" /> },
+          { id: "metrics", label: "Metrics", content: <Metrics /> },
           { id: "management", label: "Management", content: <Management bucket={bucket} /> },
           { id: "access-points", label: "Access Points", content: <NotSimulatedContainer title="Access Points" feature="S3 Access Points" /> },
         ]}
@@ -46,28 +43,15 @@ export default function BucketDetail({ params, query }) {
 
 function Objects({ bucket, prefix }) {
   const notify = useNotify();
-  const file = useRef(null);
   const [sel, setSel] = useState([]);
   const [del, setDel] = useState(false);
-  const [folder, setFolder] = useState(null);
-  const [busy, setBusy] = useState(false);
   const { data, loading, error, reload } = useAsync(() => api.listObjects(bucket, prefix), [bucket, prefix]);
   const items = data ? [...data.folders, ...data.objects] : [];
   const crumbs = prefix.split("/").filter(Boolean);
-
-  const upload = async (files) => {
-    setBusy(true);
-    try {
-      for (const f of files) await api.putObject(bucket, prefix + f.name, f, f.type);
-      notify.success(`Upload succeeded: ${files.length} file${files.length === 1 ? "" : "s"}`);
-      reload();
-    } catch (e) { notify.error(e, "Upload failed"); }
-    finally { setBusy(false); if (file.current) file.current.value = ""; }
-  };
+  const withPrefix = (base) => prefix ? `${base}?prefix=${encodeURIComponent(prefix)}` : base;
 
   return (
     <>
-      <input ref={file} type="file" multiple hidden onChange={(e) => e.target.files.length && upload([...e.target.files])} />
       <ResourceTable
         variant="container"
         resourceName="Objects"
@@ -85,7 +69,7 @@ function Objects({ bucket, prefix }) {
         columns={[
           { id: "name", header: "Name", isRowHeader: true, sortingField: "name", cell: (o) => o.folder
             ? <Link href={`${href("s3", "buckets", bucket)}?prefix=${encodeURIComponent(o.key)}`} onFollow={follow}>{o.name}</Link>
-            : <Link href={WIRE_BASE + api.objectUrl(bucket, o.key)} external>{o.name}</Link> },
+            : <Link href={`${href("s3", "object", bucket)}?prefix=${encodeURIComponent(o.key)}`} onFollow={follow}>{o.name}</Link> },
           { id: "type", header: "Type", cell: (o) => o.folder ? "Folder" : (o.name.includes(".") ? o.name.split(".").pop() : "-") },
           { id: "modified", header: "Last modified", sortingField: "modified", cell: (o) => o.folder ? "-" : fmtDate(o.modified) },
           { id: "size", header: "Size", sortingField: "size", cell: (o) => o.folder ? "-" : fmtBytes(o.size) },
@@ -94,11 +78,11 @@ function Objects({ bucket, prefix }) {
         actions={
           <SpaceBetween direction="horizontal" size="xs">
             <Button disabled={!sel.length} onClick={() => setDel(true)}>Delete</Button>
-            <Button onClick={() => setFolder("")}>Create folder</Button>
-            <Button variant="primary" iconName="upload" loading={busy} onClick={() => file.current?.click()}>Upload</Button>
+            <Button href={withPrefix(href("s3", "bucket", bucket, "create", "folder"))} onFollow={follow}>Create folder</Button>
+            <Button variant="primary" iconName="upload" href={withPrefix(href("s3", "upload", bucket))} onFollow={follow}>Upload</Button>
           </SpaceBetween>
         }
-        empty={{ title: "No objects", subtitle: "You don't have any objects in this bucket.", action: <Button iconName="upload" onClick={() => file.current?.click()}>Upload</Button> }}
+        empty={{ title: "No objects", subtitle: "You don't have any objects in this bucket.", action: <Button iconName="upload" href={withPrefix(href("s3", "upload", bucket))} onFollow={follow}>Upload</Button> }}
       />
       <DeleteModal
         visible={del}
@@ -118,22 +102,6 @@ function Objects({ bucket, prefix }) {
           setSel([]); reload();
         }}
       />
-      <Modal
-        visible={folder !== null}
-        onDismiss={() => setFolder(null)}
-        header="Create folder"
-        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
-          <Button variant="link" onClick={() => setFolder(null)}>Cancel</Button>
-          <Button variant="primary" disabled={!folder || folder.includes("/")} onClick={async () => {
-            try { await api.createFolder(bucket, prefix + folder); notify.success(`Successfully created folder "${folder}".`); setFolder(null); reload(); }
-            catch (e) { notify.error(e); }
-          }}>Create folder</Button>
-        </SpaceBetween></Box>}
-      >
-        <FormField label="Folder name" constraintText="Folder names can't contain &quot;/&quot;.">
-          <Input value={folder || ""} onChange={({ detail }) => setFolder(detail.value)} />
-        </FormField>
-      </Modal>
     </>
   );
 }
@@ -176,8 +144,25 @@ function Properties({ bucket }) {
       )} />
       <NotSimulatedContainer title="Intelligent-Tiering Archive configurations" />
       <NotSimulatedContainer title="Server access logging" />
+      <NotSimulatedContainer title="AWS CloudTrail data events" />
       <NotSimulatedContainer title="Event notifications" />
+      <NotSimulatedContainer title="Amazon EventBridge" />
+      <NotSimulatedContainer title="Transfer acceleration" />
+      <NotSimulatedContainer title="Object Lock" />
+      <NotSimulatedContainer title="Requester pays" />
       <NotSimulatedContainer title="Static website hosting" />
+    </SpaceBetween>
+  );
+}
+
+function Metrics() {
+  return (
+    <SpaceBetween size="l">
+      <NotSimulatedContainer title="Bucket metrics" feature="CloudWatch storage metrics for S3" />
+      <NotSimulatedContainer title="Storage Lens metrics" />
+      <NotSimulatedContainer title="Request metrics" />
+      <NotSimulatedContainer title="Replication metrics" />
+      <NotSimulatedContainer title="Data transfer metrics" />
     </SpaceBetween>
   );
 }
@@ -204,9 +189,10 @@ function Permissions({ bucket }) {
           {d.policy ? <Box variant="code"><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{pretty(d.policy)}</pre></Box> : <Box color="text-body-secondary">No policy to display.</Box>}
         </Container>
       )} />
+      <NotSimulatedContainer title="Permissions overview" />
       <NotSimulatedContainer title="Object Ownership" />
       <NotSimulatedContainer title="Access control list (ACL)" />
-      <NotSimulatedContainer title="Cross-origin resource sharing (CORS)" />
+      <NotSimulatedContainer title="Cross-origin resource sharing (CORS)" feature="CORS configuration" />
     </SpaceBetween>
   );
 }
