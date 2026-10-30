@@ -1,9 +1,6 @@
 /* Capability disclaimers for the GCP lens, driven by core/capabilities/gcp/*.json (the same
  * registry tests/conformance/test_capabilities.py proves against the backend). Never
  * hand-write a disclaimer in a page — wrap the section in <CapabilityContainer id=…> instead.
-/* Capability disclaimers, driven by core/capabilities/gcp/*.json (the same registry
- * tests/conformance/test_capabilities.py proves against the backend). Never hand-write a
- * disclaimer in a page — wrap the section in <CapabilityContainer id=…> instead.
  *
  *   full           → no badge
  *   limited        → "Limited in Vyomi" badge + popover with the limitations
@@ -14,15 +11,12 @@ import { useState } from "react";
 import { Box, Chip, Popover, Stack, Typography } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/esm/InfoOutlined.js";
 import artifacts from "../../../../core/capabilities/gcp/artifacts.json";
-import { NotSimulatedContainer, Section } from "./common.jsx";
-
-const REGISTRY = { ...artifacts };
-import { Box, Chip, IconButton, Popover, Stack, Typography } from "@mui/material";
-import InfoOutlinedIcon from "@mui/icons-material/esm/InfoOutlined.js";
 import cloudscheduler from "../../../../core/capabilities/gcp/cloudscheduler.json";
+import firestore from "../../../../core/capabilities/gcp/firestore.json";
+import logs from "../../../../core/capabilities/gcp/logs.json";
 import { NotSimulatedContainer, Section } from "./common.jsx";
 
-const REGISTRY = { ...cloudscheduler };
+const REGISTRY = { ...artifacts, ...cloudscheduler, ...firestore, ...logs };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 
@@ -65,21 +59,6 @@ export function CapabilityBadge({ id }) {
             <Typography variant="caption" color="text.secondary">Applies to this Vyomi environment ({SUBSTRATE}).</Typography>
           </Stack>
         </Box>
-  const c = capability(id);
-  const [anchor, setAnchor] = useState(null);
-  if (!c || c.level === "full" || c.level === "not_simulated") return null;
-  return (
-    <span data-vyomi-capability={c.level} data-vyomi-capability-id={id}>
-      <IconButton size="small" aria-label={`${LABEL[c.level]} — details`} onClick={(e) => setAnchor(e.currentTarget)}>
-        <Chip size="small" component="span" color={c.level === "limited" ? "info" : "default"} label={LABEL[c.level]} />
-      </IconButton>
-      <Popover open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)} anchorOrigin={{ vertical: "bottom", horizontal: "left" }}>
-        <Stack spacing={1} sx={{ p: 2, maxWidth: 360 }}>
-          <Typography variant="subtitle2">{c.title}: {LABEL[c.level]}</Typography>
-          <Typography variant="body2">{DEFAULT_NOTE[c.level]}</Typography>
-          {c.limitations?.length > 0 && <Box component="ul" sx={{ m: 0, pl: 2.5 }}>{c.limitations.map((l) => <li key={l}><Typography variant="body2">{l}</Typography></li>)}</Box>}
-          <Typography variant="caption" color="text.secondary">Applies to this Vyomi environment ({SUBSTRATE}).</Typography>
-        </Stack>
       </Popover>
     </span>
   );
@@ -98,10 +77,6 @@ export function CapabilityContainer({ id, title, description, actions, children 
       description={description}
       actions={actions}
     >
-    return <NotSimulatedContainer title={title} feature={c?.title || title} note={c?.limitations?.join(" ")} />;
-  }
-  return (
-    <Section title={<Stack direction="row" spacing={1} alignItems="center"><span>{title}</span><CapabilityBadge id={id} /></Stack>} description={description} actions={actions}>
       {children}
     </Section>
   );

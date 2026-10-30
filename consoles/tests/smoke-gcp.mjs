@@ -282,6 +282,42 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete job via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`)).status === 404);
+  // Firestore: create database → start a collection via the UI → cross-check the native wire,
+  // then the reverse (a document created over the wire shows up in the Studio UI).
+  const FSDB = `smoke-fs-${Date.now() % 100000}`;
+  await page.goto(UI + "#/firestore/create-database");
+  await page.getByLabel("Database ID").fill(FSDB);
+  await page.getByRole("button", { name: "Create Database" }).click();
+  await page.getByRole("heading", { name: "Firestore Studio" }).waitFor({ timeout: 10000 });
+  check("create database via UI → visible over native wire (databases.list)",
+    !!(await wjson(`/v1/projects/vyomi-project/databases`)).databases?.some((d) => d.name.endsWith(`/databases/${FSDB}`)));
+
+  await page.getByRole("button", { name: "Start collection" }).click();
+  await page.getByLabel("Collection ID").fill("smoke-items");
+  await page.getByLabel("Document ID").fill("item-1");
+  await page.getByLabel("Field name").fill("title");
+  await page.getByLabel("Field value").fill("Smoke test item");
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  await page.getByText("item-1", { exact: true }).waitFor({ timeout: 10000 });
+  check("start collection via UI → readable over native wire",
+    (await wjson(`/v1/projects/vyomi-project/databases/${FSDB}/documents/smoke-items/item-1`)).fields?.title?.stringValue === "Smoke test item");
+
+  await wire(`/v1/projects/vyomi-project/databases/${FSDB}/documents/wire-coll?documentId=w1`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ fields: { k: { stringValue: "v" } } }),
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  check("document created over wire → collection shown in Studio UI", await page.getByText("wire-coll", { exact: true }).isVisible());
+
+  await page.goto(UI + "#/firestore/databases");
+  await page.getByRole("link", { name: FSDB }).waitFor({ timeout: 10000 });
+  await page.getByRole("checkbox", { name: `Select ${FSDB}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(FSDB);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  check("delete database via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/databases/${FSDB}`)).status === 404);
 
   // Dark mode
   await page.goto(UI + "#/storage/browser");

@@ -93,11 +93,13 @@ def _gcp_service(path):
             return "gcp-container"
         if re.search(r"/locations/[^/]+/jobs([/:]|$)", path) or re.search(r"^/v1(beta1)?/projects/[^/]+/locations/?$", path):
             return "gcp-cloudscheduler"
+        if re.search(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/backups([/:]|$)", path):
+            return "gcp-firestore"
         if "/locations/" in path and ("/repositories" in path or "/operations/" in path):
             return "gcp-artifactregistry"
         if re.search(r"^/v1/projects/[^/]+/projectSettings$", path):
             return "gcp-artifactregistry"
-        if "/databases/" in path and "/documents" in path:
+        if re.search(r"^/v1(beta1)?/projects/[^/]+/databases($|[/:])", path):
             return "gcp-firestore"
         if "/keyRings" in path:
             return "gcp-kms"
