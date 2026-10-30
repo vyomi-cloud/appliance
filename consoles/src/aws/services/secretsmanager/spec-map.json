@@ -1,0 +1,37 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "landing": {
+    "route": "#/secretsmanager/home"
+  },
+  "secrets": {
+    "route": "#/secretsmanager/listsecrets",
+    "live": "live-secret"
+  },
+  "store-a-new-secret": {
+    "route": "#/secretsmanager/newsecret",
+    "expand": [
+      "text=Credentials for other database",
+      "text=Other type of secret",
+      "role=button[name=\"Next\"]",
+      "role=button[name=\"Next\"]",
+      "role=checkbox[name=\"Automatic rotation\"]",
+      "role=button[name=\"Next\"]"
+    ]
+  },
+  "secret-detail": {
+    "route": "#/secretsmanager/secret/{live}",
+    "live": "live-secret"
+  },
+  "edit-secret-value": {
+    "route": "#/secretsmanager/secret/uic-secret-edit/edit-value",
+    "fixtures": [
+      "fixed-secret-edit"
+    ]
+  },
+  "delete-secret": {
+    "route": "#/secretsmanager/secret/uic-secret-delete/delete",
+    "fixtures": [
+      "fixed-secret-delete"
+    ]
+  }
+}

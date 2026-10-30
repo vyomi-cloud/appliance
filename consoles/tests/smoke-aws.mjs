@@ -26,6 +26,7 @@ let page;
 const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return r.text(); }, [WIRE + path, init]);
 const ddb = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `DynamoDB_20120810.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/dynamodb/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const kms = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `TrentService.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/kms/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
+const sm = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `secretsmanager.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/secretsmanager/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 
 await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch();
@@ -185,6 +186,30 @@ try {
   await page.getByText(`aws/${svc}`).waitFor({ timeout: 10000 });
   check("KMS Encrypt over wire against an unseen aws/ alias → AWS managed key shown in UI", true);
   await shot("14-kms-aws-managed-keys");
+
+  // Secrets Manager: store a secret through the UI wizard (UI → CLI direction)
+  const S = `v4smoke-secret-${Date.now() % 100000}`;
+  await page.goto(UI + "#/secretsmanager/newsecret");
+  await page.getByRole("radio", { name: "Other type of secret", exact: true }).check();
+  await page.getByRole("button", { name: "Plaintext", exact: true }).click();
+  await page.getByRole("textbox", { name: "Plaintext", exact: true }).fill("v4-smoke-value");
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByLabel("Secret name", { exact: true }).fill(S);
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Store" }).click();
+  await page.getByRole("heading", { name: S }).waitFor({ timeout: 10000 });
+  const storedVal = await sm("GetSecretValue", { SecretId: S });
+  check("Secrets Manager store secret (UI wizard) → readable over native wire", storedVal.SecretString === "v4-smoke-value", JSON.stringify(storedVal));
+  await shot("15-secretsmanager-detail");
+
+  // Secrets Manager: CreateSecret over the wire → shown in the Secrets list (CLI → UI direction)
+  const S2 = `v4smoke-secret2-${Date.now() % 100000}`;
+  await sm("CreateSecret", { Name: S2, SecretString: "v4-smoke-wire" });
+  await page.goto(UI + "#/secretsmanager/listsecrets");
+  await page.getByText(S2).first().waitFor({ timeout: 10000 });
+  check("Secrets Manager CreateSecret over wire → shown in Secrets list", true);
+  await shot("16-secretsmanager-list");
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));
