@@ -13,10 +13,14 @@
 // tests / advanced use):
 //   relay → worker : {id, method, path, query, headers, body(base64)}
 //   worker → relay : {id, status, headers, body(base64)}
-import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs";
 import { installPGlite } from "../pglite-loader.js";
 
-const PYODIDE_INDEX = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+// Same-origin runtime first (wasm/fetch_pyodide.py vendors it at <bundle>/vendor/pyodide/),
+// the public CDN as fallback — a CDN stall would otherwise leave the relay unable to boot.
+const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+const PYODIDE_LOCAL = new URL("../vendor/pyodide/", import.meta.url).href;
+const pyodideIndex = () => fetch(PYODIDE_LOCAL + "pyodide.mjs", { method: "HEAD" })
+  .then((r) => (r.ok ? PYODIDE_LOCAL : PYODIDE_CDN), () => PYODIDE_CDN);
 // Cores live at ../core/ relative to THIS worker (works at web root AND /nano/).
 const CORE_BASE = new URL("../core/", self.location.href).href.replace(/\/$/, "");
 const CORES = [
@@ -107,6 +111,8 @@ async function bootPyodide() {
   if (booting) return booting;
   booting = (async () => {
     log("loading Pyodide…", "dim");
+    const PYODIDE_INDEX = await pyodideIndex();
+    const { loadPyodide } = await import(PYODIDE_INDEX + "pyodide.mjs");
     py = await loadPyodide({ indexURL: PYODIDE_INDEX });   // explicit indexURL: required in a worker
     try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
     const hasPg = await installPGlite();

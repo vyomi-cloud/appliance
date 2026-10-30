@@ -20,7 +20,6 @@
 <h3>Vyomi-Nano — in-browser AWS endpoint (S3·DynamoDB·KMS·Secrets·SQS·SNS·IAM·RDS)</h3>
 <pre id="log">booting…</pre>
 <script type="module">
-import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs";
 import { installPGlite } from "../pglite-loader.js";   // RDS real-Postgres engine (optional)
 // Same-origin BroadcastChannel so the launch dashboard can MIRROR our splash
 // logs + status (the endpoint runs in its own tab — surviving dashboard→console
@@ -74,7 +73,11 @@ const CORES = [
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (Fix #1/#2)
 ];
 async function boot() {
-  const py = await loadPyodide();
+  const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";   // fallback
+  const PYODIDE_LOCAL = new URL("../vendor/pyodide/", location.href).href;   // wasm/fetch_pyodide.py
+  const pyodideBase = await fetch(PYODIDE_LOCAL + "pyodide.mjs", { method: "HEAD" }).then((r) => (r.ok ? PYODIDE_LOCAL : PYODIDE_CDN), () => PYODIDE_CDN);
+  const { loadPyodide } = await import(pyodideBase + "pyodide.mjs");
+  const py = await loadPyodide({ indexURL: pyodideBase });
   // RDS's SQL data-plane uses sqlite3 (a loadable Pyodide package); the control
   // plane doesn't, but load it so SQL-over-RDS works through the relay too.
   try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }

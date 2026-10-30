@@ -152,8 +152,14 @@ function banner(text, bad) {
 async function bootBackend() {
   banner("Nano: booting Pyodide (in-browser cloud backend)…");
   let st = K.step("kernel", "loading Pyodide 0.26.2: CPython on WebAssembly");
-  const { loadPyodide } = await import("https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs");
-  const py = await loadPyodide();
+  // Same-origin runtime first (wasm/fetch_pyodide.py vendors it) — a CDN stall would leave Nano
+  // stuck here; the public CDN stays as the fallback when the bundle doesn't carry it.
+  const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+  const PYODIDE_LOCAL = new URL(BASE + "/vendor/pyodide/", location.origin).href;
+  const pyodideBase = await fetch(PYODIDE_LOCAL + "pyodide.mjs", { method: "HEAD" })
+    .then((r) => (r.ok ? PYODIDE_LOCAL : PYODIDE_CDN), () => PYODIDE_CDN);
+  const { loadPyodide } = await import(pyodideBase + "pyodide.mjs");
+  const py = await loadPyodide({ indexURL: pyodideBase });
   let pyv = ""; try { pyv = py.runPython("import sys; sys.version.split()[0]"); } catch (_) {}
   st.ok("Python " + (pyv || "3") + " · Pyodide " + (py.version || "0.26.2"));
   st = K.step("fs", "mounting /wasm: " + MODULES.length + " console modules");
