@@ -22,7 +22,10 @@ DescribeStackEvents/Resources, ListExports, ValidateTemplate, StackSets (control
 only — no multi-account/region deployment, matching the real console's "StackSets" being
 largely a cross-account feature Vyomi doesn't model), stack drift (detects a resource
 deleted independently through its own service's store), termination protection,
-ContinueUpdateRollback.
+ContinueUpdateRollback, stack refactors (CreateStackRefactor/ExecuteStackRefactor really
+move a resource's runtime state — ref/physical id/properties — between two existing
+stacks; no new-stack StackDefinitions), the registry's ListTypes/DescribeType (the
+resource types above, the real activated-extension catalog, PUBLIC/RESOURCE only).
 """
 from __future__ import annotations
 
@@ -1643,9 +1646,138 @@ def _list_stack_instances(store, params, stores):
 def _list_stack_refactors(store, params, stores):
     body = "<StackRefactorSummaries>" + "".join(
         "<member>" + _el("StackRefactorId", r["StackRefactorId"]) + _el("Status", r["Status"]) +
-        _el("Description", r.get("Description")) + "</member>"
+        _el("StatusReason", r.get("StatusReason")) + _el("ExecutionStatus", r.get("ExecutionStatus")) +
+        _el("ExecutionStatusReason", r.get("ExecutionStatusReason")) + _el("Description", r.get("Description")) +
+        "</member>"
         for r in store.stack_refactors.values()) + "</StackRefactorSummaries>"
     return _envelope("ListStackRefactors", body)
+
+
+def _resource_mappings(params: dict) -> list:
+    out, i = [], 1
+    while f"ResourceMappings.member.{i}.Source.LogicalResourceId" in params:
+        out.append({
+            "source_stack": _p(params, f"ResourceMappings.member.{i}.Source.StackName"),
+            "source_lid": _p(params, f"ResourceMappings.member.{i}.Source.LogicalResourceId"),
+            "dest_stack": _p(params, f"ResourceMappings.member.{i}.Destination.StackName"),
+            "dest_lid": _p(params, f"ResourceMappings.member.{i}.Destination.LogicalResourceId"),
+        })
+        i += 1
+    return out
+
+
+def _create_stack_refactor(store, params, stores):
+    mappings = _resource_mappings(params)
+    if not mappings:
+        raise CfnError("ValidationError", "At least one resource mapping is required.", 400)
+    stack_ids = []
+    for m in mappings:
+        src = _require_stack(store, m["source_stack"])
+        dst = _require_stack(store, m["dest_stack"])
+        if m["source_lid"] not in src["resources"]:
+            raise CfnError("ValidationError",
+                            f"Resource {m['source_lid']} not found in stack {m['source_stack']}", 400)
+        for sid in (src["stack_id"], dst["stack_id"]):
+            if sid not in stack_ids:
+                stack_ids.append(sid)
+    refactor_id = str(uuid.uuid4())
+    store.stack_refactors[refactor_id] = {
+        "StackRefactorId": refactor_id, "StackIds": stack_ids, "Description": _p(params, "Description"),
+        "Status": "CREATE_COMPLETE", "StatusReason": "",
+        "ExecutionStatus": "AVAILABLE", "ExecutionStatusReason": "",
+        "ResourceMappings": mappings,
+    }
+    store.persist()
+    return _envelope("CreateStackRefactor", _el("StackRefactorId", refactor_id))
+
+
+def _describe_stack_refactor(store, params, stores):
+    rid = _p(params, "StackRefactorId")
+    r = store.stack_refactors.get(rid)
+    if not r:
+        raise CfnError("StackRefactorNotFoundException", f"Stack refactor {rid} not found", 400)
+    ids = "".join(_el("member", sid) for sid in r["StackIds"])
+    body = (_el("StackRefactorId", r["StackRefactorId"]) + f"<StackIds>{ids}</StackIds>" +
+            _el("Description", r["Description"]) + _el("ExecutionStatus", r["ExecutionStatus"]) +
+            _el("ExecutionStatusReason", r["ExecutionStatusReason"]) + _el("Status", r["Status"]) +
+            _el("StatusReason", r["StatusReason"]))
+    return _envelope("DescribeStackRefactor", body)
+
+
+def _execute_stack_refactor(store, params, stores):
+    rid = _p(params, "StackRefactorId")
+    r = store.stack_refactors.get(rid)
+    if not r:
+        raise CfnError("StackRefactorNotFoundException", f"Stack refactor {rid} not found", 400)
+    if r["ExecutionStatus"] != "AVAILABLE":
+        raise CfnError("ValidationError",
+                        f"Stack refactor {rid} is not available for execution (status: {r['ExecutionStatus']})", 400)
+    for m in r["ResourceMappings"]:
+        src = _require_stack(store, m["source_stack"])
+        dst = _require_stack(store, m["dest_stack"])
+        rec = src["resources"].pop(m["source_lid"], None)
+        if rec is None:
+            continue
+        moved = dict(rec, LogicalResourceId=m["dest_lid"])
+        dst["resources"][m["dest_lid"]] = moved
+        _emit_event(src, m["source_lid"], "DELETE_COMPLETE",
+                    f"Resource moved to stack {dst['stack_name']} by stack refactor {rid}",
+                    rec["ResourceType"], rec["PhysicalResourceId"])
+        _emit_event(dst, m["dest_lid"], "IMPORT_COMPLETE",
+                    f"Resource moved from stack {src['stack_name']} by stack refactor {rid}",
+                    rec["ResourceType"], rec["PhysicalResourceId"])
+    r["ExecutionStatus"] = "EXECUTE_COMPLETE"
+    store.persist()
+    return _envelope("ExecuteStackRefactor")
+
+
+# ── registry (extensions: the resource types this engine actually provisions) ──
+_TYPE_DESCRIPTIONS = {
+    "AWS::S3::Bucket": "An Amazon S3 bucket, provisioned through Vyomi's S3 engine.",
+    "AWS::DynamoDB::Table": "A DynamoDB table, provisioned through Vyomi's DynamoDB engine.",
+    "AWS::SNS::Topic": "An SNS topic, provisioned through Vyomi's SNS engine.",
+    "AWS::SQS::Queue": "An SQS queue, provisioned through Vyomi's SQS engine.",
+    "AWS::IAM::Role": "An IAM role, provisioned through Vyomi's IAM engine.",
+    "AWS::CloudFormation::WaitCondition": "A CloudFormation-internal signaling resource (no underlying infrastructure in real AWS either).",
+    "AWS::CloudFormation::WaitConditionHandle": "A CloudFormation-internal signaling handle (no underlying infrastructure in real AWS either).",
+}
+
+
+def _type_arn(type_name: str) -> str:
+    return f"arn:aws:cloudformation:{REGION}::type/resource/{type_name.replace('::', '-')}/00000001"
+
+
+def _list_types(store, params, stores):
+    visibility = _p(params, "Visibility", "PUBLIC")
+    type_filter = _p(params, "Type", "RESOURCE")
+    if type_filter != "RESOURCE" or visibility != "PUBLIC":
+        return _envelope("ListTypes", "<TypeSummaries></TypeSummaries>")
+    body = "<TypeSummaries>" + "".join(
+        "<member>" + _el("Type", "RESOURCE") + _el("TypeName", t) + _el("DefaultVersionId", "00000001") +
+        _el("TypeArn", _type_arn(t)) + _el("IsActivated", "true") + _el("LastUpdated", _now_iso()) +
+        _el("Description", _TYPE_DESCRIPTIONS.get(t, f"{t} resource provider")) + "</member>"
+        for t in sorted(RESOURCE_TYPES)) + "</TypeSummaries>"
+    return _envelope("ListTypes", body)
+
+
+def _describe_type(store, params, stores):
+    type_name = _p(params, "TypeName")
+    if type_name not in RESOURCE_TYPES:
+        raise CfnError("TypeNotFoundException", f"Type {type_name} not found", 404)
+    name_prop = RESOURCE_TYPES[type_name].get("name_prop")
+    schema = json.dumps({
+        "typeName": type_name,
+        "description": _TYPE_DESCRIPTIONS.get(type_name, ""),
+        "properties": {name_prop: {"type": "string"}} if name_prop else {},
+        "additionalProperties": False,
+    })
+    body = (_el("Arn", _type_arn(type_name)) + _el("Type", "RESOURCE") + _el("TypeName", type_name) +
+            _el("DefaultVersionId", "00000001") + _el("IsDefaultVersion", "true") +
+            _el("Description", _TYPE_DESCRIPTIONS.get(type_name, "")) + _el("Schema", schema) +
+            _el("ProvisioningType", "FULLY_MUTABLE") + _el("DeprecatedStatus", "LIVE") +
+            _el("Visibility", "PUBLIC") + _el("LastUpdated", _now_iso()) + _el("TimeCreated", _now_iso()) +
+            _el("IsActivated", "true"))
+    return _envelope("DescribeType", body)
 
 
 # ── dispatch ──────────────────────────────────────────────────────────────────
@@ -1666,6 +1798,9 @@ _ACTIONS = {
     "CreateStackSet": _create_stack_set, "DescribeStackSet": _describe_stack_set,
     "ListStackSets": _list_stack_sets, "DeleteStackSet": _delete_stack_set,
     "ListStackInstances": _list_stack_instances, "ListStackRefactors": _list_stack_refactors,
+    "CreateStackRefactor": _create_stack_refactor, "DescribeStackRefactor": _describe_stack_refactor,
+    "ExecuteStackRefactor": _execute_stack_refactor,
+    "ListTypes": _list_types, "DescribeType": _describe_type,
 }
 
 

@@ -223,6 +223,43 @@ def run():
     r = call("ListStackRefactors")
     _check("stack refactors list (empty, real endpoint)", "<StackRefactorSummaries>" in r.body)
 
+    # ── registry: ListTypes / DescribeType (the real provisionable resource types) ──
+    r = call("ListTypes", Visibility="PUBLIC", Type="RESOURCE")
+    _check("ListTypes 200", r.status == 200)
+    _check("ListTypes lists AWS::S3::Bucket", "<TypeName>AWS::S3::Bucket</TypeName>" in r.body)
+    _check("ListTypes marks it activated", "<IsActivated>true</IsActivated>" in r.body)
+    r = call("ListTypes", Visibility="PRIVATE", Type="RESOURCE")
+    _check("ListTypes PRIVATE is empty (nothing private registered)", "<member>" not in r.body)
+    r = call("DescribeType", TypeName="AWS::S3::Bucket")
+    _check("DescribeType 200", r.status == 200)
+    _check("DescribeType returns a schema", "<Schema>" in r.body and "typeName" in r.body)
+    _check("DescribeType unknown type fails honestly", err(call("DescribeType", TypeName="AWS::EC2::Instance"), "TypeNotFoundException"))
+
+    # ── stack refactors: CreateStackRefactor / ExecuteStackRefactor really move a
+    # resource's runtime state between two existing stacks ──────────────────────
+    call("CreateStack", StackName="refactor-src", TemplateBody=json.dumps({"Resources": {"Q": {"Type": "AWS::SQS::Queue", "Properties": {"QueueName": "cfn-conf-refactor-q"}}}}))
+    call("CreateStack", StackName="refactor-dst", TemplateBody=json.dumps({"Resources": {"B": {"Type": "AWS::S3::Bucket", "Properties": {}}}}))
+    r = call("CreateStackRefactor", Description="conformance-refactor",
+             **{"ResourceMappings.member.1.Source.StackName": "refactor-src",
+                "ResourceMappings.member.1.Source.LogicalResourceId": "Q",
+                "ResourceMappings.member.1.Destination.StackName": "refactor-dst",
+                "ResourceMappings.member.1.Destination.LogicalResourceId": "QMoved"})
+    _check("create stack refactor 200", r.status == 200)
+    refactor_id = _v(r.body, "StackRefactorId")
+    _check("missing resource mapping rejected", err(call("CreateStackRefactor"), "ValidationError"))
+    r = call("DescribeStackRefactor", StackRefactorId=refactor_id)
+    _check("describe stack refactor AVAILABLE", "<ExecutionStatus>AVAILABLE</ExecutionStatus>" in r.body)
+    r = call("ExecuteStackRefactor", StackRefactorId=refactor_id)
+    _check("execute stack refactor 200", r.status == 200)
+    r = call("ListStackResources", StackName="refactor-dst")
+    _check("moved resource now in destination stack", "<LogicalResourceId>QMoved</LogicalResourceId>" in r.body)
+    r = call("ListStackResources", StackName="refactor-src")
+    _check("moved resource gone from source stack", "<LogicalResourceId>Q</LogicalResourceId>" not in r.body)
+    _check("queue still exists (moved, not destroyed)", msg.get_queue("cfn-conf-refactor-q") is not None)
+    _check("re-executing an executed refactor fails", err(call("ExecuteStackRefactor", StackRefactorId=refactor_id), "ValidationError"))
+    r = call("ListStackRefactors")
+    _check("executed refactor listed", f"<StackRefactorId>{refactor_id}</StackRefactorId>" in r.body and "<ExecutionStatus>EXECUTE_COMPLETE</ExecutionStatus>" in r.body)
+
     print("\nRESULT: PASS — CloudFormation core conforms.")
     return 0
 

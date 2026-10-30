@@ -6,7 +6,6 @@
  * simulated in Vyomi" — not just a generic placeholder — per consoles/AGENT-UI.md. */
 import Header from "@cloudscape-design/components/header";
 import ContentLayout from "@cloudscape-design/components/content-layout";
-import Tabs from "@cloudscape-design/components/tabs";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { NotSimulatedContainer } from "../../kit/common.jsx";
 
@@ -50,21 +49,6 @@ export function PublicExtensions() {
         note="Columns: Type name, Publisher, Description, Last updated. Actions: Activate." />
       <NotSimulatedContainer title="Filter" note="Extension type: Resource types, Modules, Hooks. Publisher: AWS, Third party." />
     </GapPage>
-  );
-}
-
-export function ExtensionDetail({ params }) {
-  const name = params.name || "AWS::S3::Bucket";
-  return (
-    <ContentLayout header={<Header variant="h1">{name}</Header>}>
-      <SpaceBetween size="l">
-        <NotSimulatedContainer title="Overview" feature="Public extensions registry" note="ARN, Publisher, Description, Release date, Visibility." />
-        <Tabs tabs={[
-          { id: "schema", label: "Schema", content: <NotSimulatedContainer title="Schema" /> },
-          { id: "configuration", label: "Configuration", content: <NotSimulatedContainer title="Configuration" /> },
-        ]} />
-      </SpaceBetween>
-    </ContentLayout>
   );
 }
 

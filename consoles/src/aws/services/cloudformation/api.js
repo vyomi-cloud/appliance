@@ -6,13 +6,6 @@ import { awsQuery, asList } from "../../../common/wire.js";
 const call = (action, params = {}) => awsQuery("cloudformation", action, params);
 const result = (resp, action) => resp[`${action}Response`]?.[`${action}Result`] || {};
 
-// Resource types this engine actually provisions (core/cloudformation_core.py RESOURCE_TYPES) —
-// used to render the Registry's "Activated extensions" page honestly from the real engine.
-export const SUPPORTED_RESOURCE_TYPES = [
-  "AWS::S3::Bucket", "AWS::DynamoDB::Table", "AWS::SNS::Topic", "AWS::SQS::Queue",
-  "AWS::IAM::Role", "AWS::CloudFormation::WaitCondition", "AWS::CloudFormation::WaitConditionHandle",
-];
-
 function listParams(values, prefix) {
   const out = {};
   values.forEach((v, i) => { out[`${prefix}.member.${i + 1}`] = v; });
@@ -137,4 +130,29 @@ export const deleteStackSet = (name) => call("DeleteStackSet", { StackSetName: n
 export async function listStackRefactors() {
   const r = result(await call("ListStackRefactors"), "ListStackRefactors");
   return asList(r.StackRefactorSummaries?.member);
+}
+export async function createStackRefactor({ mappings = [], description } = {}) {
+  const params = description ? { Description: description } : {};
+  mappings.forEach((m, i) => {
+    params[`ResourceMappings.member.${i + 1}.Source.StackName`] = m.sourceStack;
+    params[`ResourceMappings.member.${i + 1}.Source.LogicalResourceId`] = m.sourceLogicalId;
+    params[`ResourceMappings.member.${i + 1}.Destination.StackName`] = m.destStack;
+    params[`ResourceMappings.member.${i + 1}.Destination.LogicalResourceId`] = m.destLogicalId;
+  });
+  const r = result(await call("CreateStackRefactor", params), "CreateStackRefactor");
+  return r.StackRefactorId;
+}
+export async function describeStackRefactor(id) {
+  const r = result(await call("DescribeStackRefactor", { StackRefactorId: id }), "DescribeStackRefactor");
+  return { ...r, StackIds: asList(r.StackIds?.member) };
+}
+export const executeStackRefactor = (id) => call("ExecuteStackRefactor", { StackRefactorId: id });
+
+// ── registry (extensions) ────────────────────────────────────────────────────
+export async function listTypes() {
+  const r = result(await call("ListTypes", { Visibility: "PUBLIC", Type: "RESOURCE" }), "ListTypes");
+  return asList(r.TypeSummaries?.member);
+}
+export async function describeType(typeName) {
+  return result(await call("DescribeType", { TypeName: typeName }), "DescribeType");
 }

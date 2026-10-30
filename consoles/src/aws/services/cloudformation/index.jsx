@@ -8,8 +8,8 @@ import StackSets from "./StackSets.jsx";
 import Exports from "./Exports.jsx";
 import IacGenerator from "./IacGenerator.jsx";
 import TemplateStudio from "./TemplateStudio.jsx";
-import ActivatedExtensions from "./ActivatedExtensions.jsx";
-import { HooksOverview, InvocationSummary, Hooks, PublicExtensions, ExtensionDetail, Publisher, Spotlight } from "./HonestPages.jsx";
+import ActivatedExtensions, { ExtensionDetail } from "./ActivatedExtensions.jsx";
+import { HooksOverview, InvocationSummary, Hooks, PublicExtensions, Publisher, Spotlight } from "./HonestPages.jsx";
 
 export default {
   nav: [

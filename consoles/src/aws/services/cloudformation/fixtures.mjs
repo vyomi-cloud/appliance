@@ -44,4 +44,22 @@ export default {
     await wire("POST", "/", Q("CreateStack", { StackName: `${uniq}-stack`, TemplateBody: tpl }));
     return uniq;
   },
+
+  // Moves a resource from one freshly created stack into another via CreateStackRefactor +
+  // ExecuteStackRefactor, so the Stack refactors list shows a real, non-empty refactor.
+  "live-stack-refactor": async (wire, uniq) => {
+    const src = `${uniq}-src`, dst = `${uniq}-dst`;
+    await wire("POST", "/", Q("CreateStack", { StackName: src, TemplateBody: queueTemplate("Q") }));
+    await wire("POST", "/", Q("CreateStack", { StackName: dst, TemplateBody: queueTemplate("Q2") }));
+    const created = await wire("POST", "/", Q("CreateStackRefactor", {
+      Description: uniq,
+      "ResourceMappings.member.1.Source.StackName": src,
+      "ResourceMappings.member.1.Source.LogicalResourceId": "Q",
+      "ResourceMappings.member.1.Destination.StackName": dst,
+      "ResourceMappings.member.1.Destination.LogicalResourceId": "QMoved",
+    }));
+    const id = /<StackRefactorId>(.*?)<\/StackRefactorId>/.exec(created)?.[1];
+    if (id) await wire("POST", "/", Q("ExecuteStackRefactor", { StackRefactorId: id }));
+    return uniq;
+  },
 };

@@ -116,9 +116,9 @@
    "offline": "limited"
   },
   "limitations": [
-   "ListStackRefactors is real (empty until a refactor exists); starting a refactor (moving resources between stacks) is not simulated."
+   "A refactor moves a resource's runtime state (ref, physical id, properties) between two EXISTING stacks — it does not create new stacks from StackDefinitions, the way the real ListStackRefactorActions / template-diff flow does."
   ],
-  "api": ["ListStackRefactors"],
+  "api": ["CreateStackRefactor", "DescribeStackRefactor", "ExecuteStackRefactor", "ListStackRefactors"],
   "tests": ["tests/conformance/test_cloudformation_core.py"]
  },
  "aws.cloudformation.registry.activated-extensions": {
@@ -128,6 +128,7 @@
    "offline": "full"
   },
   "limitations": [],
+  "api": ["ListTypes", "DescribeType"],
   "tests": ["tests/conformance/test_cloudformation_core.py"]
  },
  "aws.cloudformation.registry.public-extensions-publisher": {

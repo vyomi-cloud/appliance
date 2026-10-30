@@ -1,5 +1,5 @@
 {
-  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap (not used here — cloudformation has no honest-allowlist.json entries, so every page is mapped and gaps are rendered inline with NotSimulatedContainer instead).",
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap, approved on consoles/honest-allowlist.json (hooks, invocation-summary, public-extensions). activated-extensions/extension-detail are approved as read-only REFERENCE pages (_reference) — real backend data (ListTypes/DescribeType), no create-a-resource liveness.",
   "getting-started": {
     "route": "#/cloudformation"
   },
@@ -18,7 +18,8 @@
     "expand": ["role=button[name=\"Next\"]", "role=button[name=\"Next\"]", "role=button[name=\"Next\"]"]
   },
   "stack-refactors": {
-    "route": "#/cloudformation/stack-refactors"
+    "route": "#/cloudformation/stack-refactors",
+    "live": "live-stack-refactor"
   },
   "stacksets": {
     "route": "#/cloudformation/stacksets",
@@ -40,13 +41,16 @@
     "route": "#/cloudformation/hooks/overview"
   },
   "invocation-summary": {
-    "route": "#/cloudformation/hooks/invocations"
+    "route": "#/cloudformation/hooks/invocations",
+    "honest_page": true
   },
   "hooks": {
-    "route": "#/cloudformation/hooks/list"
+    "route": "#/cloudformation/hooks/list",
+    "honest_page": true
   },
   "public-extensions": {
-    "route": "#/cloudformation/registry/public-extensions"
+    "route": "#/cloudformation/registry/public-extensions",
+    "honest_page": true
   },
   "extension-detail": {
     "route": "#/cloudformation/registry/public-extensions/resource-type/AWS::S3::Bucket",
