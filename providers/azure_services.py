@@ -802,6 +802,14 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if namespace.lower() == "microsoft.cognitiveservices":
         return await _handle_cognitiveservices(request, method, sub, rg, chain, names, base)
 
+    # Microsoft.CostManagement (cost query, alerts, exports) / Microsoft.Consumption
+    # (budgets): core/azure_cost_core.py owns both namespaces over this same _state —
+    # sub/RG scoped, no per-resource-group catalog entry (real Cost Management has none).
+    if namespace.lower() == "microsoft.costmanagement":
+        return await _handle_costmanagement(request, method, sub, rg, chain, base)
+    if namespace.lower() == "microsoft.consumption":
+        return await _handle_consumption(request, method, sub, rg, chain, base)
+
     top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
     if top is None:
         return _error(404, "ResourceTypeNotSupported",
@@ -990,6 +998,24 @@ async def _handle_operationalinsights(request: Request, method: str, sub: str, r
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.OperationalInsights/workspaces", "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
     return resp
+
+
+async def _handle_costmanagement(request: Request, method: str, sub: str, rg: str | None,
+                                 chain: list[str], base: str) -> JSONResponse:
+    from core import azure_cost_core as _cm
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _cm.dispatch_costmanagement(_state, method, sub, rg, chain, payload, dict(request.query_params), base=base)
+    return JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+
+
+async def _handle_consumption(request: Request, method: str, sub: str, rg: str | None,
+                              chain: list[str], base: str) -> JSONResponse:
+    from core import azure_cost_core as _cm
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _cm.dispatch_consumption(_state, method, sub, rg, chain, payload, dict(request.query_params), base=base)
+    return JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
 
 
 async def _handle_cognitiveservices(request: Request, method: str, sub: str, rg: str | None, chain: list[str],

@@ -1,0 +1,196 @@
+{
+  "$doc": "Vyomi capability registry \u2014 Azure Cost Management. One entry per console section that makes a backend claim (proven by tests/conformance/test_capabilities.py). Pure navigation/static/local-preference sections (Overview, Diagnose and solve problems, Configuration, Preview features) carry no backend claim and are intentionally not listed here. level.nano = core/azure_cost_core.py in-process (Nano / dev_server, checked by this test without CAP_BASE). level.offline = the full appliance (providers/azure_services.py), which wires the SAME core/azure_cost_core.py module over its own ARM resource store.",
+  "azure.cost.change_scope": {
+    "title": "Change scope (subscription)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "Vyomi simulates one subscription; there are no management groups or billing accounts to pick between."
+    ],
+    "api": [
+      "Subscriptions.Get"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
+  },
+  "azure.cost.cost_analysis": {
+    "title": "Cost analysis (query, grouping, filters)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "Daily/Monthly granularity reports an even split of the month-to-date total rather than a true per-day usage history."
+    ],
+    "api": [
+      "CostManagement.Query"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cost_core.py"
+    ]
+  },
+  "azure.cost.budgets": {
+    "title": "Budgets (create, list, delete, evaluated spend)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [],
+    "api": [
+      "Budgets.CreateOrUpdate",
+      "Budgets.Get",
+      "Budgets.List",
+      "Budgets.Delete"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cost_core.py"
+    ]
+  },
+  "azure.cost.alert_rules": {
+    "title": "Alert rules (a budget's notification thresholds)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "Read-only view derived from Budgets \u2014 real Azure lets you manage threshold rules from this page directly; here, edit the budget instead."
+    ],
+    "api": [
+      "Budgets.List"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cost_core.py"
+    ]
+  },
+  "azure.cost.cost_alerts": {
+    "title": "Cost alerts (derived from budget thresholds, dismiss/reactivate)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "Only budget-threshold alerts are modelled; Azure's anomaly-detection alerts are not generated."
+    ],
+    "api": [
+      "Alerts.List",
+      "Alerts.Dismiss"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cost_core.py"
+    ]
+  },
+  "azure.cost.exports": {
+    "title": "Exports (create, list, delete, run now)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "\"Run now\" computes the real total over Vyomi's inventory but does not deliver a CSV file into a storage account container."
+    ],
+    "api": [
+      "Exports.CreateOrUpdate",
+      "Exports.Get",
+      "Exports.List",
+      "Exports.Delete"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cost_core.py"
+    ]
+  },
+  "azure.cost.advisor_recommendations": {
+    "title": "Advisor recommendations (derived from real inventory)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Recommendations are the highest-cost real resources in your inventory, not Azure Advisor's own usage-pattern heuristics (idle %, burst history, \u2026)."
+    ],
+    "api": [
+      "CostManagement.Query"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cost_core.py"
+    ]
+  },
+  "azure.cost.azure_subscriptions": {
+    "title": "Azure subscriptions (billing scope list)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "Shows Vyomi's one simulated subscription; no billing account/agreement metadata."
+    ],
+    "api": [
+      "Subscriptions.Get"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_arm_core.py"
+    ]
+  },
+  "azure.cost.cost_allocation": {
+    "title": "Cost allocation (tag-based cost splitting rules)",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Cost allocation rules are not modelled; cost by resource/service/location is still available from Cost analysis."
+    ]
+  },
+  "azure.cost.reservations_hybrid_benefit": {
+    "title": "Reservations + Hybrid Benefit (purchase a commitment)",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Purchasing a real financial commitment against a payment method is out of scope for a simulator."
+    ]
+  },
+  "azure.cost.savings_plans": {
+    "title": "Savings plans (purchase a commitment)",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Purchasing a real financial commitment against a payment method is out of scope for a simulator."
+    ]
+  },
+  "azure.cost.invoices": {
+    "title": "Invoices (billing documents)",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Vyomi does not generate real billing/invoice documents."
+    ]
+  },
+  "azure.cost.payment_methods": {
+    "title": "Payment methods (card/billing profile management)",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Capturing or storing real payment instruments is out of scope for a simulator."
+    ]
+  },
+  "azure.cost.new_support_request": {
+    "title": "New support request (file a Microsoft support ticket)",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "not_simulated"
+    },
+    "limitations": [
+      "Vyomi does not file real Microsoft support tickets."
+    ]
+  }
+}
