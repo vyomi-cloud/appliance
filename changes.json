@@ -1,17 +1,80 @@
 {
- "at": "2026-10-30T18:47:33+00:00",
+ "at": "2026-10-30T19:47:35+00:00",
  "baseline": false,
  "changes": [
   {
+   "cloud": "aws",
+   "service": "logs",
+   "kind": "operation-changed",
+   "key": "aws:logs:DeleteAccountPolicy:1f1da347d99a",
+   "title": "AWS logs: operation DeleteAccountPolicy changed",
+   "detail": {
+    "in": {
+     "was": [
+      "policyName",
+      "policyType"
+     ],
+     "now": [
+      "dryRun",
+      "policyName",
+      "policyType"
+     ]
+    },
+    "out": {
+     "was": [],
+     "now": [
+      "dryRunResult"
+     ]
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "logs",
+   "kind": "operation-changed",
+   "key": "aws:logs:PutAccountPolicy:733a9caf3a70",
+   "title": "AWS logs: operation PutAccountPolicy changed",
+   "detail": {
+    "in": {
+     "was": [
+      "policyDocument",
+      "policyName",
+      "policyType",
+      "scope",
+      "selectionCriteria"
+     ],
+     "now": [
+      "dryRun",
+      "policyDocument",
+      "policyName",
+      "policyType",
+      "scope",
+      "selectionCriteria"
+     ]
+    },
+    "out": {
+     "was": [
+      "accountPolicy"
+     ],
+     "now": [
+      "accountPolicy",
+      "dryRunResult"
+     ]
+    }
+   },
+   "actionable": false
+  },
+  {
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:fd389969f2ca",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
    "detail": {
     "request": {
-     "was": "WorkloadCapturesStartRequest",
-     "now": "SqlWorkloadCapturesStartRequest"
+     "was": "SqlWorkloadCapturesStartRequest",
+     "now": "WorkloadCapturesStartRequest"
     }
    },
    "actionable": false
@@ -20,12 +83,12 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:f421c3d61dc0",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
    "detail": {
     "request": {
-     "was": "WorkloadCapturesStartReplayRequest",
-     "now": "SqlWorkloadCapturesStartReplayRequest"
+     "was": "SqlWorkloadCapturesStartReplayRequest",
+     "now": "WorkloadCapturesStartReplayRequest"
     }
    },
    "actionable": false
@@ -34,12 +97,12 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:c8c00d855f73",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
    "detail": {
     "request": {
-     "was": "WorkloadCapturesStopRequest",
-     "now": "SqlWorkloadCapturesStopRequest"
+     "was": "SqlWorkloadCapturesStopRequest",
+     "now": "WorkloadCapturesStopRequest"
     }
    },
    "actionable": false
@@ -48,24 +111,73 @@
    "cloud": "gcp",
    "service": "sqladmin/v1beta4",
    "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
+   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:acd5b7e919b1",
    "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
    "detail": {
     "request": {
-     "was": "WorkloadCapturesStopReplayRequest",
-     "now": "SqlWorkloadCapturesStopReplayRequest"
+     "was": "SqlWorkloadCapturesStopReplayRequest",
+     "now": "WorkloadCapturesStopReplayRequest"
     }
    },
    "actionable": false
   },
   {
    "cloud": "azure",
-   "service": "Blob Storage, Azure SQL",
+   "service": "storage",
+   "kind": "spec-commit",
+   "key": "azure:storage:418fc8bf77",
+   "title": "Azure storage: STG105 add handwritten swaggers for new api version (#47761)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/418fc8bf77b536fe624f81f60212aa5a12569354",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "pypi:boto3",
+   "kind": "release",
+   "key": "ver:pypi:boto3:1.43.123",
+   "title": "pypi:boto3: 1.43.122 \u2192 1.43.123",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "pypi:botocore",
+   "kind": "release",
+   "key": "ver:pypi:botocore:1.43.123",
+   "title": "pypi:botocore: 1.43.122 \u2192 1.43.123",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb",
+   "kind": "release",
+   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/dynamodb:v1.72.3",
+   "title": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.72.2 \u2192 v1.72.3",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "go:github.com/aws/aws-sdk-go-v2/service/sqs",
+   "kind": "release",
+   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/sqs:v1.52.8",
+   "title": "go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.7 \u2192 v1.52.8",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "cli:aws",
+   "kind": "release",
+   "key": "ver:cli:aws:2.39.3",
+   "title": "cli:aws: 2.39.2 \u2192 2.39.3",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon RDS",
    "kind": "announcement",
-   "key": "feed:azure:b1db4e5b38b2",
-   "title": "[In preview] Public Preview: Support database-level managed identity (including FIC) in Create Database Scoped Credential T-SQL ",
-   "link": "https://azure.microsoft.com/updates?id=577491",
-   "detail": "With database-level managed identity in Azure SQL Database, you can use a user-assigned managed identity for each database to query files in Azure Blob Storage and Azure Data Lake Storage Gen2 through external tables and OPENROWSET. You can authenticate t",
+   "key": "feed:aws:46202e42ed65",
+   "title": "Amazon RDS for Oracle no longer requires automatic minor version upgrades for JVM, Spatial, Locator, and OLAP options",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/oracle-jvm-spatial-locator-olap-options-amvu-optional/",
+   "detail": "Amazon Relational Database Service (Amazon RDS) for Oracle now lets you turn off automatic minor version upgrades on new and existing DB instances that use the JVM, Spatial, Locator, or OLAP option. Previously, these options required automatic minor version upgrades to be enabled. With this change, you decide when to apply minor version upgrades to DB instances using these options. If you turn off automatic minor version upgrades, we recommend that you apply new minor versions regularly so your DB instances keep the latest Oracle security fixes. To keep automatic minor version upgrades turned ",
    "actionable": false
   }
  ],
