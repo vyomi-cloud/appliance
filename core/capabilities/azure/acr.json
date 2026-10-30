@@ -45,7 +45,7 @@
   "title": "Repositories and tags, over the OCI/Docker Registry v2 wire and the ACR REST repository-metadata extension",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Image layers are never modelled — a manifest PUT is accepted directly without the blob-upload steps a real `docker push` performs first, and manifest bodies are stored and returned verbatim but never validated against a real OCI schema. Repositories are process-global (not scoped to one registry's login server), the same simplification Key Vault's keys/secrets data planes make."
+   "Repositories are process-global (not scoped to one registry's login server), the same simplification Key Vault's keys/secrets data planes make. Blob content is stored and digest-verified but never unpacked/executed — Vyomi doesn't run containers."
   ],
   "tests": ["tests/conformance/test_azure_acr_core.py"]
  },

@@ -7,6 +7,7 @@
  */
 import { createRequire } from "node:module";
 import { mkdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 
 const require = createRequire(import.meta.url);
 let pw;
@@ -52,7 +53,7 @@ let page;
 // answers /_wire, and it only sees requests from pages it controls.
 const wire = (path, init = {}) => page.evaluate(async ([u, i]) => {
   const r = await fetch(u, i);
-  return { status: r.status, text: await r.text() };
+  return { status: r.status, text: await r.text(), headers: Object.fromEntries(r.headers.entries()) };
 }, [WIRE + path, init]);
 const arm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2023-05-01`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -639,6 +640,28 @@ try {
   await page.getByRole("cell", { name: "latest" }).waitFor({ timeout: 10000 });
   check("repository detail shows the pushed tag + digest", true);
   await shot("27-acr-repository-detail");
+
+  // ── Real OCI blob-layer wire: a manifest referencing an un-uploaded layer is rejected,
+  //     then the SAME manifest succeeds once the blob is pushed through blob-uploads ──────
+  const LREPO = `smokelayers${n}`;
+  const layerBody = `vy-layer-${n}`;
+  const layerDigest = "sha256:" + createHash("sha256").update(layerBody).digest("hex");
+  const layeredManifest = JSON.stringify({
+    schemaVersion: 2, mediaType: "application/vnd.docker.distribution.manifest.v2+json",
+    config: { mediaType: "application/vnd.docker.container.image.v1+json", digest: layerDigest, size: layerBody.length },
+    layers: [],
+  });
+  const rejected = await wire(`/v2/${LREPO}/manifests/v1`, { method: "PUT", headers: { "content-type": "application/vnd.docker.distribution.manifest.v2+json" }, body: layeredManifest });
+  check("manifest referencing an un-uploaded blob is rejected", rejected.status === 404, `HTTP ${rejected.status}`);
+  const initUpload = await wire(`/v2/${LREPO}/blobs/uploads/`, { method: "POST" });
+  check("blob upload session starts", initUpload.status === 202, `HTTP ${initUpload.status}`);
+  const uploadUrl = initUpload.headers.location;
+  const finish = await wire(`${uploadUrl}?digest=${encodeURIComponent(layerDigest)}`, { method: "PUT", body: layerBody });
+  check("blob upload finalize matches the real digest", finish.status === 201 && finish.headers["docker-content-digest"] === layerDigest, `HTTP ${finish.status}`);
+  const accepted = await wire(`/v2/${LREPO}/manifests/v1`, { method: "PUT", headers: { "content-type": "application/vnd.docker.distribution.manifest.v2+json" }, body: layeredManifest });
+  check("same manifest succeeds once its blob exists", accepted.status === 201, `HTTP ${accepted.status}`);
+  const gotBlob = await wire(`/v2/${LREPO}/blobs/${layerDigest}`);
+  check("pushed blob reads back byte-for-byte", gotBlob.status === 200 && gotBlob.text === layerBody, `HTTP ${gotBlob.status}`);
 
   // ── Webhook created through the UI → visible over native ARM (nested resource) ─────────
   const WH = `smokewh${n}`;

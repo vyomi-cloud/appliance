@@ -96,6 +96,70 @@ def run() -> int:
     rd2 = dispatch(st, "DELETE", "/acr/v1/other")
     _check("deleting an already-gone repo 404", rd2.status == 404)
 
+    # 9. blob-layer wire: a manifest referencing an un-uploaded layer is rejected ────────────
+    cfg_bytes = b'{"architecture":"amd64"}'
+    cfg_digest = "sha256:" + __import__("hashlib").sha256(cfg_bytes).hexdigest()
+    layer_bytes = b"fake tar layer bytes"
+    layer_digest = "sha256:" + __import__("hashlib").sha256(layer_bytes).hexdigest()
+    real_manifest = json.dumps({
+        "schemaVersion": 2, "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+        "config": {"mediaType": "application/vnd.docker.container.image.v1+json", "digest": cfg_digest, "size": len(cfg_bytes)},
+        "layers": [{"mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip", "digest": layer_digest, "size": len(layer_bytes)}],
+    }).encode()
+    rejected = dispatch(st, "PUT", "/v2/withlayers/manifests/v1",
+                         {}, {"content-type": "application/vnd.docker.distribution.manifest.v2+json"}, real_manifest)
+    _check("manifest referencing an unknown blob is rejected", rejected.status == 404 and _jbody(rejected)["errors"][0]["code"] == "BLOB_UNKNOWN")
+
+    # 10. chunked blob upload (POST init -> PATCH chunk -> PUT finalize with digest check) ───
+    init = dispatch(st, "POST", "/v2/withlayers/blobs/uploads/")
+    _check("blob upload init 202", init.status == 202)
+    upload_url = init.headers["location"]
+    _check("upload session uuid in Location", "/blobs/uploads/" in upload_url)
+    uid = upload_url.rsplit("/", 1)[-1]
+    patch = dispatch(st, "PATCH", f"/v2/withlayers/blobs/uploads/{uid}", {}, {}, layer_bytes)
+    _check("blob upload chunk 202", patch.status == 202)
+    bad_finish = dispatch(st, "PUT", f"/v2/withlayers/blobs/uploads/{uid}", {"digest": "sha256:" + "0" * 64}, {}, b"")
+    _check("finalizing with a wrong digest is rejected", bad_finish.status == 400 and _jbody(bad_finish)["errors"][0]["code"] == "DIGEST_INVALID")
+    finish = dispatch(st, "PUT", f"/v2/withlayers/blobs/uploads/{uid}", {"digest": layer_digest}, {}, b"")
+    _check("blob upload finalize 201", finish.status == 201)
+    _check("finalize echoes the real digest", finish.headers["docker-content-digest"] == layer_digest)
+
+    # 11. monolithic upload (single POST with ?digest=... carrying the whole blob) ───────────
+    mono = dispatch(st, "POST", "/v2/withlayers/blobs/uploads/", {"digest": cfg_digest}, {}, cfg_bytes)
+    _check("monolithic blob upload 201", mono.status == 201)
+
+    # 12. blob reads: HEAD/GET by digest now that both layer + config were uploaded ──────────
+    head = dispatch(st, "HEAD", f"/v2/withlayers/blobs/{layer_digest}")
+    _check("HEAD existing blob 200, no body", head.status == 200 and head.body == b"")
+    got_blob = dispatch(st, "GET", f"/v2/withlayers/blobs/{layer_digest}")
+    _check("GET existing blob returns exact bytes", got_blob.status == 200 and got_blob.body == layer_bytes)
+    missing_blob = dispatch(st, "GET", "/v2/withlayers/blobs/sha256:" + "f" * 64)
+    _check("GET unknown blob 404 BLOB_UNKNOWN", missing_blob.status == 404 and _jbody(missing_blob)["errors"][0]["code"] == "BLOB_UNKNOWN")
+
+    # 13. now that both referenced blobs exist, the SAME manifest push succeeds ──────────────
+    pushed_real = dispatch(st, "PUT", "/v2/withlayers/manifests/v1",
+                            {}, {"content-type": "application/vnd.docker.distribution.manifest.v2+json"}, real_manifest)
+    _check("manifest push succeeds once config+layers are uploaded blobs", pushed_real.status == 201)
+    real_digest = pushed_real.headers["docker-content-digest"]
+    pulled_real = dispatch(st, "GET", f"/v2/withlayers/manifests/{real_digest}")
+    _check("pulled-back manifest round-trips the config+layers", _jbody(pulled_real)["config"]["digest"] == cfg_digest)
+
+    # 14. deleting an uploaded blob then re-reading it 404s ─────────────────────────────────
+    delb = dispatch(st, "DELETE", f"/v2/withlayers/blobs/{cfg_digest}")
+    _check("delete blob 202", delb.status == 202)
+    _check("deleted blob 404s on GET", dispatch(st, "GET", f"/v2/withlayers/blobs/{cfg_digest}").status == 404)
+
+    # 15. a manifest LIST (multi-arch) has no config/layers of its own -> skips the blob dance ──
+    list_manifest = json.dumps({"schemaVersion": 2, "mediaType": "application/vnd.docker.distribution.manifest.list.v2+json",
+                                 "manifests": [{"digest": real_digest, "platform": {"architecture": "amd64", "os": "linux"}}]}).encode()
+    pushed_list = dispatch(st, "PUT", "/v2/withlayers/manifests/multiarch",
+                            {}, {"content-type": "application/vnd.docker.distribution.manifest.list.v2+json"}, list_manifest)
+    _check("manifest-list push skips blob-ref validation", pushed_list.status == 201)
+
+    # 16. an upload session unknown to the registry 404s (not a silent no-op) ───────────────
+    unknown_session = dispatch(st, "PATCH", "/v2/withlayers/blobs/uploads/does-not-exist", {}, {}, b"x")
+    _check("unknown upload session 404", unknown_session.status == 404 and _jbody(unknown_session)["errors"][0]["code"] == "BLOB_UPLOAD_UNKNOWN")
+
     print("\nAzure Container Registry repository-core conformance: ALL GREEN")
     return 0
 
