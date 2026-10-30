@@ -50,6 +50,9 @@
       "connections",
       "schemas",
       "global-endpoints"
+    ],
+    "ec2": [
+      "events"
     ]
   },
   "_planned": {
@@ -72,5 +75,13 @@
   },
   "_backlog": {
     "aws.eventbridge": "connections + api-destinations are core EventBridge features worth building on eventbridge_core (CreateConnection / CreateApiDestination); allowlisted for v4.0.0 only"
+  },
+  "_reference": {
+    "aws": {
+      "ec2": [
+        "instance-types",
+        "instance-type-detail"
+      ]
+    }
   }
 }

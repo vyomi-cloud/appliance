@@ -189,7 +189,7 @@ jobs:
           echo "ui=$ui smoke=$smoke core=$core"
           echo "ok=$([ $ui -eq 0 ] && [ $smoke -eq 0 ] && [ $core -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           cp -r $RUNNER_TEMP/ui-out ui-out 2>/dev/null; cp -r $RUNNER_TEMP/smoke-out smoke-out 2>/dev/null; cp $RUNNER_TEMP/gate.txt gate.txt 2>/dev/null
-          printf 'ui-out/\nsmoke-out/\ngate.txt\n' >> .git/info/exclude
+          printf 'ui-out/\nsmoke-out/\ngate.txt\nconsoles/tests/.gate-smoke.mjs\n' >> .git/info/exclude
 
       - name: Rebuild outputs + push branch + PR
         if: always() && steps.limit.outputs.hit != 'true'
@@ -205,6 +205,10 @@ jobs:
             echo "::warning::agent modified .github/ — reverting those changes"
             git checkout origin/${{ env.BASE_BRANCH }} -- .github && git commit -qm "ci: revert agent changes to .github (agents may not edit CI)" || true
           fi
+          # The gate scored the WORKSPACE: anything the agent wrote but didn't commit must ship too,
+          # or the PR carries bundles without their source (seen: azure-cosmos). .github stays out.
+          git add -A && git reset -q -- .github
+          git diff --cached --quiet || git commit -qm "v4: agent work left uncommitted in the workspace (committed by the runner)"
           git add static/v4 wasm/v4 && git commit -qm "build(v4): rebuild console bundles" || true
           if git diff --quiet origin/${{ env.BASE_BRANCH }}...HEAD; then echo "no changes"; exit 0; fi
           git push -q origin HEAD
