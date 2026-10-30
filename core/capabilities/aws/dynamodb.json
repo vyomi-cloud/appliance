@@ -54,7 +54,7 @@
   ]
  },
  "dynamodb.table.indexes": {
-  "title": "Global secondary indexes",
+  "title": "Secondary indexes (global + local)",
   "level": {
    "nano": "full",
    "offline": "full"
@@ -126,7 +126,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "PITR can be turned on and reports its restore window; RestoreTableToPointInTime is not implemented yet \u2014 use on-demand backups to restore."
+   "RestoreTableToPointInTime is enforced against the PITR window (rejected without PITR enabled, or for a RestoreDateTime outside [EarliestRestorableDateTime, LatestRestorableDateTime]) but always restores the table's current state \u2014 Vyomi keeps no change history, so every point in the window yields the same (latest) data."
   ],
   "tests": [
    "tests/conformance/test_dynamodb_table_ops_core.py"

@@ -39,6 +39,25 @@ function KeyField({ label, typeLabel, desc, name, setName, type, setType, placeh
   );
 }
 
+function LsiModal({ visible, onDismiss, onSave }) {
+  const [lname, setLname] = useState(""); const [lsk, setLsk] = useState(""); const [lskType, setLskType] = useState("S"); const [proj, setProj] = useState("ALL");
+  return (
+    <Modal visible={visible} size="medium" onDismiss={onDismiss} header="Create local index"
+      footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+        <Button variant="link" onClick={onDismiss}>Cancel</Button>
+        <Button variant="primary" disabled={!lname || !lsk} onClick={() => { onSave({ name: lname, sk: lsk, skType: lskType, projection: proj }); setLname(""); setLsk(""); }}>Create local index</Button>
+      </SpaceBetween></Box>}>
+      <SpaceBetween size="l">
+        <FormField label="Index name"><Input value={lname} onChange={({ detail }) => setLname(detail.value)} ariaLabel="Index name" /></FormField>
+        <KeyField label="Sort key" typeLabel="Sort key type" desc="Local indexes share the table's partition key." name={lsk} setName={setLsk} type={lskType} setType={setLskType} placeholder="Enter the sort key name" />
+        <FormField label="Select attribute projection">
+          <Select selectedOption={PROJECTIONS.find((p) => p.value === proj)} onChange={({ detail }) => setProj(detail.selectedOption.value)} options={PROJECTIONS} ariaLabel="Select attribute projection" />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
 function GsiModal({ visible, onDismiss, onSave }) {
   const [gname, setGname] = useState(""); const [gpk, setGpk] = useState(""); const [gpkType, setGpkType] = useState("S");
   const [gsk, setGsk] = useState(""); const [gskType, setGskType] = useState("S"); const [proj, setProj] = useState("ALL");
@@ -74,6 +93,9 @@ export default function CreateTable() {
   const [gsis, setGsis] = useState([]);
   const [gsiSel, setGsiSel] = useState([]);
   const [gsiModal, setGsiModal] = useState(false);
+  const [lsis, setLsis] = useState([]);
+  const [lsiSel, setLsiSel] = useState([]);
+  const [lsiModal, setLsiModal] = useState(false);
   const [tags, setTags] = useState([]);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -93,6 +115,10 @@ export default function CreateTable() {
       addAttr(g.pk, g.pkType); addAttr(g.sk, g.skType);
       return { IndexName: g.name, KeySchema: [{ AttributeName: g.pk, KeyType: "HASH" }, ...(g.sk ? [{ AttributeName: g.sk, KeyType: "RANGE" }] : [])], Projection: { ProjectionType: g.projection } };
     }) : [];
+    const localIndexes = custom ? lsis.map((l) => {
+      addAttr(l.sk, l.skType);
+      return { IndexName: l.name, KeySchema: [{ AttributeName: pk, KeyType: "HASH" }, { AttributeName: l.sk, KeyType: "RANGE" }], Projection: { ProjectionType: l.projection } };
+    }) : [];
     try {
       await api.createTable({
         TableName: name,
@@ -103,6 +129,7 @@ export default function CreateTable() {
         ...(custom ? { TableClass: tableClass, DeletionProtectionEnabled: deletionProtection } : {}),
         ...(custom && sseType !== "OWNED" ? { SSESpecification: { Enabled: true, SSEType: "KMS" } } : {}),
         ...(indexes.length ? { GlobalSecondaryIndexes: indexes } : {}),
+        ...(localIndexes.length ? { LocalSecondaryIndexes: localIndexes } : {}),
         ...(tags.filter((t) => !t.markedForRemoval && t.key).length ? { Tags: tags.filter((t) => !t.markedForRemoval && t.key).map((t) => ({ Key: t.key, Value: t.value })) } : {}),
       });
       notify.success(`Creating the ${name} table. It will be available for use shortly.`);
@@ -194,13 +221,27 @@ export default function CreateTable() {
 
                     <Container header={<Header variant="h3">Secondary indexes</Header>}>
                       <SpaceBetween size="l">
-                        <NotSimulatedContainer title="Local indexes" note="LSIs must be declared at table creation and aren't modeled by Vyomi." />
+                        <Table variant="embedded" items={lsis} selectionType="single" selectedItems={lsiSel} onSelectionChange={({ detail }) => setLsiSel(detail.selectedItems)}
+                          trackBy="name"
+                          header={<Header variant="h3" counter={`(${lsis.length})`} description={!sk ? "Add a sort key to the table's primary key above to create local indexes." : undefined} actions={
+                            <SpaceBetween direction="horizontal" size="xs">
+                              <Button formAction="none" disabled={!lsiSel.length} onClick={() => { setLsis(lsis.filter((l) => !lsiSel.includes(l))); setLsiSel([]); }}>Delete</Button>
+                              <Button formAction="none" disabled={!sk} onClick={() => setLsiModal(true)}>Create local index</Button>
+                            </SpaceBetween>
+                          }>Local indexes</Header>}
+                          columnDefinitions={[
+                            { id: "n", header: "Name", cell: (l) => l.name },
+                            { id: "pk", header: "Partition key", cell: () => pk },
+                            { id: "sk", header: "Sort key", cell: (l) => l.sk },
+                            { id: "p", header: "Projected attributes", cell: (l) => PROJECTIONS.find((p) => p.value === l.projection)?.label },
+                          ]}
+                          empty={<Box textAlign="center" color="inherit"><b>No local secondary indexes</b></Box>} />
                         <Table variant="embedded" items={gsis} selectionType="single" selectedItems={gsiSel} onSelectionChange={({ detail }) => setGsiSel(detail.selectedItems)}
                           trackBy="name"
                           header={<Header variant="h3" counter={`(${gsis.length})`} actions={
                             <SpaceBetween direction="horizontal" size="xs">
-                              <Button disabled={!gsiSel.length} onClick={() => { setGsis(gsis.filter((g) => !gsiSel.includes(g))); setGsiSel([]); }}>Delete</Button>
-                              <Button onClick={() => setGsiModal(true)}>Create global index</Button>
+                              <Button formAction="none" disabled={!gsiSel.length} onClick={() => { setGsis(gsis.filter((g) => !gsiSel.includes(g))); setGsiSel([]); }}>Delete</Button>
+                              <Button formAction="none" onClick={() => setGsiModal(true)}>Create global index</Button>
                             </SpaceBetween>
                           }>Global indexes</Header>}
                           columnDefinitions={[
@@ -237,6 +278,7 @@ export default function CreateTable() {
           </SpaceBetween>
         </Form>
       </form>
+      <LsiModal visible={lsiModal} onDismiss={() => setLsiModal(false)} onSave={(l) => { setLsis([...lsis, l]); setLsiModal(false); }} />
       <GsiModal visible={gsiModal} onDismiss={() => setGsiModal(false)} onSave={(g) => { setGsis([...gsis, g]); setGsiModal(false); }} />
     </ContentLayout>
   );
