@@ -289,6 +289,14 @@ def _dispatch_documents(store: FirestoreStore, db: str, base: str, method: str,
         return _run_query(store, db, base, rel, _load_json(body))
     if suffix == "listCollectionIds":
         return _list_collection_ids(store, db, rel)
+    if suffix == "batchGet":
+        return _batch_get(store, db, base, _load_json(body))
+    if suffix == "commit":
+        return _commit(store, db, base, _load_json(body))
+    if suffix == "beginTransaction":
+        return _json(200, {"transaction": uuid.uuid4().hex})
+    if suffix == "rollback":
+        return _json(200, {})
 
     segs = [s for s in rel.split("/") if s != ""]
     is_collection = (len(segs) % 2 == 1)   # odd → collection, even → document
@@ -328,6 +336,19 @@ def _dispatch_documents(store: FirestoreStore, db: str, base: str, method: str,
         if method in ("PATCH", "PUT"):     # set / merge fields
             data = _load_json(body)
             new_fields = data.get("fields", {})
+            exists = str(query.get("currentDocument.exists", "")).lower()
+            if exists == "true" and entry is None:
+                return _err(404, "NOT_FOUND", f"No document to update: {_doc_name(base, rel)}")
+            if exists == "false" and entry is not None:
+                return _err(409, "ALREADY_EXISTS", f"Document already exists: {_doc_name(base, rel)}")
+            mask = _mask_paths(query.get("updateMask.fieldPaths"))
+            if mask is not None:           # updateMask: only the named fields change
+                ts = _now()                # (a masked field absent from the body is deleted)
+                entry = entry or {"fields": {}, "createTime": ts}
+                entry["fields"] = _apply_mask(dict(entry.get("fields", {})), new_fields, mask)
+                entry["updateTime"] = ts
+                store.put(db, rel, entry)
+                return _json(200, _doc_view(base, rel, entry))
             if entry is None:              # create-on-set
                 ts = _now()
                 entry = {"fields": dict(new_fields), "createTime": ts, "updateTime": ts}
@@ -345,6 +366,172 @@ def _dispatch_documents(store: FirestoreStore, db: str, base: str, method: str,
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on document")
 
     return _err(400, "INVALID_ARGUMENT", f"Unsupported request: {method} {rel!r}")
+
+
+# ── updateMask / commit / batchGet (the RPCs google-cloud-firestore's DocumentReference
+#    set()/update()/create()/delete()/get() and WriteBatch use) ─────────────
+def _mask_paths(raw) -> list | None:
+    if raw is None:
+        return None
+    vals = raw if isinstance(raw, (list, tuple)) else [raw]
+    out = []
+    for v in vals:
+        out += [p.strip() for p in str(v).split(",") if p.strip()]
+    return out
+
+
+def _split_field_path(fp: str) -> list:
+    parts, cur, quoted = [], "", False
+    for ch in fp:
+        if ch == "`":
+            quoted = not quoted
+        elif ch == "." and not quoted:
+            parts.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    parts.append(cur)
+    return [p for p in parts if p != ""]
+
+
+def _get_path(fields: dict, path: list):
+    cur = fields
+    for i, seg in enumerate(path):
+        v = cur.get(seg) if isinstance(cur, dict) else None
+        if v is None:
+            return None
+        if i == len(path) - 1:
+            return v
+        cur = (v.get("mapValue") or {}).get("fields") if isinstance(v, dict) else None
+    return None
+
+
+def _set_path(fields: dict, path: list, value) -> None:
+    cur = fields
+    for seg in path[:-1]:
+        nxt = cur.get(seg)
+        if not (isinstance(nxt, dict) and "mapValue" in nxt):
+            nxt = {"mapValue": {"fields": {}}}
+            cur[seg] = nxt
+        nxt["mapValue"].setdefault("fields", {})
+        cur = nxt["mapValue"]["fields"]
+    if value is None:
+        cur.pop(path[-1], None)
+    else:
+        cur[path[-1]] = value
+
+
+def _apply_mask(current: dict, new_fields: dict, mask: list) -> dict:
+    out = json.loads(json.dumps(current))
+    for fp in mask:
+        path = _split_field_path(fp)
+        if path:
+            _set_path(out, path, _get_path(new_fields, path))
+    return out
+
+
+def _rel_of(base: str, name: str) -> str | None:
+    name = str(name or "")
+    marker = base + "/"
+    i = name.find(marker)
+    return unquote(name[i + len(marker):].strip("/")) if i >= 0 else None
+
+
+def _num(v: dict):
+    if "integerValue" in v:
+        return int(v["integerValue"]), True
+    if "doubleValue" in v:
+        return float(v["doubleValue"]), False
+    return 0, True
+
+
+def _apply_transform(fields: dict, t: dict, ts: str) -> dict:
+    path = _split_field_path(t.get("fieldPath", ""))
+    if not path:
+        return {"nullValue": None}
+    cur = _get_path(fields, path) or {}
+    if t.get("setToServerValue") in ("REQUEST_TIME", 1, "1"):   # (enum-encoding=int sends 1)
+        val = {"timestampValue": ts}
+    elif "increment" in t or "maximum" in t or "minimum" in t:
+        op = "increment" if "increment" in t else ("maximum" if "maximum" in t else "minimum")
+        a, ai = _num(cur if isinstance(cur, dict) else {})
+        b, bi = _num(t[op])
+        r = a + b if op == "increment" else (max(a, b) if op == "maximum" else min(a, b))
+        val = {"integerValue": str(int(r))} if (ai and bi) else {"doubleValue": float(r)}
+    elif "appendMissingElements" in t or "removeAllFromArray" in t:
+        have = list(((cur or {}).get("arrayValue") or {}).get("values") or [])
+        if "appendMissingElements" in t:
+            for e in (t["appendMissingElements"].get("values") or []):
+                if e not in have:
+                    have.append(e)
+        else:
+            rm = t["removeAllFromArray"].get("values") or []
+            have = [e for e in have if e not in rm]
+        val = {"arrayValue": {"values": have}}
+    else:
+        return {"nullValue": None}
+    _set_path(fields, path, val)
+    return val
+
+
+def _commit(store: FirestoreStore, db: str, base: str, request: dict) -> FirestoreResponse:
+    """`documents:commit` — the writes apply in order, all or none (each precondition is
+    checked against the state the earlier writes of the same commit produced). Supports
+    update (+updateMask), delete, currentDocument preconditions and updateTransforms
+    (server timestamp, increment, maximum/minimum, array union/remove)."""
+    ts = _now()
+    staged: dict = {}          # rel -> entry | None (deleted), in write order
+    results = []
+    for w in request.get("writes") or []:
+        name = (w.get("update") or {}).get("name") if "update" in w else (w.get("delete") or w.get("transform", {}).get("document"))
+        rel = _rel_of(base, name)
+        if rel is None or rel.count("/") % 2 == 0:
+            return _err(400, "INVALID_ARGUMENT", f"Invalid document name: {name}")
+        cur = staged[rel] if rel in staged else store.get(db, rel)
+        pre = w.get("currentDocument") or {}
+        if "exists" in pre:
+            if pre["exists"] and cur is None:
+                return _err(404, "NOT_FOUND", f"No document to update: {_doc_name(base, rel)}")
+            if not pre["exists"] and cur is not None:
+                return _err(409, "ALREADY_EXISTS", f"Document already exists: {_doc_name(base, rel)}")
+        if pre.get("updateTime") and (cur is None or cur.get("updateTime") != pre["updateTime"]):
+            return _err(400, "FAILED_PRECONDITION", f"The document was modified: {_doc_name(base, rel)}")
+        if "delete" in w:
+            staged[rel] = None
+            results.append({"updateTime": ts})
+            continue
+        entry = json.loads(json.dumps(cur)) if cur else {"fields": {}, "createTime": ts}
+        if "update" in w:
+            new_fields = (w["update"] or {}).get("fields") or {}
+            # an empty mask arrives as `"updateMask": {}` (proto JSON drops the empty list)
+            mask = (_mask_paths((w.get("updateMask") or {}).get("fieldPaths")) or []) if "updateMask" in w else None
+            entry["fields"] = (_apply_mask(entry.get("fields") or {}, new_fields, mask) if mask is not None
+                               else json.loads(json.dumps(new_fields)))
+        tr = [_apply_transform(entry["fields"], t, ts)
+              for t in (w.get("updateTransforms") or (w.get("transform") or {}).get("fieldTransforms") or [])]
+        entry["updateTime"] = ts
+        staged[rel] = entry
+        results.append({"updateTime": ts, **({"transformResults": tr} if tr else {})})
+    for rel, entry in staged.items():
+        if entry is None:
+            store.delete(db, rel)
+        else:
+            store.put(db, rel, entry)
+    return _json(200, {"writeResults": results, "commitTime": ts})
+
+
+def _batch_get(store: FirestoreStore, db: str, base: str, request: dict) -> FirestoreResponse:
+    """`documents:batchGet` — the streaming shape: a JSON array of {found|missing, readTime}."""
+    ts = _now()
+    out = []
+    for name in request.get("documents") or []:
+        rel = _rel_of(base, name)
+        entry = store.get(db, rel) if rel else None
+        if entry is None:
+            out.append({"missing": name, "readTime": ts})
+        else:
+            out.append({"found": _doc_view(base, rel, entry), "readTime": ts})
+    return _json(200, out)
 
 
 def _list_collection_ids(store: FirestoreStore, db: str, parent_rel: str) -> FirestoreResponse:
@@ -424,6 +611,48 @@ def _eval_filter(fields: dict, filt: dict) -> bool:
     return True
 
 
+_FIELD_OPS = {1: "LESS_THAN", 2: "LESS_THAN_OR_EQUAL", 3: "GREATER_THAN", 4: "GREATER_THAN_OR_EQUAL",
+              5: "EQUAL", 6: "NOT_EQUAL", 7: "ARRAY_CONTAINS", 8: "IN", 9: "ARRAY_CONTAINS_ANY", 10: "NOT_IN"}
+_UNARY_OPS = {2: "IS_NAN", 3: "IS_NULL", 4: "IS_NOT_NAN", 5: "IS_NOT_NULL"}
+_COMPOSITE_OPS = {1: "AND", 2: "OR"}
+_DIRECTIONS = {1: "ASCENDING", 2: "DESCENDING"}
+
+
+def _norm_query_enums(sq):
+    """google-cloud-firestore's REST transport asks for `enum-encoding=int`, so operators
+    and directions may arrive as numbers; map them to the names the evaluator uses."""
+    def enum(v, table):
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, int) or (isinstance(v, str) and v.isdigit()):
+            return table.get(int(v), v)
+        return v
+
+    def filt(f):
+        if not isinstance(f, dict):
+            return f
+        f = dict(f)
+        if isinstance(f.get("fieldFilter"), dict):
+            f["fieldFilter"] = dict(f["fieldFilter"], op=enum(f["fieldFilter"].get("op"), _FIELD_OPS))
+        if isinstance(f.get("unaryFilter"), dict):
+            f["unaryFilter"] = dict(f["unaryFilter"], op=enum(f["unaryFilter"].get("op"), _UNARY_OPS))
+        if isinstance(f.get("compositeFilter"), dict):
+            cf = f["compositeFilter"]
+            f["compositeFilter"] = dict(cf, op=enum(cf.get("op"), _COMPOSITE_OPS),
+                                        filters=[filt(x) for x in (cf.get("filters") or [])])
+        return f
+
+    if not isinstance(sq, dict):
+        return {}
+    sq = dict(sq)
+    if "where" in sq:
+        sq["where"] = filt(sq["where"])
+    if isinstance(sq.get("orderBy"), list):
+        sq["orderBy"] = [dict(o, direction=enum(o.get("direction", "ASCENDING"), _DIRECTIONS))
+                         if isinstance(o, dict) else o for o in sq["orderBy"]]
+    return sq
+
+
 def _run_query(store: FirestoreStore, db: str, base: str, parent_rel: str,
                request: dict) -> FirestoreResponse:
     """structuredQuery: `from[0].collectionId` (relative to the query parent) with
@@ -431,7 +660,7 @@ def _run_query(store: FirestoreStore, db: str, base: str, parent_rel: str,
     comparison + IN/NOT_IN + ARRAY_CONTAINS[_ANY] operators), plus orderBy,
     offset and limit. Returns the Firestore streaming shape — a JSON array of
     `{"document","readTime"}` rows."""
-    sq = request.get("structuredQuery", {}) or {}
+    sq = _norm_query_enums(request.get("structuredQuery", {}) or {})
     froms = sq.get("from", []) or []
     if not froms:
         return _json(200, [])

@@ -34,7 +34,14 @@ def _gcp_vpc_reconcile() -> dict:
     from core import gcp_vpc_enforce
     space = _gcp_active_space_dict()
     enforce = bool(space.get("enforce_vpc"))
-    firewalls = [fw for fw in gcp_vpc_state.get("firewalls", {}).values() if isinstance(fw, dict)]
+    firewalls = None
+    try:   # v4 C0d: the shared Compute core holds the firewall rules when unified
+        from routes import gcp_firestore_compute_unified as _gfc
+        firewalls = _gfc.firewall_rules()
+    except Exception:
+        firewalls = None
+    if firewalls is None:
+        firewalls = [fw for fw in gcp_vpc_state.get("firewalls", {}).values() if isinstance(fw, dict)]
     applied: list[str] = []
     for inst in gcp_compute_state.get("instances", {}).values():
         if not isinstance(inst, dict) or str(inst.get("runtime_backend") or "") != "lxd":
@@ -136,6 +143,11 @@ def register(app: FastAPI) -> None:
             "gcp-vpc": count("gcp_vpc", "networks"),
             "gcp-iam": count_iam("service_accounts"),
         }
+        try:   # v4 C0d: Compute / VPC / Firestore counts come from the shared cores' state
+            from routes import gcp_firestore_compute_unified as _gfc
+            services.update(_gfc.summary_counts(target))
+        except Exception:
+            pass
         return {"project": target, "services": services}
 
     @app.post("/api/gcp/console/consolidate")

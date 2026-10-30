@@ -50,9 +50,10 @@ def client():
 def test_unified_services_parsing(monkeypatch):
     monkeypatch.delenv("VYOMI_UNIFIED_INGRESS_SERVICES", raising=False)
     monkeypatch.delenv("VYOMI_LEGACY_WIRE", raising=False)
-    # C0b added azure_blob / gcp_secrets / gcp_kms, C0c kms / secretsmanager to the default set
+    # C0b added azure_blob / gcp_secrets / gcp_kms, C0c kms / secretsmanager, C0d gcp_firestore /
+    # gcp_compute to the default set
     assert wire_ingress.unified_services() == {"s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
-                                               "kms", "secretsmanager"}
+                                               "kms", "secretsmanager", "gcp_firestore", "gcp_compute"}
     monkeypatch.setenv("VYOMI_UNIFIED_INGRESS_SERVICES", "s3")
     assert wire_ingress.unified_services() == {"s3"}
     monkeypatch.setenv("VYOMI_UNIFIED_INGRESS_SERVICES", "none")

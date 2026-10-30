@@ -117,6 +117,28 @@ After C0, each feature is implemented once and appears on every substrate.
 - The ported behaviours and the upgrade path, tested against a fake Vault, are pinned by
   `tests/conformance/test_c0c_legacy_parity_core.py`.
 
+**Step C0d (done):** Firestore and Compute Engine (VPC networking and VMs).
+- Offline, `POST /v1/projects/{p}/databases?databaseId=` fell through to the S3 catch-all (405)
+  and `aggregated/subnetworks` / `aggregated/addresses` returned 404: Firestore and Compute were
+  legacy handlers (`providers/gcp_services.py`, `server.api_gcp_compute_*`, `api_gcp_vpc_*`).
+- Both now run on the cores Nano uses: `core/gcp_firestore_core.py`, and `/compute/v1|beta`
+  routed by path like `AwsWireRouter` (networks, subnetworks, firewalls, routes, addresses →
+  `core/gcp_compute_core.py`; everything else → `core/gcp_compute_instances_core.py`). State
+  lives in new space-scoped slots (`gcp_gcp_firestore_engine`, `gcp_gcp_compute_vpc`,
+  `gcp_gcp_compute_vm`). The classic console paths (`/firestore/v1`, `/api/gcp/firestore/v1`,
+  `/api/gcp/dynamodb/*`, `/api/gcp/compute/v1`, `/api/gcp/vpc/*`) are aliases onto the same
+  stores (`routes/gcp_firestore_compute_unified.py`).
+- Real VMs: the core holds an instance's control-plane record; the Docker / LXD / Multipass guest
+  is still driven through the pre-v4 runtime record (`gcp_compute_state["instances"]`, linked by
+  `_runtimeId`) and the same `server.py` functions (launch, stop, reset, terminate, host-budget /
+  disk / tier gates). Console exec, connect-info, VPC enforcement and the host meters read it.
+- Upgrade path: once per space (a marker in the slot), the pre-v4 Firestore databases, indexes and
+  documents (FirestoreEngine SQLite, or the emulator) and the VPC / Compute records (networks,
+  subnets, firewalls, routes, disks, images, snapshots, groups, instances) are adopted.
+- Opt out with `VYOMI_UNIFIED_INGRESS_SERVICES` without `gcp_firestore` / `gcp_compute`, or
+  with `VYOMI_LEGACY_WIRE=1`.
+- Pinned by `tests/conformance/test_c0d_legacy_parity_core.py` and `tests/test_c0d_unified_engine.py`.
+
 ## 5. Triage — S3
 
 | Feature | Today | Target | How (backend) |

@@ -260,6 +260,7 @@ def appliance_mode_enabled() -> bool:
 def is_gcp_native_path(path: str) -> bool:
     return path.startswith((
         "/compute/v1/",
+        "/compute/beta/",     # v4 C0d: google-cloud-compute / gcloud beta surfaces
         "/storage/v1/",
         "/upload/storage/v1/",
         "/download/storage/v1/",
@@ -267,6 +268,7 @@ def is_gcp_native_path(path: str) -> bool:
         "/pubsub/v1/",
         "/firestore/v1/",
         "/v1/projects/",
+        "/v1beta1/projects/",  # v4 C0d: Firestore v1beta1 (same core as /v1)
         "/v1/operations/",
         "/api/gcp/s3/",
         "/api/gcp/iam/",

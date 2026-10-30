@@ -181,6 +181,15 @@ try:
 except Exception:
     pass
 
+# v4 C0d — ONE engine: Firestore + Compute Engine (native wire and the classic console
+# aliases) on the shared cores. Registered BEFORE the provider routes so these paths win;
+# opted-out services (VYOMI_UNIFIED_INGRESS_SERVICES / VYOMI_LEGACY_WIRE) mount nothing.
+try:
+    from routes import gcp_firestore_compute_unified as _gfc_unified
+    _gfc_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] Firestore/Compute core mount skipped: {_e}")
+
 # ── Provider route registration ──────────────────────────────────────
 register_aws_ec2_routes(app, None)
 register_gcp_compute_routes(app, None)
@@ -2711,7 +2720,19 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(repo, dict):
             add("gcp", "artifactregistry", "repository", repo_name, repo)
 
-    gcp_firestore = _cloudsim_service_state(space, "gcp_firestore")
+    # v4 C0d: Firestore databases + VPC resources served by the shared cores live in the
+    # space's gcp_gcp_firestore_engine / gcp_gcp_compute_vpc slots.
+    try:
+        from routes import gcp_firestore_compute_unified as _gfc_inv
+        _gfc_core_inv = _gfc_inv.inventory(space)
+    except Exception:
+        _gfc_core_inv = {}
+    for (_svc, _kind), _items in _gfc_core_inv.items():
+        if _svc in ("firestore", "vpc"):
+            for _entry, _created in _items.items():
+                add("gcp", _svc, _kind, f"core:{_svc}:{_entry}", {"name": _entry.rsplit("/", 1)[-1], "created": _created})
+
+    gcp_firestore = {} if ("firestore", "database") in _gfc_core_inv else _cloudsim_service_state(space, "gcp_firestore")
     for db_id, db in gcp_firestore.get("databases", {}).items():
         if isinstance(db, dict):
             add("gcp", "firestore", "database", db_id, db)
@@ -2758,7 +2779,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(gw, dict):
             add("gcp", "apigateway", "gateway", gw_id, gw)
 
-    gcp_vpc = _cloudsim_service_state(space, "gcp_vpc")
+    gcp_vpc = {} if ("vpc", "network") in _gfc_core_inv else _cloudsim_service_state(space, "gcp_vpc")
     for network_id, network in gcp_vpc.get("networks", {}).items():
         if isinstance(network, dict):
             add("gcp", "vpc", "network", network_id, network)
