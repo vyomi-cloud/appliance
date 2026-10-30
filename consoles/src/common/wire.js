@@ -30,7 +30,7 @@ export const getRegion = () => region;
 
 const amzDate = () => new Date().toISOString().replace(/[-:]|\.\d{3}/g, "");
 
-function authHeader(service) {
+export function authHeader(service) {
   const d = amzDate();
   return {
     "authorization": `AWS4-HMAC-SHA256 Credential=VYOMICONSOLE/${d.slice(0, 8)}/${region}/${service}/aws4_request, SignedHeaders=host;x-amz-date, Signature=0`,
@@ -112,5 +112,19 @@ export async function restJson(method, path, { query, body, headers = {} } = {})
   });
   const data = r.text ? (() => { try { return JSON.parse(r.text); } catch { return { raw: r.text }; } })() : {};
   if (!r.ok) throw new WireError(r.status, data.error?.status || data.error?.code, data.error?.message, r.text);
+  return data;
+}
+
+/** SigV4-signed REST JSON (API Gateway v1/v2, and any other AWS REST-JSON service):
+ * same shape as restJson, but with the AWS Authorization header so the router can
+ * credential-scope routes that don't carry a distinguishing path segment (e.g.
+ * API Gateway's account-level /apikeys, /usageplans, /clientcertificates, /account). */
+export async function awsRest(service, method, path, { query, body, headers = {} } = {}) {
+  const r = await send(method, path, {
+    query, headers: { ...authHeader(service), "content-type": "application/json", ...headers },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = r.text ? (() => { try { return JSON.parse(r.text); } catch { return { raw: r.text }; } })() : {};
+  if (!r.ok) throw new WireError(r.status, data.__type || data.message, data.message, r.text);
   return data;
 }

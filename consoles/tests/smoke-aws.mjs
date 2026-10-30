@@ -186,6 +186,27 @@ try {
   check("KMS Encrypt over wire against an unseen aws/ alias → AWS managed key shown in UI", true);
   await shot("14-kms-aws-managed-keys");
 
+  // API Gateway: create a REST API through the UI (UI → CLI direction)
+  const G = `v4smoke-api-${Date.now() % 100000}`;
+  await page.goto(UI + "#/apigateway/create-rest-api");
+  await page.getByLabel("API name", { exact: true }).fill(G);
+  await page.getByRole("button", { name: "Create API" }).click();
+  await page.getByRole("heading", { level: 1, name: G }).waitFor({ timeout: 10000 });
+  const gwAuth = { authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/apigateway/aws4_request, SignedHeaders=host, Signature=0" };
+  const restApis = JSON.parse(await wire("/restapis", { headers: gwAuth }));
+  const createdApi = (restApis.item || []).find((a) => a.name === G);
+  check("API Gateway create REST API (UI) → visible over native wire", !!createdApi, JSON.stringify(restApis.item?.slice(-1)));
+  await shot("15-apigateway-rest-api");
+
+  // API Gateway: create an HTTP API over the wire (CLI → UI direction)
+  const H = `v4smoke-http-${Date.now() % 100000}`;
+  await page.evaluate(([u, a, name]) => fetch(u, { method: "POST", headers: { ...a, "content-type": "application/json" }, body: JSON.stringify({ name, protocolType: "HTTP" }) }),
+    [WIRE + "/v2/apis", gwAuth, H]);
+  await page.goto(UI + "#/apigateway/apis");
+  await page.getByText(H).waitFor({ timeout: 10000 });
+  check("API Gateway create HTTP API (wire) → shown in UI APIs list", true);
+  await shot("16-apigateway-apis-list");
+
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));
   await page.reload();
