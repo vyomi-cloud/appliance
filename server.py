@@ -13521,11 +13521,13 @@ def _gcp_compute_instance_json(instance: dict) -> dict:
         "selfLink": _gcp_compute_instance_path(project, zone, instance_name),
         "canIpForward": bool(instance.get("assign_external_ip", True)),
         "description": instance.get("description", ""),
-        "scheduling": {
+        # setScheduling (console Scheduling tab / SDK) stores the instance's own policy.
+        "scheduling": dict(instance.get("scheduling") or {
             "automaticRestart": True,
             "onHostMaintenance": "MIGRATE",
             "preemptible": False,
-        },
+            "provisioningModel": "STANDARD",
+        }),
         "serviceAccounts": [
             {
                 "email": f"{instance.get('service_account', 'default')}@{project}.iam.gserviceaccount.com",
@@ -16969,7 +16971,17 @@ def _gcp_storage_bucket_view(project: str, bucket: dict) -> dict:
         "labels": bucket.get("labels", {}),
         "iamConfiguration": _gcp_storage_sanitize_iam_config(bucket.get("iamConfiguration")),
         "etag": bucket.get("etag", ""),
+        # lifecycle / retentionPolicy / encryption / versioning / softDeletePolicy (buckets.patch)
+        **_gcp_storage_settings_view(bucket),
     }
+
+
+def _gcp_storage_settings_view(bucket: dict) -> dict:
+    try:
+        from core import gcp_storage_core as _gcs_core
+        return _gcs_core.bucket_settings_view(bucket)
+    except Exception:
+        return {}
 
 
 def _gcp_storage_sanitize_iam_config(conf: Any) -> dict:
@@ -23715,6 +23727,13 @@ try:
     _mon_console.register(app, _mon_changed)
 except Exception as _e:   # never let this break appliance boot
     print(f"[monitoring] routes skipped: {_e}")
+
+# GCP console resource-detail tabs (/api/gcp/sub/{service}/{op}/{name}) over the services' own state.
+try:
+    from providers import gcp_tabs_console as _gcp_tabs_console
+    _gcp_tabs_console.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[gcp-tabs] routes skipped: {_e}")
 
 if not _UNIFIED_INGRESS:
     # v2.8.0: expose the NET-NEW services (Lambda, API Gateway, Azure SQL, Azure RBAC)

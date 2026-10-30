@@ -200,7 +200,7 @@ class PersistentAzureBlobStore(_PersistentMixin, AzureBlobStore):
 class PersistentFirestoreStore(_PersistentMixin, FirestoreStore):
     """Durable Firestore (v2.5.0): the FirestoreStore has clean put/delete methods,
     so we persist on those — no core edits needed."""
-    _STATE_ATTRS = ("documents",)
+    _STATE_ATTRS = ("documents", "databases", "indexes")
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "firestore"):
         FirestoreStore.__init__(self)

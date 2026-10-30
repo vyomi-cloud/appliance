@@ -334,6 +334,90 @@ def gcp_vault_index(space: str, kind: str) -> dict:
     return {n: created.get(n, "") for n in _gcp_idx_get(space, kind)}
 
 
+# ── GCP Secret Manager model on Vault: secret settings (replication, labels, rotation,
+#    topics) + per-version lifecycle states, KV-backed so they persist and the native
+#    /v1 API, the console and its detail tabs (providers/gcp_tabs_console) share them.
+def _kv_dict(space: str, key: str) -> dict:
+    got = vc.kv_get("gcp", space, key)
+    data = (got or {}).get("data") if isinstance(got, dict) else None
+    return dict(data) if isinstance(data, dict) else {}
+
+
+def gcp_secret_meta(space: str, name: str) -> dict:
+    return _kv_dict(space, f"__secmeta__{name}")
+
+
+def gcp_secret_meta_put(space: str, name: str, meta: dict) -> None:
+    vc.kv_put("gcp", space, f"__secmeta__{name}", dict(meta) or {"_": ""})
+
+
+def gcp_secret_states(space: str, name: str) -> dict:
+    return _kv_dict(space, f"__verstate__{name}")
+
+
+def gcp_secret_set_state(space: str, name: str, version: str, state: str) -> dict:
+    st = gcp_secret_states(space, name)
+    st[str(version)] = state
+    if state == "DESTROYED":
+        st[f"{version}_destroyTime"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        vc.kv_destroy_versions("gcp", space, name, [int(version)])
+    vc.kv_put("gcp", space, f"__verstate__{name}", st)
+    return st
+
+
+def gcp_secret_versions(space: str, name: str) -> list:
+    """The secret's versions, newest first: {version, state, createTime[, destroyTime]}."""
+    st = gcp_secret_states(space, name)
+    out = []
+    for v in vc.kv_list_versions("gcp", space, name):
+        n = str(v.get("version"))
+        state = st.get(n) or ("DESTROYED" if v.get("destroyed") else "ENABLED")
+        out.append({"version": n, "state": state, "createTime": v.get("created_time", ""),
+                    **({"destroyTime": st.get(f"{n}_destroyTime")} if state == "DESTROYED" else {})})
+    return list(reversed(out))
+
+
+# ── GCP Cloud KMS model on Vault transit: each CryptoKeyVersion is a transit key version;
+#    version states, the primary version, rotation schedule and labels live in the key's
+#    KV meta (shared by the native /v1 API, the console and its detail tabs).
+def gcp_kms_ring_of(space: str, name: str) -> str:
+    for entry in _gcp_idx_get(space, "kms"):
+        if entry == name or entry.split("/")[-1] == name:
+            return entry.partition("/")[0]
+    return "default-ring"
+
+
+def gcp_kms_key_meta(space: str, name: str) -> dict:
+    return _kv_dict(space, f"__kmsmeta__{name}")
+
+
+def gcp_kms_key_meta_put(space: str, name: str, meta: dict) -> None:
+    vc.kv_put("gcp", space, f"__kmsmeta__{name}", dict(meta))
+
+
+def gcp_kms_sync(space: str, ring: str, name: str) -> dict:
+    """The key's meta with every transit version listed, due automatic rotations applied
+    and DESTROY_SCHEDULED versions past their destroy time moved to DESTROYED."""
+    from core import gcp_kms_core as kc
+    meta = gcp_kms_key_meta(space, name)
+    tkey = f"{ring}__{name}"
+    for _ in range(kc.rotation_due(meta)):
+        nv = vc.transit_rotate("gcp", space, tkey)
+        if nv:
+            meta.setdefault("versions", {})[str(nv)] = {"state": "ENABLED", "createTime": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+            meta["primary"] = str(nv)
+    vs = meta.setdefault("versions", {})
+    for v, t in vc.transit_key_versions("gcp", space, tkey).items():
+        vs.setdefault(str(v), {"state": "ENABLED", "createTime": t})
+    now = datetime.now(timezone.utc).timestamp()
+    for v in vs.values():
+        if v.get("state") == "DESTROY_SCHEDULED" and kc._parse_ts(v.get("destroyTime", "")) <= now:
+            v["state"], v["destroyEventTime"] = "DESTROYED", datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    meta.setdefault("primary", "1")
+    gcp_kms_key_meta_put(space, name, meta)
+    return meta
+
+
 def _register_gcp(app: FastAPI) -> None:
     @app.post("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}:encrypt")
     async def gcp_kms_encrypt(project: str, loc: str, ring: str, key: str, request: Request):
@@ -343,7 +427,15 @@ def _register_gcp(app: FastAPI) -> None:
         vc.transit_create_key("gcp", space, key_name)
         _gcp_idx_add(space, "kms", f"{ring}/{key}")   # so the console list sees SDK-used keys
         pt_b64 = body.get("plaintext", "")
-        ct = vc.transit_encrypt("gcp", space, key_name, pt_b64)
+        # encrypt with the PRIMARY version, which must be ENABLED (Cloud KMS semantics)
+        meta = gcp_kms_sync(space, ring, key)
+        primary = str(meta.get("primary") or "1")
+        pstate = (meta.get("versions") or {}).get(primary, {}).get("state", "ENABLED")
+        if pstate != "ENABLED":
+            return JSONResponse({"error": {"code": 400, "status": "FAILED_PRECONDITION",
+                "message": f"projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions/{primary} is not enabled, current state is: {pstate}."}},
+                status_code=400)
+        ct = vc.transit_encrypt("gcp", space, key_name, pt_b64, key_version=int(primary))
         if ct is None:
             return _vault_unavailable_response("gcp.kms")
         # Vault returns ``vault:v1:<base64>`` as an opaque string. Google's KMS
@@ -372,6 +464,16 @@ def _register_gcp(app: FastAPI) -> None:
                 ct = ct_in  # not our wrap, pass through
         except Exception:
             ct = ct_in
+        # the ciphertext names its key version (vault:vN:...): only an ENABLED version decrypts
+        try:
+            ver = ct.split(":")[1].lstrip("v") if ct.startswith("vault:") else "1"
+        except Exception:
+            ver = "1"
+        vstate = (gcp_kms_sync(space, ring, key).get("versions") or {}).get(ver, {}).get("state", "ENABLED")
+        if vstate != "ENABLED":
+            return JSONResponse({"error": {"code": 400, "status": "FAILED_PRECONDITION",
+                "message": f"projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}/cryptoKeyVersions/{ver} is not enabled, current state is: {vstate}."}},
+                status_code=400)
         pt = vc.transit_decrypt("gcp", space, key_name, ct)
         if pt is None:
             return _vault_unavailable_response("gcp.kms")
@@ -389,14 +491,18 @@ def _register_gcp(app: FastAPI) -> None:
         return {"name": f"projects/{project}/locations/{loc}/keyRings/{ring}",
                 "createTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
 
-    def _gcp_cryptokey_view(project: str, loc: str, ring: str, key: str) -> dict:
+    def _gcp_cryptokey_view(project: str, loc: str, ring: str, key: str, meta: dict | None = None) -> dict:
         base = f"projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}"
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        meta = meta or {}
+        primary = str(meta.get("primary") or "1")
+        pv = (meta.get("versions") or {}).get(primary, {})
         return {
-            "name": base, "purpose": "ENCRYPT_DECRYPT", "createTime": now,
-            "primary": {"name": f"{base}/cryptoKeyVersions/1", "state": "ENABLED",
+            "name": base, "purpose": "ENCRYPT_DECRYPT", "createTime": pv.get("createTime") or now,
+            "primary": {"name": f"{base}/cryptoKeyVersions/{primary}", "state": pv.get("state", "ENABLED"),
                         "protectionLevel": "SOFTWARE",
-                        "algorithm": "GOOGLE_SYMMETRIC_ENCRYPTION", "createTime": now},
+                        "algorithm": "GOOGLE_SYMMETRIC_ENCRYPTION", "createTime": pv.get("createTime") or now},
+            **{k: meta[k] for k in ("rotationPeriod", "nextRotationTime", "labels") if meta.get(k)},
             "versionTemplate": {"protectionLevel": "SOFTWARE",
                                 "algorithm": "GOOGLE_SYMMETRIC_ENCRYPTION"},
         }
@@ -411,7 +517,7 @@ def _register_gcp(app: FastAPI) -> None:
 
     @app.get("/v1/projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}")
     async def gcp_kms_get_cryptokey(project: str, loc: str, ring: str, key: str, request: Request):
-        return _gcp_cryptokey_view(project, loc, ring, key)
+        return _gcp_cryptokey_view(project, loc, ring, key, gcp_kms_sync(_active_space_id(request), ring, key))
 
     @app.post("/v1/projects/{project}/secrets")
     async def gcp_secrets_create(project: str, request: Request):
@@ -448,15 +554,19 @@ def _register_gcp(app: FastAPI) -> None:
         }
 
     # Version state transitions (:disable / :enable / :destroy). Vault KV keeps the
-    # value; the lifecycle state lives here and gates :access like the real service.
-    _gcp_ver_state: dict = {}
-
+    # value; the lifecycle state (KV-backed, gcp_secret_states) gates :access like the
+    # real service, and :destroy really destroys the version's data in Vault.
     def _gcp_ver_set(request: Request, project: str, secret: str, version: str, state: str):
         space = _active_space_id(request)
         ver = version
         if version == "latest":
-            ver = "1"
-        _gcp_ver_state[(space, secret, ver)] = state
+            vs = [v for v in gcp_secret_versions(space, secret) if v["state"] != "DESTROYED"]
+            ver = vs[0]["version"] if vs else "1"
+        cur = gcp_secret_states(space, secret).get(ver)
+        if cur == "DESTROYED" and state != "DESTROYED":
+            return JSONResponse({"error": {"code": 400, "status": "FAILED_PRECONDITION",
+                "message": f"Secret Version [projects/{project}/secrets/{secret}/versions/{ver}] is destroyed."}}, status_code=400)
+        gcp_secret_set_state(space, secret, ver, state)
         return {
             "name": f"projects/{project}/secrets/{secret}/versions/{ver}",
             "createTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -484,7 +594,10 @@ def _register_gcp(app: FastAPI) -> None:
     @app.post("/v1/projects/{project}/secrets/{secret}/versions/{version}:access")
     async def gcp_secrets_access(project: str, secret: str, version: str, request: Request):
         space = _active_space_id(request)
-        st = _gcp_ver_state.get((space, secret, "1" if version == "latest" else version), "ENABLED")
+        if version == "latest":   # the newest version that isn't destroyed
+            vs = [v for v in gcp_secret_versions(space, secret) if v["state"] != "DESTROYED"]
+            version = vs[0]["version"] if vs else "latest"
+        st = gcp_secret_states(space, secret).get(version, "ENABLED")
         if st != "ENABLED":
             return JSONResponse({"error": {"code": 400, "status": "FAILED_PRECONDITION",
                 "message": f"Secret Version [projects/{project}/secrets/{secret}/versions/{version}] is in {st} state."}},
@@ -526,8 +639,9 @@ def _register_gcp(app: FastAPI) -> None:
         for n in names:
             got = vc.kv_get("gcp", space, n)
             version = str(((got or {}).get("metadata") or {}).get("version") or 1)
-            items.append({"name": n, "replication": "automatic", "created": created.get(n, ""),
-                          "latest_version": version})
+            rep = gcp_secret_meta(space, n).get("replication") or {"automatic": {}}
+            items.append({"name": n, "replication": "automatic" if "automatic" in rep else "user-managed",
+                          "created": created.get(n, ""), "latest_version": version})
         return {"items": items}
 
     @app.post("/api/gcp/secrets")
@@ -540,9 +654,16 @@ def _register_gcp(app: FastAPI) -> None:
         name = (body.get("name") or body.get("secretId") or body.get("secret_id") or "").strip()
         if not name:
             return JSONResponse(status_code=400, content={"ok": False, "error": "missing 'name'"})
+        from core import gcp_secretmanager_core as _smc
+        try:
+            replication = _smc.replication_from_form(body)
+        except _smc.SecretPatchError as e:
+            return JSONResponse(status_code=e.status, content={"ok": False, "error": e.message})
         if vc.kv_put("gcp", space, name, body.get("value") or body.get("secret_value") or "changeme") is None:
             return _vault_unavailable_response("gcp.secrets")
         _gcp_idx_add(space, "secrets", name)
+        gcp_secret_meta_put(space, name, {"replication": replication,
+                                          **({"labels": body["labels"]} if isinstance(body.get("labels"), dict) and body["labels"] else {})})
         return {"ok": True, "name": name}
 
     @app.get("/api/gcp/secrets/{name}")
@@ -576,6 +697,8 @@ def _register_gcp(app: FastAPI) -> None:
     async def gcp_console_secret_delete(name: str, request: Request):
         space = _active_space_id(request)
         vc.kv_delete("gcp", space, name)
+        vc.kv_delete("gcp", space, f"__secmeta__{name}")
+        vc.kv_delete("gcp", space, f"__verstate__{name}")
         _gcp_idx_remove(space, "secrets", name)
         return {"ok": True, "deleted": True, "name": name}
 

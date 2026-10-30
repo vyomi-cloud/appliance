@@ -43,6 +43,8 @@ CORES = [
     "gcp_iam_core.py",                              # GCP: Cloud IAM REST (SA + policy eval)
     "gcp_cloudsql_core.py",                         # GCP: Cloud SQL Admin REST (control plane)
     "gcp_artifactregistry_core.py",                 # GCP: Artifact Registry REST v1 (repositories, packages, versions, tags, docker images)
+    "gcp_console_tabs.py",                          # GCP console resource-detail tabs (validation + records no engine models)
+    "instance_catalog.py",                          # machine-type catalog (vCPU/RAM per GCE/EC2/Azure size)
     "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
     "azure_cosmos_core.py",                         # Azure: Cosmos DB SQL/Core API (native azure-cosmos)
     "azure_keyvault_secrets_core.py",               # Azure: Key Vault secrets (native azure-keyvault-secrets)
