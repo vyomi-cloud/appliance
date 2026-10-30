@@ -27,7 +27,7 @@ export default function ServicesMenu({ onClose }) {
               {list.map((s) => (
                 <div key={s.id}>
                   <Link href={`#/${s.id}`} onFollow={(e) => { follow(e); onClose(); }} fontSize="heading-s">{s.title}</Link>
-                  <Box variant="small" color="text-body-secondary">{s.description}</Box>
+                  <Box variant="small" display="block" color="text-body-secondary" margin={{ top: "xxxs" }}>{s.description}</Box>
                 </div>
               ))}
             </Grid>

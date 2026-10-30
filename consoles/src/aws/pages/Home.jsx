@@ -219,7 +219,7 @@ export function AllServices() {
               {SERVICES.filter((s) => s.category === cat).map((s) => (
                 <div key={s.id}>
                   <Link href={`#/${s.id}`} onFollow={follow} fontSize="heading-s">{s.title}</Link>
-                  <Box variant="small" color="text-body-secondary">{s.description}{!s.load ? " · classic console" : ""}</Box>
+                  <Box variant="small" display="block" color="text-body-secondary" margin={{ top: "xxxs" }}>{s.description}{!s.load ? " · classic console" : ""}</Box>
                 </div>
               ))}
             </ColumnLayout>
