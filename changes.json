@@ -1,7 +1,16 @@
 {
- "at": "2026-10-30T21:47:55+00:00",
+ "at": "2026-10-30T22:47:43+00:00",
  "baseline": false,
  "changes": [
+  {
+   "cloud": "azure",
+   "service": "storage",
+   "kind": "spec-commit",
+   "key": "azure:storage:759a12cf1d",
+   "title": "Azure storage: Remove known-encoding suppressions immediately before rfc7231 in storage TypeSpec (#47794)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/759a12cf1df0cefd32ecc0968a3f201b905c02e2",
+   "actionable": false
+  },
   {
    "cloud": "azure",
    "service": "storage",
@@ -28,20 +37,7 @@
    "title": "Azure compute: WorkloadManager: correct 2026-11-01-preview resource contract (#47558)",
    "link": "https://github.com/Azure/azure-rest-api-specs/commit/411fb227a905864f972d26ab88b21ef69e1f67b2",
    "actionable": true
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3, CloudWatch Logs, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:f8bd89552413",
-   "title": "Amazon Bedrock expands API support and introduces Cross Region Inferencing for OpenAI models in AWS GovCloud (US)",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/bedrock-openai-runtime-govcloud/",
-   "detail": "Amazon Bedrock now supports the OpenAI GPT-5.6 models (Terra and Luna) on the bedrock-runtime endpoint, with support for the Responses, Converse, and Chat Completions APIs in AWS GovCloud (US). It also adds support for cross-Region inference, allowing customers to use cross-Region inference within AWS GovCloud (US) regions to access higher throughput and increased redundancy. Cross-Region inference automatically routes inference requests across both AWS GovCloud (US) Regions to give you higher throughput, without you needing to manage capacity across multiple Regions. Cross region inference wi",
-   "actionable": false
   }
  ],
- "errors": [
-  "maven/com.azure:azure-cosmos: The read operation timed out",
-  "maven/com.azure:azure-data-appconfiguration: The read operation timed out"
- ]
+ "errors": []
 }
