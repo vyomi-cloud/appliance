@@ -1,0 +1,17 @@
+{
+ "cloud": "gcp",
+ "service": "logs",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Every page in ui-spec/gcp/logs.json (9 pages; nav: Overview, Dashboards, Application monitoring, Explore, Detect, Configure, Observability Scopes, Release Notes)",
+  "Backend: Logs Explorer over Vyomi's real event/log stream (grep core/ for logging/event log); query by resource/severity; log router/sinks stored as config",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/gcp/logs.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
+  "Capability feature ids MUST start with 'gcp.' (e.g. 'gcp.logs.<section>') — ids share one namespace with the AWS registry",
+  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
+ ],
+ "attempt": 1
+}

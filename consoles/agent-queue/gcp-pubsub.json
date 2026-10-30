@@ -1,0 +1,17 @@
+{
+ "cloud": "gcp",
+ "service": "pubsub",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Every page in ui-spec/gcp/pubsub.json (10 pages; nav: Overview, Topics, Subscriptions, Snapshots, Schemas)",
+  "Backend: core gcp pubsub (tests/conformance/test_gcp_pubsub_core.py): topics, subscriptions, publish/pull/ack, snapshots, schemas if modeled",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/gcp/pubsub.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
+  "Capability feature ids MUST start with 'gcp.' (e.g. 'gcp.pubsub.<section>') — ids share one namespace with the AWS registry",
+  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
+ ],
+ "attempt": 1
+}

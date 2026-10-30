@@ -1,0 +1,17 @@
+{
+ "cloud": "gcp",
+ "service": "security/kms",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Every page in ui-spec/gcp/security/kms.json (7 pages; nav: Key management, Key inventory, Autokey)",
+  "Backend: core gcp kms (test_gcp_kms_core.py; offline via C0b): key rings, keys, versions, rotation, labels, encrypt/decrypt",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/gcp/kms.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
+  "Capability feature ids MUST start with 'gcp.' (e.g. 'gcp.kms.<section>') — ids share one namespace with the AWS registry",
+  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
+ ],
+ "attempt": 1
+}

@@ -1,0 +1,17 @@
+{
+ "cloud": "gcp",
+ "service": "firestore",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Every page in ui-spec/gcp/firestore.json (12 pages; nav: All databases, {resource-name})",
+  "Backend: core gcp firestore (test_gcp_firestore_core.py, test_firestore_query_core.py): databases, collections/documents data viewer, query builder, indexes",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/gcp/firestore.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
+  "Capability feature ids MUST start with 'gcp.' (e.g. 'gcp.firestore.<section>') — ids share one namespace with the AWS registry",
+  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
+ ],
+ "attempt": 1
+}

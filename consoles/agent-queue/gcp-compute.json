@@ -1,0 +1,17 @@
+{
+ "cloud": "gcp",
+ "service": "compute",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Every page in ui-spec/gcp/compute.json (40 pages; nav: Overview, Security risk overview, Compute Advisor, Virtual machines, Storage, Instance groups, VM Extension Manager, VM Manager, Bare Metal Solution, Settings, Marketplace, Release Notes)",
+  "Backend: Compute Engine: Vyomi compute backend (grep core/ providers/ for gce/compute instances, Docker compute) — VM instances list/create/start/stop/delete, disks, images, instance templates",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/gcp/compute.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
+  "Capability feature ids MUST start with 'gcp.' (e.g. 'gcp.compute.<section>') — ids share one namespace with the AWS registry",
+  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
+ ],
+ "attempt": 1
+}
