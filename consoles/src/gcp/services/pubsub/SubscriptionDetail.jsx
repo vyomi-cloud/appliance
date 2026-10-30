@@ -3,7 +3,8 @@
 import { useState } from "react";
 import {
   Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-  FormControl, FormControlLabel, IconButton, InputLabel, MenuItem, Select, Stack, Tab, Tabs, TextField, Typography,
+  FormControl, FormControlLabel, IconButton, InputLabel, MenuItem, Radio, RadioGroup, Select,
+  Stack, Tab, Tabs, TextField, Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
 import EditIcon from "@mui/icons-material/esm/Edit.js";
@@ -15,7 +16,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { ErrorAlert, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
 import * as api from "./api.js";
 
@@ -75,10 +76,11 @@ function DetailsTab({ sub }) {
         ["Ack deadline", `${sub.ackDeadlineSeconds}s`],
         ["Message retention duration", api.retentionText(sub)],
         ["Expiration", api.expirationText(sub)],
-        ["Exactly once delivery", api.exactlyOnceText(sub)],
+        ["Exactly once delivery", api.exactlyOnceText(sub), <CapabilityBadge key="eo" id="gcp.pubsub.subscriptions.ordering-exactly-once" />],
         ["Message ordering", api.orderingText(sub)],
         ["Dead lettering", sub.deadLetterPolicy ? `${api.shortId(sub.deadLetterPolicy.deadLetterTopic)} after ${sub.deadLetterPolicy.maxDeliveryAttempts} attempts` : "Disabled"],
-        ["Retry policy", sub.retryPolicy ? "Retry after exponential backoff delay" : "Retry immediately"],
+        ["Retry policy", sub.retryPolicy ? "Retry after exponential backoff delay" : "Retry immediately", <CapabilityBadge key="rp" id="gcp.pubsub.subscriptions.retry-policy" />],
+        ["Subscription filter", sub.filter || "None", sub.filter ? <CapabilityBadge key="f" id="gcp.pubsub.subscriptions.filter" /> : null],
         ["Labels", api.labelsText(sub.labels)],
       ]} />
     </Section>
@@ -213,13 +215,18 @@ function CreateSnapshotDialog({ open, onClose, subId, onCreated }) {
 function ReplayDialog({ open, onClose, sub, onReplayed }) {
   const { data = [] } = useAsync(() => (open ? api.listSnapshots() : Promise.resolve([])), [open, sub?.name]);
   const mine = data.filter((s) => s.subscription === sub?.name);
+  const [mode, setMode] = useState("snapshot");
   const [snapshot, setSnapshot] = useState("");
+  const [minutesAgo, setMinutesAgo] = useState("10");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const go = async () => {
     setBusy(true); setError(null);
-    try { await api.seek(api.shortId(sub.name), { snapshot }); onReplayed(); onClose(); setSnapshot(""); }
-    catch (e) { setError(e); }
+    try {
+      const body = mode === "snapshot" ? { snapshot } : { time: new Date(Date.now() - Number(minutesAgo) * 60000).toISOString() };
+      await api.seek(api.shortId(sub.name), body);
+      onReplayed(); onClose(); setSnapshot("");
+    } catch (e) { setError(e); }
     finally { setBusy(false); }
   };
   return (
@@ -228,18 +235,29 @@ function ReplayDialog({ open, onClose, sub, onReplayed }) {
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           <ErrorAlert error={error} title="Failed to replay messages" />
-          <FormControl>
-            <InputLabel id="replay-snap-l">From snapshot</InputLabel>
-            <Select labelId="replay-snap-l" label="From snapshot" value={snapshot} onChange={(e) => setSnapshot(e.target.value)}>
-              {mine.map((s) => <MenuItem key={s.name} value={s.name}>{api.shortId(s.name)}</MenuItem>)}
-            </Select>
-          </FormControl>
-          {!mine.length && <Typography variant="body2" color="text.secondary">No snapshots taken from this subscription yet.</Typography>}
+          <RadioGroup value={mode} onChange={(e) => setMode(e.target.value)} aria-label="Replay from">
+            <FormControlLabel value="snapshot" control={<Radio size="small" />} label="From a snapshot" />
+            <FormControlLabel value="time" control={<Radio size="small" />} label="From a point in time" />
+          </RadioGroup>
+          {mode === "snapshot" ? (
+            <>
+              <FormControl>
+                <InputLabel id="replay-snap-l">From snapshot</InputLabel>
+                <Select labelId="replay-snap-l" label="From snapshot" value={snapshot} onChange={(e) => setSnapshot(e.target.value)}>
+                  {mine.map((s) => <MenuItem key={s.name} value={s.name}>{api.shortId(s.name)}</MenuItem>)}
+                </Select>
+              </FormControl>
+              {!mine.length && <Typography variant="body2" color="text.secondary">No snapshots taken from this subscription yet.</Typography>}
+            </>
+          ) : (
+            <TextField label="Minutes ago" type="number" value={minutesAgo} onChange={(e) => setMinutesAgo(e.target.value)}
+              helperText="Requires the topic to have message retention enabled; otherwise Vyomi has no backlog to replay from." />
+          )}
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button variant="contained" disabled={busy || !snapshot} onClick={go}>{busy ? "Replaying…" : "Replay"}</Button>
+        <Button variant="contained" disabled={busy || (mode === "snapshot" ? !snapshot : !minutesAgo)} onClick={go}>{busy ? "Replaying…" : "Replay"}</Button>
       </DialogActions>
     </Dialog>
   );

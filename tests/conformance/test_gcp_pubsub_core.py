@@ -12,6 +12,7 @@ Run in Pyodide: loaded by the wasm/ harness (same file).
 """
 import base64
 import json
+from datetime import datetime, timezone
 
 try:
     from core.messaging_store import InMemoryMessagingStore
@@ -239,6 +240,107 @@ def run() -> int:
     _check("delete schema 200", dschema.status == 200)
     miss_schema = ps.dispatch(st, "GET", f"/v1/{SCHEMA}", {}, {}, b"")
     _check("deleted schema 404 NOT_FOUND", miss_schema.status == 404)
+
+    # 19. retry policy backoff: a redelivery doesn't happen the instant the ack deadline
+    # expires — it waits out the configured (exponential, capped) backoff window too.
+    T3 = f"projects/{P}/topics/retrytopic"
+    SUB_RETRY = f"projects/{P}/subscriptions/sub-retry"
+    ps.dispatch(st, "PUT", f"/v1/{T3}", {}, {}, b"{}")
+    ps.dispatch(st, "PUT", f"/v1/{SUB_RETRY}", {}, {}, json.dumps({
+        "topic": T3, "ackDeadlineSeconds": 5, "retryPolicy": {"minimumBackoff": "20s", "maximumBackoff": "20s"},
+    }).encode())
+    ps.dispatch(st, "POST", f"/v1/{T3}:publish", {}, {}, json.dumps({"messages": [{"data": base64.b64encode(b"retryme").decode()}]}).encode())
+    first = ps.dispatch(st, "POST", f"/v1/{SUB_RETRY}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    _check("retry: first delivery attempt", len(_jbody(first).get("receivedMessages", [])) == 1)
+    st.advance(6)   # past the 5s ack deadline, but inside the 20s backoff window
+    still_backing_off = ps.dispatch(st, "POST", f"/v1/{SUB_RETRY}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    _check("retry backoff withholds redelivery inside the window", not _jbody(still_backing_off).get("receivedMessages"))
+    st.advance(20)   # now past both the ack deadline AND the backoff window
+    redelivered = ps.dispatch(st, "POST", f"/v1/{SUB_RETRY}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    redel = _jbody(redelivered).get("receivedMessages", [])
+    _check("retry backoff redelivers once the window elapses", len(redel) == 1 and redel[0]["deliveryAttempt"] == 2)
+
+    # 20. message ordering: only the earliest unacked message for a given ordering key is
+    # ever delivered; the next one waits until it's acked, even once its own deadline lapses.
+    T4 = f"projects/{P}/topics/orderedtopic"
+    SUB_ORD = f"projects/{P}/subscriptions/sub-ordered"
+    ps.dispatch(st, "PUT", f"/v1/{T4}", {}, {}, b"{}")
+    ps.dispatch(st, "PUT", f"/v1/{SUB_ORD}", {}, {}, json.dumps({"topic": T4, "enableMessageOrdering": True}).encode())
+    ps.dispatch(st, "POST", f"/v1/{T4}:publish", {}, {}, json.dumps({"messages": [
+        {"data": base64.b64encode(b"first").decode(), "orderingKey": "k1"},
+        {"data": base64.b64encode(b"second").decode(), "orderingKey": "k1"},
+    ]}).encode())
+    ord1 = ps.dispatch(st, "POST", f"/v1/{SUB_ORD}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    ord1_recv = _jbody(ord1)["receivedMessages"]
+    _check("ordering: only the head-of-key message is delivered while it's unacked",
+           len(ord1_recv) == 1 and base64.b64decode(ord1_recv[0]["message"]["data"]) == b"first")
+    ps.dispatch(st, "POST", f"/v1/{SUB_ORD}:acknowledge", {}, {}, json.dumps({"ackIds": [ord1_recv[0]["ackId"]]}).encode())
+    ord2 = ps.dispatch(st, "POST", f"/v1/{SUB_ORD}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    ord2_recv = _jbody(ord2)["receivedMessages"]
+    _check("ordering: the next same-key message is delivered only after the head is acked",
+           len(ord2_recv) == 1 and base64.b64decode(ord2_recv[0]["message"]["data"]) == b"second")
+
+    # 21. subscription filter: only messages whose attributes match the filter are
+    # delivered; an unparsable filter is rejected when the subscription is created.
+    T5 = f"projects/{P}/topics/filteredtopic"
+    SUB_FILTER = f"projects/{P}/subscriptions/sub-filtered"
+    ps.dispatch(st, "PUT", f"/v1/{T5}", {}, {}, b"{}")
+    fsub = ps.dispatch(st, "PUT", f"/v1/{SUB_FILTER}", {}, {}, json.dumps({
+        "topic": T5, "filter": 'attributes.kind = "keep"',
+    }).encode())
+    _check("filter stored on subscription", _jbody(fsub).get("filter") == 'attributes.kind = "keep"')
+    ps.dispatch(st, "POST", f"/v1/{T5}:publish", {}, {}, json.dumps({"messages": [
+        {"data": base64.b64encode(b"keep-me").decode(), "attributes": {"kind": "keep"}},
+        {"data": base64.b64encode(b"drop-me").decode(), "attributes": {"kind": "drop"}},
+    ]}).encode())
+    filtered = ps.dispatch(st, "POST", f"/v1/{SUB_FILTER}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    fbodies = [base64.b64decode(m["message"]["data"]) for m in _jbody(filtered).get("receivedMessages", [])]
+    _check("filter: only the matching message is delivered", fbodies == [b"keep-me"])
+    bad_filter = ps.dispatch(st, "PUT", f"/v1/projects/{P}/subscriptions/sub-bad-filter", {}, {},
+                             json.dumps({"topic": T5, "filter": "hasPrefix(("}).encode())
+    _check("invalid filter rejected at subscription create", bad_filter.status == 400
+           and _jbody(bad_filter)["error"]["status"] == "INVALID_ARGUMENT")
+
+    # 22. topic message retention + seek-by-time: a subscription created AFTER a message
+    # was published can still replay it from the topic's own retained backlog.
+    T6 = f"projects/{P}/topics/retainedtopic"
+    ps.dispatch(st, "PUT", f"/v1/{T6}", {}, {}, json.dumps({"messageRetentionDuration": "3600s"}).encode())
+    ps.dispatch(st, "POST", f"/v1/{T6}:publish", {}, {}, json.dumps({"messages": [{"data": base64.b64encode(b"old").decode()}]}).encode())
+    st.advance(2)
+    cutoff = datetime.fromtimestamp(st.now(), tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    st.advance(2)
+    ps.dispatch(st, "POST", f"/v1/{T6}:publish", {}, {}, json.dumps({"messages": [{"data": base64.b64encode(b"new").decode()}]}).encode())
+    LATE_SUB = f"projects/{P}/subscriptions/sub-late"
+    ps.dispatch(st, "PUT", f"/v1/{LATE_SUB}", {}, {}, json.dumps({"topic": T6}).encode())
+    seeked = ps.dispatch(st, "POST", f"/v1/{LATE_SUB}:seek", {}, {}, json.dumps({"time": cutoff}).encode())
+    _check("seek-by-time 200", seeked.status == 200)
+    replayed_time = ps.dispatch(st, "POST", f"/v1/{LATE_SUB}:pull", {}, {}, json.dumps({"maxMessages": 10}).encode())
+    rbodies = [base64.b64decode(m["message"]["data"]) for m in _jbody(replayed_time).get("receivedMessages", [])]
+    _check("seek-by-time replays only messages published after the cutoff", rbodies == [b"new"])
+
+    NORET_TOPIC = f"projects/{P}/topics/noretentiontopic"
+    NORET_SUB = f"projects/{P}/subscriptions/sub-noretention"
+    ps.dispatch(st, "PUT", f"/v1/{NORET_TOPIC}", {}, {}, b"{}")
+    ps.dispatch(st, "PUT", f"/v1/{NORET_SUB}", {}, {}, json.dumps({"topic": NORET_TOPIC}).encode())
+    bad_seek = ps.dispatch(st, "POST", f"/v1/{NORET_SUB}:seek", {}, {}, json.dumps({"time": cutoff}).encode())
+    _check("seek-by-time without topic retention is rejected", bad_seek.status == 400
+           and _jbody(bad_seek)["error"]["status"] == "FAILED_PRECONDITION")
+
+    # 23. AVRO/JSON schema validation on publish: a message matching the schema's shape
+    # publishes; one that doesn't is rejected rather than silently accepted.
+    SCHEMA2 = f"projects/{P}/schemas/order-v2"
+    ps.dispatch(st, "POST", f"/v1/projects/{P}/schemas", {"schemaId": "order-v2"}, {}, json.dumps({
+        "type": "AVRO",
+        "definition": json.dumps({"type": "record", "name": "Order", "fields": [{"name": "id", "type": "string"}]}),
+    }).encode())
+    T7 = f"projects/{P}/topics/schematized"
+    ps.dispatch(st, "PUT", f"/v1/{T7}", {}, {}, json.dumps({"schemaSettings": {"schema": SCHEMA2, "encoding": "JSON"}}).encode())
+    good_msg = ps.dispatch(st, "POST", f"/v1/{T7}:publish", {}, {},
+                           json.dumps({"messages": [{"data": base64.b64encode(json.dumps({"id": "o-1"}).encode()).decode()}]}).encode())
+    _check("schema-conformant message publishes", good_msg.status == 200)
+    bad_msg = ps.dispatch(st, "POST", f"/v1/{T7}:publish", {}, {},
+                          json.dumps({"messages": [{"data": base64.b64encode(json.dumps({"wrong": "field"}).encode()).decode()}]}).encode())
+    _check("schema-violating message rejected", bad_msg.status == 400 and _jbody(bad_msg)["error"]["status"] == "INVALID_ARGUMENT")
 
     print("\nGCP Pub/Sub-core conformance: ALL GREEN")
     return 0

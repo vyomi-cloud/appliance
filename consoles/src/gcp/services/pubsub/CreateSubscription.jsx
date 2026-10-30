@@ -1,6 +1,6 @@
-/* Create a subscription — one native subscriptions.create body. Push/dead-lettering/retry
- * are real (stored + returned); BigQuery/Cloud Storage delivery and the filter language
- * aren't modeled in Vyomi, so they're declared gaps rather than inert controls. */
+/* Create a subscription — one native subscriptions.create body. Push/dead-lettering/retry/
+ * ordering/filter are all real (stored + enforced where Vyomi can — see the capability
+ * badges); BigQuery/Cloud Storage delivery isn't a Vyomi product, so it's a declared gap. */
 import { useState } from "react";
 import {
   Box, Button, Checkbox, FormControl, FormControlLabel, IconButton, InputLabel, MenuItem,
@@ -11,6 +11,7 @@ import AddIcon from "@mui/icons-material/esm/Add.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
 import { ErrorAlert, NotSimulated, PageHeader, Section } from "../../kit/common.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
@@ -47,6 +48,8 @@ export default function CreateSubscription() {
 
   const [retryMode, setRetryMode] = useState("immediate");
 
+  const [filter, setFilter] = useState("");
+
   const [labels, setLabels] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -72,6 +75,7 @@ export default function CreateSubscription() {
         ...(labels.length ? { labels: Object.fromEntries(labels.filter((l) => l.key).map((l) => [l.key, l.value])) } : {}),
         ...(dlqEnabled && dlqTopic ? { deadLetterPolicy: { deadLetterTopic: dlqTopic, maxDeliveryAttempts: Number(maxAttempts) || 5 } } : {}),
         ...(retryMode === "backoff" ? { retryPolicy: { minimumBackoff: "10s", maximumBackoff: "600s" } } : {}),
+        ...(filter.trim() ? { filter: filter.trim() } : {}),
       };
       await api.createSubscription(id, body);
       notify.success(`Created subscription "${id}"`);
@@ -134,8 +138,11 @@ export default function CreateSubscription() {
           helperText="Seconds (10 - 600)" inputProps={{ min: 10, max: 600 }} sx={{ width: 220 }} />
       </Section>
 
-      <Section title="Subscription filter">
-        <NotSimulated compact feature="Subscription filter" note="Pub/Sub's filter expression language isn't implemented — every message is delivered regardless of attributes." />
+      <Section title={<Stack direction="row" spacing={1} alignItems="center"><span>Subscription filter</span><CapabilityBadge id="gcp.pubsub.subscriptions.filter" /></Stack>}>
+        <TextField label="Subscription filter" value={filter} onChange={(e) => setFilter(e.target.value)}
+          placeholder='attributes.kind = "order" AND NOT attributes.test:"true"'
+          helperText="Only messages matching this filter are delivered to the subscription. Leave blank to receive every message on the topic."
+          sx={{ maxWidth: 560 }} />
       </Section>
 
       <Section title="Exactly once delivery">

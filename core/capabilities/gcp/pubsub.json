@@ -21,12 +21,19 @@
  "gcp.pubsub.topics.config": {
   "title": "Topic labels, message retention and CMEK",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Labels and messageRetentionDuration are stored and returned exactly as configured.",
+   "Labels are stored and returned exactly as configured.",
+   "messageRetentionDuration is ENFORCED: Vyomi keeps a replayable backlog of every message published to the topic for that long, independent of any subscription, so subscriptions.seek can replay by timestamp — even from a subscription created after the message was published.",
    "kmsKeyName is stored and returned, but Vyomi does not call Cloud KMS to encrypt/decrypt message data — there is no real encryption-at-rest difference between a Google-managed key and a customer-managed one in Vyomi."
+  ],
+  "api": [
+   "topics.create",
+   "topics.patch",
+   "topics.publish",
+   "subscriptions.seek"
   ],
   "tests": [
    "tests/conformance/test_gcp_pubsub_core.py"
@@ -40,10 +47,12 @@
   },
   "limitations": [
    "schemaSettings (schema name + encoding) is stored on the topic and returned as configured.",
-   "Published messages are never validated against the schema — a payload that violates the schema still publishes successfully."
+   "A message published with JSON encoding against an AVRO schema IS validated — required fields and primitive/record/array/map/enum shapes are checked, and a violating message is rejected rather than published.",
+   "BINARY-encoded Avro and PROTOCOL_BUFFER schemas are not decoded, so messages in those encodings still publish unvalidated."
   ],
   "api": [
    "topics.create",
+   "topics.publish",
    "schemas.create",
    "schemas.get",
    "schemas.list",
@@ -134,12 +143,17 @@
  "gcp.pubsub.subscriptions.ordering-exactly-once": {
   "title": "Message ordering and exactly-once delivery flags",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "enableMessageOrdering and enableExactlyOnceDelivery are stored and returned as configured.",
-   "Vyomi does not enforce per-key ordering or deduplicate redelivered messages — a subscriber may still see messages out of order or more than once."
+   "enableMessageOrdering is ENFORCED: when set, the next message for a given orderingKey is never delivered until the earlier message with that key has been acknowledged, even if its own ack deadline has lapsed.",
+   "enableExactlyOnceDelivery is stored and returned as configured, but Vyomi does not deduplicate redelivered messages — a subscriber may still see a message more than once."
+  ],
+  "api": [
+   "subscriptions.create",
+   "subscriptions.pull",
+   "subscriptions.acknowledge"
   ],
   "tests": [
    "tests/conformance/test_gcp_pubsub_core.py"
@@ -148,11 +162,16 @@
  "gcp.pubsub.subscriptions.retry-policy": {
   "title": "Retry policy (immediate vs. exponential backoff)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "full",
+   "offline": "full"
   },
   "limitations": [
-   "retryPolicy is stored and returned as configured; Vyomi redelivers on the next pull after the ack deadline regardless of the configured backoff timing."
+   "minimumBackoff/maximumBackoff are ENFORCED: a redelivery is withheld until the exponential backoff window (capped at maximumBackoff) has elapsed, not just the ack deadline.",
+   "As with all pull-based redelivery, the backoff only takes effect on the subscriber's next pull call rather than via a background timer."
+  ],
+  "api": [
+   "subscriptions.create",
+   "subscriptions.pull"
   ],
   "tests": [
    "tests/conformance/test_gcp_pubsub_core.py"
@@ -161,11 +180,20 @@
  "gcp.pubsub.subscriptions.filter": {
   "title": "Subscription message filter",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Pub/Sub's filter expression language isn't implemented — every message is delivered to every subscription on its topic regardless of attributes."
+   "A documented subset of the filter language is evaluated at publish time: attributes.key = \"value\", attributes.key != \"value\", hasPrefix(attributes.key, \"prefix\"), attributes:\"key\" (has-attribute), NOT/AND/OR and parentheses.",
+   "The ':' substring-match form on a value (e.g. attributes.key:\"-suffix\") and any CEL-style expressions beyond this subset aren't implemented; an unparsable filter is rejected when the subscription is created, not silently ignored."
+  ],
+  "api": [
+   "subscriptions.create",
+   "topics.publish",
+   "subscriptions.pull"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
   ]
  },
  "gcp.pubsub.subscriptions.bigquery-gcs-delivery": {
