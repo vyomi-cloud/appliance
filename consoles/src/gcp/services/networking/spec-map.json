@@ -1,0 +1,19 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap (none here — gcp/networking is not on the base honest-allowlist). Unlisted spec pages count as missing.",
+  "vpc-networks": { "route": "#/networking/networks/list", "live": "live-network" },
+  "create-vpc-network": { "route": "#/networking/networks/add" },
+  "vpc-network-details": { "route": "#/networking/networks/details/uic-network", "fixtures": ["gcp-network"], "vars": { "resource-name": "uic-network" }, "live": "live-subnet" },
+  "firewall": { "route": "#/networking/firewall", "fixtures": ["gcp-network"], "live": "live-firewall" },
+  "create-firewall-rule": { "route": "#/networking/firewall/add", "fixtures": ["gcp-network"] },
+  "ip-addresses": { "route": "#/networking/addresses/list", "live": "live-address" },
+  "reserve-external-address": { "route": "#/networking/addresses/add" },
+  "routes": { "route": "#/networking/routes/list", "fixtures": ["gcp-network"], "live": "live-route" },
+  "create-route": { "route": "#/networking/routes/add", "fixtures": ["gcp-network"] },
+  "vpc-flow-logs": { "route": "#/networking/vpc-flow-logs", "fixtures": ["gcp-network"], "live": "live-subnet" },
+  "internal-ranges": { "route": "#/networking/internal-ranges" },
+  "bring-your-own-ip": { "route": "#/networking/bring-your-own-ip" },
+  "vpc-connectivity": { "route": "#/networking/vpc-connectivity" },
+  "shared-vpc": { "route": "#/networking/shared-vpc" },
+  "serverless-vpc-access": { "route": "#/networking/serverless-vpc-access" },
+  "packet-mirroring": { "route": "#/networking/packet-mirroring" }
+}

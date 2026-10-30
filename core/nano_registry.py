@@ -38,6 +38,7 @@ from core.gcp_cloudscheduler_core import CloudSchedulerStore
 from core.gcp_iamcredentials_core import IamCredentialsStore
 from core.gcp_redis_core import RedisStore
 from core.gcp_container_core import ContainerStore
+from core.gcp_compute_core import ComputeStore
 from core.azure_arm_core import AzureArm
 
 import types
@@ -88,6 +89,7 @@ def get() -> dict:
             "gcp_iam": InMemoryIamStore(),
             "gcp_sql": InMemorySqlStore(),
             "gcp_ar":  ArtifactRegistryStore(),   # Artifact Registry repositories/packages
+            "gcp_compute": ComputeStore(),   # VPC network: networks/subnets/firewalls/routes/addresses
             # ── Azure ── (blob/cosmos/keyvault secrets+keys/queue/servicebus)
             "az_blob":   AzureBlobStore(),
             "az_cosmos": CosmosStore(),
