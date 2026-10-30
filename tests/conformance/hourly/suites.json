@@ -1565,6 +1565,14 @@
       "timeout": 300
     },
     {
+      "id": "offline-ui-azure-identity",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "ui",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/azure-identity.mjs",
+      "timeout": 300
+    },
+    {
       "id": "nano-ui-azure-locks",
       "target": "nano",
       "cloud": "azure",

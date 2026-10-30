@@ -1169,6 +1169,32 @@ def _enforce_azure_quantity_cap(_srv_mod_unused, full_type: str, method: str) ->
         enforce_quantity_cap(rt)
 
 
+def _managed_identity(rec: dict, req: dict) -> dict | None:
+    """ARM managed-identity semantics: SystemAssigned keeps a stable principalId
+    and tenantId, UserAssigned entries get principalId/clientId, None removes it."""
+    import uuid
+    kind = str(req.get("type") or "None")
+    parts = {p.strip().lower() for p in kind.replace(",", " ").split() if p.strip()}
+    old = rec.get("identity") or {}
+    out: dict = {}
+    if "systemassigned" in parts:
+        out["principalId"] = old.get("principalId") or str(uuid.uuid4())
+        out["tenantId"] = old.get("tenantId") or "00000000-0000-0000-0000-000000000000"
+    uai = req.get("userAssignedIdentities")
+    if "userassigned" in parts and isinstance(uai, dict):
+        prev = old.get("userAssignedIdentities") or {}
+        out["userAssignedIdentities"] = {
+            k: (prev.get(k) or {"principalId": str(uuid.uuid4()), "clientId": str(uuid.uuid4())})
+            for k in uai}
+    elif "userassigned" in parts and old.get("userAssignedIdentities"):
+        out["userAssignedIdentities"] = old["userAssignedIdentities"]
+    if not out:
+        return None
+    sa, ua = "systemassigned" in parts, bool(out.get("userAssignedIdentities"))
+    out["type"] = "SystemAssigned, UserAssigned" if sa and ua else "UserAssigned" if ua else "SystemAssigned"
+    return out
+
+
 def _upsert(rid: str, key: str, full_type: str, name: str, catalog: dict,
             payload: dict, base: str, patch: bool = False) -> JSONResponse:
     existed = key in _state
@@ -1204,6 +1230,13 @@ def _upsert(rid: str, key: str, full_type: str, name: str, catalog: dict,
         rec["sku"] = _merge(rec.get("sku", {}), payload["sku"])
     if isinstance(payload.get("properties"), dict):
         rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
+
+    if isinstance(payload.get("identity"), dict):
+        ident = _managed_identity(rec, payload["identity"])
+        if ident:
+            rec["identity"] = ident
+        else:
+            rec.pop("identity", None)
 
     rec.setdefault("properties", {})
     rec["properties"].setdefault("provisioningState", "Succeeded")

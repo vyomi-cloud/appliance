@@ -1238,7 +1238,8 @@ function buildSubBlade(svc, full, item){
   const inner = el("div",{});
   wrap.append(inner);
   const t = (item.type||"").toLowerCase();
-  const R = SUB_RENDERERS[t];
+  // Catalog tabs typed "stub" whose key has a real renderer resolve by key (Nano does the same).
+  const R = SUB_RENDERERS[t] || (t==="stub" && item.key==="identity" ? SUB_RENDERERS.identity : null);
   if (R) { try { R(svc, full, inner, item); } catch (e) {
     inner.append(el("div",{class:"sub-stub"},"Renderer error: "+e.message)); } }
   else inner.append(stubPane(item));
@@ -2641,14 +2642,56 @@ SUB_RENDERERS.authentication = function(svc, full, host){
   sec.append(g); host.append(sec);
 };
 SUB_RENDERERS.identity = function(svc, full, host){
-  host.append(el("div",{class:"sub-info"},"Managed identities for this resource."));
-  const sec = el("div",{class:"essentials"});
-  sec.append(el("div",{class:"h"},"System assigned"));
-  const g = el("div",{class:"essentials-grid"});
-  g.append(el("div",{class:"k"},"Status"),      el("div",{class:"v"},"Off"));
-  g.append(el("div",{class:"k"},"Object ID"),   el("div",{class:"v"},"—"));
-  g.append(el("div",{class:"k"},"Tenant ID"),   el("div",{class:"v"},"—"));
-  sec.append(g); host.append(sec);
+  host.append(el("div",{class:"sub-info"},
+    "Managed identities for this resource. Changes are PATCHed to " + full.id + " and survive a reload."));
+  const wrap = el("div",{}); host.append(wrap);
+  async function load(){
+    const r = await arm("GET", full.id, undefined, svc.apiVersion);
+    return (r.ok && r.json) ? (r.json.identity || {}) : {};
+  }
+  async function save(ident, okMsg){
+    const sa = ident.system, ua = ident.users;
+    const type = sa && ua.length ? "SystemAssigned, UserAssigned" : ua.length ? "UserAssigned" : sa ? "SystemAssigned" : "None";
+    const body = {identity:{type}};
+    if (ua.length) { body.identity.userAssignedIdentities = {}; ua.forEach(u => body.identity.userAssignedIdentities[u] = {}); }
+    const r = await arm("PATCH", full.id, body, svc.apiVersion);
+    if (r.ok) { toast(okMsg); render(); } else toast("Identity update failed ("+r.status+")","err");
+  }
+  async function render(){
+    wrap.innerHTML = "";
+    const id = await load();
+    const sa = /systemassigned/i.test(id.type || "");
+    const users = Object.keys(id.userAssignedIdentities || {});
+    const sec = el("div",{class:"essentials"});
+    sec.append(el("div",{class:"h"},"System assigned"));
+    const g = el("div",{class:"essentials-grid"});
+    g.append(el("div",{class:"k"},"Status"), el("div",{class:"v"}, sa ? "On" : "Off"));
+    if (sa) g.append(el("div",{class:"k"},"Object (principal) ID"), el("div",{class:"v"}, id.principalId || ""),
+                     el("div",{class:"k"},"Tenant ID"), el("div",{class:"v"}, id.tenantId || ""));
+    sec.append(g);
+    sec.append(el("button",{class:"btn",onclick:()=>save({system:!sa, users}, sa ? "System-assigned identity removed" : "System-assigned identity enabled")}, sa ? "Turn off" : "Turn on"));
+    wrap.append(sec);
+    const usec = el("div",{class:"essentials",style:"margin-top:14px"});
+    usec.append(el("div",{class:"h"},"User assigned"));
+    if (!users.length) usec.append(emptyState("No user-assigned identities. Add one by resource ID."));
+    else {
+      const t = el("table",{class:"sub-table"});
+      t.append(el("tr",{},["Identity","Principal ID","Client ID",""].map(h=>el("th",{},h))));
+      users.forEach(u => {
+        const d = id.userAssignedIdentities[u] || {};
+        t.append(el("tr",{}, el("td",{}, u.split("/").pop()), el("td",{}, d.principalId || ""), el("td",{}, d.clientId || ""),
+          el("td",{}, el("button",{class:"vm-action danger",title:"Remove",onclick:()=>save({system:sa, users:users.filter(x=>x!==u)}, "User-assigned identity removed")}, icon("delete")))));
+      });
+      usec.append(t);
+    }
+    const inp = el("input",{class:"sub-nav-filter",placeholder:"/subscriptions/…/Microsoft.ManagedIdentity/userAssignedIdentities/name"});
+    usec.append(inp, el("button",{class:"btn",onclick:()=>{
+      const v = inp.value.trim(); if (!v) return;
+      save({system:sa, users:users.concat([v])}, "User-assigned identity added");
+    }}, "Add"));
+    wrap.append(usec);
+  }
+  render();
 };
 SUB_RENDERERS.addressspace = function(svc, full, host){
   host.append(el("div",{class:"sub-info"},"The IPv4 and IPv6 address space for this virtual network."));
