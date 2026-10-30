@@ -25,6 +25,13 @@ Every response carries `x-ms-request-id` + `x-ms-version` headers.
 An OPTIONAL leading `/{account}` path segment (Azurite style
 `/{account}/{container}/{blob}`) is tolerated — the well-known
 `/devstoreaccount1/` prefix is stripped.
+
+Per-account namespaces: a path-style request whose `Authorization: SharedKey
+{account}:{sig}` (the header every azure-storage-blob SDK sends) names the
+account in its first path segment is scoped to THAT account — its containers
+are invisible to other accounts, like separate `{account}.blob.core.windows.net`
+endpoints. Requests without a SharedKey account (or for `devstoreaccount1`)
+use the default namespace, exactly as before.
 """
 from __future__ import annotations
 
@@ -131,6 +138,23 @@ def _strip_account(p: str) -> str:
     return p
 
 
+_SHAREDKEY_RE = re.compile(r"^\s*SharedKey(?:Lite)?\s+([a-z0-9]{1,64}):", re.I)
+
+
+def _account_scope(p: str, headers: dict) -> tuple[str, str]:
+    """(account, path-without-account) when the SharedKey account names the first
+    path segment (path-style `/{account}/...`); ("", p) otherwise."""
+    m = _SHAREDKEY_RE.match(headers.get("authorization", "") or "")
+    acct = m.group(1) if m else ""
+    if not acct or acct == "devstoreaccount1":
+        return "", p
+    if p == "/" + acct:
+        return acct, "/"
+    if p.startswith("/" + acct + "/"):
+        return acct, p[len(acct) + 1:]
+    return "", p
+
+
 # ── dispatch ────────────────────────────────────────────────────────────────
 def dispatch(store: AzureBlobStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
@@ -141,6 +165,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
 
     p = path.split("?", 1)[0]
     p = _strip_account(p)
+    acct, p = _account_scope(p, headers)
     p = p.rstrip("/") if p != "/" else p
     segs = [unquote(s) for s in p.split("/") if s != ""]
 
@@ -150,10 +175,13 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
     # ---- account-level: list containers  GET /?comp=list ----
     if not segs:
         if method == "GET" and comp == "list":
-            return _list_containers(store)
+            return _list_containers(store, acct)
         return _err(400, "InvalidUri", f"Unsupported account operation {method}")
 
-    container = segs[0]
+    display = segs[0]
+    # Container names never contain "/", so "{account}/{container}" keys cannot
+    # collide with default-namespace containers.
+    container = f"{acct}/{display}" if acct else display
 
     # ---- container-level: /{container} ----
     if len(segs) == 1:
@@ -178,7 +206,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                 if not store.container_exists(container):
                     return _err(404, "ContainerNotFound",
                                 "The specified container does not exist.")
-                return _list_blobs(store, container, query)
+                return _list_blobs(store, container, query, display)
             if method in ("GET", "HEAD"):             # get container props
                 if not store.container_exists(container):
                     return _err(404, "ContainerNotFound",
@@ -275,11 +303,19 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
 
 
 # ── XML builders ────────────────────────────────────────────────────────────
-def _list_containers(store: AzureBlobStore) -> Response:
+def _list_containers(store: AzureBlobStore, acct: str = "") -> Response:
     parts = ['<?xml version="1.0" encoding="utf-8"?>',
              '<EnumerationResults><Containers>']
-    for name in sorted(store.containers):
-        meta = store.containers[name]
+    for key in sorted(store.containers):
+        if acct:
+            if not key.startswith(acct + "/"):
+                continue
+            name = key[len(acct) + 1:]
+        elif "/" in key:
+            continue                      # another account's container
+        else:
+            name = key
+        meta = store.containers[key]
         parts.append(
             "<Container>"
             f"<Name>{escape(name)}</Name>"
@@ -295,11 +331,11 @@ def _list_containers(store: AzureBlobStore) -> Response:
     return _xml(200, "".join(parts))
 
 
-def _list_blobs(store: AzureBlobStore, container: str, query: dict) -> Response:
+def _list_blobs(store: AzureBlobStore, container: str, query: dict, display: str | None = None) -> Response:
     prefix = query.get("prefix", "") or ""
     blobs = store.container_blobs(container)
     parts = ['<?xml version="1.0" encoding="utf-8"?>',
-             f'<EnumerationResults ContainerName="{escape(container)}"><Blobs>']
+             f'<EnumerationResults ContainerName="{escape(display or container)}"><Blobs>']
     for name in sorted(blobs):
         if not name.startswith(prefix):
             continue

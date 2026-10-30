@@ -1,0 +1,17 @@
+{
+  "_doc": "ui-spec page id → v4 route (same contract as consoles/src/aws/services/*/spec-map.json). ui-spec/azure/storage.json has not been extracted yet (the live captures had no subscription, so create/blade pages were not crawlable); page ids below are the expected ones and must be reconciled when the spec lands. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap.",
+  "storage-accounts": { "route": "#/storage", "fixtures": ["az-storage-account"] },
+  "create-storage-account": { "route": "#/storage/create" },
+  "storage-account-overview": { "route": "#/storage/uic-rg/uicstorage", "fixtures": ["az-storage-account"], "vars": { "resource-name": "uicstorage" } },
+  "storage-account-containers": { "route": "#/storage/uic-rg/uicstorage/containers", "fixtures": ["az-storage-account"] },
+  "storage-account-access-keys": { "route": "#/storage/uic-rg/uicstorage/accesskeys", "fixtures": ["az-storage-account"] },
+  "storage-account-configuration": { "route": "#/storage/uic-rg/uicstorage/configuration", "fixtures": ["az-storage-account"] },
+  "storage-account-endpoints": { "route": "#/storage/uic-rg/uicstorage/endpoints", "fixtures": ["az-storage-account"] },
+  "storage-account-tags": { "route": "#/storage/uic-rg/uicstorage/tags", "fixtures": ["az-storage-account"] },
+  "storage-account-data-protection": { "route": "#/storage/uic-rg/uicstorage/dataprotection", "honest_page": true },
+  "storage-account-activity-log": { "route": "#/storage/uic-rg/uicstorage/activitylog", "honest_page": true },
+  "storage-account-iam": { "route": "#/storage/uic-rg/uicstorage/iam", "honest_page": true },
+  "storage-account-file-shares": { "route": "#/storage/uic-rg/uicstorage/fileshares", "honest_page": true },
+  "storage-account-queues": { "route": "#/storage/uic-rg/uicstorage/queues", "honest_page": true },
+  "storage-account-tables": { "route": "#/storage/uic-rg/uicstorage/tables", "honest_page": true }
+}

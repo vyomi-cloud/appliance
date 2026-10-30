@@ -11,6 +11,7 @@ conformance suite; final verification still runs on the real offline appliance +
 from __future__ import annotations
 
 import argparse
+import json
 import mimetypes
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,9 +21,15 @@ from urllib.parse import parse_qsl, urlsplit
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from core.aws_wire_router import AwsWireRouter  # noqa: E402
+from core.azure_arm_core import AzureArm  # noqa: E402
 
 STATIC = ROOT / "static"
 ROUTER = AwsWireRouter()
+# Azure ARM (/subscriptions/*) is not in AwsWireRouter. Nano sends /_wire/subscriptions/* to
+# the same substrate-free AzureArm core (wasm/sw.js handleWire → the azure/_arm tuple) and the
+# appliance serves it with providers/azure_services.handle_arm (which AzureArm ports), so the
+# dev server does the same — the Azure lens's control plane, in-memory like the rest.
+ARM = AzureArm()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -32,6 +39,9 @@ class Handler(BaseHTTPRequestHandler):
         u = urlsplit(self.path)
         n = int(self.headers.get("content-length") or 0)
         body = self.rfile.read(n) if n else b""
+        rest = u.path[len("/_wire"):] or "/"
+        if rest.startswith("/subscriptions/") or rest.startswith("/api/azure/operations/"):
+            return self._arm(rest, dict(parse_qsl(u.query, keep_blank_values=True)), body)
         try:
             out = ROUTER.handle(self.command, u.path[len("/_wire"):] or "/", dict(parse_qsl(u.query, keep_blank_values=True)),
                                 {k.lower(): v for k, v in self.headers.items()}, body)
@@ -44,6 +54,25 @@ class Handler(BaseHTTPRequestHandler):
         for k, v in (out.get("headers") or {}).items():
             if k.lower() not in ("content-length", "transfer-encoding", "connection"):
                 self.send_header(k, v)
+        self.send_header("content-length", str(len(data)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(data)
+
+    def _arm(self, path, query, body):
+        try:
+            payload = json.loads(body) if body.strip() else None
+        except ValueError:
+            payload = None
+        try:
+            out = ARM.handle(self.command, path, query, payload)
+        except Exception as e:
+            out = {"status": 500, "headers": {}, "body": {"error": {"code": "InternalServerError", "message": repr(e)}}}
+        data = b"" if out.get("body") is None else json.dumps(out["body"]).encode()
+        self.send_response(int(out.get("status", 200)))
+        for k, v in (out.get("headers") or {}).items():
+            self.send_header(k, v)
+        self.send_header("content-type", "application/json; charset=utf-8")
         self.send_header("content-length", str(len(data)))
         self.end_headers()
         if self.command != "HEAD":

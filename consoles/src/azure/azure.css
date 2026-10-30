@@ -1,0 +1,135 @@
+/* Azure lens layout. Colours come from the Fluent UI v9 theme tokens (CSS variables that
+ * FluentProvider injects), so light and dark both follow the theme. */
+html, body, #root { margin: 0; height: 100%; }
+body { font-family: "Segoe UI", "Segoe UI Web (West European)", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif; }
+.vy-app { height: 100vh; display: flex; flex-direction: column; background: var(--colorNeutralBackground1); color: var(--colorNeutralForeground1); }
+
+/* ── top bar ─────────────────────────────────────────────────────────────── */
+.vy-top { position: sticky; top: 0; z-index: 100; height: 40px; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 4px;
+  background: var(--vy-top-bg); color: #fff; }
+.vy-top .vy-top-btn { color: #fff; min-width: 40px; height: 40px; border-radius: 0; }
+.vy-top .vy-top-btn:hover { background: rgba(255, 255, 255, .14); color: #fff; }
+.vy-brand { color: #fff; font-weight: 600; font-size: 15px; text-decoration: none; padding: 0 12px; white-space: nowrap; }
+.vy-search { flex: 1; display: flex; justify-content: center; position: relative; }
+.vy-search .fui-SearchBox { width: min(420px, 100%); }
+.vy-search-results { position: absolute; top: 36px; width: min(560px, 100%); background: var(--colorNeutralBackground1); color: var(--colorNeutralForeground1);
+  box-shadow: var(--shadow16); border-radius: 4px; padding: 8px 0; z-index: 200; }
+.vy-search-results h4 { margin: 6px 16px; font-size: 12px; color: var(--colorNeutralForeground3); font-weight: 600; }
+.vy-search-results a { display: block; padding: 6px 16px; color: inherit; text-decoration: none; }
+.vy-search-results a:hover, .vy-search-results a:focus { background: var(--colorNeutralBackground1Hover); }
+.vy-copilot { background: #fff !important; color: #242424 !important; height: 28px; margin: 0 6px; }
+.vy-account { display: flex; align-items: center; gap: 8px; padding: 0 6px; height: 40px; cursor: pointer; color: #fff; background: none; border: 0; font: inherit; }
+.vy-account:hover { background: rgba(255, 255, 255, .14); }
+.vy-account .vy-acct-text { text-align: right; line-height: 1.15; }
+.vy-account .vy-acct-text b { font-weight: 400; font-size: 13px; display: block; }
+.vy-account .vy-acct-text small { font-size: 10px; text-transform: uppercase; letter-spacing: .02em; opacity: .95; }
+
+/* ── portal menu flyout ──────────────────────────────────────────────────── */
+.vy-portal-menu { position: fixed; top: 40px; left: 0; bottom: 0; width: 280px; z-index: 150; background: var(--colorNeutralBackground1);
+  box-shadow: var(--shadow28); padding: 8px 0; overflow: auto; }
+.vy-portal-menu a { display: flex; align-items: center; gap: 12px; padding: 8px 16px; color: var(--colorNeutralForeground1); text-decoration: none; font-size: 14px; }
+.vy-portal-menu a:hover { background: var(--colorNeutralBackground1Hover); }
+.vy-portal-menu hr { border: 0; border-top: 1px solid var(--colorNeutralStroke2); margin: 6px 0; }
+.vy-portal-menu .vy-pm-head { font-size: 12px; font-weight: 600; color: var(--colorNeutralForeground3); padding: 8px 16px 4px; }
+.vy-scrim { position: fixed; inset: 40px 0 0 0; z-index: 140; background: transparent; }
+
+/* ── page chrome ─────────────────────────────────────────────────────────── */
+.vy-main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: auto; }
+.vy-crumbs { padding: 12px 20px 0; font-size: 13px; }
+.vy-crumbs a { color: var(--colorNeutralForeground1); text-decoration: none; }
+.vy-crumbs a:hover { text-decoration: underline; color: var(--colorBrandForegroundLink); }
+.vy-crumbs .sep { margin: 0 6px; color: var(--colorNeutralForeground3); }
+.vy-page { padding: 8px 20px 24px; }
+.vy-title-row { display: flex; align-items: flex-start; gap: 10px; padding: 4px 20px 0; }
+.vy-title-row h1 { margin: 0; font-size: 24px; font-weight: 600; line-height: 32px; }
+.vy-title-row .vy-subtitle { font-size: 12px; color: var(--colorNeutralForeground3); }
+.vy-title-row .vy-close { margin-left: auto; }
+.vy-glyph { width: 32px; height: 32px; border-radius: 4px; flex: none; display: inline-grid; place-items: center; font-weight: 700; font-size: 13px;
+  color: #fff; background: var(--vy-glyph, #4f6bed); margin-top: 2px; }
+
+/* ── home ────────────────────────────────────────────────────────────────── */
+.vy-home { max-width: 1100px; margin: 0 auto; padding: 28px 24px 40px; width: 100%; box-sizing: border-box; }
+.vy-home h2 { font-size: 20px; font-weight: 600; margin: 28px 0 16px; }
+.vy-tiles { display: flex; flex-wrap: wrap; gap: 0; }
+.vy-tile { width: 104px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 4px; text-align: center; font-size: 13px;
+  color: var(--colorNeutralForeground1); text-decoration: none; border-radius: 4px; }
+.vy-tile:hover { background: var(--colorNeutralBackground1Hover); }
+.vy-tile.vy-link { color: var(--colorBrandForegroundLink); }
+.vy-banner { border: 1px solid var(--colorNeutralStroke2); border-radius: 4px; padding: 16px 20px; display: flex; gap: 16px; align-items: center; }
+
+/* ── browse grid ─────────────────────────────────────────────────────────── */
+.vy-cmdbar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 4px 0; border-bottom: 1px solid var(--colorNeutralStroke2); margin-bottom: 12px; }
+.vy-cmdbar .sep { width: 1px; height: 20px; background: var(--colorNeutralStroke2); margin: 0 6px; }
+.vy-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.vy-pill { border-radius: 12px !important; min-height: 24px; font-size: 12px !important; background: var(--colorNeutralBackground3) !important; }
+.vy-pill b { font-weight: 600; margin-left: 4px; }
+.vy-count { font-size: 12px; color: var(--colorNeutralForeground2); margin: 6px 0; }
+.vy-grid { width: 100%; }
+.vy-grid th { font-weight: 600; }
+.vy-empty { text-align: center; padding: 48px 16px; color: var(--colorNeutralForeground2); }
+.vy-empty h3 { color: var(--colorNeutralForeground1); font-size: 18px; margin: 0 0 6px; }
+
+/* ── resource blade ──────────────────────────────────────────────────────── */
+.vy-blade { display: flex; flex: 1; min-height: 0; border-top: 1px solid transparent; }
+.vy-rmenu { width: 240px; flex: none; border-right: 1px solid var(--colorNeutralStroke2); padding: 8px 0; overflow: auto; }
+.vy-rmenu .fui-SearchBox { margin: 0 8px 8px; width: calc(100% - 16px); }
+.vy-rmenu a { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 16px; font-size: 13px; color: var(--colorNeutralForeground1); text-decoration: none; border-left: 3px solid transparent; }
+.vy-rmenu a:hover { background: var(--colorNeutralBackground1Hover); }
+.vy-rmenu a.active { background: var(--colorNeutralBackground1Selected); border-left-color: var(--colorBrandStroke1); font-weight: 600; }
+.vy-rmenu .vy-group { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; background: none; border: 0; width: 100%; color: inherit; font: inherit; text-align: left; }
+.vy-rmenu .vy-group:hover { background: var(--colorNeutralBackground1Hover); }
+.vy-rmenu .vy-sub a { padding-left: 36px; }
+.vy-bcontent { flex: 1; min-width: 0; padding: 0 20px 24px; overflow: auto; }
+.vy-panel-title { font-size: 16px; font-weight: 600; margin: 16px 0 8px; }
+
+/* Essentials */
+.vy-essentials { border-bottom: 1px solid var(--colorNeutralStroke2); padding: 8px 0 12px; margin-bottom: 12px; }
+.vy-essentials-head { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; cursor: pointer; background: none; border: 0; color: inherit; padding: 4px 0; font-family: inherit; }
+.vy-essentials-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 48px; }
+.vy-kv { display: grid; grid-template-columns: minmax(140px, 38%) 1fr; font-size: 13px; padding: 3px 0; }
+.vy-kv > span:first-child { color: var(--colorNeutralForeground2); }
+.vy-kv > span:first-child::after { content: ""; }
+.vy-kv > span:last-child::before { content: ":"; margin-right: 8px; color: var(--colorNeutralForeground2); }
+.vy-section { margin: 16px 0; }
+.vy-section h3 { font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+.vy-props { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 8px 48px; }
+
+/* Not simulated */
+.vy-ns { border: 1px dashed var(--colorNeutralStroke1); border-radius: 4px; padding: 16px; color: var(--colorNeutralForeground2); background: var(--colorNeutralBackground2); }
+.vy-ns-container { margin: 12px 0; }
+.vy-ns-container h3 { font-size: 14px; font-weight: 600; margin: 0 0 8px; color: var(--colorNeutralForeground1); }
+.vy-ns-badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 10px; background: var(--colorNeutralBackground5); color: var(--colorNeutralForeground1); margin-bottom: 6px; }
+
+/* ── create wizard ───────────────────────────────────────────────────────── */
+.vy-wizard { display: flex; flex-direction: column; flex: 1 0 auto; }
+.vy-wizard-body { flex: 1; padding: 0 20px 96px; max-width: 900px; }
+.vy-wizard-body .fui-TabList { margin: 8px 0 16px; border-bottom: 1px solid var(--colorNeutralStroke2); }
+.vy-wizard-foot { position: sticky; bottom: 0; display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--colorNeutralStroke2); background: var(--colorNeutralBackground1); z-index: 5; }
+.vy-form-section { margin: 20px 0 8px; }
+.vy-form-section h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+.vy-form-section p { font-size: 13px; color: var(--colorNeutralForeground2); margin: 0 0 12px; }
+.vy-form-row { display: grid; grid-template-columns: 260px minmax(0, 420px); align-items: start; gap: 12px; margin: 10px 0; font-size: 13px; }
+.vy-form-row > label, .vy-form-row > .vy-label { padding-top: 6px; }
+.vy-form-row .req::after { content: " *"; color: var(--colorPaletteRedForeground1); }
+.vy-review dl { display: grid; grid-template-columns: 260px 1fr; gap: 6px 12px; font-size: 13px; margin: 0 0 16px; }
+.vy-review dt { color: var(--colorNeutralForeground2); }
+.vy-review dd { margin: 0; }
+.vy-review h3 { font-size: 15px; font-weight: 600; margin: 18px 0 8px; }
+
+/* toasts */
+.vy-toasts { position: fixed; top: 48px; right: 12px; z-index: 300; display: flex; flex-direction: column; gap: 8px; width: 360px; }
+.vy-drawer { position: fixed; top: 40px; right: 0; bottom: 0; width: 360px; z-index: 160; background: var(--colorNeutralBackground1); box-shadow: var(--shadow28); padding: 12px 16px; overflow: auto; }
+.vy-drawer h2 { font-size: 18px; margin: 4px 0 12px; display: flex; align-items: center; }
+
+.vy-mono { font-family: Consolas, "Courier New", monospace; font-size: 12px; }
+.vy-muted { color: var(--colorNeutralForeground3); }
+
+@media (max-width: 720px) {
+  .vy-rmenu { display: none; }
+  .vy-essentials-grid { grid-template-columns: 1fr; }
+  .vy-form-row { grid-template-columns: 1fr; }
+  .vy-account .vy-acct-text, .vy-copilot { display: none; }
+}
+.vy-form-row .fui-Input, .vy-form-row .fui-Select { width: 100%; }
+.vy-pill-static { display: inline-flex; align-items: center; padding: 2px 10px; border: 1px solid var(--colorNeutralStroke2); font-size: 12px; }
+.vy-rmenu .vy-rmenu-search { position: sticky; top: -8px; z-index: 1; background: var(--colorNeutralBackground1); padding-top: 8px; margin-top: -8px; }

@@ -159,6 +159,11 @@ def _azure_service(path, lheaders, query):
         if len(segs) >= 2:          # /{container}/{blob}
             return "az-blob"
         if len(segs) == 1:          # /{queue} create/delete/metadata (blob container ops carry restype)
+            # …unless it is a path-style account root `/{account}?comp=list` whose
+            # SharedKey authorization names that account (list containers).
+            m = re.match(r"^\s*SharedKey(?:Lite)?\s+([^:\s]+):", lheaders.get("authorization", "") or "", re.I)
+            if m and m.group(1) == segs[0] and query.get("comp") == "list":
+                return "az-blob"
             return "az-queue"
         return "az-blob"            # root ?comp=list → default to containers
     return None
