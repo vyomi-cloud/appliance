@@ -1,0 +1,17 @@
+{
+ "cloud": "azure",
+ "service": "monitor",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Every page in ui-spec/azure/monitor.json (38 pages; nav: Overview, Activity log, Alerts, Metrics, Observability agents (preview), Issues, Logs, Health models, Change Analysis, Service health, Workbooks, Dashboards with Grafana, Insights, Managed Services)",
+  "Backend: core azure monitor (test_azure_monitor_core.py, test_azure_operationalinsights_core.py): metrics, activity log, alerts, Log Analytics query if modeled",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/azure/monitor.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
+  "Capability feature ids MUST start with 'azure.' (e.g. 'azure.monitor.<section>') — ids share one namespace with the AWS registry",
+  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
+ ],
+ "attempt": 1
+}

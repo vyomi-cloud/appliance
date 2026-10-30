@@ -1,0 +1,17 @@
+{
+ "cloud": "azure",
+ "service": "sql",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Every page in ui-spec/azure/sql.json (44 pages; nav: Overview, Activity log, Tags, Diagnose and solve problems, Getting started, Query editor (preview), Mirror database in Fabric, Settings, Data management, Integrations, Power Platform, Security, Intelligent Performance, Monitoring)",
+  "Backend: ARM Microsoft.Sql servers/databases + core (test_azure_sql_core.py): servers, databases, firewall rules, query editor if a real engine is available",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/azure/sql.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
+  "Capability feature ids MUST start with 'azure.' (e.g. 'azure.sql.<section>') — ids share one namespace with the AWS registry",
+  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
+ ],
+ "attempt": 1
+}

@@ -1,0 +1,17 @@
+{
+ "cloud": "azure",
+ "service": "vnets",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Every page in ui-spec/azure/vnets.json (32 pages; nav: Overview, Activity log, Access control (IAM), Tags, Diagnose and solve problems, Resource visualizer, Settings, Monitoring, Automation, Help)",
+  "Backend: ARM Microsoft.Network virtualNetworks (test_azure_subresource_core.py, test_azure_arm_core.py): vnets, subnets, peerings",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/azure/vnets.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
+  "Capability feature ids MUST start with 'azure.' (e.g. 'azure.vnets.<section>') — ids share one namespace with the AWS registry",
+  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
+ ],
+ "attempt": 1
+}

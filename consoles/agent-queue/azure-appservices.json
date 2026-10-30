@@ -1,0 +1,17 @@
+{
+ "cloud": "azure",
+ "service": "appservices",
+ "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "must_build": [
+  "Every page in ui-spec/azure/appservices.json (50 pages; nav: Overview, Activity log, Access control (IAM), Tags, Diagnose and solve problems, Microsoft Defender for Cloud, Events (preview), Resource visualizer, Deployment, Settings, App Service plan, Development Tools, API, Monitoring)",
+  "Backend: ARM Microsoft.Web sites + core (test_azure_app_core.py): web apps, plans, configuration, deployment slots as modeled",
+  "List / create / detail / edit / delete round-trips through the native API the SDK and CLI use"
+ ],
+ "always": [
+  "Every page wired to the native API on /_wire (no static data); liveness fixtures for every list/detail page",
+  "core/capabilities/azure/appservices.json: one entry per console section with an honest level + tests; tests/conformance/test_capabilities.py must pass",
+  "Capability feature ids MUST start with 'azure.' (e.g. 'azure.appservices.<section>') — ids share one namespace with the AWS registry",
+  "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
+ ],
+ "attempt": 1
+}
