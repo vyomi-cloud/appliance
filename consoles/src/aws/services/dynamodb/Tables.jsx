@@ -15,6 +15,7 @@ export const keyOf = (t, type) => t.KeySchema?.find((k) => k.KeyType === type)?.
 export const attrType = (t, name) => ({ S: "String", N: "Number", B: "Binary" }[t.AttributeDefinitions?.find((a) => a.AttributeName === name)?.AttributeType] || "");
 export const statusOf = (s) => <StatusIndicator type={s === "ACTIVE" ? "success" : s === "DELETING" ? "loading" : "in-progress"}>{s ? s[0] + s.slice(1).toLowerCase() : "-"}</StatusIndicator>;
 export const capacity = (t) => t.BillingModeSummary?.BillingMode === "PAY_PER_REQUEST" ? "On-demand" : "Provisioned";
+export const tableClass = (t) => t.TableClassSummary?.TableClass === "STANDARD_INFREQUENT_ACCESS" ? "DynamoDB Standard-IA" : "DynamoDB Standard";
 
 export default function Tables() {
   const notify = useNotify();
@@ -47,6 +48,7 @@ export default function Tables() {
           { id: "readcap", header: "Read capacity mode", cell: (t) => capacity(t) },
           { id: "writecap", header: "Write capacity mode", cell: (t) => capacity(t) },
           { id: "size", header: "Total size", cell: (t) => `${t.TableSizeBytes ?? 0} bytes` },
+          { id: "class", header: "Table class", cell: (t) => tableClass(t) },
         ]}
         actions={
           <SpaceBetween direction="horizontal" size="xs">

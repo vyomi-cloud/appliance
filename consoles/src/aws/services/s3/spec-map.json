@@ -38,8 +38,7 @@
     "honest_page": true
   },
   "access-points": {
-    "route": "#/s3/access-points",
-    "honest_page": true
+    "route": "#/s3/access-points"
   },
   "access-points-for-fsx": {
     "route": "#/s3/access-points-fsx",
@@ -62,8 +61,7 @@
     "honest_page": true
   },
   "account-and-organization-settings": {
-    "route": "#/s3/settings",
-    "honest_page": true
+    "route": "#/s3/settings"
   },
   "create-table-bucket": {
     "route": "#/s3/table-buckets",

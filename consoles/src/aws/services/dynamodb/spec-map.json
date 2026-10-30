@@ -1,5 +1,38 @@
 {
   "_doc": "ui-spec page id \u2192 v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "dashboard": {
+    "route": "#/dynamodb/dashboard"
+  },
+  "partiql-editor": {
+    "route": "#/dynamodb/partiql"
+  },
+  "backups": {
+    "route": "#/dynamodb/backups"
+  },
+  "create-backup": {
+    "route": "#/dynamodb/backups"
+  },
+  "exports-to-s3": {
+    "route": "#/dynamodb/exports"
+  },
+  "export-to-s3": {
+    "route": "#/dynamodb/exports"
+  },
+  "imports-from-s3": {
+    "route": "#/dynamodb/imports"
+  },
+  "import-from-s3": {
+    "route": "#/dynamodb/imports"
+  },
+  "settings": {
+    "route": "#/dynamodb/settings"
+  },
+  "edit-layout-settings": {
+    "route": "#/dynamodb/settings"
+  },
+  "edit-explore-items-settings": {
+    "route": "#/dynamodb/settings"
+  },
   "tables": {
     "route": "#/dynamodb/tables",
     "fixtures": [
@@ -18,7 +51,8 @@
   "create-table": {
     "route": "#/dynamodb/create-table",
     "expand": [
-      "text=Customize settings"
+      "text=Customize settings",
+      "text=Provisioned"
     ]
   },
   "explore-items": {

@@ -71,18 +71,27 @@ function elements(page) {
   return els.filter((e) => { const k = e.kind + "|" + norm(e.text); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
-/** Everything a user can read on the page right now, plus honest-gap text. */
+/** Everything a user can read on the page right now — split into text OUTSIDE any
+ *  "Not simulated" panel (real UI) and text inside those panels (declared gaps). */
 async function snapshot(page) {
   return page.evaluate(() => {
     const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-    const text = document.body.innerText;
-    const attrs = [...document.querySelectorAll("[placeholder],[aria-label]")].filter(vis)
+    const gapBoxes = [...document.querySelectorAll("[data-vyomi-not-simulated]")].map((e) => e.closest("[class*=container]") || e.parentElement || e);
+    const inGap = (el) => gapBoxes.some((g) => g.contains(el));
+    // Real text: walk visible text nodes that are not inside a gap panel.
+    const parts = [];
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n; (n = w.nextNode());) {
+      const el = n.parentElement;
+      if (!el || inGap(el) || !n.nodeValue.trim()) continue;
+      const cs = getComputedStyle(el);
+      if (cs.display === "none" || cs.visibility === "hidden") continue;
+      parts.push(n.nodeValue);
+    }
+    const attrs = [...document.querySelectorAll("[placeholder],[aria-label]")].filter((e) => vis(e) && !inGap(e))
       .map((e) => (e.getAttribute("placeholder") || "") + " " + (e.getAttribute("aria-label") || ""));
-    const honest = [...document.querySelectorAll("[data-vyomi-not-simulated]")].map((e) => {
-      const box = e.closest("[class*=container]") || e.parentElement;
-      return (box?.innerText || "") + " " + e.getAttribute("data-vyomi-not-simulated");
-    });
-    return { text, attrs: attrs.join("\n"), honest: honest.join("\n") };
+    const honest = gapBoxes.map((g) => (g.innerText || "") + " " + (g.querySelector("[data-vyomi-not-simulated]")?.getAttribute("data-vyomi-not-simulated") || ""));
+    return { text: parts.join("\n"), attrs: attrs.join("\n"), honest: honest.join("\n") };
   });
 }
 
@@ -118,8 +127,10 @@ async function checkService(browser, svc) {
     for (const e of els) {
       const t = norm(e.text);
       const label = `${e.kind}: ${e.text}`;
-      if (honest.includes(t)) rec.honest.push(label);
-      else if (all.includes(t)) rec.present.push(label);
+      // Real UI wins: an element shown outside every gap panel is present even if a gap
+      // panel elsewhere happens to mention the same words.
+      if (all.includes(t)) rec.present.push(label);
+      else if (honest.includes(t)) rec.honest.push(label);
       else if (m.honest_page) rec.honest.push(label);
       else rec.missing.push(label);
     }
