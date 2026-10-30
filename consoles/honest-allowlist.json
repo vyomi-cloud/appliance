@@ -93,6 +93,9 @@
       "monitor-dashboards-with-grafana",
       "monitor-managed-prometheus",
       "monitor-diagnostic-settings"
+    ],
+    "entra": [
+      "entra-sign-in-logs"
     ]
   }
 }
