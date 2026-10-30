@@ -45,6 +45,7 @@ STORE_ATTRS = [
     "gcp_rm", "gcp_pam",  # IAM & Admin: Resource Manager + Privileged Access Manager
     "gcp_compute_vm",  # Compute Engine VMs/disks/images/templates (core/gcp_compute_instances_core.ComputeStore)
     "gcp_compute",  # VPC network: networks/subnets/firewalls/routes/addresses (core/gcp_compute_core.ComputeStore)
+    "gcp_run",    # Cloud Run (core/gcp_run_core.RunStore) — backs /functions
     "resources",  # generic catalog CRUD (EC2, Lambda-adjacent, every GCP service; wasm/backends/store.ResourceStore)
     "compute",  # Lambda functions + API Gateway APIs + VPC model (core/nano_registry.ComputeStore)
     "sfn",      # Step Functions (core/stepfunctions_core.StepFunctionsStore)

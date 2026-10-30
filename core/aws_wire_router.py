@@ -69,11 +69,19 @@ from core import gcp_compute_core as gcp_compute
 from core import gcp_compute_instances_core as gcp_compute_vm
 from core import gcp_resourcemanager_core as gcp_rm
 from core import gcp_pam_core as gcp_pam
+from core import gcp_run_core as gcp_run
 
 
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
     client is pointed at the relay and the path is the service discriminator)."""
+    if re.match(r"^/v2/projects/[^/]+/locations/[^/]+/(services|jobs|workerPools|operations)([/:]|$)", path) \
+            or path.lstrip("/").startswith(("apis/serving.knative.dev/", "apis/domains.cloudrun.com/")):
+        # Cloud Run Admin API v2 (+ its Knative v1 facades for `gcloud run` and
+        # `gcloud run domain-mappings`) — gated on its specific kinds (services/jobs/
+        # workerPools/operations) because Cloud Logging also lives under /v2/projects/,
+        # and Cloud Scheduler's /v1/.../locations/.../jobs shares the shape one version down.
+        return "gcp-run"
     if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1")):
         return "gcp-gcs"
     if path.startswith("/v2/entries"):   # Cloud Logging: entries:write / entries:list
@@ -327,6 +335,7 @@ class AwsWireRouter:
         self.gcp_compute_vm = s.get("gcp_compute_vm") or gcp_compute_vm.ComputeStore()   # Compute Engine VMs, disks, images, templates
         self.gcp_rm = s.get("gcp_rm") or gcp_rm.ResourceManagerStore()   # Resource Manager (project, tags, contacts, org policies)
         self.gcp_pam = s.get("gcp_pam") or gcp_pam.PamStore()   # Privileged Access Manager entitlements
+        self.gcp_run = s.get("gcp_run") or gcp_run.RunStore()   # Cloud Run (backs /functions, which the real console folds into it)
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -567,6 +576,7 @@ class AwsWireRouter:
                 "gcp-compute-vm": (gcp_compute_vm, self.gcp_compute_vm),
                 "gcp-resourcemanager": (gcp_rm, self.gcp_rm),
                 "gcp-pam": (gcp_pam, self.gcp_pam),
+                "gcp-run": (gcp_run, self.gcp_run),
             }[svc]
             mod, store = _gcp_core
             if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store
