@@ -35,6 +35,8 @@ const wire = (path, init = {}) => page.evaluate(async ([u, i]) => {
 }, [WIRE + path, init]);
 const arm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2023-05-01`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+const armWeb = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2023-12-01`,
+  { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const blobHdr = (acct) => ({ "x-ms-version": "2021-12-02", authorization: `SharedKey ${acct}:c21va2U=` });
 const blob = (method, acct, path, { query = "", headers = {}, body } = {}) => wire(`/${acct}${path}${query}`, { method, headers: { ...blobHdr(acct), ...headers }, body });
 
@@ -182,6 +184,63 @@ try {
   await page.getByText(CR, { exact: true }).first().waitFor({ timeout: 10000 });
   check("wire-created resource shown in Advisor recommendations", true);
   await shot("20-advisor-recommendations");
+  // ── Function App created through the wizard → visible over native ARM ─────────────────
+  const FA = `vysmokefn${n}`;
+  const FARG = "cloudlearn-rg";                   // the Function App wizard's default resource group
+  await page.goto(UI + "#/functionapp/create");
+  await page.getByRole("button", { name: "Select" }).click();
+  await page.waitForURL(/#\/functionapp\/create\/flex/);
+  await page.getByLabel("Function App name").fill(FA);
+  await shot("18-functionapp-basics");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: FA, exact: true }).waitFor({ timeout: 10000 });
+  const fa = await armWeb("GET", `/resourceGroups/${FARG}/providers/Microsoft.Web/sites/${FA}`);
+  check("UI create function app → visible over native ARM", fa.status === 200, `HTTP ${fa.status}`);
+  await shot("19-functionapp-overview");
+
+  // ── Function created in the UI → invoked for real, read back over native ARM ──────────
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.waitForURL(/\/functions\/create/);
+  await page.getByRole("tab", { name: "Template details" }).click();
+  await page.getByLabel("Function name").fill("httptrigger");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: "httptrigger", exact: true }).waitFor({ timeout: 10000 });
+  const fn = await armWeb("GET", `/resourceGroups/${FARG}/providers/Microsoft.Web/sites/${FA}/functions/httptrigger`);
+  check("UI create function → visible over native ARM", fn.status === 200, `HTTP ${fn.status}`);
+  await page.getByLabel("Body").fill('{"n": 2}');
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await page.getByText('"ok": true').waitFor({ timeout: 10000 });
+  check("Test/Run executes the real sandboxed function", await page.getByText("hello from Azure Functions").first().isVisible());
+  await shot("20-function-test-run");
+
+  // ── Environment variables: UI write → native ARM config/appsettings ───────────────────
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}/environment-variables`);
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill("SMOKE_SETTING");
+  await page.getByLabel("Value", { exact: true }).fill("1");
+  await page.getByRole("button", { name: "OK" }).click();
+  await page.getByRole("cell", { name: "SMOKE_SETTING" }).waitFor({ timeout: 10000 });
+  const settings = JSON.parse((await armWeb("POST", `/resourceGroups/${FARG}/providers/Microsoft.Web/sites/${FA}/config/appsettings/list`)).text);
+  check("UI add app setting → native ARM config/appsettings", settings.properties?.SMOKE_SETTING === "1", JSON.stringify(settings.properties));
+  await shot("21-environment-variables");
+
+  // ── App keys panel shows the real host master/default keys ────────────────────────────
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}/app-keys`);
+  await page.getByRole("cell", { name: "default" }).first().waitFor({ timeout: 10000 });
+  check("App keys panel lists the default host key", await page.getByRole("cell", { name: "default" }).first().isVisible());
+  await shot("22-app-keys");
+
+  // ── Delete through Overview → gone over ARM ────────────────────────────────────────────
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(FA);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "Function App", exact: true }).waitFor({ timeout: 10000 });
+  const faGone = await armWeb("GET", `/resourceGroups/${FARG}/providers/Microsoft.Web/sites/${FA}`);
+  check("UI delete function app → ARM GET 404", faGone.status === 404, `HTTP ${faGone.status}`);
 
   // ── Shell: unbacked service is honest; dark mode ───────────────────────────────────────
   await page.goto(UI + "#/vms");

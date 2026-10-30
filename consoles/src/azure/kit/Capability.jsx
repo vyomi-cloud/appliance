@@ -10,8 +10,9 @@
 import { Badge, Popover, PopoverSurface, PopoverTrigger } from "@fluentui/react-components";
 import { NotSimulatedContainer } from "./common.jsx";
 import cap_cost from "../../../../core/capabilities/azure/cost.json";
+import cap_functionapp from "../../../../core/capabilities/azure/functionapp.json";
 
-const REGISTRY = { ...cap_cost };
+const REGISTRY = { ...cap_cost, ...cap_functionapp };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

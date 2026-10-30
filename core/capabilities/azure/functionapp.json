@@ -1,0 +1,188 @@
+{
+ "$doc": "Vyomi capability registry — Azure Function Apps (Microsoft.Web/sites, kind=functionapp). One entry per console feature/section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py.",
+ "azure.functionapp.site.crud": {
+  "title": "Function apps (create, list, update, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "Sites_CreateOrUpdate",
+   "Sites_Get",
+   "Sites_List",
+   "Sites_Delete",
+   "Sites_Start",
+   "Sites_Stop",
+   "Sites_Restart"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.function.crud": {
+  "title": "Functions (create, list, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "WebApps_ListFunctions",
+   "WebApps_CreateFunction",
+   "WebApps_GetFunction",
+   "WebApps_DeleteFunction"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.function.invoke": {
+  "title": "Function Test/Run (real sandboxed execution)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only the Python programming model (a `main(req)` entry point) runs.",
+   "The sandbox is restricted (no filesystem, network or process access, a curated stdlib subset) — the same technique as the Lambda console's Invoke."
+  ],
+  "api": [
+   "WebApps_ListFunctions"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.appsettings": {
+  "title": "App settings and connection strings (Environment variables)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "WebApps_ListApplicationSettings",
+   "WebApps_UpdateApplicationSettings",
+   "WebApps_ListConnectionStrings",
+   "WebApps_UpdateConnectionStrings"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.keys": {
+  "title": "App keys (host keys, system keys, function keys)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "WebApps_ListHostKeys",
+   "WebApps_CreateOrUpdateHostSecret",
+   "WebApps_DeleteHostSecret",
+   "WebApps_ListFunctionKeys",
+   "WebApps_CreateOrUpdateFunctionSecret"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.scale": {
+  "title": "Scale and concurrency (Flex Consumption)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Instance memory, maximum instance count and per-instance concurrency are stored on the site and returned from the API exactly as configured, but Vyomi does not run multiple instances or enforce these limits."
+  ],
+  "api": [
+   "Sites_CreateOrUpdate",
+   "Sites_Get"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.locks": {
+  "title": "Resource locks",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Modelled as a function-app sub-resource (create/list/delete round-trip) rather than the real Microsoft.Authorization/locks extension resource path, and not enforced — Vyomi does not block delete/write operations on a locked site."
+  ],
+  "api": [
+   "ManagementLocks_CreateOrUpdateAtResourceLevel",
+   "ManagementLocks_ListAtResourceLevel",
+   "ManagementLocks_DeleteAtResourceLevel"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.publishprofile": {
+  "title": "Download / reset publish profile",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The profile is a simulator-generated credential; it does not grant real deployment access and Vyomi has no Web Deploy / Kudu endpoint behind it."
+  ],
+  "api": [
+   "WebApps_ListPublishingProfileXmlWithSecrets"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.rbac": {
+  "title": "Access control (IAM) — role assignments and role definitions",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Role assignments and role definitions are the generic subscription-scoped Microsoft.Authorization store (shared with every other Azure resource), not filtered to assignments scoped exactly to this function app.",
+   "Deny assignments and classic administrators are always empty (Vyomi models neither)."
+  ],
+  "api": [
+   "RoleAssignments_ListForSubscription",
+   "RoleDefinitions_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_rbac_core.py"
+  ]
+ },
+ "azure.functionapp.activitylog": {
+  "title": "Activity log",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "api": [
+   "ActivityLogs_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_functionapp_core.py"
+  ]
+ },
+ "azure.functionapp.diagnostics": {
+  "title": "Diagnose and solve problems, Microsoft Defender for Cloud, Events, Log stream, Resource visualizer, App files, Deployment Center, Authentication, Application Insights, Identity, Custom domains, Certificates, Networking, Service Connector, Advanced Tools, Extensions, API Management, CORS, Alerts, Metrics, Logs, Advisor recommendations, Health check, Diagnostic settings, Tasks, Resource health, New support request",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "These panels need a managed diagnostics/telemetry/identity backend Vyomi does not run; each renders only its title and an honest not-simulated note."
+  ],
+  "api": []
+ }
+}
