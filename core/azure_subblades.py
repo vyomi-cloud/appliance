@@ -12,7 +12,9 @@ Universal types implemented in the SPA::
     tags          → key/value editor (PATCH on save)
     json          → raw JSON dump
     properties    → flattened recursive kv-grid of every property path
-    locks         → list of resource locks (read-only stub)
+    locks         → management locks (Microsoft.Authorization/locks) on / inherited by the resource
+    diagnose      → Resource Health availability + configuration checks
+    identity      → the resource's managed identity (system / user assigned)
     metrics       → time-series mock charts (synthesized sparklines)
 
 Per-service types::
@@ -42,7 +44,7 @@ _UNIVERSAL_TOP = [
     {"key": "iam",         "label": "Access control (IAM)","icon": "admin_panel_settings", "type": "iam"},
     {"key": "tags",        "label": "Tags",                "icon": "sell",          "type": "tags"},
     {"key": "diagnose",    "label": "Diagnose and solve problems",
-                                                          "icon": "healing",        "type": "stub"},
+                                                          "icon": "healing",        "type": "diagnose"},
 ]
 
 def _settings_props_locks():
@@ -62,18 +64,18 @@ _VM_SUB = [
         {"key": "connect",      "label": "Connect",           "icon": "terminal",     "type": "connect"},
         {"key": "disks",        "label": "Disks",             "icon": "storage",      "type": "disks"},
         {"key": "size",         "label": "Size",              "icon": "tune",         "type": "size"},
-        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "stub"},
+        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "identity"},
         *_settings_props_locks(),
     ]},
     {"group": "Operations", "items": [
         {"key": "autoShutdown", "label": "Auto-shutdown",     "icon": "schedule",     "type": "autoShutdown"},
-        {"key": "backup",       "label": "Backup",            "icon": "backup",       "type": "stub"},
-        {"key": "extensions",   "label": "Extensions + applications", "icon": "extension", "type": "stub"},
-        {"key": "runCommand",   "label": "Run command",       "icon": "play_circle",  "type": "stub"},
+        {"key": "backup",       "label": "Backup",            "icon": "backup",       "type": "vmBackup"},
+        {"key": "extensions",   "label": "Extensions + applications", "icon": "extension", "type": "vmExtensions"},
+        {"key": "runCommand",   "label": "Run command",       "icon": "play_circle",  "type": "runCommand"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "insights",     "label": "Insights",          "icon": "monitoring",   "type": "metrics"},
-        {"key": "alerts",       "label": "Alerts",            "icon": "notifications","type": "stub"},
+        {"key": "alerts",       "label": "Alerts",            "icon": "notifications","type": "resourceAlerts"},
         {"key": "metrics",      "label": "Metrics",           "icon": "show_chart",   "type": "metrics"},
     ]},
 ]
@@ -82,19 +84,19 @@ _STORAGE_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Data storage", "items": [
         {"key": "containers",   "label": "Containers",        "icon": "folder",       "type": "containers"},
-        {"key": "fileShares",   "label": "File shares",       "icon": "folder_shared","type": "stub"},
+        {"key": "fileShares",   "label": "File shares",       "icon": "folder_shared","type": "fileShares"},
         {"key": "queues",       "label": "Queues",            "icon": "queue",        "type": "storagequeues"},
-        {"key": "tables",       "label": "Tables",            "icon": "table_chart",  "type": "stub"},
+        {"key": "tables",       "label": "Tables",            "icon": "table_chart",  "type": "storageTables"},
     ]},
     {"group": "Security + networking", "items": [
         {"key": "networking",   "label": "Networking",        "icon": "lan",          "type": "networking"},
         {"key": "encryption",   "label": "Encryption",        "icon": "enhanced_encryption", "type": "encryption"},
         {"key": "accessKeys",   "label": "Access keys",       "icon": "key",          "type": "accessKeys"},
-        {"key": "sas",          "label": "Shared access signature", "icon": "vpn_key", "type": "stub"},
+        {"key": "sas",          "label": "Shared access signature", "icon": "vpn_key", "type": "storageSas"},
     ]},
     {"group": "Data management", "items": [
         {"key": "lifecycle",    "label": "Lifecycle management", "icon": "history_toggle_off", "type": "lifecycle"},
-        {"key": "replication",  "label": "Geo-replication",   "icon": "public",       "type": "stub"},
+        {"key": "replication",  "label": "Geo-replication",   "icon": "public",       "type": "geoReplication"},
     ]},
     {"group": "Settings", "items": _settings_props_locks()},
     {"group": "Monitoring", "items": [
@@ -108,19 +110,19 @@ _SQL_SUB = [
     {"group": "Data management", "items": [
         {"key": "databases",    "label": "Databases",         "icon": "database",     "type": "databases"},
         {"key": "pricingTier",  "label": "Pricing tier",      "icon": "monetization_on","type": "perfTier"},
-        {"key": "deletedDb",    "label": "Deleted databases", "icon": "delete",       "type": "stub"},
-        {"key": "failover",     "label": "Failover groups",   "icon": "swap_horiz",   "type": "stub"},
-        {"key": "backups",      "label": "Backups",           "icon": "backup",       "type": "stub"},
+        {"key": "deletedDb",    "label": "Deleted databases", "icon": "delete",       "type": "sqlDeleted"},
+        {"key": "failover",     "label": "Failover groups",   "icon": "swap_horiz",   "type": "sqlFailover"},
+        {"key": "backups",      "label": "Backups",           "icon": "backup",       "type": "sqlBackups"},
     ]},
     {"group": "Security", "items": [
         {"key": "firewalls",    "label": "Networking",        "icon": "security",     "type": "firewalls"},
-        {"key": "tde",          "label": "Transparent data encryption", "icon": "enhanced_encryption", "type": "stub"},
-        {"key": "auditing",     "label": "Auditing",          "icon": "fact_check",   "type": "stub"},
-        {"key": "defender",     "label": "Microsoft Defender for Cloud", "icon": "shield", "type": "stub"},
+        {"key": "tde",          "label": "Transparent data encryption", "icon": "enhanced_encryption", "type": "sqlTde"},
+        {"key": "auditing",     "label": "Auditing",          "icon": "fact_check",   "type": "sqlAuditing"},
+        {"key": "defender",     "label": "Microsoft Defender for Cloud", "icon": "shield", "type": "sqlDefender"},
     ]},
     {"group": "Settings", "items": [
         {"key": "connStrings",  "label": "Connection strings","icon": "vpn_key",      "type": "connStrings"},
-        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "stub"},
+        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "identity"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
@@ -136,14 +138,14 @@ _COSMOS_SUB = [
     {"group": "Settings", "items": [
         {"key": "throughput",   "label": "Throughput (RU/s)", "icon": "speed",        "type": "throughput"},
         {"key": "replicate",    "label": "Replicate data globally", "icon": "public", "type": "replicate"},
-        {"key": "consistency",  "label": "Default consistency",     "icon": "tune",   "type": "stub"},
+        {"key": "consistency",  "label": "Default consistency",     "icon": "tune",   "type": "cosmosConsistency"},
         {"key": "backup",       "label": "Backup & Restore",  "icon": "backup",       "type": "backup"},
         {"key": "networking",   "label": "Networking",        "icon": "lan",          "type": "networking"},
-        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "stub"},
+        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "identity"},
         *_settings_props_locks(),
     ]},
     {"group": "Integrations", "items": [
-        {"key": "defender",     "label": "Microsoft Defender","icon": "shield",       "type": "stub"},
+        {"key": "defender",     "label": "Microsoft Defender","icon": "shield",       "type": "defender"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "insights",     "label": "Insights",          "icon": "monitoring",   "type": "metrics"},
@@ -154,16 +156,16 @@ _COSMOS_SUB = [
 _FUNCTIONAPP_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Functions", "items": [
-        {"key": "functions",    "label": "Functions",         "icon": "bolt",         "type": "stub"},
-        {"key": "appKeys",      "label": "App keys",          "icon": "key",          "type": "stub"},
+        {"key": "functions",    "label": "Functions",         "icon": "bolt",         "type": "functionsList"},
+        {"key": "appKeys",      "label": "App keys",          "icon": "key",          "type": "appKeys"},
     ]},
     {"group": "Settings", "items": [
         {"key": "configuration","label": "Environment variables", "icon": "settings", "type": "configuration"},
         {"key": "authentication","label": "Authentication",   "icon": "lock_person",  "type": "authentication"},
         {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "identity"},
         {"key": "networking",   "label": "Networking",        "icon": "lan",          "type": "networking"},
-        {"key": "tls",          "label": "TLS/SSL settings",  "icon": "https",        "type": "stub"},
-        {"key": "scaleUp",      "label": "Scale up (App Service plan)", "icon": "trending_up", "type": "stub"},
+        {"key": "tls",          "label": "TLS/SSL settings",  "icon": "https",        "type": "webTls"},
+        {"key": "scaleUp",      "label": "Scale up (App Service plan)", "icon": "trending_up", "type": "webScaleUp"},
         *_settings_props_locks(),
     ]},
     {"group": "Deployment", "items": [
@@ -172,7 +174,7 @@ _FUNCTIONAPP_SUB = [
     ]},
     {"group": "Monitoring", "items": [
         {"key": "appInsights",  "label": "Application Insights", "icon": "insights", "type": "metrics"},
-        {"key": "logStream",    "label": "Log stream",        "icon": "stream",       "type": "stub"},
+        {"key": "logStream",    "label": "Log stream",        "icon": "stream",       "type": "logStream"},
         {"key": "metrics",      "label": "Metrics",           "icon": "show_chart",   "type": "metrics"},
     ]},
 ]
@@ -185,9 +187,9 @@ _SERVICEBUS_SUB = [
     ]},
     {"group": "Settings", "items": [
         {"key": "sharedAccess", "label": "Shared access policies", "icon": "vpn_key", "type": "sharedAccess"},
-        {"key": "georecovery",  "label": "Geo-recovery",      "icon": "public",       "type": "stub"},
+        {"key": "georecovery",  "label": "Geo-recovery",      "icon": "public",       "type": "sbGeoRecovery"},
         {"key": "networking",   "label": "Networking",        "icon": "lan",          "type": "networking"},
-        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "stub"},
+        {"key": "identity",     "label": "Identity",          "icon": "badge",        "type": "identity"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
@@ -202,12 +204,12 @@ _APIM_SUB = [
         {"key": "products",     "label": "Products",          "icon": "inventory_2",  "type": "productsList"},
         {"key": "subscriptions","label": "Subscriptions",     "icon": "card_membership", "type": "subscriptionsList"},
         {"key": "policies",     "label": "Policies",          "icon": "policy",       "type": "apimPolicies"},
-        {"key": "namedValues",  "label": "Named values",      "icon": "label",        "type": "stub"},
+        {"key": "namedValues",  "label": "Named values",      "icon": "label",        "type": "apimNamedValues"},
     ]},
     {"group": "Deployment + infrastructure", "items": [
         {"key": "networking",   "label": "Virtual network",   "icon": "lan",          "type": "networking"},
-        {"key": "customDomains","label": "Custom domains",    "icon": "language",     "type": "stub"},
-        {"key": "backups",      "label": "Backup",            "icon": "backup",       "type": "stub"},
+        {"key": "customDomains","label": "Custom domains",    "icon": "language",     "type": "apimDomains"},
+        {"key": "backups",      "label": "Backup",            "icon": "backup",       "type": "apimBackup"},
     ]},
     {"group": "Settings", "items": [
         *_settings_props_locks(),
@@ -225,12 +227,12 @@ _VNET_SUB = [
         {"key": "subnets",      "label": "Subnets",           "icon": "view_module",  "type": "subnetsList"},
         {"key": "connectedDevs","label": "Connected devices", "icon": "devices",      "type": "connectedDevs"},
         {"key": "peerings",     "label": "Peerings",          "icon": "compare_arrows","type": "peerings"},
-        {"key": "dnsServers",   "label": "DNS servers",       "icon": "dns",          "type": "stub"},
-        {"key": "ddos",         "label": "DDoS protection",   "icon": "shield",       "type": "stub"},
+        {"key": "dnsServers",   "label": "DNS servers",       "icon": "dns",          "type": "vnetDns"},
+        {"key": "ddos",         "label": "DDoS protection",   "icon": "shield",       "type": "vnetDdos"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
-        {"key": "diagnostic",   "label": "Diagnostic settings", "icon": "build",      "type": "stub"},
+        {"key": "diagnostic",   "label": "Diagnostic settings", "icon": "build",      "type": "diagSettings"},
     ]},
 ]
 
@@ -253,11 +255,11 @@ _KEYVAULT_SUB = [
     {"group": "Objects", "items": [
         {"key": "secrets",      "label": "Secrets",           "icon": "key",          "type": "kvsecrets"},
         {"key": "keys",         "label": "Keys",              "icon": "lock",         "type": "kvkeys"},
-        {"key": "certificates", "label": "Certificates",      "icon": "verified",     "type": "stub"},
+        {"key": "certificates", "label": "Certificates",      "icon": "verified",     "type": "kvCertificates"},
     ]},
     {"group": "Settings", "items": [
         {"key": "accessPolicies","label": "Access policies",  "icon": "policy",       "type": "accessPolicies"},
-        {"key": "accessConfig", "label": "Access configuration", "icon": "tune",      "type": "stub"},
+        {"key": "accessConfig", "label": "Access configuration", "icon": "tune",      "type": "kvAccessConfig"},
         {"key": "networking",   "label": "Networking",        "icon": "lan",          "type": "networking"},
         *_settings_props_locks(),
     ]},
@@ -270,12 +272,12 @@ _EVENTGRID_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Events", "items": [
         {"key": "eventSubs",   "label": "Event subscriptions", "icon": "subscriptions", "type": "eventSubs"},
-        {"key": "topicTypes",  "label": "Topic types",         "icon": "list",          "type": "stub"},
+        {"key": "topicTypes",  "label": "Topic types",         "icon": "list",          "type": "egTopicTypes"},
         {"key": "accessKeys",  "label": "Access keys",         "icon": "key",           "type": "egAccessKeys"},
     ]},
     {"group": "Settings", "items": [
         {"key": "networking",  "label": "Networking",          "icon": "lan",           "type": "networking"},
-        {"key": "identity",    "label": "Identity",            "icon": "badge",         "type": "stub"},
+        {"key": "identity",    "label": "Identity",            "icon": "badge",         "type": "identity"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
@@ -386,7 +388,7 @@ _OI_SUB = [
 _RBAC_SUB = [
     {"key": "overview",   "label": "Overview",   "icon": "dashboard", "type": "overview"},
     {"key": "json",       "label": "JSON view",  "icon": "code",      "type": "json"},
-    {"key": "conditions", "label": "Conditions", "icon": "rule",      "type": "stub"},
+    {"key": "conditions", "label": "Conditions", "icon": "rule",      "type": "raConditions"},
 ]
 
 

@@ -1,0 +1,2276 @@
+# GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
+# Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
+"""Azure ARM resource-model extensions shared by the offline ARM dispatcher
+(``providers/azure_services.handle_arm``) and Nano's ``core/azure_arm_core.AzureArm``.
+
+Substrate-free (stdlib only) so the SAME file runs on the appliance and under
+Pyodide. Everything lives in the shared flat ARM state map (lower-cased resource
+id → record), so it is space-scoped and persisted by the existing seams.
+
+What it models (real ARM shapes, so the portal-style blades and the native SDKs
+read the same data):
+
+  * **Management locks** — ``Microsoft.Authorization/locks`` at subscription,
+    resource-group and resource scope (``{scope}/providers/Microsoft.Authorization/
+    locks/{name}``), and their enforcement: a ``CanNotDelete`` lock rejects DELETE,
+    a ``ReadOnly`` lock rejects every write (PUT/PATCH/DELETE/POST) on the locked
+    scope and everything under it with ``409 ScopeLocked``.
+  * **Managed identity** — the ``identity`` block of any resource (system and user
+    assigned; principal/tenant/client ids are allocated on enable) and the
+    ``{scope}/providers/Microsoft.ManagedIdentity/identities/default`` read.
+  * **Resource health** — ``{scope}/providers/Microsoft.ResourceHealth/
+    availabilityStatuses/current``, derived from the resource's own state
+    (provisioning state, VM power state, app running state).
+  * **Role assignments at a scope** — ``{scope}/providers/Microsoft.Authorization/
+    roleAssignments`` (GET lists the assignments that apply, inherited ones included;
+    PUT creates one at that scope).
+  * **Other extension resources** (``diagnosticSettings``, …) — plain CRUD at scope.
+  * **Network interfaces + public IPs** — ``Microsoft.Network/networkInterfaces`` /
+    ``publicIPAddresses`` with private-IP allocation from the referenced subnet,
+    public-IP allocation, and the NIC↔VM / NIC↔NSG / PIP↔NIC back-references.
+  * **VM auto-shutdown** — ``Microsoft.DevTestLab/schedules`` (``shutdown-computevm-{vm}``).
+  * **VM run commands** — ``virtualMachines/{vm}/runCommands/{name}`` (managed run
+    command, executed on PUT and recorded with its instance view) and the
+    ``virtualMachines/{vm}/runCommand`` action. Execution goes through an optional
+    ``executor(vm_record, script) -> (exit_code, stdout, stderr) | None`` supplied by
+    the host (the appliance execs in the VM's container); with no guest runtime the
+    run is recorded as failed — no output is invented.
+  * **VM restore points** — ``Microsoft.Compute/restorePointCollections/{c}/restorePoints/{p}``
+    capturing the source VM's configuration.
+
+``route(...)`` returns ``None`` when the request is not one of these, else
+``{"status","headers","body","scope","type","name"}`` (``scope`` = the resource id
+whose activity log the operation belongs to).
+"""
+from __future__ import annotations
+
+import base64
+import datetime
+import hashlib
+import hmac
+import ipaddress
+import uuid
+from urllib.parse import quote
+
+TENANT_ID = "00000000-0000-0000-0000-000000000000"   # the simulator's Entra tenant (Key Vault default)
+LOCK_LEVELS = ("CanNotDelete", "ReadOnly")
+
+LOCK_T = "Microsoft.Authorization/locks"
+RA_T = "Microsoft.Authorization/roleAssignments"
+NIC_T = "Microsoft.Network/networkInterfaces"
+PIP_T = "Microsoft.Network/publicIPAddresses"
+SCHED_T = "Microsoft.DevTestLab/schedules"
+RUNCMD_T = "Microsoft.Compute/virtualMachines/runCommands"
+RPC_T = "Microsoft.Compute/restorePointCollections"
+RP_T = "Microsoft.Compute/restorePointCollections/restorePoints"
+VM_T = "microsoft.compute/virtualmachines"
+
+# Resource types this module owns outright (not in the console catalog).
+OWNED_TYPES = {t.lower() for t in (LOCK_T, NIC_T, PIP_T, SCHED_T, RPC_T, RP_T, RUNCMD_T)}
+
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+def _now() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _ok(body=None, status=200, scope="", typ="", name=""):
+    return {"status": status, "headers": {}, "body": body, "scope": scope, "type": typ, "name": name}
+
+
+def _err(status, code, message):
+    return {"status": status, "headers": {}, "body": {"error": {"code": code, "message": message}},
+            "scope": "", "type": "", "name": ""}
+
+
+def _view(rec):
+    return {k: v for k, v in rec.items() if not str(k).startswith("_")}
+
+
+def _rg_of(rid: str):
+    parts = rid.split("/")
+    for i, p in enumerate(parts):
+        if p.lower() == "resourcegroups" and i + 1 < len(parts):
+            return parts[i + 1]
+    return None
+
+
+def scope_id(sub: str, rg, after) -> str:
+    s = f"/subscriptions/{sub}"
+    if rg:
+        s += f"/resourceGroups/{rg}"
+    if after:
+        s += "/providers/" + "/".join(after)
+    return s
+
+
+def _type_of_scope(after) -> str:
+    """``[ns, t1, n1, t2, n2]`` → ``ns/t1/t2``."""
+    if not after:
+        return ""
+    return "/".join([after[0]] + [after[i] for i in range(1, len(after), 2)])
+
+
+def _under(rid: str, scope: str) -> bool:
+    r, s = rid.lower().rstrip("/"), scope.lower().rstrip("/")
+    return r == s or r.startswith(s + "/")
+
+
+def _of_type(state, typ):
+    t = typ.lower()
+    return [r for r in list(state.values()) if isinstance(r, dict) and str(r.get("_type", "")).lower() == t]
+
+
+def _new_rec(rid, name, typ, location=None, scope=None):
+    rec = {"id": rid, "name": name, "type": typ, "properties": {},
+           "_type": typ, "_sub": rid.split("/")[2] if rid.count("/") >= 2 else "",
+           "_rg": _rg_of(rid), "_created": _now()}
+    if location is not None:
+        rec["location"] = location
+    if scope is not None:
+        rec["_scope"] = scope
+    return rec
+
+
+def _payload_props(payload):
+    p = (payload or {}).get("properties")
+    return p if isinstance(p, dict) else {}
+
+
+# ── locks ────────────────────────────────────────────────────────────────────
+def locks_at(state, rid: str):
+    """Locks that apply to ``rid``: on it or on any scope above it."""
+    return [r for r in _of_type(state, LOCK_T) if _under(rid, r.get("_scope", ""))]
+
+
+def lock_conflict(state, rid: str, method: str):
+    """409 ScopeLocked error when a lock forbids ``method`` on ``rid``, else None.
+    Lock management itself is never blocked by locks."""
+    m = (method or "").upper()
+    if m not in ("PUT", "PATCH", "DELETE", "POST"):
+        return None
+    if "/providers/microsoft.authorization/locks" in rid.lower():
+        return None
+    blocking = []
+    for lk in locks_at(state, rid):
+        lvl = (lk.get("properties") or {}).get("level", "")
+        if lvl == "ReadOnly" or (lvl == "CanNotDelete" and m == "DELETE"):
+            blocking.append(lk.get("_scope", ""))
+    if not blocking:
+        return None
+    op = "delete" if m == "DELETE" else "write"
+    scopes = ",".join(f"'{s}'" for s in dict.fromkeys(blocking))
+    return _err(409, "ScopeLocked",
+                f"The scope '{rid}' cannot perform {op} operation because following scope(s) are locked: "
+                f"{scopes}. Please remove the lock and try again.")
+
+
+def _locks(state, method, scope, rest, payload):
+    # rest = ["locks"] or ["locks", name]
+    if len(rest) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_view(r) for r in locks_at(state, scope)]})
+    name = rest[1]
+    rid = f"{scope}/providers/{LOCK_T}/{name}"
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        if not rec:
+            return _err(404, "LockNotFound", f"The lock '{name}' could not be found.")
+        return _ok(_view(rec))
+    if method == "DELETE":
+        rec = state.pop(key, None)
+        return _ok(None, 200 if rec else 204, scope, LOCK_T, name)
+    if method in ("PUT", "PATCH"):
+        props = _payload_props(payload)
+        old = state.get(key)
+        level = props.get("level", (old or {}).get("properties", {}).get("level"))
+        if level not in LOCK_LEVELS:
+            return _err(400, "LockLevelInvalid",
+                        f"The lock level '{level}' is invalid. Allowed values: {', '.join(LOCK_LEVELS)}.")
+        notes = props.get("notes", (old or {}).get("properties", {}).get("notes", ""))
+        if notes and len(str(notes)) > 512:
+            return _err(400, "LockNotesTooLong", "Lock notes can be at most 512 characters.")
+        rec = old or _new_rec(rid, name, LOCK_T, scope=scope)
+        rec["properties"] = {"level": level, "notes": notes or "",
+                             "owners": props.get("owners", (old or {}).get("properties", {}).get("owners", []))}
+        state[key] = rec
+        return _ok(_view(rec), 200 if old else 201, scope, LOCK_T, name)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+# ── managed identity ─────────────────────────────────────────────────────────
+_ID_TYPES = {"none": "None", "systemassigned": "SystemAssigned", "userassigned": "UserAssigned",
+             "systemassigned,userassigned": "SystemAssigned, UserAssigned"}
+
+
+def validate_identity(payload):
+    idn = (payload or {}).get("identity")
+    if idn is None:
+        return None
+    if not isinstance(idn, dict):
+        return _err(400, "InvalidIdentity", "identity must be an object.")
+    t = str(idn.get("type") or "None").replace(" ", "").lower()
+    if t not in _ID_TYPES:
+        return _err(400, "InvalidIdentityType",
+                    f"The identity type '{idn.get('type')}' is invalid. Allowed: None, SystemAssigned, "
+                    "UserAssigned, 'SystemAssigned, UserAssigned'.")
+    if "userassigned" in t and not isinstance(idn.get("userAssignedIdentities"), dict):
+        return _err(400, "InvalidIdentity", "userAssignedIdentities is required for a UserAssigned identity.")
+    return None
+
+
+def apply_identity(rec: dict, payload) -> None:
+    """Apply ``payload.identity`` to ``rec`` the way ARM does: enabling a system-assigned
+    identity allocates its service principal (principalId) in the tenant; disabling it
+    drops the principal; user-assigned identities get their principal/client ids."""
+    idn = (payload or {}).get("identity")
+    if not isinstance(idn, dict):
+        return
+    t = _ID_TYPES.get(str(idn.get("type") or "None").replace(" ", "").lower(), "None")
+    cur = rec.get("identity") if isinstance(rec.get("identity"), dict) else {}
+    out = {"type": t}
+    if "SystemAssigned" in t:
+        out["principalId"] = cur.get("principalId") or str(uuid.uuid4())
+        out["tenantId"] = cur.get("tenantId") or TENANT_ID
+    if "UserAssigned" in t:
+        uai = dict(cur.get("userAssignedIdentities") or {})
+        for k, v in (idn.get("userAssignedIdentities") or {}).items():
+            if v is None:
+                uai.pop(k, None)
+            else:
+                uai.setdefault(k, {"principalId": str(uuid.uuid4()), "clientId": str(uuid.uuid4())})
+        out["userAssignedIdentities"] = uai
+    rec["identity"] = out
+
+
+def _identity_default(parent_rec, scope):
+    idn = parent_rec.get("identity") or {}
+    if "SystemAssigned" not in str(idn.get("type", "")):
+        return _err(404, "NotFound", f"No system-assigned identity is enabled on '{scope}'.")
+    pid = idn.get("principalId")
+    return _ok({"id": f"{scope}/providers/Microsoft.ManagedIdentity/identities/default", "name": "default",
+                "type": "Microsoft.ManagedIdentity/identities", "location": parent_rec.get("location"),
+                "properties": {"tenantId": idn.get("tenantId", TENANT_ID), "principalId": pid,
+                               "clientId": str(uuid.uuid5(uuid.NAMESPACE_URL, "client:" + str(pid)))}})
+
+
+# ── resource health ──────────────────────────────────────────────────────────
+def availability(rec: dict) -> dict:
+    """Resource Health availability status derived from the resource's own state."""
+    p = rec.get("properties") or {}
+    t = str(rec.get("_type") or rec.get("type") or "").lower()
+    state, summary, reason = "Available", "There aren't any known Azure platform problems affecting this resource.", ""
+    prov = str(p.get("provisioningState") or "")
+    if prov.lower() == "failed":
+        state, summary, reason = "Unavailable", "The last operation on this resource failed to provision it.", "Unplanned"
+    elif t == VM_T:
+        rt = p.get("runtime") if isinstance(p.get("runtime"), dict) else {}
+        power = str(rt.get("containerStatus") or str(p.get("powerState") or "").replace("PowerState/", "") or "running").lower()
+        if power in ("stopped", "deallocated", "exited", "stopping", "deallocating"):
+            state = "Unavailable"
+            summary = (f"This virtual machine is {power} as requested by an authorized user or process. "
+                       "It will be available again after it is started.")
+            reason = "Customer Initiated"
+        else:
+            summary = "There aren't any known Azure platform problems affecting this virtual machine."
+    elif t == "microsoft.web/sites" and str(p.get("state", "")).lower() == "stopped":
+        state, summary, reason = "Unavailable", "This app is stopped as requested by an authorized user.", "Customer Initiated"
+    elif t == "microsoft.app/containerapps" and str(p.get("runningStatus", "")).lower() == "stopped":
+        state, summary, reason = "Unavailable", "This container app is stopped as requested by an authorized user.", "Customer Initiated"
+    elif t == "microsoft.sql/servers" and p.get("state") and str(p.get("state")).lower() != "ready":
+        state, summary, reason = "Unavailable", f"This server is {p.get('state')}.", "Unplanned"
+    elif str(p.get("status", "")).lower() in ("disabled", "suspended"):
+        state, summary, reason = "Unavailable", f"This resource is {p.get('status')}.", "Customer Initiated"
+    ts = rec.get("_changed") or rec.get("_created") or _now()
+    out = {"availabilityState": state, "summary": summary, "reportedTime": _now(), "occuredTime": ts,
+           "detailedStatus": "", "reasonChronicity": "Persistent"}
+    if reason:
+        out["reasonType"] = reason
+    return out
+
+
+def _health(parent_rec, scope, rest):
+    body = {"id": f"{scope}/providers/Microsoft.ResourceHealth/availabilityStatuses/current", "name": "current",
+            "type": "Microsoft.ResourceHealth/AvailabilityStatuses", "location": parent_rec.get("location"),
+            "properties": availability(parent_rec)}
+    if len(rest) == 1:
+        return _ok({"value": [body]})
+    if rest[1].lower() != "current":
+        return _err(404, "NotFound", "Only the 'current' availability status is available.")
+    return _ok(body)
+
+
+# ── role assignments at a scope ──────────────────────────────────────────────
+def _role_assignments(state, method, scope, rest, payload):
+    if len(rest) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        out = []
+        for r in _of_type(state, RA_T):
+            sc = (r.get("properties") or {}).get("scope") or r.get("_scope") or \
+                r.get("id", "").rsplit("/providers/Microsoft.Authorization/roleAssignments/", 1)[0]
+            # atScope + inherited: assignments at this scope or above it, and those below it.
+            if _under(scope, sc) or _under(sc, scope):
+                out.append(_view(r))
+        return _ok({"value": out})
+    name = rest[1]
+    rid = f"{scope}/providers/{RA_T}/{name}"
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        return _ok(_view(rec)) if rec else _err(404, "RoleAssignmentNotFound", f"Role assignment '{name}' not found.")
+    if method == "DELETE":
+        rec = state.pop(key, None)
+        return _ok(_view(rec) if rec else None, 200 if rec else 204, scope, RA_T, name)
+    if method == "PUT":
+        props = _payload_props(payload)
+        if not props.get("roleDefinitionId") or not props.get("principalId"):
+            return _err(400, "InvalidRoleAssignment", "properties.roleDefinitionId and properties.principalId are required.")
+        rec = state.get(key) or _new_rec(rid, name, RA_T, scope=scope)
+        rec["properties"] = {"roleDefinitionId": props["roleDefinitionId"], "principalId": props["principalId"],
+                             "principalType": props.get("principalType", "User"), "scope": scope,
+                             "description": props.get("description", ""), "createdOn": rec.get("_created")}
+        state[key] = rec
+        return _ok(_view(rec), 201, scope, RA_T, name)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+# ── generic extension resources (diagnosticSettings, …) ─────────────────────
+def _generic_ext(state, method, scope, ns, rest, payload):
+    typ = ns + "/" + rest[0]
+    if typ.lower() == "microsoft.insights/diagnosticsettings" and method in ("PUT", "PATCH") and len(rest) > 1:
+        pp = _payload_props(payload)
+        if not any(pp.get(k) for k in ("workspaceId", "storageAccountId", "eventHubAuthorizationRuleId", "marketplacePartnerId")):
+            return _err(400, "BadRequest", "A diagnostic setting needs at least one destination (Log Analytics workspace, storage account or event hub).")
+        for k in ("workspaceId", "storageAccountId"):
+            if pp.get(k) and str(pp[k]).lower() not in state:
+                return _err(400, "ResourceNotFound", f"Destination {pp[k]} was not found.")
+        if not any(x.get("enabled") for x in (pp.get("logs") or []) + (pp.get("metrics") or [])):
+            return _err(400, "BadRequest", "Select at least one log category or metric to send.")
+    if len(rest) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_view(r) for r in _of_type(state, typ)
+                              if str(r.get("_scope", "")).lower() == scope.lower()]})
+    name = rest[1]
+    rid = f"{scope}/providers/{typ}/{name}"
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        return _ok(_view(rec)) if rec else _err(404, "ResourceNotFound", f"Resource '{rid}' not found.")
+    if method == "DELETE":
+        rec = state.pop(key, None)
+        return _ok(None, 200 if rec else 204, scope, typ, name)
+    if method in ("PUT", "PATCH"):
+        old = state.get(key)
+        rec = old or _new_rec(rid, name, typ, scope=scope)
+        props = dict(rec.get("properties") or {}) if method == "PATCH" else {}
+        props.update(_payload_props(payload))
+        rec["properties"] = props
+        state[key] = rec
+        return _ok(_view(rec), 200 if old else 201, scope, typ, name)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+# ── networking: NICs + public IPs ────────────────────────────────────────────
+def _find_subnet(state, subnet_id: str):
+    """(vnet_rec, subnet_dict, prefix) for a subnet id, or (None, None, None)."""
+    sid = str(subnet_id or "")
+    if "/subnets/" not in sid.lower():
+        return None, None, None
+    i = sid.lower().rindex("/subnets/")
+    vnet_id, sname = sid[:i], sid[i + len("/subnets/"):].strip("/")
+    vnet = state.get(vnet_id.lower())
+    if not vnet:
+        return None, None, None
+    for s in (vnet.get("properties") or {}).get("subnets") or []:
+        if isinstance(s, dict) and str(s.get("name", "")).lower() == sname.lower():
+            return vnet, s, (s.get("properties") or {}).get("addressPrefix") or s.get("addressPrefix")
+    child = state.get(sid.lower())
+    if child:
+        return vnet, child, (child.get("properties") or {}).get("addressPrefix")
+    return vnet, None, None
+
+
+def _used_private_ips(state, exclude_key=""):
+    used = set()
+    for r in _of_type(state, NIC_T):
+        if r.get("id", "").lower() == exclude_key:
+            continue
+        for ipc in (r.get("properties") or {}).get("ipConfigurations") or []:
+            ip = (ipc.get("properties") or {}).get("privateIPAddress")
+            if ip:
+                used.add(ip)
+    return used
+
+
+def _alloc_private_ip(state, prefix, exclude_key=""):
+    net = ipaddress.ip_network(str(prefix), strict=False)
+    used = _used_private_ips(state, exclude_key)
+    # Azure reserves the first four addresses and the last one of every subnet.
+    for n, host in enumerate(net.hosts()):
+        if n < 3:
+            continue
+        if str(host) == str(net.broadcast_address - 0):
+            break
+        if str(host) not in used:
+            return str(host)
+    return None
+
+
+def _alloc_public_ip(state, seed: str):
+    used = {(r.get("properties") or {}).get("ipAddress") for r in _of_type(state, PIP_T)}
+    h = hashlib.sha256(seed.encode()).digest()
+    for k in range(256):
+        ip = f"20.{(h[0] + k) % 200 + 20}.{h[1]}.{(h[2] + k) % 250 + 4}"
+        if ip not in used:
+            return ip
+    return None
+
+
+def _mac(seed: str) -> str:
+    h = hashlib.sha256(seed.encode()).hexdigest()[:10].upper()
+    return "00-0D-3A-" + "-".join(h[i:i + 2] for i in range(0, 6, 2))
+
+
+def _pip(state, method, sub, rg, after, payload):
+    if len(after) == 2:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_view(r) for r in _of_type(state, PIP_T)
+                              if rg is None or str(r.get("_rg") or "").lower() == rg.lower()]})
+    name = after[2]
+    rid = scope_id(sub, rg, after[:3])
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        return _ok(_view(rec)) if rec else _err(404, "ResourceNotFound", f"Resource '{rid}' not found.")
+    if method == "DELETE":
+        rec = state.get(key)
+        if rec and (rec.get("properties") or {}).get("ipConfiguration"):
+            return _err(400, "PublicIPAddressInUse",
+                        f"Public IP address {rid} can not be deleted since it is still allocated to resource "
+                        f"{rec['properties']['ipConfiguration'].get('id')}.")
+        state.pop(key, None)
+        return _ok(None, 200 if rec else 204, rid, PIP_T, name)
+    if method in ("PUT", "PATCH"):
+        old = state.get(key)
+        rec = old or _new_rec(rid, name, PIP_T, location=(payload or {}).get("location") or "eastus")
+        props = rec.setdefault("properties", {})
+        pp = _payload_props(payload)
+        sku = (payload or {}).get("sku") if isinstance((payload or {}).get("sku"), dict) else (rec.get("sku") or {"name": "Standard", "tier": "Regional"})
+        rec["sku"] = {"name": sku.get("name", "Standard"), "tier": sku.get("tier", "Regional")}
+        method_ = pp.get("publicIPAllocationMethod") or props.get("publicIPAllocationMethod") or \
+            ("Static" if rec["sku"]["name"] == "Standard" else "Dynamic")
+        if rec["sku"]["name"] == "Standard" and method_ != "Static":
+            return _err(400, "StandardSkuPublicIPAddressesNotAllowedWithDynamicAllocation",
+                        "Standard sku public IP addresses must use Static allocation.")
+        props.update({k: v for k, v in pp.items() if k not in ("ipAddress", "ipConfiguration")})
+        props["publicIPAllocationMethod"] = method_
+        props.setdefault("publicIPAddressVersion", "IPv4")
+        props.setdefault("idleTimeoutInMinutes", 4)
+        props.setdefault("resourceGuid", str(uuid.uuid4()))
+        if not props.get("ipAddress"):
+            props["ipAddress"] = _alloc_public_ip(state, rid.lower())
+        dns = props.get("dnsSettings") if isinstance(props.get("dnsSettings"), dict) else None
+        if dns and dns.get("domainNameLabel"):
+            dns["fqdn"] = f"{dns['domainNameLabel']}.{rec.get('location', 'eastus')}.cloudapp.azure.com"
+        props["provisioningState"] = "Succeeded"
+        if isinstance((payload or {}).get("tags"), dict):
+            rec["tags"] = dict(payload["tags"])
+        rec.setdefault("tags", {})
+        state[key] = rec
+        return _ok(_view(rec), 200 if old else 201, rid, PIP_T, name)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+def _set_backref_list(rec, field, rid, add: bool):
+    props = rec.setdefault("properties", {})
+    lst = [x for x in props.get(field) or [] if str(x.get("id", "")).lower() != rid.lower()]
+    if add:
+        lst.append({"id": rid})
+    props[field] = lst
+
+
+def _nic(state, method, sub, rg, after, payload):
+    if len(after) == 2:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_view(r) for r in _of_type(state, NIC_T)
+                              if rg is None or str(r.get("_rg") or "").lower() == rg.lower()]})
+    name = after[2]
+    rid = scope_id(sub, rg, after[:3])
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        return _ok(_view(rec)) if rec else _err(404, "ResourceNotFound", f"Resource '{rid}' not found.")
+    if method == "DELETE":
+        rec = state.get(key)
+        if rec and (rec.get("properties") or {}).get("virtualMachine"):
+            return _err(400, "NicInUse",
+                        f"Network Interface {rid} is used by existing resource "
+                        f"{rec['properties']['virtualMachine'].get('id')}. In order to delete the network interface, "
+                        "it must be dissociated from the resource.")
+        if rec:
+            _nic_unlink(state, rec)
+            state.pop(key, None)
+        return _ok(None, 200 if rec else 204, rid, NIC_T, name)
+    if method in ("PUT", "PATCH"):
+        old = state.get(key)
+        pp = _payload_props(payload)
+        ipcs_in = pp.get("ipConfigurations")
+        if ipcs_in is None and old:
+            ipcs_in = old["properties"].get("ipConfigurations")
+        if not isinstance(ipcs_in, list) or not ipcs_in:
+            return _err(400, "NetworkInterfaceMustHaveAtLeastOneIpConfiguration",
+                        f"Network interface {rid} must have one or more IP configurations.")
+        nsg_ref = pp.get("networkSecurityGroup", (old or {}).get("properties", {}).get("networkSecurityGroup"))
+        if nsg_ref and not state.get(str(nsg_ref.get("id", "")).lower()):
+            return _err(400, "InvalidResourceReference",
+                        f"Resource {nsg_ref.get('id')} referenced by resource {rid} was not found.")
+        new_ipcs = []
+        for n, ipc in enumerate(ipcs_in):
+            ip_props = dict(ipc.get("properties") or {})
+            sub_id = (ip_props.get("subnet") or {}).get("id")
+            vnet, subnet, prefix = _find_subnet(state, sub_id)
+            if not subnet or not prefix:
+                return _err(400, "InvalidResourceReference",
+                            f"Resource {sub_id} referenced by resource {rid} was not found.")
+            pip_id = (ip_props.get("publicIPAddress") or {}).get("id")
+            if pip_id:
+                pip = state.get(pip_id.lower())
+                if not pip:
+                    return _err(400, "InvalidResourceReference",
+                                f"Resource {pip_id} referenced by resource {rid} was not found.")
+                other = (pip.get("properties") or {}).get("ipConfiguration")
+                if other and not str(other.get("id", "")).lower().startswith(key + "/"):
+                    return _err(400, "PublicIPAddressInUse",
+                                f"Public IP address {pip_id} is already allocated to {other.get('id')}.")
+            alloc = ip_props.get("privateIPAllocationMethod") or "Dynamic"
+            ip = ip_props.get("privateIPAddress") if alloc == "Static" else None
+            if alloc == "Static":
+                if not ip or ipaddress.ip_address(ip) not in ipaddress.ip_network(prefix, strict=False):
+                    return _err(400, "PrivateIPAddressNotInSubnet",
+                                f"IP address {ip} does not belong to subnet {sub_id}.")
+                if ip in _used_private_ips(state, key):
+                    return _err(400, "PrivateIPAddressInUse", f"IP address {ip} is already in use.")
+            else:
+                prev = None
+                for oc in (old or {}).get("properties", {}).get("ipConfigurations") or []:
+                    if oc.get("name") == ipc.get("name") and (oc.get("properties") or {}).get("subnet", {}).get("id", "").lower() == str(sub_id).lower():
+                        prev = (oc.get("properties") or {}).get("privateIPAddress")
+                ip = prev or _alloc_private_ip(state, prefix, key)
+                if not ip:
+                    return _err(400, "SubnetIsFull", f"Subnet {sub_id} has no free IP addresses.")
+            ipc_name = ipc.get("name") or f"ipconfig{n + 1}"
+            ip_props.update({"privateIPAddress": ip, "privateIPAllocationMethod": alloc,
+                             "privateIPAddressVersion": "IPv4", "provisioningState": "Succeeded",
+                             "primary": n == 0 if "primary" not in ip_props else ip_props["primary"]})
+            new_ipcs.append({"id": f"{rid}/ipConfigurations/{ipc_name}", "name": ipc_name,
+                             "type": "Microsoft.Network/networkInterfaces/ipConfigurations",
+                             "properties": ip_props})
+        if old:
+            _nic_unlink(state, old)
+        rec = old or _new_rec(rid, name, NIC_T, location=(payload or {}).get("location") or "eastus")
+        props = rec.setdefault("properties", {})
+        props.update({k: v for k, v in pp.items() if k not in ("ipConfigurations", "virtualMachine", "macAddress")})
+        props["ipConfigurations"] = new_ipcs
+        if nsg_ref:
+            props["networkSecurityGroup"] = {"id": nsg_ref["id"]}
+        else:
+            props.pop("networkSecurityGroup", None)
+        props.setdefault("resourceGuid", str(uuid.uuid4()))
+        props.setdefault("enableAcceleratedNetworking", False)
+        props.setdefault("enableIPForwarding", False)
+        props["macAddress"] = props.get("macAddress") or _mac(key)
+        props["provisioningState"] = "Succeeded"
+        if isinstance((payload or {}).get("tags"), dict):
+            rec["tags"] = dict(payload["tags"])
+        rec.setdefault("tags", {})
+        state[key] = rec
+        _nic_link(state, rec)
+        return _ok(_view(rec), 200 if old else 201, rid, NIC_T, name)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+def _nic_link(state, nic):
+    rid = nic["id"]
+    nsg = (nic.get("properties") or {}).get("networkSecurityGroup")
+    if nsg and state.get(nsg["id"].lower()):
+        _set_backref_list(state[nsg["id"].lower()], "networkInterfaces", rid, True)
+    for ipc in nic["properties"].get("ipConfigurations") or []:
+        pip_id = ((ipc.get("properties") or {}).get("publicIPAddress") or {}).get("id")
+        if pip_id and state.get(pip_id.lower()):
+            state[pip_id.lower()].setdefault("properties", {})["ipConfiguration"] = {"id": ipc["id"]}
+
+
+def _nic_unlink(state, nic):
+    rid = nic["id"]
+    nsg = (nic.get("properties") or {}).get("networkSecurityGroup")
+    if nsg and state.get(str(nsg.get("id", "")).lower()):
+        _set_backref_list(state[nsg["id"].lower()], "networkInterfaces", rid, False)
+    for ipc in (nic.get("properties") or {}).get("ipConfigurations") or []:
+        pip_id = ((ipc.get("properties") or {}).get("publicIPAddress") or {}).get("id")
+        pip = state.get(str(pip_id or "").lower())
+        if pip and str(((pip.get("properties") or {}).get("ipConfiguration") or {}).get("id", "")).lower().startswith(rid.lower() + "/"):
+            pip["properties"].pop("ipConfiguration", None)
+
+
+# ── VM hooks (network profile ↔ NIC back-references) ─────────────────────────
+def _nic_refs(vm_props):
+    np_ = (vm_props or {}).get("networkProfile") or {}
+    return [r for r in np_.get("networkInterfaces") or [] if isinstance(r, dict) and r.get("id")]
+
+
+def validate_vm(state, rid: str, payload):
+    """400 when the VM's networkProfile references a NIC that doesn't exist or is
+    attached to another VM (as ARM does), else None."""
+    for ref in _nic_refs(_payload_props(payload)):
+        nic = state.get(ref["id"].lower())
+        if not nic:
+            return _err(400, "NotFound", f"Network interface '{ref['id']}' not found.")
+        owner = (nic.get("properties") or {}).get("virtualMachine")
+        if owner and owner.get("id", "").lower() != rid.lower():
+            return _err(409, "NicInUse", f"Network interface '{ref['id']}' is attached to {owner.get('id')}.")
+    return validate_identity(payload)
+
+
+def after_vm_upsert(state, vm):
+    refs = {r["id"].lower() for r in _nic_refs(vm.get("properties"))}
+    for nic in _of_type(state, NIC_T):
+        k = nic["id"].lower()
+        owner = (nic.get("properties") or {}).get("virtualMachine")
+        if k in refs:
+            nic["properties"]["virtualMachine"] = {"id": vm["id"]}
+        elif owner and owner.get("id", "").lower() == vm["id"].lower():
+            nic["properties"].pop("virtualMachine", None)
+
+
+def on_delete(state, rec):
+    """Cascade a resource delete the way ARM does: child and extension resources
+    under it go with it; a VM releases its NICs (deleting those whose deleteOption is
+    Delete, with their public IPs likewise) and its auto-shutdown schedule."""
+    if not isinstance(rec, dict):
+        return
+    rid = str(rec.get("id", ""))
+    low = rid.lower()
+    for k in [k for k in list(state.keys()) if str(k).startswith(low + "/")]:
+        state.pop(k, None)
+    if str(rec.get("_type", "")).lower() == SQL_DB_T:
+        _sql_drop(state, rec)
+    if str(rec.get("_type", "")).lower() == VM_T:
+        for ref in _nic_refs(rec.get("properties")):
+            nic = state.get(ref["id"].lower())
+            if not nic:
+                continue
+            nic["properties"].pop("virtualMachine", None)
+            if str(ref.get("properties", {}).get("deleteOption", ref.get("deleteOption", ""))).lower() == "delete":
+                pips = [((c.get("properties") or {}).get("publicIPAddress") or {}) for c in nic["properties"].get("ipConfigurations") or []]
+                _nic_unlink(state, nic)
+                state.pop(ref["id"].lower(), None)
+                for p in pips:
+                    if p.get("id") and str(p.get("properties", {}).get("deleteOption", p.get("deleteOption", ""))).lower() == "delete":
+                        state.pop(p["id"].lower(), None)
+        for s in _of_type(state, SCHED_T):
+            if str((s.get("properties") or {}).get("targetResourceId", "")).lower() == low:
+                state.pop(s["id"].lower(), None)
+
+
+# ── VM auto-shutdown (DevTestLab global schedules) ───────────────────────────
+def _schedules(state, method, sub, rg, after, payload):
+    if len(after) == 2:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_view(r) for r in _of_type(state, SCHED_T)
+                              if rg is None or str(r.get("_rg") or "").lower() == rg.lower()]})
+    name = after[2]
+    rid = scope_id(sub, rg, after[:3])
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        return _ok(_view(rec)) if rec else _err(404, "ResourceNotFound", f"The schedule '{name}' was not found.")
+    if method == "DELETE":
+        rec = state.pop(key, None)
+        tgt = (rec or {}).get("properties", {}).get("targetResourceId", rid)
+        return _ok(None, 200 if rec else 204, tgt, SCHED_T, name)
+    if method in ("PUT", "PATCH"):
+        old = state.get(key)
+        pp = _payload_props(payload)
+        props = dict((old or {}).get("properties") or {}) if method == "PATCH" else {}
+        props.update(pp)
+        task = props.get("taskType") or "ComputeVmShutdownTask"
+        tgt = props.get("targetResourceId")
+        if not tgt or not state.get(str(tgt).lower()):
+            return _err(400, "InvalidTargetResource", f"Target resource '{tgt}' was not found.")
+        t = str((props.get("dailyRecurrence") or {}).get("time") or "")
+        if len(t) != 4 or not t.isdigit() or int(t[:2]) > 23 or int(t[2:]) > 59:
+            return _err(400, "InvalidScheduleTime", "dailyRecurrence.time must be HHmm (24-hour), e.g. 1900.")
+        st = props.get("status") or "Enabled"
+        if st not in ("Enabled", "Disabled"):
+            return _err(400, "InvalidStatus", "status must be Enabled or Disabled.")
+        ns = dict(props.get("notificationSettings") or {})
+        ns.setdefault("status", "Disabled")
+        ns.setdefault("timeInMinutes", 30)
+        props.update({"status": st, "taskType": task, "dailyRecurrence": {"time": t},
+                      "timeZoneId": props.get("timeZoneId") or "UTC", "notificationSettings": ns,
+                      "targetResourceId": tgt, "provisioningState": "Succeeded",
+                      "createdDate": (old or {}).get("properties", {}).get("createdDate") or _now()})
+        rec = old or _new_rec(rid, name, SCHED_T, location=(payload or {}).get("location") or "eastus")
+        rec["properties"] = props
+        rec.setdefault("tags", {})
+        state[key] = rec
+        return _ok(_view(rec), 200 if old else 201, tgt, SCHED_T, name)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+# ── VM run commands ──────────────────────────────────────────────────────────
+def _vm_power(vm):
+    p = vm.get("properties") or {}
+    rt = p.get("runtime") if isinstance(p.get("runtime"), dict) else {}
+    return str(rt.get("containerStatus") or str(p.get("powerState") or "").replace("PowerState/", "") or "running").lower()
+
+
+def _script_of(src):
+    if isinstance(src.get("script"), list):
+        return "\n".join(str(x) for x in src["script"])
+    if src.get("script"):
+        return str(src["script"])
+    cid = str(src.get("commandId") or "")
+    if cid == "ifconfig":
+        return "ip addr"
+    return ""
+
+
+def _execute(vm, script, executor):
+    start = _now()
+    res = None
+    if executor is not None:
+        try:
+            res = executor(vm, script)
+        except Exception as exc:                       # executor failure = failed run, recorded
+            return {"executionState": "Failed", "executionMessage": f"Execution failed: {str(exc)[:300]}",
+                    "exitCode": -1, "output": "", "error": str(exc)[:2000], "startTime": start, "endTime": _now()}
+    if res is None:
+        return {"executionState": "Failed", "exitCode": -1, "output": "", "error": "",
+                "executionMessage": ("The VM guest agent is not reachable: this virtual machine has no guest "
+                                     "runtime (it is metadata-only in this simulator), so the script was not run."),
+                "startTime": start, "endTime": _now()}
+    code, out, err = res
+    return {"executionState": "Succeeded" if code == 0 else "Failed",
+            "executionMessage": "" if code == 0 else f"Script exited with code {code}.",
+            "exitCode": code, "output": out or "", "error": err or "", "startTime": start, "endTime": _now()}
+
+
+def _run_commands(state, method, vm_rid, vm, rest, payload, executor):
+    # rest = ["runCommands"] or ["runCommands", name]
+    if len(rest) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        items = [_view(r) for r in _of_type(state, RUNCMD_T) if r["id"].lower().startswith(vm_rid.lower() + "/")]
+        items.sort(key=lambda r: (r.get("properties") or {}).get("instanceView", {}).get("startTime", ""), reverse=True)
+        return _ok({"value": items})
+    name = rest[1]
+    rid = f"{vm_rid}/runCommands/{name}"
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        return _ok(_view(rec)) if rec else _err(404, "ResourceNotFound", f"Run command '{name}' not found.")
+    if method == "DELETE":
+        rec = state.pop(key, None)
+        return _ok(None, 200 if rec else 204, vm_rid, RUNCMD_T, name)
+    if method in ("PUT", "PATCH"):
+        pp = _payload_props(payload)
+        src = pp.get("source") if isinstance(pp.get("source"), dict) else {}
+        script = _script_of(src)
+        if not script.strip():
+            return _err(400, "InvalidParameter", "properties.source must carry a script or a commandId.")
+        if _vm_power(vm) not in ("running", "starting"):
+            return _err(409, "OperationNotAllowed",
+                        "Run command can't be executed because the VM is not running. Start the VM and try again.")
+        old = state.get(key)
+        rec = old or _new_rec(rid, name, RUNCMD_T, location=vm.get("location"))
+        iv = _execute(vm, script, executor)
+        rec["properties"] = {"source": src, "parameters": pp.get("parameters") or [],
+                             "asyncExecution": bool(pp.get("asyncExecution", False)),
+                             "timeoutInSeconds": int(pp.get("timeoutInSeconds") or 0),
+                             "provisioningState": "Succeeded" if iv["executionState"] == "Succeeded" else "Failed",
+                             "instanceView": iv}
+        rec.setdefault("tags", {})
+        state[key] = rec
+        return _ok(_view(rec), 200 if old else 201, vm_rid, RUNCMD_T, name)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+def instance_view(vm, executor=None):
+    """``virtualMachines/{vm}/instanceView``: provisioning + power state and the VM
+    agent status. The agent is Ready only when the VM has a guest runtime the host
+    can reach (``executor`` answers for this VM)."""
+    p = vm.get("properties") or {}
+    power = _vm_power(vm)
+    os_p = p.get("osProfile") or {}
+    img = ((p.get("storageProfile") or {}).get("imageReference") or {})
+    rt = p.get("runtime") if isinstance(p.get("runtime"), dict) else {}
+    guest = bool(rt.get("containerName")) and executor is not None
+    now = _now()
+    agent = {"vmAgentVersion": "2.11.1.4" if guest else "Unknown",
+             "statuses": [{"code": "ProvisioningState/succeeded", "level": "Info", "displayStatus": "Ready",
+                           "message": "Guest Agent is running", "time": now}] if guest else
+                         [{"code": "ProvisioningState/Unavailable", "level": "Warning", "displayStatus": "Not Ready",
+                           "message": "VM agent is unresponsive: this VM has no guest runtime in the simulator (metadata-only).",
+                           "time": now}]}
+    prov = str(p.get("provisioningState") or "Succeeded").lower()
+    return {"computerName": os_p.get("computerName") or vm.get("name"),
+            "osName": " ".join(x for x in (img.get("offer"), img.get("sku")) if x) or None,
+            "vmAgent": agent, "hyperVGeneration": "V2",
+            "statuses": [{"code": "ProvisioningState/" + prov, "level": "Info", "displayStatus": "Provisioning " + prov,
+                          "time": vm.get("_changed") or vm.get("_created") or now},
+                         {"code": "PowerState/" + power, "level": "Info", "displayStatus": "VM " + power}]}
+
+
+def _run_command_action(vm_rid, vm, payload, executor):
+    script = _script_of(payload or {})
+    if not script.strip():
+        return _err(400, "InvalidParameter", "commandId and script are required.")
+    if _vm_power(vm) not in ("running", "starting"):
+        return _err(409, "OperationNotAllowed",
+                    "Run command can't be executed because the VM is not running. Start the VM and try again.")
+    iv = _execute(vm, script, executor)
+    ok = iv["executionState"] == "Succeeded"
+    msg = (f"Enable succeeded: \n[stdout]\n{iv['output']}\n[stderr]\n{iv['error']}" if iv["exitCode"] != -1
+           else iv["executionMessage"])
+    return _ok({"value": [{"code": "ProvisioningState/succeeded" if ok else "ProvisioningState/failed",
+                           "level": "Info" if ok else "Error",
+                           "displayStatus": "Provisioning succeeded" if ok else "Provisioning failed",
+                           "message": msg}]}, 200, vm_rid, "Microsoft.Compute/virtualMachines/runCommand", vm.get("name", ""))
+
+
+# ── VM restore points ────────────────────────────────────────────────────────
+def _restore_points(state, method, sub, rg, after, payload):
+    # after = [Microsoft.Compute, restorePointCollections, c?, restorePoints?, p?]
+    if len(after) == 2:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_rpc_view(state, r) for r in _of_type(state, RPC_T)
+                              if rg is None or str(r.get("_rg") or "").lower() == rg.lower()]})
+    cname = after[2]
+    crid = scope_id(sub, rg, after[:3])
+    ckey = crid.lower()
+    if len(after) == 3:
+        if method == "GET":
+            rec = state.get(ckey)
+            return _ok(_rpc_view(state, rec)) if rec else _err(404, "ResourceNotFound", f"Restore point collection '{cname}' not found.")
+        if method == "DELETE":
+            rec = state.pop(ckey, None)
+            for k in [k for k in list(state.keys()) if str(k).startswith(ckey + "/")]:
+                state.pop(k, None)
+            src = (rec or {}).get("properties", {}).get("source", {}).get("id", crid)
+            return _ok(None, 200 if rec else 204, src, RPC_T, cname)
+        if method in ("PUT", "PATCH"):
+            old = state.get(ckey)
+            src = (_payload_props(payload).get("source") or {}).get("id") or (old or {}).get("properties", {}).get("source", {}).get("id")
+            vm = state.get(str(src or "").lower())
+            if not vm:
+                return _err(400, "InvalidParameter", f"Source resource '{src}' was not found.")
+            rec = old or _new_rec(crid, cname, RPC_T, location=(payload or {}).get("location") or vm.get("location"))
+            rec["properties"] = {"source": {"id": vm["id"], "location": vm.get("location")},
+                                 "restorePointCollectionId": (old or {}).get("properties", {}).get("restorePointCollectionId") or str(uuid.uuid4()),
+                                 "provisioningState": "Succeeded"}
+            rec.setdefault("tags", {})
+            state[ckey] = rec
+            return _ok(_rpc_view(state, rec), 200 if old else 201, vm["id"], RPC_T, cname)
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+    if len(after) < 4 or after[3].lower() != "restorepoints":
+        return _err(404, "ResourceTypeNotSupported", "Unknown restore point collection child.")
+    coll = state.get(ckey)
+    if not coll:
+        return _err(404, "ParentResourceNotFound", f"Restore point collection '{cname}' not found.")
+    src_id = coll["properties"]["source"]["id"]
+    if len(after) == 4:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": _rps_of(state, ckey)})
+    pname = after[4]
+    rid = f"{crid}/restorePoints/{pname}"
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        return _ok(_view(rec)) if rec else _err(404, "ResourceNotFound", f"Restore point '{pname}' not found.")
+    if method == "DELETE":
+        rec = state.pop(key, None)
+        return _ok(None, 200 if rec else 204, src_id, RP_T, pname)
+    if method == "PUT":
+        if state.get(key):
+            return _err(409, "Conflict", f"Restore point '{pname}' already exists; restore points are immutable.")
+        vm = state.get(src_id.lower())
+        if not vm:
+            return _err(400, "InvalidParameter", f"Source VM '{src_id}' no longer exists.")
+        vp = vm.get("properties") or {}
+        rec = _new_rec(rid, pname, RP_T)
+        rec["properties"] = {
+            "consistencyMode": _payload_props(payload).get("consistencyMode") or "CrashConsistent",
+            "timeCreated": _now(), "provisioningState": "Succeeded",
+            "sourceMetadata": {"vmId": vp.get("vmId"), "location": vm.get("location"),
+                               "hardwareProfile": vp.get("hardwareProfile") or {},
+                               "storageProfile": {"osDisk": (vp.get("storageProfile") or {}).get("osDisk") or {},
+                                                  "dataDisks": (vp.get("storageProfile") or {}).get("dataDisks") or []},
+                               "osProfile": {k: v for k, v in (vp.get("osProfile") or {}).items() if k != "adminPassword"}},
+        }
+        state[key] = rec
+        return _ok(_view(rec), 201, src_id, RP_T, pname)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+def _rps_of(state, ckey):
+    out = [_view(r) for r in _of_type(state, RP_T) if r["id"].lower().startswith(ckey + "/")]
+    out.sort(key=lambda r: r["properties"].get("timeCreated", ""), reverse=True)
+    return out
+
+
+def _rpc_view(state, rec):
+    v = _view(rec)
+    v["properties"] = dict(v.get("properties") or {})
+    v["properties"]["restorePoints"] = _rps_of(state, rec["id"].lower())
+    return v
+
+
+# ── storage accounts: keys, account SAS, geo-replication / failover ──────────
+STORAGE_T = "microsoft.storage/storageaccounts"
+# Azure region pairs (the secondary of a geo-redundant account).
+PAIRED_REGIONS = {"eastus": "westus", "westus": "eastus", "eastus2": "centralus", "centralus": "eastus2",
+                  "westus2": "westcentralus", "westcentralus": "westus2", "northcentralus": "southcentralus",
+                  "southcentralus": "northcentralus", "westus3": "eastus", "northeurope": "westeurope",
+                  "westeurope": "northeurope", "uksouth": "ukwest", "ukwest": "uksouth",
+                  "southeastasia": "eastasia", "eastasia": "southeastasia", "centralindia": "southindia",
+                  "southindia": "centralindia", "japaneast": "japanwest", "japanwest": "japaneast",
+                  "australiaeast": "australiasoutheast", "australiasoutheast": "australiaeast"}
+GEO_SKUS = ("standard_grs", "standard_ragrs", "standard_gzrs", "standard_ragzrs")
+SAS_VERSION = "2022-11-02"
+
+
+def _initial_storage_keys(account: str):
+    # Same derivation the appliance data plane hands SDKs (core/azure_dataplane.storage_keys),
+    # so a connection string built from listKeys works against it unchanged.
+    seed = hashlib.sha256(("cloudlearn-azure-" + account).encode()).digest()
+    return [base64.b64encode(seed).decode(), base64.b64encode(seed[::-1]).decode()]
+
+
+def _storage_fill(rec):
+    """Fields ARM reports on every storage account, kept consistent with its sku."""
+    p = rec.setdefault("properties", {})
+    name = rec.get("name", "")
+    now = _now()
+    if not isinstance(rec.get("_keys"), list) or len(rec["_keys"]) != 2:
+        rec["_keys"] = _initial_storage_keys(name)
+        p["keyCreationTime"] = {"key1": rec.get("_created") or now, "key2": rec.get("_created") or now}
+    p.setdefault("creationTime", rec.get("_created") or now)
+    p.setdefault("publicNetworkAccess", "Enabled")
+    p.setdefault("minimumTlsVersion", "TLS1_2")
+    p.setdefault("allowSharedKeyAccess", True)
+    p.setdefault("supportsHttpsTrafficOnly", True)
+    acl = p.setdefault("networkAcls", {})
+    acl.setdefault("defaultAction", "Allow")
+    acl.setdefault("bypass", "AzureServices")
+    acl.setdefault("ipRules", [])
+    acl.setdefault("virtualNetworkRules", [])
+    enc = p.setdefault("encryption", {})
+    enc.setdefault("keySource", "Microsoft.Storage")
+    enc.setdefault("requireInfrastructureEncryption", False)
+    svcs = enc.setdefault("services", {})
+    for svc in ("blob", "file", "queue", "table"):
+        svcs.setdefault(svc, {"enabled": True, "keyType": "Account", "lastEnabledTime": rec.get("_created") or now})
+    loc = str(rec.get("location") or "eastus").lower()
+    sku = str((rec.get("sku") or {}).get("name") or "Standard_LRS").lower()
+    p["primaryLocation"] = loc
+    p["statusOfPrimary"] = "available"
+    if sku in GEO_SKUS:
+        p["secondaryLocation"] = PAIRED_REGIONS.get(loc, "westus")
+        p["statusOfSecondary"] = "available"
+    else:
+        p.pop("secondaryLocation", None)
+        p.pop("statusOfSecondary", None)
+
+
+def after_upsert(state, rec, payload=None) -> None:
+    """Type-specific fields ARM computes on write (called by both dispatchers)."""
+    t = str(rec.get("_type") or "").lower()
+    p = rec.setdefault("properties", {})
+    if t == VM_T:
+        _vm_fill(rec)
+    if t == STORAGE_T:
+        _storage_fill(rec)
+    elif t == SQL_SERVER_T:
+        _sql_server_fill(state, rec)
+    elif t == SQL_DB_T:
+        _sql_db_fill(state, rec)
+    elif t == SQL_SERVER_T + "/failovergroups":
+        _sql_failover_group_fill(state, rec)
+    elif t == VNET_T:
+        _vnet_fill(state, rec)
+    elif t == SB_T:
+        _sb_fill(state, rec)
+    elif t == SB_T + "/authorizationrules":
+        _sb_rule_fill(state, rec)
+    elif t == SB_T + "/disasterrecoveryconfigs":
+        _sb_dr_fill(state, rec)
+    elif t == APIM_T:
+        _apim_fill(rec)
+    elif t == APIM_T + "/namedvalues":
+        p.setdefault("displayName", rec.get("name"))
+        p.setdefault("secret", False)
+        p.setdefault("tags", [])
+    elif t == "microsoft.authorization/roleassignments" and p.get("condition"):
+        p.setdefault("conditionVersion", "2.0")
+    elif t == "microsoft.keyvault/vaults":
+        p.setdefault("publicNetworkAccess", "Enabled")
+        acl = p.setdefault("networkAcls", {})
+        acl.setdefault("bypass", "AzureServices")
+        acl.setdefault("defaultAction", "Allow")
+        acl.setdefault("ipRules", [])
+        acl.setdefault("virtualNetworkRules", [])
+        p.setdefault("vaultUri", f"https://{rec.get('name')}.vault.azure.net/")
+    elif t == WEB_T:
+        _site_fill(state, rec)
+    elif t == WEB_T + "/functions":
+        _function_fill(state, rec, payload)
+    elif t == WEB_T + "/deployments":
+        _deployment_fill(state, rec, payload)
+    elif t == WEB_T + "/config":
+        p.pop("provisioningState", None)           # site config is a plain settings document
+        site = state.get(rec["id"].rsplit("/config/", 1)[0].lower())
+        if site and payload is not None:
+            site_log(site, f"Configuration '{rec['name']}' updated.")
+    elif t == COSMOS_T:
+        bp = (_payload_props(payload).get("backupPolicy") or {}) if payload is not None else {}
+        if bp.get("type") == "Continuous":
+            p["backupPolicy"] = {"type": "Continuous", "continuousModeProperties": bp.get("continuousModeProperties") or {"tier": "Continuous7Days"}}
+            rec.setdefault("_backup_since", _now())
+        _cosmos_fill(rec)
+    elif t in (COSMOS_DB_T, COSMOS_CONT_T):
+        _cosmos_resource_fill(state, rec, payload)
+    elif t in (COSMOS_DB_T + "/throughputsettings", COSMOS_CONT_T + "/throughputsettings"):
+        _cosmos_throughput_fill(rec)
+    elif t == STORAGE_T + "/fileservices/shares":
+        p.setdefault("shareQuota", 5120)
+        p.setdefault("accessTier", "TransactionOptimized")
+        p.setdefault("enabledProtocols", "SMB")
+        if payload is not None:
+            p["lastModifiedTime"] = _now()
+    elif t == STORAGE_T + "/tableservices/tables":
+        p["tableName"] = rec.get("name")
+    elif t == STORAGE_T + "/encryptionscopes":
+        p.setdefault("source", "Microsoft.Storage")
+        p.setdefault("state", "Enabled")
+        p.setdefault("creationTime", rec.get("_created") or _now())
+        if payload is not None:
+            p["lastModifiedTime"] = _now()
+
+
+def _storage_keys_view(rec):
+    p = rec.get("properties") or {}
+    kct = p.get("keyCreationTime") or {}
+    return {"keys": [{"keyName": f"key{i + 1}", "value": v, "permissions": "FULL",
+                      "creationTime": kct.get(f"key{i + 1}")} for i, v in enumerate(rec["_keys"])]}
+
+
+def _account_sas(rec, body):
+    b = body or {}
+    ss, srt, sp, se = (str(b.get(k) or "") for k in ("signedServices", "signedResourceTypes", "signedPermission", "signedExpiry"))
+    if not (ss and srt and sp and se):
+        return _err(400, "InvalidValuesForRequestParameters",
+                    "signedServices, signedResourceTypes, signedPermission and signedExpiry are required.")
+    if set(ss) - set("bfqt") or set(srt) - set("sco") or set(sp) - set("rwdlacuptfix"):
+        return _err(400, "InvalidValuesForRequestParameters",
+                    "signedServices must use b,f,q,t; signedResourceTypes s,c,o; signedPermission r,w,d,l,a,c,u,p,t,f,i,x.")
+    st, sip = str(b.get("signedStart") or ""), str(b.get("signedIp") or "")
+    if st and se <= st:
+        return _err(400, "InvalidValuesForRequestParameters", "signedExpiry must be after signedStart.")
+    spr = str(b.get("signedProtocol") or "https,http")
+    if spr not in ("https", "https,http"):
+        return _err(400, "InvalidValuesForRequestParameters", "signedProtocol must be https or https,http.")
+    key_name = str(b.get("keyToSign") or "key1")
+    if key_name not in ("key1", "key2"):
+        return _err(400, "InvalidValuesForRequestParameters", "keyToSign must be key1 or key2.")
+    if (rec.get("properties") or {}).get("allowSharedKeyAccess") is False:
+        return _err(403, "KeyBasedAuthenticationNotPermitted",
+                    "Key based authentication is not permitted on this storage account (allowSharedKeyAccess is false).")
+    key = rec["_keys"][int(key_name[-1]) - 1]
+    ses = str(b.get("signedEncryptionScope") or "")
+    to_sign = "\n".join([rec.get("name", ""), sp, ss, srt, st, se, sip, spr, SAS_VERSION, ses, ""])
+    sig = base64.b64encode(hmac.new(base64.b64decode(key), to_sign.encode("utf-8"), hashlib.sha256).digest()).decode()
+    parts = [("sv", SAS_VERSION), ("ss", ss), ("srt", srt), ("sp", sp), ("se", se)]
+    if st:
+        parts.append(("st", st))
+    if sip:
+        parts.append(("sip", sip))
+    parts.append(("spr", spr))
+    if ses:
+        parts.append(("ses", ses))
+    parts.append(("sig", sig))
+    return _ok({"accountSasToken": "&".join(f"{k}={quote(v, safe='')}" for k, v in parts)})
+
+
+def _storage_action(state, rid, rec, action, payload):
+    a = action.lower()
+    if a == "listkeys":
+        return _ok(_storage_keys_view(rec))
+    if a == "regeneratekey":
+        kn = str((payload or {}).get("keyName") or "")
+        if kn not in ("key1", "key2"):
+            return _err(400, "InvalidValuesForRequestParameters", "keyName must be key1 or key2.")
+        i = int(kn[-1]) - 1
+        rec["_keys"][i] = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes + uuid.uuid4().bytes + uuid.uuid4().bytes).decode()
+        rec.setdefault("properties", {}).setdefault("keyCreationTime", {})[kn] = _now()
+        return _ok(_storage_keys_view(rec), 200, rid, "Microsoft.Storage/storageAccounts/regenerateKey", rec.get("name", ""))
+    if a == "listaccountsas":
+        return _account_sas(rec, payload)
+    if a == "failover":
+        p = rec.setdefault("properties", {})
+        sku = str((rec.get("sku") or {}).get("name") or "").lower()
+        if sku not in GEO_SKUS or not p.get("secondaryLocation"):
+            return _err(400, "FailoverNotSupported",
+                        "Account failover is only supported for geo-redundant (GRS, RA-GRS, GZRS, RA-GZRS) accounts.")
+        new_primary = p["secondaryLocation"]
+        rec["location"] = new_primary
+        rec["sku"] = dict(rec.get("sku") or {}, name="Standard_ZRS" if "gzrs" in sku else "Standard_LRS")
+        p["lastGeoFailoverTime"] = _now()
+        _storage_fill(rec)
+        return _ok(None, 200, rid, "Microsoft.Storage/storageAccounts/failover", rec.get("name", ""))
+    return None
+
+
+# ── Azure SQL: server/database security + backup settings, deleted DBs, capabilities ──
+SQL_SERVER_T = "microsoft.sql/servers"
+SQL_DB_T = "microsoft.sql/servers/databases"
+_AUDIT_DEFAULT_GROUPS = ["SUCCESSFUL_DATABASE_AUTHENTICATION_GROUP", "FAILED_DATABASE_AUTHENTICATION_GROUP",
+                         "BATCH_COMPLETED_GROUP"]
+# Editions / service objectives Azure SQL Database offers (Capabilities_ListByLocation).
+SQL_EDITIONS = [
+    ("Basic", [("Basic", "Basic", 5, "DTU", 2)]),
+    ("Standard", [("S0", "Standard", 10, "DTU", 250), ("S1", "Standard", 20, "DTU", 250),
+                  ("S2", "Standard", 50, "DTU", 250), ("S3", "Standard", 100, "DTU", 1024)]),
+    ("Premium", [("P1", "Premium", 125, "DTU", 1024), ("P2", "Premium", 250, "DTU", 1024)]),
+    ("GeneralPurpose", [("GP_Gen5_2", "GeneralPurpose", 2, "VCores", 1024), ("GP_Gen5_4", "GeneralPurpose", 4, "VCores", 1536),
+                        ("GP_S_Gen5_1", "GeneralPurpose", 1, "VCores", 512)]),
+    ("BusinessCritical", [("BC_Gen5_2", "BusinessCritical", 2, "VCores", 1024)]),
+    ("Hyperscale", [("HS_Gen5_2", "Hyperscale", 2, "VCores", 102400)]),
+]
+
+
+def _ensure_child(state, parent, seg, name, typ, props):
+    rid = f"{parent['id']}/{seg}/{name}"
+    if rid.lower() not in state:
+        rec = _new_rec(rid, name, typ)
+        rec["properties"] = props
+        state[rid.lower()] = rec
+    return state[rid.lower()]
+
+
+def _sql_server_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    p.setdefault("publicNetworkAccess", "Enabled")
+    p.setdefault("minimalTlsVersion", "1.2")
+    _ensure_child(state, rec, "encryptionProtector", "current", "Microsoft.Sql/servers/encryptionProtector",
+                  {"kind": "servicemanaged", "serverKeyName": "ServiceManaged", "serverKeyType": "ServiceManaged",
+                   "autoRotationEnabled": False})
+    _ensure_child(state, rec, "auditingSettings", "default", "Microsoft.Sql/servers/auditingSettings",
+                  {"state": "Disabled", "retentionDays": 0, "auditActionsAndGroups": list(_AUDIT_DEFAULT_GROUPS),
+                   "isAzureMonitorTargetEnabled": False, "isStorageSecondaryKeyInUse": False, "storageEndpoint": ""})
+    _ensure_child(state, rec, "securityAlertPolicies", "Default", "Microsoft.Sql/servers/securityAlertPolicies",
+                  {"state": "Disabled", "disabledAlerts": [], "emailAddresses": [], "emailAccountAdmins": False,
+                   "retentionDays": 0, "creationTime": rec.get("_created") or _now()})
+
+
+def _sql_db_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    p.setdefault("status", "Online")
+    p.setdefault("databaseId", str(uuid.uuid5(uuid.NAMESPACE_URL, rec["id"].lower())))
+    p.setdefault("creationDate", rec.get("_created") or _now())
+    p.setdefault("earliestRestoreDate", p["creationDate"])
+    p.setdefault("collation", "SQL_Latin1_General_CP1_CI_AS")
+    p.setdefault("maxSizeBytes", 34359738368)
+    rec.setdefault("sku", {"name": "GP_S_Gen5", "tier": "GeneralPurpose", "family": "Gen5", "capacity": 1})
+    _ensure_child(state, rec, "transparentDataEncryption", "current",
+                  "Microsoft.Sql/servers/databases/transparentDataEncryption", {"state": "Enabled"})
+    _ensure_child(state, rec, "backupShortTermRetentionPolicies", "default",
+                  "Microsoft.Sql/servers/databases/backupShortTermRetentionPolicies",
+                  {"retentionDays": 7, "diffBackupIntervalInHours": 12})
+    _ensure_child(state, rec, "backupLongTermRetentionPolicies", "default",
+                  "Microsoft.Sql/servers/databases/backupLongTermRetentionPolicies",
+                  {"weeklyRetention": "PT0S", "monthlyRetention": "PT0S", "yearlyRetention": "PT0S", "weekOfYear": 0})
+
+
+def _sql_failover_group_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    p.setdefault("readWriteEndpoint", {"failoverPolicy": "Automatic", "failoverWithDataLossGracePeriodMinutes": 60})
+    p.setdefault("replicationRole", "Primary")
+    p.setdefault("replicationState", "CATCH_UP")
+    for ps in p.get("partnerServers") or []:
+        prt = state.get(str(ps.get("id", "")).lower())
+        if prt:
+            ps["location"] = prt.get("location")
+            ps.setdefault("replicationRole", "Secondary")
+
+
+def _sql_drop(state, rec):
+    """Deleting a database leaves a restorable dropped database on its server."""
+    server_id = rec["id"].rsplit("/databases/", 1)[0]
+    if server_id.lower() not in state:
+        return
+    now = datetime.datetime.now(datetime.timezone.utc)
+    ticks = int((now - datetime.datetime(1, 1, 1, tzinfo=datetime.timezone.utc)).total_seconds() * 10_000_000)
+    name = f"{rec['name']},{ticks}"
+    rid = f"{server_id}/restorableDroppedDatabases/{name}"
+    p = rec.get("properties") or {}
+    d = _new_rec(rid, name, "Microsoft.Sql/servers/restorableDroppedDatabases", location=rec.get("location"))
+    d["properties"] = {"databaseName": rec["name"], "creationDate": p.get("creationDate") or rec.get("_created"),
+                       "deletionDate": _now(), "earliestRestoreDate": p.get("earliestRestoreDate") or rec.get("_created"),
+                       "maxSizeBytes": p.get("maxSizeBytes"), "backupStorageRedundancy": p.get("requestedBackupStorageRedundancy", "Geo")}
+    d["sku"] = rec.get("sku") or {}
+    state[rid.lower()] = d
+
+
+def _sql_capabilities(loc):
+    eds = []
+    for ed, slos in SQL_EDITIONS:
+        eds.append({"name": ed, "status": "Available", "supportedServiceLevelObjectives": [
+            {"name": n, "status": "Available", "sku": {"name": n, "tier": tier, "capacity": cap},
+             "performanceLevel": {"value": cap, "unit": unit},
+             "supportedMaxSizes": [{"limit": mx, "unit": "Gigabytes"}]} for n, tier, cap, unit, mx in slos]})
+    return {"name": loc, "status": "Available",
+            "supportedServerVersions": [{"name": "12.0", "status": "Default", "supportedEditions": eds}]}
+
+
+def validate_write(state, rid, full_type, payload):
+    """Request validation ARM performs before a write (400 error dict or None)."""
+    t = full_type.lower()
+    pp = _payload_props(payload)
+    if t == VM_T:
+        return validate_vm(state, rid, payload) or _vm_disks_validate(payload)
+    bad = validate_identity(payload)
+    if bad:
+        return bad
+    if t == VNET_T:
+        bad = _vnet_validate(state, rid, payload, "PUT")
+        if bad:
+            return bad
+    if t == SB_T + "/authorizationrules":
+        bad = _sb_rule_validate(payload)
+        if bad:
+            return bad
+    if t == SB_T + "/disasterrecoveryconfigs":
+        bad = _sb_dr_validate(state, rid, payload)
+        if bad:
+            return bad
+    if t == APIM_T:
+        bad = _apim_validate(payload)
+        if bad:
+            return bad
+    if t == "microsoft.authorization/roleassignments":
+        bad = _ra_validate(payload)
+        if bad:
+            return bad
+    if t == WEB_T + "/config" and rid.lower().endswith("/config/web"):
+        v = _payload_props(payload).get("minTlsVersion")
+        if v is not None and v not in TLS_VERSIONS:
+            return _err(400, "BadRequest", f"minTlsVersion must be one of {', '.join(TLS_VERSIONS)}.")
+        st = _payload_props(payload).get("ftpsState")
+        if st is not None and st not in ("AllAllowed", "FtpsOnly", "Disabled"):
+            return _err(400, "BadRequest", "ftpsState must be AllAllowed, FtpsOnly or Disabled.")
+    if t == COSMOS_T:
+        bad = _cosmos_validate(payload)
+        if bad:
+            return bad
+    if t in (COSMOS_DB_T + "/throughputsettings", COSMOS_CONT_T + "/throughputsettings"):
+        bad = _cosmos_throughput_validate(payload)
+        if bad:
+            return bad
+    if t == SQL_DB_T + "/backupshorttermretentionpolicies":
+        d = pp.get("retentionDays")
+        if d is not None and not (isinstance(d, int) and 1 <= d <= 35):
+            return _err(400, "InvalidBackupRetentionPeriod", "Point-in-time restore retention must be between 1 and 35 days.")
+        h = pp.get("diffBackupIntervalInHours")
+        if h is not None and h not in (12, 24):
+            return _err(400, "InvalidDiffBackupInterval", "Differential backup frequency must be 12 or 24 hours.")
+    if t == SQL_SERVER_T + "/auditingsettings" and pp.get("state") == "Enabled":
+        if not pp.get("storageEndpoint") and not pp.get("isAzureMonitorTargetEnabled"):
+            return _err(400, "DataSecurityInvalidUserSuppliedParameter",
+                        "Invalid parameter 'storageEndpoint': a storage endpoint or the Azure Monitor target is required when auditing is enabled.")
+    if t == SQL_SERVER_T + "/failovergroups":
+        own = rid.lower().split("/failovergroups/")[0]
+        for ps in pp.get("partnerServers") or []:
+            pid = str(ps.get("id", "")).lower()
+            if not pid or pid not in state or pid == own:
+                return _err(400, "FailoverGroupPartnerServerInvalid",
+                            f"Partner server '{ps.get('id')}' must be an existing server other than the primary.")
+        for db in pp.get("databases") or []:
+            if str(db).lower() not in state or not str(db).lower().startswith(own + "/databases/"):
+                return _err(400, "FailoverGroupDatabaseInvalid", f"Database '{db}' does not exist on the primary server.")
+    return None
+
+
+# ── Cosmos DB: consistency, regions, backup policy, database/container throughput ──
+COSMOS_T = "microsoft.documentdb/databaseaccounts"
+COSMOS_DB_T = COSMOS_T + "/sqldatabases"
+COSMOS_CONT_T = COSMOS_DB_T + "/containers"
+CONSISTENCY_LEVELS = ("Eventual", "ConsistentPrefix", "Session", "BoundedStaleness", "Strong")
+_REGION_NAMES = {"eastus": "East US", "eastus2": "East US 2", "westus": "West US", "westus2": "West US 2",
+                 "westus3": "West US 3", "centralus": "Central US", "northeurope": "North Europe",
+                 "westeurope": "West Europe", "uksouth": "UK South", "southeastasia": "Southeast Asia",
+                 "eastasia": "East Asia", "centralindia": "Central India", "japaneast": "Japan East",
+                 "australiaeast": "Australia East"}
+
+
+def _region_name(loc):
+    return _REGION_NAMES.get(str(loc or "").replace(" ", "").lower(), loc)
+
+
+def _cosmos_fill(rec):
+    p = rec.setdefault("properties", {})
+    cp = p.setdefault("consistencyPolicy", {})
+    cp.setdefault("defaultConsistencyLevel", "Session")
+    cp.setdefault("maxIntervalInSeconds", 5)
+    cp.setdefault("maxStalenessPrefix", 100)
+    locs = p.get("locations")
+    if not isinstance(locs, list) or not locs:
+        locs = [{"locationName": _region_name(rec.get("location")), "failoverPriority": 0, "isZoneRedundant": False}]
+    for i, l in enumerate(sorted(locs, key=lambda x: x.get("failoverPriority", 0))):
+        l["locationName"] = _region_name(l.get("locationName"))
+        l.setdefault("failoverPriority", i)
+        l.setdefault("isZoneRedundant", False)
+        l["id"] = f"{rec.get('name')}-{str(l['locationName']).replace(' ', '').lower()}"
+        l["provisioningState"] = "Succeeded"
+    p["locations"] = locs
+    first = min(locs, key=lambda x: x.get("failoverPriority", 0))
+    multi = bool(p.get("enableMultipleWriteLocations"))
+    p["writeLocations"] = [dict(l) for l in locs] if multi else [dict(first)]
+    p["readLocations"] = [dict(l) for l in locs]
+    p.setdefault("enableMultipleWriteLocations", False)
+    p.setdefault("enableAutomaticFailover", False)
+    p.setdefault("publicNetworkAccess", "Enabled")
+    p.setdefault("ipRules", [])
+    p.setdefault("isVirtualNetworkFilterEnabled", False)
+    p.setdefault("virtualNetworkRules", [])
+    p.setdefault("minimalTlsVersion", "Tls12")
+    p.setdefault("backupPolicy", {"type": "Periodic", "periodicModeProperties": {
+        "backupIntervalInMinutes": 240, "backupRetentionIntervalInHours": 8, "backupStorageRedundancy": "Geo"}})
+    p.setdefault("instanceId", str(uuid.uuid5(uuid.NAMESPACE_URL, rec["id"].lower())))
+    p.setdefault("createMode", "Default")
+
+
+def _cosmos_resource_fill(state, rec, payload):
+    """sqlDatabases / containers carry properties.resource (id, _rid, _ts) and, when
+    created with options.throughput / autoscaleSettings, a throughputSettings/default."""
+    p = rec.setdefault("properties", {})
+    res = p.setdefault("resource", {})
+    res["id"] = rec.get("name")
+    res.setdefault("_rid", base64.b64encode(hashlib.sha256(rec["id"].lower().encode()).digest()[:6]).decode())
+    res.setdefault("_etag", '"' + str(uuid.uuid4()) + '"')
+    res["_ts"] = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+    if str(rec.get("_type") or "").lower() == COSMOS_CONT_T:
+        res.setdefault("partitionKey", {"paths": ["/id"], "kind": "Hash", "version": 2})
+        res.setdefault("indexingPolicy", {"indexingMode": "consistent", "automatic": True,
+                                          "includedPaths": [{"path": "/*"}], "excludedPaths": [{"path": "/\"_etag\"/?"}]})
+    opts = (_payload_props(payload).get("options") or {}) if payload is not None else {}
+    want = None
+    if isinstance(opts, dict) and (opts.get("throughput") or (opts.get("autoscaleSettings") or {}).get("maxThroughput")):
+        mx = (opts.get("autoscaleSettings") or {}).get("maxThroughput")
+        want = {"throughput": int(mx) // 10 if mx else int(opts["throughput"])}
+        if mx:
+            want["autoscaleSettings"] = {"maxThroughput": int(mx)}
+    elif payload is not None and str(rec.get("_type") or "").lower() == COSMOS_CONT_T \
+            and f"{rec['id'].rsplit('/containers/', 1)[0]}/throughputSettings/default".lower() not in state:
+        want = {"throughput": 400}            # a container in a database without shared throughput gets its own
+    if want is not None and f"{rec['id']}/throughputSettings/default".lower() not in state:
+        t = _new_rec(f"{rec['id']}/throughputSettings/default", "default", rec["_type"] + "/throughputSettings")
+        want["minimumThroughput"] = "400" if "autoscaleSettings" not in want else str(max(400, want["autoscaleSettings"]["maxThroughput"] // 10))
+        t["properties"] = {"resource": want}
+        state[t["id"].lower()] = t
+
+
+def _cosmos_throughput_validate(payload):
+    r = (_payload_props(payload).get("resource") or {})
+    mx = (r.get("autoscaleSettings") or {}).get("maxThroughput")
+    if mx is not None:
+        if not isinstance(mx, int) or mx < 1000 or mx % 1000:
+            return _err(400, "BadRequest", "Autoscale max throughput must be at least 1000 RU/s and a multiple of 1000.")
+        return None
+    t = r.get("throughput")
+    if not isinstance(t, int) or t < 400 or t % 100:
+        return _err(400, "BadRequest", "Manual throughput must be at least 400 RU/s and a multiple of 100.")
+    return None
+
+
+def _cosmos_throughput_fill(rec):
+    r = rec.setdefault("properties", {}).setdefault("resource", {})
+    mx = (r.get("autoscaleSettings") or {}).get("maxThroughput")
+    if mx:
+        r["throughput"] = int(mx) // 10
+        r["minimumThroughput"] = str(max(400, int(mx) // 10))
+    else:
+        r.pop("autoscaleSettings", None)
+        r["minimumThroughput"] = "400"
+
+
+def _cosmos_validate(payload):
+    cp = _payload_props(payload).get("consistencyPolicy")
+    if isinstance(cp, dict):
+        lvl = cp.get("defaultConsistencyLevel")
+        if lvl is not None and lvl not in CONSISTENCY_LEVELS:
+            return _err(400, "BadRequest", f"defaultConsistencyLevel must be one of {', '.join(CONSISTENCY_LEVELS)}.")
+        if lvl == "BoundedStaleness":
+            pre, iv = cp.get("maxStalenessPrefix", 100), cp.get("maxIntervalInSeconds", 5)
+            if not (isinstance(pre, int) and 10 <= pre <= 2147483647) or not (isinstance(iv, int) and 5 <= iv <= 86400):
+                return _err(400, "BadRequest", "Bounded staleness needs maxStalenessPrefix 10-2147483647 and maxIntervalInSeconds 5-86400.")
+    bp = _payload_props(payload).get("backupPolicy")
+    if isinstance(bp, dict) and bp.get("type") == "Periodic":
+        pm = bp.get("periodicModeProperties") or {}
+        iv, ret = pm.get("backupIntervalInMinutes", 240), pm.get("backupRetentionIntervalInHours", 8)
+        if not (isinstance(iv, int) and 60 <= iv <= 1440) or not (isinstance(ret, int) and 8 <= ret <= 720):
+            return _err(400, "BadRequest", "Periodic backup interval must be 60-1440 minutes and retention 8-720 hours.")
+    return None
+
+
+def _cosmos_restorable(state, sub):
+    out = []
+    for r in _of_type(state, COSMOS_T):
+        if r.get("_sub") != sub:
+            continue
+        _cosmos_fill(r)
+        bp = r["properties"].get("backupPolicy") or {}
+        if bp.get("type") != "Continuous":
+            continue
+        iid = r["properties"]["instanceId"]
+        out.append({"id": f"/subscriptions/{sub}/providers/Microsoft.DocumentDB/locations/{r.get('location')}/restorableDatabaseAccounts/{iid}",
+                    "name": iid, "type": "Microsoft.DocumentDB/locations/restorableDatabaseAccounts", "location": r.get("location"),
+                    "properties": {"accountName": r.get("name"), "creationTime": r.get("_created"), "apiType": "Sql",
+                                   "oldestRestorableTime": r.get("_backup_since") or r.get("_created"),
+                                   "restorableLocations": [{"locationName": l["locationName"], "regionalDatabaseAccountInstanceId": iid,
+                                                            "creationTime": r.get("_created")} for l in r["properties"]["locations"]]}})
+    return out
+
+
+def subscription_locations(sub):
+    """GET /subscriptions/{sub}/locations — the regions the subscription can deploy to."""
+    out = []
+    for name, display in sorted(_REGION_NAMES.items(), key=lambda kv: kv[1]):
+        pair = PAIRED_REGIONS.get(name)
+        md = {"regionType": "Physical", "regionCategory": "Recommended", "geographyGroup": "", "pairedRegion": []}
+        if pair:
+            md["pairedRegion"] = [{"name": pair, "id": f"/subscriptions/{sub}/locations/{pair}"}]
+        out.append({"id": f"/subscriptions/{sub}/locations/{name}", "name": name, "displayName": display,
+                    "regionalDisplayName": display, "type": "Region", "metadata": md})
+    return {"value": out}
+
+
+# ── App Service / Function apps: plan, site config, auth, keys, functions, deployments, logs ──
+WEB_T = "microsoft.web/sites"
+PLAN_T = "Microsoft.Web/serverfarms"
+PLAN_SKUS = {"Y1": ("Dynamic", "Y"), "EP1": ("ElasticPremium", "EP"), "EP2": ("ElasticPremium", "EP"),
+             "EP3": ("ElasticPremium", "EP"), "F1": ("Free", "F"), "B1": ("Basic", "B"), "B2": ("Basic", "B"),
+             "B3": ("Basic", "B"), "S1": ("Standard", "S"), "S2": ("Standard", "S"), "S3": ("Standard", "S"),
+             "P1v3": ("PremiumV3", "Pv3"), "P2v3": ("PremiumV3", "Pv3"), "P3v3": ("PremiumV3", "Pv3")}
+TLS_VERSIONS = ("1.0", "1.1", "1.2", "1.3")
+
+
+def _key():
+    return base64.urlsafe_b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes).decode().rstrip("=") + "=="
+
+
+def site_log(rec, message, level="Information"):
+    """Append one line to the app's log stream (platform + application events)."""
+    logs = rec.setdefault("_logs", [])
+    logs.append({"timestamp": _now(), "level": level, "message": str(message)[:2000]})
+    del logs[:-500]
+
+
+def _site_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    name, rg = rec.get("name", ""), rec.get("_rg") or ""
+    p.setdefault("httpsOnly", False)
+    p.setdefault("state", "Running")
+    p.setdefault("enabled", True)
+    p.setdefault("hostNameSslStates", [
+        {"name": f"{name}.azurewebsites.net", "sslState": "Disabled", "hostType": "Standard"},
+        {"name": f"{name}.scm.azurewebsites.net", "sslState": "Disabled", "hostType": "Repository"}])
+    if not p.get("serverFarmId"):
+        sub = rec.get("_sub") or rec["id"].split("/")[2]
+        plan_name = f"ASP-{rg}-{name}"[:60]
+        pid = f"/subscriptions/{sub}/resourceGroups/{rg}/providers/{PLAN_T}/{plan_name}"
+        if pid.lower() not in state:
+            plan = _new_rec(pid, plan_name, PLAN_T, location=rec.get("location") or "eastus")
+            plan["kind"] = "functionapp"
+            plan["sku"] = {"name": "Y1", "tier": "Dynamic", "size": "Y1", "family": "Y", "capacity": 0}
+            plan["properties"] = {"status": "Ready", "reserved": True, "maximumElasticWorkerCount": 1,
+                                  "provisioningState": "Succeeded"}
+            plan["tags"] = {}
+            state[pid.lower()] = plan
+        p["serverFarmId"] = pid
+    _ensure_child(state, rec, "config", "web", "Microsoft.Web/sites/config", {
+        "numberOfWorkers": 1, "linuxFxVersion": "Python|" + ("3.11" if str(p.get("runtime", "python")).startswith("python") else "18"),
+        "alwaysOn": False, "http20Enabled": False, "minTlsVersion": "1.2", "scmMinTlsVersion": "1.2",
+        "ftpsState": "FtpsOnly", "scmType": "None", "use32BitWorkerProcess": False, "webSocketsEnabled": False,
+        "cors": {"allowedOrigins": [], "supportCredentials": False}, "functionAppScaleLimit": 200})
+    _ensure_child(state, rec, "config", "appsettings", "Microsoft.Web/sites/config", {
+        "FUNCTIONS_EXTENSION_VERSION": "~4",
+        "FUNCTIONS_WORKER_RUNTIME": "python" if str(p.get("runtime", "python")).startswith("python") else str(p.get("runtime"))})
+    _ensure_child(state, rec, "config", "authsettingsV2", "Microsoft.Web/sites/config", {
+        "platform": {"enabled": False, "runtimeVersion": "~1"},
+        "globalValidation": {"requireAuthentication": False, "unauthenticatedClientAction": "RedirectToLoginPage"},
+        "identityProviders": {}, "login": {"tokenStore": {"enabled": False}}})
+    if not isinstance(rec.get("_hostkeys"), dict):
+        rec["_hostkeys"] = {"masterKey": _key(), "functionKeys": {"default": _key()}, "systemKeys": {}}
+        site_log(rec, f"Host started for function app '{name}' (runtime {p.get('runtime', 'python')}).")
+
+
+def _function_fill(state, rec, payload):
+    site_id = rec["id"].rsplit("/functions/", 1)[0]
+    site = state.get(site_id.lower()) or {}
+    sp = site.get("properties") or {}
+    p = rec.setdefault("properties", {})
+    p["name"] = rec["name"]
+    p.setdefault("language", "python" if str(sp.get("runtime", "python")).startswith("python") else sp.get("runtime"))
+    p.setdefault("isDisabled", False)
+    cfg = p.setdefault("config", {})
+    cfg.setdefault("bindings", [{"type": "httpTrigger", "direction": "in", "name": "req", "authLevel": "function",
+                                 "methods": ["get", "post"]}, {"type": "http", "direction": "out", "name": "$return"}])
+    host = str(sp.get("defaultHostName") or f"{site.get('name', '')}.azurewebsites.net")
+    trig = (cfg["bindings"][0] if cfg["bindings"] else {}).get("type", "")
+    if trig == "httpTrigger":
+        p["invoke_url_template"] = (host.rstrip("/") + "/" + rec["name"]) if host.startswith("http") else f"https://{host}/api/{rec['name']}"
+    else:
+        p.pop("invoke_url_template", None)
+    p["href"] = f"https://{site.get('name', '')}.scm.azurewebsites.net/api/functions/{rec['name']}"
+    p["script_href"] = p["href"].replace("/api/functions/", "/api/vfs/site/wwwroot/") + "/__init__.py"
+    if payload is not None and site:
+        site_log(site, f"Function '{rec['name']}' {'disabled' if p['isDisabled'] else 'updated'} ({trig}).")
+
+
+def _deployment_fill(state, rec, payload):
+    site_id = rec["id"].rsplit("/deployments/", 1)[0]
+    site = state.get(site_id.lower())
+    p = rec.setdefault("properties", {})
+    p.setdefault("status", 4)                      # 4 = Success (Kudu DeployStatus)
+    p.setdefault("author", "N/A")
+    p.setdefault("deployer", "Push-Deployer")
+    p.setdefault("message", "Created via a push deployment")
+    p.setdefault("start_time", rec.get("_created") or _now())
+    p.setdefault("end_time", p["start_time"])
+    p.setdefault("active", False)
+    if payload is not None and site:               # a new deployment becomes the active one
+        for d in _of_type(state, "Microsoft.Web/sites/deployments"):
+            if d["id"].lower().startswith(site_id.lower() + "/") and d is not rec:
+                d["properties"]["active"] = False
+        p["active"] = True
+        site_log(site, f"Deployment {rec['name']} by {p['deployer']} succeeded: {p['message']}")
+
+
+def _plan_validate(payload):
+    sku = (payload or {}).get("sku") or {}
+    if sku.get("name") and sku["name"] not in PLAN_SKUS:
+        return _err(400, "BadRequest", f"The pricing tier '{sku['name']}' is not allowed. Allowed: {', '.join(PLAN_SKUS)}.")
+    return None
+
+
+def _plans(state, method, sub, rg, after, payload):
+    if len(after) == 2:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_plan_view(state, r) for r in _of_type(state, PLAN_T)
+                              if rg is None or str(r.get("_rg") or "").lower() == rg.lower()]})
+    name = after[2]
+    rid = scope_id(sub, rg, after[:3])
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        return _ok(_plan_view(state, rec)) if rec else _err(404, "ResourceNotFound", f"App Service plan '{name}' not found.")
+    if method == "DELETE":
+        if _plan_sites(state, rid):
+            return _err(409, "Conflict", f"Server farm '{name}' cannot be deleted because it has web app(s) assigned to it.")
+        rec = state.pop(key, None)
+        return _ok(None, 200 if rec else 204, rid, PLAN_T, name)
+    if method in ("PUT", "PATCH"):
+        bad = _plan_validate(payload)
+        if bad:
+            return bad
+        old = state.get(key)
+        rec = old or _new_rec(rid, name, PLAN_T, location=(payload or {}).get("location") or "eastus")
+        sku = dict(rec.get("sku") or {"name": "Y1"})
+        sku.update((payload or {}).get("sku") or {})
+        tier, fam = PLAN_SKUS.get(sku["name"], ("Dynamic", "Y"))
+        sku.update({"tier": tier, "family": fam, "size": sku["name"]})
+        sku.setdefault("capacity", 0 if tier == "Dynamic" else 1)
+        rec["sku"] = sku
+        rec["kind"] = (payload or {}).get("kind") or rec.get("kind") or "functionapp"
+        props = dict(rec.get("properties") or {})
+        props.update(_payload_props(payload))
+        props.update({"status": "Ready", "provisioningState": "Succeeded"})
+        rec["properties"] = props
+        rec.setdefault("tags", {})
+        state[key] = rec
+        for site in _plan_sites(state, rid):
+            site_log(site, f"App Service plan scaled to {sku['name']} ({tier}).")
+        return _ok(_plan_view(state, rec), 200 if old else 201, rid, PLAN_T, name)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+def _plan_sites(state, plan_id):
+    return [r for r in _of_type(state, "Microsoft.Web/sites")
+            if str((r.get("properties") or {}).get("serverFarmId", "")).lower() == plan_id.lower()]
+
+
+def _plan_view(state, rec):
+    v = _view(rec)
+    v["properties"] = dict(v.get("properties") or {}, numberOfSites=len(_plan_sites(state, rec["id"])))
+    return v
+
+
+def _site_route(state, method, sub, rg, after, payload):
+    """POST start/stop/restart, host keys, function keys, Kudu log tail (ARM extensions passthrough)."""
+    low = [a.lower() for a in after]
+    site_id = scope_id(sub, rg, after[:3])
+    site = state.get(site_id.lower())
+    rest = low[3:]
+    if not rest:
+        return None
+    if site is None:
+        return _err(404, "ResourceNotFound", f"Site '{after[2]}' not found.")
+    _site_fill(state, site)
+    p = site.setdefault("properties", {})
+    if rest in (["start"], ["stop"], ["restart"]) and method == "POST":
+        if rest[0] == "stop":
+            p["state"] = "Stopped"
+            site_log(site, "Site stopped by user request.")
+        else:
+            p["state"] = "Running"
+            site_log(site, "Site restarted by user request." if rest[0] == "restart" else "Site started by user request.")
+            site_log(site, f"Host started for function app '{site.get('name')}'.")
+        mark_changed(site)
+        return _ok(None, 200, site_id, "Microsoft.Web/sites/" + rest[0], site.get("name", ""))
+    if rest == ["config", "appsettings", "list"] and method == "POST":
+        return _ok(_view(state[f"{site_id}/config/appsettings".lower()]))
+    hk = site["_hostkeys"]
+    if rest == ["host", "default", "listkeys"] and method == "POST":
+        return _ok(dict(hk))
+    if len(rest) == 5 and rest[:3] == ["host", "default", "functionkeys"] or len(rest) == 4 and rest[:3] == ["host", "default", "functionkeys"]:
+        kname = after[6]
+        if method == "PUT":
+            val = (_payload_props(payload).get("value") or _key())
+            hk["functionKeys"][kname] = val
+            site_log(site, f"Host key '{kname}' set.")
+            return _ok({"id": f"{site_id}/host/default/functionKeys/{kname}", "name": kname,
+                        "properties": {"name": kname, "value": val}}, 201, site_id, "Microsoft.Web/sites/host/functionKeys", kname)
+        if method == "DELETE":
+            if kname == "default":
+                return _err(400, "BadRequest", "The default host key can't be deleted.")
+            existed = hk["functionKeys"].pop(kname, None)
+            if existed:
+                site_log(site, f"Host key '{kname}' deleted.")
+            return _ok(None, 200 if existed else 204, site_id, "Microsoft.Web/sites/host/functionKeys", kname)
+    if len(rest) == 3 and rest[0] == "functions" and rest[2] == "listkeys" and method == "POST":
+        fn = state.get(f"{site_id}/functions/{after[4]}".lower())
+        if not fn:
+            return _err(404, "NotFound", f"Function '{after[4]}' not found.")
+        fk = fn.setdefault("_keys", {"default": _key()})
+        return _ok(dict(fk))
+    if rest[:1] == ["extensions"] and rest[1:] == ["api", "logs"] and method == "GET":
+        return _ok({"value": list(reversed(site.get("_logs") or []))[:200]})
+    return None
+
+
+# ── Virtual networks: address space, subnets (child view of the inline list), DDoS plans ──
+VNET_T = "microsoft.network/virtualnetworks"
+DDOS_T = "Microsoft.Network/ddosProtectionPlans"
+
+
+def _net(prefix):
+    try:
+        return ipaddress.ip_network(str(prefix), strict=False)
+    except ValueError:
+        return None
+
+
+def _vnet_validate(state, rid, payload, method):
+    pp = _payload_props(payload)
+    old = state.get(rid.lower()) or {}
+    space = (pp.get("addressSpace") or (old.get("properties") or {}).get("addressSpace") or {}).get("addressPrefixes") or []
+    nets = []
+    for pfx in space:
+        n = _net(pfx)
+        if n is None:
+            return _err(400, "InvalidAddressPrefixFormat", f"Address prefix {pfx} has an invalid format.")
+        if any(n.overlaps(m) for m in nets):
+            return _err(400, "NetcfgInvalidAddressSpace", f"Address space {pfx} overlaps another address space of the virtual network.")
+        nets.append(n)
+    subnets = pp.get("subnets") if "subnets" in pp else (old.get("properties") or {}).get("subnets") or []
+    seen = []
+    for sn in subnets or []:
+        sp = (sn.get("properties") or {}).get("addressPrefix") or sn.get("addressPrefix")
+        n = _net(sp)
+        if n is None:
+            return _err(400, "InvalidAddressPrefixFormat", f"Subnet {sn.get('name')} has an invalid address prefix {sp}.")
+        if nets and not any(n.subnet_of(m) for m in nets if m.version == n.version):
+            return _err(400, "NetcfgSubnetRangeOutsideVnet",
+                        f"Subnet '{sn.get('name')}' is not valid because its IP address range {sp} is outside the address space of virtual network.")
+        if any(n.overlaps(m) for m in seen):
+            return _err(400, "NetcfgSubnetRangesOverlap", f"Subnet '{sn.get('name')}' {sp} overlaps another subnet.")
+        seen.append(n)
+    if "subnets" in pp:
+        keep = {str(x.get("name", "")).lower() for x in pp.get("subnets") or []}
+        for sn in (old.get("properties") or {}).get("subnets") or []:
+            if str(sn.get("name", "")).lower() not in keep and _subnet_nics(state, f"{rid}/subnets/{sn.get('name')}"):
+                return _err(400, "InUseSubnetCannotBeDeleted",
+                            f"Subnet {sn.get('name')} is in use by network interfaces and cannot be deleted.")
+    dns = (pp.get("dhcpOptions") or {}).get("dnsServers")
+    for d in dns or []:
+        try:
+            ipaddress.ip_address(d)
+        except ValueError:
+            return _err(400, "InvalidDnsServer", f"DNS server {d} is not a valid IP address.")
+    ddos = (pp.get("ddosProtectionPlan") or {}).get("id")
+    if pp.get("enableDdosProtection") and not (ddos or (old.get("properties") or {}).get("ddosProtectionPlan")):
+        return _err(400, "DdosProtectionPlanRequired", "Enabling DDoS protection requires a DDoS protection plan.")
+    if ddos and str(ddos).lower() not in state:
+        return _err(400, "InvalidResourceReference", f"DDoS protection plan {ddos} was not found.")
+    return None
+
+
+def _subnet_nics(state, subnet_id):
+    out = []
+    for nic in _of_type(state, NIC_T):
+        for ipc in (nic.get("properties") or {}).get("ipConfigurations") or []:
+            if str(((ipc.get("properties") or {}).get("subnet") or {}).get("id", "")).lower() == subnet_id.lower():
+                out.append((nic, ipc))
+    return out
+
+
+def _vnet_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    p.setdefault("addressSpace", {"addressPrefixes": []})
+    p.setdefault("subnets", [])
+    p.setdefault("virtualNetworkPeerings", [])
+    p.setdefault("enableDdosProtection", False)
+    p.setdefault("dhcpOptions", {"dnsServers": []})
+    p.setdefault("resourceGuid", str(uuid.uuid5(uuid.NAMESPACE_URL, rec["id"].lower())))
+    for sn in p["subnets"]:
+        if not isinstance(sn, dict):
+            continue
+        sid = f"{rec['id']}/subnets/{sn.get('name')}"
+        sn["id"] = sid
+        sn["type"] = "Microsoft.Network/virtualNetworks/subnets"
+        sp = sn.setdefault("properties", {})
+        if "addressPrefix" in sn and "addressPrefix" not in sp:
+            sp["addressPrefix"] = sn.pop("addressPrefix")
+        sp["provisioningState"] = "Succeeded"
+        sp.setdefault("privateEndpointNetworkPolicies", "Disabled")
+        sp.setdefault("privateLinkServiceNetworkPolicies", "Enabled")
+        used = _subnet_nics(state, sid)
+        if used:
+            sp["ipConfigurations"] = [{"id": ipc["id"]} for _, ipc in used]
+        else:
+            sp.pop("ipConfigurations", None)
+    plan = (p.get("ddosProtectionPlan") or {}).get("id")
+    for d in _of_type(state, DDOS_T):
+        _set_backref_list(d, "virtualNetworks", rec["id"], bool(plan) and plan.lower() == d["id"].lower())
+
+
+def _subnets(state, method, sub, rg, after, payload):
+    vid = scope_id(sub, rg, after[:3])
+    vnet = state.get(vid.lower())
+    if vnet is None:
+        return _err(404, "ResourceNotFound", f"Virtual network '{after[2]}' not found.")
+    _vnet_fill(state, vnet)
+    subs = vnet["properties"]["subnets"]
+    if len(after) == 4:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [dict(x) for x in subs]})
+    name = after[4]
+    cur = next((x for x in subs if str(x.get("name", "")).lower() == name.lower()), None)
+    if method == "GET":
+        return _ok(dict(cur)) if cur else _err(404, "NotFound", f"Subnet '{name}' not found.")
+    if method == "DELETE":
+        if cur is None:
+            return _ok(None, 204)
+        if _subnet_nics(state, f"{vid}/subnets/{cur['name']}"):
+            return _err(400, "InUseSubnetCannotBeDeleted", f"Subnet {name} is in use by network interfaces and cannot be deleted.")
+        vnet["properties"]["subnets"] = [x for x in subs if x is not cur]
+        return _ok(None, 200, vid, "Microsoft.Network/virtualNetworks/subnets", name)
+    if method in ("PUT", "PATCH"):
+        sp = dict((cur or {}).get("properties") or {}) if method == "PATCH" else {}
+        sp.update(_payload_props(payload))
+        new = [x for x in subs if x is not cur] + [{"name": name, "properties": sp}]
+        bad = _vnet_validate(state, vid, {"properties": {"subnets": new}}, "PUT")
+        if bad:
+            return bad
+        vnet["properties"]["subnets"] = new
+        _vnet_fill(state, vnet)
+        out = next(x for x in vnet["properties"]["subnets"] if x["name"] == name)
+        return _ok(dict(out), 200 if cur else 201, vid, "Microsoft.Network/virtualNetworks/subnets", name)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+def _ddos_plans(state, method, sub, rg, after, payload):
+    if len(after) == 2:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_view(r) for r in _of_type(state, DDOS_T)
+                              if rg is None or str(r.get("_rg") or "").lower() == rg.lower()]})
+    name = after[2]
+    rid = scope_id(sub, rg, after[:3])
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        return _ok(_view(rec)) if rec else _err(404, "ResourceNotFound", f"DDoS protection plan '{name}' not found.")
+    if method == "DELETE":
+        rec = state.get(key)
+        if rec and (rec.get("properties") or {}).get("virtualNetworks"):
+            return _err(400, "DdosProtectionPlanInUse", f"DDoS protection plan {name} is associated with virtual networks.")
+        state.pop(key, None)
+        return _ok(None, 200 if rec else 204, rid, DDOS_T, name)
+    if method in ("PUT", "PATCH"):
+        old = state.get(key)
+        rec = old or _new_rec(rid, name, DDOS_T, location=(payload or {}).get("location") or "eastus")
+        rec.setdefault("properties", {}).update({"provisioningState": "Succeeded",
+                                                 "resourceGuid": rec["properties"].get("resourceGuid") or str(uuid.uuid4())})
+        rec["properties"].setdefault("virtualNetworks", [])
+        rec.setdefault("tags", {})
+        state[key] = rec
+        return _ok(_view(rec), 200 if old else 201, rid, DDOS_T, name)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+# ── Service Bus: SAS authorization rules + keys, geo-recovery (disaster recovery configs) ──
+SB_T = "microsoft.servicebus/namespaces"
+SB_RIGHTS = ("Listen", "Send", "Manage")
+
+
+def _sas_key():
+    return base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes).decode()
+
+
+def _sb_rule_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    rights = p.get("rights") or []
+    p["rights"] = [r for r in SB_RIGHTS if r in rights]
+    if not isinstance(rec.get("_keys"), list):
+        rec["_keys"] = [_sas_key(), _sas_key()]
+    p.pop("provisioningState", None)
+
+
+def _sb_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    p.setdefault("publicNetworkAccess", "Enabled")
+    p.setdefault("minimumTlsVersion", "1.2")
+    p.setdefault("zoneRedundant", False)
+    p.setdefault("disableLocalAuth", False)
+    rule = _ensure_child(state, rec, "authorizationRules", "RootManageSharedAccessKey",
+                         "Microsoft.ServiceBus/namespaces/authorizationRules", {"rights": ["Listen", "Manage", "Send"]})
+    _sb_rule_fill(state, rule)
+
+
+def _sb_rule_validate(payload):
+    rights = _payload_props(payload).get("rights")
+    if not isinstance(rights, list) or not rights or any(r not in SB_RIGHTS for r in rights):
+        return _err(400, "BadRequest", "rights must be a non-empty subset of Listen, Send, Manage.")
+    if "Manage" in rights and not {"Listen", "Send"} <= set(rights):
+        return _err(400, "BadRequest", "Manage rights require Listen and Send.")
+    return None
+
+
+def _sb_keys(ns, rule):
+    host = f"{ns.get('name')}.servicebus.windows.net"
+    k1, k2 = rule["_keys"]
+    cs = lambda k: f"Endpoint=sb://{host}/;SharedAccessKeyName={rule['name']};SharedAccessKey={k}"
+    return {"keyName": rule["name"], "primaryKey": k1, "secondaryKey": k2,
+            "primaryConnectionString": cs(k1), "secondaryConnectionString": cs(k2)}
+
+
+def _sb_dr_validate(state, rid, payload):
+    partner = str(_payload_props(payload).get("partnerNamespace") or "")
+    ns_id = rid.lower().split("/disasterrecoveryconfigs/")[0]
+    ns = state.get(ns_id)
+    prt = state.get(partner.lower())
+    if not prt or partner.lower() == ns_id:
+        return _err(400, "BadRequest", "partnerNamespace must be the resource id of another existing Service Bus namespace.")
+    for x in (ns, prt):
+        if str((x.get("sku") or {}).get("name", "")).lower() != "premium":
+            return _err(400, "BadRequest", f"Geo-disaster recovery requires Premium namespaces; '{x.get('name')}' is {(x.get('sku') or {}).get('name')}.")
+    for d in _of_type(state, "Microsoft.ServiceBus/namespaces/disasterRecoveryConfigs"):
+        if d["id"].lower() != rid.lower() and str(d["properties"].get("partnerNamespace", "")).lower() == partner.lower():
+            return _err(409, "Conflict", f"Namespace {prt.get('name')} is already paired.")
+    return None
+
+
+def _sb_dr_fill(state, rec):
+    p = rec.setdefault("properties", {})
+    p.setdefault("role", "Primary")
+    p.setdefault("pendingReplicationOperationsCount", 0)
+    p.setdefault("alternateName", "")
+    p["provisioningState"] = "Succeeded"
+
+
+def _sb_route(state, method, sub, rg, after, payload):
+    low = [a.lower() for a in after]
+    ns_id = scope_id(sub, rg, after[:3])
+    ns = state.get(ns_id.lower())
+    if ns is None:
+        return _err(404, "ResourceNotFound", f"Namespace '{after[2]}' not found.")
+    _sb_fill(state, ns)
+    # namespaces/{n}/authorizationRules/{r}/listKeys | regenerateKeys
+    if len(low) == 6 and low[3] == "authorizationrules" and method == "POST" and low[5] in ("listkeys", "regeneratekeys"):
+        rule = state.get(f"{ns_id}/authorizationRules/{after[4]}".lower())
+        if not rule:
+            return _err(404, "NotFound", f"Authorization rule '{after[4]}' not found.")
+        _sb_rule_fill(state, rule)
+        if low[5] == "regeneratekeys":
+            kt = str((payload or {}).get("keyType") or "")
+            if kt not in ("PrimaryKey", "SecondaryKey"):
+                return _err(400, "BadRequest", "keyType must be PrimaryKey or SecondaryKey.")
+            rule["_keys"][0 if kt == "PrimaryKey" else 1] = (payload or {}).get("key") or _sas_key()
+            return _ok(_sb_keys(ns, rule), 200, ns_id, "Microsoft.ServiceBus/namespaces/authorizationRules/regenerateKeys", rule["name"])
+        return _ok(_sb_keys(ns, rule))
+    # namespaces/{n}/disasterRecoveryConfigs/{alias}/breakPairing | failover
+    if len(low) == 6 and low[3] == "disasterrecoveryconfigs" and method == "POST" and low[5] in ("breakpairing", "failover"):
+        dr = state.get(f"{ns_id}/disasterRecoveryConfigs/{after[4]}".lower())
+        if not dr:
+            return _err(404, "NotFound", f"Alias '{after[4]}' not found.")
+        partner = state.get(str(dr["properties"].get("partnerNamespace", "")).lower())
+        if low[5] == "failover" and partner:
+            # The alias moves to the (former) secondary, which becomes a standalone primary.
+            moved = _new_rec(f"{partner['id']}/disasterRecoveryConfigs/{dr['name']}", dr["name"],
+                             "Microsoft.ServiceBus/namespaces/disasterRecoveryConfigs")
+            moved["properties"] = {"role": "PrimaryNotReplicating", "partnerNamespace": "", "alternateName": "",
+                                   "pendingReplicationOperationsCount": 0, "provisioningState": "Succeeded"}
+            state[moved["id"].lower()] = moved
+            state.pop(dr["id"].lower(), None)
+            return _ok(None, 200, ns_id, "Microsoft.ServiceBus/namespaces/disasterRecoveryConfigs/failover", dr["name"])
+        dr["properties"]["role"] = "PrimaryNotReplicating"
+        dr["properties"]["partnerNamespace"] = ""
+        return _ok(None, 200, ns_id, "Microsoft.ServiceBus/namespaces/disasterRecoveryConfigs/" + low[5], dr["name"])
+    return None
+
+
+# ── Event Grid topics: access keys ──
+EG_T = "microsoft.eventgrid/topics"
+
+
+def _eg_route(state, method, sub, rg, after, payload):
+    low = [a.lower() for a in after]
+    rid = scope_id(sub, rg, after[:3])
+    rec = state.get(rid.lower())
+    if rec is None:
+        return _err(404, "ResourceNotFound", f"Topic '{after[2]}' not found.")
+    if not isinstance(rec.get("_keys"), list):
+        rec["_keys"] = [_sas_key(), _sas_key()]
+    if (rec.get("properties") or {}).get("disableLocalAuth"):
+        return _err(400, "BadRequest", "Local (key) authentication is disabled on this topic.")
+    if low[3] == "regeneratekey":
+        kn = str((payload or {}).get("keyName") or "")
+        if kn not in ("key1", "key2"):
+            return _err(400, "BadRequest", "keyName must be key1 or key2.")
+        rec["_keys"][int(kn[-1]) - 1] = _sas_key()
+        return _ok({"key1": rec["_keys"][0], "key2": rec["_keys"][1]}, 200, rid, "Microsoft.EventGrid/topics/regenerateKey", rec.get("name", ""))
+    return _ok({"key1": rec["_keys"][0], "key2": rec["_keys"][1]})
+
+
+# ── API Management: named values (secret values hidden), custom domains ──
+APIM_T = "microsoft.apimanagement/service"
+_HOST_RE_OK = set("abcdefghijklmnopqrstuvwxyz0123456789-.")
+
+
+def _apim_fill(rec):
+    p = rec.setdefault("properties", {})
+    name = rec.get("name", "")
+    p.setdefault("virtualNetworkType", "None")
+    p.setdefault("publicNetworkAccess", "Enabled")
+    hc = p.get("hostnameConfigurations")
+    if not isinstance(hc, list) or not any(h.get("hostName") == f"{name}.azure-api.net" for h in hc):
+        hc = [{"type": "Proxy", "hostName": f"{name}.azure-api.net", "defaultSslBinding": True,
+               "negotiateClientCertificate": False, "certificateSource": "BuiltIn"}] + (hc if isinstance(hc, list) else [])
+    p["hostnameConfigurations"] = hc
+
+
+def _apim_validate(payload):
+    for h in _payload_props(payload).get("hostnameConfigurations") or []:
+        hn = str(h.get("hostName") or "").lower()
+        if h.get("type") not in ("Proxy", "Portal", "Management", "Scm", "DeveloperPortal"):
+            return _err(400, "ValidationError", f"Hostname type '{h.get('type')}' is invalid.")
+        if not hn or "." not in hn or set(hn) - _HOST_RE_OK or hn.startswith(("-", ".")):
+            return _err(400, "ValidationError", f"'{h.get('hostName')}' is not a valid host name.")
+        if h.get("certificateSource") == "KeyVault" and not h.get("keyVaultId"):
+            return _err(400, "ValidationError", "keyVaultId is required for a Key Vault certificate.")
+    return None
+
+
+def _apim_nv_view(rec):
+    v = _view(rec)
+    if (v.get("properties") or {}).get("secret"):
+        v["properties"] = {k: x for k, x in v["properties"].items() if k != "value"}
+    return v
+
+
+def _apim_route(state, method, sub, rg, after, payload):
+    low = [a.lower() for a in after]
+    svc_id = scope_id(sub, rg, after[:3])
+    if state.get(svc_id.lower()) is None:
+        return _err(404, "ResourceNotFound", f"API Management service '{after[2]}' not found.")
+    if len(low) == 4 and method == "GET":
+        items = [_apim_nv_view(r) for r in _of_type(state, "Microsoft.ApiManagement/service/namedValues")
+                 if r["id"].lower().startswith(svc_id.lower() + "/")]
+        return _ok({"value": items, "count": len(items)})
+    if len(low) == 5 and method == "GET":
+        rec = state.get(f"{svc_id}/namedValues/{after[4]}".lower())
+        return _ok(_apim_nv_view(rec)) if rec else _err(404, "ResourceNotFound", f"Named value '{after[4]}' not found.")
+    if len(low) == 6 and low[5] == "listvalue" and method == "POST":
+        rec = state.get(f"{svc_id}/namedValues/{after[4]}".lower())
+        return _ok({"value": rec["properties"].get("value", "")}) if rec else _err(404, "ResourceNotFound", "Named value not found.")
+    return None
+
+
+# ── RBAC: role assignment conditions (ABAC) ──
+def _ra_validate(payload):
+    pp = _payload_props(payload)
+    cond = pp.get("condition")
+    if cond:
+        c = str(cond)
+        if c.count("(") != c.count(")") or not any(op in c for op in ("@Resource", "@Request", "@Principal", "@Environment")):
+            return _err(400, "InvalidCondition", "The condition must reference @Resource, @Request, @Principal or @Environment attributes with balanced parentheses.")
+        if str(pp.get("conditionVersion") or "2.0") != "2.0":
+            return _err(400, "InvalidConditionVersion", "conditionVersion must be 2.0.")
+    return None
+
+
+# ── API Management backup / restore to a storage account blob ──
+# ``blob`` is a host hook with exists(account, container) / put(account, container, name,
+# data, content_type) / get(account, container, name) -> bytes|None over the SAME blob
+# data plane the Storage console and SDKs use.
+def _apim_backup(state, svc_id, svc, payload, blob, restore):
+    b = payload or {}
+    acct, cont, name = (str(b.get(k) or "") for k in ("storageAccount", "containerName", "backupName"))
+    if not (acct and cont and name):
+        return _err(400, "InvalidParameters", "storageAccount, containerName and backupName are required.")
+    sub = svc_id.split("/")[2]
+    sa = next((r for r in _of_type(state, "Microsoft.Storage/storageAccounts")
+               if r.get("name", "").lower() == acct.lower() and r.get("_sub") == sub), None)
+    if sa is None:
+        return _err(400, "InvalidParameters", f"Storage account '{acct}' was not found in the subscription.")
+    at = b.get("accessType") or "AccessKey"
+    if at == "AccessKey":
+        _storage_fill(sa)
+        if b.get("accessKey") not in sa["_keys"]:
+            return _err(400, "InvalidParameters", "accessKey is not a valid key of the storage account.")
+    elif at == "SystemAssignedManagedIdentity":
+        if "SystemAssigned" not in str((svc.get("identity") or {}).get("type", "")):
+            return _err(400, "InvalidParameters", "The service has no system-assigned managed identity to access the storage account.")
+    else:
+        return _err(400, "InvalidParameters", "accessType must be AccessKey or SystemAssignedManagedIdentity.")
+    if blob is None:
+        return _err(503, "ServiceUnavailable", "The blob data plane is not available.")
+    if not blob.exists(acct, cont):
+        return _err(400, "InvalidParameters", f"Container '{cont}' does not exist in storage account '{acct}'.")
+    pre = svc_id.lower() + "/"
+    if not restore:
+        snap = {"format": "vyomi-apim-backup/1", "service": svc.get("name"), "createdAt": _now(),
+                "properties": {k: v for k, v in (svc.get("properties") or {}).items() if k not in ("provisioningState",)},
+                "sku": svc.get("sku"),
+                "children": [{"rel": r["id"][len(svc_id):], "rec": {k: v for k, v in r.items() if not k.startswith("_")}}
+                             for k2, r in list(state.items()) if str(k2).startswith(pre)]}
+        blob.put(acct, cont, name, json_dumps(snap), "application/json")
+        return _ok(_view(svc), 200, svc_id, "Microsoft.ApiManagement/service/backup", svc.get("name", ""))
+    raw = blob.get(acct, cont, name)
+    if raw is None:
+        return _err(400, "InvalidParameters", f"Backup blob '{name}' was not found in {acct}/{cont}.")
+    try:
+        snap = json_loads(raw)
+        assert snap.get("format") == "vyomi-apim-backup/1"
+    except Exception:
+        return _err(400, "InvalidParameters", f"Blob '{name}' is not an API Management backup.")
+    for k2 in [k for k in list(state.keys()) if str(k).startswith(pre)]:
+        state.pop(k2, None)
+    for ch in snap.get("children") or []:
+        rec = dict(ch["rec"])
+        rec["id"] = svc_id + ch["rel"]
+        parts = rec["id"].split("/providers/", 1)[1].split("/")
+        rec["_type"] = "/".join([parts[0]] + [parts[i] for i in range(1, len(parts), 2)])
+        rec["_sub"], rec["_rg"], rec["_created"] = sub, _rg_of(rec["id"]), _now()
+        state[rec["id"].lower()] = rec
+    keep = {k: v for k, v in (svc.get("properties") or {}).items() if k in ("gatewayUrl", "hostnameConfigurations")}
+    svc["properties"] = dict(snap.get("properties") or {}, **keep, provisioningState="Succeeded")
+    if snap.get("sku"):
+        svc["sku"] = snap["sku"]
+    return _ok(_view(svc), 200, svc_id, "Microsoft.ApiManagement/service/restore", svc.get("name", ""))
+
+
+def json_dumps(o):
+    import json
+    return json.dumps(o, sort_keys=True).encode("utf-8")
+
+
+def json_loads(b):
+    import json
+    return json.loads(b.decode("utf-8") if isinstance(b, (bytes, bytearray)) else b)
+
+
+# ── VM storage profile: OS / data disks as ARM reports them ──
+def _vm_fill(rec):
+    p = rec.setdefault("properties", {})
+    name = rec.get("name", "")
+    sp = p.setdefault("storageProfile", {})
+    img = sp.get("imageReference") or {}
+    win = "windows" in str(img.get("publisher", "")).lower() or "windows" in str(img.get("offer", "")).lower()
+    rg_id = rec["id"].split("/providers/")[0]
+    tag = hashlib.sha256(rec["id"].lower().encode()).hexdigest()[:32]
+    od = sp.setdefault("osDisk", {})
+    od.setdefault("osType", "Windows" if win else "Linux")
+    od.setdefault("name", f"{name}_OsDisk_1_{tag}")
+    od.setdefault("createOption", "FromImage")
+    od.setdefault("caching", "ReadWrite")
+    od.setdefault("diskSizeGB", 127 if win else 30)
+    od.setdefault("deleteOption", "Delete")
+    md = od.setdefault("managedDisk", {})
+    md.setdefault("storageAccountType", "Premium_LRS")
+    md["id"] = f"{rg_id}/providers/Microsoft.Compute/disks/{od['name']}"
+    for d in sp.get("dataDisks") or []:
+        d.setdefault("name", f"{name}_DataDisk_{d.get('lun', 0)}")
+        d.setdefault("createOption", "Empty")
+        d.setdefault("caching", "None")
+        d.setdefault("deleteOption", "Detach")
+        dm = d.setdefault("managedDisk", {})
+        dm.setdefault("storageAccountType", md["storageAccountType"])
+        dm["id"] = f"{rg_id}/providers/Microsoft.Compute/disks/{d['name']}"
+
+
+def _vm_disks_validate(payload):
+    dd = ((_payload_props(payload).get("storageProfile") or {}).get("dataDisks"))
+    if dd is None:
+        return None
+    luns = []
+    for d in dd:
+        lun, size = d.get("lun"), d.get("diskSizeGB")
+        if not isinstance(lun, int) or not 0 <= lun <= 63:
+            return _err(400, "InvalidParameter", "Each data disk needs a LUN between 0 and 63.")
+        if lun in luns:
+            return _err(400, "InvalidParameter", f"LUN {lun} is used by more than one data disk.")
+        luns.append(lun)
+        if d.get("createOption", "Empty") == "Empty" and not (isinstance(size, int) and 1 <= size <= 32767):
+            return _err(400, "InvalidParameter", "An empty data disk needs diskSizeGB between 1 and 32767.")
+    return None
+
+
+# ── entry ────────────────────────────────────────────────────────────────────
+def route(state, method, sub, rg, after, payload=None, query=None, executor=None, blob=None):
+    """Serve the request if it is one this module models, else None.
+    ``after`` = the path segments after the first ``/providers/``."""
+    method = (method or "GET").upper()
+    if len(after) < 2:
+        return None
+    low = [a.lower() for a in after]
+    # Extension resource: {resource}/providers/{ns}/{type}[/{name}]
+    j = next((i for i in range(2, len(low)) if low[i] == "providers"), None)
+    if j is not None:
+        parent_after, ext = after[:j], after[j + 1:]
+        if len(ext) < 2:
+            return _err(400, "BadRequest", "Missing extension resource type.")
+        scope = scope_id(sub, rg, parent_after)
+        parent = state.get(scope.lower())
+        if parent is None:
+            return _err(404, "ParentResourceNotFound", f"Resource '{scope}' not found.")
+        ns, rest = ext[0], ext[1:]
+        nsl, t0 = ns.lower(), rest[0].lower()
+        if nsl == "microsoft.authorization" and t0 == "locks":
+            return _locks(state, method, scope, rest, payload)
+        if nsl == "microsoft.authorization" and t0 == "roleassignments":
+            return _role_assignments(state, method, scope, rest, payload)
+        if nsl == "microsoft.resourcehealth" and t0 == "availabilitystatuses":
+            return _health(parent, scope, rest) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
+        if nsl == "microsoft.managedidentity" and t0 == "identities":
+            return _identity_default(parent, scope) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
+        return _generic_ext(state, method, scope, ns, rest, payload)
+    # Locks at subscription / resource-group scope.
+    if low[0] == "microsoft.authorization" and low[1] == "locks":
+        return _locks(state, method, scope_id(sub, rg, []), after[1:], payload)
+    if low[0] == "microsoft.network" and low[1] == "virtualnetworks" and len(after) in (4, 5) and low[3] == "subnets":
+        return _subnets(state, method, sub, rg, after, payload)
+    if low[0] == "microsoft.network" and low[1] == "ddosprotectionplans" and len(after) <= 3:
+        return _ddos_plans(state, method, sub, rg, after, payload)
+    if low[0] == "microsoft.network" and low[1] == "networkinterfaces" and len(after) <= 3:
+        return _nic(state, method, sub, rg, after, payload)
+    if low[0] == "microsoft.network" and low[1] == "publicipaddresses" and len(after) <= 3:
+        return _pip(state, method, sub, rg, after, payload)
+    if low[0] == "microsoft.devtestlab" and low[1] == "schedules" and len(after) <= 3:
+        return _schedules(state, method, sub, rg, after, payload)
+    if low[0] == "microsoft.storage" and low[1] == "storageaccounts" and len(after) == 4 and method == "POST" \
+            and low[3] in ("listkeys", "regeneratekey", "listaccountsas", "failover"):
+        rid = scope_id(sub, rg, after[:3])
+        rec = state.get(rid.lower())
+        if rec is None:
+            return _err(404, "ResourceNotFound", f"Storage account '{after[2]}' not found.")
+        _storage_fill(rec)
+        r = _storage_action(state, rid, rec, after[3], payload)
+        if r is not None:
+            return r
+    if low[0] == "microsoft.servicebus" and low[1] == "namespaces" and len(after) == 6 and method == "POST" \
+            and low[3] in ("authorizationrules", "disasterrecoveryconfigs"):
+        r = _sb_route(state, method, sub, rg, after, payload)
+        if r is not None:
+            return r
+    if low[0] == "microsoft.eventgrid" and low[1] == "topics" and len(after) == 4 and method == "POST" \
+            and low[3] in ("listkeys", "regeneratekey"):
+        return _eg_route(state, method, sub, rg, after, payload)
+    if low[0] == "microsoft.apimanagement" and low[1] == "service" and len(after) == 4 and method == "POST" \
+            and low[3] in ("backup", "restore"):
+        svc_id = scope_id(sub, rg, after[:3])
+        svc = state.get(svc_id.lower())
+        if svc is None:
+            return _err(404, "ResourceNotFound", f"API Management service '{after[2]}' not found.")
+        return _apim_backup(state, svc_id, svc, payload, blob, low[3] == "restore")
+    if low[0] == "microsoft.apimanagement" and low[1] == "service" and len(after) >= 4 and low[3] == "namedvalues" \
+            and (method == "GET" or (len(after) == 6 and low[5] == "listvalue")):
+        r = _apim_route(state, method, sub, rg, after, payload)
+        if r is not None:
+            return r
+    if low[0] == "microsoft.web" and low[1] == "serverfarms" and len(after) <= 3:
+        return _plans(state, method, sub, rg, after, payload)
+    if low[0] == "microsoft.web" and low[1] == "sites" and len(after) >= 4 and (
+            method == "POST" or low[3] in ("host", "extensions")):
+        r = _site_route(state, method, sub, rg, after, payload)
+        if r is not None:
+            return r
+    if low[0] == "microsoft.documentdb" and low[1] == "restorabledatabaseaccounts" and len(after) == 2 and rg is None:
+        return _ok({"value": _cosmos_restorable(state, sub)}) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
+    if low[0] == "microsoft.sql" and low[1] == "locations" and len(after) == 4 and low[3] == "capabilities":
+        return _ok(_sql_capabilities(after[2])) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
+    if low[0] == "microsoft.compute" and low[1] == "restorepointcollections":
+        return _restore_points(state, method, sub, rg, after, payload)
+    if low[0] == "microsoft.compute" and low[1] == "virtualmachines" and len(after) == 4 \
+            and low[3] == "instanceview":
+        vm_rid = scope_id(sub, rg, after[:3])
+        vm = state.get(vm_rid.lower())
+        if vm is None:
+            return _err(404, "ResourceNotFound", f"Virtual machine '{after[2]}' not found.")
+        return _ok(instance_view(vm, executor)) if method == "GET" else _err(405, "MethodNotAllowed", "GET only.")
+    if low[0] == "microsoft.compute" and low[1] == "virtualmachines" and len(after) >= 4 \
+            and low[3] in ("runcommands", "runcommand"):
+        vm_rid = scope_id(sub, rg, after[:3])
+        vm = state.get(vm_rid.lower())
+        if vm is None:
+            return _err(404, "ParentResourceNotFound", f"Virtual machine '{after[2]}' not found.")
+        if low[3] == "runcommand":
+            if method != "POST":
+                return _err(405, "MethodNotAllowed", "POST only.")
+            return _run_command_action(vm_rid, vm, payload, executor)
+        return _run_commands(state, method, vm_rid, vm, after[3:], payload, executor)
+    return None
+
+
+def target_id(sub, rg, after) -> str:
+    """The resource id a request acts on (used for lock checks)."""
+    return scope_id(sub, rg, after)
+
+
+def mark_changed(rec) -> None:
+    """Remember when a resource's state last changed (Resource Health 'occured time')."""
+    if isinstance(rec, dict):
+        rec["_changed"] = _now()

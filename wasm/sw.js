@@ -439,6 +439,12 @@ async function route(method, path, body, query) {
   }
   // Key Vault data plane as the vault blade (and the native SDK) address it:
   // /azure-data/keyvault/{vault}/secrets|keys[/{name}[/create]] → the KV secrets/keys cores.
+  // Key Vault certificates (create / get / versions / pending / delete) → the shared certificates core.
+  am = path.match(/^\/azure-data\/keyvault\/([^/]+)\/certificates((?:\/[^/]+){0,2})$/);
+  if (am) {
+    return { tuple: ["azure", "_resource", "KvData", { service: "kvcerts",
+      body: { method, vault: decodeURIComponent(am[1]), sub: am[2].replace(/^\//, "").split("/").map(decodeURIComponent).join("/"), body: body || {} } }] };
+  }
   am = path.match(/^\/azure-data\/keyvault\/([^/]+)\/(secrets|keys)((?:\/[^/]+){0,2})$/);
   if (am) {
     return { tuple: ["azure", "_resource", "KvData", { service: am[2] === "keys" ? "kvkeys" : "kvsecrets",

@@ -652,8 +652,19 @@ async def _function_app_handle(app_name: str, function_name: str, request: Reque
         })
 
     try:
+        from core import azure_arm_ext_core as _ext
+        _ext.site_log(func_rec, f"Executing 'Functions.{function_name}' (Reason='This function was programmatically called via the host APIs.')")
+    except Exception:
+        pass
+    try:
         from core import gcp_function_runtime
         out = gcp_function_runtime.execute(code, entry, runtime, payload, timeout=timeout)
+        try:
+            _ext.site_log(func_rec, f"Executed 'Functions.{function_name}' ({'Succeeded' if out.get('status') == 'SUCCESS' else 'Failed'})"
+                          + (": " + str(out.get("logs"))[:500] if out.get("logs") else ""),
+                          "Information" if out.get("status") == "SUCCESS" else "Error")
+        except Exception:
+            pass
         if out.get("status") == "SUCCESS":
             return JSONResponse(content={
                 "invocationId": uuid.uuid4().hex,
