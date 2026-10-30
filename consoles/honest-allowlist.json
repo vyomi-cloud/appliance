@@ -134,6 +134,12 @@
     "azure": {
       "vms": [
         "vm-size"
+      ],
+      "subscriptions": [
+        "subscriptions",
+        "subscription-overview",
+        "subscription-resource-providers",
+        "subscription-activity-log"
       ]
     }
   },
@@ -152,6 +158,9 @@
     ],
     "vms": [
       "vm-run-command"
+    ],
+    "subscriptions": [
+      "subscription-usage-quotas"
     ]
   }
 }
