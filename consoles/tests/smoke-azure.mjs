@@ -715,7 +715,11 @@ try {
   await page.getByRole("link", { name: SBQ, exact: true }).click();
   await openPanel("Service Bus Explorer");
   await page.getByLabel("Message body", { exact: true }).fill("smoke-message");
-  await page.getByRole("button", { name: "Send messages", exact: true }).click();
+  // wait for the send itself — Nano's in-browser engine answers after the click returns
+  await Promise.all([
+    page.waitForResponse((r) => r.request().method() === "POST" && r.url().includes(`/${SBQ}/messages`), { timeout: 20000 }),
+    page.getByRole("button", { name: "Send messages", exact: true }).click(),
+  ]);
   const peeked = await wire(`/${SBQ}/messages`);
   const peekedBody = peeked.status === 200 ? JSON.parse(peeked.text) : { messages: [] };
   check("UI send → readable over the Service Bus data plane wire", peekedBody.messages.some((m) => m.Body === "smoke-message"), `HTTP ${peeked.status}`);
@@ -737,7 +741,10 @@ try {
   await page.getByRole("checkbox", { name: `Select ${SBQ}` }).click();
   await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(SBQ);
-  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await Promise.all([   // the row can unmount on a grid re-render before the DELETE returns
+    page.waitForResponse((r) => r.request().method() === "DELETE" && r.url().includes(`/queues/${SBQ}`), { timeout: 20000 }),
+    page.getByRole("dialog").getByRole("button", { name: "Delete" }).click(),
+  ]);
   await page.getByRole("link", { name: SBQ, exact: true }).waitFor({ state: "detached", timeout: 10000 });
   const sbQGone = await arm("GET", `${sbArm}/queues/${SBQ}`);
   check("UI delete queue → ARM GET 404", sbQGone.status === 404, `HTTP ${sbQGone.status}`);
@@ -865,7 +872,10 @@ try {
   await page.getByRole("checkbox", { name: `Select /subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}` }).click();
   await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(ALERT);
-  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await Promise.all([
+    page.waitForResponse((r) => r.request().method() === "DELETE" && r.url().includes(`/metricAlerts/${ALERT}`), { timeout: 20000 }),
+    page.getByRole("dialog").getByRole("button", { name: "Delete" }).click(),
+  ]);
   // the deleted row's own checkbox (the name text also appears in the delete notification)
   await page.getByRole("checkbox", { name: `Select /subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}` }).waitFor({ state: "detached", timeout: 10000 });
   const alertGone = await armMonitor("GET", `/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}`);

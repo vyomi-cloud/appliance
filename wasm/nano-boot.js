@@ -164,6 +164,9 @@ async function bootBackend() {
   const py = await loadPyodide({ indexURL: pyodideBase });
   let pyv = ""; try { pyv = py.runPython("import sys; sys.version.split()[0]"); } catch (_) {}
   st.ok("Python " + (pyv || "3") + " · Pyodide " + (py.version || "0.26.2"));
+  // sqlite3 is a separate Pyodide package (vendored by wasm/fetch_pyodide.py): the SQL data
+  // planes (Azure SQL query editor, RDS Data API) need it — the relay worker loads it too.
+  try { await py.loadPackage("sqlite3"); } catch (e) { console.warn("[nano] sqlite3 load skipped:", e); }
   st = K.step("fs", "mounting /wasm: " + MODULES.length + " console modules");
   py.FS.mkdir("/wasm"); py.FS.mkdir("/wasm/backends"); py.FS.mkdir("/wasm/providers");
   py.FS.writeFile("/wasm/__init__.py", "");
