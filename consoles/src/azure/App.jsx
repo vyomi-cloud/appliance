@@ -1,6 +1,8 @@
 /* Azure lens shell: the portal top bar (portal menu, global search, Copilot / Cloud Shell /
  * notifications / settings / help, directory + user chip), breadcrumbs, toasts, and the
  * service router. Theme (light/dark) and the subscription filter live in Settings. */
+import { wordmark } from "../common/brand.js";
+const AZ_BRAND = wordmark("Azure");
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Avatar, Button, FluentProvider, Menu, MenuDivider, MenuGroupHeader, MenuItem, MenuList, MenuPopover, MenuTrigger,
@@ -96,7 +98,7 @@ export default function App() {
             <Tooltip content="Show portal menu" relationship="label">
               <Button className="vy-top-btn" appearance="transparent" icon={<Navigation20Regular />} aria-label="Show portal menu" onClick={() => setMenuOpen((v) => !v)} />
             </Tooltip>
-            <a className="vy-brand" href="#/">Vyomi · Azure</a>
+            <a className="vy-brand" href="#/" aria-label="Vyomi Azure — Home"><img src={AZ_BRAND.src} alt="vyomi | Azure" height={22} style={{ display: "block" }} /></a>
             <GlobalSearch />
             <Button className="vy-copilot" size="small" icon={<Sparkle20Regular />} onClick={() => setDrawer((d) => (d === "copilot" ? null : "copilot"))}>Copilot</Button>
             {top(<WindowConsole20Regular />, "Cloud Shell", "shell")}

@@ -78,7 +78,7 @@ export default function App() {
     <>
       <div id="vyomi-top" style={{ position: "sticky", top: 0, zIndex: 1002 }}>
         <TopNavigation
-          identity={{ href: "#/", logo: { src: LOGO, alt: "Vyomi — Console Home" }, onFollow: follow }}
+          identity={{ href: "#/", logo: { src: LOGO, alt: "Vyomi AWS — Console Home" }, onFollow: follow }}
           search={<ServicesMenu.Search />}
           utilities={[
             { type: "button", text: "Services", iconName: "grid-view", onClick: () => setMenuOpen((v) => !v), ariaLabel: "Services" },
