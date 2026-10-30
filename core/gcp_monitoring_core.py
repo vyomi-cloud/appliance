@@ -50,6 +50,10 @@ class MonitoringStore:
         self.notification_channels: dict = {}   # full name -> NotificationChannel
         self.groups: dict = {}                  # full name -> Group
         self.uptime_checks: dict = {}           # full name -> UptimeCheckConfig
+        self.dashboards: dict = {}              # full name -> Dashboard (v1 API)
+        self.snoozes: dict = {}                 # full name -> Snooze (v1 API)
+        self.services: dict = {}                # full name -> Service
+        self.slos: dict = {}                    # full name -> ServiceLevelObjective (nested under a service)
 
 
 _SHARED: MonitoringStore | None = None
@@ -797,8 +801,8 @@ def list_groups(store, project, query):
 
 
 # ── uptime checks ──────────────────────────────────────────────────────────
-_UPTIME_WRITABLE = ("displayName", "monitoredResource", "resourceGroup", "httpCheck", "tcpCheck", "period",
-                    "timeout", "contentMatchers", "checkerType", "selectedRegions", "isInternal",
+_UPTIME_WRITABLE = ("displayName", "monitoredResource", "resourceGroup", "httpCheck", "tcpCheck", "syntheticMonitor",
+                    "period", "timeout", "contentMatchers", "checkerType", "selectedRegions", "isInternal",
                     "internalCheckers", "userLabels")
 _UPTIME_PERIODS = (60, 300, 600, 900)
 
@@ -808,8 +812,8 @@ def _validate_uptime(u):
         raise _bad("Field uptime_check_config.display_name is required and must be non-empty.")
     if sum(1 for k in ("monitoredResource", "resourceGroup") if u.get(k)) != 1:
         raise _bad("Field uptime_check_config must specify exactly one of monitored_resource or resource_group.")
-    if sum(1 for k in ("httpCheck", "tcpCheck") if u.get(k)) != 1:
-        raise _bad("Field uptime_check_config must specify exactly one of http_check or tcp_check.")
+    if sum(1 for k in ("httpCheck", "tcpCheck", "syntheticMonitor") if u.get(k)) != 1:
+        raise _bad("Field uptime_check_config must specify exactly one of http_check, tcp_check or synthetic_monitor.")
     mr = u.get("monitoredResource")
     if mr and not mr.get("type"):
         raise _bad("Field uptime_check_config.monitored_resource.type is required.")
@@ -878,6 +882,296 @@ def patch_uptime(store, project, uid, payload, mask):
     merged["name"] = cur["name"]
     store.uptime_checks[cur["name"]] = merged
     return merged
+
+
+# ── dashboards (Dashboards API, v1) ─────────────────────────────────────────
+_DASHBOARD_WRITABLE = ("displayName", "labels", "etag", "gridLayout", "mosaicLayout", "rowLayout", "columnLayout",
+                       "dashboardFilters")
+_LAYOUTS = ("gridLayout", "mosaicLayout", "rowLayout", "columnLayout")
+
+
+def _dashboard_name(project, did):
+    return "projects/%s/dashboards/%s" % (project, did)
+
+
+def _validate_dashboard(d):
+    if not str(d.get("displayName") or "").strip():
+        raise _bad("Field dashboard.display_name is required and must be non-empty.")
+    if len(d["displayName"]) > 1024:
+        raise _bad("Field dashboard.display_name must be at most 1024 characters.")
+    if sum(1 for k in _LAYOUTS if k in d) > 1:
+        raise _bad("Field dashboard must specify at most one of grid_layout, mosaic_layout, row_layout, column_layout.")
+
+
+def create_dashboard(store, project, payload):
+    d = {k: _copy(v) for k, v in (payload or {}).items() if k in _DASHBOARD_WRITABLE}
+    d.pop("etag", None)
+    _validate_dashboard(d)
+    if not any(k in d for k in _LAYOUTS):
+        d["mosaicLayout"] = {"columns": 12, "tiles": []}
+    d.setdefault("labels", {})
+    did = _rand_id()
+    d["name"] = _dashboard_name(project, did)
+    d["etag"] = did
+    store.dashboards[d["name"]] = d
+    return d
+
+
+def _get_dashboard(store, project, did):
+    d = store.dashboards.get(_dashboard_name(project, did))
+    if not d:
+        raise _E(404, "NOT_FOUND", "Dashboard %s does not exist." % _dashboard_name(project, did))
+    return d
+
+
+def patch_dashboard(store, project, did, payload):
+    cur = _get_dashboard(store, project, did)
+    etag = (payload or {}).get("etag")
+    if etag and etag != cur.get("etag"):
+        raise _E(409, "ABORTED", "Dashboard %s was modified concurrently (etag mismatch)." % cur["name"])
+    d = {k: _copy(v) for k, v in (payload or {}).items() if k in _DASHBOARD_WRITABLE}
+    d.pop("etag", None)
+    _validate_dashboard(d)
+    if not any(k in d for k in _LAYOUTS):
+        d["mosaicLayout"] = cur.get("mosaicLayout") or {"columns": 12, "tiles": []}
+        for k in _LAYOUTS:
+            if k in cur and k != "mosaicLayout":
+                d.pop("mosaicLayout", None)
+                d[k] = cur[k]
+    d.setdefault("labels", cur.get("labels") or {})
+    d["name"] = cur["name"]
+    d["etag"] = _rand_id()
+    store.dashboards[cur["name"]] = d
+    return d
+
+
+def delete_dashboard(store, project, did):
+    d = _get_dashboard(store, project, did)
+    del store.dashboards[d["name"]]
+
+
+def list_dashboards(store, project, query):
+    prefix = "projects/%s/dashboards/" % project
+    items = [_copy(d) for n, d in sorted(store.dashboards.items()) if n.startswith(prefix)]
+    return _paginate(items, query, "dashboards")
+
+
+def _dashboards(store, method, project, rest, payload, query):
+    if not rest:
+        if method == "POST":
+            return _json(200, _copy(create_dashboard(store, project, payload)))
+        if method == "GET":
+            return _json(200, list_dashboards(store, project, query))
+        raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on dashboards." % method)
+    if len(rest) == 1:
+        if method == "GET":
+            return _json(200, _copy(_get_dashboard(store, project, rest[0])))
+        if method == "PATCH":
+            return _json(200, _copy(patch_dashboard(store, project, rest[0], payload)))
+        if method == "DELETE":
+            delete_dashboard(store, project, rest[0])
+            return _json(200, {})
+    raise _E(404, "NOT_FOUND", "Unknown dashboard path.")
+
+
+# ── snoozes (Snoozes API, v1) ────────────────────────────────────────────────
+_SNOOZE_WRITABLE = ("displayName", "criteria", "interval")
+
+
+def _snooze_name(project, sid):
+    return "projects/%s/snoozes/%s" % (project, sid)
+
+
+def _validate_snooze(s, store, project):
+    if not str(s.get("displayName") or "").strip():
+        raise _bad("Field snooze.display_name is required and must be non-empty.")
+    if len(s["displayName"]) > 512:
+        raise _bad("Field snooze.display_name must be at most 512 characters.")
+    crit = s.get("criteria")
+    if not isinstance(crit, dict) or not crit.get("policies"):
+        raise _bad("Field snooze.criteria.policies is required: a snooze needs at least one alert policy.")
+    for pn in crit["policies"]:
+        if pn not in store.alert_policies:
+            raise _bad("Snooze criteria refers to an alert policy that does not exist: %s." % pn)
+    if len(crit["policies"]) > 16:
+        raise _bad("Field snooze.criteria.policies has too many values: at most 16 alert policies.")
+    iv = s.get("interval")
+    if not isinstance(iv, dict) or not iv.get("startTime") or not iv.get("endTime"):
+        raise _bad("Field snooze.interval.start_time and end_time are required.")
+    start, end = parse_ts(iv["startTime"]), parse_ts(iv["endTime"])
+    if end <= start:
+        raise _bad("Field snooze.interval had an invalid value: end_time must be after start_time.")
+
+
+def create_snooze(store, project, payload):
+    s = {k: _copy(v) for k, v in (payload or {}).items() if k in _SNOOZE_WRITABLE}
+    _validate_snooze(s, store, project)
+    sid = _rand_id()
+    s["name"] = _snooze_name(project, sid)
+    store.snoozes[s["name"]] = s
+    return s
+
+
+def _get_snooze(store, project, sid):
+    s = store.snoozes.get(_snooze_name(project, sid))
+    if not s:
+        raise _E(404, "NOT_FOUND", "Snooze %s does not exist." % _snooze_name(project, sid))
+    return s
+
+
+def patch_snooze(store, project, sid, payload, mask):
+    cur = _get_snooze(store, project, sid)
+    payload = dict(payload or {})
+    payload.pop("name", None)
+    merged = _apply_mask(cur, payload, mask, _SNOOZE_WRITABLE, "snooze")
+    _validate_snooze(merged, store, project)
+    merged["name"] = cur["name"]
+    store.snoozes[cur["name"]] = merged
+    return merged
+
+
+def _snooze_active(s, now):
+    iv = s.get("interval") or {}
+    try:
+        return parse_ts(iv["startTime"]) <= now <= parse_ts(iv["endTime"])
+    except Exception:
+        return False
+
+
+def list_snoozes(store, project, query):
+    prefix = "projects/%s/snoozes/" % project
+    items = [_copy(s) for n, s in sorted(store.snoozes.items()) if n.startswith(prefix)]
+    if query.get("filter"):
+        def getter(s, lhs):
+            return s.get(_snake_to_camel(lhs))
+        pred = compile_filter(query["filter"], getter)
+        items = [s for s in items if pred(s)]
+    return _paginate(items, query, "snoozes")
+
+
+def _snoozes(store, method, project, rest, payload, query):
+    if not rest:
+        if method == "POST":
+            return _json(200, _copy(create_snooze(store, project, payload)))
+        if method == "GET":
+            return _json(200, list_snoozes(store, project, query))
+        raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on snoozes." % method)
+    if len(rest) == 1:
+        if method == "GET":
+            return _json(200, _copy(_get_snooze(store, project, rest[0])))
+        if method == "PATCH":
+            return _json(200, _copy(patch_snooze(store, project, rest[0], payload, query.get("updateMask", ""))))
+    raise _E(404, "NOT_FOUND", "Unknown snooze path.")
+
+
+# ── services & SLOs (Service Monitoring API, v3) ───────────────────────────
+_SERVICE_WRITABLE = ("displayName", "custom", "telemetry", "userLabels")
+_SLO_WRITABLE = ("displayName", "goal", "rollingPeriod", "calendarPeriod", "serviceLevelIndicator", "userLabels")
+
+
+def _service_name(project, sid):
+    return "projects/%s/services/%s" % (project, sid)
+
+
+def create_service(store, project, payload):
+    s = {k: _copy(v) for k, v in (payload or {}).items() if k in _SERVICE_WRITABLE}
+    if not str(s.get("displayName") or "").strip():
+        raise _bad("Field service.display_name is required and must be non-empty.")
+    s.setdefault("custom", {})
+    s.setdefault("userLabels", {})
+    sid = _rand_id()
+    s["name"] = _service_name(project, sid)
+    store.services[s["name"]] = s
+    return s
+
+
+def _get_service(store, project, sid):
+    s = store.services.get(_service_name(project, sid))
+    if not s:
+        raise _E(404, "NOT_FOUND", "Service %s does not exist." % _service_name(project, sid))
+    return s
+
+
+def delete_service(store, project, sid):
+    s = _get_service(store, project, sid)
+    for k in [k for k, o in store.slos.items() if o["name"].startswith(s["name"] + "/")]:
+        del store.slos[k]
+    del store.services[s["name"]]
+
+
+def list_services(store, project, query):
+    prefix = "projects/%s/services/" % project
+    items = [_copy(s) for n, s in sorted(store.services.items()) if n.startswith(prefix)]
+    return _paginate(items, query, "services")
+
+
+def _slo_name(service_name, oid):
+    return "%s/serviceLevelObjectives/%s" % (service_name, oid)
+
+
+def create_slo(store, project, sid, payload):
+    svc = _get_service(store, project, sid)
+    o = {k: _copy(v) for k, v in (payload or {}).items() if k in _SLO_WRITABLE}
+    if not str(o.get("displayName") or "").strip():
+        raise _bad("Field service_level_objective.display_name is required and must be non-empty.")
+    goal = o.get("goal")
+    if not isinstance(goal, (int, float)) or isinstance(goal, bool) or not (0 < goal <= 1):
+        raise _bad("Field service_level_objective.goal is required and must be between 0 (exclusive) and 1.")
+    if sum(1 for k in ("rollingPeriod", "calendarPeriod") if k in o) != 1:
+        raise _bad("Field service_level_objective must specify exactly one of rolling_period or calendar_period.")
+    if not isinstance(o.get("serviceLevelIndicator"), dict) or not o["serviceLevelIndicator"]:
+        raise _bad("Field service_level_objective.service_level_indicator is required.")
+    o["name"] = _slo_name(svc["name"], _rand_id())
+    store.slos[o["name"]] = o
+    return o
+
+
+def list_slos(store, project, sid):
+    svc = _get_service(store, project, sid)
+    prefix = svc["name"] + "/serviceLevelObjectives/"
+    items = [_copy(o) for n, o in sorted(store.slos.items()) if n.startswith(prefix)]
+    return items
+
+
+def delete_slo(store, project, sid, oid):
+    svc = _get_service(store, project, sid)
+    name = _slo_name(svc["name"], oid)
+    if name not in store.slos:
+        raise _E(404, "NOT_FOUND", "Service level objective %s does not exist." % name)
+    del store.slos[name]
+
+
+def _services(store, method, project, rest, payload, query):
+    if not rest:
+        if method == "POST":
+            return _json(200, _copy(create_service(store, project, payload)))
+        if method == "GET":
+            return _json(200, list_services(store, project, query))
+        raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on services." % method)
+    sid = rest[0]
+    if len(rest) == 1:
+        if method == "GET":
+            return _json(200, _copy(_get_service(store, project, sid)))
+        if method == "DELETE":
+            delete_service(store, project, sid)
+            return _json(200, {})
+    if len(rest) >= 2 and rest[1] == "serviceLevelObjectives":
+        if len(rest) == 2:
+            if method == "POST":
+                return _json(200, create_slo(store, project, sid, payload))
+            if method == "GET":
+                return _json(200, {"serviceLevelObjectives": list_slos(store, project, sid)})
+        if len(rest) == 3:
+            oid = rest[2]
+            if method == "GET":
+                name = _slo_name(_get_service(store, project, sid)["name"], oid)
+                if name not in store.slos:
+                    raise _E(404, "NOT_FOUND", "Service level objective %s does not exist." % name)
+                return _json(200, _copy(store.slos[name]))
+            if method == "DELETE":
+                delete_slo(store, project, sid, oid)
+                return _json(200, {})
+    raise _E(404, "NOT_FOUND", "Unknown service path.")
 
 
 # ── metric descriptors ─────────────────────────────────────────────────────
@@ -1373,6 +1667,18 @@ def _dispatch(store, method, path, query, headers, body):
         payload = {}
     payload = _enum_walk(payload, False)   # integer enums in request bodies → names
     p = path.split("?", 1)[0]
+    if p.startswith("/v1/") or p == "/v1":
+        p = p[len("/v1"):].strip("/")
+        segs = [s for s in p.split("/") if s]
+        try:
+            if len(segs) >= 3 and segs[0] == "projects" and segs[2] in ("dashboards", "snoozes"):
+                project, coll, rest = segs[1], segs[2], segs[3:]
+                if coll == "dashboards":
+                    return _dashboards(store, method, project, rest, payload, query)
+                return _snoozes(store, method, project, rest, payload, query)
+        except _E as e:
+            return _err(e.status, e.gcp_status, e.message)
+        return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
     if not (p.startswith("/v3/") or p == "/v3"):
         return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
     p = p[len("/v3"):].strip("/")
@@ -1400,6 +1706,8 @@ def _dispatch(store, method, path, query, headers, body):
                 if not d:
                     raise _E(404, "NOT_FOUND", "Notification channel descriptor %s not found." % rest[0])
                 return _json(200, _with_project(d, project))
+        elif coll == "services":
+            return _services(store, method, project, rest, payload, query)
         elif coll == "groups":
             return _groups(store, method, project, rest, payload, query)
         elif coll == "uptimeCheckConfigs":

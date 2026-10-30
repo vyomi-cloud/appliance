@@ -157,6 +157,27 @@ try {
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete bucket via UI → gone over native wire", (await wire(`/storage/v1/b/${B}`)).status === 404);
 
+  // Cloud Monitoring: create an uptime check through the UI wizard → visible over the
+  // native wire (Cloud Monitoring REST API v3), and the reverse (wire → UI list).
+  const UC = `v4-gcp-smoke-uptime-${Date.now() % 100000}`;
+  await page.goto(UI + "#/monitoring/uptime/create");
+  await page.getByLabel("Hostname").fill("example.com");
+  for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Title").fill(UC);
+  await shot("12-monitoring-create-uptime");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: "Uptime checks" }).waitFor({ timeout: 10000 });
+  await page.getByText(UC).waitFor({ timeout: 10000 });
+  const checks = await wjson(`/v3/projects/vyomi-project/uptimeCheckConfigs`);
+  check("create uptime check via UI wizard → visible over native wire", (checks.uptimeCheckConfigs || []).some((c) => c.displayName === UC && c.httpCheck?.path === "/"));
+
+  const DASH = `v4-gcp-smoke-dash-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/dashboards`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: DASH }) });
+  await page.goto(UI + "#/monitoring/dashboards");
+  await page.getByText(DASH).waitFor({ timeout: 10000 });
+  check("dashboard created over wire → shown in UI list", true);
+  await shot("13-monitoring-dashboards");
+
   // Not-simulated gaps carry the conformance attribute
   await page.goto(UI + "#/storage/monitoring");
   await page.locator("[data-vyomi-not-simulated]").first().waitFor({ timeout: 5000 });
