@@ -101,7 +101,7 @@ check("deletes", call(st, "DELETE", ["jobs", "j1"])["status"] == 200 and call(st
 
 # the Nano ARM class delegates to the same engine and keeps its map in the public `state`
 arm = AzureArm()
-base = "/subscriptions/s/resourceGroups/g/providers/Microsoft.App"
+base = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/g/providers/Microsoft.App"
 r = arm.handle("PUT", base + "/containerApps/a1", {"api-version": "2024-03-01"}, APP)
 check("AzureArm (Nano) serves Microsoft.App with LRO headers and public state",
       r["status"] == 200 and "Azure-AsyncOperation" in r["headers"] and any("containerapps" in k for k in arm.state), r)

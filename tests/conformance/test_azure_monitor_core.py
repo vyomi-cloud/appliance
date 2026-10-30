@@ -81,9 +81,9 @@ check("capacity min>max → 400", cp(st, "PUT", ["autoscaleSettings", "y"], {"pr
 check("delete → 200 then 204", cp(st, "DELETE", ["metricAlerts", "cpu"])["status"] == 200 and cp(st, "DELETE", ["metricAlerts", "cpu"])["status"] == 204)
 
 arm = AzureArm()
-r = arm.handle("PUT", "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/metricAlerts/viaarm", {"api-version": "2018-03-01"}, alert())
+r = arm.handle("PUT", "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg1/providers/Microsoft.Insights/metricAlerts/viaarm", {"api-version": "2018-03-01"}, alert())
 check("ARM dispatcher routes Microsoft.Insights to the engine", r["status"] == 200, r)
-r = arm.handle("GET", "/subscriptions/sub1/providers/Microsoft.Insights/metricAlerts", {"api-version": "2018-03-01"})
+r = arm.handle("GET", "/subscriptions/00000000-0000-0000-0000-cloudlearn01/providers/Microsoft.Insights/metricAlerts", {"api-version": "2018-03-01"})
 check("ARM dispatcher lists at subscription scope", r["status"] == 200 and len(r["body"]["value"]) == 1, r)
 print(f"\n{PASS} passed, {FAIL} failed")
 

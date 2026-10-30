@@ -195,7 +195,7 @@ client := s3.NewFromConfig(cfg, func(o *s3.Options) {
             "language": "java",
             "endpoint": endpoint,
             "snippet": """AzureProfile profile = new AzureProfile(
-    "tenant-sim", "sub-001", AzureEnvironment.AZURE);
+    "tenant-sim", "00000000-0000-0000-0000-cloudlearn01", AzureEnvironment.AZURE);
 HttpPipeline pipeline = HttpPipelineProvider.buildHttpPipeline(
     new AzureCliCredentialBuilder().build(),
     new AzureProfile(AzureEnvironment.AZURE));
@@ -219,7 +219,7 @@ opts := &arm.ClientOptions{
         },
     },
 }
-client, _ := armcompute.NewVirtualMachinesClient("sub-001", cred, opts)""",
+client, _ := armcompute.NewVirtualMachinesClient("00000000-0000-0000-0000-cloudlearn01", cred, opts)""",
         }
     # ── Python SDK snippets ──────────────────────────────────────────────
     if provider == "aws" and language == "python":
@@ -262,7 +262,7 @@ from azure.mgmt.compute import ComputeManagementClient
 credential = DefaultAzureCredential()
 client = ComputeManagementClient(
     credential,
-    'sub-001',
+    '00000000-0000-0000-0000-cloudlearn01',
     base_url='http://127.0.0.1:9000',
 )
 vms = list(client.virtual_machines.list_all())
@@ -308,7 +308,7 @@ console.log(buckets);""",
 const { ComputeManagementClient } = require('@azure/arm-compute');
 
 const credential = new DefaultAzureCredential();
-const client = new ComputeManagementClient(credential, 'sub-001', {
+const client = new ComputeManagementClient(credential, '00000000-0000-0000-0000-cloudlearn01', {
     $host: 'http://127.0.0.1:9000',
 });
 const vms = [];

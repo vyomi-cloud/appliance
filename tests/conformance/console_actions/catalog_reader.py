@@ -10,6 +10,7 @@ Net win: zero Python-import dependencies on the simulator. The harness
 works in any venv that has `requests` + `pytest`.
 """
 from __future__ import annotations
+import json
 import os
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -195,8 +196,15 @@ def _read_azure() -> list[ActionSpec]:
     services = cat.get("services") if isinstance(cat, dict) else cat
     if not isinstance(services, list):
         return []
+    # The subscription + resource group the console itself uses (catalog), not a
+    # made-up one: the space has one subscription, any other is SubscriptionNotFound.
+    meta = cat if isinstance(cat, dict) else {}
+    sub, rg = meta.get("subscription") or "00000000-0000-0000-0000-cloudlearn01", meta.get("resourceGroup") or "cloudlearn-rg"
     specs: list[ActionSpec] = []
     from .sample_payloads import payload_for, form_payload
+
+    def scoped(payload):
+        return json.loads(json.dumps(payload).replace("/subscriptions/sim-sub/", f"/subscriptions/{sub}/")) if payload else payload
     for svc in services:
         key = str(svc.get("key", "")).strip()
         if not key:
@@ -204,7 +212,7 @@ def _read_azure() -> list[ActionSpec]:
         namespace = svc.get("namespace") or "Microsoft.Compute"
         rtype = svc.get("type") or "virtualMachines"
         coll = (
-            f"/subscriptions/sim-sub/resourceGroups/cloudlearn-rg/"
+            f"/subscriptions/{sub}/resourceGroups/{rg}/"
             f"providers/{namespace}/{rtype}"
         )
         res = coll + "/{name}"
@@ -215,7 +223,7 @@ def _read_azure() -> list[ActionSpec]:
         specs.append(ActionSpec(
             provider="azure", service=key, action="create",
             method="PUT", path=res.replace("{name}", _azure_name(svc, key)),
-            payload=payload_for("azure", key) or form_payload("azure", svc), requires_resource=True,
+            payload=scoped(payload_for("azure", key) or form_payload("azure", svc)), requires_resource=True,
         ))
         specs.append(ActionSpec(
             provider="azure", service=key, action="get",

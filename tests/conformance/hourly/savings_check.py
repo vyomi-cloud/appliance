@@ -84,7 +84,7 @@ def create_gcp(name: str):
 
 
 def create_azure(name: str):
-    sub, rg = "sub-001", "rg-savings-check"
+    sub, rg = "00000000-0000-0000-0000-cloudlearn01", "rg-savings-check"
     arm = f"{BASE}/subscriptions/{sub}/resourceGroups/{rg}"
     http("PUT", f"{arm}?api-version=2021-04-01", {"location": "eastus"})
     http("PUT", f"{arm}/providers/Microsoft.Storage/storageAccounts/{name}?api-version=2023-01-01",
@@ -114,7 +114,7 @@ def check_azure_vm() -> None:
     try:
         if not switch_to("azure"):
             return
-        sub, rg, name = "sub-001", "rg-savings-check", f"vm-sav-{uuid.uuid4().hex[:8]}"
+        sub, rg, name = "00000000-0000-0000-0000-cloudlearn01", "rg-savings-check", f"vm-sav-{uuid.uuid4().hex[:8]}"
         before = savings()
         http("PUT", f"{BASE}/subscriptions/{sub}/resourceGroups/{rg}?api-version=2021-04-01", {"location": "eastus"})
         http("PUT", f"{BASE}/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{name}?api-version=2023-09-01",

@@ -23,6 +23,8 @@ where ``path`` is the request path (``/subscriptions/...`` or
 from __future__ import annotations
 
 import datetime
+import json
+import re
 import uuid
 
 try:                                              # host: package import
@@ -68,6 +70,116 @@ except ImportError:
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
+TENANT_ID = "00000000-0000-0000-0000-000000000000"
+
+
+# ── One subscription per space ─────────────────────────────────────────────
+# A space is one Azure subscription, as an account is in real Azure: `az login`
+# discovers it from GET /subscriptions, the console uses it (catalog), and any
+# other subscription id is SubscriptionNotFound — instead of silently getting
+# its own empty store, which split the az CLI and the console apart. Shared by
+# the offline handler (providers/azure_services.py) and Nano (AzureArm below).
+def subscription_doc() -> dict:
+    return {"id": f"/subscriptions/{DEFAULT_SUBSCRIPTION}", "authorizationSource": "RoleBased",
+            "managedByTenants": [], "subscriptionId": DEFAULT_SUBSCRIPTION, "tenantId": TENANT_ID,
+            "displayName": "Vyomi Subscription", "state": "Enabled",
+            "subscriptionPolicies": {"locationPlacementId": "Public_2014-09-01",
+                                     "quotaId": "PayAsYouGo_2014-09-01", "spendingLimit": "Off"}}
+
+
+def tenants_doc() -> dict:
+    return {"value": [{"id": f"/tenants/{TENANT_ID}", "tenantId": TENANT_ID, "tenantCategory": "Home",
+                       "displayName": "Vyomi", "defaultDomain": "vyomi.onmicrosoft.com"}]}
+
+
+def is_space_subscription(sub: str) -> bool:
+    return (sub or "").lower() == DEFAULT_SUBSCRIPTION.lower()
+
+
+def subscription_not_found(sub: str) -> tuple[int, dict]:
+    return 404, {"error": {"code": "SubscriptionNotFound",
+                           "message": f"The subscription '{sub}' could not be found."}}
+
+
+_FOREIGN_SUB = re.compile(r"^/subscriptions/([^/]+)/", re.I)
+
+
+def adopt_foreign_subscriptions(state) -> int:
+    """Move resources stored under any other subscription id (accepted before
+    there was one subscription per space) into the space's subscription, so
+    nothing created through the CLI earlier disappears. Ids inside each record
+    are rewritten too; a resource whose id already exists in the space's
+    subscription keeps the space's copy. Returns how many records moved."""
+    target = DEFAULT_SUBSCRIPTION.lower()
+    moved = 0
+    for key in [k for k in list(state.keys()) if (m := _FOREIGN_SUB.match(k)) and m.group(1).lower() != target]:
+        old = _FOREIGN_SUB.match(key).group(1)
+        new_key = f"/subscriptions/{target}/" + key[len(f"/subscriptions/{old}/"):]
+        rec = state.pop(key)
+        if new_key in state:
+            continue
+        if isinstance(rec, dict):
+            rec = json.loads(re.sub(rf"/subscriptions/{re.escape(old)}(?=/|\"|$)", f"/subscriptions/{DEFAULT_SUBSCRIPTION}",
+                                    json.dumps(rec), flags=re.I))
+            if "_sub" in rec:
+                rec["_sub"] = DEFAULT_SUBSCRIPTION
+        state[new_key] = rec
+        moved += 1
+    # Lists match `_sub` exactly; the same id in other letter case was accepted too.
+    for rec in state.values():
+        if isinstance(rec, dict) and rec.get("_sub") and rec["_sub"] != DEFAULT_SUBSCRIPTION:
+            rec["_sub"] = DEFAULT_SUBSCRIPTION
+    return moved
+
+
+def rg_key(rg: str) -> str:
+    return f"/subscriptions/{DEFAULT_SUBSCRIPTION}/resourcegroups/{rg}".lower()
+
+
+def list_resource_groups(state) -> list[dict]:
+    """Stored resource groups (created with PUT, as in real Azure, even when
+    empty) plus any group a resource names, plus the default group."""
+    groups: dict[str, dict] = {DEFAULT_RG.lower(): {"name": DEFAULT_RG, "location": DEFAULT_LOCATION, "tags": {}}}
+    for rec in state.values():
+        if not isinstance(rec, dict):
+            continue
+        if rec.get("type") == "Microsoft.Resources/resourceGroups":
+            groups[rec["name"].lower()] = rec
+        elif rec.get("_rg"):
+            groups.setdefault(rec["_rg"].lower(), {"name": rec["_rg"], "location": DEFAULT_LOCATION, "tags": {}})
+    return [rg_doc(g["name"], g.get("location"), g.get("tags")) for g in groups.values()]
+
+
+def rg_doc(rg: str, location=None, tags=None) -> dict:
+    return {"id": f"/subscriptions/{DEFAULT_SUBSCRIPTION}/resourceGroups/{rg}", "name": rg,
+            "type": "Microsoft.Resources/resourceGroups", "location": location or DEFAULT_LOCATION,
+            "tags": tags or {}, "properties": {"provisioningState": "Succeeded"}}
+
+
+def resource_group_item(state, method: str, rg: str, payload: dict) -> tuple[int, dict | None]:
+    """PUT/PATCH store the group; GET returns it (404 ResourceGroupNotFound if
+    it doesn't exist); DELETE removes it and every resource in it."""
+    key = rg_key(rg)
+    known = {g["name"].lower(): g for g in list_resource_groups(state)}
+    if method in ("PUT", "PATCH"):
+        cur = known.get(rg.lower())
+        loc = (payload or {}).get("location") or (cur or {}).get("location") or DEFAULT_LOCATION
+        tags = (payload or {}).get("tags", (cur or {}).get("tags") or {})
+        state[key] = rg_doc(cur["name"] if cur else rg, loc, tags)
+        return (200 if cur else 201), state[key]
+    if method == "GET":
+        if rg.lower() in known:
+            return 200, known[rg.lower()]
+        return 404, {"error": {"code": "ResourceGroupNotFound", "message": f"Resource group '{rg}' could not be found."}}
+    if method == "DELETE":
+        if rg.lower() == DEFAULT_RG.lower():
+            state.pop(key, None)
+            return 200, None
+        for k in [k for k, r in state.items() if isinstance(r, dict) and (r.get("_rg") or "").lower() == rg.lower()]:
+            state.pop(k, None)
+        state.pop(key, None)
+        return 200, None
+    return 405, {"error": {"code": "MethodNotAllowed", "message": "Use PUT, GET or DELETE on a resource group."}}
 
 _BY_TYPE = {(c["namespace"].lower(), c["type"].lower()): c for c in CATALOG}
 
@@ -233,6 +345,11 @@ class AzureArm:
                 base.update({"id": op["id"], "name": op["name"], "startTime": op["startTime"], "endTime": op["endTime"]})
                 base.update(op.get("result") or {})
             return _ok(base)
+        bare = path.split("?", 1)[0].rstrip("/")
+        if bare.endswith("/tenants") and method == "GET":
+            return _ok(tenants_doc())
+        if bare.endswith("/subscriptions") and method == "GET":
+            return _ok({"value": [subscription_doc()]})
         i = path.find("/subscriptions/")
         if i == -1:
             return _err(404, "NotFound", f"Not an ARM path: {path}")
@@ -251,12 +368,15 @@ class AzureArm:
         segs = [s for s in rest.split("/") if s != ""]
         if not segs:
             return _err(400, "BadRequest", "Missing subscription id.")
-        sub = segs[0]
+        if not is_space_subscription(segs[0]):
+            code, err = subscription_not_found(segs[0])
+            return {"status": code, "headers": {}, "body": err}
+        adopt_foreign_subscriptions(self.state)
+        sub = DEFAULT_SUBSCRIPTION
         rest_segs = segs[1:]
 
         if not rest_segs:
-            return _ok({"id": f"/subscriptions/{sub}", "subscriptionId": sub,
-                        "displayName": "CloudLearn Subscription", "state": "Enabled"})
+            return _ok(subscription_doc())
 
         if len(rest_segs) == 1 and rest_segs[0].lower() == "locations" and method == "GET":
             return _ok(ext_engine.subscription_locations(sub))
@@ -265,9 +385,10 @@ class AzureArm:
         if rest_segs[0].lower() == "resourcegroups" and len(rest_segs) <= 2:
             if len(rest_segs) == 1:
                 if method == "GET":
-                    return _ok({"value": self._list_resource_groups(sub)})
+                    return _ok({"value": list_resource_groups(self.state)})
                 return _err(405, "MethodNotAllowed", "Use PUT /resourcegroups/{name}.")
-            return self._resource_group_item(method, sub, rest_segs[1], payload)
+            code, body = resource_group_item(self.state, method, rest_segs[1], payload)
+            return {"status": code, "headers": {}, "body": body}
 
         rg = None
         idx = 0
@@ -550,25 +671,6 @@ class AzureArm:
         return {"id": f"/subscriptions/{DEFAULT_SUBSCRIPTION}/providers/{namespace}",
                 "namespace": namespace, "registrationState": "Registered",
                 "registrationPolicy": "RegistrationRequired", "resourceTypes": types}
-
-    def _list_resource_groups(self, sub):
-        names = {DEFAULT_RG: True}
-        for rec in self.state.values():
-            if rec.get("_sub") == sub and rec.get("_rg"):
-                names[rec["_rg"]] = True
-        return [{"id": f"/subscriptions/{sub}/resourceGroups/{n}", "name": n,
-                 "type": "Microsoft.Resources/resourceGroups", "location": DEFAULT_LOCATION,
-                 "properties": {"provisioningState": "Succeeded"}} for n in names]
-
-    def _resource_group_item(self, method, sub, rg, payload):
-        body = {"id": f"/subscriptions/{sub}/resourceGroups/{rg}", "name": rg,
-                "type": "Microsoft.Resources/resourceGroups",
-                "location": (payload or {}).get("location") or DEFAULT_LOCATION,
-                "tags": (payload or {}).get("tags", {}),
-                "properties": {"provisioningState": "Succeeded"}}
-        if method == "DELETE":
-            return _ok(None, status=200)
-        return _ok(body, status=200 if method in ("PUT", "PATCH", "GET") else 405)
 
     def _make_operation(self, resource_id, method, result=None):
         op_id = uuid.uuid4().hex

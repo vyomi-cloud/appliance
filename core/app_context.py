@@ -296,7 +296,7 @@ def is_azure_native_path(path: str) -> bool:
     """Azure ARM control-plane (``/subscriptions/...``) and the console catalog.
     These are served by the generic ARM dispatcher and must bypass the AWS
     action/capability gating (they are not S3/EC2 calls)."""
-    return path.startswith(("/subscriptions/", "/api/azure/", "/azure-data/"))
+    return path in ("/subscriptions", "/tenants") or path.startswith(("/subscriptions/", "/api/azure/", "/azure-data/"))
 
 
 # ── State initialization ───────────────────────────────────────────────────

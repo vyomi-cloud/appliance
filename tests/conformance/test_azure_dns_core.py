@@ -77,7 +77,7 @@ check("delete missing zone → 204", cp(st, "DELETE", ["dnsZones", "contoso.com"
 
 # through the Nano ARM wire
 arm = AzureArm()
-P = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network"
+P = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg/providers/Microsoft.Network"
 r = arm.handle("PUT", P + "/dnsZones/nano.example.com", {}, {"location": "global"})
 check("Nano ARM: zone create", r["status"] == 201 and r["body"]["name"] == "nano.example.com", r)
 r = arm.handle("PUT", P + "/dnsZones/nano.example.com/A/w", {}, {"properties": {"ARecords": [{"ipv4Address": "1.1.1.1"}]}})

@@ -72,7 +72,7 @@ class ApiPassTest {
         // Switch to an Azure space for the SQL create, then to AWS for the rest.
         switchToProviderSpace("azure");
         var api = "api-version=2023-08-01";
-        var base = ENDPOINT + "/subscriptions/sub-e2e/resourceGroups/rg-e2e/providers/Microsoft.Sql/servers/orders-sql";
+        var base = ENDPOINT + "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-e2e/providers/Microsoft.Sql/servers/orders-sql";
 
         // Server
         http("PUT", base + "?" + api, """

@@ -65,7 +65,7 @@ func TestApiPass(t *testing.T) {
 		if err := switchSpace(ep, "azure"); err != nil { t.Fatal(err) }
 
 		api := "api-version=2023-08-01"
-		base := ep + "/subscriptions/sub-e2e/resourceGroups/rg-e2e/providers/Microsoft.Sql/servers/inv-sql"
+		base := ep + "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-e2e/providers/Microsoft.Sql/servers/inv-sql"
 
 		mustHttp(t, "PUT", base+"?"+api,
 			`{"location":"eastus","properties":{"administratorLogin":"azureadmin","administratorLoginPassword":"Password123!"}}`)

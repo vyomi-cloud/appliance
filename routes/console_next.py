@@ -162,7 +162,7 @@ _AZURE_SQL_CONSOLE_API = {
     # dispatcher (providers/azure_services.py handle_arm) upserts the record. The
     # {id} (server name) travels in the PATH (ARM is name-in-URL), so the widget
     # substitutes it into `create` before sending; api-version is on the query.
-    "create": ("/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/"
+    "create": ("/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/"
                "cloudlearn-rg/providers/Microsoft.Sql/servers/{id}"
                "?api-version=2023-05-01-preview"),
     "createForm": {

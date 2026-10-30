@@ -21,6 +21,8 @@ from typing import Any
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
+from core import azure_arm_core as _arm   # one subscription per space (shared with Nano)
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -723,13 +725,16 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     segs = [s for s in rest.split("/") if s != ""]
     if not segs:
         return _error(400, "BadRequest", "Missing subscription id.")
-    sub = segs[0]
+    if not _arm.is_space_subscription(segs[0]):
+        code, err = _arm.subscription_not_found(segs[0])
+        return JSONResponse(status_code=code, content=err)
+    _arm.adopt_foreign_subscriptions(_state)
+    sub = DEFAULT_SUBSCRIPTION
     rest_segs = segs[1:]
 
     # GET /subscriptions/{sub}
     if not rest_segs:
-        return JSONResponse({"id": f"/subscriptions/{sub}", "subscriptionId": sub,
-                             "displayName": "CloudLearn Subscription", "state": "Enabled"})
+        return JSONResponse(_arm.subscription_doc())
 
     if len(rest_segs) == 1 and rest_segs[0].lower() == "locations" and method == "GET":
         from core import azure_arm_ext_core as _ext_loc
@@ -740,10 +745,10 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
                                                       (len(rest_segs) == 2)):
         if len(rest_segs) == 1:
             if method == "GET":
-                return JSONResponse({"value": _list_resource_groups(sub)})
+                return JSONResponse({"value": _arm.list_resource_groups(_state)})
             return _error(405, "MethodNotAllowed", "Use PUT /resourcegroups/{name}.")
-        rg = rest_segs[1]
-        return _resource_group_item(method, sub, rg, await _safe_json(request))
+        code, body = _arm.resource_group_item(_state, method, rest_segs[1], await _safe_json(request))
+        return JSONResponse(status_code=code, content=body)
 
     # Provider resources. Two scopes:
     #   subscription scope: /subscriptions/{sub}/providers/{ns}/{type}[/{name}...]
@@ -1307,27 +1312,6 @@ def _rg_from_id(rid: str) -> str | None:
     return None
 
 
-def _list_resource_groups(sub: str) -> list[dict]:
-    names: dict[str, bool] = {DEFAULT_RG: True}
-    for rec in _state.values():
-        if rec.get("_sub") == sub and rec.get("_rg"):
-            names[rec["_rg"]] = True
-    return [{"id": f"/subscriptions/{sub}/resourceGroups/{n}", "name": n,
-             "type": "Microsoft.Resources/resourceGroups", "location": DEFAULT_LOCATION,
-             "properties": {"provisioningState": "Succeeded"}} for n in names]
-
-
-def _resource_group_item(method: str, sub: str, rg: str, payload: dict) -> JSONResponse:
-    body = {"id": f"/subscriptions/{sub}/resourceGroups/{rg}", "name": rg,
-            "type": "Microsoft.Resources/resourceGroups",
-            "location": (payload or {}).get("location") or DEFAULT_LOCATION,
-            "tags": (payload or {}).get("tags", {}),
-            "properties": {"provisioningState": "Succeeded"}}
-    if method == "DELETE":
-        return JSONResponse(status_code=200, content=None)
-    return JSONResponse(status_code=200 if method in ("PUT", "PATCH", "GET") else 405, content=body)
-
-
 # --- console support -------------------------------------------------------
 def catalog_for_console() -> list[dict]:
     """Catalog trimmed to what the console needs (no python defaults objects
@@ -1545,7 +1529,16 @@ def register(app, _h=None) -> None:
     async def arm_dispatch(rest: str, request: Request):
         return await handle_arm(request, rest)
 
+    # `az login` discovers the account here: the space's one subscription and its tenant.
+    async def arm_subscriptions():
+        return JSONResponse({"value": [_arm.subscription_doc()]})
+
+    async def arm_tenants():
+        return JSONResponse(_arm.tenants_doc())
+
     if not _UNIFIED:
+        app.add_api_route("/subscriptions", arm_subscriptions, methods=["GET"], include_in_schema=False)
+        app.add_api_route("/tenants", arm_tenants, methods=["GET"], include_in_schema=False)
         app.add_api_route("/subscriptions/{rest:path}", arm_dispatch,
                           methods=["GET", "PUT", "POST", "PATCH", "DELETE"],
                           include_in_schema=False)

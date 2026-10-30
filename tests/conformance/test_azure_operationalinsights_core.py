@@ -68,11 +68,11 @@ check("data sources filter by kind", len(cp(st, "GET", D[:3], query={"$filter": 
 check("delete returns 200 + LRO, then 204", cp(st, "DELETE", ["workspaces", "law-one"])["lro"] and cp(st, "DELETE", ["workspaces", "law-one"])["status"] == 204)
 
 arm = AzureArm()
-resp = arm.handle("PUT", "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/law-arm",
+resp = arm.handle("PUT", "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/law-arm",
                   {"api-version": "2022-10-01"}, {"location": "eastus", "properties": {}})
 check("ARM dispatcher routes Microsoft.OperationalInsights (201 + async header)",
       resp["status"] == 201 and "Azure-AsyncOperation" in resp["headers"], str(resp)[:200])
-resp = arm.handle("GET", "/subscriptions/sub1/providers/Microsoft.OperationalInsights/workspaces", {"api-version": "2022-10-01"})
+resp = arm.handle("GET", "/subscriptions/00000000-0000-0000-0000-cloudlearn01/providers/Microsoft.OperationalInsights/workspaces", {"api-version": "2022-10-01"})
 check("ARM subscription list sees the workspace", any(w["name"] == "law-arm" for w in resp["body"]["value"]), str(resp)[:200])
 
 print(f"{PASS} passed, {FAIL} failed")

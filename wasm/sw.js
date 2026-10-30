@@ -410,7 +410,7 @@ async function route(method, path, body, query) {
   //     /api/azure/operations/{id}. The substrate-free AzureArm core serves both;
   //     its HTTP envelope (status + Azure-AsyncOperation/Location headers + body)
   //     is returned verbatim (see the __http handling in the fetch listener).
-  if (path.startsWith("/subscriptions/") || path.startsWith("/api/azure/operations/")) {
+  if (path.startsWith("/subscriptions/") || path === "/subscriptions" || path === "/tenants" || path.startsWith("/api/azure/operations/")) {
     return { tuple: ["azure", "_arm", method, { path, query: query || {}, body: body || null }] };
   }
 
@@ -972,7 +972,8 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   // We own /api/* (console REST) AND /subscriptions/* (native Azure ARM).
   const inApi = url.pathname.startsWith(BASE + "/api/");
-  const inArm = url.pathname.startsWith(BASE + "/subscriptions/") || url.pathname.startsWith(BASE + "/azure-data/keyvault/");
+  const inArm = url.pathname.startsWith(BASE + "/subscriptions/") || url.pathname === BASE + "/subscriptions" ||
+                url.pathname === BASE + "/tenants" || url.pathname.startsWith(BASE + "/azure-data/keyvault/");
   if (url.origin !== self.location.origin || !(inApi || inArm)) return;
   // Strip the mount prefix so all routing below is written against "/api/..."
   // or "/subscriptions/...".

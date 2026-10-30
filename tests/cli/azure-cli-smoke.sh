@@ -13,7 +13,9 @@
 #        mcr.microsoft.com/azure-cli:latest bash azure-cli-smoke.sh'
 set -u
 BASE="${ENDPOINT:-http://127.0.0.1:9000}"
-SUB="${AZURE_SUBSCRIPTION_ID:-sub-001}"
+# The subscription is discovered the way `az login` does (GET /subscriptions):
+# the space has exactly one, and any other id is SubscriptionNotFound.
+SUB="${AZURE_SUBSCRIPTION_ID:-$(python3 -c "import json,urllib.request;print(json.load(urllib.request.urlopen('$BASE/subscriptions?api-version=2022-12-01',timeout=10))['value'][0]['subscriptionId'])" 2>/dev/null)}"
 RG="${AZURE_RESOURCE_GROUP:-rg-smoke}"
 LOCATION="${AZURE_LOCATION:-eastus}"
 
