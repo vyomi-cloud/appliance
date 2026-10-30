@@ -1,0 +1,145 @@
+{
+ "artifacts": [
+  "Repositories",
+  "Settings"
+ ],
+ "cloudscheduler": [
+  "Cloud Scheduler"
+ ],
+ "compute": [
+  "Security risk overview",
+  "Compute Advisor",
+  "Virtual machines",
+  "VM instances",
+  "Instance templates",
+  "Sole-tenant nodes",
+  "Machine images",
+  "TPUs",
+  "Committed use discounts",
+  "Reservations"
+ ],
+ "firestore": [
+  "All databases",
+  "{resource-name}",
+  "Firestore Studio",
+  "Indexes",
+  "Import/Export",
+  "Disaster recovery",
+  "Time-to-live (TTL)",
+  "Security rules",
+  "Insights",
+  "Usage"
+ ],
+ "functions": [
+  "Services",
+  "Jobs",
+  "Worker pools",
+  "Domain mappings",
+  "Release Notes"
+ ],
+ "iam-admin": [
+  "Identity & Access",
+  "IAM",
+  "Service Accounts",
+  "Groups",
+  "Privileged Access Manager",
+  "Roles",
+  "Workload Identity Federation",
+  "Workforce Identity Federation",
+  "Principal Access Boundary",
+  "Managed Workload Identities"
+ ],
+ "kubernetes": [
+  "Clusters",
+  "Workloads",
+  "Applications",
+  "Secrets & ConfigMaps",
+  "Storage",
+  "Object Browser",
+  "Gateways, Services & Ingress",
+  "Backup for GKE",
+  "Config",
+  "Marketplace"
+ ],
+ "logs": [
+  "Dashboards",
+  "Application monitoring",
+  "Explore",
+  "Metrics explorer",
+  "Logs explorer",
+  "Observability analytics",
+  "Trace explorer",
+  "Cost explorer",
+  "Detect",
+  "Alerting"
+ ],
+ "monitoring": [
+  "Dashboards",
+  "Application monitoring",
+  "Explore",
+  "Metrics explorer",
+  "Logs explorer",
+  "Observability analytics",
+  "Trace explorer",
+  "Cost explorer",
+  "Detect",
+  "Alerting"
+ ],
+ "networking": [
+  "VPC networks",
+  "IP addresses",
+  "Internal ranges",
+  "Bring your own IP",
+  "Firewall",
+  "Routes",
+  "VPC connectivity",
+  "Shared VPC",
+  "Serverless VPC access",
+  "Packet mirroring"
+ ],
+ "pubsub": [
+  "Topics",
+  "Subscriptions",
+  "Snapshots",
+  "Schemas"
+ ],
+ "run": [
+  "Services",
+  "Jobs",
+  "Worker pools",
+  "Domain mappings",
+  "Release Notes"
+ ],
+ "security/kms": [
+  "Key management",
+  "Key inventory",
+  "Autokey"
+ ],
+ "security/secret-manager": [
+  "Secret Manager"
+ ],
+ "sql": [
+  "Get Started",
+  "Instances",
+  "Backups",
+  "{resource-name}",
+  "System insights",
+  "Query insights",
+  "Cloud SQL Studio",
+  "Connections",
+  "Users",
+  "Databases"
+ ],
+ "storage": [
+  "Buckets",
+  "Monitoring",
+  "Settings",
+  "Storage Intelligence",
+  "Advisor",
+  "Batch operations",
+  "Insights datasets",
+  "Configuration",
+  "Smart Storage",
+  "Object enrichments"
+ ]
+}
