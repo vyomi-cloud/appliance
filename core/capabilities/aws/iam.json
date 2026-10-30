@@ -1,0 +1,180 @@
+{
+ "$doc": "Vyomi capability registry — IAM. See s3.json for the contract.",
+ "iam.user.crud": {
+  "title": "Users (create, get, list, delete, rename)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.user.permissions": {
+  "title": "User permissions (attach/detach managed policies, inline policies)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.user.groups": {
+  "title": "User group membership",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.user.tags": {
+  "title": "User tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.user.access-keys": {
+  "title": "Access keys (create, list, activate/deactivate, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.user.console-password": {
+  "title": "Console sign-in (password)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Vyomi stores a login profile (password-set flag, password-reset-required flag) for an IAM user, but there is no console sign-in flow in this environment to authenticate against it."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.user.mfa": {
+  "title": "Multi-factor authentication (MFA) devices",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Assigning, resyncing or removing a virtual/hardware MFA device is not modeled; no MFA state exists to check at sign-in or policy-condition time."
+  ]
+ },
+ "iam.security-credentials.codecommit": {
+  "title": "API keys, SSH keys, Git credentials, X.509 certificates",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "AWS CodeCommit, Amazon Keyspaces and X.509 signing certificates are not simulated by Vyomi, so the credentials IAM issues for them have nothing to authenticate against."
+  ]
+ },
+ "iam.role.crud": {
+  "title": "Roles (create, get, list, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.role.trust-policy": {
+  "title": "Trust policy + maximum session duration",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.role.permissions": {
+  "title": "Role permissions (attach/detach managed policies, inline policies)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.role.tags": {
+  "title": "Role tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.permissions-boundary": {
+  "title": "Permissions boundaries",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "A permissions boundary ARN is stored on the user/role and reflected in ListEntitiesForPolicy, but Vyomi does not clip the effective permissions to it — SimulatePrincipalPolicy and policy enforcement ignore the boundary."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.policy.crud": {
+  "title": "Managed policies (create, get, list, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.policy.versions": {
+  "title": "Policy versions (create, list, get, set default, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.policy.entities-attached": {
+  "title": "Entities attached (as permissions policy or boundary)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.policy.simulate": {
+  "title": "Policy simulator (SimulatePrincipalPolicy)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.enforcement": {
+  "title": "Cross-service authorization enforcement",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "IAM policies are stored and evaluated faithfully by SimulatePrincipalPolicy / the Policy simulator page, but Vyomi does not gate other services' native API calls on them: an action an IAM policy would deny still succeeds against S3, DynamoDB, etc. in this environment."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.identity-providers": {
+  "title": "Identity providers (SAML, OpenID Connect)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.account-settings.password-policy": {
+  "title": "Account password policy",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.account-settings.alias": {
+  "title": "Account alias",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.credential-report": {
+  "title": "Credentials report",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The report is generated synchronously from current user/key state. Fields Vyomi does not track over time — password/key last-used dates, MFA activity — are reported as N/A or false rather than measured."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
+ },
+ "iam.last-accessed": {
+  "title": "Last Accessed (service last-accessed data)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Service last-accessed data requires long-term usage telemetry AWS aggregates in the background; Vyomi has no equivalent history to report."
+  ]
+ },
+ "iam.cloudtrail-policy-generator": {
+  "title": "Generate policy based on CloudTrail events",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Vyomi does not simulate CloudTrail, so there are no recorded events to mine a least-privilege policy from."
+  ]
+ },
+ "iam.roles-anywhere": {
+  "title": "IAM Roles Anywhere",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Issuing short-term role credentials to on-premises/X.509-authenticated workloads is not modeled."
+  ]
+ },
+ "iam.access-analyzer": {
+  "title": "IAM Access Analyzer",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Resource analysis, unused-access findings and analyzer settings require cross-account reachability analysis Vyomi (a single-account appliance) has no basis to compute."
+  ]
+ },
+ "iam.organizations": {
+  "title": "AWS Organizations multi-account features (SCPs, RCPs, root access management, organization activity, account access manager, temporary delegation requests)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Vyomi simulates a single AWS account; there is no organization of member accounts for these multi-account features to operate over."
+  ]
+ }
+}
