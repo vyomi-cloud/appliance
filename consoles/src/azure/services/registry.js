@@ -16,7 +16,7 @@ export const SERVICES = [
   { id: "functionapp", title: "Function App", type: "Microsoft.Web/sites (functionapp)", category: "Compute", icon: "functionapp", load: () => import("./functionapp/index.jsx") },
   { id: "appservices", title: "App Services", type: "Microsoft.Web/sites", category: "Compute", icon: "appservices", load: () => import("./appservices/index.jsx") },
   { id: "vnets", title: "Virtual networks", type: "Microsoft.Network/virtualNetworks", category: "Networking", icon: "vnets" },
-  { id: "nsgs", title: "Network security groups", type: "Microsoft.Network/networkSecurityGroups", category: "Networking", icon: "nsgs" },
+  { id: "nsgs", title: "Network security groups", type: "Microsoft.Network/networkSecurityGroups", category: "Networking", icon: "nsgs", load: () => import("./nsgs/index.jsx") },
   { id: "resourcegroups", title: "Resource groups", type: "Microsoft.Resources/resourceGroups", category: "Management and governance", icon: "resourcegroups" },
   { id: "acr", title: "Container registries", type: "Microsoft.ContainerRegistry/registries", category: "Containers", icon: "acr" },
   { id: "aks", title: "Kubernetes services", type: "Microsoft.ContainerService/managedClusters", category: "Containers", icon: "aks" },

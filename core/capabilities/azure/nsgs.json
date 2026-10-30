@@ -1,0 +1,71 @@
+{
+ "$doc": "Vyomi capability registry — Azure Network security groups. See aws/s3.json for the contract.",
+ "azure.nsgs.nsg.crud": {
+  "title": "Network security groups (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.security_rules": {
+  "title": "Inbound and outbound security rules (Microsoft.Network/networkSecurityGroups/securityRules)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "The 3 default rules per direction (AllowVNetInBound, AllowAzureLoadBalancerInBound, DenyAllInBound, AllowVNetOutBound, AllowInternetOutBound, DenyAllOutBound) are fixed display rows, not stored ARM resources — they can't be edited or deleted, matching the real portal."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this network security group",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this network security group); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.activity_log": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.export_template": {
+  "title": "Export template",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only the ARM Template tab is generated from the live resource; Bicep and Terraform export are not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.nsgs.iam": {
+  "title": "Access control (IAM)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Microsoft.Authorization/roleAssignments is only simulated at subscription scope, so role assignments/roles/deny assignments/classic administrators scoped to a single network security group are an honest gap."
+  ]
+ },
+ "azure.nsgs.tools": {
+  "title": "Diagnose and solve problems, Tasks, Effective security rules, Support + Troubleshooting",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["These console tools require live network topology / traffic simulation Vyomi doesn't model."]
+ },
+ "azure.nsgs.monitoring": {
+  "title": "Alerts, Diagnostic settings, Logs, NSG flow logs",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Azure Monitor alert rules/diagnostic settings/flow logs for network security groups are not modelled."]
+ },
+ "azure.nsgs.associations": {
+  "title": "Network interfaces, Subnets (NSG associations)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "No standalone Network Interface or Subnet resource type is simulated in this lens yet, so there is nothing to Associate this network security group with: the Network interfaces list (Name, Public IP address, Private IP address, Virtual machine columns, Search network interfaces placeholder) and the Subnets list (Name, Address range, Virtual network columns, Search subnets placeholder) are both an honest gap."
+  ]
+ }
+}
