@@ -636,6 +636,13 @@ def _slot_attr(name: str):
     return property(lambda self: self._slot()[name])
 
 
+def _slot_attr_rw(name: str):
+    """Like _slot_attr, but settable — for fields a core reassigns wholesale
+    (`store.password_policy = {...}` / `= None`), not just mutates in place."""
+    return property(lambda self: self._slot()[name],
+                    lambda self, value: self._slot().__setitem__(name, value))
+
+
 def _space_id_of(slot: dict) -> str:
     """The id of the space whose service_states hold `slot` (the proxy may have pivoted
     away from the globally active space to the request's provider)."""
@@ -1996,3 +2003,189 @@ def az_servicebus_store() -> AppStateServiceBusStore:
     if _AZSB is None:
         _AZSB = AppStateServiceBusStore()
     return _AZSB
+
+
+# ── v4 C0g: AWS IAM ─────────────────────────────────────────────────────────────────
+#
+#   IAM   users / groups / roles / managed policies / access keys / SAML+OIDC providers /
+#         account alias+password policy / Vyomi-only org policies + access requests
+#                                            -> service_states["iam_core"]{users,groups,roles,
+#                                               policies,access_keys,saml_providers,
+#                                               oidc_providers,account_aliases,password_policy,
+#                                               credential_report,org_policies,access_requests}
+#   The pre-v4 handler (server.py `_iam_*` + providers/aws_iam.py, records keyed by opaque
+#   ids with flat `policies: [policy_id]` lists) kept its own slot (core.app_context.iam_state,
+#   still the classic console's — /api/iam/* REST stays on it). Its users/groups/roles/
+#   policies/identity-providers/password-policy are adopted ONCE per space into this slot
+#   (keyed by name/ARN, `attached_policies: [arn]`, as the core expects) so an upgrade keeps
+#   what the classic console created; the native wire is this slot's from then on.
+from core.iam_store import IamStore as _IamStoreBase   # noqa: E402
+from core.iam_store import NativeIamEvaluator as _NativeIamEvaluator   # noqa: E402
+
+_IAM_KEYS = {
+    "users": dict, "groups": dict, "roles": dict, "policies": dict, "access_keys": dict,
+    "saml_providers": dict, "oidc_providers": dict, "account_aliases": list,
+    "password_policy": lambda: None, "credential_report": lambda: None,
+    "org_policies": dict, "access_requests": dict,
+}
+
+
+class AppStateIamStore(_SlotStore, _IamStoreBase):
+    """iam_core store over the appliance's space-scoped IAM state (a new slot — see above)."""
+
+    _KEYS = _IAM_KEYS
+
+    def __init__(self, proxy):
+        self._bind(proxy)   # NB: no IamStore.__init__ — the dicts are the slot's
+        self.engine = _NativeIamEvaluator()
+        from core import app_context as ctx
+        self.account_id = ctx.AWS_ACCOUNT_ID
+
+    users = _slot_attr("users")
+    groups = _slot_attr("groups")
+    roles = _slot_attr("roles")
+    policies = _slot_attr("policies")
+    access_keys = _slot_attr("access_keys")
+    saml_providers = _slot_attr("saml_providers")
+    oidc_providers = _slot_attr("oidc_providers")
+    account_aliases = _slot_attr_rw("account_aliases")
+    password_policy = _slot_attr_rw("password_policy")
+    credential_report = _slot_attr_rw("credential_report")
+    org_policies = _slot_attr("org_policies")
+    access_requests = _slot_attr("access_requests")
+
+    def adopt(self) -> None:
+        """Pre-v4 server.py IAM state (core.app_context.iam_state) -> this slot, once per space."""
+        if not self._begin_adoption():
+            return
+        try:
+            from core.app_context import iam_state as legacy
+            n = adopt_legacy_iam(self._slot(), legacy, account_id=self.account_id)
+            if n:
+                _log.info("iam: adopted %d pre-v4 users/groups/roles/policies", n)
+        except Exception as exc:   # never break the data plane over a migration
+            _log.warning("iam: pre-v4 adoption skipped: %s", exc)
+
+
+def adopt_legacy_iam(slot: dict, legacy: dict, account_id: str = "123456789012") -> int:
+    """Convert the pre-v4 IAM records of one space (server.py `_iam_*` / providers/aws_iam.py
+    shape: opaque `user-…`/`group-…`/`role-…`/`policy-…` ids, a flat `policies: [policy_id]`
+    list per principal, a separate global `attachments` list) into the core/iam_core.py shape
+    (keyed by name — policies by ARN — `attached_policies: [arn]`) IN PLACE. Returns the
+    number of entities adopted."""
+    from core.iam_core import _now as _iam_now
+
+    users, groups, roles = slot.setdefault("users", {}), slot.setdefault("groups", {}), slot.setdefault("roles", {})
+    policies = slot.setdefault("policies", {})
+    n = 0
+
+    def arn_of(kind: str, name: str) -> str:
+        return f"arn:aws:iam::{account_id}:{kind}/{name}"
+
+    policy_arn_by_id: dict[str, str] = {}
+    for pid, p in (legacy.get("policies") or {}).items():
+        if not isinstance(p, dict) or not p.get("policy_name"):
+            continue
+        arn = arn_of("policy", p["policy_name"])
+        policy_arn_by_id[pid] = arn
+        if arn in policies:
+            continue
+        when = p.get("created") or _iam_now()
+        doc = p.get("document") or {}
+        policies[arn] = {"policy_name": p["policy_name"], "policy_id": p.get("policy_id") or pid,
+                         "arn": arn, "path": p.get("path", "/"), "document": doc,
+                         "description": p.get("description", ""), "created": when, "updated": when,
+                         "default_version_id": "v1", "attachment_count": 0, "tags": {},
+                         "versions": {"v1": {"document": doc, "created": when}}}
+        n += 1
+
+    group_name_by_id: dict[str, str] = {}
+    for gid, g in (legacy.get("groups") or {}).items():
+        if not isinstance(g, dict) or not g.get("group_name"):
+            continue
+        name = g["group_name"]
+        group_name_by_id[gid] = name
+        if name in groups:
+            continue
+        groups[name] = {"group_name": name, "group_id": g.get("group_id") or gid,
+                        "path": g.get("path", "/"), "arn": arn_of("group", name),
+                        "created": g.get("created") or _iam_now(), "members": [],
+                        "attached_policies": [policy_arn_by_id[pid] for pid in g.get("policies") or []
+                                              if pid in policy_arn_by_id],
+                        "inline_policies": {}}
+        n += 1
+
+    for uid, u in (legacy.get("users") or {}).items():
+        if not isinstance(u, dict) or not u.get("user_name"):
+            continue
+        name = u["user_name"]
+        if name in users:
+            continue
+        member_groups = [group_name_by_id[gid] for gid in u.get("groups") or [] if gid in group_name_by_id]
+        for gname in member_groups:
+            members = groups[gname]["members"]
+            if name not in members:
+                members.append(name)
+        users[name] = {"user_name": name, "user_id": u.get("user_id") or uid,
+                       "path": u.get("path", "/"), "arn": arn_of("user", name),
+                       "created": u.get("created") or _iam_now(),
+                       "attached_policies": [policy_arn_by_id[pid] for pid in u.get("policies") or []
+                                             if pid in policy_arn_by_id],
+                       "inline_policies": {}, "groups": member_groups, "tags": {},
+                       "permissions_boundary": None, "login_profile": None}
+        n += 1
+
+    for rid, r in (legacy.get("roles") or {}).items():
+        if not isinstance(r, dict) or not r.get("role_name"):
+            continue
+        name = r["role_name"]
+        if name in roles:
+            continue
+        roles[name] = {"role_name": name, "role_id": r.get("role_id") or rid,
+                       "path": r.get("path", "/"), "arn": arn_of("role", name),
+                       "created": r.get("created") or _iam_now(),
+                       "assume_role_policy_document": r.get("assume_role_policy_document") or {},
+                       "description": r.get("description", ""),
+                       "max_session_duration": int(r.get("max_session_duration") or 3600),
+                       "attached_policies": [policy_arn_by_id[pid] for pid in r.get("policies") or []
+                                             if pid in policy_arn_by_id],
+                       "inline_policies": {}, "tags": {}, "permissions_boundary": None}
+        n += 1
+
+    for arn in policy_arn_by_id.values():
+        p = policies.get(arn)
+        if p is not None:
+            p["attachment_count"] = sum(1 for coll in (users, groups, roles) for rec in coll.values()
+                                        if arn in rec.get("attached_policies", []))
+
+    saml, oidc = slot.setdefault("saml_providers", {}), slot.setdefault("oidc_providers", {})
+    for p in (legacy.get("identity_providers") or {}).values():
+        if not isinstance(p, dict) or not p.get("provider_name"):
+            continue
+        is_saml = "SAML" in str(p.get("provider_type") or "").upper()
+        arn = arn_of("saml-provider" if is_saml else "oidc-provider", p["provider_name"])
+        dest = saml if is_saml else oidc
+        if arn in dest:
+            continue
+        when = p.get("created") or _iam_now()
+        dest[arn] = ({"name": p["provider_name"], "arn": arn, "created": when,
+                     "metadata_document": p.get("url") or ""} if is_saml else
+                     {"url": p.get("url") or "", "arn": arn, "created": when,
+                      "client_ids": [], "thumbprints": []})
+        n += 1
+
+    pol = (legacy.get("account_settings") or {}).get("password_policy")
+    if pol and not slot.get("password_policy"):
+        slot["password_policy"] = dict(pol)
+
+    return n
+
+
+_IAM = None
+
+
+def iam_store() -> AppStateIamStore:
+    global _IAM
+    if _IAM is None:
+        _IAM = AppStateIamStore(_proxy("iam_core", dict, None))
+    return _IAM

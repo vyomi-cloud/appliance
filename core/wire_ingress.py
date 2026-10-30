@@ -78,11 +78,11 @@ def _cfg(key: str, default: str) -> str:
 
 _DEFAULT_SERVICES = ("s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager,"
                      "gcp_firestore,gcp_compute,sqs,sns,events,scheduler,"
-                     "lambda,azure_keyvault,azure_acr,azure_servicebus")
+                     "lambda,azure_keyvault,azure_acr,azure_servicebus,iam")
 _KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
                    "kms", "secretsmanager", "gcp_firestore", "gcp_compute",
                    "sqs", "sns", "events", "scheduler",
-                   "lambda", "azure_keyvault", "azure_acr", "azure_servicebus")
+                   "lambda", "azure_keyvault", "azure_acr", "azure_servicebus", "iam")
 
 
 def unified_services() -> frozenset:
@@ -117,7 +117,7 @@ def appliance_stores() -> dict:
             "msg": aps.messaging_store(), "sched": aps.scheduler_store(),
             "lam": aps.lambda_store(), "az_kvsec": aps.az_kv_secrets_store(),
             "az_kvkeys": aps.az_kv_keys_store(), "az_kvcerts": aps.az_kv_certs_store(),
-            "az_acr": aps.acr_store(), "az_sb": aps.az_servicebus_store()}
+            "az_acr": aps.acr_store(), "az_sb": aps.az_servicebus_store(), "iam": aps.iam_store()}
 
 
 # router store key -> unified service name (which stores a full-ingress router overrides)
@@ -127,7 +127,8 @@ STORE_SERVICE = {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb", "az_blob": "azure_
                  "gcp_compute": "gcp_compute", "gcp_compute_vm": "gcp_compute",
                  "msg": "sqs", "sched": "scheduler", "lam": "lambda",
                  "az_kvsec": "azure_keyvault", "az_kvkeys": "azure_keyvault",
-                 "az_kvcerts": "azure_keyvault", "az_acr": "azure_acr", "az_sb": "azure_servicebus"}
+                 "az_kvcerts": "azure_keyvault", "az_acr": "azure_acr", "az_sb": "azure_servicebus",
+                 "iam": "iam"}
 
 
 def appliance_router() -> AwsWireRouter:
@@ -270,6 +271,15 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
     if service in ("azure_keyvault", "azure_acr", "azure_servicebus"):
         return _dispatch_azure(service, r, method, path, query, headers, body)
+    if service == "iam":
+        from core import iam_core
+        if hasattr(r.iam, "adopt"):
+            r.iam.adopt()                 # pre-v4 users/groups/roles/policies (once per space)
+        params = r._query_params(query, body)
+        resp = iam_core.dispatch(r.iam, params)
+        hdrs = dict(resp.headers or {})
+        hdrs.setdefault("content-type", "text/xml")
+        return {"status": resp.status, "headers": hdrs, "body": resp.body.encode()}
     raise ValueError(f"not a unified service: {service}")
 
 

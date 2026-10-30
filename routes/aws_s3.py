@@ -1283,6 +1283,11 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if service == "dynamodb":
             from routes.aws_dynamodb import api_dynamodb_aws as _ddb_handler
             return await _ddb_handler(request)
+        if service == "iam" and _wi.is_unified("iam"):
+            # v4 C0g — AWS IAM (Query protocol) on the shared core (core/iam_core.py) over the
+            # space-scoped appliance state, like Nano; the pre-v4 handler stays reachable with
+            # VYOMI_UNIFIED_INGRESS_SERVICES excluding "iam" (or VYOMI_LEGACY_WIRE=1).
+            return await _wi.serve_service("iam", request)
         if service == "iam":
             return await _srv().api_iam_query(request)
         if service == "sts":

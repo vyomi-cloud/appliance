@@ -2578,9 +2578,17 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
         if isinstance(api, dict):
             add("aws", "apigateway", "api", api_id, api)
 
-    _iam_src = _cloudsim_service_state(space, "iam")
-    if not _iam_src.get("users") and space.get("space_id") == _spaces_state().get("active_space_id"):
-        _iam_src = _iam_state()   # IAM lives in the live (active-space) STATE, not service_states
+    try:   # IAM — v4 C0g: the shared core's space state (console + SDK/CLI share it)
+        from core import wire_ingress as _wi_iam
+        _iam_unified = _wi_iam.is_unified("iam")
+    except Exception:
+        _iam_unified = False
+    if _iam_unified:
+        _iam_src = _cloudsim_service_state(space, "iam_core")
+    else:
+        _iam_src = _cloudsim_service_state(space, "iam")
+        if not _iam_src.get("users") and space.get("space_id") == _spaces_state().get("active_space_id"):
+            _iam_src = _iam_state()   # IAM lives in the live (active-space) STATE, not service_states
     for _iam_kind, _iam_coll in (("user", "users"), ("group", "groups"), ("role", "roles")):
         for _iam_id, _iam_rec in _iam_src.get(_iam_coll, {}).items():
             if isinstance(_iam_rec, dict):
