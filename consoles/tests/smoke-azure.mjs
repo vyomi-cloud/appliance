@@ -29,6 +29,8 @@ const EGT = `vyegtopic${n}`;       // Event Grid topic created through the UI
 const EGT2 = `vyegwire${n}`;       // Event Grid topic created over the wire
 const ES = `vyeges${n}`;           // event subscription created over the wire
 const LOCK = `vyeglock${n}`;       // management lock created through the UI
+const EUSR = `vysmokeuser${n}`;    // Entra ID user created through the UI
+const EUSR2 = `vywireuser${n}`;    // Entra ID user created over the wire
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -43,6 +45,7 @@ const arm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.inc
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const armWeb = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2023-12-01`,
   { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+const graph = (method, path, body) => wire(`/v1.0${path}`, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const blobHdr = (acct) => ({ "x-ms-version": "2021-12-02", authorization: `SharedKey ${acct}:c21va2U=` });
 const blob = (method, acct, path, { query = "", headers = {}, body } = {}) => wire(`/${acct}${path}${query}`, { method, headers: { ...blobHdr(acct), ...headers }, body });
 
@@ -461,6 +464,37 @@ try {
   await page.getByRole("heading", { name: "Event Grid Topics" }).waitFor({ timeout: 10000 });
   const egGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}`);
   check("UI delete topic → ARM GET 404", egGone.status === 404, `HTTP ${egGone.status}`);
+
+  // ── Entra ID: UI create user → visible over native Microsoft Graph wire ────────────────
+  await page.goto(UI + "#/entra/users/create");
+  await page.getByLabel("User principal name", { exact: true }).fill(`${EUSR}@vyomilearn.onmicrosoft.com`);
+  await page.getByLabel("Display name", { exact: true }).fill(EUSR);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: EUSR, exact: true }).waitFor({ timeout: 10000 });
+  const gotUsers = await graph("GET", "/users");
+  const createdUsers = gotUsers.status === 200 ? JSON.parse(gotUsers.text).value : [];
+  check("UI create user → visible over native Microsoft Graph wire", createdUsers.some((u) => u.displayName === EUSR), `HTTP ${gotUsers.status}`);
+  await shot("22-entra-create-user");
+
+  // ── Entra ID: user created over the wire → visible in the UI (CLI → UI direction) ──────
+  const graphPut = await graph("POST", "/users", { displayName: EUSR2, userPrincipalName: `${EUSR2}@vyomilearn.onmicrosoft.com`, passwordProfile: { password: "Vy3omi!2345AB" } });
+  check("Graph POST user over wire", graphPut.status === 201, `HTTP ${graphPut.status}`);
+  await page.goto(UI + "#/entra/users");
+  await page.getByText(EUSR2).first().waitFor({ timeout: 10000 });
+  check("wire-created user shown in browse grid", true);
+  await shot("23-entra-users");
+
+  // ── Entra ID: delete through the user's own blade → gone over native Microsoft Graph ───
+  await page.getByRole("link", { name: EUSR, exact: true }).click();
+  await page.getByRole("toolbar", { name: "User commands" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(EUSR);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "Users", exact: true }).waitFor({ timeout: 10000 });
+  const afterDelete = await graph("GET", "/users");
+  const stillThere = (afterDelete.status === 200 ? JSON.parse(afterDelete.text).value : []).some((u) => u.displayName === EUSR);
+  check("UI delete user → gone over native Microsoft Graph wire", !stillThere);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});

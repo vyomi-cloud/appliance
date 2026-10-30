@@ -1,0 +1,144 @@
+{
+ "$doc": "Vyomi capability registry — Microsoft Entra ID (Azure AD). See aws/s3.json for the contract.",
+ "azure.entra.users.crud": {
+  "title": "Users (create, get, list, update, delete) over Microsoft Graph",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.groups.crud": {
+  "title": "Groups (create, get, list, delete, membership) over Microsoft Graph",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Dynamic membership rules are stored but never evaluated — Vyomi only tracks membership added/removed explicitly."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.applications.crud": {
+  "title": "App registrations, their auto-created enterprise application (service principal), and client secrets",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Only the default Microsoft Graph User.Read delegated permission is seeded on every new registration; the API permissions / admin-consent workflow and OAuth2 token issuance are not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.domains": {
+  "title": "Custom domain names (add, list, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Added domains are never verified (isVerified stays false) — Vyomi has no DNS/TXT-record check to perform."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.administrative_units": {
+  "title": "Administrative units (add, list, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.roles_and_administrators": {
+  "title": "Roles and administrators (built-in + custom directory roles, assignments)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Shares its evaluation engine with Azure RBAC (Microsoft.Authorization); directory roles are modelled as role definitions assignable at the tenant-root scope rather than through the real roleManagement/directory Graph surface."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_rbac_core.py"
+  ]
+ },
+ "azure.entra.directory_audit_log": {
+  "title": "Audit logs (directory mutations)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Only console/API-triggered directory mutations made since the simulation booted are recorded (no historical backfill); category/activity filtering and the date-range picker are not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.organization_properties": {
+  "title": "Tenant properties (name, technical/privacy contacts, verified domains)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.directory_settings": {
+  "title": "User settings (default user role permissions, guest access, LinkedIn connections)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "These toggles are stored and returned exactly as set, but Vyomi does not enforce them — e.g. a 'No' on Users can register applications never blocks application creation."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_graph_core.py"
+  ]
+ },
+ "azure.entra.sign_in_logs": {
+  "title": "Sign-in logs",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi has no interactive sign-in flow to generate telemetry from; the page honestly shows no sign-ins rather than sample data."
+  ]
+ },
+ "azure.entra.security_defaults": {
+  "title": "Security defaults / Access management for Azure resources",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Conditional-access-style tenant security policy is not modelled; the toggle is not stored and nothing is enforced."
+  ]
+ },
+ "azure.entra.devices": {
+  "title": "Devices (MDM/Intune-registered device inventory)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Device registration (MDM/WIP/BitLocker) is a distinct subsystem Vyomi does not model; no devices are ever listed."
+  ]
+ }
+}

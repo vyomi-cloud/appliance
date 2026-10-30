@@ -135,6 +135,11 @@
   "category": "gcp"
  },
  {
+  "name": "sched",
+  "label": "sched \u00b7 SchedulerStore",
+  "category": "aws"
+ },
+ {
   "name": "gcp_logging",
   "label": "gcp_logging \u00b7 LoggingStore",
   "category": "gcp"
@@ -197,6 +202,11 @@
  {
   "name": "az_sb",
   "label": "az_sb \u00b7 InMemoryMessagingStore",
+  "category": "azure"
+ },
+ {
+  "name": "az_graph",
+  "label": "az_graph \u00b7 GraphStore",
   "category": "azure"
  },
  {

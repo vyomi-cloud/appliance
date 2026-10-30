@@ -182,6 +182,7 @@ from core import kinesis_core as kinesis
 from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
+from core import azure_graph_core as az_graph
 import types as _types
 
 
@@ -191,6 +192,10 @@ def _azure_service(path, lheaders, query):
     shape. Known limits: over a single relay we can't see the .blob/.queue host,
     so root `?comp=list` (list-containers vs list-queues) defaults to blob."""
     query = query or {}
+    # Microsoft Graph (Entra ID): unambiguous `/v1.0/...` or `/beta/...` prefix, checked
+    # first so it never falls through to a data-plane guess below.
+    if path.startswith("/v1.0/") or path.startswith("/beta/"):
+        return "az-graph"
     p = path
     if p.startswith("/devstoreaccount1/"):     # Azurite account prefix
         p = p[len("/devstoreaccount1"):]
@@ -348,6 +353,7 @@ class AwsWireRouter:
         self.az_kvcerts = s.get("az_kvcerts") or InMemoryKvStore()
         self.az_queue = s.get("az_queue") or AzureQueueStore()
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
+        self.az_graph = s.get("az_graph") or az_graph.GraphStore()   # Microsoft Graph (Entra ID)
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
         # its own lightweight function registry (a namespace the core attaches to).
         self.events = s.get("events") or self.msg
@@ -613,6 +619,7 @@ class AwsWireRouter:
                 "az-kv-secrets": (az_kvsec, self.az_kvsec), "az-kv-keys": (az_kvkeys, self.az_kvkeys),
                 "az-kv-certs": (az_kvcerts, self.az_kvcerts),
                 "az-queue": (az_queue, self.az_queue), "az-servicebus": (az_sb, self.az_sb),
+                "az-graph": (az_graph, self.az_graph),
             }[svc]
             mod, store = _az_core
             r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))

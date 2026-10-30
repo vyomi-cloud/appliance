@@ -59,6 +59,7 @@ CORES = [
     "azure_servicebus_core.py",                     # v2.5.0 Azure: Service Bus topics (pub/sub fan-out — SNS/Pub-Sub peer)
     "azure_sql_core.py",                            # v2.6.0 Azure: SQL data plane on the SqlStore seam (RDS/Cloud SQL peer)
     "azure_iam_core.py",                            # v2.6.0 Azure: RBAC checkAccess decision core (IAM/testIamPermissions peer)
+    "azure_graph_core.py",                          # v4: Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units)
     "eventbridge_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
