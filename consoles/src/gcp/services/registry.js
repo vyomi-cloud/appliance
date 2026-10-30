@@ -26,7 +26,7 @@ export const PRODUCTS = [
   { id: "storage", title: "Cloud Storage", description: "Object storage for companies of all sizes", category: "Storage", icon: BucketIcon, load: () => import("./storage/index.jsx") },
   { id: "compute", title: "Compute Engine", description: "VMs, GPUs, TPUs, disks", category: "Compute", icon: ComputeIcon, load: () => import("./compute/index.jsx") },
   { id: "kubernetes", title: "Kubernetes Engine", description: "Managed Kubernetes clusters", category: "Compute", icon: ClusterIcon, load: () => import("./kubernetes/index.jsx") },
-  { id: "sql", title: "Cloud SQL", description: "Managed MySQL, PostgreSQL, SQL Server", category: "Databases", icon: SqlIcon, classic: "sql" },
+  { id: "sql", title: "Cloud SQL", description: "Managed MySQL, PostgreSQL, SQL Server", category: "Databases", icon: SqlIcon, load: () => import("./sql/index.jsx") },
   { id: "firestore", title: "Firestore", description: "Serverless NoSQL document database", category: "Databases", icon: DocumentIcon, load: () => import("./firestore/index.jsx") },
   { id: "networking", title: "VPC network", description: "Networks, subnets, firewall rules", category: "Networking", icon: NetworkIcon, load: () => import("./networking/index.jsx") },
   { id: "run", title: "Cloud Run", description: "Fully managed container platform", category: "Serverless", icon: RunIcon, load: () => import("./run/index.jsx") },
