@@ -3,12 +3,9 @@
   "cloud": "aws",
   "service": "apigateway",
   "console_path": "/apigateway/",
-  "status": "draft",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
   "nav": [
-    {
-      "label": "API Gateway",
-      "page_id": "api-gateway"
-    },
     {
       "label": "APIs",
       "page_id": "apis"
@@ -47,6 +44,7 @@
     },
     {
       "label": "Developer portals",
+      "expandable": false,
       "children": [
         {
           "label": "Portals",
@@ -61,30 +59,54 @@
   ],
   "pages": [
     {
-      "id": "landing",
-      "kind": "other",
-      "title": "API Gateway",
-      "route": "/apigateway/home",
-      "captures": [
-        "A-apigateway/001-L1-landing"
-      ],
-      "provenance": "capture"
-    },
-    {
-      "id": "api-gateway",
+      "id": "welcome",
       "kind": "other",
       "title": "API Gateway",
       "route": "/apigateway/main/welcome",
       "captures": [
+        "A-apigateway/001-L1-landing",
         "A-apigateway/002-L2-api-gateway"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "header_actions": [
+        "Create an API"
+      ],
+      "sections": [
+        {
+          "title": "Get started",
+          "actions": [
+            "Create an API"
+          ]
+        },
+        {
+          "title": "API types",
+          "actions": [
+            "Create REST API",
+            "Create HTTP API",
+            "Create WebSocket API"
+          ]
+        },
+        {
+          "title": "How it works"
+        },
+        {
+          "title": "Pricing"
+        },
+        {
+          "title": "Resources"
+        },
+        {
+          "title": "Benefits"
+        }
+      ],
+      "notes": "Service landing (no APIs yet). Marketing copy omitted."
     },
     {
       "id": "apis",
       "kind": "list",
-      "title": "API Gateway - APIs",
-      "route": "/apigateway/main/apis&apiId=unselected",
+      "title": "APIs",
+      "route": "/apigateway/main/apis",
       "breadcrumbs": [
         "API Gateway",
         "APIs"
@@ -93,26 +115,38 @@
         "A-apigateway/003-L2-apis"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
-        "resource_label": "Create API",
+        "resource_label": "APIs",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Delete",
+          "Create API"
+        ],
+        "empty_state": "You don't have any APIs.",
+        "pagination": true,
+        "preferences": true,
         "columns": [
+          "Name",
           "Description",
           "ID",
           "Protocol",
           "Endpoint type",
           "Created",
-          "Security policy",
-          "API status"
+          "Security policy"
         ],
-        "header_actions": [],
-        "confidence": "low"
-      }
+        "empty_state_action": "Create API",
+        "filter_placeholder": "Find APIs"
+      },
+      "notes": "Header counter is '(selected/total)', e.g. APIs (0/0). Empty-state heading 'No API'."
     },
     {
       "id": "custom-domain-names",
       "kind": "list",
-      "title": "API Gateway - Custom domain names",
-      "route": "/apigateway/main/publish/domain-names&apiId=unselected",
+      "title": "Custom domain names",
+      "route": "/apigateway/main/publish/domain-names",
       "breadcrumbs": [
         "API Gateway",
         "Custom domain names"
@@ -121,26 +155,31 @@
         "A-apigateway/004-L2-custom-domain-names"
       ],
       "provenance": "capture",
+      "confidence": "medium",
       "table": {
         "resource_label": "Custom domain names",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Add domain name"
+        ],
+        "empty_state": "No custom domain names",
+        "pagination": true,
+        "preferences": true,
         "columns": [
           "Domain name",
           "Status",
           "Endpoint type",
           "Security policy"
         ],
-        "header_actions": [
-          "Add domain name"
-        ],
-        "empty_state": "No custom domain names",
-        "confidence": "medium"
+        "empty_state_action": "Add domain name"
       }
     },
     {
       "id": "domain-name-access-associations",
       "kind": "list",
-      "title": "API Gateway",
-      "route": "/apigateway/main/publish/domain-associations&apiId=unselected",
+      "title": "Domain name access associations",
+      "route": "/apigateway/main/publish/domain-associations",
       "breadcrumbs": [
         "API Gateway",
         "Domain name access associations"
@@ -149,26 +188,31 @@
         "A-apigateway/005-L2-domain-name-access-associations"
       ],
       "provenance": "capture",
+      "confidence": "medium",
       "table": {
         "resource_label": "Domain name access associations",
-        "columns": [
-          "VPC endpoint ID",
-          "Domain name",
-          "Domain name ARN"
-        ],
+        "counter": true,
+        "selection": "single",
         "header_actions": [
           "Delete",
           "Create domain association"
         ],
         "empty_state": "No domain association",
-        "confidence": "medium"
+        "pagination": true,
+        "preferences": true,
+        "columns": [
+          "VPC endpoint ID",
+          "Domain name",
+          "Domain name ARN"
+        ],
+        "empty_state_action": "Create domain association"
       }
     },
     {
       "id": "vpc-links",
       "kind": "list",
-      "title": "API Gateway - VPC links",
-      "route": "/apigateway/main/vpc-links&apiId=unselected",
+      "title": "VPC links",
+      "route": "/apigateway/main/vpc-links",
       "breadcrumbs": [
         "API Gateway",
         "VPC links"
@@ -177,20 +221,27 @@
         "A-apigateway/006-L2-vpc-links"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
-        "resource_label": "Create",
-        "columns": [
-          "API type"
+        "resource_label": "VPC links",
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Create"
         ],
-        "header_actions": [],
-        "confidence": "low"
-      }
+        "filter_placeholder": "Find APIs",
+        "columns": [
+          "Name",
+          "API type"
+        ]
+      },
+      "notes": "Split view: list panel left ('Last updated <time>'), detail right shows 'Choose a VPC link to view its details.'"
     },
     {
       "id": "agentcore-targets",
       "kind": "list",
-      "title": "API Gateway - AgentCore targets",
-      "route": "/apigateway/main/agentcore-gateways&apiId=unselected",
+      "title": "AgentCore targets",
+      "route": "/apigateway/main/agentcore-gateways",
       "breadcrumbs": [
         "API Gateway",
         "AgentCore targets"
@@ -199,29 +250,37 @@
         "A-apigateway/007-L2-agentcore-targets"
       ],
       "provenance": "capture",
+      "confidence": "medium",
       "table": {
         "resource_label": "AgentCore targets",
-        "columns": [
-          "Target",
-          "AgentCore gateway",
-          "Status",
-          "Description",
-          "Last synchronized (UTC+3:30)",
-          "Date created (UTC+3:30)"
-        ],
+        "counter": true,
         "header_actions": [
           "Create new AgentCore gateway",
           "Add AgentCore target"
         ],
         "empty_state": "No associated AgentCore targets",
-        "confidence": "medium"
-      }
+        "empty_state_action": "Add AgentCore target",
+        "columns": [
+          "Target",
+          "AgentCore gateway",
+          "Status",
+          "Description",
+          "Last synchronized",
+          "Date created"
+        ]
+      },
+      "sections": [
+        {
+          "title": "How to enable MCP access to your APIs using AgentCore"
+        }
+      ],
+      "notes": "Out of Vyomi scope; declared for nav completeness."
     },
     {
       "id": "usage-plans",
       "kind": "list",
-      "title": "API Gateway - Usage plans",
-      "route": "/apigateway/main/usage-plans&apiId=unselected",
+      "title": "Usage plans",
+      "route": "/apigateway/main/usage-plans",
       "breadcrumbs": [
         "API Gateway",
         "Usage plans"
@@ -230,23 +289,36 @@
         "A-apigateway/008-L2-usage-plans"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
-        "resource_label": "Create usage plan",
+        "resource_label": "Usage plans",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Edit",
+          "Delete",
+          "Create usage plan"
+        ],
+        "empty_state": "No usage plans found",
+        "pagination": true,
+        "preferences": true,
         "columns": [
+          "Name",
           "ID",
           "Request rate",
           "Burst",
           "Quota"
         ],
-        "header_actions": [],
-        "confidence": "low"
-      }
+        "empty_state_action": "Create usage plan"
+      },
+      "notes": "Counter is '(selected/total)'. Header shows 'Last updated <time>'."
     },
     {
       "id": "api-keys",
       "kind": "list",
-      "title": "API Gateway - API keys",
-      "route": "/apigateway/main/api-keys&apiId=unselected",
+      "title": "API keys",
+      "route": "/apigateway/main/api-keys",
       "breadcrumbs": [
         "API Gateway",
         "API keys"
@@ -255,28 +327,42 @@
         "A-apigateway/009-L2-api-keys"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "API keys",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Create API key"
+        ],
+        "empty_state": "You don’t have any API keys.",
+        "pagination": true,
+        "preferences": true,
         "columns": [
+          "Name",
           "Status",
           "ID",
           "API key",
           "Description",
           "Creation date"
         ],
-        "header_actions": [
-          "Actions",
-          "Create API key"
-        ],
-        "empty_state": "No API keys",
-        "confidence": "medium"
-      }
+        "empty_state_action": "Create API Key",
+        "actions": [
+          "Edit",
+          "Delete",
+          "Import API keys",
+          "Add to usage plan"
+        ]
+      },
+      "notes": "Actions menu items are reference."
     },
     {
       "id": "client-certificates",
       "kind": "list",
-      "title": "API Gateway - Client certificates",
-      "route": "/apigateway/main/client-certificates&apiId=unselected",
+      "title": "Client certificates",
+      "route": "/apigateway/main/client-certificates",
       "breadcrumbs": [
         "API Gateway",
         "Client certificates"
@@ -285,27 +371,32 @@
         "A-apigateway/010-L2-client-certificates"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Client certificates",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "Generate certificate"
+        ],
+        "empty_state": "No client certificates found",
+        "pagination": true,
+        "preferences": true,
         "columns": [
           "ID",
           "Description",
           "Creation date",
           "Expiration date"
-        ],
-        "header_actions": [
-          "Actions",
-          "Generate certificate"
-        ],
-        "empty_state": "No client certificates found",
-        "confidence": "medium"
+        ]
       }
     },
     {
       "id": "settings",
       "kind": "settings",
-      "title": "API Gateway - Settings",
-      "route": "/apigateway/main/settings&apiId=unselected",
+      "title": "Settings",
+      "route": "/apigateway/main/settings",
       "breadcrumbs": [
         "API Gateway",
         "Settings"
@@ -314,16 +405,27 @@
         "A-apigateway/011-L2-settings"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "sections": [
+        {
+          "title": "Logging",
+          "actions": [
+            "Edit"
+          ],
+          "fields": [
+            {
+              "label": "CloudWatch log role ARN",
+              "type": "readonly"
+            }
+          ]
+        },
         {
           "title": "Throttling",
           "fields": [
             {
-              "label": "{resource-name}-level throttling",
-              "type": "text",
-              "required": true,
-              "help": "Your current account-level throttling rate is 10000 requests per second with a burst of 5000 requests. Learn more",
-              "confidence": "low"
+              "label": "Account-level throttling",
+              "type": "readonly",
+              "help": "Shows current account-level rate (requests per second) and burst"
             }
           ]
         }
@@ -332,7 +434,7 @@
     {
       "id": "portals",
       "kind": "list",
-      "title": "Developer Portal - Portals",
+      "title": "Portals",
       "route": "/apigateway/portal/",
       "breadcrumbs": [
         "API Gateway",
@@ -342,25 +444,35 @@
         "A-apigateway/012-L2-portals"
       ],
       "provenance": "capture",
+      "confidence": "medium",
       "table": {
         "resource_label": "Portals",
-        "columns": [
-          "Status",
-          "Date modified",
-          "Last published"
-        ],
+        "counter": true,
         "header_actions": [
+          "Refresh",
           "Edit",
           "Create portal"
         ],
         "empty_state": "No portals",
-        "confidence": "medium"
-      }
+        "empty_state_action": "Create developer portal",
+        "columns": [
+          "Name",
+          "Status",
+          "Date modified",
+          "Last published"
+        ]
+      },
+      "sections": [
+        {
+          "title": "How portals work"
+        }
+      ],
+      "notes": "Out of Vyomi scope; declared for nav completeness."
     },
     {
       "id": "portal-products",
       "kind": "list",
-      "title": "Developer Portal - Portal products",
+      "title": "Portal products",
       "route": "/apigateway/portal/products",
       "breadcrumbs": [
         "API Gateway",
@@ -370,75 +482,903 @@
         "A-apigateway/013-L2-portal-products"
       ],
       "provenance": "capture",
+      "confidence": "medium",
       "table": {
         "resource_label": "Portal products",
-        "columns": [
-          "Display name",
-          "Description",
-          "Date created"
-        ],
+        "counter": true,
         "header_actions": [
+          "Refresh",
           "Edit",
           "Create product"
         ],
         "empty_state": "No products",
-        "confidence": "medium"
-      }
+        "empty_state_action": "Create products",
+        "columns": [
+          "Display name",
+          "Description",
+          "Date created"
+        ]
+      },
+      "sections": [
+        {
+          "title": "How products work"
+        }
+      ],
+      "notes": "Out of Vyomi scope; declared for nav completeness."
     },
     {
-      "id": "precreate",
+      "id": "create-api",
       "kind": "create",
-      "title": "API Gateway - Create API",
+      "title": "Create API",
       "route": "/apigateway/main/precreate",
+      "breadcrumbs": [
+        "API Gateway",
+        "APIs",
+        "Create API"
+      ],
       "captures": [
         "C-apigateway/01-precreate/step-1",
         "C-apigateway/01-precreate/step-1-expanded"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "sections": [
         {
           "title": "Choose an API type",
           "fields": [
             {
               "label": "HTTP API",
-              "type": "radio",
-              "options": [
-                "Works with the following:",
-                "Lambda, HTTP backends",
-                "Import",
-                "Build",
-                "WebSocket API",
-                "Works with the following:",
-                "Lambda, HTTP, AWS Services",
-                "Build",
-                "REST API",
-                "Works with the following:",
-                "Lambda, HTTP, AWS Services",
-                "Import"
-              ],
-              "default": "Works with the following:",
-              "required": true,
-              "help": "Build low-latency and cost-effective REST APIs with built-in features such as OIDC and OAuth2, and native CORS support.",
-              "confidence": "low"
-            },
-            {
-              "label": "REST API Private",
-              "type": "radio",
-              "options": [
-                "Works with the following:",
-                "Lambda, HTTP, AWS Services",
+              "type": "button",
+              "actions": [
                 "Import",
                 "Build"
               ],
-              "default": "Works with the following:",
-              "required": true,
-              "help": "Create a REST API that is only accessible from within a VPC.",
-              "confidence": "low"
+              "help": "Works with: Lambda, HTTP backends"
+            },
+            {
+              "label": "WebSocket API",
+              "type": "button",
+              "actions": [
+                "Build"
+              ],
+              "help": "Works with: Lambda, HTTP, AWS Services"
+            },
+            {
+              "label": "REST API",
+              "type": "button",
+              "actions": [
+                "Import",
+                "Build"
+              ],
+              "help": "Works with: Lambda, HTTP, AWS Services"
+            },
+            {
+              "label": "REST API Private",
+              "type": "button",
+              "actions": [
+                "Import",
+                "Build"
+              ],
+              "help": "Create a REST API that is only accessible from within a VPC."
             }
           ]
         }
+      ],
+      "notes": "Each API type is a card with Import/Build buttons; Build opens the type-specific create page."
+    },
+    {
+      "id": "create-rest-api",
+      "kind": "create",
+      "title": "Create REST API",
+      "route": "/apigateway/main/create-rest",
+      "breadcrumbs": [
+        "API Gateway",
+        "APIs",
+        "Create API",
+        "Create REST API"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "API details",
+          "fields": [
+            {
+              "label": "API details",
+              "type": "radio",
+              "required": true,
+              "default": "New API",
+              "options": [
+                "New API",
+                "Clone existing API",
+                "Import API",
+                "Example API"
+              ]
+            },
+            {
+              "label": "API name",
+              "type": "text",
+              "required": true,
+              "placeholder": "My REST API"
+            },
+            {
+              "label": "Description - optional",
+              "type": "text"
+            },
+            {
+              "label": "API endpoint type",
+              "type": "select",
+              "default": "Regional",
+              "options": [
+                "Regional",
+                "Edge-optimized",
+                "Private"
+              ]
+            },
+            {
+              "label": "IP address type",
+              "type": "radio",
+              "default": "IPv4",
+              "options": [
+                "IPv4",
+                "Dualstack"
+              ]
+            }
+          ]
+        }
+      ],
+      "submit": "Create API"
+    },
+    {
+      "id": "create-http-api",
+      "kind": "create",
+      "title": "Create HTTP API",
+      "route": "/apigateway/main/create",
+      "breadcrumbs": [
+        "API Gateway",
+        "APIs",
+        "Create API",
+        "Create HTTP API"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "steps": [
+        {
+          "title": "Create an API",
+          "sections": [
+            {
+              "title": "Integrations",
+              "fields": [
+                {
+                  "label": "Integrations",
+                  "type": "table",
+                  "columns": [
+                    "Integration type",
+                    "Target",
+                    "Version"
+                  ],
+                  "actions": [
+                    "Add integration"
+                  ],
+                  "options": [
+                    "Lambda",
+                    "HTTP"
+                  ]
+                },
+                {
+                  "label": "API name",
+                  "type": "text",
+                  "required": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Configure routes",
+          "sections": [
+            {
+              "title": "Configure routes",
+              "fields": [
+                {
+                  "label": "Routes",
+                  "type": "table",
+                  "columns": [
+                    "Method",
+                    "Resource path",
+                    "Integration target"
+                  ],
+                  "actions": [
+                    "Add route"
+                  ]
+                }
+              ]
+            }
+          ],
+          "optional": true
+        },
+        {
+          "title": "Define stages",
+          "sections": [
+            {
+              "title": "Configure stages",
+              "fields": [
+                {
+                  "label": "Stage name",
+                  "type": "text",
+                  "default": "$default"
+                },
+                {
+                  "label": "Auto-deploy",
+                  "type": "toggle",
+                  "default": true
+                }
+              ]
+            }
+          ],
+          "optional": true
+        },
+        {
+          "title": "Review and create",
+          "sections": [
+            {
+              "title": "Review"
+            }
+          ]
+        }
+      ],
+      "submit": "Create"
+    },
+    {
+      "id": "create-websocket-api",
+      "kind": "create",
+      "title": "Create WebSocket API",
+      "breadcrumbs": [
+        "API Gateway",
+        "APIs",
+        "Create API",
+        "Create WebSocket API"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "steps": [
+        {
+          "title": "API details",
+          "sections": [
+            {
+              "title": "API details",
+              "fields": [
+                {
+                  "label": "API name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Route selection expression",
+                  "type": "text",
+                  "default": "request.body.action"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Add routes",
+          "sections": [
+            {
+              "title": "Routes",
+              "fields": [
+                {
+                  "label": "Predefined routes",
+                  "type": "checkbox",
+                  "options": [
+                    "$connect",
+                    "$disconnect",
+                    "$default"
+                  ]
+                },
+                {
+                  "label": "Custom routes",
+                  "type": "table",
+                  "actions": [
+                    "Add custom route"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Attach integrations",
+          "sections": [
+            {
+              "title": "Integrations"
+            }
+          ]
+        },
+        {
+          "title": "Add stages",
+          "sections": [
+            {
+              "title": "Stages",
+              "fields": [
+                {
+                  "label": "Stage name",
+                  "type": "text",
+                  "default": "production"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Review and create",
+          "sections": [
+            {
+              "title": "Review"
+            }
+          ]
+        }
+      ],
+      "submit": "Create API",
+      "notes": "WebSocket APIs are outside the Vyomi API Gateway subset."
+    },
+    {
+      "id": "rest-api-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/apigateway/main/apis/{api-id}/resources",
+      "breadcrumbs": [
+        "API Gateway",
+        "APIs",
+        "{resource-name}",
+        "Resources"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "API actions",
+        "Deploy API"
+      ],
+      "sections": [
+        {
+          "title": "Resources",
+          "actions": [
+            "Create resource"
+          ],
+          "fields": [
+            {
+              "label": "Resource tree",
+              "type": "other",
+              "help": "Path tree of resources and methods"
+            }
+          ]
+        },
+        {
+          "title": "Resource details",
+          "actions": [
+            "Delete",
+            "Update documentation",
+            "Enable CORS"
+          ],
+          "fields": [
+            {
+              "label": "Path",
+              "type": "readonly"
+            },
+            {
+              "label": "Resource ID",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Methods",
+          "actions": [
+            "Delete",
+            "Create method"
+          ],
+          "table": {
+            "resource_label": "Methods",
+            "counter": true,
+            "selection": "single",
+            "columns": [
+              "Method type",
+              "Integration type",
+              "Authorization",
+              "API key"
+            ]
+          }
+        }
+      ],
+      "notes": "Sub-nav: Resources, Stages, Authorizers, Gateway responses, Models, Resource policy, Documentation, API settings"
+    },
+    {
+      "id": "create-resource",
+      "kind": "create",
+      "title": "Create resource",
+      "breadcrumbs": [
+        "API Gateway",
+        "APIs",
+        "{resource-name}",
+        "Resources",
+        "Create resource"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Resource details",
+          "fields": [
+            {
+              "label": "Proxy resource",
+              "type": "toggle",
+              "default": false
+            },
+            {
+              "label": "Resource path",
+              "type": "select",
+              "default": "/"
+            },
+            {
+              "label": "Resource name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "CORS (Cross Origin Resource Sharing)",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        }
+      ],
+      "submit": "Create resource"
+    },
+    {
+      "id": "create-method",
+      "kind": "create",
+      "title": "Create method",
+      "breadcrumbs": [
+        "API Gateway",
+        "APIs",
+        "{resource-name}",
+        "Resources",
+        "Create method"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Method details",
+          "fields": [
+            {
+              "label": "Method type",
+              "type": "select",
+              "required": true,
+              "options": [
+                "ANY",
+                "DELETE",
+                "GET",
+                "HEAD",
+                "OPTIONS",
+                "PATCH",
+                "POST",
+                "PUT"
+              ]
+            },
+            {
+              "label": "Integration type",
+              "type": "radio",
+              "required": true,
+              "default": "Lambda function",
+              "options": [
+                "Lambda function",
+                "HTTP",
+                "Mock",
+                "AWS service",
+                "VPC link"
+              ]
+            },
+            {
+              "label": "Lambda proxy integration",
+              "type": "toggle",
+              "default": false,
+              "visible_when": "Integration type = Lambda function"
+            },
+            {
+              "label": "Lambda function",
+              "type": "select",
+              "required": true,
+              "visible_when": "Integration type = Lambda function"
+            },
+            {
+              "label": "Endpoint URL",
+              "type": "text",
+              "visible_when": "Integration type = HTTP"
+            },
+            {
+              "label": "Integration timeout",
+              "type": "number",
+              "default": 29000
+            }
+          ]
+        },
+        {
+          "title": "Method request settings",
+          "expandable": true,
+          "fields": [
+            {
+              "label": "Authorization",
+              "type": "select",
+              "default": "None"
+            },
+            {
+              "label": "API key required",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        }
+      ],
+      "submit": "Create method"
+    },
+    {
+      "id": "deploy-api",
+      "kind": "other",
+      "title": "Deploy API",
+      "breadcrumbs": [
+        "API Gateway",
+        "APIs",
+        "{resource-name}",
+        "Resources"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Deploy API",
+          "fields": [
+            {
+              "label": "Stage",
+              "type": "select",
+              "required": true,
+              "options": [
+                "*New stage*"
+              ]
+            },
+            {
+              "label": "Stage name",
+              "type": "text",
+              "visible_when": "Stage = *New stage*"
+            },
+            {
+              "label": "Deployment description",
+              "type": "textarea"
+            }
+          ]
+        }
+      ],
+      "submit": "Deploy",
+      "notes": "Modal opened from Deploy API."
+    },
+    {
+      "id": "stages",
+      "kind": "detail",
+      "title": "Stages",
+      "route": "/apigateway/main/apis/{api-id}/stages",
+      "breadcrumbs": [
+        "API Gateway",
+        "APIs",
+        "{resource-name}",
+        "Stages"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Delete",
+        "Create stage"
+      ],
+      "tabs": [
+        "Stage details",
+        "Logs and tracing",
+        "Stage variables",
+        "Deployment history",
+        "Canary",
+        "Tags"
+      ],
+      "sections": [
+        {
+          "title": "Stage details",
+          "actions": [
+            "Edit",
+            "Stage actions"
+          ],
+          "fields": [
+            {
+              "label": "Stage name",
+              "type": "readonly"
+            },
+            {
+              "label": "Invoke URL",
+              "type": "readonly"
+            },
+            {
+              "label": "Deployment",
+              "type": "readonly"
+            },
+            {
+              "label": "Rate",
+              "type": "readonly"
+            },
+            {
+              "label": "Burst",
+              "type": "readonly"
+            },
+            {
+              "label": "Cache cluster",
+              "type": "readonly"
+            },
+            {
+              "label": "Default method-level caching",
+              "type": "readonly"
+            },
+            {
+              "label": "Active deployment",
+              "type": "readonly"
+            },
+            {
+              "label": "Created",
+              "type": "readonly"
+            },
+            {
+              "label": "Last updated",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Logs and tracing",
+          "actions": [
+            "Edit"
+          ],
+          "fields": [
+            {
+              "label": "CloudWatch logs",
+              "type": "readonly"
+            },
+            {
+              "label": "Detailed metrics",
+              "type": "readonly"
+            },
+            {
+              "label": "Data tracing",
+              "type": "readonly"
+            },
+            {
+              "label": "X-Ray tracing",
+              "type": "readonly"
+            },
+            {
+              "label": "Custom access logging",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Stage variables",
+          "actions": [
+            "Manage variables"
+          ],
+          "table": {
+            "columns": [
+              "Name",
+              "Value"
+            ]
+          }
+        }
       ]
+    },
+    {
+      "id": "http-api-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/apigateway/main/api-detail?api={api-id}",
+      "breadcrumbs": [
+        "API Gateway",
+        "APIs",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Delete",
+        "Edit"
+      ],
+      "sections": [
+        {
+          "title": "API details",
+          "fields": [
+            {
+              "label": "API ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Protocol",
+              "type": "readonly"
+            },
+            {
+              "label": "Created",
+              "type": "readonly"
+            },
+            {
+              "label": "Default endpoint",
+              "type": "readonly"
+            },
+            {
+              "label": "Description",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Stages for {resource-name}",
+          "table": {
+            "columns": [
+              "Stage name",
+              "Invoke URL",
+              "Attached deployment",
+              "Auto deploy",
+              "Last updated"
+            ]
+          }
+        },
+        {
+          "title": "Tags",
+          "actions": [
+            "Manage tags"
+          ],
+          "table": {
+            "columns": [
+              "Key",
+              "Value"
+            ]
+          }
+        }
+      ],
+      "notes": "HTTP sub-nav: Routes, Integrations, Authorization, CORS, Reimport, Export, Stages, Metrics, Logging, Throttling"
+    },
+    {
+      "id": "create-api-key",
+      "kind": "create",
+      "title": "Create API key",
+      "breadcrumbs": [
+        "API Gateway",
+        "API keys",
+        "Create API key"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "API key details",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Description - optional",
+              "type": "text"
+            },
+            {
+              "label": "API key",
+              "type": "radio",
+              "default": "Auto generate",
+              "options": [
+                "Auto generate",
+                "Custom"
+              ]
+            },
+            {
+              "label": "Tags",
+              "type": "tags",
+              "help": "Key / Value pairs; up to 50 tags",
+              "actions": [
+                "Add new tag",
+                "Remove"
+              ]
+            }
+          ]
+        }
+      ],
+      "submit": "Save"
+    },
+    {
+      "id": "create-usage-plan",
+      "kind": "create",
+      "title": "Create usage plan",
+      "breadcrumbs": [
+        "API Gateway",
+        "Usage plans",
+        "Create usage plan"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Usage plan details",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Description - optional",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "title": "Throttling",
+          "fields": [
+            {
+              "label": "Throttling",
+              "type": "toggle",
+              "default": true
+            },
+            {
+              "label": "Rate",
+              "type": "number"
+            },
+            {
+              "label": "Burst",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "title": "Quota",
+          "fields": [
+            {
+              "label": "Quota",
+              "type": "toggle",
+              "default": true
+            },
+            {
+              "label": "Requests per",
+              "type": "select",
+              "options": [
+                "Day",
+                "Week",
+                "Month"
+              ]
+            },
+            {
+              "label": "Requests",
+              "type": "number"
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "help": "Key / Value pairs; up to 50 tags",
+              "actions": [
+                "Add new tag",
+                "Remove"
+              ]
+            }
+          ]
+        }
+      ],
+      "submit": "Create usage plan"
     }
   ],
-  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+  "gaps_note": "Create API type picker and all nav list pages are from captures. API detail pages (REST resources/methods/stages, HTTP API detail), the per-type create forms, Create API key and Create usage plan are provenance=reference: the account had no APIs and the crawl did not click Build. AgentCore targets and Developer portals are out of Vyomi scope. Filter placeholders seen only on APIs and VPC links."
 }

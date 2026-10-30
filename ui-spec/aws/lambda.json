@@ -3,31 +3,28 @@
   "cloud": "aws",
   "service": "lambda",
   "console_path": "/lambda/",
-  "status": "draft",
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
   "nav": [
     {
-      "label": "Lambda",
-      "page_id": "lambda"
+      "label": "Dashboard",
+      "page_id": "dashboard"
     },
     {
-      "label": "Dashboard",
-      "children": [
-        {
-          "label": "Applications",
-          "page_id": "applications"
-        },
-        {
-          "label": "Event Functions",
-          "page_id": "event-functions"
-        },
-        {
-          "label": "Web Functions",
-          "page_id": "web-functions"
-        }
-      ]
+      "label": "Applications",
+      "page_id": "applications"
+    },
+    {
+      "label": "Event Functions",
+      "page_id": "event-functions"
+    },
+    {
+      "label": "Web Functions",
+      "page_id": "web-functions"
     },
     {
       "label": "Event Function resources",
+      "expandable": true,
       "children": [
         {
           "label": "Capacity providers",
@@ -48,58 +45,136 @@
         {
           "label": "Replicas",
           "page_id": "replicas"
+        }
+      ]
+    },
+    {
+      "label": "MicroVMs",
+      "expandable": true,
+      "children": [
+        {
+          "label": "MicroVM Images",
+          "page_id": "microvm-images"
         },
         {
           "label": "MicroVMs",
           "page_id": "microvms"
-        },
+        }
+      ]
+    },
+    {
+      "label": "Network connectors",
+      "page_id": "network-connectors"
+    },
+    {
+      "label": "Documentation",
+      "external": true
+    },
+    {
+      "label": "Serverless workshops",
+      "external": true
+    },
+    {
+      "label": "Related AWS resources",
+      "expandable": true,
+      "children": [
         {
-          "label": "MicroVM Images",
-          "page_id": "microvm-images"
+          "label": "Step Functions state machines",
+          "page_id": "step-functions-state-machines"
         }
       ]
     }
   ],
   "pages": [
     {
-      "id": "landing",
-      "kind": "other",
-      "title": "AWS Lambda",
-      "route": "/lambda/home",
-      "captures": [
-        "A-lambda/001-L1-landing",
-        "A-lambda/001-L1-landing--tab-01-net",
-        "A-lambda/001-L1-landing--tab-02-java",
-        "A-lambda/001-L1-landing--tab-03-node-js",
-        "A-lambda/001-L1-landing--tab-04-python",
-        "A-lambda/001-L1-landing--tab-05-ruby",
-        "A-lambda/001-L1-landing--tab-06-customer-managed-runtime"
-      ],
-      "provenance": "capture",
-      "tabs": [
-        "Next: Lambda responds to events",
-        ".NET",
-        "Java",
-        "Node.js",
-        "Python",
-        "Ruby",
-        "Customer-managed runtime"
-      ]
-    },
-    {
-      "id": "lambda",
-      "kind": "other",
+      "id": "dashboard",
+      "kind": "dashboard",
       "title": "Dashboard",
       "route": "/lambda/home#/discover",
+      "breadcrumbs": [
+        "Lambda",
+        "Dashboard"
+      ],
       "captures": [
         "A-lambda/002-L2-lambda",
         "A-lambda/002-L2-lambda--tab-02-web-functions"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "tabs": [
         "Event Functions",
         "Web Functions"
-      ]
+      ],
+      "tab_panels": [
+        {
+          "label": "Event Functions",
+          "sections": [
+            {
+              "title": "Resources for {region}",
+              "actions": [
+                "Create Event Function"
+              ],
+              "fields": [
+                {
+                  "label": "Lambda Event Function(s)",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Code storage",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Full account concurrency",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Unreserved account concurrency",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Top 10 Event Functions"
+            },
+            {
+              "title": "Account-level Event Function metrics"
+            }
+          ]
+        },
+        {
+          "label": "Web Functions",
+          "sections": [
+            {
+              "title": "Top 10 Web Functions"
+            },
+            {
+              "title": "Account-level Web Functions metrics"
+            },
+            {
+              "title": "Account throttles"
+            }
+          ]
+        }
+      ],
+      "sections": [
+        {
+          "title": "Set up your agent to build with Lambda",
+          "actions": [
+            "Copy agent prompt",
+            "View instructions"
+          ]
+        },
+        {
+          "title": "Recommended for you"
+        },
+        {
+          "title": "Developer resources"
+        },
+        {
+          "title": "Additional information"
+        }
+      ],
+      "notes": "Code storage shows '<size> (<pct>% of 300 GB)'. Region name appears in the Resources heading."
     },
     {
       "id": "applications",
@@ -114,19 +189,27 @@
         "A-lambda/004-L2-applications"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Applications",
-        "columns": [
-          "Description",
-          "Status",
-          "Last modified"
-        ],
+        "counter": true,
+        "selection": "multi",
         "header_actions": [
           "Delete",
           "Create application"
         ],
-        "confidence": "medium"
-      }
+        "filter_placeholder": "Search by attributes or search by keyword",
+        "empty_state": "You don't have any serverless applications yet.",
+        "pagination": true,
+        "preferences": true,
+        "columns": [
+          "Name",
+          "Description",
+          "Status",
+          "Last modified"
+        ]
+      },
+      "notes": "Header shows 'Last fetched <timestamp>' and a refresh button left of the actions."
     },
     {
       "id": "event-functions",
@@ -141,8 +224,19 @@
         "A-lambda/005-L2-event-functions"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Event Functions",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Actions",
+          "Create Event Function"
+        ],
+        "filter_placeholder": "Search by attributes or search by keyword",
+        "empty_state": "There is no data to display.",
+        "pagination": true,
+        "preferences": true,
         "columns": [
           "Function name",
           "Description",
@@ -150,13 +244,9 @@
           "Runtime",
           "Type",
           "Last modified"
-        ],
-        "header_actions": [
-          "Actions",
-          "Create Event Function"
-        ],
-        "confidence": "medium"
-      }
+        ]
+      },
+      "notes": "Header shows 'Last fetched <timestamp>' and a refresh button left of the actions."
     },
     {
       "id": "web-functions",
@@ -171,20 +261,28 @@
         "A-lambda/006-L2-web-functions"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Web Functions",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Delete",
+          "Create Web Function"
+        ],
+        "filter_placeholder": "Search by attributes or search by keyword",
+        "empty_state": "No Web Functions",
+        "pagination": true,
+        "preferences": true,
         "columns": [
           "Function name",
           "State",
           "State reason",
           "Created"
         ],
-        "header_actions": [
-          "Delete",
-          "Create Web Function"
-        ],
-        "confidence": "medium"
-      }
+        "empty_state_action": "Create Web Function"
+      },
+      "notes": "Header shows 'Last fetched <timestamp>' and a refresh button left of the actions."
     },
     {
       "id": "capacity-providers",
@@ -199,21 +297,30 @@
         "A-lambda/007-L2-capacity-providers"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Capacity providers",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Delete",
+          "Create capacity provider"
+        ],
+        "filter_placeholder": "Search by attributes or search by keyword",
+        "empty_state": "No capacity providers.",
+        "pagination": true,
+        "preferences": true,
         "columns": [
+          "Name",
           "State",
           "Architectures",
           "Maximum vCPU",
           "Scaling mode",
           "Last modified"
         ],
-        "header_actions": [
-          "Delete",
-          "Create capacity provider"
-        ],
-        "confidence": "medium"
-      }
+        "empty_state_action": "Create capacity provider"
+      },
+      "notes": "Header shows 'Last fetched <timestamp>' and a refresh button left of the actions."
     },
     {
       "id": "code-signing-configurations",
@@ -228,22 +335,29 @@
         "A-lambda/008-L2-code-signing-configurations"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Code signing configurations",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Edit",
+          "Delete",
+          "Create configuration"
+        ],
+        "filter_placeholder": "Search by attributes or search by keyword",
+        "empty_state": "There is no data to display.",
+        "pagination": true,
+        "preferences": true,
         "columns": [
           "ID",
           "Description",
           "Signing profiles",
           "Signature validation policy",
           "Last modified"
-        ],
-        "header_actions": [
-          "Edit",
-          "Delete",
-          "Create configuration"
-        ],
-        "confidence": "medium"
-      }
+        ]
+      },
+      "notes": "Header shows 'Last fetched <timestamp>' and a refresh button left of the actions."
     },
     {
       "id": "event-source-mappings",
@@ -258,8 +372,18 @@
         "A-lambda/009-L2-event-source-mappings"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Event source mappings",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Delete"
+        ],
+        "filter_placeholder": "Search by attributes or search by keyword",
+        "empty_state": "There is no data to display.",
+        "pagination": true,
+        "preferences": true,
         "columns": [
           "UUID",
           "Event source ARN",
@@ -268,12 +392,9 @@
           "State",
           "Last processing result",
           "Last modified"
-        ],
-        "header_actions": [
-          "Delete"
-        ],
-        "confidence": "medium"
-      }
+        ]
+      },
+      "notes": "Header shows 'Last fetched <timestamp>' and a refresh button left of the actions."
     },
     {
       "id": "layers",
@@ -288,20 +409,28 @@
         "A-lambda/010-L2-layers"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Layers",
+        "counter": true,
+        "selection": "none",
+        "header_actions": [
+          "Create layer"
+        ],
+        "filter_placeholder": "Search by attributes or search by keyword",
+        "empty_state": "There is no data to display.",
+        "pagination": true,
+        "preferences": true,
         "columns": [
+          "Name",
           "Version",
           "Description",
           "Compatible runtimes",
           "Compatible architectures",
           "Created"
-        ],
-        "header_actions": [
-          "Create layer"
-        ],
-        "confidence": "medium"
-      }
+        ]
+      },
+      "notes": "Header shows 'Last fetched <timestamp>' and a refresh button left of the actions."
     },
     {
       "id": "replicas",
@@ -316,17 +445,24 @@
         "A-lambda/011-L2-replicas"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Replicas",
+        "counter": true,
+        "selection": "none",
+        "header_actions": [],
+        "filter_placeholder": "Search by attributes or search by keyword",
+        "empty_state": "There is no data to display.",
+        "pagination": true,
+        "preferences": true,
         "columns": [
           "Function name",
           "Description",
           "Runtime",
           "Last modified"
-        ],
-        "header_actions": [],
-        "confidence": "medium"
-      }
+        ]
+      },
+      "notes": "Header shows 'Last fetched <timestamp>' and a refresh button left of the actions."
     },
     {
       "id": "microvm-images",
@@ -341,23 +477,37 @@
         "A-lambda/012-L2-microvm-images"
       ],
       "provenance": "capture",
+      "confidence": "medium",
       "table": {
         "resource_label": "MicroVM Images",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Actions",
+          "Create"
+        ],
+        "empty_state": "No data to display.",
+        "pagination": true,
         "columns": [
+          "Name",
           "State",
           "Active version",
           "Failed version",
           "Created",
           "Image ARN"
-        ],
-        "header_actions": [
-          "Last fetched 0 seconds ago",
-          "Actions",
-          "Create"
-        ],
-        "empty_state": "No data to display.",
-        "confidence": "medium"
-      }
+        ]
+      },
+      "sections": [
+        {
+          "title": "How it works",
+          "actions": [
+            "Get MicroVM agent instructions",
+            "Create new MicroVM image",
+            "Run MicroVM"
+          ]
+        }
+      ],
+      "notes": "Out of Vyomi scope; declared for nav completeness."
     },
     {
       "id": "microvms",
@@ -372,24 +522,37 @@
         "A-lambda/013-L2-microvms"
       ],
       "provenance": "capture",
+      "confidence": "medium",
       "table": {
         "resource_label": "MicroVMs",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Actions",
+          "Connect",
+          "Run MicroVM"
+        ],
+        "empty_state": "No data to display.",
+        "pagination": true,
         "columns": [
           "ID",
           "Status",
           "MicroVM Image",
           "Version",
           "Creation time"
-        ],
-        "header_actions": [
-          "Last fetched 0 seconds ago",
-          "Actions",
-          "Connect",
-          "Run MicroVM"
-        ],
-        "empty_state": "No data to display.",
-        "confidence": "medium"
-      }
+        ]
+      },
+      "sections": [
+        {
+          "title": "How it works",
+          "actions": [
+            "Get MicroVM agent instructions",
+            "Create new MicroVM image",
+            "Run MicroVM"
+          ]
+        }
+      ],
+      "notes": "Out of Vyomi scope; declared for nav completeness."
     },
     {
       "id": "network-connectors",
@@ -404,20 +567,29 @@
         "A-lambda/014-L2-network-connectors"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "table": {
         "resource_label": "Network connectors",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Create network connector"
+        ],
+        "filter_placeholder": "Search by attributes or search by keyword",
+        "empty_state": "No network connectors.",
+        "pagination": true,
+        "preferences": true,
         "columns": [
+          "Name",
           "ID",
           "ARN",
           "Type",
           "State",
           "Last modified"
         ],
-        "header_actions": [
-          "Create network connector"
-        ],
-        "confidence": "medium"
-      }
+        "empty_state_action": "Create network connector"
+      },
+      "notes": "Header shows 'Last fetched <timestamp>' and a refresh button left of the actions."
     },
     {
       "id": "step-functions-state-machines",
@@ -432,92 +604,162 @@
         "A-lambda/015-L2-step-functions-state-machines"
       ],
       "provenance": "capture",
+      "confidence": "medium",
       "table": {
         "resource_label": "State machines",
-        "columns": [
-          "Type",
-          "Created"
-        ],
+        "counter": true,
         "header_actions": [
           "Create state machine"
         ],
         "empty_state": "No state machines",
-        "confidence": "medium"
-      }
+        "empty_state_action": "Get started with a sample Lambda workflow",
+        "columns": [
+          "Name",
+          "Type",
+          "Created"
+        ]
+      },
+      "sections": [
+        {
+          "title": "Build serverless workflows with state machines",
+          "actions": [
+            "Get started"
+          ]
+        }
+      ],
+      "notes": "Lists Step Functions state machines; Create state machine leaves to the Step Functions console."
     },
     {
-      "id": "search-functions-by-name",
+      "id": "get-started",
       "kind": "other",
       "title": "AWS Lambda",
       "route": "/lambda/home#/search",
       "captures": [
-        "A-lambda/016-L2-search-functions-by-name",
-        "A-lambda/016-L2-search-functions-by-name--tab-01-net",
-        "A-lambda/016-L2-search-functions-by-name--tab-02-java",
-        "A-lambda/016-L2-search-functions-by-name--tab-03-node-js",
-        "A-lambda/016-L2-search-functions-by-name--tab-04-python",
-        "A-lambda/016-L2-search-functions-by-name--tab-05-ruby",
-        "A-lambda/016-L2-search-functions-by-name--tab-06-customer-managed-runtime"
+        "A-lambda/001-L1-landing",
+        "A-lambda/016-L2-search-functions-by-name"
       ],
       "provenance": "capture",
-      "tabs": [
-        "Next: Lambda responds to events",
-        ".NET",
-        "Java",
-        "Node.js",
-        "Python",
-        "Ruby",
-        "Customer-managed runtime"
-      ]
+      "confidence": "medium",
+      "header_actions": [
+        "Create an Event Function"
+      ],
+      "sections": [
+        {
+          "title": "How it works",
+          "actions": [
+            "Run"
+          ],
+          "fields": [
+            {
+              "label": "Code sample",
+              "type": "other",
+              "options": [
+                ".NET",
+                "Java",
+                "Node.js",
+                "Python",
+                "Ruby",
+                "Customer-managed runtime"
+              ],
+              "default": "Node.js",
+              "help": "Tabbed sample editor; Run shows the function output"
+            }
+          ]
+        },
+        {
+          "title": "Lambda offerings",
+          "actions": [
+            "Create an Event Function",
+            "Create a Web Function",
+            "Start a microVM"
+          ]
+        },
+        {
+          "title": "Use cases"
+        },
+        {
+          "title": "Resources"
+        }
+      ],
+      "notes": "Service landing / first-run page (Compute > AWS Lambda). Marketing copy omitted."
     },
     {
-      "id": "create-an-event-function",
+      "id": "create-function",
       "kind": "create",
-      "title": "Create function",
-      "route": "/lambda/home#/create/function?firstrun=true",
+      "title": "Create Event Function",
+      "route": "/lambda/home#/create/function",
       "breadcrumbs": [
         "Lambda",
         "Event Functions",
         "Create function"
       ],
       "captures": [
+        "A-lambda/022-L3-create-event-function",
         "A-lambda/017-L2-create-an-event-function"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "sections": [
         {
-          "title": "Create Event Function",
+          "title": "(create method)",
           "fields": [
             {
-              "label": "Author from scratch",
+              "label": "Create method",
               "type": "radio",
-              "options": [
-                "Use a blueprint",
-                "Container image",
-                "Basic information"
-              ],
-              "default": "Use a blueprint",
               "required": true,
-              "help": "Start with a simple Hello World example.",
-              "confidence": "low"
-            },
+              "default": "Author from scratch",
+              "options": [
+                "Author from scratch",
+                "Use a blueprint",
+                "Container image"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Basic information",
+          "fields": [
             {
               "label": "Function name",
               "type": "text",
               "required": true,
+              "placeholder": "myFunctionName",
               "help": "Enter a name that describes the purpose of your function.",
-              "confidence": "low"
+              "constraints": "1 to 64 characters, unique to the Region, no spaces; a-z, A-Z, 0-9, hyphens (-), underscores (_)"
             },
             {
               "label": "Runtime",
-              "type": "radio",
+              "type": "select",
+              "required": true,
+              "default": "Node.js 24.x",
               "options": [
                 "Node.js 24.x",
-                "Permissions"
+                "Node.js 22.x",
+                "Node.js 20.x",
+                "Python 3.14",
+                "Python 3.13",
+                "Python 3.12",
+                "Python 3.11",
+                "Python 3.10",
+                "Java 25",
+                "Java 21",
+                "Java 17",
+                "Java 11",
+                "Java 8 on Amazon Linux 2",
+                ".NET 10",
+                ".NET 8",
+                "Ruby 3.4",
+                "Ruby 3.3",
+                "Amazon Linux 2023",
+                "Amazon Linux 2"
               ],
-              "default": "Node.js 24.x",
-              "required": true,
-              "confidence": "low"
+              "help": "Choose the language to use to write your function.",
+              "confidence": "medium"
+            },
+            {
+              "label": "Permissions",
+              "type": "readonly",
+              "help": "By default Lambda creates an execution role that can upload logs to CloudWatch Logs."
             }
           ]
         },
@@ -526,22 +768,95 @@
           "fields": [
             {
               "label": "Durable execution",
+              "type": "toggle",
+              "default": false,
+              "help": "Build resilient, stateful applications with automatic failure recovery."
+            },
+            {
+              "label": "EC2 capacity provider",
+              "type": "toggle",
+              "default": false,
+              "help": "Run Lambda on your preferred EC2 instance types instead of Lambda's serverless compute."
+            }
+          ]
+        },
+        {
+          "title": "Additional settings",
+          "expandable": true,
+          "provenance": "reference",
+          "confidence": "medium",
+          "fields": [
+            {
+              "label": "Architecture",
+              "type": "radio",
+              "default": "x86_64",
+              "options": [
+                "x86_64",
+                "arm64"
+              ]
+            },
+            {
+              "label": "Execution role",
+              "type": "radio",
+              "default": "Create a new role with basic Lambda permissions",
+              "options": [
+                "Create a new role with basic Lambda permissions",
+                "Use an existing role",
+                "Create a new role from AWS policy templates"
+              ]
+            },
+            {
+              "label": "Existing role",
+              "type": "select",
+              "visible_when": "Execution role = Use an existing role"
+            },
+            {
+              "label": "Enable function URL",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Auth type",
               "type": "radio",
               "options": [
-                "EC2 capacity provider",
-                "Additional settings"
+                "AWS_IAM",
+                "NONE"
               ],
-              "default": "EC2 capacity provider",
-              "required": true,
-              "help": "Build resilient, stateful applications with automatic failure recovery.",
-              "confidence": "low"
+              "visible_when": "Enable function URL checked"
+            },
+            {
+              "label": "Tenant isolation mode",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Enable VPC",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Enable code signing",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Enable encryption with an AWS KMS customer managed key",
+              "type": "checkbox",
+              "default": false
+            },
+            {
+              "label": "Enable tags",
+              "type": "checkbox",
+              "default": false
             }
           ]
         }
-      ]
+      ],
+      "submit": "Create Event Function",
+      "notes": "Blueprint and Container image branches not captured (crawler does not toggle radios)."
     },
     {
-      "id": "create-a-web-function",
+      "id": "create-web-function",
       "kind": "create",
       "title": "Create Web Function",
       "route": "/lambda/home#/create/web-function",
@@ -554,38 +869,39 @@
         "A-lambda/019-L2-create-a-web-function"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "sections": [
         {
-          "title": "Create Web Function",
+          "title": "Basic information",
           "fields": [
             {
               "label": "Function name",
               "type": "text",
               "required": true,
-              "help": "Enter a name that describes the purpose of your function.",
-              "confidence": "low"
+              "constraints": "2 to 64 characters; can't start or end with - or _; a-z, A-Z, 0-9, -, _"
             },
             {
               "label": "Runtime",
               "type": "select",
-              "default": "Node.js 24.x",
               "required": true,
-              "help": "Select the runtime environment for your function code.",
-              "confidence": "low"
-            },
+              "default": "Node.js 24.x",
+              "help": "Select the runtime environment for your function code."
+            }
+          ]
+        },
+        {
+          "title": "Code source",
+          "fields": [
             {
               "label": "Code source",
               "type": "radio",
+              "required": true,
+              "default": "Hello World template",
               "options": [
                 "Hello World template",
                 "Upload ZIP file",
-                "Amazon S3",
-                "Hello World template"
-              ],
-              "default": "Hello World template",
-              "required": true,
-              "help": "Choose one of the following options to create your function.",
-              "confidence": "low"
+                "Amazon S3"
+              ]
             }
           ]
         },
@@ -596,65 +912,72 @@
               "label": "Endpoint name",
               "type": "text",
               "required": true,
-              "help": "Enter a name that describes the purpose of this endpoint.",
-              "confidence": "low"
+              "constraints": "2 to 64 characters; can't start or end with - or _"
             },
             {
-              "label": "Description",
+              "label": "Description - optional",
               "type": "text",
-              "required": false,
-              "help": "Description must be 0 to 256 characters.",
-              "confidence": "low"
+              "constraints": "0 to 256 characters"
             },
             {
               "label": "Type",
               "type": "radio",
+              "required": true,
+              "default": "Home-Region",
               "options": [
                 "Home-Region",
                 "Multi-Region",
                 "Per-Region"
-              ],
-              "default": "Home-Region",
-              "required": true,
-              "confidence": "low"
+              ]
             },
             {
               "label": "Authentication type",
               "type": "select",
-              "default": "Select an authentication type",
               "required": true,
-              "help": "Choose the authentication type for this Web Function endpoint.",
-              "confidence": "low"
+              "placeholder": "Select an authentication type"
             },
             {
               "label": "Auto deployment",
               "type": "radio",
+              "default": "Latest revision",
               "options": [
                 "Latest revision",
                 "Disabled"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Additional configurations - optional",
+          "expandable": true,
+          "fields": [
+            {
+              "label": "Encryption",
+              "type": "other",
+              "provenance": "reference",
+              "confidence": "low"
+            },
+            {
+              "label": "Environment variables",
+              "type": "table",
+              "provenance": "reference",
+              "confidence": "low"
+            },
+            {
+              "label": "Tags",
+              "type": "tags",
+              "help": "Key / Value pairs; up to 50 tags",
+              "actions": [
+                "Add new tag",
+                "Remove"
               ],
-              "default": "Latest revision",
-              "required": true,
-              "help": "Control how new revisions are routed to this endpoint.",
+              "provenance": "reference",
               "confidence": "low"
             }
           ]
         }
-      ]
-    },
-    {
-      "id": "aws-lambda-extensions",
-      "kind": "other",
-      "title": "Extensions",
-      "route": "/lambda/home#/extensions",
-      "breadcrumbs": [
-        "Lambda",
-        "Extensions"
       ],
-      "captures": [
-        "A-lambda/020-L3-aws-lambda-extensions"
-      ],
-      "provenance": "capture"
+      "submit": "Create Web Function"
     },
     {
       "id": "create-application",
@@ -672,6 +995,7 @@
         "A-lambda/021-L3-create-application--tab-03-build-with-infrastructure-composer"
       ],
       "provenance": "capture",
+      "confidence": "medium",
       "tabs": [
         "CI/CD pipeline application",
         "Serverless application",
@@ -679,144 +1003,24 @@
       ],
       "sections": [
         {
-          "title": "Create a Lambda application",
+          "title": "Templates",
           "fields": [
             {
-              "label": "From scratch",
+              "label": "Template",
               "type": "radio",
               "options": [
-                "Runtime",
-                "Node.js 22.x",
-                "Uses",
-                "Lambda",
+                "From scratch",
                 "Serverless API backend",
-                "Runtime",
-                "Node.js 22.x",
-                "Uses",
-                "API Gateway, DynamoDB, Lambda"
-              ],
-              "default": "Runtime",
-              "required": true,
-              "help": "Create a repository and pipeline to use with your own application.",
-              "confidence": "low"
-            },
-            {
-              "label": "File processing",
-              "type": "radio",
-              "options": [
-                "Runtime",
-                "Node.js 22.x",
-                "Uses",
-                "Lambda, S3",
+                "File processing",
                 "Scheduled job",
-                "Runtime",
-                "Node.js 22.x",
-                "Uses",
-                "EventBridge, Lambda"
-              ],
-              "default": "Runtime",
-              "required": true,
-              "confidence": "low"
-            },
-            {
-              "label": "Notifications processing",
-              "type": "radio",
-              "options": [
-                "Runtime",
-                "Node.js 22.x",
-                "Uses",
-                "Lambda, SNS"
-              ],
-              "default": "Runtime",
-              "required": true,
-              "confidence": "low"
-            },
-            {
-              "label": "Queue processing",
-              "type": "radio",
-              "options": [
-                "Runtime",
-                "Node.js 22.x",
-                "Uses",
-                "Lambda, SQS"
-              ],
-              "default": "Runtime",
-              "required": true,
-              "confidence": "low"
+                "Notifications processing",
+                "Queue processing"
+              ]
             }
           ]
         }
-      ]
-    },
-    {
-      "id": "create-event-function",
-      "kind": "create",
-      "title": "Create function",
-      "route": "/lambda/home#/create/function",
-      "breadcrumbs": [
-        "Lambda",
-        "Event Functions",
-        "Create function"
       ],
-      "captures": [
-        "A-lambda/022-L3-create-event-function"
-      ],
-      "provenance": "capture",
-      "sections": [
-        {
-          "title": "Create Event Function",
-          "fields": [
-            {
-              "label": "Author from scratch",
-              "type": "radio",
-              "options": [
-                "Use a blueprint",
-                "Container image",
-                "Basic information"
-              ],
-              "default": "Use a blueprint",
-              "required": true,
-              "help": "Start with a simple Hello World example.",
-              "confidence": "low"
-            },
-            {
-              "label": "Function name",
-              "type": "text",
-              "required": true,
-              "help": "Enter a name that describes the purpose of your function.",
-              "confidence": "low"
-            },
-            {
-              "label": "Runtime",
-              "type": "radio",
-              "options": [
-                "Node.js 24.x",
-                "Permissions"
-              ],
-              "default": "Node.js 24.x",
-              "required": true,
-              "confidence": "low"
-            }
-          ]
-        },
-        {
-          "title": "Custom settings",
-          "fields": [
-            {
-              "label": "Durable execution",
-              "type": "radio",
-              "options": [
-                "EC2 capacity provider",
-                "Additional settings"
-              ],
-              "default": "EC2 capacity provider",
-              "required": true,
-              "help": "Build resilient, stateful applications with automatic failure recovery.",
-              "confidence": "low"
-            }
-          ]
-        }
-      ]
+      "notes": "Each template card shows Runtime (Node.js 22.x) and Uses (services)."
     },
     {
       "id": "create-capacity-provider",
@@ -832,33 +1036,53 @@
         "A-lambda/023-L3-create-capacity-provider"
       ],
       "provenance": "capture",
+      "confidence": "medium",
       "sections": [
         {
           "title": "Capacity provider settings",
           "fields": [
             {
-              "label": "{resource-name}",
-              "type": "select",
-              "default": "Network Configuration",
-              "required": true,
-              "help": "Enter a name that describes your capacity provider.",
-              "confidence": "low"
-            },
+              "label": "Name",
+              "type": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "title": "Network Configuration",
+          "fields": [
             {
               "label": "VPC",
-              "type": "radio",
-              "options": [
-                "Choose VPC",
-                "Permissions"
-              ],
-              "default": "Choose VPC",
+              "type": "select",
               "required": true,
-              "help": "Select a VPC for your resource to access.",
+              "placeholder": "Choose VPC"
+            }
+          ]
+        },
+        {
+          "title": "Permissions",
+          "fields": [
+            {
+              "label": "Change default operator role",
+              "type": "checkbox",
+              "default": false
+            }
+          ]
+        },
+        {
+          "title": "Advanced settings",
+          "expandable": true,
+          "fields": [
+            {
+              "label": "Architecture, instance types, scaling, encryption, tags",
+              "type": "other",
+              "provenance": "reference",
               "confidence": "low"
             }
           ]
         }
-      ]
+      ],
+      "submit": "Create capacity provider"
     },
     {
       "id": "create-layer",
@@ -874,52 +1098,69 @@
         "A-lambda/025-L3-create-layer"
       ],
       "provenance": "capture",
+      "confidence": "high",
       "sections": [
         {
-          "title": "(form)",
+          "title": "Layer configuration",
           "fields": [
             {
-              "label": "Description",
-              "type": "radio",
-              "options": [
-                "Source code",
-                "Create from a .zip file",
-                "Create from a file in Amazon S3",
-                "Choose file",
-                "Choose file"
-              ],
-              "default": "Source code",
-              "required": false,
-              "confidence": "low"
-            },
-            {
-              "label": "Compatible architectures",
-              "type": "select",
-              "default": "Search Compatible architectures",
-              "required": false,
-              "help": "Choose the compatible instruction set architectures for your layer.",
-              "confidence": "low"
-            },
-            {
-              "label": "Compatible runtimes",
-              "type": "select",
-              "default": "Search Compatible runtimes",
-              "required": false,
-              "help": "Choose up to 15 runtimes.",
-              "confidence": "low"
-            },
-            {
-              "label": "License",
+              "label": "Name",
               "type": "text",
-              "required": false,
-              "confidence": "low"
+              "required": true
+            },
+            {
+              "label": "Description - optional",
+              "type": "text"
+            },
+            {
+              "label": "Source code",
+              "type": "radio",
+              "required": true,
+              "default": "Create from a .zip file",
+              "options": [
+                "Create from a .zip file",
+                "Create from a file in Amazon S3"
+              ]
+            },
+            {
+              "label": "Choose file",
+              "type": "file",
+              "visible_when": "Source code = Create from a .zip file",
+              "help": "For files larger than 10 MB, consider uploading using Amazon S3."
+            },
+            {
+              "label": "Amazon S3 link URL",
+              "type": "text",
+              "visible_when": "Source code = Create from a file in Amazon S3",
+              "provenance": "reference",
+              "confidence": "medium"
+            },
+            {
+              "label": "Compatible architectures - optional",
+              "type": "checkbox",
+              "options": [
+                "x86_64",
+                "arm64"
+              ],
+              "confidence": "medium"
+            },
+            {
+              "label": "Compatible runtimes - optional",
+              "type": "select",
+              "placeholder": "Search Compatible runtimes",
+              "help": "Choose up to 15 runtimes."
+            },
+            {
+              "label": "License - optional",
+              "type": "text"
             }
           ]
         }
-      ]
+      ],
+      "submit": "Create"
     },
     {
-      "id": "create",
+      "id": "create-microvm-image",
       "kind": "create",
       "title": "Create MicroVM Image",
       "route": "/lambda/home#/create/microvm-image",
@@ -932,50 +1173,34 @@
         "A-lambda/026-L3-create"
       ],
       "provenance": "capture",
+      "confidence": "medium",
       "sections": [
         {
-          "title": "Create MicroVM Image",
+          "title": "MicroVM Image settings",
           "fields": [
             {
-              "label": "{resource-name}",
-              "type": "select",
-              "default": "Character count: 0/64",
+              "label": "Name",
+              "type": "text",
               "required": true,
-              "confidence": "low"
+              "constraints": "1 to 64 characters, unique to the region"
             },
             {
-              "label": "Description",
-              "type": "radio",
-              "options": [
-                "Character count: 0/2048",
-                "Character count: 0/2048"
-              ],
-              "default": "Character count: 0/2048",
-              "required": false,
-              "confidence": "low"
+              "label": "Description - optional",
+              "type": "textarea"
             },
             {
               "label": "Base MicroVM Image",
               "type": "select",
-              "default": "al2023-1",
-              "required": true,
-              "help": "The platform base image used to create your MicroVM image.",
-              "confidence": "low"
+              "default": "al2023-1"
             },
             {
               "label": "Base Image version",
               "type": "select",
-              "default": "Always use latest - recommended",
-              "required": true,
-              "help": "{resource-name}s to latest. Choose a specific version to test or rollback.",
-              "confidence": "low"
+              "default": "Always use latest - recommended"
             },
             {
               "label": "Instance size",
-              "type": "text",
-              "required": true,
-              "help": "Base and peak usage size. Usage exceeding the base is only billed during active use. For details, view pricing",
-              "confidence": "low"
+              "type": "select"
             }
           ]
         },
@@ -983,28 +1208,13 @@
           "title": "Code configuration",
           "fields": [
             {
-              "label": "Code package requirements",
+              "label": "S3 destination",
               "type": "text",
-              "required": true,
-              "confidence": "low"
-            },
-            {
-              "label": "Environment variables",
-              "type": "text",
-              "required": false,
-              "confidence": "low"
-            },
-            {
-              "label": "MicroVM lifecycle hooks",
-              "type": "text",
-              "required": false,
-              "confidence": "low"
-            },
-            {
-              "label": "Additional capabilities",
-              "type": "text",
-              "required": false,
-              "confidence": "low"
+              "placeholder": "s3://<bucket>/<object-path>",
+              "actions": [
+                "View",
+                "Browse S3"
+              ]
             }
           ]
         },
@@ -1015,35 +1225,30 @@
               "label": "IAM permissions",
               "type": "radio",
               "options": [
-                "Create {resource-name} role",
+                "Create default role",
                 "Use another role"
               ],
-              "default": "Create {resource-name} role",
-              "required": true,
-              "confidence": "low"
-            },
+              "default": "Create default role"
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "fields": [
             {
-              "label": "Networking",
-              "type": "text",
-              "required": false,
-              "confidence": "low"
-            },
-            {
-              "label": "Logging",
-              "type": "text",
-              "required": false,
-              "confidence": "low"
-            },
-            {
-              "label": "Image build lifecycle hooks",
-              "type": "select",
-              "default": "Tags",
-              "required": false,
-              "confidence": "low"
+              "label": "Tags",
+              "type": "tags",
+              "help": "Key / Value pairs; up to 50 tags",
+              "actions": [
+                "Add new tag",
+                "Remove"
+              ]
             }
           ]
         }
-      ]
+      ],
+      "submit": "Create",
+      "notes": "Out of Vyomi scope; declared for nav completeness."
     },
     {
       "id": "run-microvm",
@@ -1059,17 +1264,19 @@
         "A-lambda/027-L3-run-microvm"
       ],
       "provenance": "capture",
+      "confidence": "medium",
       "sections": [
         {
-          "title": "Run MicroVM",
+          "title": "MicroVM configuration",
           "fields": [
             {
               "label": "Base MicroVM Image",
               "type": "select",
-              "default": "Version",
-              "required": true,
-              "help": "The MicroVM Image used as the base for your MicroVM.",
-              "confidence": "low"
+              "required": true
+            },
+            {
+              "label": "Version",
+              "type": "select"
             },
             {
               "label": "Execution role",
@@ -1077,15 +1284,21 @@
               "options": [
                 "No role",
                 "Use a role"
-              ],
-              "default": "No role",
-              "required": true,
-              "help": "The IAM role that defines the permissions for your MicroVM.",
-              "confidence": "low"
+              ]
             }
           ]
+        },
+        {
+          "title": "Operational settings - optional",
+          "expandable": true
+        },
+        {
+          "title": "Additional configurations - optional",
+          "expandable": true
         }
-      ]
+      ],
+      "submit": "Run",
+      "notes": "Out of Vyomi scope; declared for nav completeness."
     },
     {
       "id": "create-network-connector",
@@ -1101,38 +1314,719 @@
         "A-lambda/028-L3-create-network-connector"
       ],
       "provenance": "capture",
+      "confidence": "medium",
       "sections": [
         {
           "title": "Network connector settings",
           "fields": [
             {
-              "label": "{resource-name}",
+              "label": "Name",
               "type": "text",
               "required": true,
-              "help": "Enter a name for your network connector.",
-              "confidence": "low"
+              "constraints": "1 to 64 characters; a-z, A-Z, 0-9, -, _"
+            },
+            {
+              "label": "Associated compute type",
+              "type": "select",
+              "default": "MicroVm"
             },
             {
               "label": "VPC",
+              "type": "select",
+              "required": true,
+              "placeholder": "Choose VPC"
+            },
+            {
+              "label": "Network protocol",
+              "type": "select",
+              "placeholder": "Search Network protocol"
+            },
+            {
+              "label": "Execution role",
               "type": "radio",
               "options": [
-                "Choose VPC",
-                "Network protocol",
-                "Search Network protocol",
-                "Execution role",
                 "Choose an existing role",
-                "Create new role",
-                "Tags"
+                "Create new role"
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "help": "Key / Value pairs; up to 50 tags",
+              "actions": [
+                "Add new tag",
+                "Remove"
+              ]
+            }
+          ]
+        }
+      ],
+      "submit": "Create network connector"
+    },
+    {
+      "id": "extensions",
+      "kind": "other",
+      "title": "Extensions",
+      "route": "/lambda/home#/extensions",
+      "breadcrumbs": [
+        "Lambda",
+        "Extensions"
+      ],
+      "captures": [
+        "A-lambda/020-L3-aws-lambda-extensions"
+      ],
+      "provenance": "capture",
+      "confidence": "medium",
+      "notes": "Catalog of partner extension cards, each with a 'Go to <partner>' link. Reached from Dashboard > Developer resources."
+    },
+    {
+      "id": "function-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/lambda/home#/functions/{resource-name}",
+      "breadcrumbs": [
+        "Lambda",
+        "Functions",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Throttle",
+        "Copy ARN",
+        "Actions"
+      ],
+      "tabs": [
+        "Code",
+        "Test",
+        "Monitor",
+        "Configuration",
+        "Aliases",
+        "Versions"
+      ],
+      "tab_panels": [
+        {
+          "label": "Code",
+          "sections": [
+            {
+              "title": "Code source",
+              "actions": [
+                "Upload from",
+                "Deploy",
+                "Test"
               ],
-              "default": "Choose VPC",
+              "fields": [
+                {
+                  "label": "Code editor",
+                  "type": "other",
+                  "options": [
+                    ".zip file",
+                    "Amazon S3 location"
+                  ],
+                  "help": "Upload from: .zip file / Amazon S3 location"
+                }
+              ]
+            },
+            {
+              "title": "Code properties",
+              "fields": [
+                {
+                  "label": "Package size",
+                  "type": "readonly"
+                },
+                {
+                  "label": "SHA256 hash",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Last modified",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Runtime settings",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Runtime",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Handler",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Architecture",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Layers",
+              "actions": [
+                "Edit",
+                "Add a layer"
+              ],
+              "table": {
+                "columns": [
+                  "Merge order",
+                  "Name",
+                  "Layer version",
+                  "Compatible runtimes",
+                  "Compatible architectures",
+                  "Version ARN"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Test",
+          "sections": [
+            {
+              "title": "Test event",
+              "actions": [
+                "Save",
+                "Test"
+              ],
+              "fields": [
+                {
+                  "label": "Test event action",
+                  "type": "radio",
+                  "options": [
+                    "Create new event",
+                    "Edit saved event"
+                  ],
+                  "default": "Create new event"
+                },
+                {
+                  "label": "Invocation type",
+                  "type": "radio",
+                  "options": [
+                    "Synchronous",
+                    "Asynchronous"
+                  ],
+                  "default": "Synchronous"
+                },
+                {
+                  "label": "Event name",
+                  "type": "text"
+                },
+                {
+                  "label": "Event sharing settings",
+                  "type": "radio",
+                  "options": [
+                    "Private",
+                    "Shareable"
+                  ],
+                  "default": "Private"
+                },
+                {
+                  "label": "Template - optional",
+                  "type": "select",
+                  "default": "hello-world"
+                },
+                {
+                  "label": "Event JSON",
+                  "type": "textarea",
+                  "default": "{\"key1\": \"value1\", \"key2\": \"value2\", \"key3\": \"value3\"}"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Monitor",
+          "sections": [
+            {
+              "title": "Metrics",
+              "actions": [
+                "View CloudWatch logs",
+                "View X-Ray traces",
+                "View Lambda Insights"
+              ],
+              "fields": [
+                {
+                  "label": "Invocations",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Duration",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Error count and success rate (%)",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Throttles",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Async delivery failures",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Concurrent executions",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Recent invocations",
+              "table": {
+                "columns": [
+                  "Timestamp",
+                  "RequestId",
+                  "LogStream",
+                  "DurationInMS",
+                  "BilledDurationInMS",
+                  "MemorySetInMB",
+                  "MemoryUsedInMB"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Configuration",
+          "sections": [
+            {
+              "title": "General configuration",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Description",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Memory",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Ephemeral storage",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Timeout",
+                  "type": "readonly"
+                },
+                {
+                  "label": "SnapStart",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Triggers",
+              "actions": [
+                "Add trigger",
+                "Edit",
+                "Delete"
+              ],
+              "table": {
+                "selection": "multi",
+                "columns": [
+                  "Trigger"
+                ]
+              }
+            },
+            {
+              "title": "Permissions",
+              "fields": [
+                {
+                  "label": "Execution role",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Role name",
+                  "type": "readonly"
+                }
+              ],
+              "table": {
+                "resource_label": "Resource-based policy statements",
+                "columns": [
+                  "Statement ID",
+                  "Principal",
+                  "Principal organization ID",
+                  "Conditions",
+                  "Action"
+                ]
+              }
+            },
+            {
+              "title": "Destinations",
+              "actions": [
+                "Add destination",
+                "Edit",
+                "Remove"
+              ],
+              "table": {
+                "columns": [
+                  "Source",
+                  "Condition",
+                  "Destination type",
+                  "Destination"
+                ]
+              }
+            },
+            {
+              "title": "Function URL",
+              "actions": [
+                "Create function URL",
+                "Edit",
+                "Delete"
+              ],
+              "fields": [
+                {
+                  "label": "Function URL",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Auth type",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Invoke mode",
+                  "type": "readonly"
+                },
+                {
+                  "label": "CORS",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Environment variables",
+              "actions": [
+                "Edit"
+              ],
+              "table": {
+                "empty_state": "No environment variables",
+                "columns": [
+                  "Key",
+                  "Value"
+                ]
+              },
+              "fields": [
+                {
+                  "label": "Environment variables",
+                  "type": "table",
+                  "columns": [
+                    "Key",
+                    "Value"
+                  ],
+                  "actions": [
+                    "Add environment variable",
+                    "Remove"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Tags",
+              "actions": [
+                "Manage tags"
+              ],
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ]
+              }
+            },
+            {
+              "title": "VPC",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "VPC",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Subnets",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Security groups",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "RDS databases"
+            },
+            {
+              "title": "Monitoring and operations tools",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "CloudWatch Logs",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Log format",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Log group",
+                  "type": "readonly"
+                },
+                {
+                  "label": "AWS X-Ray",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Enhanced monitoring",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Concurrency and recursion detection",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Reserved concurrency",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Provisioned concurrency",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Recursive loop detection",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Asynchronous invocation",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Maximum age of event",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Retry attempts",
+                  "type": "readonly"
+                },
+                {
+                  "label": "Dead-letter queue service",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "Code signing",
+              "actions": [
+                "Edit"
+              ],
+              "fields": [
+                {
+                  "label": "Code signing configuration",
+                  "type": "readonly"
+                }
+              ]
+            },
+            {
+              "title": "File systems",
+              "actions": [
+                "Add file system"
+              ],
+              "table": {
+                "columns": [
+                  "File system",
+                  "Access point",
+                  "Local mount path"
+                ]
+              }
+            },
+            {
+              "title": "State machines"
+            }
+          ]
+        },
+        {
+          "label": "Aliases",
+          "sections": [
+            {
+              "title": "Aliases",
+              "actions": [
+                "Delete",
+                "Edit",
+                "Create alias"
+              ],
+              "table": {
+                "resource_label": "Aliases",
+                "counter": true,
+                "selection": "single",
+                "columns": [
+                  "Name",
+                  "Version",
+                  "Description",
+                  "Last modified"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Versions",
+          "sections": [
+            {
+              "title": "Versions",
+              "actions": [
+                "Delete",
+                "Publish new version"
+              ],
+              "table": {
+                "resource_label": "Versions",
+                "counter": true,
+                "selection": "single",
+                "columns": [
+                  "Version",
+                  "Aliases",
+                  "Description",
+                  "Function ARN",
+                  "Last modified"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "sections": [
+        {
+          "title": "Function overview",
+          "actions": [
+            "Add trigger",
+            "Add destination"
+          ],
+          "fields": [
+            {
+              "label": "Description",
+              "type": "readonly"
+            },
+            {
+              "label": "Last modified",
+              "type": "readonly"
+            },
+            {
+              "label": "Function ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "Function URL",
+              "type": "readonly"
+            }
+          ]
+        }
+      ],
+      "notes": "Not crawled (account had no functions). Configuration tab has a left sub-nav, one entry per section."
+    },
+    {
+      "id": "create-alias",
+      "kind": "create",
+      "title": "Create alias",
+      "breadcrumbs": [
+        "Lambda",
+        "Functions",
+        "{resource-name}",
+        "Create alias"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Alias configuration",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Description",
+              "type": "text"
+            },
+            {
+              "label": "Version",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "Weighted alias",
+              "type": "other",
+              "help": "Additional version + weight (%)"
+            }
+          ]
+        }
+      ],
+      "submit": "Save"
+    },
+    {
+      "id": "add-trigger",
+      "kind": "create",
+      "title": "Add trigger",
+      "breadcrumbs": [
+        "Lambda",
+        "Functions",
+        "{resource-name}",
+        "Add trigger"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Trigger configuration",
+          "fields": [
+            {
+              "label": "Select a source",
+              "type": "select",
               "required": true,
-              "help": "Select a VPC for your resource to access.",
+              "options": [
+                "API Gateway",
+                "EventBridge (CloudWatch Events)",
+                "S3",
+                "SNS",
+                "SQS",
+                "DynamoDB",
+                "Kinesis",
+                "CloudWatch Logs"
+              ]
+            },
+            {
+              "label": "Activate trigger",
+              "type": "checkbox",
+              "default": true,
+              "provenance": "reference",
               "confidence": "low"
             }
           ]
         }
-      ]
+      ],
+      "submit": "Add"
     }
   ],
-  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+  "gaps_note": "Function detail (Code/Test/Monitor/Configuration/Aliases/Versions), Create alias and Add trigger are provenance=reference: the captured account had no functions. Create function 'Additional settings' (collapsed in capture) and Runtime option list are reference. Code signing configuration / layer / application detail pages not captured. MicroVMs and network connectors are out of Vyomi scope."
 }

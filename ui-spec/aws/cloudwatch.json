@@ -3,38 +3,597 @@
   "cloud": "aws",
   "service": "cloudwatch",
   "console_path": "/cloudwatch/",
-  "status": "draft",
-  "nav": [],
+  "status": "reviewed",
+  "captured_at": "2026-10-30",
+  "nav": [
+    {
+      "label": "Favorites and recents",
+      "expandable": true
+    },
+    {
+      "label": "Dashboards",
+      "page_id": "dashboards"
+    },
+    {
+      "label": "Alarms",
+      "expandable": true,
+      "children": [
+        {
+          "label": "In alarm",
+          "page_id": "alarms"
+        },
+        {
+          "label": "All alarms",
+          "page_id": "alarms"
+        }
+      ]
+    },
+    {
+      "label": "Logs",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Log management",
+          "page_id": "log-management"
+        },
+        {
+          "label": "Logs Insights",
+          "page_id": "logs-insights"
+        },
+        {
+          "label": "Live Tail",
+          "page_id": "live-tail"
+        }
+      ]
+    },
+    {
+      "label": "Metrics",
+      "expandable": true,
+      "children": [
+        {
+          "label": "All metrics",
+          "page_id": "all-metrics"
+        },
+        {
+          "label": "Explorer"
+        },
+        {
+          "label": "Streams"
+        }
+      ]
+    },
+    {
+      "label": "Application Signals (APM)",
+      "expandable": true
+    },
+    {
+      "label": "Network Monitoring",
+      "expandable": true
+    },
+    {
+      "label": "Insights",
+      "expandable": true
+    },
+    {
+      "label": "Settings",
+      "page_id": "settings"
+    },
+    {
+      "label": "Getting Started"
+    }
+  ],
   "pages": [
     {
       "id": "landing",
       "kind": "other",
-      "title": "{resource-name}",
+      "title": "CloudWatch",
       "route": "/cloudwatch/home",
       "captures": [
         "A-cloudwatch/001-L1-landing"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "low",
+      "notes": "Captured landing rendered blank (console content loads in an iframe the crawler did not read)."
     },
     {
-      "id": "alarmsv2-create",
+      "id": "dashboards",
+      "kind": "list",
+      "title": "Custom dashboards",
+      "route": "/cloudwatch/home#dashboards",
+      "breadcrumbs": [
+        "CloudWatch",
+        "Dashboards"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Custom dashboards",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Delete",
+          "Actions",
+          "Create dashboard"
+        ],
+        "filter_placeholder": "Filter dashboards",
+        "empty_state": "No dashboards",
+        "empty_state_action": "Create dashboard",
+        "pagination": true,
+        "columns": [
+          "Name",
+          "Sharing",
+          "Favorite",
+          "Last updated (UTC)"
+        ]
+      },
+      "tabs": [
+        "Custom dashboards",
+        "Automatic dashboards"
+      ]
+    },
+    {
+      "id": "create-dashboard",
       "kind": "create",
+      "title": "Create new dashboard",
+      "breadcrumbs": [
+        "CloudWatch",
+        "Dashboards"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Create new dashboard",
+          "fields": [
+            {
+              "label": "Dashboard name",
+              "type": "text",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "submit": "Create dashboard",
+      "notes": "Modal; then Add widget dialog."
+    },
+    {
+      "id": "dashboard-detail",
+      "kind": "detail",
       "title": "{resource-name}",
+      "route": "/cloudwatch/home#dashboards/dashboard/{resource-name}",
+      "breadcrumbs": [
+        "CloudWatch",
+        "Dashboards",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Refresh",
+        "Time range",
+        "Actions",
+        "Save",
+        "Add widget"
+      ],
+      "sections": [
+        {
+          "title": "Add widget",
+          "fields": [
+            {
+              "label": "Widget type",
+              "type": "radio",
+              "options": [
+                "Line",
+                "Number",
+                "Gauge",
+                "Stacked area",
+                "Bar",
+                "Pie",
+                "Text",
+                "Alarm status",
+                "Logs table",
+                "Explorer"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "alarms",
+      "kind": "list",
+      "title": "Alarms",
+      "route": "/cloudwatch/home#alarmsV2:",
+      "breadcrumbs": [
+        "CloudWatch",
+        "Alarms"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Alarms",
+        "counter": true,
+        "selection": "single",
+        "header_actions": [
+          "Refresh",
+          "Hide Auto Scaling alarms",
+          "Clear selection",
+          "Create composite alarm",
+          "Actions",
+          "Create alarm"
+        ],
+        "filter_placeholder": "Search",
+        "filters": [
+          "Alarm state",
+          "Alarm type",
+          "Actions status"
+        ],
+        "empty_state": "No alarms",
+        "empty_state_action": "Create alarm",
+        "pagination": true,
+        "preferences": true,
+        "columns": [
+          "Name",
+          "State",
+          "Last state update (UTC)",
+          "Conditions",
+          "Actions"
+        ]
+      },
+      "notes": "'In alarm' nav entry is the same list filtered by state = In alarm."
+    },
+    {
+      "id": "create-alarm",
+      "kind": "create",
+      "title": "Create alarm",
       "route": "/cloudwatch/home#alarmsV2:create",
+      "breadcrumbs": [
+        "CloudWatch",
+        "Alarms",
+        "Create alarm"
+      ],
       "captures": [
         "C-cloudwatch/01-alarmsv2-create/step-1",
         "C-cloudwatch/01-alarmsv2-create/step-1-expanded",
         "C-cloudwatch/01-alarmsv2-create/step-2",
         "C-cloudwatch/01-alarmsv2-create/step-3"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "steps": [
+        {
+          "title": "Specify metric and conditions",
+          "sections": [
+            {
+              "title": "Data source",
+              "fields": [
+                {
+                  "label": "Data source",
+                  "type": "radio",
+                  "required": true,
+                  "default": "Metrics",
+                  "options": [
+                    "Metrics",
+                    "Logs",
+                    "Alarms"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Type",
+              "fields": [
+                {
+                  "label": "Type",
+                  "type": "radio",
+                  "required": true,
+                  "default": "Classic",
+                  "options": [
+                    "Classic",
+                    "PromQL"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Metric",
+              "actions": [
+                "Select metric"
+              ]
+            },
+            {
+              "title": "Conditions",
+              "provenance": "reference",
+              "confidence": "medium",
+              "fields": [
+                {
+                  "label": "Statistic",
+                  "type": "select",
+                  "default": "Average"
+                },
+                {
+                  "label": "Period",
+                  "type": "select",
+                  "default": "5 minutes"
+                },
+                {
+                  "label": "Threshold type",
+                  "type": "radio",
+                  "default": "Static",
+                  "options": [
+                    "Static",
+                    "Anomaly detection"
+                  ]
+                },
+                {
+                  "label": "Whenever {metric} is...",
+                  "type": "radio",
+                  "options": [
+                    "Greater",
+                    "Greater/Equal",
+                    "Lower/Equal",
+                    "Lower"
+                  ]
+                },
+                {
+                  "label": "than...",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "label": "Datapoints to alarm",
+                  "type": "other",
+                  "confidence": "low"
+                },
+                {
+                  "label": "Missing data treatment",
+                  "type": "select",
+                  "default": "Treat missing data as missing"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Configure actions",
+          "sections": [
+            {
+              "title": "Notification",
+              "provenance": "reference",
+              "confidence": "medium",
+              "actions": [
+                "Add notification"
+              ],
+              "fields": [
+                {
+                  "label": "Alarm state trigger",
+                  "type": "radio",
+                  "default": "In alarm",
+                  "options": [
+                    "In alarm",
+                    "OK",
+                    "Insufficient data"
+                  ]
+                },
+                {
+                  "label": "Send a notification to the following SNS topic",
+                  "type": "radio",
+                  "options": [
+                    "Select an existing SNS topic",
+                    "Create new topic",
+                    "Use topic ARN"
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Lambda action",
+              "provenance": "reference"
+            },
+            {
+              "title": "Auto Scaling action",
+              "provenance": "reference"
+            },
+            {
+              "title": "EC2 action",
+              "provenance": "reference"
+            }
+          ]
+        },
+        {
+          "title": "Add alarm details",
+          "sections": [
+            {
+              "title": "Name and description",
+              "provenance": "reference",
+              "confidence": "medium",
+              "fields": [
+                {
+                  "label": "Alarm name",
+                  "type": "text",
+                  "required": true
+                },
+                {
+                  "label": "Alarm description - optional",
+                  "type": "textarea"
+                }
+              ]
+            },
+            {
+              "title": "Tags",
+              "provenance": "reference",
+              "fields": [
+                {
+                  "label": "Tags",
+                  "type": "tags",
+                  "help": "Key / Value pairs; up to 50 tags",
+                  "actions": [
+                    "Add new tag",
+                    "Remove"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Preview and create",
+          "sections": [
+            {
+              "title": "Preview",
+              "provenance": "reference"
+            }
+          ]
+        }
+      ],
+      "submit": "Create alarm",
+      "notes": "Steps 2-4 not reachable in capture without choosing a metric; their content is reference."
+    },
+    {
+      "id": "alarm-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/cloudwatch/home#alarmsV2:alarm/{resource-name}",
+      "breadcrumbs": [
+        "CloudWatch",
+        "Alarms",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Actions",
+        "Edit"
+      ],
+      "tabs": [
+        "Details",
+        "Actions",
+        "History",
+        "Parent alarms"
+      ],
+      "sections": [
+        {
+          "title": "Graph"
+        },
+        {
+          "title": "Details",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "readonly"
+            },
+            {
+              "label": "Type",
+              "type": "readonly"
+            },
+            {
+              "label": "Description",
+              "type": "readonly"
+            },
+            {
+              "label": "State",
+              "type": "readonly"
+            },
+            {
+              "label": "Threshold",
+              "type": "readonly"
+            },
+            {
+              "label": "Last state update",
+              "type": "readonly"
+            },
+            {
+              "label": "Metric name",
+              "type": "readonly"
+            },
+            {
+              "label": "Namespace",
+              "type": "readonly"
+            },
+            {
+              "label": "Statistic",
+              "type": "readonly"
+            },
+            {
+              "label": "Period",
+              "type": "readonly"
+            },
+            {
+              "label": "Datapoints to alarm",
+              "type": "readonly"
+            },
+            {
+              "label": "Missing data treatment",
+              "type": "readonly"
+            },
+            {
+              "label": "ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "Actions",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "log-management",
+      "kind": "list",
+      "title": "Log management",
+      "route": "/cloudwatch/home#logsV2:log-groups",
+      "breadcrumbs": [
+        "CloudWatch",
+        "Log management"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "resource_label": "Log groups",
+        "counter": true,
+        "selection": "multi",
+        "header_actions": [
+          "Refresh",
+          "Actions",
+          "View in Logs Insights",
+          "Start tailing",
+          "Create log group"
+        ],
+        "filter_placeholder": "Filter log groups or try prefix search",
+        "filters": [
+          "Exact match"
+        ],
+        "empty_state": "No log groups",
+        "pagination": true,
+        "preferences": true,
+        "columns": [
+          "Log group",
+          "Log class",
+          "Anomaly detection",
+          "Data protection",
+          "Sensitive data count",
+          "Retention",
+          "Metric filters",
+          "Contributor Insights",
+          "Subscription filters",
+          "KMS key ID"
+        ]
+      },
+      "tabs": [
+        "Log groups",
+        "Data sources"
+      ],
+      "notes": "Breadcrumb 'Log management' confirmed by the create-log-group capture."
     },
     {
       "id": "create-log-group",
       "kind": "create",
-      "title": "{resource-name}",
+      "title": "Create log group",
       "route": "/cloudwatch/home#logsV2:log-groups/create-log-group",
       "breadcrumbs": [
+        "CloudWatch",
         "Log management",
         "Create log group"
       ],
@@ -42,8 +601,440 @@
         "C-cloudwatch/02-create-log-group/step-1",
         "C-cloudwatch/02-create-log-group/step-1-expanded"
       ],
-      "provenance": "capture"
+      "provenance": "capture",
+      "confidence": "high",
+      "sections": [
+        {
+          "title": "Log group details",
+          "fields": [
+            {
+              "label": "Log group name",
+              "type": "text",
+              "required": true,
+              "placeholder": "Enter log group name"
+            },
+            {
+              "label": "Retention setting",
+              "type": "select",
+              "default": "Never expire",
+              "options": [
+                "Never expire",
+                "1 day",
+                "3 days",
+                "5 days",
+                "1 week",
+                "2 weeks",
+                "1 month",
+                "2 months",
+                "3 months",
+                "4 months",
+                "5 months",
+                "6 months",
+                "1 year",
+                "13 months",
+                "18 months",
+                "2 years",
+                "3 years",
+                "5 years",
+                "6 years",
+                "7 years",
+                "8 years",
+                "9 years",
+                "10 years"
+              ]
+            },
+            {
+              "label": "Log class",
+              "type": "select",
+              "default": "Standard",
+              "options": [
+                "Standard",
+                "Infrequent Access",
+                "Delivery"
+              ]
+            },
+            {
+              "label": "KMS key ARN - optional",
+              "type": "select",
+              "placeholder": "Choose an AWS KMS key or enter an ARN",
+              "actions": [
+                "Create an AWS KMS key"
+              ]
+            },
+            {
+              "label": "Deletion protection",
+              "type": "checkbox",
+              "default": false,
+              "help": "Deletion protection is turned off by default."
+            }
+          ]
+        },
+        {
+          "title": "Tags",
+          "fields": [
+            {
+              "label": "Tags",
+              "type": "tags",
+              "help": "No tags are associated with this log group.",
+              "actions": [
+                "Add new tag",
+                "Remove"
+              ]
+            }
+          ]
+        }
+      ],
+      "submit": "Create"
+    },
+    {
+      "id": "log-group-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/cloudwatch/home#logsV2:log-groups/log-group/{resource-name}",
+      "breadcrumbs": [
+        "CloudWatch",
+        "Log management",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Actions",
+        "View in Logs Insights",
+        "Start tailing",
+        "Search log group"
+      ],
+      "tabs": [
+        "Log streams",
+        "Tags",
+        "Anomaly detection",
+        "Metric filters",
+        "Subscription filters",
+        "Contributor Insights",
+        "Data protection",
+        "Field indexes",
+        "Transformer"
+      ],
+      "tab_panels": [
+        {
+          "label": "Log streams",
+          "sections": [
+            {
+              "title": "Log streams",
+              "table": {
+                "counter": true,
+                "selection": "multi",
+                "header_actions": [
+                  "Refresh",
+                  "Delete",
+                  "Create log stream",
+                  "Search all log streams"
+                ],
+                "filter_placeholder": "Filter log streams or try prefix search",
+                "pagination": true,
+                "columns": [
+                  "Log stream",
+                  "Last event time"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Tags",
+          "sections": [
+            {
+              "title": "Tags",
+              "actions": [
+                "Manage tags"
+              ],
+              "table": {
+                "columns": [
+                  "Key",
+                  "Value"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "label": "Metric filters",
+          "sections": [
+            {
+              "title": "Metric filters",
+              "actions": [
+                "Create metric filter"
+              ]
+            }
+          ]
+        },
+        {
+          "label": "Subscription filters",
+          "sections": [
+            {
+              "title": "Subscription filters",
+              "actions": [
+                "Create"
+              ]
+            }
+          ]
+        }
+      ],
+      "sections": [
+        {
+          "title": "Log group details",
+          "fields": [
+            {
+              "label": "Log class",
+              "type": "readonly"
+            },
+            {
+              "label": "ARN",
+              "type": "readonly"
+            },
+            {
+              "label": "Creation time",
+              "type": "readonly"
+            },
+            {
+              "label": "Retention",
+              "type": "readonly"
+            },
+            {
+              "label": "Stored bytes",
+              "type": "readonly"
+            },
+            {
+              "label": "Metric filters",
+              "type": "readonly"
+            },
+            {
+              "label": "Subscription filters",
+              "type": "readonly"
+            },
+            {
+              "label": "Contributor Insights rules",
+              "type": "readonly"
+            },
+            {
+              "label": "KMS key ID",
+              "type": "readonly"
+            },
+            {
+              "label": "Deletion protection",
+              "type": "readonly"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "log-events",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/cloudwatch/home#logsV2:log-groups/log-group/{group}/log-events/{resource-name}",
+      "breadcrumbs": [
+        "CloudWatch",
+        "Log management",
+        "{group}",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Actions",
+        "Start tailing",
+        "Create metric filter"
+      ],
+      "table": {
+        "resource_label": "Log events",
+        "filter_placeholder": "Filter events - press enter to search",
+        "filters": [
+          "Clear",
+          "1m",
+          "30m",
+          "1h",
+          "12h",
+          "Custom",
+          "UTC timezone",
+          "Display"
+        ],
+        "pagination": false,
+        "columns": [
+          "Timestamp",
+          "Message"
+        ]
+      }
+    },
+    {
+      "id": "create-log-stream",
+      "kind": "create",
+      "title": "Create log stream",
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Create log stream",
+          "fields": [
+            {
+              "label": "Log stream name",
+              "type": "text",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "submit": "Create",
+      "notes": "Modal."
+    },
+    {
+      "id": "logs-insights",
+      "kind": "other",
+      "title": "Logs Insights",
+      "route": "/cloudwatch/home#logsV2:logs-insights",
+      "breadcrumbs": [
+        "CloudWatch",
+        "Logs Insights"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Run query",
+        "Save",
+        "History"
+      ],
+      "tabs": [
+        "Logs",
+        "Patterns",
+        "Visualization"
+      ],
+      "sections": [
+        {
+          "title": "Query",
+          "fields": [
+            {
+              "label": "Query language",
+              "type": "radio",
+              "default": "Logs Insights QL",
+              "options": [
+                "Logs Insights QL",
+                "OpenSearch PPL",
+                "OpenSearch SQL"
+              ]
+            },
+            {
+              "label": "Selection criteria",
+              "type": "select",
+              "placeholder": "Select log groups"
+            },
+            {
+              "label": "Query",
+              "type": "textarea",
+              "default": "fields @timestamp, @message, @logStream, @log | sort @timestamp desc | limit 10000"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "live-tail",
+      "kind": "other",
+      "title": "Live Tail",
+      "route": "/cloudwatch/home#logsV2:live-tail",
+      "breadcrumbs": [
+        "CloudWatch",
+        "Live Tail"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "sections": [
+        {
+          "title": "Filter",
+          "fields": [
+            {
+              "label": "Select log groups",
+              "type": "select",
+              "required": true
+            },
+            {
+              "label": "Select log streams - optional",
+              "type": "select"
+            },
+            {
+              "label": "Add filter pattern - optional",
+              "type": "text"
+            }
+          ],
+          "actions": [
+            "Start",
+            "Clear"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "all-metrics",
+      "kind": "other",
+      "title": "Metrics",
+      "route": "/cloudwatch/home#metricsV2",
+      "breadcrumbs": [
+        "CloudWatch",
+        "Metrics"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "table": {
+        "filter_placeholder": "Search for any metric, dimension, resource id or account id",
+        "resource_label": "Metrics",
+        "columns": [
+          "Metric name"
+        ]
+      },
+      "tabs": [
+        "Browse",
+        "Multi source query",
+        "Graphed metrics",
+        "Options",
+        "Source"
+      ],
+      "sections": [
+        {
+          "title": "Graph",
+          "fields": [
+            {
+              "label": "Time range",
+              "type": "other",
+              "options": [
+                "1h",
+                "3h",
+                "12h",
+                "1d",
+                "3d",
+                "1w",
+                "Custom"
+              ]
+            }
+          ],
+          "actions": [
+            "Actions",
+            "Refresh",
+            "Add to dashboard"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "kind": "settings",
+      "title": "Settings",
+      "route": "/cloudwatch/home#settings",
+      "breadcrumbs": [
+        "CloudWatch",
+        "Settings"
+      ],
+      "provenance": "reference",
+      "confidence": "medium"
     }
   ],
-  "gaps_note": "Auto-extracted draft from text captures; field types, sections and option lists are heuristic (confidence: low). Review against screenshots before use."
+  "gaps_note": "Only Create alarm (step 1) and Create log group were captured; the landing page rendered blank (iframe), so nav and all list/detail pages are provenance=reference from the current console. Re-crawl with iframe text extraction to verify column headers and nav labels."
 }
