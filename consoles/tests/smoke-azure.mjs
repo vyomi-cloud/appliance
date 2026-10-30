@@ -785,6 +785,35 @@ try {
   check("UI create namespace → visible over native ARM (properties.namespaces)",
     (nsCluster.properties?.namespaces || []).some((x) => x.name === NS), JSON.stringify(nsCluster.properties?.namespaces));
   await shot("28-aks-namespaces");
+  // ── Network security group created through the wizard → visible over native ARM ──────
+  const NSG = `vysmokensg${n}`;
+  const NSG2 = `vywirensg${n}`;
+  const RULE = `allow-smoke-${n}`;
+  const NSGLOCK = `vynsglock${n}`;
+  await page.goto(UI + "#/nsgs/create");
+  await page.getByLabel("Name", { exact: true }).fill(NSG);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await shot("23-nsg-create-basics");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: NSG, exact: true }).waitFor({ timeout: 10000 });
+  const nsgGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}`);
+  check("UI create NSG → visible over native ARM", nsgGet.status === 200, `HTTP ${nsgGet.status}`);
+  await shot("24-nsg-overview");
+
+  // ── Inbound security rule added in the UI → visible as a native ARM child resource ────
+  await openPanel("Inbound security rules");
+  await page.getByRole("toolbar", { name: "Inbound security rules commands" }).getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(RULE);
+  await page.getByLabel("Priority", { exact: true }).fill("150");
+  await page.getByRole("dialog").getByRole("button", { name: "Add" }).click();
+  await page.getByRole("cell", { name: RULE, exact: true }).waitFor({ timeout: 10000 });
+  const ruleGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}/securityRules/${RULE}`);
+  check("UI add inbound rule → visible over native ARM (nested child resource)",
+    ruleGet.status === 200 && JSON.parse(ruleGet.text).properties?.direction === "Inbound", `HTTP ${ruleGet.status}`);
+  await shot("25-nsg-inbound-rules");
 
   // ── Lock created in the UI → visible over the native ARM wire ─────────────────────────
   await openPanel("Locks");
@@ -931,6 +960,31 @@ try {
   await page.getByRole("heading", { name: "SQL databases", exact: true }).waitFor({ timeout: 10000 });
   const dbGone = await sqlArm("GET", `/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SRV}/databases/${DB}`);
   check("UI delete SQL database → ARM GET 404", dbGone.status === 404, `HTTP ${dbGone.status}`);
+  await page.getByLabel("Lock name", { exact: true }).fill(NSGLOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByText(NSGLOCK, { exact: true }).waitFor({ timeout: 10000 });
+  const nsgLockGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}/providers/Microsoft.Authorization/locks/${NSGLOCK}`);
+  check("UI create lock on NSG → visible over native ARM", nsgLockGet.status === 200, `HTTP ${nsgLockGet.status}`);
+  await shot("26-nsg-locks");
+
+  // ── NSG created over the wire → visible in the UI (CLI → UI), then deleted in the UI ──
+  const nsgPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG2}`, { location: "eastus" });
+  check("ARM PUT network security group over wire", nsgPut.status === 200 || nsgPut.status === 201, `HTTP ${nsgPut.status}`);
+  await page.goto(UI + "#/nsgs");
+  await page.getByRole("link", { name: NSG2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created NSG shown in browse grid", true);
+  await shot("27-nsg-browse");
+  await page.getByRole("checkbox", { name: `Select /subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG2}` }).click();
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(NSG2);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("link", { name: NSG2, exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  let nsgGone = { status: 0 };
+  for (let i = 0; i < 20 && nsgGone.status !== 404; i++) {
+    nsgGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG2}`);
+    if (nsgGone.status !== 404) await page.waitForTimeout(500);
+  }
+  check("UI delete NSG → ARM GET 404", nsgGone.status === 404, `HTTP ${nsgGone.status}`);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});
