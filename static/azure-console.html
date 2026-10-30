@@ -5386,6 +5386,18 @@ SUB_RENDERERS.apimnamedvalues = function(svc, full, host){
       const r = await arm("POST", it.id + "/listValue", {}, svc.apiVersion); if (r.ok) alert(it.name + " = " + r.json.value); else toast("Failed: " + rbErr(r), "err"); }, "sec")] : [],
   });
 };
+// ---- API Management: Application Insights = the service's App Insights loggers ----
+SUB_RENDERERS.apimappinsights = function(svc, full, host){
+  return rbChildCrud(full, host, {
+    coll: "loggers", apiv: svc.apiVersion, child: "Logger",
+    intro: "Application Insights loggers of " + full.name + ": the gateway sends request telemetry to each one. Instrumentation keys are never returned by GET.",
+    empty: "No Application Insights logger on " + full.name + ". Add one to start sending gateway telemetry.",
+    columns: [["properties.loggerType","Type"],["properties.description","Description"],["properties.isBuffered","Buffered"]],
+    fields: [{key:"description", label:"Description", default:"Application Insights logger"},
+             {key:"key", label:"Instrumentation key", default:"00000000-0000-0000-0000-000000000000"}],
+    body: v => ({properties:{loggerType:"applicationInsights", description: v.description, isBuffered: true, credentials:{instrumentationKey: v.key}}}),
+  });
+};
 SUB_RENDERERS.apimdomains = async function(svc, full, host){
   const r = await arm("GET", full.id, undefined, svc.apiVersion);
   const hc = (r.ok && getPath(r.json,"properties.hostnameConfigurations")) || [];
