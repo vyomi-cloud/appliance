@@ -27,6 +27,7 @@ export default function BrowseGrid({
   extraCommands,
   emptyAction,
   csvName = "export.csv",
+  filterPlaceholder = "Filter for any field...",
 }) {
   const [filter, setFilter] = useState("");
   const [pillValues, setPillValues] = useState({});
@@ -83,7 +84,7 @@ export default function BrowseGrid({
       </div>
 
       <div className="vy-filters">
-        <Input size="small" style={{ width: 260 }} contentBefore={<Filter20Regular />} placeholder="Filter for any field..." value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Filter for any field" />
+        <Input size="small" style={{ width: 260 }} contentBefore={<Filter20Regular />} placeholder={filterPlaceholder} value={filter} onChange={(_, d) => setFilter(d.value)} aria-label={filterPlaceholder} />
         {subscriptionLabel && <span className="vy-pill vy-pill-static" title="Vyomi simulates one subscription">Subscription equals <b>{subscriptionLabel}</b></span>}
         {pills.map((p) => {
           const opts = [...new Set(items.map(p.value).filter(Boolean))].sort();

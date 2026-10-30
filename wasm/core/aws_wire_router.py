@@ -167,6 +167,7 @@ from core import azure_cosmos_core as az_cosmos
 from core.azure_cosmos_core import CosmosStore
 from core import azure_keyvault_secrets_core as az_kvsec
 from core import azure_keyvault_keys_core as az_kvkeys
+from core import azure_keyvault_certificates_core as az_kvcerts
 from core import azure_queue_core as az_queue
 from core.azure_queue_core import AzureQueueStore
 from core import azure_servicebus_core as az_sb
@@ -205,6 +206,8 @@ def _azure_service(path, lheaders, query):
             return "az-kv-keys"
         if s0 == "secrets":
             return "az-kv-secrets"
+        if s0 == "certificates":
+            return "az-kv-certs"
     # Cosmos DB: /dbs path or the documentdb headers.
     if p.startswith("/dbs") or any(k.startswith("x-ms-documentdb") for k in lheaders):
         return "az-cosmos"
@@ -343,6 +346,7 @@ class AwsWireRouter:
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
         self.az_kvsec = s.get("az_kvsec") or InMemoryKvStore()
         self.az_kvkeys = s.get("az_kvkeys") or InMemoryKeyStore()
+        self.az_kvcerts = s.get("az_kvcerts") or InMemoryKvStore()
         self.az_queue = s.get("az_queue") or AzureQueueStore()
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
@@ -599,6 +603,7 @@ class AwsWireRouter:
             _az_core = {
                 "az-blob": (az_blob, self.az_blob), "az-cosmos": (az_cosmos, self.az_cosmos),
                 "az-kv-secrets": (az_kvsec, self.az_kvsec), "az-kv-keys": (az_kvkeys, self.az_kvkeys),
+                "az-kv-certs": (az_kvcerts, self.az_kvcerts),
                 "az-queue": (az_queue, self.az_queue), "az-servicebus": (az_sb, self.az_sb),
             }[svc]
             mod, store = _az_core

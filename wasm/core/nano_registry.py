@@ -107,6 +107,7 @@ def get() -> dict:
             "az_cosmos": CosmosStore(),
             "az_kvsec":  InMemoryKvStore(),
             "az_kvkeys": InMemoryKeyStore(),
+            "az_kvcerts": InMemoryKvStore(),
             "az_queue":  AzureQueueStore(),
             "az_sb":     InMemoryMessagingStore(),   # Service Bus (router-only today)
             "az_arm":    AzureArm(),                 # ARM control plane (VMs, apps, …): public `state` map → persisted + synced

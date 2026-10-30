@@ -173,6 +173,49 @@ def run() -> int:
     _check("identity merges without wiping type",
            r["body"]["identity"]["type"] == "SystemAssigned" and r["body"]["identity"]["principalId"] == "p1")
 
+    # 19. Microsoft.Authorization/locks — a resource-scoped extension resource (any
+    # resource type can carry one; the vault is just the first UI to surface it).
+    kv = _p(RG, "Microsoft.KeyVault", "vaults", "uickv")
+    arm.handle("PUT", kv, {"api-version": "2023-07-01"}, {"location": "eastus"})
+    lock = kv + "/providers/Microsoft.Authorization/locks/dont-delete-me"
+    r = arm.handle("GET", kv + "/providers/Microsoft.Authorization/locks", {"api-version": "2020-05-01"})
+    _check("locks empty before create", r["status"] == 200 and r["body"]["value"] == [])
+    r = arm.handle("PUT", lock, {"api-version": "2020-05-01"},
+                   {"properties": {"level": "CanNotDelete", "notes": "protected"}})
+    _check("lock put 201", r["status"] == 201 and r["body"]["name"] == "dont-delete-me")
+    _check("lock id canonical", r["body"]["id"].lower() == lock.lower())
+    _check("lock level", r["body"]["properties"]["level"] == "CanNotDelete")
+    r = arm.handle("GET", lock, {"api-version": "2020-05-01"})
+    _check("lock get 200", r["status"] == 200 and r["body"]["properties"]["notes"] == "protected")
+    r = arm.handle("GET", kv + "/providers/Microsoft.Authorization/locks", {"api-version": "2020-05-01"})
+    _check("locks list has item", any(x["name"] == "dont-delete-me" for x in r["body"]["value"]))
+    # a lock on one vault doesn't leak into another vault's scope
+    kv2 = _p(RG, "Microsoft.KeyVault", "vaults", "otherkv")
+    arm.handle("PUT", kv2, {"api-version": "2023-07-01"}, {"location": "eastus"})
+    r = arm.handle("GET", kv2 + "/providers/Microsoft.Authorization/locks", {"api-version": "2020-05-01"})
+    _check("locks scoped per resource", r["body"]["value"] == [])
+
+    # 20. Activity log (Microsoft.Insights/eventtypes/management/values) — vault create and
+    # lock writes land on the unified subscription-scoped feed, filtered by resourceUri.
+    events_path = f"/subscriptions/{SUB}/providers/Microsoft.Insights/eventtypes/management/values"
+    ev = arm.handle("GET", events_path, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{kv}'"})
+    ops = [e["operationName"]["value"] for e in ev["body"]["value"]]
+    _check("activity log records the vault create + the lock create, newest first",
+           ev["status"] == 200 and ops[0] == "Create lock" and "Create" in ops)
+    ev2 = arm.handle("GET", events_path, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{kv2}'"})
+    ops2 = [e["operationName"]["value"] for e in ev2["body"]["value"]]
+    _check("activity log is scoped per vault (no cross-resource leakage)", "Create lock" not in ops2)
+
+    r = arm.handle("DELETE", lock, {"api-version": "2020-05-01"})
+    _check("lock delete 200", r["status"] == 200)
+    r = arm.handle("GET", lock, {"api-version": "2020-05-01"})
+    _check("lock gone after delete", r["status"] == 404)
+    # deleting the resource cascades to its locks
+    arm.handle("PUT", lock, {"api-version": "2020-05-01"}, {"properties": {"level": "ReadOnly"}})
+    arm.handle("DELETE", kv, {"api-version": "2023-07-01"})
+    r = arm.handle("GET", kv + "/providers/Microsoft.Authorization/locks", {"api-version": "2020-05-01"})
+    _check("locks cascade-deleted with resource", r["body"]["value"] == [])
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 

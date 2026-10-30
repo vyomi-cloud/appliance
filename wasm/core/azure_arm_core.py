@@ -469,6 +469,12 @@ class AzureArm:
             rec = self.state.pop(key, None)
             if rec is not None:
                 _record_activity(leaf_name, "Delete", f"{full_type} '{leaf_name}'")
+                # Extension resources (locks, …) are stored under the SAME flat state map,
+                # keyed "{parent id}/providers/<ext ns>/<ext type>/<name>" — real ARM cascades
+                # their deletion with the parent, so sweep them here too.
+                prefix = key + "/providers/"
+                for ext_key in [k for k in self.state if k.startswith(prefix)]:
+                    del self.state[ext_key]
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
