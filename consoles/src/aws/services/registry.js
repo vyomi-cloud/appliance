@@ -7,6 +7,21 @@ export const CATEGORIES = ["Compute", "Storage", "Database", "Networking & Conte
 
 export const SERVICES = [
   { id: "secretsmanager", icon: "secretsmanager", title: "Secrets Manager", description: "Store, manage, and retrieve secrets", category: "Security, Identity, & Compliance", load: () => import("./secretsmanager/index.jsx") },
+  { id: "s3", title: "S3", description: "Scalable storage in the cloud", category: "Storage", load: () => import("./s3/index.jsx") },
+  { id: "dynamodb", title: "DynamoDB", description: "Managed NoSQL database", category: "Database", load: () => import("./dynamodb/index.jsx") },
+  { id: "ec2", title: "EC2", description: "Virtual servers in the cloud", category: "Compute", classic: "ec2" },
+  { id: "lambda", title: "Lambda", description: "Run code without thinking about servers", category: "Compute", classic: "lambda" },
+  { id: "rds", title: "RDS", description: "Managed relational database service", category: "Database", classic: "rds" },
+  { id: "vpc", title: "VPC", description: "Isolated cloud resources", category: "Networking & Content Delivery", classic: "vpc" },
+  { id: "apigateway", title: "API Gateway", description: "Build, deploy, and manage APIs", category: "Networking & Content Delivery", classic: "apigateway" },
+  { id: "iam", title: "IAM", description: "Manage access to AWS resources", category: "Security, Identity, & Compliance", classic: "iam" },
+  { id: "kms", title: "Key Management Service", description: "Create and control encryption keys", category: "Security, Identity, & Compliance", load: () => import("./kms/index.jsx") },
+  { id: "secretsmanager", title: "Secrets Manager", description: "Store, manage, and retrieve secrets", category: "Security, Identity, & Compliance", classic: "secretsmanager" },
+  { id: "sqs", icon: "sqs", title: "Simple Queue Service", description: "Managed message queues", category: "Application Integration", load: () => import("./sqs/index.jsx") },
+  { id: "sns", title: "Simple Notification Service", description: "Pub/sub, SMS, email, and mobile push", category: "Application Integration", classic: "sns" },
+  { id: "eventbridge", title: "EventBridge", description: "Serverless event bus", category: "Application Integration", classic: "eventbridge" },
+  { id: "cloudwatch", title: "CloudWatch", description: "Monitor resources and applications", category: "Management & Governance", classic: "cloudwatch" },
+  { id: "cloudformation", title: "CloudFormation", description: "Create and manage resources with templates", category: "Management & Governance", classic: "cloudformation" },
 ];
 
 export const byId = Object.fromEntries(SERVICES.map((s) => [s.id, s]));
