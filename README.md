@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-30 05:59 UTC · refreshes after every pipeline run_
+_Updated 2026-10-30 06:23 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -8,8 +8,8 @@ _Updated 2026-10-30 05:59 UTC · refreshes after every pipeline run_
 - **Building now:** nothing
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
-- **Consoles really implemented:** offline 73% · Nano 76%
-- **Hourly tests:** 218 of 226 suites passing (run 03:58 UTC)
+- **Consoles really implemented:** offline 74% · Nano 76%
+- **Hourly tests:** 225 of 233 suites passing (run 06:05 UTC)
 - **Upstream watch:** 60 open changes from the real clouds to adopt
 
 ## By cloud
@@ -17,8 +17,8 @@ _Updated 2026-10-30 05:59 UTC · refreshes after every pipeline run_
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
 | AWS | 19 | 0 | 9 | 17 | 61% · 80% |
-| GCP | 18 | 0 | 6 | 12 | 86% · 74% |
-| Azure | 18 | 0 | 6 | 12 | 73% · 74% |
+| GCP | 18 | 0 | 6 | 12 | 87% · 74% |
+| Azure | 18 | 0 | 6 | 12 | 74% · 74% |
 
 ## In progress
 
@@ -79,70 +79,70 @@ _Updated 2026-10-30 05:59 UTC · refreshes after every pipeline run_
 
 | Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|---|---|
-| EC2 | — | not audited | 🧩 7/18 · 🧩 11/18 | 0 · 0 | ✅ watched | before gate |
+| EC2 | — | not audited | 🧩 7/18 · 🧩 11/18 | 10 · 7 | ✅ watched | before gate |
 | S3 | — | not audited | 🧩 16/18 · 🧩 15/18 | 0 · 0 | ✅ watched | before gate |
 | IAM | — | not audited | 🧩 8/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
 | RDS | — | not audited | 🧩 14/18 · 🧩 15/18 | 0 · 0 | ✅ watched | before gate |
-| DynamoDB | — | not audited | 🧩 6/19 · 🧩 15/19 | 12 · 3 | ✅ watched | before gate |
-| SQS | — | not audited | 🧩 6/13 · 🧩 9/13 | 6 · 3 | ✅ watched | before gate |
-| Lambda | — | not audited | 🧩 8/16 · 🧩 13/16 | 0 · 0 | ✅ watched | before gate |
+| DynamoDB | — | not audited | 🧩 6/19 · 🧩 15/19 | 1 · 1 | ✅ watched | before gate |
+| SQS | — | not audited | 🧩 6/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
+| Lambda | — | not audited | 🧩 8/16 · 🧩 13/16 | 7 · 2 | ✅ watched | before gate |
 | API Gateway | caddy · Lite | not audited | 🧩 9/15 · 🧩 12/15 | 0 · 0 | ✅ watched | before gate |
 | VPC | — | not audited | 🧩 9/14 · 🧩 13/14 | 0 · 0 | ✅ watched | before gate |
 | EventBridge | nats · Lite | 🟡 rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered | 🧩 7/15 · 🧩 12/15 | 0 · 0 | ✅ watched | before gate |
-| Secrets Manager | — | not audited | 🧩 6/15 · 🧩 12/15 | 8 · 2 | ✅ watched | before gate |
-| KMS | — | not audited | 🧩 6/16 · 🧩 14/16 | 9 · 1 | ✅ watched | before gate |
+| Secrets Manager | — | not audited | 🧩 6/15 · 🧩 12/15 | 0 · 0 | ✅ watched | before gate |
+| KMS | — | not audited | 🧩 6/16 · 🧩 14/16 | 0 · 0 | ✅ watched | before gate |
 | CloudWatch Logs | logstore · in-process · + fluent-bit agent | ✅ in-process engine, SQLite store; filter + Insights queries | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | [v3.0.11](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.11) |
 | Elastic Load Balancing | caddy · Lite | ⚪ no traffic forwarded (Caddy not wired) | 🧩 7/8 · 🧩 7/8 | 0 · 0 | ✅ watched | [v3.0.10](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.10) |
-| Systems Manager | in-process | 🟡 Parameter Store real; Run Command reports Success without running | 🧩 6/10 · 🧩 6/10 | 3 · 3 | ✅ watched | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
-| Step Functions | workflow-engine · in-process · + temporal engine | ✅ ASL interpreter runs executions and calls Lambda; Wait doesn't sleep | 🧩 9/12 · 🧩 9/12 | 2 · 2 | ✅ watched | [v3.0.13](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.13) |
+| Systems Manager | in-process | 🟡 Parameter Store real; Run Command reports Success without running | 🧩 6/10 · 🧩 6/10 | 0 · 0 | ✅ watched | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
+| Step Functions | workflow-engine · in-process · + temporal engine | ✅ ASL interpreter runs executions and calls Lambda; Wait doesn't sleep | 🧩 9/12 · 🧩 9/12 | 0 · 0 | ✅ watched | [v3.0.13](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.13) |
 | API Gateway V2 | caddy · Lite | not audited | 🧩 12/13 · 🧩 12/13 | 0 · 0 | ✅ watched | [v3.0.25](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.25) |
 | Amazon CloudWatch | victoriametrics · Lite · + vmalert agent | not audited | — | – · – | ✅ watched | [v3.0.26](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.26) |
-| Amazon SNS | nats · Lite | not audited | 🧩 7/10 · 🧩 7/10 | 0 · 0 | ✅ watched | [v3.0.28](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.28) |
+| Amazon SNS | nats · Lite | not audited | 🧩 7/10 · 🧩 7/10 | 2 · 2 | ✅ watched | [v3.0.28](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.28) |
 
 ### GCP
 
 | Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|---|---|
 | Compute Engine | — | not audited | 🧩 13/18 · 🧩 12/18 | 0 · 0 | ✅ watched | before gate |
-| Cloud Storage | — | not audited | 🧩 13/14 · 🧩 10/14 | 0 · 0 | ✅ watched | before gate |
+| Cloud Storage | — | not audited | ✅ 14/14 · 🧩 10/14 | 0 · 4 | ✅ watched | before gate |
 | Cloud SQL | — | not audited | 🧩 15/17 · 🧩 14/17 | 0 · 0 | ⚠️ 50 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
 | Pub/Sub | — | not audited | 🧩 11/13 · 🧩 10/13 | 0 · 0 | ✅ watched | before gate |
 | Firestore | — | not audited | 🧩 13/14 · 🧩 8/14 | 0 · 0 | ✅ watched | before gate |
-| Cloud Functions | — | not audited | 🧩 14/15 · 🧩 9/15 | 0 · 0 | ✅ watched | before gate |
-| API Gateway | caddy · Lite | not audited | ✅ 12/12 · 🧩 10/12 | 0 · 2 | ✅ watched | before gate |
-| VPC Network | — | not audited | 🧩 12/14 · 🧩 8/14 | 0 · 0 | ✅ watched | before gate |
-| IAM & Admin | — | not audited | 🧩 6/9 · 🧩 8/9 | 3 · 1 | ✅ watched | before gate |
+| Cloud Functions | — | not audited | ✅ 15/15 · 🧩 9/15 | 0 · 6 | ✅ watched | before gate |
+| API Gateway | caddy · Lite | not audited | ✅ 12/12 · 🧩 10/12 | 0 · 0 | ✅ watched | before gate |
+| VPC Network | — | not audited | 🧩 13/14 · 🧩 8/14 | 1 · 6 | ✅ watched | before gate |
+| IAM & Admin | — | not audited | 🧩 6/9 · 🧩 8/9 | 0 · 0 | ✅ watched | before gate |
 | Eventarc | — | not audited | 🧩 11/12 · 🧩 10/12 | 0 · 0 | ✅ watched | before gate |
-| Secret Manager | — | not audited | 🧩 10/13 · 🧩 8/13 | 0 · 0 | ✅ watched | before gate |
-| Cloud KMS | — | not audited | ✅ 13/13 · 🧩 11/13 | 0 · 0 | ✅ watched | before gate |
+| Secret Manager | — | not audited | 🧩 11/13 · 🧩 8/13 | 2 · 5 | ✅ watched | before gate |
+| Cloud KMS | — | not audited | 🧩 12/13 · 🧩 11/13 | 1 · 2 | ✅ watched | before gate |
 | Cloud Scheduler | in-process | 🟡 cron fires only on reads; HTTP targets not sent (#147-#149) | 🧩 9/11 · 🧩 9/11 | 0 · 0 | ✅ watched | [v3.0.14](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.14) |
 | Kubernetes Engine | k3s · Max | ⚪ no Kubernetes API; kubectl can't connect (k3s not wired) | 🧩 8/11 · 🧩 8/11 | 0 · 0 | ✅ watched | [v3.0.15](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.15) |
 | IAM Service Account Credentials | in-process | ✅ real RS256-signed tokens, JWTs and blobs | 🧩 8/11 · 🧩 9/11 | 0 · 0 | ✅ watched | [v3.0.16](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.16) |
 | Memorystore for Redis | valkey · Lite | 🟡 one shared 64 MB Valkey; port not published, no per-instance AUTH | 🧩 10/11 · 🧩 8/11 | 0 · 0 | ✅ watched | [v3.0.17](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.17) |
-| Artifact Registry | registry · Lite | not audited | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | [v3.0.29](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.29) |
-| Cloud Monitoring | victoriametrics · Lite · + vmalert agent | not audited | 🧩 10/11 · 🧩 10/11 | 1 · 1 | ✅ watched | [v3.0.30](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.30) |
+| Artifact Registry | registry · Lite | not audited | ✅ 11/11 · 🧩 10/11 | 0 · 1 | ✅ watched | [v3.0.29](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.29) |
+| Cloud Monitoring | victoriametrics · Lite · + vmalert agent | not audited | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | [v3.0.30](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.30) |
 
 ### Azure
 
 | Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|---|---|
-| Virtual Machines | — | not audited | 🧩 13/22 · 🧩 14/22 | 0 · 0 | ✅ watched | before gate |
-| Storage accounts | — | not audited | 🧩 12/22 · 🧩 12/22 | 10 · 10 | ✅ watched | before gate |
-| SQL servers | — | not audited | 🧩 15/22 · 🧩 14/22 | 7 · 8 | ✅ watched | before gate |
+| Virtual Machines | — | not audited | 🧩 13/22 · 🧩 13/22 | 0 · 0 | ✅ watched | before gate |
+| Storage accounts | — | not audited | 🧩 12/22 · 🧩 12/22 | 0 · 0 | ✅ watched | before gate |
+| SQL servers | — | not audited | 🧩 15/22 · 🧩 14/22 | 0 · 0 | ✅ watched | before gate |
 | Service Bus | messaging-core · in-process · + nats agent · + amqp protocol | 🟡 REST management + messaging only; native SDKs need AMQP (in PRs #35-#45, not merged) | 🧩 13/17 · 🧩 13/17 | 0 · 0 | ✅ watched | before gate |
-| Cosmos DB | — | not audited | 🧩 13/20 · 🧩 12/20 | 7 · 8 | ✅ watched | before gate |
+| Cosmos DB | — | not audited | 🧩 13/20 · 🧩 12/20 | 0 · 0 | ✅ watched | before gate |
 | Function apps | — | not audited | 🧩 12/23 · 🧩 14/23 | 0 · 0 | ✅ watched | before gate |
-| API Management | caddy · Lite | not audited | 🧩 14/20 · 🧩 14/20 | 0 · 0 | ✅ watched | before gate |
-| Virtual networks | — | not audited | 🧩 11/17 · 🧩 12/17 | 6 · 5 | ✅ watched | before gate |
-| Network Security Group | — | not audited | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | before gate |
-| Event Grid topics | — | not audited | 🧩 13/16 · 🧩 12/16 | 3 · 4 | ✅ watched | before gate |
-| Key vaults | — | not audited | 🧩 12/17 · 🧩 12/17 | 5 · 5 | ✅ watched | before gate |
+| API Management | caddy · Lite | not audited | 🧩 16/20 · 🧩 15/20 | 4 · 5 | ✅ watched | before gate |
+| Virtual networks | — | not audited | 🧩 11/17 · 🧩 12/17 | 0 · 0 | ✅ watched | before gate |
+| Network Security Group | — | not audited | ✅ 11/11 · 🧩 10/11 | 0 · 1 | ✅ watched | before gate |
+| Event Grid topics | — | not audited | 🧩 13/16 · 🧩 12/16 | 0 · 0 | ✅ watched | before gate |
+| Key vaults | — | not audited | 🧩 12/17 · 🧩 12/17 | 0 · 0 | ✅ watched | before gate |
 | Entra ID / RBAC | — | not audited | 🧩 5/6 · 🧩 5/6 | 0 · 0 | ✅ watched | before gate |
 | Container Apps | docker · Pro · + caddy gateway | 🟡 real containers on Pro/Max only; no ingress URL | 🧩 12/17 · 🧩 13/17 | 0 · 0 | ✅ watched | [v3.0.18](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.18) |
-| App Configuration | in-process | ✅ real key-value data plane | 🧩 14/16 · 🧩 13/16 | 2 · 3 | ✅ watched | [v3.0.19](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.19) |
-| Azure AI services | ollama · Max | ⚪ no model inference (Ollama not wired) | 🧩 14/16 · 🧩 13/16 | 2 · 3 | ✅ watched | [v3.0.20](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.20) |
+| App Configuration | in-process | ✅ real key-value data plane | 🧩 14/16 · 🧩 13/16 | 0 · 0 | ✅ watched | [v3.0.19](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.19) |
+| Azure AI services | ollama · Max | ⚪ no model inference (Ollama not wired) | 🧩 14/16 · 🧩 13/16 | 0 · 0 | ✅ watched | [v3.0.20](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.20) |
 | DNS zones | coredns · Lite | ⚪ no DNS server answers (CoreDNS not wired) | 🧩 12/14 · 🧩 12/14 | 0 · 0 | ✅ watched | [v3.0.21](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.21) |
-| Monitor alerts | victoriametrics · Lite · + vmalert agent | ⚪ alert rules stored, never evaluated or fired (vmalert not wired) | 🧩 14/15 · 🧩 14/15 | 1 · 1 | ✅ watched | [v3.0.22](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.22) |
+| Monitor alerts | victoriametrics · Lite · + vmalert agent | ⚪ alert rules stored, never evaluated or fired (vmalert not wired) | 🧩 14/15 · 🧩 14/15 | 0 · 0 | ✅ watched | [v3.0.22](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.22) |
 | Log Analytics | logstore · in-process · + fluent-bit agent | ⚪ workspaces only; no ingestion or KQL queries | 🧩 15/16 · 🧩 15/16 | 0 · 0 | ✅ watched | [v3.0.23](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.23) |
 
 - **Nano ↔ offline gaps:** Blob containers (Nano-only), Cosmos databases (Nano-only), Key Vault keys (Nano-only), Key Vault secrets (Nano-only), Storage queues (Nano-only), azure_subresource_core (Nano-only)
@@ -1018,7 +1018,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Console parts not live yet — GCP (90)</summary>
+<details><summary>Console parts not live yet — GCP (86)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -1027,26 +1027,22 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | Compute Engine | offline | tab: Metadata | static |
 | Compute Engine | offline | tab: Connect | static |
 | Compute Engine | offline | tab: Scheduling | static |
-| Cloud Functions | offline | tab: Labels | static |
 | Kubernetes Engine | offline | tab: Details | static |
 | Kubernetes Engine | offline | tab: Networking | static |
 | Kubernetes Engine | offline | tab: Observability | static |
-| Cloud Storage | offline | tab: Labels | static |
-| Artifact Registry | offline | tab: Labels | static |
 | Cloud SQL | offline | tab: Labels | static |
 | Cloud SQL | offline | tab: Connectivity | static |
 | Firestore | offline | tab: Labels | static |
 | Memorystore for Redis | offline | tab: Configuration | static |
-| VPC Network | offline | tab: Labels | static |
 | VPC Network | offline | tab: Properties | static |
 | Pub/Sub | offline | tab: Labels | static |
 | Pub/Sub | offline | tab: Properties | static |
 | Eventarc | offline | tab: Labels | static |
 | Cloud Scheduler | offline | tab: Last execution | static |
 | Cloud Scheduler | offline | tab: Retry policy | static |
-| Secret Manager | offline | tab: Labels | static |
 | Secret Manager | offline | tab: Secret value | static |
 | Secret Manager | offline | tab: Replication | static |
+| Cloud KMS | offline | tab: Rotation & labels | static |
 | IAM & Admin | offline | tab: Members | static |
 | IAM & Admin | offline | tab: Permissions | static |
 | IAM & Admin | offline | tab: Properties | static |
@@ -1115,7 +1111,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Console parts not live yet — Azure (166)</summary>
+<details><summary>Console parts not live yet — Azure (163)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -1167,9 +1163,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | Function apps | offline | tab: Scale up (App Service plan) | unimplemented |
 | Function apps | offline | tab: Deployment Center | static |
 | Function apps | offline | tab: Log stream | unimplemented |
-| API Management | offline | tab: Diagnose and solve problems | unimplemented |
 | API Management | offline | tab: Named values | unimplemented |
-| API Management | offline | tab: Virtual network | static |
 | API Management | offline | tab: Custom domains | unimplemented |
 | API Management | offline | tab: Backup | unimplemented |
 | API Management | offline | tab: Metrics | static |
@@ -1179,7 +1173,6 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | Virtual networks | offline | tab: DNS servers | unimplemented |
 | Virtual networks | offline | tab: DDoS protection | unimplemented |
 | Virtual networks | offline | tab: Diagnostic settings | unimplemented |
-| Network Security Group | offline | tab: Diagnose and solve problems | unimplemented |
 | Event Grid topics | offline | tab: Diagnose and solve problems | unimplemented |
 | Event Grid topics | offline | tab: Topic types | unimplemented |
 | Event Grid topics | offline | tab: Networking | static |
@@ -1202,6 +1195,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | Azure AI services | offline | tab: Diagnose and solve problems | unimplemented |
 | Azure AI services | offline | tab: Networking | static |
 | Entra ID / RBAC | offline | tab: Conditions | unimplemented |
+| Virtual Machines | nano | page: Virtual Machines | static |
 | Virtual Machines | nano | tab: Diagnose and solve problems | unimplemented |
 | Virtual Machines | nano | tab: Networking | unimplemented |
 | Virtual Machines | nano | tab: Connect | static |
@@ -1254,7 +1248,6 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | API Management | nano | tab: Virtual network | static |
 | API Management | nano | tab: Custom domains | static |
 | API Management | nano | tab: Backup | static |
-| API Management | nano | tab: Metrics | static |
 | Virtual networks | nano | tab: Diagnose and solve problems | unimplemented |
 | Virtual networks | nano | tab: Subnets | static |
 | Virtual networks | nano | tab: Connected devices | static |
@@ -1292,7 +1285,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 | Suite | Result | Checks |
 |---|---|---|
-| offline-ui-crawl | ❌ | 40/58 |
+| offline-ui-crawl | ❌ | 49/58 |
 | offline-console-actions | ❌ | 370/372 |
 | offline-api-ec2-instance-detail | ✅ | 3/3 |
 | offline-api-s3-bucket-creation-date | ✅ | 3/3 |
@@ -1321,7 +1314,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-cli-gcp | ✅ | 6/6 |
 | offline-cli-azure | ✅ | 6/6 |
 | offline-ui-core | ✅ | 9/9 |
-| nano-ui-crawl | ❌ | 44/63 |
+| nano-ui-crawl | ❌ | 51/63 |
 | nano-cores | ✅ | 344/344 |
 | nano-aws-iam-detail | ✅ | 8/8 |
 | nano-aws-ec2-launch | ✅ | 13/13 |
@@ -1510,13 +1503,20 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | nano-ui-aws-secrets-created | ✅ | 3/3 |
 | nano-ui-azure-locks | ✅ | 8/8 |
 | nano-ui-gcp-detail-panes | ✅ | 4/4 |
+| nano-ui-gcp-iam-detail | ✅ | 4/4 |
 | offline-sdk-python-aws-s3-config | ✅ | 4/4 |
 | offline-ui-aws-apigw-deployments | ✅ | 4/4 |
+| offline-ui-aws-dynamodb-settings | ✅ | 14/14 |
+| offline-ui-aws-kms-tabs | ✅ | 12/12 |
 | offline-ui-aws-rds-tabs | ✅ | 22/22 |
 | offline-ui-aws-s3-config | ✅ | 35/35 |
+| offline-ui-aws-secretsmanager-tabs | ✅ | 10/10 |
+| offline-ui-aws-sqs-tabs | ✅ | 6/6 |
 | offline-ui-azure-identity | ✅ | 9/9 |
 | offline-ui-azure-locks | ✅ | 8/8 |
+| offline-ui-azure-network-diagnose | ✅ | 7/7 |
 | offline-ui-gcp-detail-panes | ✅ | 4/4 |
+| offline-ui-gcp-iam-detail | ✅ | 5/5 |
 | offline-ui-gcp-labels-tab | ✅ | 9/9 |
 
 </details>
