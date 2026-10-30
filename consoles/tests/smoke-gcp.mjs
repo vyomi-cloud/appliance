@@ -430,6 +430,37 @@ try {
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete function via UI → gone over native wire", (await wire(`/v2/projects/vyomi-project/locations/us-central1/services/${FN}`)).status === 404);
 
+  // Cloud Run: create a service via the UI → visible over the native Cloud Run Admin API v2
+  // wire, then the reverse (a job created over the wire shows up in the UI jobs list).
+  const RUNSVC = `v4-gcp-run-${Date.now() % 100000}`;
+  await page.goto(UI + "#/run/create");
+  await page.getByLabel("Service name").fill(RUNSVC);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: RUNSVC, exact: true }).waitFor({ timeout: 10000 });
+  const runSvcWire = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${RUNSVC}`);
+  check("create service via UI → visible over native Cloud Run wire", runSvcWire.name?.endsWith(`/services/${RUNSVC}`), JSON.stringify(runSvcWire).slice(0, 200));
+  const runSvcPolicy = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${RUNSVC}:getIamPolicy`);
+  check("Allow public access → setIamPolicy grants allUsers run.invoker", (runSvcPolicy.bindings || []).some((b) => b.role === "roles/run.invoker" && b.members?.includes("allUsers")));
+  await shot("14-run-service-created");
+
+  const RUNJOB = `v4-gcp-run-job-${Date.now() % 100000}`;
+  await wire(`/v2/projects/vyomi-project/locations/us-central1/jobs?jobId=${RUNJOB}`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ template: { template: { containers: [{ image: "us-docker.pkg.dev/cloudrun/container/hello" }] } } }),
+  });
+  await page.goto(UI + "#/run/jobs");
+  await page.getByRole("cell", { name: RUNJOB, exact: true }).waitFor({ timeout: 10000 });
+  check("job created over wire → shown in Cloud Run Jobs UI", true);
+  await shot("14-run-jobs");
+
+  await page.goto(UI + "#/run/services");
+  await page.getByRole("checkbox", { name: `Select ${RUNSVC}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(RUNSVC);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  check("delete service via UI → gone over native wire", (await wire(`/v2/projects/vyomi-project/locations/us-central1/services/${RUNSVC}`)).status === 404);
+
   // Not-simulated gaps carry the conformance attribute
   await page.goto(UI + "#/storage/monitoring");
   await page.locator("[data-vyomi-not-simulated]").first().waitFor({ timeout: 5000 });
