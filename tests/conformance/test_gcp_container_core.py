@@ -58,6 +58,29 @@ s, op = call(st, "POST", L + "/clusters", {"cluster": {"name": "ap", "autopilot"
 check("int enums on request (operationType/status)", s == 200 and op["operationType"] == 1 and op["status"] == 3, op)
 check("autopilot has no node pools", call(st, "GET", L + "/clusters/ap")[1]["nodePools"] == [])
 check("delete cluster", call(st, "DELETE", L + "/clusters/c1")[1]["operationType"] == "DELETE_CLUSTER" and call(st, "GET", L + "/clusters/c1")[0] == 404)
+
+# controlPlaneEndpointsConfig — DNS / IPv4 control plane access (console: "Access using DNS" /
+# "Access using IPv4 addresses"). Defaults both on; at least one must stay enabled.
+s, _ = call(st, "POST", L + "/clusters", {"cluster": {"name": "cpe-default", "initialNodeCount": 1}})
+c = call(st, "GET", L + "/clusters/cpe-default")[1]
+check("defaults: both DNS and IPv4 access enabled, public endpoint set",
+      c["controlPlaneEndpointsConfig"]["dnsEndpointConfig"]["allowExternalTraffic"] is True
+      and c["controlPlaneEndpointsConfig"]["ipEndpointsConfig"]["enabled"] is True and c["endpoint"], c)
+check("DNS endpoint hostname ends in .gke.goog", c["controlPlaneEndpointsConfig"]["dnsEndpointConfig"]["endpoint"].endswith(".gke.goog"), c)
+s, body = call(st, "POST", L + "/clusters", {"cluster": {"name": "cpe-bad", "initialNodeCount": 1,
+    "controlPlaneEndpointsConfig": {"dnsEndpointConfig": {"allowExternalTraffic": False}, "ipEndpointsConfig": {"enabled": False}}}})
+check("disabling both DNS and IPv4 access -> 400", s == 400 and body["error"]["status"] == "INVALID_ARGUMENT", body)
+s, _ = call(st, "POST", L + "/clusters", {"cluster": {"name": "cpe-dns-only", "initialNodeCount": 1,
+    "controlPlaneEndpointsConfig": {"ipEndpointsConfig": {"enabled": False}}}})
+c = call(st, "GET", L + "/clusters/cpe-dns-only")[1]
+check("IPv4 access disabled -> no public endpoint, DNS endpoint present",
+      c["endpoint"] == "" and not c["controlPlaneEndpointsConfig"]["ipEndpointsConfig"].get("publicEndpoint")
+      and c["controlPlaneEndpointsConfig"]["dnsEndpointConfig"]["allowExternalTraffic"] is True, c)
+s, body = call(st, "PUT", L + "/clusters/cpe-dns-only", {"update": {"desiredControlPlaneEndpointsConfig": {"dnsEndpointConfig": {"allowExternalTraffic": False}}}})
+check("flipping DNS off while IPv4 stays off -> 400 (no access method left)", s == 400, body)
+s, _ = call(st, "PUT", L + "/clusters/cpe-dns-only", {"update": {"desiredControlPlaneEndpointsConfig": {"ipEndpointsConfig": {"enabled": True}}}})
+c = call(st, "GET", L + "/clusters/cpe-dns-only")[1]
+check("re-enabling IPv4 access restores the public endpoint", s == 200 and bool(c["endpoint"]), c)
 print(f"RESULT pass={PASS} fail={FAIL}")
 
 

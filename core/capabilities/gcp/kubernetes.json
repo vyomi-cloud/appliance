@@ -40,8 +40,12 @@
  },
  "gcp.kubernetes.cluster.private-networking": {
   "title": "Restricting cluster access by DNS / IPv4 (private clusters)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Vyomi always creates clusters with a public endpoint; privateClusterConfig is not modeled."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Enforces that at least one control-plane access method (DNS-based or IPv4-based) stays enabled on create and update, and the cluster's endpoint/DNS hostname reflect the choice (no public IPv4 endpoint when IPv4 access is off). Vyomi does not run a reachable control plane behind either endpoint, so there is no live network boundary for the setting to actually restrict — same caveat as gcp.kubernetes.cluster.connect. Full private clusters (no node public IPs, authorized networks) are not modeled."
+  ],
+  "api": ["projects.locations.clusters.create", "projects.locations.clusters.update", "projects.locations.clusters.get"],
+  "tests": ["tests/conformance/test_gcp_container_core.py"]
  },
  "gcp.kubernetes.cluster.nodes": {
   "title": "Nodes (kubectl get nodes)",

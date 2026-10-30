@@ -140,6 +140,37 @@ def _endpoint(name):
     return "34.%d.%d.%d" % (h[0] % 200 + 20, h[1], h[2] % 253 + 1)
 
 
+def _dns_endpoint(name):
+    h = hashlib.sha256(("dns" + name).encode()).hexdigest()
+    loc = name.split("/")[3]
+    return "%s-%s-%s-%s-%s.%s.gke.goog" % (h[0:8], h[8:12], h[12:16], h[16:20], h[20:32], loc)
+
+
+def _control_plane_endpoints(spec, existing=None):
+    """`controlPlaneEndpointsConfig` (DNS-based / IPv4-based control plane access — the
+    console's 'Access using DNS' / 'Access using IPv4 addresses' checkboxes). At least one
+    must stay enabled, same as the real API."""
+    cpe = spec.get("controlPlaneEndpointsConfig") or {}
+    existing = existing or {}
+    dns_enabled = bool((cpe.get("dnsEndpointConfig") or {}).get(
+        "allowExternalTraffic", (existing.get("dnsEndpointConfig") or {}).get("allowExternalTraffic", True)))
+    ip_enabled = bool((cpe.get("ipEndpointsConfig") or {}).get(
+        "enabled", (existing.get("ipEndpointsConfig") or {}).get("enabled", True)))
+    if not dns_enabled and not ip_enabled:
+        raise _E(400, "INVALID_ARGUMENT", "At least one of DNS-based or IPv4-based control plane access must stay enabled.")
+    return dns_enabled, ip_enabled
+
+
+def _apply_control_plane_endpoints(c, full, dns_enabled, ip_enabled):
+    public_ip = _endpoint(full)
+    dns_name = _dns_endpoint(full)
+    c["controlPlaneEndpointsConfig"] = {
+        "dnsEndpointConfig": dict({"allowExternalTraffic": dns_enabled}, **({"endpoint": dns_name} if dns_enabled else {})),
+        "ipEndpointsConfig": dict({"enabled": ip_enabled}, **({"publicEndpoint": public_ip} if ip_enabled else {})),
+    }
+    c["endpoint"] = public_ip if ip_enabled else ""
+
+
 def _check_labels(labels, what="resourceLabels"):
     if not isinstance(labels, dict):
         raise _E(400, "INVALID_ARGUMENT", "Invalid %s." % what)
@@ -329,6 +360,7 @@ def create_cluster(store, project, location, payload):
     ch = (spec.get("releaseChannel") or {}).get("channel")
     if ch is not None and ch not in CHANNELS + ("UNSPECIFIED",):
         raise _E(400, "INVALID_ARGUMENT", "Invalid release channel %r." % ch)
+    dns_enabled, ip_enabled = _control_plane_endpoints(spec)
     zone_like = location if _ZONE.match(location) else location
     c = {k: spec[k] for k in ("description", "network", "subnetwork", "clusterIpv4Cidr", "loggingService",
                               "monitoringService", "resourceLabels", "releaseChannel", "autopilot",
@@ -344,7 +376,6 @@ def create_cluster(store, project, location, payload):
         "monitoringService": spec.get("monitoringService") or "monitoring.googleapis.com/kubernetes",
         "nodePools": pools,
         "locations": spec.get("locations") or [zone_like if _ZONE.match(location) else location + "-a"],
-        "endpoint": _endpoint(full),
         "masterAuth": {"clusterCaCertificate": hashlib.sha256(full.encode()).hexdigest()},
         "currentMasterVersion": version, "currentNodeVersion": version,
         "initialClusterVersion": version,
@@ -357,6 +388,7 @@ def create_cluster(store, project, location, payload):
                           "subnetwork": "projects/%s/regions/%s/subnetworks/%s" % (project, _region_of(location), spec.get("subnetwork") or "default")},
         "etag": hashlib.md5(full.encode()).hexdigest()[:16],
     })
+    _apply_control_plane_endpoints(c, full, dns_enabled, ip_enabled)
     c["labelFingerprint"] = _fingerprint(c["resourceLabels"])
     if not auto:
         c["initialNodeCount"] = sum(pool_node_count(p) for p in pools)
@@ -398,6 +430,11 @@ def update_cluster(store, project, location, cid, payload):
         for p in c["nodePools"]:
             if not pid or p["name"] == pid:
                 p["autoscaling"] = _norm_autoscaling(u["desiredNodePoolAutoscaling"])
+        changed = True
+    if "desiredControlPlaneEndpointsConfig" in u:
+        dns_enabled, ip_enabled = _control_plane_endpoints(
+            {"controlPlaneEndpointsConfig": u["desiredControlPlaneEndpointsConfig"]}, c.get("controlPlaneEndpointsConfig"))
+        _apply_control_plane_endpoints(c, cluster_name(project, location, cid), dns_enabled, ip_enabled)
         changed = True
     if "desiredImageType" in u:
         if u["desiredImageType"] not in IMAGE_TYPES:

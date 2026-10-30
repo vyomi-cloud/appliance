@@ -360,7 +360,22 @@ try {
   const cl = await wjson(`${KL}/clusters/${K}`);
   check("create cluster via UI → visible over native wire (clusters.get)", cl.name === K && cl.autopilot?.enabled === true);
   check("release channel applied", cl.releaseChannel?.channel === "STABLE");
+  check("control plane access defaults to DNS + IPv4, public endpoint set",
+    cl.controlPlaneEndpointsConfig?.dnsEndpointConfig?.allowExternalTraffic === true
+    && cl.controlPlaneEndpointsConfig?.ipEndpointsConfig?.enabled === true && !!cl.endpoint);
   await shot("12-cluster-details");
+
+  // Disable IPv4 control plane access via the Edit dialog — the public endpoint disappears
+  // over the native wire; the DNS-based endpoint stays.
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByLabel("Access using IPv4 addresses").uncheck();
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  const clNoIp = await wjson(`${KL}/clusters/${K}`);
+  check("disable IPv4 access via UI → no public endpoint, DNS endpoint kept over native wire",
+    clNoIp.controlPlaneEndpointsConfig?.ipEndpointsConfig?.enabled === false && clNoIp.endpoint === ""
+    && !!clNoIp.controlPlaneEndpointsConfig?.dnsEndpointConfig?.endpoint);
+  check("control plane access shown in Details tab", (await page.getByText("DNS", { exact: true }).count()) > 0);
 
   // A Standard cluster with a node pool, created directly over the wire (the console only
   // builds the Autopilot create form — Standard clusters still render the same detail page).

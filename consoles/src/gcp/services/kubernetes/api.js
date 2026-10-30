@@ -39,6 +39,13 @@ export const REGIONS = [
 export const CHANNELS = [["RAPID", "Rapid channel"], ["REGULAR", "Regular channel"], ["STABLE", "Stable channel"], ["EXTENDED", "Extended channel"]];
 export const channelLabel = (c) => CHANNELS.find(([v]) => v === c)?.[1] || (c ? c : "No channel");
 
+export function controlPlaneAccessLabel(c) {
+  const cpe = c.controlPlaneEndpointsConfig || {};
+  const dns = (cpe.dnsEndpointConfig || {}).allowExternalTraffic !== false;
+  const ipv4 = (cpe.ipEndpointsConfig || {}).enabled !== false;
+  return [dns && "DNS", ipv4 && "IPv4"].filter(Boolean).join(" + ") || "None";
+}
+
 export const statusLabel = (s) => ({ RUNNING: "Running", PROVISIONING: "Provisioning", STOPPING: "Stopping", RECONCILING: "Reconciling", ERROR: "Error", DEGRADED: "Degraded" }[s] || s);
 
 /** vCPU/memory for a machine type — mirrors core.gcp_container_core.shape() for display. */

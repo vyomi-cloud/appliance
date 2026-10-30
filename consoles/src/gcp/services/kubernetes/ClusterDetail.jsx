@@ -19,7 +19,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { ErrorAlert, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
 import DeployDialog from "./DeployDialog.jsx";
@@ -100,6 +100,8 @@ function Details({ cluster: cl }) {
           ["Subnet", cl.subnetwork],
           ["Cluster pod IPv4 range", cl.clusterIpv4Cidr],
           ["Service IPv4 range", cl.servicesIpv4Cidr],
+          ["Control plane access", api.controlPlaneAccessLabel(cl), <CapabilityBadge id="gcp.kubernetes.cluster.private-networking" />],
+          ["DNS endpoint", (cl.controlPlaneEndpointsConfig?.dnsEndpointConfig || {}).endpoint],
         ]} />
       </Section>
     </Stack>
@@ -216,14 +218,23 @@ function EditDialog({ open, onClose, cluster: cl, location, reload }) {
   const notify = useNotify();
   const [rows, setRows] = useState(() => Object.entries(cl.resourceLabels || {}).map(([key, value]) => ({ key, value })));
   const [channel, setChannel] = useState((cl.releaseChannel || {}).channel || "REGULAR");
+  const cpe = cl.controlPlaneEndpointsConfig || {};
+  const [dnsAccess, setDnsAccess] = useState((cpe.dnsEndpointConfig || {}).allowExternalTraffic !== false);
+  const [ipv4Access, setIpv4Access] = useState((cpe.ipEndpointsConfig || {}).enabled !== false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const bad = rows.some((r) => !/^[a-z][a-z0-9_-]{0,62}$/.test(r.key));
+  const noAccess = !dnsAccess && !ipv4Access;
   const save = async () => {
     setBusy(true); setError(null);
     try {
       await api.setResourceLabels(location, cl.name, Object.fromEntries(rows.map((r) => [r.key, r.value])), cl.labelFingerprint);
       if (channel !== (cl.releaseChannel || {}).channel) await api.updateCluster(location, cl.name, { desiredReleaseChannel: { channel } });
+      if (dnsAccess !== (cpe.dnsEndpointConfig || {}).allowExternalTraffic || ipv4Access !== (cpe.ipEndpointsConfig || {}).enabled) {
+        await api.updateCluster(location, cl.name, {
+          desiredControlPlaneEndpointsConfig: { dnsEndpointConfig: { allowExternalTraffic: dnsAccess }, ipEndpointsConfig: { enabled: ipv4Access } },
+        });
+      }
       notify.success("Cluster settings saved");
       reload(); onClose();
     } catch (e) { setError(e); } finally { setBusy(false); }
@@ -237,6 +248,12 @@ function EditDialog({ open, onClose, cluster: cl, location, reload }) {
           <RadioGroup value={channel} onChange={(e) => setChannel(e.target.value)}>
             {api.CHANNELS.map(([v, l]) => <FormControlLabel key={v} value={v} control={<Radio size="small" />} label={l} />)}
           </RadioGroup>
+          <Typography variant="body2" sx={{ fontWeight: 500 }}>Control plane access</Typography>
+          <Stack spacing={0.5}>
+            <FormControlLabel control={<Checkbox checked={dnsAccess} onChange={(e) => setDnsAccess(e.target.checked)} inputProps={{ "aria-label": "Access using DNS" }} />} label="Access using DNS" />
+            <FormControlLabel control={<Checkbox checked={ipv4Access} onChange={(e) => setIpv4Access(e.target.checked)} inputProps={{ "aria-label": "Access using IPv4 addresses" }} />} label="Access using IPv4 addresses" />
+            {noAccess && <Typography variant="body2" color="error">At least one access method must be enabled.</Typography>}
+          </Stack>
           <Typography variant="body2" sx={{ fontWeight: 500 }}>Labels</Typography>
           {rows.map((r, i) => (
             <Stack key={i} direction="row" spacing={1} alignItems="center">
@@ -251,7 +268,7 @@ function EditDialog({ open, onClose, cluster: cl, location, reload }) {
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button variant="contained" disabled={busy || bad} onClick={save}>Save</Button>
+        <Button variant="contained" disabled={busy || bad || noAccess} onClick={save}>Save</Button>
       </DialogActions>
     </Dialog>
   );
