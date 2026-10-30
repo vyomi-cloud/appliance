@@ -20,8 +20,9 @@ import cap_keyvaults from "../../../../core/capabilities/azure/keyvaults.json";
 import cap_monitor from "../../../../core/capabilities/azure/monitor.json";
 import cap_resourcegroups from "../../../../core/capabilities/azure/resourcegroups.json";
 import cap_servicebus from "../../../../core/capabilities/azure/servicebus.json";
+import cap_sql from "../../../../core/capabilities/azure/sql.json";
 
-const REGISTRY = { ...cap_acr, ...cap_aks, ...cap_apim, ...cap_appservices, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_monitor, ...cap_resourcegroups, ...cap_servicebus };
+const REGISTRY = { ...cap_acr, ...cap_aks, ...cap_apim, ...cap_appservices, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_monitor, ...cap_resourcegroups, ...cap_servicebus, ...cap_sql };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

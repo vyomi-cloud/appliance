@@ -9,7 +9,7 @@ export const CATEGORIES = ["Compute", "Containers", "Databases", "Storage", "Net
 export const SERVICES = [
   { id: "storage", title: "Storage accounts", type: "Microsoft.Storage/storageAccounts", category: "Storage", icon: "storage", load: () => import("./storage/index.jsx") },
   { id: "vms", title: "Virtual machines", type: "Microsoft.Compute/virtualMachines", category: "Compute", icon: "vms" },
-  { id: "sql", title: "SQL databases", type: "Microsoft.Sql/servers/databases", category: "Databases", icon: "sql" },
+  { id: "sql", title: "SQL databases", type: "Microsoft.Sql/servers/databases", category: "Databases", icon: "sql", load: () => import("./sql/index.jsx") },
   { id: "cosmos", title: "Azure Cosmos DB", type: "Microsoft.DocumentDB/databaseAccounts", category: "Databases", icon: "cosmos" },
   { id: "keyvaults", title: "Key vaults", type: "Microsoft.KeyVault/vaults", category: "Security", icon: "keyvaults", load: () => import("./keyvaults/index.jsx") },
   { id: "servicebus", title: "Service Bus", type: "Microsoft.ServiceBus/namespaces", category: "Integration", icon: "servicebus", load: () => import("./servicebus/index.jsx") },
