@@ -64,15 +64,12 @@ const WIDGETS = [
 ];
 const DEFAULT_LAYOUT = WIDGETS.map((w) => w.id);
 
-function Widget({ title, info, actions, footer, children }) {
-  return (
-    <Container fitHeight header={<Header variant="h2" info={info} actions={actions}>{title}</Header>} footer={footer}>
-      {children}
-    </Container>
-  );
+// Inside the Board, BoardItem draws the header/footer; a widget body renders only its content.
+function Widget({ children }) {
+  return <>{children}</>;
 }
 
-function Recent() {
+function RecentWidget() {
   const recent = store.get("recent", []).map((id) => byId[id]).filter(Boolean);
   return (
     <Widget title="Recently visited" actions={<Button href="#/services" onFollow={follow}>All services</Button>}>
@@ -85,7 +82,7 @@ function Recent() {
   );
 }
 
-function Welcome() {
+function WelcomeWidget() {
   return (
     <Widget title="Welcome to Vyomi">
       <SpaceBetween size="s">
@@ -98,7 +95,7 @@ function Welcome() {
   );
 }
 
-function Health({ probes }) {
+function HealthWidget({ probes }) {
   const rows = probes.data || [];
   const up = rows.filter((r) => r.ok).length;
   return (
@@ -115,7 +112,7 @@ function Health({ probes }) {
   );
 }
 
-function Resources({ probes }) {
+function ResourcesWidget({ probes }) {
   return (
     <Widget title="Resources" actions={<Button iconName="refresh" ariaLabel="Refresh" onClick={probes.reload} />}>
       <Table variant="embedded" loading={probes.loading} items={(probes.data || []).filter((r) => r.ok)}
@@ -129,7 +126,7 @@ function Resources({ probes }) {
   );
 }
 
-function Activity() {
+function ActivityWidget() {
   // Vyomi's own event log (appliance: {events:[{at,event,detail}]}; Nano: {events:[{ts,service,action,resource}]}).
   const ev = useAsync(async () => {
     const base = WIRE_BASE.replace(/\/_wire$/, "");
@@ -155,7 +152,7 @@ function Activity() {
   );
 }
 
-function Connect() {
+function ConnectWidget() {
   const endpoint = location.origin + (WIRE_BASE.startsWith("/nano") ? " (via the Nano relay: vyomi-tunnel)" : "");
   return (
     <Widget title="Connect your SDK or CLI">
@@ -169,40 +166,167 @@ function Connect() {
   );
 }
 
+
+import Board from "@cloudscape-design/board-components/board";
+import BoardItem from "@cloudscape-design/board-components/board-item";
+import ItemsPalette from "@cloudscape-design/board-components/items-palette";
+import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
+import Alert from "@cloudscape-design/components/alert";
+
+// Widget catalogue (columnSpan of a 4-column board; the board reflows on narrow screens).
+const CATALOG = {
+  recent: { title: "Recently visited", columnSpan: 2, rowSpan: 3 },
+  welcome: { title: "Welcome to Vyomi", columnSpan: 1, rowSpan: 3 },
+  health: { title: "Vyomi Health", columnSpan: 1, rowSpan: 3 },
+  cost: { title: "Cost and usage", columnSpan: 2, rowSpan: 3 },
+  resources: { title: "Resources", columnSpan: 2, rowSpan: 4 },
+  activity: { title: "Recent activity", columnSpan: 2, rowSpan: 4 },
+  explore: { title: "Explore Vyomi", columnSpan: 1, rowSpan: 3 },
+  security: { title: "Security", columnSpan: 1, rowSpan: 3 },
+  connect: { title: "Connect your SDK or CLI", columnSpan: 2, rowSpan: 3 },
+};
+const DEFAULT_ITEMS = ["recent", "welcome", "health", "cost", "resources", "activity", "explore", "security", "connect"]
+  .map((id) => ({ id, columnSpan: CATALOG[id].columnSpan, rowSpan: CATALOG[id].rowSpan, data: { id } }));
+
+const boardI18n = {
+  liveAnnouncementDndStarted: (op) => (op === "resize" ? "Resizing" : "Dragging"),
+  liveAnnouncementDndItemReordered: () => "Item moved.",
+  liveAnnouncementDndItemResized: () => "Item resized.",
+  liveAnnouncementDndItemInserted: () => "Item inserted.",
+  liveAnnouncementDndCommitted: (op) => `${op} committed`,
+  liveAnnouncementDndDiscarded: (op) => `${op} discarded`,
+  liveAnnouncementItemRemoved: (op) => `Removed item ${op.item.data.id}.`,
+  navigationAriaLabel: "Board navigation",
+  navigationAriaDescription: "Click on non-empty item to move focus over",
+  navigationItemAriaLabel: (item) => (item ? CATALOG[item.data.id]?.title : "Empty"),
+};
+const itemI18n = {
+  dragHandleAriaLabel: "Drag handle",
+  dragHandleAriaDescription: "Use Space or Enter to activate drag, arrow keys to move, Space or Enter to submit, or Escape to discard.",
+  resizeHandleAriaLabel: "Resize handle",
+  resizeHandleAriaDescription: "Use Space or Enter to activate resize, arrow keys to resize, Space or Enter to submit, or Escape to discard.",
+};
+const paletteI18n = {
+  header: "Add widgets",
+  headerDescription: "Drag a widget onto the board.",
+  liveAnnouncementDndStarted: () => "Dragging",
+  liveAnnouncementDndDiscarded: () => "Insertion discarded",
+  navigationAriaLabel: "Widgets",
+  navigationAriaDescription: "Click on an item to move focus over",
+  navigationItemAriaLabel: (item) => CATALOG[item.data.id]?.title,
+};
+
+const RecentBody = RecentWidget, WelcomeBody = WelcomeWidget, ResourcesBody = ResourcesWidget,
+  ActivityBody = ActivityWidget, ConnectBody = ConnectWidget;
+
+function Cost() {
+  // Vyomi never bills, so the true figure is $0.00; projected AWS pricing is not simulated.
+  return (
+    <SpaceBetween size="s">
+      <div><Box variant="awsui-key-label">Current month</Box><Box fontSize="heading-xl" color="text-status-info">$0.00</Box></div>
+      <div><Box variant="awsui-key-label">Forecasted month end</Box><Box fontSize="heading-xl" color="text-status-info">$0.00</Box></div>
+      <Box variant="small" color="text-body-secondary">Resources in Vyomi are free. Estimating what they would cost on AWS is not simulated.</Box>
+    </SpaceBetween>
+  );
+}
+
+function Explore() {
+  return (
+    <SpaceBetween size="s">
+      <div><Link href="https://vyomi.cloud" external>Vyomi documentation</Link><Box variant="small" display="block" color="text-body-secondary">Guides for every simulated service.</Box></div>
+      <div><Link href="#/services" onFollow={follow}>All services</Link><Box variant="small" display="block" color="text-body-secondary">What this console can open.</Box></div>
+      <div><Link href={`${location.pathname.split("/v4/")[0]}/console/aws`}>Classic Vyomi console</Link><Box variant="small" display="block" color="text-body-secondary">Services without a v4 page yet.</Box></div>
+    </SpaceBetween>
+  );
+}
+
+function Security() {
+  return (
+    <Box textAlign="center" color="text-body-secondary" padding={{ top: "l" }}>
+      <Box variant="strong" color="inherit">No security data</Box>
+      <Box variant="p" color="inherit">Security Hub findings are not simulated in Vyomi.</Box>
+    </Box>
+  );
+}
+
+function HealthBody({ probes }) {
+  const rows = probes.data || [];
+  const down = rows.filter((r) => !r.ok);
+  if (probes.loading) return <StatusIndicator type="loading">Checking services</StatusIndicator>;
+  return (
+    <SpaceBetween size="m">
+      <div style={{ display: "flex", justifyContent: "space-between" }}><div><Box variant="awsui-key-label">Open issues</Box><Box fontSize="heading-xl">{down.length}</Box></div><Box variant="small" color="text-body-secondary">Now</Box></div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}><div><Box variant="awsui-key-label">Services responding</Box><Box fontSize="heading-xl">{rows.length - down.length}/{rows.length}</Box></div><Box variant="small" color="text-body-secondary">Live check</Box></div>
+      {down.map((r) => <StatusIndicator key={r.id} type="error">{byId[r.id]?.title || r.id}: {r.error}</StatusIndicator>)}
+    </SpaceBetween>
+  );
+}
+
 export default function Home() {
-  const [layout, setLayout] = useState(store.get("home.layout", DEFAULT_LAYOUT));
-  const [picking, setPicking] = useState(null);
+  const [items, setItems] = useState(() => store.get("home.board", DEFAULT_ITEMS));
+  const [palette, setPalette] = useState(false);
+  const [banner, setBanner] = useState(() => !store.get("home.bannerDismissed", false));
   const probes = useProbes();
-  const save = (l) => { setLayout(l); store.set("home.layout", l); };
-  const render = {
-    recent: <Recent />, welcome: <Welcome />, health: <Health probes={probes} />,
-    resources: <Resources probes={probes} />, activity: <Activity />, connect: <Connect />,
+  const save = (xs) => { setItems(xs); store.set("home.board", xs); };
+  const content = {
+    recent: <RecentBody />, welcome: <WelcomeBody />, health: <HealthBody probes={probes} />, cost: <Cost />,
+    resources: <ResourcesBody probes={probes} />, activity: <ActivityBody />, explore: <Explore />, security: <Security />, connect: <ConnectBody />,
   };
-  const shown = layout.filter((id) => render[id]);
+  const footers = {
+    recent: null,
+    health: <Box textAlign="center"><Link href="#/" onFollow={(e) => { e.preventDefault(); probes.reload(); }}>Refresh health</Link></Box>,
+    cost: <Box textAlign="center" color="text-body-secondary" variant="small">Billing and Cost Management is not simulated</Box>,
+  };
+  const actions = { recent: <Button href="#/services" onFollow={follow}>All services</Button> };
+  const renderItem = (item, a) => {
+    const id = item.data.id;
+    return (
+      <BoardItem
+        i18nStrings={itemI18n}
+        header={<Header variant="h2" actions={actions[id]}>{CATALOG[id].title}</Header>}
+        settings={a && <ButtonDropdown variant="icon" ariaLabel={`${CATALOG[id].title} settings`} items={[{ id: "remove", text: "Remove" }]} onItemClick={() => a.removeItem()} />}
+        footer={footers[id]}
+      >
+        {content[id]}
+      </BoardItem>
+    );
+  };
+  const hidden = Object.keys(CATALOG).filter((id) => !items.some((i) => i.id === id))
+    .map((id) => ({ id, columnSpan: CATALOG[id].columnSpan, rowSpan: CATALOG[id].rowSpan, data: { id } }));
+
   return (
     <ContentLayout header={
-      <Header variant="h1" actions={
-        <SpaceBetween direction="horizontal" size="xs">
-          <Button onClick={() => save(DEFAULT_LAYOUT)}>Reset to default layout</Button>
-          <Button variant="primary" iconName="add-plus" onClick={() => setPicking([...layout])}>Add widgets</Button>
-        </SpaceBetween>
-      }>Console Home</Header>
+      <SpaceBetween size="m">
+        {banner && (
+          <Alert type="info" dismissible onDismiss={() => { setBanner(false); store.set("home.bannerDismissed", true); }} header="Welcome to the Vyomi AWS console">
+            Everything here runs against your local Vyomi simulator, using the same native APIs your SDKs and CLI call. Features Vyomi doesn't simulate are marked.
+          </Alert>
+        )}
+        <Header variant="h1" actions={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={() => save(DEFAULT_ITEMS)}>Reset to default layout</Button>
+            <Button variant="primary" iconName="add-plus" onClick={() => setPalette((v) => !v)}>Add widgets</Button>
+          </SpaceBetween>
+        }>Console Home</Header>
+      </SpaceBetween>
     }>
-      <Grid gridDefinition={shown.map((id) => ({ colspan: { default: 12, m: id === "recent" || id === "resources" || id === "activity" ? 6 : 6, l: id === "recent" ? 6 : id === "resources" || id === "activity" ? 6 : 3 } }))}>
-        {shown.map((id) => <div key={id} style={{ height: "100%" }}>{render[id]}</div>)}
-      </Grid>
-      <Modal visible={!!picking} onDismiss={() => setPicking(null)} header="Add widgets"
-        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
-          <Button variant="link" onClick={() => setPicking(null)}>Cancel</Button>
-          <Button variant="primary" onClick={() => { save(DEFAULT_LAYOUT.filter((id) => picking.includes(id))); setPicking(null); }}>Save</Button>
-        </SpaceBetween></Box>}>
-        <SpaceBetween size="xs">
-          {picking && WIDGETS.map((w) => (
-            <Checkbox key={w.id} checked={picking.includes(w.id)}
-              onChange={({ detail }) => setPicking(detail.checked ? [...picking, w.id] : picking.filter((x) => x !== w.id))}>{w.title}</Checkbox>
-          ))}
-        </SpaceBetween>
-      </Modal>
+      <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Board items={items} renderItem={renderItem} onItemsChange={({ detail }) => save(detail.items)} i18nStrings={boardI18n}
+            empty={<Box textAlign="center" padding="xxl" color="text-body-secondary"><b>No widgets</b><Box variant="p" color="inherit">Add widgets to your Console Home.</Box><Button onClick={() => save(DEFAULT_ITEMS)}>Reset to default layout</Button></Box>} />
+          <Box textAlign="right" margin={{ top: "l" }}><Button iconName="add-plus" onClick={() => setPalette(true)}>Add widgets</Button></Box>
+        </div>
+        {palette && (
+          <div style={{ width: 320, position: "sticky", top: 56 }}>
+            <Container header={<Header variant="h2" actions={<Button variant="icon" iconName="close" ariaLabel="Close" onClick={() => setPalette(false)} />} description="Drag a widget onto the board.">Add widgets</Header>}>
+              {hidden.length ? (
+                <ItemsPalette items={hidden} i18nStrings={paletteI18n}
+                  renderItem={(item) => <BoardItem i18nStrings={itemI18n} header={<Header variant="h3">{CATALOG[item.data.id].title}</Header>}><Box variant="small" color="text-body-secondary">Drag onto the board</Box></BoardItem>} />
+              ) : <Box color="text-body-secondary">All widgets are on the board.</Box>}
+            </Container>
+          </div>
+        )}
+      </div>
     </ContentLayout>
   );
 }

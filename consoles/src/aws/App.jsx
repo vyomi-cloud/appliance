@@ -1,7 +1,6 @@
 /* AWS lens shell: top bar (services menu, search, region, preferences), app layout with the
  * service's side navigation, breadcrumbs, notifications and the help panel. */
 import { Suspense, useEffect, useState } from "react";
-import TopNavigation from "@cloudscape-design/components/top-navigation";
 import AppLayout from "@cloudscape-design/components/app-layout";
 import SideNavigation from "@cloudscape-design/components/side-navigation";
 import BreadcrumbGroup from "@cloudscape-design/components/breadcrumb-group";
@@ -15,7 +14,8 @@ import { useNotify } from "../common/notify.jsx";
 import { setRegion } from "../common/wire.js";
 import { SERVICES, byId, classicHref } from "./services/registry.js";
 import Home, { AllServices, recordVisit } from "./pages/Home.jsx";
-import { LOGO } from "./pages/logo.js";
+import TopBar from "./pages/TopBar.jsx";
+import { applyAwsTheme } from "./kit/theme.js";
 import ServicesMenu from "./pages/ServicesMenu.jsx";
 import { NotSimulated } from "./kit/common.jsx";
 
@@ -36,6 +36,8 @@ function resolve(m, route) {
   }
   return { content: <NotSimulated feature={`The page ${route.path}`} />, nav: m.nav, crumbs: [] };
 }
+
+applyAwsTheme();   // orange primary actions, as in the native console
 
 export default function App() {
   const route = useRoute();
@@ -77,29 +79,13 @@ export default function App() {
   return (
     <>
       <div id="vyomi-top" style={{ position: "sticky", top: 0, zIndex: 1002 }}>
-        <TopNavigation
-          identity={{ href: "#/", logo: { src: LOGO, alt: "vyomi.cloud AWS — Console Home" }, onFollow: follow }}
-          search={<ServicesMenu.Search />}
-          utilities={[
-            { type: "button", text: "Services", iconName: "grid-view", onClick: () => setMenuOpen((v) => !v), ariaLabel: "Services" },
-            {
-              type: "menu-dropdown", text: regionLabel, description: region, ariaLabel: "Region",
-              items: REGIONS.map(([id, label]) => ({ id, text: label, secondaryText: id, checked: id === region })),
-              onItemClick: ({ detail }) => { setRegionState(detail.id); notify.info(`Switched to ${detail.id}`); },
-            },
-            {
-              type: "menu-dropdown", iconName: "settings", ariaLabel: "Settings", title: "Settings",
-              items: [
-                { id: "mode", text: "Visual mode", items: [{ id: "light", text: "Light", checked: mode === "light" }, { id: "dark", text: "Dark", checked: mode === "dark" }] },
-                { id: "density", text: "Density", items: [{ id: "comfortable", text: "Comfortable", checked: density === "comfortable" }, { id: "compact", text: "Compact", checked: density === "compact" }] },
-              ],
-              onItemClick: ({ detail }) => {
-                if (detail.id === "light" || detail.id === "dark") setMode(detail.id);
-                if (detail.id === "comfortable" || detail.id === "compact") setDensity(detail.id);
-              },
-            },
-            { type: "menu-dropdown", text: "Vyomi", description: "Local simulator", iconName: "user-profile", items: [{ id: "classic", text: "Classic console", href: classicHref("") }] },
-          ]}
+        <TopBar
+          onServices={() => setMenuOpen((v) => !v)}
+          region={region} regions={REGIONS} onRegion={(r) => { setRegionState(r); notify.info(`Switched to ${r}`); }}
+          mode={mode} density={density} onMode={setMode} onDensity={setDensity}
+          onHelp={() => setToolsOpen((v) => !v)}
+          notifications={notify.history || []}
+          onNotice={(content, header) => notify.info(content, header)}
         />
         {menuOpen && <ServicesMenu onClose={() => setMenuOpen(false)} />}
       </div>

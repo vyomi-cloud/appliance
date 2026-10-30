@@ -9,6 +9,7 @@
     "watch": "node build.mjs --watch"
   },
   "dependencies": {
+    "@cloudscape-design/board-components": "3.0.89",
     "@cloudscape-design/components": "3.0.900",
     "@cloudscape-design/global-styles": "1.0.40",
     "@emotion/react": "^11.13.3",
