@@ -1,12 +1,13 @@
 # Release checks — v3.0.33
 
-Generated 2026-10-29 19:17 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/40934343368) for tag `v3.0.33`.
+Generated 2026-10-30 04:31 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/41002526259) for tag `v3.0.33`.
 
 | Package / check | Platform | Result |
 |---|---|---|
 | DEB: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | ✅ passed |
 | RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | ✅ passed |
-| Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | ❌ failure |
+| Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | ✅ passed |
+| CLI: aws / gcloud / az suites + CLI ↔ console both ways  | Linux, release images | ❌ failure |
 | MSI: install, upgrade, uninstall (+ signing) | Windows (GitHub) | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/40934343357)) |
 | Startup: all services + UI status | Linux, release images | ❌ failure ([run](https://github.com/vyomi-cloud/appliance/actions/runs/40935785259)) |
 | Windows E2E: MSI → vyomi up → services + UI | Windows laptop (private runner) | ❌ failure |
@@ -17,7 +18,7 @@ Generated 2026-10-29 19:17 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi_3.0.33_all.deb | 6s |
+| ✅ | install vyomi_3.0.33_all.deb | 5s |
 | ✅ | package manager reports version 3.0.33 | found '3.0.33' |
 | ✅ | bundled VERSION is 3.0.33 | /usr/share/vyomi/packaging/common/VERSION = 3.0.33 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -55,7 +56,7 @@ Generated 2026-10-29 19:17 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33; ==> Vyomi 3.0.33 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.33 (SHA256-checked) | exit 0; cached compose v3.0.33 |
-| ✅ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.33 (/tmp/tmp.B0ai6C08j8/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.33 (/tmp/tmp.L9EOCFmkkF/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Removing vyomi-docker (3.0.33) ... |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -104,7 +105,7 @@ Generated 2026-10-29 19:17 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33; ==> Vyomi 3.0.33 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.33 (SHA256-checked) | exit 0; cached compose v3.0.33 |
-| ✅ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.33 (/tmp/tmp.RxvDNxxJat/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.33 (/tmp/tmp.XJib1Q4P6U/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Complete! |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -115,7 +116,7 @@ Generated 2026-10-29 19:17 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi | 8s |
+| ✅ | install vyomi | 17s |
 | ✅ | package manager reports version 3.0.33 | found '3.0.33' |
 | ✅ | bundled VERSION is 3.0.33 | /opt/homebrew/opt/vyomi/libexec/VERSION = 3.0.33 |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -129,16 +130,16 @@ Generated 2026-10-29 19:17 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi status → docker compose ps | exit 0 |
 | ✅ | vyomi logs → docker compose logs | exit 0 |
 | ✅ | vyomi down → docker compose down | exit 0 |
-| ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33;  |
+| ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33; ==> Vyomi 3.0.33 is the latest release. |
 | ✅ | brew test vyomi | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi/3.0.33/bin/cloud-learn help 2>&1[0m |
 | ✅ | uninstall vyomi | Uninstalling /opt/homebrew/Cellar/socat/1.8.1.3... (16 files, 1.1MB) |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
-#### brew · `vyomi-docker` — 18/20 passed
+#### brew · `vyomi-docker` — 20/20 passed
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker | 4s |
+| ✅ | install vyomi-docker | 7s |
 | ✅ | package manager reports version 3.0.33 | found '3.0.33' |
 | ✅ | ships docker-compose.cloudlite.yml | /opt/homebrew/opt/vyomi-docker/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -153,8 +154,8 @@ Generated 2026-10-29 19:17 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi logs → docker compose logs | exit 0 |
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.33 | exit 0; compose v3.0.33; ==> Vyomi 3.0.33 is the latest release. |
-| ❌ | vyomi update from v3.0.0 → v3.0.33 (SHA256-checked) | exit 0; cached compose vnone |
-| ❌ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.0 (/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/tmp.arFWqXZnqV/old.yml) |
+| ✅ | vyomi update from v3.0.0 → v3.0.33 (SHA256-checked) | exit 0; cached compose v3.0.33 |
+| ✅ | after update, vyomi runs the cached v3.0.33 |   compose   : v3.0.33 (/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/tmp.mfUIxC0rMt/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | brew test vyomi-docker | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi-docker/3.0.33/bin/vyomi --help[0m |
 | ✅ | uninstall vyomi-docker | Uninstalling /opt/homebrew/Cellar/vyomi-docker/3.0.33... (8 files, 314.8KB) |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
