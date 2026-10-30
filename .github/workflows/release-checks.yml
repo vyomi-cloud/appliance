@@ -109,7 +109,7 @@ jobs:
   cli:
     needs: resolve
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150   # up to 75 min waiting for the images + the checks
     env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}', VER: '${{ needs.resolve.outputs.ver }}', TAG: '${{ needs.resolve.outputs.tag }}' }
     steps:
       - uses: actions/checkout@v4
@@ -118,6 +118,17 @@ jobs:
         run: |
           git fetch -q origin main
           git checkout -q origin/main -- tests/release tests/cli
+      # These checks start when the Release workflow ends, but Docker Publish builds the
+      # images in parallel and finishes later; boot only once this release's images exist.
+      - name: Wait for this release's Docker images
+        run: |
+          for i in $(seq 1 90); do
+            if docker manifest inspect "vyomi/appliance:$VER" >/dev/null 2>&1 && docker manifest inspect "vyomi/cloudsim:$VER" >/dev/null 2>&1; then
+              echo "vyomi/appliance:$VER and vyomi/cloudsim:$VER are published"; exit 0
+            fi
+            sleep 50
+          done
+          echo "::error::vyomi/appliance:$VER / vyomi/cloudsim:$VER not published after 75 min"; exit 1
       - name: Boot the release like `vyomi up`
         run: |
           gh release download "$TAG" -p "vyomi-$VER.tar.gz" -D /tmp/rel
