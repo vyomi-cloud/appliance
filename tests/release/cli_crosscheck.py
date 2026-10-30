@@ -20,6 +20,11 @@ Plus coverage: released services (services/registry.json) with no CLI suite.
 
     ENDPOINT=http://localhost:9000 OUT=cli-check python3 tests/release/cli_crosscheck.py
 
+Nano: the CLIs go through the relay tunnel (ENDPOINT = the local relay) and the
+console side is the Nano tab itself (CONSOLE = a bridge that runs each request
+as a fetch inside the SW-controlled page) — tests/release/nano_cli_check.mjs
+sets both up and runs this with TARGET=nano.
+
 Writes OUT/summary.md ("N/M checks passed" first) and OUT/results.json; exits
 1 if any check fails. CLI config goes to a temp dir, never the user's.
 """
@@ -37,6 +42,8 @@ import urllib.request
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 B = os.environ.get("ENDPOINT", "http://localhost:9000").rstrip("/")
+CONSOLE = os.environ.get("CONSOLE", B).rstrip("/")   # where the console's own API calls go
+TARGET = os.environ.get("TARGET", "offline")
 OUT = os.environ.get("OUT", "cli-check")
 T = str(int(time.time()))[-7:]
 TMP = tempfile.mkdtemp(prefix="vyomi-cli-")
@@ -74,7 +81,7 @@ def run(*cmd: str, timeout: int = 120) -> tuple[int, str]:
 
 
 def http(method: str, path: str, body=None) -> tuple[int, object]:
-    req = urllib.request.Request(B + path, method=method, data=None if body is None else json.dumps(body).encode(),
+    req = urllib.request.Request(CONSOLE + path, method=method, data=None if body is None else json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
@@ -120,6 +127,18 @@ def wait_ready(timeout_s: int = int(os.environ.get("READY_TIMEOUT_S", "900"))) -
     """Wait for the appliance, then start every on-demand backend the way the
     UI does (tests/installer/startup_check.mjs), so the CLIs hit live backends."""
     t0, kicked, rd = time.time(), set(), {}
+    if TARGET == "nano":   # no backends to start: the tunnel needs a registered Nano tab
+        while time.time() - t0 < timeout_s:
+            try:
+                with urllib.request.urlopen(B + "/health", timeout=10) as r:
+                    h = json.loads(r.read().decode())
+            except Exception:  # noqa: BLE001
+                h = {}
+            if h.get("tab"):
+                break
+            time.sleep(3)
+        check("tools", "Nano tab registered with the relay tunnel", bool(h.get("tab")), json.dumps(h) or "relay not reachable")
+        return
     while time.time() - t0 < timeout_s:
         code, rd = http("GET", "/api/runtime/readiness")
         if code == 200 and isinstance(rd, dict):
@@ -321,7 +340,8 @@ def main() -> int:
     titles = {"tools": "CLIs", "identity": "Identity: CLI and console use the same account / project / subscription",
               "both-ways": "Both directions: CLI → console and console → CLI",
               "cli-suite": "CLI suites, each on its own"}
-    md = [f"**{ok}/{len(results)} checks passed** against `{B}`.", ""]
+    where = f"Nano through the relay tunnel `{B}`" if TARGET == "nano" else f"`{B}`"
+    md = [f"**{ok}/{len(results)} checks passed** against {where}.", ""]
     for sec, title in titles.items():
         rs = [r for r in results if r["section"] == sec]
         if not rs:
@@ -332,7 +352,7 @@ def main() -> int:
     if no_cli:
         md += [f"### Released services with no CLI suite yet ({len(no_cli)})", "", ", ".join(no_cli), ""]
     open(os.path.join(OUT, "summary.md"), "w").write("\n".join(md) + "\n")
-    json.dump({"endpoint": B, "identities": ids, "results": results, "no_cli_suite": no_cli},
+    json.dump({"endpoint": B, "console": CONSOLE, "target": TARGET, "identities": ids, "results": results, "no_cli_suite": no_cli},
               open(os.path.join(OUT, "results.json"), "w"), indent=1)
     print(f"\n{ok}/{len(results)} checks passed → {OUT}/summary.md")
     return 0 if ok == len(results) else 1

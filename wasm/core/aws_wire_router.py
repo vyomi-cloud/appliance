@@ -128,6 +128,7 @@ from core import kinesis_core as kinesis
 from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
+from core.azure_arm_core import AzureArm
 import types as _types
 
 
@@ -237,6 +238,19 @@ for _a in elbv2.OPERATIONS:
 _GENERIC_ACTIONS = {"TagResource", "UntagResource", "ListTagsForResource"}
 
 
+# Azure RBAC role assignments / definitions / checkAccess stay on the IAM store
+# (shared with Azure SQL enforcement); every other ARM path goes to AzureArm.
+_AUTHZ_IAM = re.compile(r"/providers/microsoft\.authorization/(roleassignments|roledefinitions|checkaccess)", re.I)
+
+
+def _is_arm_path(path):
+    """Azure Resource Manager: the subscription list, anything under a
+    subscription, the tenant list, and the LRO poll URLs AzureArm hands out.
+    Checked before the S3 default so ARM never answers with S3 XML (#176)."""
+    p = path.split("?", 1)[0]
+    return p in ("/subscriptions", "/tenants") or p.startswith(("/subscriptions/", "/api/azure/operations/"))
+
+
 def _lower_headers(headers):
     return {str(k).lower(): v for k, v in (headers or {}).items()}
 
@@ -282,6 +296,7 @@ class AwsWireRouter:
         self.az_kvkeys = s.get("az_kvkeys") or InMemoryKeyStore()
         self.az_queue = s.get("az_queue") or AzureQueueStore()
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
+        self.az_arm = s.get("az_arm") or AzureArm()   # Azure Resource Manager — the console's ARM store
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
         # its own lightweight function registry (a namespace the core attaches to).
         self.events = s.get("events") or self.msg
@@ -364,8 +379,10 @@ class AwsWireRouter:
             return "apigatewayv2"
         if "/restapis" in path:               # API Gateway v1 control plane
             return "apigateway"
-        if "microsoft.authorization" in path.lower():   # Azure RBAC checkAccess
+        if _AUTHZ_IAM.search(path):   # Azure RBAC role assignments/definitions + checkAccess
             return "azure-sql-iam-rbac"
+        if _is_arm_path(path):        # Azure Resource Manager (az, azure-mgmt-* SDKs)
+            return "azure-arm"
         if path.startswith("/azure-sql/") or path == "/azure-sql":  # Azure SQL data plane
             return "azure-sql"
         if path.startswith("/service/" + cw.TARGET_PREFIX + "/") or lheaders.get("smithy-protocol") == "rpc-v2-cbor":
@@ -482,6 +499,17 @@ class AwsWireRouter:
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "azure-arm":   # Azure Resource Manager → the same AzureArm the Nano console uses
+            host = lheaders.get("host", "")
+            # LRO poll URLs must be absolute for az / azure-mgmt pollers.
+            self.az_arm._base = f"{lheaders.get('x-forwarded-proto', 'http')}://{host}" if host else ""
+            r = self.az_arm.handle(method, path, query or {}, self._json_body(body) if body else None)
+            out = r.get("body")
+            hdrs = dict(r.get("headers") or {})
+            if out is not None:
+                hdrs.setdefault("content-type", "application/json")
+            return {"status": r["status"], "headers": hdrs, "body": json.dumps(out).encode() if out is not None else b""}
 
         if svc == "azure-sql-iam-rbac":   # Azure RBAC checkAccess (shares the IAM store)
             r = az_iam.dispatch(self.iam, method, path, query or {}, headers or {}, bytes(body))
