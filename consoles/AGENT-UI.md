@@ -17,6 +17,33 @@ real Vyomi backend through the service's native API. Read first:
   `core/` (e.g. `core/<svc>_core.py`). Run `python3 consoles/dev_server.py -q &` for a
   no-Docker backend serving `/_wire` with the same router.
 
+## Cloud lenses — use YOUR cloud's kit and patterns
+| | AWS | GCP | Azure |
+|---|---|---|---|
+| UI library | Cloudscape | MUI (`@mui/material`) | Fluent UI v9 |
+| Lens kit | `consoles/src/aws/kit/` | `consoles/src/gcp/kit/` (`ResourceTable`, `Section`, `NotSimulated`, `DeleteDialog`) | `consoles/src/azure/kit/` (`BrowseGrid`, `ResourceBlade`/`TitleRow`, `CreateWizard`, `NotSimulated`, `DeleteDialog`, `arm.js`) |
+| Pattern to copy | `aws/services/{s3,dynamodb,kms}/` | `gcp/services/storage/` | `azure/services/storage/` |
+| Native wire | `awsJson` / `awsQuery` / `s3` | `restJson` on the Google REST paths (`/v1/projects/{p}/…`, `/storage/v1/…`), project from `gcp/project.js` | ARM via `azure/kit/arm.js` (`/subscriptions/{sub}/…?api-version=`) + data planes through the routes `azure/services/storage/api.js` uses |
+| Backend router | `core/aws_wire_router.py` routes all three clouds' native requests to the cores | | |
+
+- **GCP product ids with a slash** (`security/secret-manager`, `security/kms`): the service
+  directory is `consoles/src/gcp/services/security/secret-manager/`, the spec
+  `ui-spec/gcp/security/secret-manager.json`; the queue file spells it `gcp-security__secret-manager`.
+- **Fixtures** for GCP/Azure call `wire(method, path, { svc: null, headers, body })` — `svc: null`
+  sends no AWS signature. Create through the same native REST/ARM call the SDK makes.
+- **Capabilities:** add `core/capabilities/<cloud>/<service>.json` (same schema as the AWS
+  files). Feature ids start with `<cloud>.` (`gcp.kms.keyring.crud`) — all clouds share one id namespace. For GCP/Azure give each supported feature `"tests": [<core conformance test>]` — the
+  probe helper speaks AWS wire. Render gaps with your lens kit's `NotSimulated`, wording from
+  the registry's `limitations`.
+- **Existing cores** (check `tests/conformance/test_gcp_*`, `test_azure_*` before writing new
+  backend code): GCP storage, firestore, pubsub, secretmanager, kms, iam, cloudsql,
+  cloudscheduler, artifactregistry, container, monitoring, …; Azure ARM (`core/azure_arm_core.py`
+  — control plane for every resource type), blob, queue, cosmos, keyvault keys/secrets, sql,
+  servicebus, monitor, rbac, app, …
+- Smoke: add your round-trip to `consoles/tests/smoke-gcp.mjs` / `smoke-azure.mjs`.
+- Use the Vyomi logo in page text through `<VyomiMark />` / `vy()` from
+  `consoles/src/common/VyomiMark.jsx`, never the bare word in visible copy.
+
 ## What to build
 1. `consoles/src/<cloud>/services/<service>/` — `index.jsx` (nav + routes), pages, `api.js`
    (native wire only: `awsJson` / `awsQuery` / `s3` / `restJson` from `consoles/src/common/wire.js`;
@@ -64,7 +91,7 @@ real Vyomi backend through the service's native API. Read first:
 cd consoles && npm ci && node build.mjs && cd ..
 python3 consoles/dev_server.py -q &          # wait until curl -s localhost:8740/_wire/ answers
 node consoles/tests/ui-conformance.mjs <cloud> <service>   # fidelity ≥ 90 %, exit 0
-node consoles/tests/smoke-aws.mjs                           # (aws) existing pilots still pass
+node consoles/tests/smoke-<cloud>.mjs                       # existing pilots of your cloud still pass
 PYTHONPATH=. python3 tests/conformance/<any core test you touched>.py
 ```
 Add a UI ↔ wire round-trip for your service to `consoles/tests/smoke-<cloud>.mjs` (create in

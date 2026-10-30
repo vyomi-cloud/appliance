@@ -48,7 +48,8 @@ const FIXTURES = {
 
 /** Native-wire helper handed to per-service fixtures. */
 async function wire(method, path, { headers = {}, body, svc = "s3", target } = {}) {
-  const h = { authorization: sig(svc), ...headers };
+  // svc: null → no AWS signature (GCP REST / Azure ARM and data-plane requests).
+  const h = { ...(svc ? { authorization: sig(svc) } : {}), ...headers };
   if (target) Object.assign(h, { "x-amz-target": target, "content-type": "application/x-amz-json-1.0" });
   const r = await fetch(`${WIRE}${path}`, { method, headers: h, body: body && typeof body !== "string" && !(body instanceof Uint8Array) ? JSON.stringify(body) : body });
   const text = await r.text();
