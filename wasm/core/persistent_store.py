@@ -161,8 +161,9 @@ class PersistentIamStore(_PersistentMixin, InMemoryIamStore):
 
 class PersistentObjectStore(_PersistentMixin, InMemoryObjectStore):
     """The object seam mutates self.objects directly + calls mirror_put/delete
-    (it does NOT call persist()), so we write-through on the seam methods."""
-    _STATE_ATTRS = ("buckets", "objects")
+    (v4 C0: the S3/GCS cores now also call persist() after bucket-config and other
+    mutations), so we write-through on the seam methods AND on persist()."""
+    _STATE_ATTRS = ("buckets", "objects", "_multipart_uploads")
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "objects"):
         InMemoryObjectStore.__init__(self)

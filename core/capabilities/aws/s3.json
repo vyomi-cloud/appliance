@@ -211,14 +211,17 @@
    "offline": "limited"
   },
   "limitations": [
-   "Read-only: GetBucketAcl returns the owner's FULL_CONTROL grant; PutBucketAcl is not implemented (501)."
+   "Bucket and object ACLs are stored and returned (Get/PutBucketAcl, Get/PutObjectAcl); grants are not evaluated for authorization."
   ],
   "api": [
    "GetBucketAcl"
   ],
   "probe": {
    "s3_get": "acl"
-  }
+  },
+  "tests": [
+   "tests/conformance/test_c0_legacy_parity_core.py"
+  ]
  },
  "s3.bucket.object-lock": {
   "title": "Object Lock",
@@ -260,13 +263,24 @@
  "s3.bucket.notification": {
   "title": "Event notifications",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "config_only",
+   "offline": "limited"
   },
-  "limitations": [],
+  "limitations": [
+   "Offline appliance: events are delivered to the configured SQS queues, SNS topics and Lambda functions in this simulator (ObjectCreated, ObjectRemoved, DeleteMarkerCreated, TestEvent).",
+   "Nano: the configuration is stored and returned, but events are not delivered yet."
+  ],
+  "api": [
+   "PutBucketNotificationConfiguration",
+   "GetBucketNotificationConfiguration"
+  ],
   "probe": {
-   "s3_unsupported": "notification"
-  }
+   "s3_roundtrip": "notification",
+   "doc": "<NotificationConfiguration></NotificationConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_c0_legacy_parity_core.py"
+  ]
  },
  "s3.bucket.replication": {
   "title": "Replication rules",

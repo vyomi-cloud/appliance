@@ -228,7 +228,7 @@ def _object_view(bucket: str, name: str, entry: dict) -> dict:
         "name": name,
         "bucket": bucket,
         "generation": gen,
-        "metageneration": "1",
+        "metageneration": str(entry.get("metageneration", 1)),
         "contentType": entry.get("contentType", "application/octet-stream"),
         "timeCreated": entry.get("timeCreated", _now()),
         "updated": entry.get("updated", _now()),
@@ -240,7 +240,73 @@ def _object_view(bucket: str, name: str, entry: dict) -> dict:
         "selfLink": f"https://www.googleapis.com/storage/v1/b/{bucket}/o/{enc}",
         "mediaLink": f"https://storage.googleapis.com/download/storage/v1/b/{bucket}/o/{enc}?alt=media",
         **({"metadata": entry["metadata"]} if entry.get("metadata") else {}),
+        **{k: entry[k] for k in ("contentEncoding", "contentDisposition", "contentLanguage", "cacheControl",
+                                 "temporaryHold", "eventBasedHold", "customTime", "componentCount")
+           if entry.get(k) not in (None, "")},
     }
+
+
+def _entry_bytes(store: ObjectStore, bucket: str, name: str, entry: dict) -> bytes:
+    """An object's bytes: inline `data`, else `data_b64` (console facade), else the
+    substrate's external byte store (pre-v4 metadata whose bytes live elsewhere)."""
+    data = entry.get("data")
+    if data is None and entry.get("data_b64"):
+        try:
+            data = base64.b64decode(entry["data_b64"])
+        except Exception:
+            data = None
+    if data is None:
+        data = store.fetch_bytes(bucket, name)
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    return bytes(data or b"")
+
+
+def _new_entry(objs: dict, name: str, media: bytes, content_type: str, custom: dict) -> dict:
+    gen = int(objs.get(name, {}).get("generation", "0") or 0) + 1
+    return {"data": media, "size": len(media), "contentType": content_type,
+            "timeCreated": objs.get(name, {}).get("timeCreated", _now()),
+            "updated": _now(), "md5Hash": _md5_b64(media), "crc32c": _crc32c_b64(media),
+            "etag": _etag(), "generation": gen, "metageneration": 1, "metadata": custom or {}}
+
+
+# Object metadata fields settable via objects.patch / objects.update.
+_OBJECT_SETTABLE = ("contentType", "contentEncoding", "contentDisposition", "contentLanguage",
+                    "cacheControl", "metadata", "temporaryHold", "eventBasedHold", "customTime")
+
+
+def _compose(store: ObjectStore, bucket: str, dest: str, body: bytes) -> GcsResponse:
+    """POST /b/{bucket}/o/{destination}/compose — concatenate source objects."""
+    try:
+        req = json.loads(body.decode("utf-8")) if body else {}
+    except Exception:
+        return _err(400, "parseError", "Parse Error")
+    sources = req.get("sourceObjects") or []
+    if not sources:
+        return _err(400, "required", "Required field sourceObjects is missing.")
+    objs = store.bucket_objects(bucket)
+    chunks = []
+    for src in sources:
+        name = (src or {}).get("name", "")
+        ent = objs.get(name)
+        if ent is None:
+            return _err(404, "notFound", f"No such object: {bucket}/{name}")
+        chunks.append(_entry_bytes(store, bucket, name, ent))
+    blocked = _retention_block(store, bucket, dest, objs.get(dest))
+    if blocked:
+        return blocked
+    dmeta = req.get("destination") or {}
+    media = b"".join(chunks)
+    first = objs.get(sources[0].get("name", ""), {})
+    entry = _new_entry(objs, dest, media, dmeta.get("contentType") or first.get("contentType") or
+                       "application/octet-stream", dmeta.get("metadata") or {})
+    entry["componentCount"] = len(sources)
+    objs[dest] = entry
+    store.mirror_put(bucket, dest, media, entry["contentType"], entry["metadata"])
+    store.persist()
+    view = _object_view(bucket, dest, entry)
+    view["componentCount"] = len(sources)
+    return _json(200, view)
 
 
 # ── multipart/related upload parsing ──────────────────────────────────────
@@ -336,8 +402,10 @@ def dispatch(store: ObjectStore, method: str, path: str,
                 return bad
             store.create_bucket(name)
             store.buckets[name].update(bmeta)
+            store.bucket_objects(name)
+            store.persist()
             return _json(200, _bucket_view(store, name))
-        if method == "GET":             # list buckets
+        if method == "GET":             # list buckets (single simulated project: ?project is not a filter)
             items = [_bucket_view(store, n) for n in sorted(store.buckets)]
             return _json(200, {"kind": "storage#buckets", "items": items})
         return _err(400, "invalid", f"Unsupported method {method} on /b")
@@ -357,6 +425,7 @@ def dispatch(store: ObjectStore, method: str, path: str,
                 return _err(409, "conflict", "The bucket you tried to delete is not empty.")
             store.buckets.pop(bucket, None)
             store.objects.pop(bucket, None)
+            store.persist()
             return GcsResponse(status=204, body=b"", media_type=None)
         if method in ("PATCH", "PUT"):     # buckets.patch / buckets.update
             if not store.bucket_exists(bucket):
@@ -374,6 +443,7 @@ def dispatch(store: ObjectStore, method: str, path: str,
             staged["updated"] = _now()
             bmeta.clear()
             bmeta.update(staged)
+            store.persist()
             return _json(200, _bucket_view(store, bucket))
         return _err(400, "invalid", f"Unsupported method {method} on bucket")
 
@@ -384,7 +454,7 @@ def dispatch(store: ObjectStore, method: str, path: str,
         bmeta = store.buckets[bucket]
         if method == "GET":
             return _json(200, bmeta.get("iamPolicy") or _default_policy(store, bucket))
-        if method == "PUT":
+        if method in ("PUT", "POST"):   # setIamPolicy (POST: pre-v4 appliance console alias)
             try:
                 pol = json.loads(body.decode("utf-8")) if body else {}
             except Exception:
@@ -400,6 +470,7 @@ def dispatch(store: ObjectStore, method: str, path: str,
                       "version": int(pol.get("version") or 1), "etag": base64.b64encode(uuid.uuid4().bytes[:6]).decode(),
                       "bindings": bindings}
             bmeta["iamPolicy"] = stored
+            store.persist()
             return _json(200, stored)
         return _err(400, "invalid", f"Unsupported method {method} on bucket IAM policy")
 
@@ -421,17 +492,11 @@ def dispatch(store: ObjectStore, method: str, path: str,
                     return blocked
                 content_type = sess.get("content_type") or headers.get("content-type") or "application/octet-stream"
                 custom = sess.get("metadata") or {}
-                gen = int(objs.get(name, {}).get("generation", "0")) + 1
-                entry = {
-                    "data": media, "size": len(media), "contentType": content_type,
-                    "timeCreated": objs.get(name, {}).get("timeCreated", _now()),
-                    "updated": _now(), "md5Hash": _md5_b64(media),
-                    "crc32c": _crc32c_b64(media), "etag": _etag(),
-                    "generation": gen, "metadata": custom,
-                }
+                entry = _new_entry(objs, name, media, content_type, custom)
                 objs[name] = entry
                 store.mirror_put(bucket, name, media, content_type, custom)
                 _gcs_resumable(store).pop(query.get("upload_id"), None)
+                store.persist()
                 return _json(200, _object_view(bucket, name, entry))
             if method == "POST" or is_upload:      # insert object
                 if not store.bucket_exists(bucket):
@@ -455,7 +520,19 @@ def dispatch(store: ObjectStore, method: str, path: str,
                     location = f"/upload/storage/v1/b/{bucket}/o?uploadType=resumable&upload_id={sid}"
                     return GcsResponse(status=200, body=b"", media_type=None,
                                        headers={"Location": location, "X-GUploader-UploadID": sid})
-                if upload_type == "multipart" or ct.startswith("multipart/related"):
+                if not is_upload and "json" in ct.lower():
+                    # Pre-v4 appliance console insert: JSON {name, data|content, contentType}
+                    # on the non-upload URL (no real GCS client sends this).
+                    try:
+                        meta = json.loads(body.decode("utf-8")) if body else {}
+                    except Exception:
+                        return _err(400, "parseError", "Parse Error")
+                    name = meta.get("name") or meta.get("object") or query.get("name")
+                    raw = meta.get("data", meta.get("content", ""))
+                    media = raw.encode("utf-8") if isinstance(raw, str) else json.dumps(raw).encode("utf-8")
+                    content_type = meta.get("contentType") or "text/plain"
+                    custom = meta.get("metadata") or {}
+                elif upload_type == "multipart" or ct.startswith("multipart/related"):
                     meta, media, media_ct = _parse_multipart_related(body, ct)
                     name = meta.get("name") or query.get("name")
                     content_type = meta.get("contentType") or media_ct
@@ -470,16 +547,10 @@ def dispatch(store: ObjectStore, method: str, path: str,
                 blocked = _retention_block(store, bucket, name, objs.get(name))
                 if blocked:
                     return blocked
-                gen = int(objs.get(name, {}).get("generation", "0")) + 1
-                entry = {
-                    "data": media, "size": len(media), "contentType": content_type,
-                    "timeCreated": objs.get(name, {}).get("timeCreated", _now()),
-                    "updated": _now(), "md5Hash": _md5_b64(media),
-                    "crc32c": _crc32c_b64(media), "etag": _etag(),
-                    "generation": gen, "metadata": custom,
-                }
+                entry = _new_entry(objs, name, media, content_type, custom)
                 objs[name] = entry
                 store.mirror_put(bucket, name, media, content_type, custom)
+                store.persist()
                 return _json(200, _object_view(bucket, name, entry))
             if method == "GET":                     # list objects
                 if not store.bucket_exists(bucket):
@@ -507,18 +578,69 @@ def dispatch(store: ObjectStore, method: str, path: str,
             return _err(400, "invalid", f"Unsupported method {method} on objects")
 
         # single object: /b/{bucket}/o/{object...}
+        if not store.bucket_exists(bucket):
+            return _err(404, "notFound", "The specified bucket does not exist.")
+        if method == "POST" and len(segs) >= 5 and segs[-1] == "compose":
+            return _compose(store, bucket, unquote("/".join(segs[3:-1])), body)
         name = unquote("/".join(segs[3:]))
         entry = objs.get(name)
         if method == "GET":
             if entry is None:
                 return _err(404, "notFound", f"No such object: {bucket}/{name}")
             if query.get("alt") == "media":         # download bytes
-                return GcsResponse(status=200, headers={
-                    "content-type": entry.get("contentType", "application/octet-stream"),
-                    "x-goog-generation": str(entry.get("generation", "1")),
-                    "x-goog-hash": f"crc32c={entry.get('crc32c','')},md5={entry.get('md5Hash','')}",
-                }, body=entry.get("data", b""), media_type=entry.get("contentType"))
+                data = _entry_bytes(store, bucket, name, entry)
+                hdrs = {"content-type": entry.get("contentType", "application/octet-stream"),
+                        "x-goog-generation": str(entry.get("generation", "1")),
+                        "x-goog-metageneration": str(entry.get("metageneration", 1)),
+                        "x-goog-stored-content-length": str(len(data)),
+                        "x-goog-hash": f"crc32c={entry.get('crc32c') or _crc32c_b64(data)},"
+                                       f"md5={entry.get('md5Hash') or _md5_b64(data)}"}
+                status = 200
+                rng = headers.get("range", "")
+                if rng.startswith("bytes=") and data:
+                    a, _, b = rng[6:].partition("-")
+                    try:
+                        start = int(a) if a else max(0, len(data) - int(b))
+                        end = int(b) if (a and b) else len(data) - 1
+                    except ValueError:
+                        start, end = 0, len(data) - 1
+                    end = min(end, len(data) - 1)
+                    if start <= end:
+                        hdrs["content-range"] = f"bytes {start}-{end}/{len(data)}"
+                        data, status = data[start:end + 1], 206
+                return GcsResponse(status=status, headers=hdrs, body=data, media_type=entry.get("contentType"))
             return _json(200, _object_view(bucket, name, entry))   # metadata
+        if method in ("PATCH", "PUT"):              # objects.patch / objects.update (metadata only)
+            if entry is None:
+                return _err(404, "notFound", f"No such object: {bucket}/{name}")
+            try:
+                patch = json.loads(body.decode("utf-8")) if body else {}
+            except Exception:
+                return _err(400, "parseError", "Parse Error")
+            if method == "PUT":
+                for k in _OBJECT_SETTABLE:
+                    if k != "contentType":
+                        entry.pop(k, None)
+            for k in _OBJECT_SETTABLE:
+                if k not in patch:
+                    continue
+                v = patch[k]
+                if k == "metadata" and isinstance(v, dict) and method == "PATCH":
+                    cur = dict(entry.get("metadata") or {})
+                    for mk, mv in v.items():
+                        if mv is None:
+                            cur.pop(mk, None)
+                        else:
+                            cur[str(mk)] = str(mv)
+                    entry["metadata"] = cur
+                elif v is None:
+                    entry.pop(k, None)
+                else:
+                    entry[k] = v
+            entry["metageneration"] = int(entry.get("metageneration", 1) or 1) + 1
+            entry["updated"] = _now()
+            store.persist()
+            return _json(200, _object_view(bucket, name, entry))
         if method == "DELETE":
             if entry is None:
                 return _err(404, "notFound", f"No such object: {bucket}/{name}")
@@ -527,6 +649,7 @@ def dispatch(store: ObjectStore, method: str, path: str,
                 return blocked
             objs.pop(name, None)
             store.mirror_delete(bucket, name)
+            store.persist()
             return GcsResponse(status=204, body=b"", media_type=None)
         return _err(400, "invalid", f"Unsupported method {method} on object")
 

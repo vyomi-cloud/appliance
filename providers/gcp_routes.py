@@ -616,8 +616,18 @@ def register(app, h) -> None:
         ("DELETE", "/api/gcp/iam/identity-providers/{provider_id}", "api_gcp_iam_delete_identity_provider", "(provider_id: str)"),
     ]
 
+    # v4 C0: the GCS JSON API (native /storage/v1, /upload/…, /download/… and the
+    # console's /api/gcp/storage/v1 alias) is served by the shared core
+    # (core/gcp_storage_core.py) — see core.wire_ingress.mount_gcs(). Folders,
+    # transfer jobs, the /upload console helper and /api/gcp/s3/* stay here; they
+    # share the same space-scoped gcp_storage_state the core reads and writes.
+    from core import wire_ingress as _wi
+    _gcs_core = _wi.is_unified("gcs")
+
     for spec in specs:
         method, path, target_name, signature, *rest = spec
+        if _gcs_core and _wi.gcs_core_path(path):
+            continue
         include_in_schema = True
         body_mode = "none"
         body_target = "request"

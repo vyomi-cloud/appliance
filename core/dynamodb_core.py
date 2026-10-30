@@ -43,6 +43,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from core.nosql_store import NoSqlStore
+from core import dynamodb_expr as _expr
 
 
 # ── transport types ───────────────────────────────────────────────────────
@@ -596,14 +597,17 @@ def _update_item_record(store: NoSqlStore, table: dict, payload: dict[str, Any])
     else:
         expr = str(payload.get("UpdateExpression") or payload.get("update_expression") or "").strip()
         values = payload.get("ExpressionAttributeValues") or payload.get("expression_attribute_values") or {}
-        if expr.upper().startswith("SET "):
-            for clause in expr[4:].split(","):
-                if "=" not in clause:
-                    continue
-                left, right = clause.split("=", 1)
-                attr_name = left.strip()
-                token = right.strip()
-                current[attr_name] = json_to_native(values.get(token, token))
+        names = payload.get("ExpressionAttributeNames") or payload.get("expression_attribute_names") or {}
+        if expr:
+            try:
+                current, _touched = _expr.apply_update(current, expr, names, values, json_to_native)
+            except _expr.ExprError as exc:
+                raise DdbError("ValidationException", str(exc), 400)
+            for k in (native_key or {}):
+                if current.get(k) != native_key.get(k):
+                    raise DdbError("ValidationException",
+                                   f"One or more parameter values were invalid: Cannot update attribute {k}. "
+                                   "This attribute is part of the key", 400)
     items = table.setdefault("items", {})
     items[key] = {
         "item": current,
@@ -868,25 +872,89 @@ def _eval_condition(table: dict, key_payload: dict[str, Any], expr: str,
         return True
     record = _get_item_record(None, table, {"Key": key_payload})  # store unused for read
     item = record.get("item", {}) if record else {}
+    try:
+        return _expr.compile_condition(expr, names, values, json_to_native)(item)
+    except _expr.ExprError as exc:
+        raise DdbError("ValidationException", f"Invalid ConditionExpression: {exc}", 400)
 
-    def _resolve(tok: str) -> str:
-        tok = tok.strip()
-        return str(names.get(tok, tok)) if tok.startswith("#") else tok
 
-    fn = re.match(r"^\s*(attribute_exists|attribute_not_exists)\s*\(\s*(.+?)\s*\)\s*$",
-                  expr, re.IGNORECASE)
-    if fn:
-        attr = _resolve(fn.group(2))
-        present = attr in item
-        return present if fn.group(1).lower() == "attribute_exists" else not present
+def _check_condition(table: dict, key_payload: dict[str, Any], payload: dict[str, Any]) -> None:
+    """ConditionExpression on a single-item write (PutItem / DeleteItem / UpdateItem)."""
+    cond = str(payload.get("ConditionExpression") or "").strip()
+    if cond and not _eval_condition(table, key_payload, cond, payload.get("ExpressionAttributeNames") or {},
+                                    payload.get("ExpressionAttributeValues") or {}):
+        raise DdbError("ConditionalCheckFailedException", "The conditional request failed", 400)
 
-    eq = re.match(r"^\s*(#?[\w.]+)\s*=\s*(:[\w]+)\s*$", expr)
-    if eq:
-        attr = _resolve(eq.group(1))
-        want = json_to_native(values.get(eq.group(2), {}))
-        return item.get(attr) == want
 
-    return True   # unsupported predicate → don't fail the transaction
+# ── native Query / Scan (expressions, ordering, pagination, projection) ────
+def _typed_sort(v: Any) -> tuple:
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return (0, v, "")
+    return (1, 0, "" if v is None else str(v))
+
+
+def _key_attrs(table: dict, index_name: str) -> tuple[list[str], str, str]:
+    """(attribute names forming LastEvaluatedKey, partition key, sort key) for the
+    table or one of its GSIs."""
+    pk, sk = _table_key_fields(table)
+    base = [pk] + ([sk] if sk else [])
+    if not index_name:
+        return base, pk, sk
+    gsi = _gsi_key_fields(table, index_name)
+    if gsi is None:
+        raise DdbError("ValidationException", f"The table does not have the specified index: {index_name}", 400)
+    ipk, isk = gsi
+    return base + [a for a in (ipk, isk) if a and a not in base], ipk, isk
+
+
+def _read_page(table: dict, payload: dict[str, Any], query: bool) -> dict:
+    names = payload.get("ExpressionAttributeNames") or {}
+    values = payload.get("ExpressionAttributeValues") or {}
+    index_name = str(payload.get("IndexName") or "").strip()
+    key_names, pk, sk = _key_attrs(table, index_name)
+    try:
+        key_fn = _expr.compile_condition(payload.get("KeyConditionExpression") or "", names, values, json_to_native) \
+            if query else (lambda it: True)
+        filt = _expr.compile_condition(payload.get("FilterExpression") or "", names, values, json_to_native)
+    except _expr.ExprError as exc:
+        raise DdbError("ValidationException", f"Invalid expression: {exc}", 400)
+    if query and pk not in _expr.key_condition_attrs(payload.get("KeyConditionExpression") or "", names):
+        raise DdbError("ValidationException", "Query condition missed key schema element: " + pk, 400)
+    rows = [r for r in (table.get("items") or {}).values() if isinstance(r, dict)]
+    if index_name:     # a sparse index holds only the items carrying its keys
+        rows = [r for r in rows if pk in r.get("item", {}) and (not sk or sk in r.get("item", {}))]
+    rows.sort(key=lambda r: (_typed_sort(r.get("item", {}).get(pk)), _typed_sort(r.get("item", {}).get(sk)) if sk else (0, 0, ""),
+                             _item_key_string(table, r.get("item", {}))))
+    if query:
+        rows = [r for r in rows if key_fn(r.get("item", {}))]
+        if payload.get("ScanIndexForward") is False:
+            rows.reverse()
+    esk = payload.get("ExclusiveStartKey")
+    if isinstance(esk, dict) and esk:
+        want = _item_key_string(table, _item_to_native_item(esk))
+        for i, r in enumerate(rows):
+            if _item_key_string(table, r.get("item", {})) == want:
+                rows = rows[i + 1:]
+                break
+    limit = payload.get("Limit")
+    try:
+        limit = int(limit) if limit is not None else None
+    except (TypeError, ValueError):
+        raise DdbError("ValidationException", "Limit must be an integer", 400)
+    if limit is not None and limit < 1:
+        raise DdbError("ValidationException", "Limit must be greater than or equal to 1", 400)
+    page = rows[:limit] if limit else rows
+    out_items = [r.get("item", {}) for r in page if filt(r.get("item", {}))]
+    proj = str(payload.get("ProjectionExpression") or "").strip()
+    if proj:
+        out_items = [_expr.project(it, proj, names) for it in out_items]
+    body: dict = {"Count": len(out_items), "ScannedCount": len(page)}
+    if str(payload.get("Select") or "").upper() != "COUNT":
+        body["Items"] = [native_item_to_json(it) for it in out_items]
+    if limit and len(rows) > limit and page:
+        last = page[-1].get("item", {})
+        body["LastEvaluatedKey"] = {a: native_to_json(last[a]) for a in key_names if a in last}
+    return body
 
 
 # ── native-wire dispatcher (X-Amz-Target action → operation) ───────────────
@@ -993,6 +1061,7 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None) -> Ddb
 
         if action == "PutItem":
             table = _require_table(store, table_name())
+            _check_condition(table, payload.get("Item") or {}, payload)
             old = _put_item_record(store, table, payload)
             return_old = str(payload.get("ReturnValues", "NONE")).upper() in {"ALL_OLD", "UPDATED_OLD"}
             attrs = native_item_to_json(copy.deepcopy(old.get("item", {}))) if old and return_old else {}
@@ -1006,6 +1075,7 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None) -> Ddb
 
         if action == "DeleteItem":
             table = _require_table(store, table_name())
+            _check_condition(table, payload.get("Key") or {}, payload)
             removed = _delete_item_record(store, table, payload)
             return_old = str(payload.get("ReturnValues", "NONE")).upper() == "ALL_OLD"
             attrs = native_item_to_json(removed.get("item", {})) if removed and return_old else {}
@@ -1013,22 +1083,35 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None) -> Ddb
 
         if action == "UpdateItem":
             table = _require_table(store, table_name())
+            _check_condition(table, payload.get("Key") or {}, payload)
+            before = copy.deepcopy((_get_item_record(store, table, payload) or {}).get("item", {}))
             updated = _update_item_record(store, table, payload)
-            return _ok({"Attributes": native_item_to_json(updated.get("item", {}))})
+            after = updated.get("item", {})
+            rv = str(payload.get("ReturnValues") or "").upper()
+            if rv == "NONE":
+                return _ok({})
+            if rv in ("ALL_OLD", "UPDATED_OLD"):
+                src = before if rv == "ALL_OLD" else {k: v for k, v in before.items() if after.get(k) != v or k not in after}
+                return _ok({"Attributes": native_item_to_json(src)} if src else {})
+            if rv == "UPDATED_NEW":
+                src = {k: v for k, v in after.items() if before.get(k) != v}
+                return _ok({"Attributes": native_item_to_json(src)} if src else {})
+            # ALL_NEW — also the (pre-v4, conformance-pinned) default when ReturnValues is absent
+            return _ok({"Attributes": native_item_to_json(after)})
 
         if action == "Query":
             table = _require_table(store, table_name())
-            _expire_table_items(table)
-            matched, scanned = _query_filter(table, payload)
+            _expire_table_items(table)                               # TTL: drop expired items first
+            if payload.get("KeyConditionExpression"):
+                return _ok(_read_page(table, payload, query=True))
+            matched, scanned = _query_filter(table, payload)       # console-REST shaped payload
             return _ok({"Items": [native_item_to_json(r.get("item", {})) for r in matched],
                         "Count": len(matched), "ScannedCount": scanned})
 
         if action == "Scan":
             table = _require_table(store, table_name())
-            _expire_table_items(table)
-            matched, scanned = _scan_filter(table, payload)
-            return _ok({"Items": [native_item_to_json(r.get("item", {})) for r in matched],
-                        "Count": len(matched), "ScannedCount": scanned})
+            _expire_table_items(table)                               # TTL: drop expired items first
+            return _ok(_read_page(table, payload, query=False))
 
         if action == "BatchGetItem":
             responses: dict[str, list] = {}

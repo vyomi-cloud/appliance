@@ -61,6 +61,27 @@ class ObjectStore:
         """Tier storage-quota gate (Pro/Max wires this to server.py). No-op in
         Nano/tests — the WASM tab has no tier server to consult."""
 
+    def enforce_quantity_cap(self, resource_type: str) -> None:
+        """Tier resource-count gate (e.g. "bucket"); no-op outside the appliance."""
+
+    def persist(self) -> None:
+        """Called by the object cores after EVERY mutation — bucket config
+        (versioning, sub-resources, notifications, tags, IAM), bucket create/delete
+        and object writes — so a durable substrate can flush state that the
+        mirror hooks never see. No-op for the in-memory substrate."""
+
+    def emit_event(self, bucket: str, key: str, event_name: str,
+                   version: dict | None = None, source: str = "") -> None:
+        """S3 event-notification hook (s3:ObjectCreated:* / s3:ObjectRemoved:* /
+        s3:TestEvent). The core stores the NotificationConfiguration; the substrate
+        owns delivery (the appliance fans out to SQS/SNS/Lambda). No-op default."""
+
+    def fetch_bytes(self, bucket: str, key: str) -> bytes | None:
+        """Last-resort byte source for an object entry that carries no inline
+        data (e.g. metadata written by a pre-v4 handler whose bytes live in an
+        external byte store). None = unknown."""
+        return None
+
 
 class InMemoryObjectStore(ObjectStore):
     """The Nano / test substrate: pure in-memory, zero external deps. Identical

@@ -12,6 +12,14 @@ from env, host-friendly defaults). `mount(app)` exposes it as a FastAPI catch-al
 handlers is a deliberate step once this ingress is validated in parallel.
 
 Pro/Max only (imports the boto3/psycopg2/nats/urllib backed stores) — never WASM.
+
+v4 C0 — per-service unified ingress, ON by default. `unified_services()` names the
+services whose native wire the offline appliance serves through this router
+(VYOMI_UNIFIED_INGRESS_SERVICES, default "s3,dynamodb,gcs"; "none" — or
+VYOMI_LEGACY_WIRE=1 — restores the pre-v4 legacy handlers). `appliance_router()` is
+the router those services use: the shared cores over core/appliance_stores.py (the
+appliance's own space-scoped state, so the classic console REST sees the same
+buckets / tables). Every other service stays on its current handler.
 """
 from __future__ import annotations
 
@@ -24,9 +32,149 @@ def _cfg(key: str, default: str) -> str:
     return os.environ.get(key, default)
 
 
-def build_backed_router() -> AwsWireRouter:
-    """An AwsWireRouter wired to the appliance's real backends behind the seams."""
-    from core.minio_backed_store import MinioBackedObjectStore
+_DEFAULT_SERVICES = "s3,dynamodb,gcs"
+_KNOWN_SERVICES = ("s3", "dynamodb", "gcs")
+
+
+def unified_services() -> frozenset:
+    """Services whose native wire the appliance serves via the shared cores (C0)."""
+    if os.environ.get("VYOMI_LEGACY_WIRE", "").strip().lower() in ("1", "true", "yes"):
+        return frozenset()
+    raw = os.environ.get("VYOMI_UNIFIED_INGRESS_SERVICES", _DEFAULT_SERVICES).strip().lower()
+    if raw in ("", "none", "off", "0", "false", "legacy"):
+        return frozenset()
+    if raw in ("all", "*"):
+        return frozenset(_KNOWN_SERVICES)
+    return frozenset(x.strip() for x in raw.split(",") if x.strip() in _KNOWN_SERVICES)
+
+
+def is_unified(service: str) -> bool:
+    return service in unified_services()
+
+
+_APPLIANCE_ROUTER: AwsWireRouter | None = None
+
+
+def appliance_stores() -> dict:
+    """The C0 stores (S3 / GCS / DynamoDB over the appliance's own state)."""
+    from core import appliance_stores as aps
+    return {"s3": aps.s3_store(), "gcs": aps.gcs_store(), "ddb": aps.ddb_store()}
+
+
+def appliance_router() -> AwsWireRouter:
+    """The router the default appliance uses for the unified services."""
+    global _APPLIANCE_ROUTER
+    if _APPLIANCE_ROUTER is None:
+        _APPLIANCE_ROUTER = AwsWireRouter(stores=appliance_stores())
+    return _APPLIANCE_ROUTER
+
+
+def to_response(out: dict):
+    """Router output {status, headers, body} → a Starlette Response."""
+    from fastapi import Response
+    hdrs = {k: v for k, v in (out.get("headers") or {}).items()}
+    return Response(content=out.get("body") or b"", status_code=out["status"], headers=hdrs)
+
+
+async def serve(router: AwsWireRouter, request, path: str | None = None, body: bytes | None = None):
+    """Dispatch one FastAPI request through the router (path override for aliases)."""
+    if body is None:
+        body = await request.body()
+    out = await router.ahandle(request.method, path or request.url.path,
+                               dict(request.query_params), dict(request.headers), body)
+    return to_response(out)
+
+
+def dispatch_service(service: str, method: str, path: str, query: dict, headers: dict,
+                     body: bytes, router: AwsWireRouter | None = None) -> dict:
+    """Serve one request of a KNOWN service (the route already identified it) with
+    that service's core over the router's store. Skips the router's header/path
+    sniffing on purpose: an S3 key like `a/restapis/b` or an upload carrying
+    `atom+xml` must never be re-classified as another service."""
+    import json as _json
+    from core import s3_object_core, gcp_storage_core, dynamodb_core
+    r = router or appliance_router()
+    if service == "s3":
+        resp = s3_object_core.dispatch(r.s3, method, path, query, headers, body)
+        return {"status": resp.status, "headers": dict(resp.headers or {}), "body": resp.body or b""}
+    if service == "gcs":
+        resp = gcp_storage_core.dispatch(r.gcs, method, path, query, headers, body)
+        hdrs = dict(resp.headers or {})
+        if resp.media_type and not any(k.lower() == "content-type" for k in hdrs):
+            hdrs["content-type"] = resp.media_type
+        return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
+    if service == "dynamodb":
+        target = next((v for k, v in headers.items() if k.lower() == "x-amz-target"), "") or ""
+        try:
+            payload = _json.loads(body or b"{}")
+        except Exception:
+            return {"status": 400, "headers": {"content-type": "application/x-amz-json-1.0"},
+                    "body": _json.dumps({"__type": "com.amazon.coral.service#SerializationException",
+                                         "message": "Request body is not valid JSON."}).encode()}
+        resp = dynamodb_core.dispatch(r.ddb, target, payload if isinstance(payload, dict) else {})
+        import uuid as _uuid
+        hdrs = {"x-amzn-requestid": _uuid.uuid4().hex.upper(), **dict(resp.headers or {})}
+        hdrs.setdefault("content-type", "application/x-amz-json-1.0")
+        return {"status": resp.status, "headers": hdrs, "body": resp.json_bytes()}
+    raise ValueError(f"not a unified service: {service}")
+
+
+async def serve_service(service: str, request, path: str | None = None, body: bytes | None = None,
+                        query: dict | None = None):
+    if body is None:
+        body = await request.body()
+    out = dispatch_service(service, request.method, path or request.url.path,
+                           dict(request.query_params) if query is None else query,
+                           dict(request.headers), body)
+    return to_response(out)
+
+
+_GCS_PREFIXES = ("/storage/v1/b", "/upload/storage/v1/b", "/download/storage/v1/b", "/api/gcp/storage/v1/b")
+
+
+def gcs_core_path(path: str) -> bool:
+    """A GCS route the core serves (vs. the legacy-only folders / console upload helper)."""
+    return path.startswith(_GCS_PREFIXES) and "/folders" not in path and not path.endswith("/upload")
+
+
+def mount_gcs(app) -> None:
+    """Register the GCS JSON API on the shared core (C0). Call AFTER the provider
+    routes (so legacy folders/transfer routes registered earlier still win) and
+    BEFORE the S3 catch-all."""
+    import json as _json
+
+    async def _gcs(request):
+        # The GCS core splits on "/" and unquotes each segment itself, so it needs the
+        # RAW (still-encoded) path: an object named "reports/" arrives as
+        # `/o/reports%2F` and must not collapse into "reports".
+        raw = request.scope.get("raw_path")
+        path = raw.decode("utf-8", "replace") if isinstance(raw, (bytes, bytearray)) and raw else \
+            (request.scope.get("path") or request.url.path)
+        body = await request.body()
+        if path.startswith("/api/gcp/"):
+            # classic console alias → the native path; accept its legacy body keys
+            path = path[len("/api/gcp"):]
+            if request.method == "POST" and path.rstrip("/") == "/storage/v1/b" and body:
+                try:
+                    d = _json.loads(body)
+                    if isinstance(d, dict) and not d.get("name") and d.get("bucket"):
+                        d["name"] = d["bucket"]
+                        body = _json.dumps(d).encode()
+                except Exception:
+                    pass
+        return await serve_service("gcs", request, path=path, body=body)
+
+    methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
+    for prefix in _GCS_PREFIXES:
+        app.add_route(prefix, _gcs, methods=methods)
+        app.add_route(prefix + "/{rest:path}", _gcs, methods=methods)
+
+
+def build_backed_router(overrides: dict | None = None) -> AwsWireRouter:
+    """An AwsWireRouter wired to the appliance's real backends behind the seams.
+    `overrides` replaces individual stores (server.py passes the C0 appliance
+    stores for s3/gcs/ddb so the full ingress shares the console's state)."""
+    from core.minio_backed_store import build_object_store
     from core.postgres_backed_store import PostgresBackedSqlStore
     from core.vault_backed_store import VaultBackedKeyStore, VaultBackedKvStore
     from core.persistent_store import (SqliteStateBackend, PersistentAzureBlobStore,
@@ -36,7 +184,7 @@ def build_backed_router() -> AwsWireRouter:
     from core.nats_backed_store import NatsBackedMessagingStore
 
     minio = dict(
-        endpoint=_cfg("VYOMI_MINIO_ENDPOINT", "http://localhost:9100"),
+        endpoint=_cfg("VYOMI_MINIO_ENDPOINT", _cfg("CLOUDLEARN_MINIO_URL", "http://localhost:9100")),
         access_key=_cfg("VYOMI_MINIO_ACCESS_KEY", "cloudlearn"),
         secret_key=_cfg("VYOMI_MINIO_SECRET_KEY", "cloudlearn-dev-secret-key"))
     pg_dsn = _cfg("VYOMI_PG_DSN",
@@ -45,10 +193,13 @@ def build_backed_router() -> AwsWireRouter:
                  token=_cfg("VYOMI_VAULT_TOKEN", "vyomi-dev-token"))
     nats_servers = _cfg("VYOMI_NATS", "nats://localhost:4222")
 
+    overrides = overrides or {}
     stores = {
-        # object storage — AWS S3 + GCP GCS on MinIO (namespaced prefixes)
-        "s3": MinioBackedObjectStore(prefix="aws-s3-", **minio),
-        "gcs": MinioBackedObjectStore(prefix="gcp-gcs-", **minio),
+        # object storage — AWS S3 + GCP GCS on MinIO (namespaced prefixes); bucket
+        # metadata in a SQLite sidecar next to the appliance state (C0). Without
+        # MinIO: SQLite-only persistent stores (logged once).
+        "s3": overrides.get("s3") or build_object_store("aws-s3-", **minio),
+        "gcs": overrides.get("gcs") or build_object_store("gcp-gcs-", **minio),
         # relational — RDS + Cloud SQL on real Postgres (schema-namespaced)
         "rds": PostgresBackedSqlStore(pg_dsn, schema_prefix="rds_"),
         "gcp_sql": PostgresBackedSqlStore(pg_dsn, schema_prefix="gcpsql_"),
@@ -64,7 +215,7 @@ def build_backed_router() -> AwsWireRouter:
         "az_blob": PersistentAzureBlobStore(
             SqliteStateBackend(_cfg("VYOMI_AZBLOB_DB", "/tmp/vyomi-azblob.sqlite"))),
         # DynamoDB (v2.5.0) — durable NoSQL via the file-backed substrate (was in-memory)
-        "ddb": PersistentNoSqlStore(
+        "ddb": overrides.get("ddb") or PersistentNoSqlStore(
             SqliteStateBackend(_cfg("VYOMI_DDB_DB", "/tmp/vyomi-ddb.sqlite"))),
         # Firestore (v2.5.0) — durable documents via the file-backed substrate
         "gcp_fs": PersistentFirestoreStore(
