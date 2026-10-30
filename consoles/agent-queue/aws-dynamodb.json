@@ -1,1 +1,21 @@
-{"cloud":"aws","service":"dynamodb","goal":"P1 pilot: fidelity >= 90%","attempt":2}
+{
+  "cloud": "aws", "service": "dynamodb", "attempt": 3,
+  "goal": "P1 pilot: fidelity >= 90% WITHOUT new honest pages; raise real coverage substantially (currently 32%).",
+  "must_build": {
+    "backend (core/dynamodb_core.py + tests/conformance)": [
+      "DeleteTable honours DeletionProtectionEnabled (ValidationException) + UpdateTable (billing mode, throughput, deletion protection, table class, GSI create/delete)",
+      "UpdateTimeToLive / DescribeTimeToLive (TTL attribute stored; expired items removed on read/scan)",
+      "UpdateContinuousBackups / DescribeContinuousBackups (PITR flag)",
+      "CreateBackup / ListBackups / DescribeBackup / DeleteBackup / RestoreTableFromBackup (snapshot copies inside the store)",
+      "ExecuteStatement for PartiQL SELECT (WHERE on key/attributes), INSERT, UPDATE ... SET, DELETE"
+    ],
+    "pages": [
+      "dashboard (over ListTables/DescribeTable: favourites in localStorage, table counts, alarms panel as NotSimulated container only)",
+      "partiql-editor (real ExecuteStatement, Table view + JSON view)",
+      "backups + create-backup (real backup ops; restore)",
+      "settings, edit-layout-settings, edit-explore-items-settings (console preferences persisted in localStorage and actually applied)",
+      "table detail: Backups tab (PITR + on-demand), Additional settings TTL edit"
+    ],
+    "may_stay_not_simulated": ["exports-to-s3", "export-to-s3", "imports-from-s3", "import-from-s3 (unless you can do it cleanly via the router's S3 store)"]
+  }
+}
