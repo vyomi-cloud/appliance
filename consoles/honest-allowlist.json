@@ -43,6 +43,13 @@
     "apigateway": [
       "portals",
       "portal-products"
+    ],
+    "eventbridge": [
+      "pipes",
+      "api-destinations",
+      "connections",
+      "schemas",
+      "global-endpoints"
     ]
   },
   "_planned": {
@@ -62,5 +69,8 @@
       "applications",
       "storage"
     ]
+  },
+  "_backlog": {
+    "aws.eventbridge": "connections + api-destinations are core EventBridge features worth building on eventbridge_core (CreateConnection / CreateApiDestination); allowlisted for v4.0.0 only"
   }
 }
