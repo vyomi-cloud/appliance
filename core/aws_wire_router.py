@@ -182,6 +182,8 @@ from core import kinesis_core as kinesis
 from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
+from core import azure_acr_core as az_acr
+from core.azure_acr_core import AcrRegistryStore
 import types as _types
 
 
@@ -196,6 +198,20 @@ def _azure_service(path, lheaders, query):
         p = p[len("/devstoreaccount1"):]
     elif p == "/devstoreaccount1":
         p = "/"
+    # Container Registry data plane: the OCI/Docker Registry v2 push+pull wire (`docker push`,
+    # `az acr`, oras/crane) and the ACR REST repository-metadata extension — both live on the
+    # registry's own host (no SigV4, no api-version). "/v2/projects/..." and "/v2/entries" are
+    # GCP (already routed away by _gcp_service above); "/v2/apis", "/v2/domainnames", … are the
+    # AWS API Gateway V2 control plane (routed later in service_of) — so only the specific OCI
+    # Distribution shapes are claimed here, not every "/v2/..." path.
+    if p.startswith("/acr/v1/") or p == "/acr/v1":
+        return "az-acr"
+    if p == "/v2" or p == "/v2/" or p == "/v2/_catalog":
+        return "az-acr"
+    v2segs = [s for s in p.split("/") if s]
+    if len(v2segs) >= 3 and v2segs[0] == "v2" and (
+            v2segs[-2] == "manifests" or (v2segs[-2] == "tags" and v2segs[-1] == "list")):
+        return "az-acr"
     apiv = ("api-version" in query) or ("api-version=" in path)
     # Key Vault (data plane): root /keys or /secrets WITH api-version (GCP secrets
     # live under /v1/projects/…; a plain S3 bucket named "keys" has no api-version).
@@ -370,6 +386,7 @@ class AwsWireRouter:
         self.az_kvcerts = s.get("az_kvcerts") or InMemoryKvStore()
         self.az_queue = s.get("az_queue") or AzureQueueStore()
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
+        self.az_acr = s.get("az_acr") or AcrRegistryStore()   # Container Registry repositories/tags/manifests
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
         # its own lightweight function registry (a namespace the core attaches to).
         # EventBridge shares the messaging store (rule targets deliver into the real SQS/SNS).
@@ -642,6 +659,7 @@ class AwsWireRouter:
                 "az-kv-secrets": (az_kvsec, self.az_kvsec), "az-kv-keys": (az_kvkeys, self.az_kvkeys),
                 "az-kv-certs": (az_kvcerts, self.az_kvcerts),
                 "az-queue": (az_queue, self.az_queue), "az-servicebus": (az_sb, self.az_sb),
+                "az-acr": (az_acr, self.az_acr),
             }[svc]
             mod, store = _az_core
             r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))

@@ -41,6 +41,7 @@ STORE_ATTRS = [
     "gcp_redis",  # Memorystore for Redis (core/gcp_redis_core.RedisStore)
     "gcp_iamc",   # IAM Credentials issue log (core/gcp_iamcredentials_core.IamCredentialsStore)
     "gcp_sched",  # Cloud Scheduler (core/gcp_cloudscheduler_core.CloudSchedulerStore)
+    "az_acr",  # Azure Container Registry (core/azure_acr_core.AcrRegistryStore)
     "sched",  # EventBridge Scheduler (core/scheduler_core.SchedulerStore)
     "gcp_logging",  # Cloud Logging (core/gcp_logging_core.LoggingStore)
     "gcp_rm", "gcp_pam",  # IAM & Admin: Resource Manager + Privileged Access Manager
