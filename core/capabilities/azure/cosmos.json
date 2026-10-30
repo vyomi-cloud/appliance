@@ -1,0 +1,87 @@
+{
+ "$doc": "Vyomi capability registry — Azure Cosmos DB (SQL / Core API). See aws/s3.json for the contract.",
+ "azure.cosmos.account.crud": {
+  "title": "Database accounts (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cosmos.keys": {
+  "title": "Keys (listKeys / listReadOnlyKeys / listConnectionStrings / regenerateKey)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cosmos.data_explorer": {
+  "title": "Data Explorer: databases, containers and documents over the native Cosmos DB REST (SQL/Core API) data plane",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "The Cosmos data-plane store is a single keyspace shared by every Cosmos account in this Vyomi environment (no per-account partitioning) — a database id created under one account is visible from any other account's Data Explorer.",
+   "New Container accepts a hierarchical partition key request, a unique key policy and analytical store enablement the way the real form submits them, but only the indexing policy (on/off) round-trips for real; the others are accepted and not enforced."
+  ],
+  "tests": ["tests/conformance/test_azure_cosmos_core.py"]
+ },
+ "azure.cosmos.query": {
+  "title": "SQL query (SELECT) over the Cosmos data plane",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Covers a pragmatic SELECT subset (projection, a single WHERE comparison/IN predicate, ORDER BY); joins, subqueries, aggregate/system functions and stored procedures are not implemented."
+  ],
+  "tests": ["tests/conformance/test_azure_cosmos_core.py"]
+ },
+ "azure.cosmos.default_consistency": {
+  "title": "Default consistency level",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "properties.consistencyPolicy.defaultConsistencyLevel round-trips through ARM, but every data-plane read in Vyomi is already strongly consistent regardless of the configured level."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cosmos.replicate_data_globally": {
+  "title": "Replicate data globally (region list, failover)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "properties.locations round-trips through ARM, but Vyomi has one logical region: added regions are not separately provisioned, and Manual/Service-Managed Failover do not move the data plane anywhere."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cosmos.backup_restore": {
+  "title": "Backup & Restore policy",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "properties.backupPolicy round-trips through ARM exactly as configured at create time, but Vyomi never takes or restores a backup."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cosmos.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cosmos.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to the database account",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this account); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cosmos.activity_log": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only console/SDK-triggered ARM mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "api": ["ActivityLogs_List"],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.cosmos.iam": {
+  "title": "Access control (IAM): role assignments and built-in role definitions over ARM",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), but the generic ARM list is subscription-wide (not scoped to this one account), and 'Check access' / 'My access' evaluation is not modelled — Vyomi never denies a console action based on a role assignment."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ }
+}

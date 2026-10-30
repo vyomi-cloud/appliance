@@ -13,6 +13,7 @@ import cap_acr from "../../../../core/capabilities/azure/acr.json";
 import cap_aks from "../../../../core/capabilities/azure/aks.json";
 import cap_apim from "../../../../core/capabilities/azure/apim.json";
 import cap_appservices from "../../../../core/capabilities/azure/appservices.json";
+import cap_cosmos from "../../../../core/capabilities/azure/cosmos.json";
 import cap_cost from "../../../../core/capabilities/azure/cost.json";
 import cap_eventgrid from "../../../../core/capabilities/azure/eventgrid.json";
 import cap_functionapp from "../../../../core/capabilities/azure/functionapp.json";
@@ -23,7 +24,7 @@ import cap_resourcegroups from "../../../../core/capabilities/azure/resourcegrou
 import cap_servicebus from "../../../../core/capabilities/azure/servicebus.json";
 import cap_sql from "../../../../core/capabilities/azure/sql.json";
 
-const REGISTRY = { ...cap_acr, ...cap_aks, ...cap_apim, ...cap_appservices, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_monitor, ...cap_nsgs, ...cap_resourcegroups, ...cap_servicebus, ...cap_sql };
+const REGISTRY = { ...cap_acr, ...cap_aks, ...cap_apim, ...cap_appservices, ...cap_cosmos, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults, ...cap_monitor, ...cap_nsgs, ...cap_resourcegroups, ...cap_servicebus, ...cap_sql };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

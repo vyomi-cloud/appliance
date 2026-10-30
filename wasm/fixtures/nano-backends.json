@@ -135,6 +135,11 @@
   "category": "gcp"
  },
  {
+  "name": "az_acr",
+  "label": "az_acr \u00b7 AcrRegistryStore",
+  "category": "azure"
+ },
+ {
   "name": "sched",
   "label": "sched \u00b7 SchedulerStore",
   "category": "aws"
