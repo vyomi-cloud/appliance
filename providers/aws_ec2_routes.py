@@ -156,6 +156,14 @@ def register(app, h) -> None:
     def api_ec2_get_instance(instance_id: str):
         return _server().api_ec2_get_instance(instance_id)
 
+    @app.put("/api/ec2/instances/{instance_id}/attributes")
+    async def api_ec2_update_instance_attributes(instance_id: str, request: Request):
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        return _server().api_ec2_update_instance_attributes(instance_id, payload if isinstance(payload, dict) else {})
+
     @app.delete("/api/ec2/instances/{instance_id}")
     def api_ec2_delete_instance(instance_id: str):
         return _server().api_ec2_terminate_instance(instance_id)

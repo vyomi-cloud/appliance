@@ -91,6 +91,7 @@ class EC2InstanceRequest(BaseModel):
     storage_gb: int = 8
     command: str = ""
     user_data: str = ""
+    iam_instance_profile: str = ""
 
 
 class GCPComputeInstanceRequest(BaseModel):

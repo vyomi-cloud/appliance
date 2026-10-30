@@ -12342,6 +12342,21 @@ def api_ec2_get_instance(instance_id: str):
     return instance
 
 
+def api_ec2_update_instance_attributes(instance_id: str, payload: dict):
+    """Console 'Modify' for user data (stopped instances only, as on AWS) and the IAM role."""
+    instance = ec2_state["instances"].get(instance_id)
+    if not instance:
+        raise HTTPException(404, detail="InvalidInstanceID.NotFound")
+    if "user_data" in payload:
+        if instance.get("state") not in ("stopped",):
+            raise HTTPException(400, detail="IncorrectInstanceState: instance must be stopped to modify user data")
+        instance["user_data"] = str(payload.get("user_data") or "")
+    if "iam_instance_profile" in payload:
+        instance["iam_instance_profile"] = str(payload.get("iam_instance_profile") or "")
+    _cloudsim_sync_ec2_resource(instance, "upsert")
+    return instance
+
+
 def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True, host_os_hint: str = ""):
     # Host-budget gate (clamp 30%-50% of host CPU+RAM): reject upfront if the
     # chosen instance_type would push the simulator past its share of the host.
@@ -12411,6 +12426,7 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
         "public_ip": None,
         "command": req.command,
         "user_data": req.user_data,
+        "iam_instance_profile": req.iam_instance_profile,
         "created": _now(),
         "pack_id": pack["id"],
         "runtime_backend": runtime_backend,
@@ -13150,7 +13166,8 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
             az=az,
             storage_gb=8,
             command="",
-            user_data="",
+            user_data=base64.b64decode(str(params.get("UserData", "") or "")).decode("utf-8", "replace") if params.get("UserData") else "",
+            iam_instance_profile=str(params.get("IamInstanceProfile.Name") or str(params.get("IamInstanceProfile.Arn", "")).rsplit("/", 1)[-1]),
         )
         trusted_host_os = _resolved_host_os()
         if trusted_host_os:

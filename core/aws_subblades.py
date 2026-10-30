@@ -68,11 +68,11 @@ _EC2_SUB = [
     ]},
     {"group": "Connect", "items": [
         {"key": "connect",        "label": "Connect",                "icon": "terminal",      "type": "connect"},
-        {"key": "console",        "label": "EC2 serial console",     "icon": "terminal",      "type": "stub"},
+        {"key": "console",        "label": "EC2 serial console",     "icon": "terminal",      "type": "ec2serial"},
     ]},
     {"group": "Operations", "items": [
-        {"key": "userData",       "label": "User data",              "icon": "code",          "type": "stub"},
-        {"key": "iam",            "label": "IAM role",               "icon": "admin_panel_settings", "type": "stub"},
+        {"key": "userData",       "label": "User data",              "icon": "code",          "type": "ec2userdata"},
+        {"key": "iam",            "label": "IAM role",               "icon": "admin_panel_settings", "type": "ec2iamrole"},
         *_settings_props_locks(),
     ]},
 ]

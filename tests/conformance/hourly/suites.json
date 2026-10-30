@@ -1789,6 +1789,14 @@
       "timeout": 600
     },
     {
+      "id": "offline-ui-aws-ec2-userdata-iam",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/aws-ec2-userdata-iam.mjs",
+      "timeout": 300
+    },
+    {
       "id": "offline-ui-aws-secretsmanager-tabs",
       "target": "offline",
       "cloud": "aws",

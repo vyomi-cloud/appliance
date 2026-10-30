@@ -2911,12 +2911,56 @@ SUB_RENDERERS.ec2networking = function(svc, full, host){
     el("div",{class:"v"+(/id|address/i.test(k)?" mono":"")}, String(v)))));
   card.append(g); host.append(card);
 };
+SUB_RENDERERS.ec2serial = function(svc, full, host){
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "EC2 serial console"));
+  const g = el("div",{class:"kv-grid"});
+  [
+    ["Instance ID",     full.instance_id || "—"],
+    ["Instance state",  full.state || "—"],
+    ["Console backend", full.console_backend || "—"],
+    ["Prompt",          full.console_prompt || "—"],
+  ].forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, String(v)))));
+  card.append(g); host.append(card);
+  const log = full.console_log || [];
+  host.append(el("div",{class:"panel-h"}, "Console output"));
+  host.append(log.length
+    ? el("pre",{class:"json"}, log.map(e => (e.cwd||"") + "$ " + (e.command||"") + "\n" + (e.output||"")).join("\n"))
+    : el("div",{class:"empty"}, "No console output yet. Use the Connect tab to open a session."));
+};
+async function ec2PutAttrs(full, body, host, rerender){
+  const r = await api("PUT", "/api/ec2/instances/" + encodeURIComponent(full.instance_id) + "/attributes", body);
+  if (r.ok) { Object.assign(full, body); toast("Saved"); host.innerHTML = ""; rerender(); }
+  else toast("Save failed: " + ((r.json && r.json.detail) || r.status), "err");
+}
+SUB_RENDERERS.ec2userdata = function(svc, full, host){
+  const ta = el("textarea",{rows:12,style:"width:100%;font-family:monospace",id:"ec2-user-data"});
+  ta.value = full.user_data || "";
+  const stopped = full.state === "stopped";
+  ta.disabled = !stopped;
+  host.append(el("div",{class:"alert info"}, icon("code"),
+    el("div",{}, stopped ? "Edit the user data for this instance." : "Stop the instance to edit its user data.")));
+  host.append(ta);
+  if (!full.user_data) host.append(el("div",{class:"small"}, "This instance has no user data."));
+  if (stopped) host.append(el("button",{class:"btn primary",id:"ec2-user-data-save",
+    onclick:()=>ec2PutAttrs(full,{user_data:ta.value},host,()=>SUB_RENDERERS.ec2userdata(svc,full,host))}, "Save user data"));
+};
+SUB_RENDERERS.ec2iamrole = function(svc, full, host){
+  const inp = el("input",{type:"text",id:"ec2-iam-profile",placeholder:"Instance profile name"});
+  inp.value = full.iam_instance_profile || "";
+  host.append(el("div",{class:"alert info"}, icon("admin_panel_settings"),
+    el("div",{}, full.iam_instance_profile ? "IAM instance profile attached: " + full.iam_instance_profile
+                                           : "No IAM role is attached to this instance.")));
+  host.append(inp);
+  host.append(el("button",{class:"btn primary",id:"ec2-iam-save",
+    onclick:()=>ec2PutAttrs(full,{iam_instance_profile:inp.value.trim()},host,()=>SUB_RENDERERS.ec2iamrole(svc,full,host))}, "Update IAM role"));
+};
 SUB_RENDERERS.ec2security = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Security details"));
   const g = el("div",{class:"kv-grid"});
   [
-    ["IAM role",       full.iam_instance_profile || "—"],
+    ["IAM role",       full.iam_instance_profile || "(none)"],
     ["Owner",          ACCOUNT],
     ["Launch time",    full.launch_time || full.created || "—"],
     ["Key pair name",  full.key_name || "(no key pair)"],
