@@ -1,0 +1,71 @@
+{
+ "$doc": "Vyomi capability registry — Cloud Scheduler. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
+ "gcp.cloudscheduler.jobs.crud": {
+  "title": "Jobs (create, list, get, update, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "jobs.create",
+   "jobs.get",
+   "jobs.list",
+   "jobs.patch",
+   "jobs.delete",
+   "locations.list"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_cloudscheduler_core.py"
+  ]
+ },
+ "gcp.cloudscheduler.jobs.schedule": {
+  "title": "Pause, resume and force run",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Schedules are advanced lazily on read/run, not by a background timer: a due job fires the first time any request touches its project (list, get or run), not at the exact wall-clock instant.",
+   "A missed tick is never replayed — only the single next occurrence is computed."
+  ],
+  "api": [
+   "jobs.pause",
+   "jobs.resume",
+   "jobs.run"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_cloudscheduler_core.py"
+  ]
+ },
+ "gcp.cloudscheduler.jobs.targets": {
+  "title": "HTTP, Pub/Sub and App Engine HTTP targets",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A Pub/Sub target is delivered into Vyomi's Pub/Sub core for real — a subscriber receives an actual message.",
+   "HTTP and App Engine HTTP targets are recorded as attempted (lastAttemptTime/status are stamped); Vyomi makes no outbound network call, so the target URL is never actually invoked.",
+   "OAuth and OIDC auth headers are stored and returned to the SDK exactly as configured but are not verified or used to sign an outbound request."
+  ],
+  "api": [
+   "jobs.create",
+   "jobs.patch",
+   "jobs.run"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_cloudscheduler_core.py"
+  ]
+ },
+ "gcp.cloudscheduler.cron-jobs": {
+  "title": "App Engine cron jobs (legacy cron.yaml)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "App Engine isn't modeled in Vyomi, so the legacy cron.yaml-based jobs the real console lists under this tab have no backend to read from."
+  ]
+ }
+}
