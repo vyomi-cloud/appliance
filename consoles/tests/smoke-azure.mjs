@@ -391,11 +391,11 @@ try {
   await shot("23-locks-wire");
 
   // ── Shell: unbacked service is honest; dark mode ───────────────────────────────────────
-  await page.goto(UI + "#/vms");
+  await page.goto(UI + "#/vnets");
   await page.getByRole("link", { name: /in the classic Vyomi console/ }).first().waitFor({ timeout: 10000 }).catch(() => {});
   check("service without a v4 module → NotSimulated + classic link",
     await page.locator("[data-vyomi-not-simulated]").first().isVisible() && await page.getByRole("link", { name: /in the classic Vyomi console/ }).first().isVisible());
-  await shot("15-vms-not-simulated");
+  await shot("15-vnets-not-simulated");
   await page.evaluate(() => localStorage.setItem("vyomi.v4.azure.mode", "dark"));
   await page.goto(UI + `#/storage/${RG}/${SA}`);
   await page.reload();
@@ -985,6 +985,49 @@ try {
     if (nsgGone.status !== 404) await page.waitForTimeout(500);
   }
   check("UI delete NSG → ARM GET 404", nsgGone.status === 404, `HTTP ${nsgGone.status}`);
+
+  // ── Virtual machine created through the wizard → visible over native ARM ──────────────
+  const DEFAULT_RG = "cloudlearn-rg";   // kit/arm.js's DEFAULT_RG — the wizard's default resource group
+  const VM = `vysmokevm${n}`;
+  const VM2 = `vywirevm${n}`;
+  await page.goto(UI + "#/vms/create");
+  await page.getByLabel("Virtual machine name", { exact: true }).fill(VM);
+  await page.getByLabel("Username", { exact: true }).fill("azureuser");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await shot("29-vm-create-review");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: VM, exact: true }).waitFor({ timeout: 10000 });
+  const vmGet = await arm("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM}`);
+  check("UI create virtual machine → visible over native ARM", vmGet.status === 200, `HTTP ${vmGet.status}`);
+  await shot("30-vm-overview");
+
+  // ── Start / Stop from the Overview command bar → power state over native ARM ──────────
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Stop", exact: true }).click();
+  await page.getByText("Stop succeeded").waitFor({ timeout: 10000 });
+  const vmStopped = await arm("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM}`);
+  check("UI stop virtual machine → power state over native ARM", JSON.parse(vmStopped.text).properties?.powerState === "PowerState/stopped", vmStopped.text.slice(0, 160));
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Start", exact: true }).click();
+  await page.getByText("Start succeeded").waitFor({ timeout: 10000 });
+  await shot("31-vm-power");
+
+  // ── Virtual machine created over the wire → visible in the UI (CLI → UI) ──────────────
+  const vmPut = await arm("PUT", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM2}`,
+    { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_B2s" }, osProfile: { computerName: VM2, adminUsername: "azureuser" }, storageProfile: { osDisk: { osType: "Linux" } } } });
+  check("ARM PUT virtual machine over wire", vmPut.status === 200 || vmPut.status === 201, `HTTP ${vmPut.status}`);
+  await page.goto(UI + "#/vms");
+  await page.getByRole("link", { name: VM2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created virtual machine shown in browse grid", true);
+  await shot("32-vm-browse");
+
+  // ── Delete through the Overview command bar → gone over native ARM ───────────────────
+  await page.goto(UI + `#/vms/${DEFAULT_RG}/${VM2}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(VM2);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "Virtual machines", exact: true }).waitFor({ timeout: 10000 });
+  const vmGone = await arm("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM2}`);
+  check("UI delete virtual machine → ARM GET 404", vmGone.status === 404, `HTTP ${vmGone.status}`);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});

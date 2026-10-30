@@ -1,0 +1,119 @@
+{
+ "$doc": "Vyomi capability registry — Azure Virtual machines. See aws/s3.json for the contract.",
+ "azure.vms.vm.crud": {
+  "title": "Virtual machines (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.power": {
+  "title": "Start, restart, stop (power off) and delete",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Power actions update the virtual machine's logical power state (properties.powerState) only — there is no LXD/container runtime backing a virtual machine in-browser, so nothing is actually booted or halted. Hibernate and Capture are not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.size": {
+  "title": "Size (list sizes, resize)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "The size list is a curated sample of real Azure VM size names (core/instance_catalog.py), not the full regional catalog, and Cost/month is a rough estimate derived from vCPU/RAM rather than live Azure retail pricing."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.disks": {
+  "title": "Disks (OS disk, data disks)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "OS disk and data disks are modelled as an embedded field on the virtual machine resource (properties.storageProfile), the same shape the create wizard writes, rather than standalone Microsoft.Compute/disks resources — so 'Attach existing disk' (which would need a standalone Disks console to pick from) is an honest gap. 'Create and attach a new disk' and detaching a data disk are real."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.networking": {
+  "title": "Networking (network interface, inbound/outbound port rules)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The virtual machine's network interface (Microsoft.Network/networkInterfaces) and, when a network security group is attached, its inbound/outbound rules (Microsoft.Network/networkSecurityGroups/securityRules) are real ARM resources and real CRUD — the same engine the Network security groups console uses. Load balancing, Application security groups and Network manager are an honest gap (this lens does not model those resource types), and Public IP address is not modelled (always '--')."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.connect": {
+  "title": "Connect (SSH command)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The displayed SSH command is built from the virtual machine's real admin username and its network interface's private IP address, but Vyomi does not open a real SSH session, and Bastion is not modelled (no public IP address is modelled either, matching azure.vms.networking)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.identity": {
+  "title": "Identity (system-assigned managed identity)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "The identity.type flag round-trips through ARM exactly as configured, but Vyomi never issues a managed-identity token or honours it on any other resource's access checks."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.auto_shutdown": {
+  "title": "Auto-shutdown schedule",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "The schedule, time zone and notification settings are stored on the virtual machine and returned exactly as configured, but Vyomi never runs a scheduler — the virtual machine is not actually powered off at the scheduled time."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this virtual machine",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this virtual machine); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.activity_log": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.export_template": {
+  "title": "Export template",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only the ARM Template tab is generated from the live resource; Bicep and Terraform export are not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.vms.iam": {
+  "title": "Access control (IAM)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Microsoft.Authorization/roleAssignments is only simulated at subscription scope, so role assignments/roles/deny assignments/classic administrators scoped to a single virtual machine are an honest gap."
+  ]
+ },
+ "azure.vms.run_command": {
+  "title": "Run command",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Guest command execution requires a live VM agent; virtual machines are metadata-only in Vyomi (no runtime backing them in-browser), so scripts are never actually run."
+  ]
+ },
+ "azure.vms.monitoring": {
+  "title": "Insights, Alerts, Metrics, Diagnostic settings, Logs, Connection monitor, Workbooks",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Azure Monitor metrics/alerts/diagnostic settings and Network Watcher connection monitor for virtual machines are not modelled."]
+ },
+ "azure.vms.tools": {
+  "title": "Diagnose and solve problems, Resource visualizer, Bastion, Load balancing, Application security groups, Network manager, Extensions + applications, Operating system, Configuration, Advisor recommendations, Availability + scaling, Microsoft Defender for Cloud, Backup, Disaster recovery, Updates, Inventory, Change tracking, Tasks, Resource health, Boot diagnostics, Performance diagnostics, Reset password, Redeploy + reapply, Serial console, Support + Troubleshooting",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["These console tools need a live guest agent, hypervisor telemetry or resource types this lens does not model."]
+ }
+}
