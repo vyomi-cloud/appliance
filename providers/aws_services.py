@@ -219,6 +219,11 @@ def _sqs_queue_attributes(queue: dict) -> dict[str, str]:
         "FifoQueue": "true" if queue.get("fifo_queue") else "false",
         "ContentBasedDeduplication": "true" if queue.get("content_based_deduplication") else "false",
     }
+    if queue.get("kms_master_key_id"):
+        attrs["KmsMasterKeyId"] = str(queue["kms_master_key_id"])
+        attrs["KmsDataKeyReusePeriodSeconds"] = str(int(queue.get("kms_data_key_reuse_period", 300) or 300))
+    else:
+        attrs["SqsManagedSseEnabled"] = "false" if queue.get("sqs_managed_sse") is False else "true"
     redrive_policy = queue.get("redrive_policy") or {}
     if redrive_policy:
         attrs["RedrivePolicy"] = json.dumps(redrive_policy, separators=(",", ":"), default=str)
@@ -376,6 +381,16 @@ def _sqs_update_queue_attributes(queue: dict, payload: dict) -> dict:
         queue["redrive_policy"] = copy.deepcopy(redrive or {})
     if "ContentBasedDeduplication" in payload:
         queue["content_based_deduplication"] = str(payload.get("ContentBasedDeduplication")).lower() == "true"
+    if "SqsManagedSseEnabled" in payload:
+        queue["sqs_managed_sse"] = str(payload.get("SqsManagedSseEnabled")).lower() == "true"
+        if queue["sqs_managed_sse"]:
+            queue["kms_master_key_id"] = ""
+    if "KmsMasterKeyId" in payload:
+        queue["kms_master_key_id"] = str(payload.get("KmsMasterKeyId") or "")
+        if queue["kms_master_key_id"]:
+            queue["sqs_managed_sse"] = False
+    if "KmsDataKeyReusePeriodSeconds" in payload:
+        queue["kms_data_key_reuse_period"] = max(60, min(86400, int(payload.get("KmsDataKeyReusePeriodSeconds") or 300)))
     queue["last_modified"] = _now()
     _persist_state()
     return queue

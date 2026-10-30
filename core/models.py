@@ -495,6 +495,9 @@ class SQSQueueUpdateRequest(BaseModel):
     delay_seconds: int | None = None
     content_based_deduplication: bool | None = None
     redrive_policy: dict[str, Any] | None = None
+    sqs_managed_sse: bool | None = None
+    kms_master_key_id: str | None = None
+    kms_data_key_reuse_period: int | None = None
     tags: dict[str, str] | None = None
 
 

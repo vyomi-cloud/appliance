@@ -150,6 +150,9 @@ def api_sqs_update_queue(queue_name: str, req: SQSQueueUpdateRequest):
         "DelaySeconds": req.delay_seconds,
         "ContentBasedDeduplication": req.content_based_deduplication,
         "RedrivePolicy": req.redrive_policy,
+        "SqsManagedSseEnabled": req.sqs_managed_sse,
+        "KmsMasterKeyId": req.kms_master_key_id,
+        "KmsDataKeyReusePeriodSeconds": req.kms_data_key_reuse_period,
     }
     if req.tags is not None:
         queue["tags"] = copy.deepcopy(req.tags)

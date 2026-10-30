@@ -3373,6 +3373,48 @@ SUB_RENDERERS.sqsmessages = function(svc, full, host){
     }}, icon("download"), "Poll for messages")));
   host.append(out);
 };
+// Both tabs re-read the queue from the API when opened, and write through the queue's PUT.
+const sqsFresh = async (svc, full) => { const r = await api("GET", fillPath(svc.resource_path, {name: full.name})); return r.ok && r.json ? r.json : full; };
+SUB_RENDERERS.sqspurge = async function(svc, full0, host){
+  const q = await sqsFresh(svc, full0);
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Purge queue: "+q.queue_name));
+  card.append(el("div",{class:"kv-grid"},
+    el("div",{}, el("div",{class:"k"}, "Messages available"), el("div",{class:"v","data-testid":"sqs-purge-visible"}, String(q.visible_message_count ?? 0))),
+    el("div",{}, el("div",{class:"k"}, "Messages in flight"), el("div",{class:"v"}, String(q.in_flight_count ?? 0))),
+    el("div",{}, el("div",{class:"k"}, "Queue ARN"), el("div",{class:"v mono"}, q.queue_arn))));
+  card.append(el("div",{class:"alert info",style:"margin-top:12px"}, icon("warning"),
+    el("div",{}, "Purging deletes every message in the queue and cannot be undone.")));
+  card.append(el("button",{class:"btn primary","data-testid":"sqs-purge",onclick:async()=>{
+    const r = await api("POST", fillPath(svc.resource_path, {name: q.queue_name})+"/purge");
+    if (r.ok) { toast("Queue purged"); host.innerHTML=""; SUB_RENDERERS.sqspurge(svc, full0, host); } else toast("Purge failed ("+r.status+")","err");
+  }}, icon("delete_forever"), "Purge"));
+  host.append(card);
+};
+SUB_RENDERERS.sqsencryption = async function(svc, full0, host){
+  const q = await sqsFresh(svc, full0), a = q.attributes || {};
+  const kms = !!a.KmsMasterKeyId, sse = a.SqsManagedSseEnabled === "true";
+  const card = el("div",{class:"kv-card"});
+  card.append(el("div",{class:"h"}, "Server-side encryption"));
+  card.append(el("div",{class:"kv-grid"},
+    el("div",{}, el("div",{class:"k"}, "Server-side encryption"), el("div",{class:"v","data-testid":"sqs-sse-status"}, kms || sse ? "Enabled" : "Disabled")),
+    el("div",{}, el("div",{class:"k"}, "Encryption key type"), el("div",{class:"v"}, kms ? "AWS Key Management Service key (SSE-KMS)" : sse ? "Amazon SQS key (SSE-SQS)" : "None")),
+    ...(kms ? [el("div",{}, el("div",{class:"k"}, "KMS key"), el("div",{class:"v mono"}, a.KmsMasterKeyId)),
+               el("div",{}, el("div",{class:"k"}, "Data key reuse period (s)"), el("div",{class:"v"}, a.KmsDataKeyReusePeriodSeconds))] : [])));
+  const sel = el("select",{"data-testid":"sqs-sse-type"}, el("option",{value:"sqs"},"Amazon SQS key (SSE-SQS)"),
+    el("option",{value:"kms"},"AWS KMS key (SSE-KMS)"), el("option",{value:"off"},"Disabled"));
+  sel.value = kms ? "kms" : sse ? "sqs" : "off";
+  const key = el("input",{value:a.KmsMasterKeyId||"alias/aws/sqs","data-testid":"sqs-kms-key"});
+  card.append(el("div",{class:"field",style:"margin-top:14px"}, el("label",{},"Encryption"), sel),
+    el("div",{class:"field"}, el("label",{},"KMS key (SSE-KMS only)"), key),
+    el("button",{class:"btn primary","data-testid":"sqs-sse-save",onclick:async()=>{
+      const body = sel.value === "kms" ? {kms_master_key_id: key.value} : {sqs_managed_sse: sel.value === "sqs"};
+      if (sel.value === "off") body.kms_master_key_id = "";
+      const r = await api("PUT", fillPath(svc.resource_path, {name: q.queue_name}), body);
+      if (r.ok) { toast("Encryption saved"); host.innerHTML=""; SUB_RENDERERS.sqsencryption(svc, full0, host); } else toast("Save failed ("+r.status+")","err");
+    }}, "Save"));
+  host.append(card);
+};
 SUB_RENDERERS.sqsdlq = function(svc, full, host){
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Dead-letter queue"));
