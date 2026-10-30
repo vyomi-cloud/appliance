@@ -53,5 +53,14 @@
       "import-from-s3"
     ],
     "_note": "Not backed yet; scheduled in V4-CONFIG-INTEGRATION-PLAN wave W3. Remove from the allowlist when built."
+  },
+  "gcp": {
+    "kubernetes": [
+      "workloads",
+      "gateways-services-ingress",
+      "secrets-configmaps",
+      "applications",
+      "storage"
+    ]
   }
 }
