@@ -14,7 +14,7 @@ export const SERVICES = [
   { id: "keyvaults", title: "Key vaults", type: "Microsoft.KeyVault/vaults", category: "Security", icon: "keyvaults" },
   { id: "servicebus", title: "Service Bus", type: "Microsoft.ServiceBus/namespaces", category: "Integration", icon: "servicebus" },
   { id: "functionapp", title: "Function App", type: "Microsoft.Web/sites (functionapp)", category: "Compute", icon: "functionapp" },
-  { id: "appservices", title: "App Services", type: "Microsoft.Web/sites", category: "Compute", icon: "appservices" },
+  { id: "appservices", title: "App Services", type: "Microsoft.Web/sites", category: "Compute", icon: "appservices", load: () => import("./appservices/index.jsx") },
   { id: "vnets", title: "Virtual networks", type: "Microsoft.Network/virtualNetworks", category: "Networking", icon: "vnets" },
   { id: "nsgs", title: "Network security groups", type: "Microsoft.Network/networkSecurityGroups", category: "Networking", icon: "nsgs" },
   { id: "resourcegroups", title: "Resource groups", type: "Microsoft.Resources/resourceGroups", category: "Management and governance", icon: "resourcegroups" },
