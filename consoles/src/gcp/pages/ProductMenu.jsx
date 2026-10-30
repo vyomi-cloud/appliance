@@ -54,7 +54,7 @@ export default function ProductMenu({ open, onClose, active }) {
       </Stack>
       <Box sx={{ overflowY: "auto", flex: 1 }}>
         <List dense aria-label="Console">
-          <ListItemButton selected={!active} onClick={() => { location.hash = "/"; onClose(); }} sx={{ borderRadius: "0 20px 20px 0", mr: 1 }}>
+          <ListItemButton selected={location.hash.startsWith("#/dashboard")} onClick={() => { location.hash = "/dashboard"; onClose(); }} sx={{ borderRadius: "0 20px 20px 0", mr: 1 }}>
             <ListItemIcon sx={{ minWidth: 40 }}><DashboardIcon fontSize="small" /></ListItemIcon>
             <ListItemText primary="Cloud overview" primaryTypographyProps={{ variant: "body2" }} />
             <ChevronRightIcon fontSize="small" sx={{ color: "text.secondary" }} />

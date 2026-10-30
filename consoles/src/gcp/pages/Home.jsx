@@ -137,7 +137,7 @@ function CodeBlock({ code, label }) {
 }
 
 /** "Connect gcloud or an SDK": tabbed, ready-to-run snippets for this environment. */
-function ConnectTabs({ project }) {
+export function ConnectTabs({ project }) {
   const [tab, setTab] = useState(0);
   const ep = sdkEndpoint();
   const cli = [

@@ -26,6 +26,7 @@ import { PRODUCTS, classicHref, productFor } from "./services/registry.js";
 import { useProject } from "./project.js";
 import { NotSimulated } from "./kit/common.jsx";
 import Home from "./pages/Home.jsx";
+import Welcome from "./pages/Welcome.jsx";
 import ProductMenu, { recordVisit } from "./pages/ProductMenu.jsx";
 import AllProducts from "./pages/AllProducts.jsx";
 import ProjectPicker from "./pages/ProjectPicker.jsx";
@@ -54,7 +55,8 @@ export default function App() {
   useEffect(() => { savePref("gcp.navCollapsed", navCollapsed ? "1" : ""); }, [navCollapsed]);
   useEffect(() => { document.title = `${prod ? prod.title + " – " : ""}${project} – Vyomi · Google Cloud`; });
 
-  const prod = route.parts[0] === "products" ? null : productFor(route.parts);
+  const shell = ["products", "dashboard"].includes(route.parts[0]);
+  const prod = shell ? null : productFor(route.parts);
   useEffect(() => { if (prod) recordVisit(prod.id); }, [prod?.id]);
   const [loaded, setLoaded] = useState({});
   const [loadErr, setLoadErr] = useState(null);
@@ -63,9 +65,10 @@ export default function App() {
   }, [prod?.id]);
 
   let content, nav;
-  if (!route.parts.length) content = <Home />;
+  if (!route.parts.length) content = <Welcome onPicker={() => setPickerOpen(true)} />;
+  else if (route.parts[0] === "dashboard") content = <Home />;
   else if (route.parts[0] === "products") content = <AllProducts />;
-  else if (!prod && route.parts[0] !== "products") content = <NotSimulated feature={`The product "${route.parts[0]}"`} />;
+  else if (!prod) content = <NotSimulated feature={`The product "${route.parts[0]}"`} />;
   else if (!prod.load) {
     content = (
       <Box>
