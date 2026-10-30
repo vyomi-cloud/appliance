@@ -53,6 +53,11 @@
     ],
     "ec2": [
       "events"
+    ],
+    "cloudformation": [
+      "hooks",
+      "invocation-summary",
+      "public-extensions"
     ]
   },
   "_planned": {
@@ -81,6 +86,10 @@
       "ec2": [
         "instance-types",
         "instance-type-detail"
+      ],
+      "cloudformation": [
+        "activated-extensions",
+        "extension-detail"
       ]
     },
     "azure": {
