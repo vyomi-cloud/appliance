@@ -403,6 +403,46 @@ try {
   await page.getByText(DASH).waitFor({ timeout: 10000 });
   check("dashboard created over wire → shown in UI list", true);
   await shot("13-monitoring-dashboards");
+
+  // Cloud Monitoring depth: a dashboard tile built with a real timeSeriesFilter query
+  // renders a live chart from stored time series (not a static shell), and a group's
+  // membership is evaluated against the resource instances this project's own time series
+  // have reported (not an always-empty stub).
+  const METRIC = `custom.googleapis.com/smoke/${Date.now() % 100000}`;
+  const dash2 = await wjson(`/v1/projects/vyomi-project/dashboards`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ displayName: `v4-gcp-smoke-dashlive-${Date.now() % 100000}`, mosaicLayout: { columns: 12, tiles: [{
+      xPos: 0, yPos: 0, width: 6, height: 4, widget: { title: "Smoke CPU", xyChart: { dataSets: [{
+        timeSeriesQuery: { timeSeriesFilter: { filter: `metric.type = "${METRIC}" AND resource.type = "global"` } },
+      }] } },
+    }] } }),
+  });
+  await wjson(`/v3/projects/vyomi-project/timeSeries`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ timeSeries: [{
+      metric: { type: METRIC }, resource: { type: "global", labels: { project_id: "vyomi-project" } },
+      points: [{ interval: { endTime: new Date().toISOString() }, value: { doubleValue: 42 } }],
+    }] }),
+  });
+  await page.goto(UI + `#/monitoring/dashboards/${dash2.name.split("/").pop()}`);
+  await page.getByText("Smoke CPU").waitFor({ timeout: 10000 });
+  await page.locator("svg").first().waitFor({ timeout: 10000 });
+  check("dashboard tile with a real query renders a live chart from stored time series", true);
+  await shot("13b-monitoring-dashboard-live-chart");
+
+  const GROUP = `v4-gcp-smoke-group-${Date.now() % 100000}`;
+  await page.goto(UI + "#/monitoring/groups");
+  await page.getByRole("button", { name: "Create Group" }).click();
+  const groupDialog = page.getByRole("dialog");
+  await groupDialog.getByLabel("Group name").fill(GROUP);
+  await groupDialog.getByLabel("Filter").fill('resource.type = "global"');
+  await groupDialog.getByRole("button", { name: "Create" }).click();
+  const groupRow = page.getByRole("row", { name: new RegExp(GROUP) });
+  await groupRow.waitFor({ timeout: 10000 });
+  const groupCells = await groupRow.getByRole("cell").allTextContents();
+  check("group membership shows a real resource count (not a static stub)", groupCells[2]?.trim() === "1", JSON.stringify(groupCells));
+  await shot("13c-monitoring-group-members");
+
   // Cloud Run functions: create a service via the UI → visible over the native Cloud Run
   // Admin API v2 wire, then the reverse (a job created over the wire shows up in the UI).
   const FN = `v4-gcp-fn-${Date.now() % 100000}`;

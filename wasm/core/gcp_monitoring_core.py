@@ -1528,6 +1528,40 @@ def _group_label(ent, f):
     return (ent[m.group(1)].get("labels") or {}).get(m.group(2), "") if m else ""
 
 
+# ── group membership ─────────────────────────────────────────────────────────
+def _resource_inventory(store, project):
+    """Distinct monitored-resource instances this project has actually emitted time series
+    for — the only real resource inventory this appliance has, so group membership (and the
+    Groups list page's Instances/Resources columns) is evaluated against it instead of
+    always being empty."""
+    seen = {}
+    prefix = project + "|"
+    for key, s in store.time_series.items():
+        if not key.startswith(prefix):
+            continue
+        r = s["resource"]
+        k = (r["type"], tuple(sorted((r.get("labels") or {}).items())))
+        seen.setdefault(k, {"type": r["type"], "labels": dict(r.get("labels") or {})})
+    return list(seen.values())
+
+
+def _resource_getter(inst, lhs):
+    if lhs == "resource.type":
+        return inst["type"]
+    m = re.match(r"^resource\.labels?\.(.+)$", lhs)
+    return inst["labels"].get(m.group(1)) if m else None
+
+
+def group_members(store, project, filt):
+    try:
+        pred = compile_filter(filt, _resource_getter,
+                              lambda l: l == "resource.type" or re.match(r"^resource\.labels?\.", l))
+    except _E:
+        return []   # a filter the real API would also reject at evaluation time: no members
+    members = [inst for inst in _resource_inventory(store, project) if pred(inst)]
+    return sorted(members, key=lambda x: (x["type"], sorted(x["labels"].items())))
+
+
 # ── console views ──────────────────────────────────────────────────────────
 def _condition_summary(c):
     kind = next((k for k in _CONDITION_KINDS if k in c), None)
@@ -1811,8 +1845,11 @@ def _groups(store, method, project, rest, payload, query):
         raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on groups." % method)
     gid = rest[0]
     if len(rest) == 2 and rest[1] == "members" and method == "GET":
-        _get_group(store, project, gid)
-        return _json(200, {"members": [], "totalSize": 0})
+        g = _get_group(store, project, gid)
+        members = group_members(store, project, g.get("filter") or "")
+        res = _paginate(members, query, "members")
+        res["totalSize"] = len(members)
+        return _json(200, res)
     if len(rest) == 1:
         if method == "GET":
             return _json(200, _copy(_get_group(store, project, gid)))

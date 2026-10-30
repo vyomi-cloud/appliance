@@ -127,7 +127,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "A dashboard's name, labels and layout are stored and returned exactly as the real Dashboards API (v1) would, round-tripping through etag-checked updates. Vyomi doesn't render the configured charts (gridLayout/mosaicLayout tiles) with live data inside the dashboard builder."
+   "A dashboard's name, labels and layout are stored and returned exactly as the real Dashboards API (v1) would, round-tripping through etag-checked updates. Tiles built with a classic timeSeriesFilter query render a real chart from live stored time series in the dashboard builder; tiles using MQL (timeSeriesQueryLanguage) are not parsed, matching the Metrics Explorer PromQL gap."
   ],
   "tests": [
    "tests/conformance/test_gcp_monitoring_core.py"
@@ -136,12 +136,10 @@
  "gcp.monitoring.groups": {
   "title": "Groups (static and dynamic resource groups)",
   "level": {
-   "nano": "limited",
-   "offline": "limited"
+   "nano": "full",
+   "offline": "full"
   },
-  "limitations": [
-   "Groups, parent/child nesting and the group filter string are stored and listed for real. Vyomi doesn't evaluate the filter against live resources, so group membership is always empty."
-  ],
+  "limitations": [],
   "tests": [
    "tests/conformance/test_gcp_monitoring_core.py"
   ]

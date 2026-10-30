@@ -191,6 +191,18 @@ def main():
     s, b = call(st, "DELETE", "/groups/" + gid, query={"recursive": "true"})
     check("recursive delete", s == 200 and not st.groups, b)
 
+    # group membership is evaluated for real against the resource instances this project's
+    # own time series have actually reported — not an always-empty stub
+    s, g2 = call(st, "POST", "/groups", {"displayName": "globals", "filter": 'resource.type = "global"'})
+    s, b = call(st, "GET", "/groups/%s/members" % g2["name"].rsplit("/", 1)[-1])
+    check("group members matches real resource instances", s == 200 and b["totalSize"] == 1
+          and b["members"][0]["type"] == "global" and b["members"][0]["labels"]["project_id"] == "p1", b)
+    s, g3 = call(st, "POST", "/groups", {"displayName": "nothing", "filter": 'resource.type = "gce_instance"'})
+    s, b = call(st, "GET", "/groups/%s/members" % g3["name"].rsplit("/", 1)[-1])
+    check("group with no matching resources → empty members", s == 200 and b["totalSize"] == 0, b)
+    call(st, "DELETE", "/groups/" + g2["name"].rsplit("/", 1)[-1])
+    call(st, "DELETE", "/groups/" + g3["name"].rsplit("/", 1)[-1])
+
     # uptime checks
     up = {"displayName": "homepage", "monitoredResource": {"type": "uptime_url", "labels": {"host": "example.com"}},
           "httpCheck": {"path": "/", "port": 443, "useSsl": True}, "period": "300s", "timeout": "10s"}
