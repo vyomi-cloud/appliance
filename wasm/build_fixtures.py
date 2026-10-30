@@ -49,8 +49,10 @@ def _aws_catalog():
 
 def _gcp_catalog():
     m = _load_by_path("providers.gcp_catalog", "providers/gcp_catalog.py")
-    return m.build_console_payload(active_project="nano-project",
-                                   active_region="us-central1")
+    gp = _load_by_path("core.gcp_project", "core/gcp_project.py")   # Nano's one project (ID + number)
+    return m.build_console_payload(active_project=gp.NANO_PROJECT["projectId"],
+                                   active_region="us-central1",
+                                   project_number=gp.NANO_PROJECT["projectNumber"])
 
 
 # Data-plane services (served by the in-browser cores via /api/azure/{key}, not ARM).

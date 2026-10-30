@@ -100,7 +100,7 @@ const CORES = [
   "azure_app_core.py",   // Azure Container Apps engine (Microsoft.App) — loaded before azure_arm_core which delegates to it
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
-  "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
+  "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py",
   "gcp_console_tabs.py", "instance_catalog.py",   // GCP resource-detail tabs engine + machine-type catalog (gcp_core_adapter imports them)
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).

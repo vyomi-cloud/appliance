@@ -416,7 +416,7 @@ def export_space_to_terraform_json(space: dict[str, Any]) -> dict[str, Any]:
 
     active_region = _string(space.get("active_region"), "us-east-1")
     active_provider = _string(space.get("provider"), "aws").lower()
-    project = _string(space.get("active_account") or space.get("project_id") or space.get("name"), "cloudlearn")
+    project = _string(space.get("gcp_project_id") or space.get("active_account") or space.get("project_id") or space.get("name"), "cloudlearn")
 
     for node in nodes:
         if not isinstance(node, dict):

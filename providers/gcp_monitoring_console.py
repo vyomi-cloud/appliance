@@ -15,7 +15,10 @@ from fastapi import HTTPException, Request, Response
 
 from core import gcp_monitoring_core as core
 
-DEFAULT_PROJECT = "demo"
+def _project():
+    """The GCP space's project ID — the project the console creates in."""
+    from core.app_context import gcp_project_name
+    return gcp_project_name(None)
 
 
 def _http_error(r_or_e):
@@ -97,7 +100,7 @@ def register(app, on_change=None):
     async def create_policy(request: Request):
         b = await request.json()
         try:
-            v = core.create_from_form(store(), b, DEFAULT_PROJECT)
+            v = core.create_from_form(store(), b, _project())
         except core._E as e:
             raise _http_error(e)
         changed("create", v)

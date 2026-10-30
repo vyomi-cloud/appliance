@@ -132,8 +132,8 @@ _CLOUDSQL_SQL_CONSOLE_API = {
     "execute": "/api/console/cloudsql/execute",
     "schema": "/api/console/cloudsql/databases/{db}/schema",
     # Native Cloud SQL Admin insert (server.py → api_gcp_sql_create_instance).
-    # Real provisioning — spins the gcp_sql runtime bundle. Project defaults to
-    # cloudlearn (the appliance's fixed project) so the console needn't thread it.
+    # Real provisioning — spins the gcp_sql runtime bundle. `cloudlearn` is swapped
+    # for the GCP space's project ID when served (_with_gcp_project).
     "create": "/api/gcp/sql/v1beta4/projects/cloudlearn/instances",
     "createForm": {
         "method": "POST",
@@ -734,9 +734,31 @@ def _aws_services(conf) -> list:
     ]
 
 
+def _gcp_project() -> str:
+    from core.app_context import gcp_project_name
+    return gcp_project_name(None)
+
+
+def _with_gcp_project(node):
+    """The descriptors below name the project `cloudlearn` (paths, connect snippets);
+    hand the console the GCP space's real project ID (core/gcp_project) instead."""
+    if isinstance(node, dict):
+        return {k: _with_gcp_project(v) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_with_gcp_project(v) for v in node]
+    if isinstance(node, str) and "cloudlearn" in node:
+        pid = _gcp_project()
+        return node.replace("projects/cloudlearn", f"projects/{pid}").replace('"cloudlearn"', f'"{pid}"')
+    return node
+
+
 def _gcp_services(conf) -> list:
     """The GCP-lens service catalog (P3 — the SECOND cloud). `storage` reuses the
     SAME object-browser widget: the ONLY difference is the `api` block (§15.2)."""
+    return _with_gcp_project(_gcp_services_raw(conf))
+
+
+def _gcp_services_raw(conf) -> list:
     return [
         {"id": "storage", "label": "Cloud Storage", "icon": "▤", "widget": "object-browser",
          "terminology": "bucket", "backed_by": "gcp_storage",
@@ -2034,7 +2056,7 @@ def register(app: FastAPI) -> None:
         if name in buckets:
             raise HTTPException(409, detail="Conflict bucket already exists")
         buckets[name] = {
-            "name": name, "project": "cloudlearn", "location": "US",
+            "name": name, "project": _gcp_project(), "location": "US",
             "locationType": "multi-region", "storageClass": "STANDARD",
             "timeCreated": _gcs_now(), "updated": _gcs_now(), "metageneration": "1",
         }

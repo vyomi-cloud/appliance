@@ -50,6 +50,7 @@ from core import sqs_core as sqs
 from core import sns_core as sns
 from core import elbv2_core as elbv2
 from core import rds_data_core as rds_data
+from core import gcp_project as gcp_proj   # GCP: the one project (ID + number) + Resource Manager
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
 from core import gcp_firestore_core as gcp_fs
 from core.gcp_firestore_core import FirestoreStore
@@ -69,6 +70,8 @@ from core import gcp_artifactregistry_core as gcp_ar
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
     client is pointed at the relay and the path is the service discriminator)."""
+    if gcp_proj.CRM_PATH_RE.match(path):   # Cloud Resource Manager (gcloud projects list/describe)
+        return "gcp-resourcemanager"
     if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1")):
         return "gcp-gcs"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
@@ -267,6 +270,9 @@ class AwsWireRouter:
         self.gcp_iamc = s.get("gcp_iamc") or gcp_iamc.IamCredentialsStore()   # IAM Service Account Credentials issue log
         self.gcp_mon = s.get("gcp_mon") or gcp_mon.MonitoringStore()   # Cloud Monitoring (policies, channels, metrics, series)
         self.gcp_ar = s.get("gcp_ar") or gcp_ar.ArtifactRegistryStore()
+        # The GCP project every GCP request is normalized to (a dict, or a callable
+        # returning one): Nano's fixed project unless the host injects its own.
+        self.gcp_project = s.get("gcp_project") or dict(gcp_proj.NANO_PROJECT)
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -491,6 +497,15 @@ class AwsWireRouter:
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc and svc.startswith("gcp-"):   # GCP services — native google-cloud-* REST wire
+            # One project, by ID or number (core/gcp_project): normalize before the core sees it.
+            proj = self.gcp_project() if callable(self.gcp_project) else self.gcp_project
+            path, query, err = gcp_proj.normalize_request(path, dict(query or {}), method, proj)
+            if err is not None or svc == "gcp-resourcemanager":
+                st, obj = err if err is not None else gcp_proj.crm_dispatch(method, path, query, proj)
+                return {"status": st, "headers": {"content-type": "application/json"},
+                        "body": json.dumps(obj).encode()}
+            if svc != "gcp-gcs" and body[:1] in (b"{", b"["):   # object bytes are never rewritten
+                body = gcp_proj.rewrite_body(bytes(body), proj)
             _gcp_core = {
                 "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs),
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),

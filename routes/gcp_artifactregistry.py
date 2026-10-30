@@ -75,8 +75,7 @@ def get_store() -> SpaceArStore:
 
 
 def _project() -> str:
-    space = PLATFORM.get_active_space() or {}
-    return str(space.get("active_account") or "cloudlearn")
+    return ctx.gcp_project_name(None)
 
 
 _SYNC = {"at": 0.0}
@@ -101,7 +100,8 @@ def _sync_registry() -> None:
         found = []
         for repo in get(base + "/_catalog?n=1000")[1].get("repositories") or []:
             proj, _, path = repo.partition("/")
-            if proj != project or "/" not in path:
+            # Images pushed under the project number / a legacy id are the same project.
+            if ctx.gcp_project_name(proj) != project or "/" not in path:
                 continue
             for tag in get(f"{base}/{repo}/tags/list")[1].get("tags") or []:
                 h, man = get(f"{base}/{repo}/manifests/{tag}", accept)

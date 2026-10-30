@@ -9,6 +9,10 @@ import uuid
 import requests
 
 BASE = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000")
+try:   # the GCP space's project ID
+    PROJECT = requests.get(f"{BASE}/api/gcp/catalog", timeout=60).json()["project"]
+except Exception:   # appliance not up yet (collection)
+    PROJECT = "vyomi-project"
 failed = False
 
 
@@ -41,7 +45,7 @@ def snap(settle=None):
 def main():
     prev_space = switch_to_gcp()
     tag = uuid.uuid4().hex[:6]
-    ps = f"{BASE}/api/gcp/pubsub/v1/projects/cloudlearn"
+    ps = f"{BASE}/api/gcp/pubsub/v1/projects/{PROJECT}"
     c0, g0 = snap()
     topic = f"ps-sav-{tag}"
     r = requests.post(f"{ps}/topics", json={"topicId": topic}, timeout=60)
@@ -57,7 +61,7 @@ def main():
     check(f"PUT topic raises resource_count ({c1} -> {c2})", c2 > c1)
 
     sub = f"ps-sub-{tag}"
-    r = requests.put(f"{ps}/subscriptions/{sub}", json={"topic": f"projects/cloudlearn/topics/{topic2}"}, timeout=60)
+    r = requests.put(f"{ps}/subscriptions/{sub}", json={"topic": f"projects/{PROJECT}/topics/{topic2}"}, timeout=60)
     check("PUT create subscription", r.status_code < 300, r.text[:120])
     c3, _ = snap(lambda c, g: c > c2)
     check(f"subscription raises resource_count ({c2} -> {c3})", c3 > c2)

@@ -13,7 +13,10 @@ from fastapi import HTTPException, Request, Response
 
 from core import gcp_container_core as core
 
-DEFAULT_PROJECT = "demo"
+def _project():
+    """The GCP space's project ID — the project the console creates in."""
+    from core.app_context import gcp_project_name
+    return gcp_project_name(None)
 
 
 async def _json_body(request):
@@ -93,11 +96,11 @@ def register(app, on_change=None):
     @app.post("/api/container/clusters")
     async def create_cluster(request: Request):
         form = await _json_body(request)
-        req = core.job_from_form(form, DEFAULT_PROJECT)
+        req = core.job_from_form(form, _project())
         r = call("POST", f"/v1/{req['parent']}/clusters", body=json.dumps({"cluster": req["cluster"]}).encode())
         if r.status >= 300:
             raise _http_error(r)
-        v = core.view_by_name(store(), core.cluster_name(DEFAULT_PROJECT, req["location"], req["cluster"]["name"]))
+        v = core.view_by_name(store(), core.cluster_name(_project(), req["location"], req["cluster"]["name"]))
         changed("create", v)
         return v
 

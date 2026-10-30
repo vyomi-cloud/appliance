@@ -415,7 +415,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 
 <script>
 const ORIGIN = window.location.origin;
-let CATALOG = null, PROJECT = "cloudlearn", REGION = "us-central1", ZONE = "us-central1-a";
+let CATALOG = null, PROJECT = "vyomi-project", REGION = "us-central1", ZONE = "us-central1-a";
 let INSTANCE_CATALOG = [];
 let STATE = {view: "home", service: null, item: null, detailTab: 0};
 const NOTIFS = [];
@@ -604,7 +604,7 @@ function renderProjectModal(){
         icon("folder_open"),
         el("span",{class:"name"}, s.name),
         el("span",{class:"badge sim"}, "SIM"),
-        el("span",{class:"id"}, s.space_id),
+        el("span",{class:"id"}, s.gcp_project_id || s.space_id),
         el("span",{class:"star material-symbols-outlined"+(isCurrent?" starred":"")}, isCurrent?"star":"star_border"));
       list.append(item);
     });

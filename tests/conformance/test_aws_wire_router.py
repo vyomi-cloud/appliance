@@ -150,7 +150,7 @@ def run() -> int:
 
     # ── GCP GCS: native JSON-API wire, routed by /storage/v1 path (no SigV4) ──
     import json as _json
-    cb = R.handle("POST", "/storage/v1/b", {"project": "p"},
+    cb = R.handle("POST", "/storage/v1/b", {"project": "nano-project"},
                   {"content-type": "application/json"}, _json.dumps({"name": "gbucket"}).encode())
     _check("gcs create bucket 200", cb["status"] == 200 and
            _json.loads(_body(cb))["kind"] == "storage#bucket")

@@ -532,6 +532,28 @@ def _register_gcp(app: FastAPI) -> None:
             "createTime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
 
+    # Native list / get (`gcloud secrets list|describe`, the SDKs' listSecrets /
+    # getSecret) over the same name index the console list reads.
+    @app.get("/v1/projects/{project}/secrets")
+    async def gcp_secrets_list(project: str, request: Request):
+        space = _active_space_id(request)
+        created = _gcp_idx_created(space, "secrets")
+        names = _gcp_idx_get(space, "secrets")
+        return {"secrets": [{"name": f"projects/{project}/secrets/{n}",
+                             "replication": {"automatic": {}},
+                             "createTime": created.get(n, "")} for n in names],
+                "totalSize": len(names)}
+
+    @app.get("/v1/projects/{project}/secrets/{secret}")
+    async def gcp_secrets_get(project: str, secret: str, request: Request):
+        space = _active_space_id(request)
+        if secret not in _gcp_idx_get(space, "secrets"):
+            return JSONResponse(status_code=404, content={"error": {
+                "code": 404, "status": "NOT_FOUND",
+                "message": f"Secret [projects/{project}/secrets/{secret}] not found or has no versions."}})
+        return {"name": f"projects/{project}/secrets/{secret}", "replication": {"automatic": {}},
+                "createTime": _gcp_idx_created(space, "secrets").get(secret, "")}
+
     @app.post("/v1/projects/{project}/secrets/{secret}:addVersion")
     async def gcp_secrets_add_version(project: str, secret: str, request: Request):
         space = _active_space_id(request)
