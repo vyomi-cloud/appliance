@@ -162,6 +162,54 @@ try {
   await page.locator("[data-vyomi-not-simulated]").first().waitFor({ timeout: 5000 });
   check("honest gap page carries data-vyomi-not-simulated", true);
 
+  // Cloud Scheduler: create a job through the wizard → visible over native jobs.list
+  const J = `v4-gcp-job-${Date.now() % 100000}`;
+  await page.goto(UI + "#/cloudscheduler/jobs/new");
+  await page.getByLabel("Name").fill(J);
+  await page.getByLabel("Frequency").fill("0 * * * *");
+  await page.getByLabel("URL").fill("https://example.com/handler");
+  await shot("12-scheduler-create-filled");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: J }).waitFor({ timeout: 10000 });
+  const job = await wjson(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`);
+  check("create job → visible over native wire (jobs.get)", job.name?.endsWith(`/jobs/${J}`) && job.httpTarget?.uri === "https://example.com/handler");
+  await shot("13-scheduler-detail");
+
+  // Pause / resume / force run over the UI, each checked back over the wire
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await page.getByRole("button", { name: "Resume", exact: true }).waitFor({ timeout: 10000 });
+  check("pause via UI → jobs.get shows PAUSED", (await wjson(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`)).state === "PAUSED");
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await page.getByRole("button", { name: "Pause", exact: true }).waitFor({ timeout: 10000 });
+  check("resume via UI → jobs.get shows ENABLED", (await wjson(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`)).state === "ENABLED");
+  await page.getByRole("button", { name: "Force run" }).click();
+  await page.waitForTimeout(500);
+  check("force run via UI → jobs.get shows a lastAttemptTime", !!(await wjson(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`)).lastAttemptTime);
+
+  // Edit: switch the target to Pub/Sub (a real topic, created over the wire) and save
+  const T = `v4-gcp-topic-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/topics/${T}`, { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
+  await page.getByRole("link", { name: "Edit" }).click();
+  await page.getByLabel("Target type").click();
+  await page.getByRole("option", { name: "Pub/Sub" }).click();
+  await page.getByLabel("Select a Cloud Pub/Sub topic").click();
+  await page.getByRole("option", { name: `projects/vyomi-project/topics/${T}` }).click();
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("heading", { name: J }).waitFor({ timeout: 10000 });
+  const edited = await wjson(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`);
+  check("edit job target via UI → jobs.get shows pubsubTarget, httpTarget gone", edited.pubsubTarget?.topicName === `projects/vyomi-project/topics/${T}` && !edited.httpTarget);
+  await shot("14-scheduler-edited");
+
+  // Delete from the list
+  await page.goto(UI + "#/cloudscheduler/jobs");
+  await page.getByRole("link", { name: J }).waitFor({ timeout: 10000 });
+  await page.getByRole("checkbox", { name: `Select projects/vyomi-project/locations/us-central1/jobs/${J}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(J);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  check("delete job via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`)).status === 404);
+
   // Dark mode
   await page.goto(UI + "#/storage/browser");
   await page.getByRole("button", { name: "More options" }).click();          // ⋮ menu, as in the native top bar
