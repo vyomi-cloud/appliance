@@ -48,6 +48,10 @@ export const terminateInstances = (ids, force) => call("TerminateInstances", { I
 export const modifyInstanceAttribute = (id, attr) => call("ModifyInstanceAttribute", { InstanceId: id, ...attr });
 export const monitorInstances = (ids) => call("MonitorInstances", { InstanceId: ids });
 export const unmonitorInstances = (ids) => call("UnmonitorInstances", { InstanceId: ids });
+export async function describeInstanceStatus(id) {
+  const r = await call("DescribeInstanceStatus", { InstanceId: [id], IncludeAllInstances: true });
+  return asList(r.instanceStatusSet?.item)[0];
+}
 
 export async function describeInstanceTypes() {
   const r = await call("DescribeInstanceTypes");
@@ -172,6 +176,14 @@ export async function describeLaunchTemplates() {
   return asList(r.launchTemplates?.item).map(ltFromXml);
 }
 export const deleteLaunchTemplate = (id) => call("DeleteLaunchTemplate", { LaunchTemplateId: id });
+const ltvFromXml = (x) => ({ ...x, DefaultVersion: x.defaultVersion === "true" });
+export const createLaunchTemplateVersion = (id, sourceVersion, data, versionDescription) =>
+  call("CreateLaunchTemplateVersion", { LaunchTemplateId: id, SourceVersion: sourceVersion, LaunchTemplateData: data, VersionDescription: versionDescription }).then((r) => ltvFromXml(r.launchTemplateVersion));
+export async function describeLaunchTemplateVersions(id) {
+  const r = await call("DescribeLaunchTemplateVersions", { LaunchTemplateId: id });
+  return asList(r.launchTemplateVersionSet?.item).map(ltvFromXml);
+}
+export const modifyLaunchTemplate = (id, defaultVersion) => call("ModifyLaunchTemplate", { LaunchTemplateId: id, DefaultVersion: defaultVersion }).then((r) => ltFromXml(r.launchTemplate));
 
 // ── tags (generic) ──────────────────────────────────────────────────────
 export const createTags = (resourceIds, tags) => call("CreateTags", { ResourceId: resourceIds, Tag: tagsToArray(tags) });

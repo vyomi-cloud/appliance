@@ -1242,6 +1242,7 @@ def _instance_xml(inst: dict) -> str:
         f"<deleteOnTermination>{str(bd.get('delete_on_termination', True)).lower()}</deleteOnTermination></ebs></item>"
         for bd in inst.get("block_devices", []))
     sgs = "".join(f"<item><groupId>{_xml_escape(g)}</groupId><groupName>{_xml_escape(g)}</groupName></item>" for g in inst.get("sg_ids", []))
+    partition_xml = f"<partitionNumber>{inst['partition_number']}</partitionNumber>" if inst.get("partition_number") else ""
     return (
         "<item>"
         f"<instanceId>{_xml_escape(inst['id'])}</instanceId>"
@@ -1252,7 +1253,7 @@ def _instance_xml(inst: dict) -> str:
         f"<instanceType>{_xml_escape(inst['instance_type'])}</instanceType>"
         f"<launchTime>{_xml_escape(inst['launch_time'])}</launchTime>"
         f"<placement><availabilityZone>{_xml_escape(inst['az'])}</availabilityZone><tenancy>{_xml_escape(inst.get('tenancy', 'default'))}</tenancy>"
-        f"<groupName>{_xml_escape(inst.get('placement_group', ''))}</groupName></placement>"
+        f"<groupName>{_xml_escape(inst.get('placement_group', ''))}</groupName>{partition_xml}</placement>"
         f"<platform>{_xml_escape(inst.get('platform', ''))}</platform>"
         f"<platformDetails>{_xml_escape(inst.get('platform_details', 'Linux/UNIX'))}</platformDetails>"
         f"<privateIpAddress>{_xml_escape(inst.get('private_ip', ''))}</privateIpAddress>"
@@ -1294,6 +1295,22 @@ def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
     az = str(params.get("Placement.AvailabilityZone") or (subnet or {}).get("az") or _AZS[idx % len(_AZS)])
     sg_ids = [v for k, v in params.items() if k.startswith("SecurityGroupId.")] or \
              [v for k, v in params.items() if k.startswith("SecurityGroupIds.")] or [default_sg]
+    group_name = str(params.get("Placement.GroupName") or "")
+    partition_number = None
+    if group_name:
+        pg = next((p for p in m["placement_groups"].values() if p["name"] == group_name), None)
+        if pg is None:
+            raise VpcError("InvalidPlacementGroup.Unknown", f"The placement group '{group_name}' is unknown.")
+        members = [i for i in m["instances"].values() if i.get("placement_group") == group_name and i["state"] in ("pending", "running")]
+        if pg["strategy"] == "spread":
+            in_az = sum(1 for i in members if i["az"] == az)
+            if in_az >= 7:
+                raise VpcError("InsufficientInstanceCapacity",
+                                f"Insufficient capacity to launch instance into spread placement group '{group_name}': "
+                                f"a spread placement group supports a maximum of 7 running instances per Availability Zone.")
+        elif pg["strategy"] == "partition":
+            partition_count = pg.get("partition_count") or 2
+            partition_number = (len(members) % partition_count) + 1
     instance_id = "i-" + uuid.uuid4().hex[:17]
     n = len(m["instances"]) + idx
     private_ip = _pseudo_ip(n)
@@ -1322,7 +1339,7 @@ def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
         "platform": image.get("platform", ""), "platform_details": "Windows" if image.get("platform") == "windows" else "Linux/UNIX",
         "ebs_optimized": True, "termination_protection": str(params.get("DisableApiTermination", "")).lower() == "true",
         "stop_protection": False, "shutdown_behavior": str(params.get("InstanceInitiatedShutdownBehavior") or "stop"),
-        "tenancy": str(params.get("Placement.Tenancy") or "default"), "placement_group": str(params.get("Placement.GroupName") or ""),
+        "tenancy": str(params.get("Placement.Tenancy") or "default"), "placement_group": group_name, "partition_number": partition_number,
         "iam_instance_profile": str(params.get("IamInstanceProfile.Name") or params.get("IamInstanceProfile.Arn") or ""),
         "credit_spec": str(params.get("CreditSpecification.CpuCredits") or "standard"),
         "hibernation": str(params.get("HibernationOptions.Configured", "")).lower() == "true",
@@ -1438,6 +1455,30 @@ def _monitor_instances(store, params, enabled):
             items.append(f"<item><instanceId>{_xml_escape(v)}</instanceId><monitoring><state>{'enabled' if enabled else 'disabled'}</state></monitoring></item>")
     tag = "instancesSet"
     return _envelope("MonitorInstances" if enabled else "UnmonitorInstances", f"<{tag}>{''.join(items)}</{tag}>")
+
+
+def _instance_status_xml(inst: dict) -> str:
+    ok = inst["state"] == "running"
+    status = "ok" if ok else "not-applicable"
+    details = ("<details><item><name>reachability</name><status>passed</status></item></details>" if ok else "")
+    return ("<item>"
+            f"<instanceId>{_xml_escape(inst['id'])}</instanceId>"
+            f"<availabilityZone>{_xml_escape(inst['az'])}</availabilityZone>"
+            f"<instanceState><code>{_STATE_CODE.get(inst['state'], 0)}</code><name>{_xml_escape(inst['state'])}</name></instanceState>"
+            f"<systemStatus><status>{status}</status>{details}</systemStatus>"
+            f"<instanceStatus><status>{status}</status>{details}</instanceStatus>"
+            "<eventsSet/>"
+            "</item>")
+
+
+def _describe_instance_status(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("InstanceId.")]
+    include_all = str(params.get("IncludeAllInstances", "")).lower() == "true"
+    rows = [m["instances"][i] for i in ids if i in m["instances"]] if ids else list(m["instances"].values())
+    if not include_all:
+        rows = [r for r in rows if r["state"] == "running"]
+    return _envelope("DescribeInstanceStatus", f"<instanceStatusSet>{''.join(_instance_status_xml(r) for r in rows)}</instanceStatusSet>")
 
 
 # ── AMIs ────────────────────────────────────────────────────────────────
@@ -1990,8 +2031,10 @@ def _create_placement_group(store, params):
     m = _model(store)
     name = str(params.get("GroupName") or f"pg-{uuid.uuid4().hex[:6]}")
     pg_id = _rid("pg")
-    pg = {"id": pg_id, "name": name, "strategy": str(params.get("Strategy") or "cluster"), "state": "available",
-          "partition_count": int(params["PartitionCount"]) if params.get("PartitionCount") else None,
+    strategy = str(params.get("Strategy") or "cluster")
+    partition_count = int(params["PartitionCount"]) if params.get("PartitionCount") else (2 if strategy == "partition" else None)
+    pg = {"id": pg_id, "name": name, "strategy": strategy, "state": "available",
+          "partition_count": partition_count,
           "arn": f"arn:aws:ec2:us-east-1:{OWNER_ID}:placement-group/{name}", "tags": _parse_tag_specifications(params).get("placement-group", {})}
     m["placement_groups"][pg_id] = pg
     return _envelope("CreatePlacementGroup", _pg_xml(pg).replace("<item>", "").replace("</item>", ""))
@@ -2008,6 +2051,9 @@ def _delete_placement_group(store, params):
     target = next((k for k, pg in m["placement_groups"].items() if pg["name"] == name), None)
     if target is None:
         raise VpcError("InvalidPlacementGroup.Unknown", f"The placement group '{name}' is unknown.")
+    in_use = any(i.get("placement_group") == name and i["state"] in ("pending", "running", "stopping", "stopped") for i in m["instances"].values())
+    if in_use:
+        raise VpcError("InvalidPlacementGroup.InUse", f"The placement group '{name}' has running or stopped instances in it and cannot be deleted.")
     m["placement_groups"].pop(target)
     return _envelope("DeletePlacementGroup", "<return>true</return>")
 
@@ -2026,6 +2072,55 @@ def _lt_xml(lt: dict) -> str:
             "</item>")
 
 
+def _lt_version_data_xml(data: dict) -> str:
+    out = []
+    if data.get("ImageId"):
+        out.append(f"<imageId>{_xml_escape(data['ImageId'])}</imageId>")
+    if data.get("InstanceType"):
+        out.append(f"<instanceType>{_xml_escape(data['InstanceType'])}</instanceType>")
+    if data.get("KeyName"):
+        out.append(f"<keyName>{_xml_escape(data['KeyName'])}</keyName>")
+    if data.get("SubnetId"):
+        out.append(f"<networkInterfaceSet><item><subnetId>{_xml_escape(data['SubnetId'])}</subnetId></item></networkInterfaceSet>")
+    sg_ids = [v for k, v in data.items() if k.startswith("SecurityGroupIds.")]
+    if sg_ids:
+        out.append("<securityGroupIdSet>" + "".join(f"<item>{_xml_escape(g)}</item>" for g in sg_ids) + "</securityGroupIdSet>")
+    if data.get("UserData"):
+        out.append(f"<userData>{_xml_escape(data['UserData'])}</userData>")
+    if data.get("InstanceInitiatedShutdownBehavior"):
+        out.append(f"<instanceInitiatedShutdownBehavior>{_xml_escape(data['InstanceInitiatedShutdownBehavior'])}</instanceInitiatedShutdownBehavior>")
+    if "DisableApiTermination" in data:
+        out.append(f"<disableApiTermination>{str(data['DisableApiTermination']).lower()}</disableApiTermination>")
+    name = data.get("IamInstanceProfile.Name")
+    if name:
+        out.append(f"<iamInstanceProfile><name>{_xml_escape(name)}</name></iamInstanceProfile>")
+    bdm = "".join(
+        f"<item><deviceName>{_xml_escape(v)}</deviceName></item>"
+        for k, v in data.items() if k.endswith(".DeviceName") and k.startswith("BlockDeviceMapping."))
+    if bdm:
+        out.append(f"<blockDeviceMappingSet>{bdm}</blockDeviceMappingSet>")
+    return "".join(out)
+
+
+def _ltv_xml(lt: dict, v: dict) -> str:
+    return ("<item>"
+            f"<launchTemplateId>{_xml_escape(lt['id'])}</launchTemplateId><launchTemplateName>{_xml_escape(lt['name'])}</launchTemplateName>"
+            f"<versionNumber>{v['version']}</versionNumber><versionDescription>{_xml_escape(v.get('description', ''))}</versionDescription>"
+            f"<createTime>{_xml_escape(v.get('create_time') or lt['create_time'])}</createTime><createdBy>{_xml_escape(lt['created_by'])}</createdBy>"
+            f"<defaultVersion>{str(v['version'] == lt['default_version']).lower()}</defaultVersion>"
+            f"<launchTemplateData>{_lt_version_data_xml(v.get('data', {}))}</launchTemplateData>"
+            "</item>")
+
+
+def _find_launch_template(m, params) -> dict:
+    lt_id = params.get("LaunchTemplateId")
+    name = params.get("LaunchTemplateName")
+    target = next((lt for lt in m["launch_templates"].values() if (lt_id and lt["id"] == lt_id) or (name and lt["name"] == name)), None)
+    if target is None:
+        raise VpcError("InvalidLaunchTemplateId.NotFound", "Launch template not found.")
+    return target
+
+
 def _create_launch_template(store, params):
     m = _model(store)
     name = str(params.get("LaunchTemplateName"))
@@ -2034,7 +2129,7 @@ def _create_launch_template(store, params):
     lt_id = _rid("lt")
     lt = {"id": lt_id, "name": name, "default_version": 1, "latest_version": 1, "create_time": _now(),
           "created_by": f"arn:aws:iam::{OWNER_ID}:root", "tags": _parse_tag_specifications(params).get("launch-template", {}),
-          "versions": {1: {"version": 1, "description": str(params.get("VersionDescription") or ""), "data": _lt_data(params)}}}
+          "versions": {1: {"version": 1, "description": str(params.get("VersionDescription") or ""), "data": _lt_data(params), "create_time": _now()}}}
     m["launch_templates"][lt_id] = lt
     return _envelope("CreateLaunchTemplate", _lt_xml(lt).replace("<item>", "<launchTemplate>").replace("</item>", "</launchTemplate>"))
 
@@ -2060,6 +2155,52 @@ def _delete_launch_template(store, params):
         raise VpcError("InvalidLaunchTemplateId.NotFound", "Launch template not found.")
     lt = m["launch_templates"].pop(target)
     return _envelope("DeleteLaunchTemplate", _lt_xml(lt).replace("<item>", "<launchTemplate>").replace("</item>", "</launchTemplate>"))
+
+
+def _create_launch_template_version(store, params):
+    m = _model(store)
+    lt = _find_launch_template(m, params)
+    source_version = params.get("SourceVersion")
+    base_data = {}
+    if source_version is not None:
+        sv = lt["versions"].get(int(source_version))
+        if sv is None:
+            raise VpcError("InvalidLaunchTemplateId.VersionNotFound", f"Launch template version '{source_version}' is unknown.")
+        base_data = dict(sv["data"])
+    new_data = {**base_data, **_lt_data(params)}
+    version_num = lt["latest_version"] + 1
+    v = {"version": version_num, "description": str(params.get("VersionDescription") or ""), "data": new_data, "create_time": _now()}
+    lt["versions"][version_num] = v
+    lt["latest_version"] = version_num
+    return _envelope("CreateLaunchTemplateVersion", _ltv_xml(lt, v).replace("<item>", "<launchTemplateVersion>").replace("</item>", "</launchTemplateVersion>"))
+
+
+def _describe_launch_template_versions(store, params):
+    m = _model(store)
+    lt = _find_launch_template(m, params)
+    versions = [lt["versions"][k] for k in sorted(lt["versions"])]
+    wanted = [v for k, v in params.items() if k.startswith("LaunchTemplateVersion.")]
+    if wanted:
+        versions = [v for v in versions if str(v["version"]) in wanted]
+    else:
+        min_v, max_v = params.get("MinVersion"), params.get("MaxVersion")
+        if min_v is not None:
+            versions = [v for v in versions if v["version"] >= int(min_v)]
+        if max_v is not None:
+            versions = [v for v in versions if v["version"] <= int(max_v)]
+    return _envelope("DescribeLaunchTemplateVersions", f"<launchTemplateVersionSet>{''.join(_ltv_xml(lt, v) for v in versions)}</launchTemplateVersionSet>")
+
+
+def _modify_launch_template(store, params):
+    m = _model(store)
+    lt = _find_launch_template(m, params)
+    default_version = params.get("DefaultVersion")
+    if default_version is not None:
+        v = int(default_version)
+        if v not in lt["versions"]:
+            raise VpcError("InvalidLaunchTemplateId.VersionNotFound", f"Launch template version '{default_version}' is unknown.")
+        lt["default_version"] = v
+    return _envelope("ModifyLaunchTemplate", _lt_xml(lt).replace("<item>", "<launchTemplate>").replace("</item>", "</launchTemplate>"))
 
 
 # ── tags (generic, any resource) ────────────────────────────────────────
@@ -2215,6 +2356,7 @@ _OPS = {
     "UnmonitorInstances": lambda s, p: _monitor_instances(s, p, False),
     "DescribeInstanceTypes": _describe_instance_types,
     "DescribeAvailabilityZones": _describe_availability_zones,
+    "DescribeInstanceStatus": _describe_instance_status,
     # AMIs
     "CreateImage": _create_image, "DescribeImages": _describe_images,
     "DeregisterImage": _deregister_image, "CopyImage": _copy_image,
@@ -2242,6 +2384,9 @@ _OPS = {
     # launch templates
     "CreateLaunchTemplate": _create_launch_template, "DescribeLaunchTemplates": _describe_launch_templates,
     "DeleteLaunchTemplate": _delete_launch_template,
+    "CreateLaunchTemplateVersion": _create_launch_template_version,
+    "DescribeLaunchTemplateVersions": _describe_launch_template_versions,
+    "ModifyLaunchTemplate": _modify_launch_template,
     # tags
     "CreateTags": _create_tags, "DeleteTags": _delete_tags, "DescribeTags": _describe_tags,
     # EBS account defaults
