@@ -162,22 +162,22 @@ _DYNAMODB_SUB = [
     {"group": "Tables", "items": [
         {"key": "items",       "label": "Explore items",      "icon": "table_view",  "type": "dynamoItems"},
         {"key": "query",       "label": "Query/Scan",         "icon": "search",      "type": "dynamoQuery"},
-        {"key": "indexes",     "label": "Indexes",            "icon": "format_indent_increase", "type": "stub"},
-        {"key": "streams",     "label": "Streams and triggers","icon": "stream",     "type": "stub"},
+        {"key": "indexes",     "label": "Indexes",            "icon": "format_indent_increase", "type": "ddbIndexes"},
+        {"key": "streams",     "label": "Streams and triggers","icon": "stream",     "type": "ddbStreams"},
     ]},
     {"group": "Settings", "items": [
-        {"key": "capacity",    "label": "Read/write capacity","icon": "speed",       "type": "stub"},
-        {"key": "encryption",  "label": "Encryption at rest", "icon": "enhanced_encryption", "type": "stub"},
-        {"key": "ttl",         "label": "Time to live",       "icon": "schedule",    "type": "stub"},
+        {"key": "capacity",    "label": "Read/write capacity","icon": "speed",       "type": "ddbCapacity"},
+        {"key": "encryption",  "label": "Encryption at rest", "icon": "enhanced_encryption", "type": "ddbEncryption"},
+        {"key": "ttl",         "label": "Time to live",       "icon": "schedule",    "type": "ddbTtl"},
         *_settings_props_locks(),
     ]},
     {"group": "Backup", "items": [
-        {"key": "backups",     "label": "Backups",            "icon": "backup",      "type": "stub"},
-        {"key": "pitr",        "label": "Point-in-time recovery", "icon": "history", "type": "stub"},
+        {"key": "backups",     "label": "Backups",            "icon": "backup",      "type": "ddbBackups"},
+        {"key": "pitr",        "label": "Point-in-time recovery", "icon": "history", "type": "ddbPitr"},
     ]},
     {"group": "Monitoring", "items": [
         {"key": "monitoring",  "label": "Monitor",            "icon": "show_chart",  "type": "metrics"},
-        {"key": "insights",    "label": "Insights",           "icon": "insights",    "type": "stub"},
+        {"key": "insights",    "label": "Insights",           "icon": "insights",    "type": "ddbInsights"},
     ]},
 ]
 

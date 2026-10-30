@@ -3474,6 +3474,131 @@ SUB_RENDERERS.dynamoquery = function(svc, full, host){
   host.append(out);
 };
 
+// ── DynamoDB settings tabs ───────────────────────────────────────────
+// Each tab reads the table through the DynamoDB wire API (DescribeTable, DescribeTimeToLive,
+// DescribeContinuousBackups, ...), exactly what the SDK/CLI sees, and Save writes through the
+// matching Update* operation, so an edit is still there when the tab is reopened.
+async function ddbRpc(op, payload){
+  const r = await fetch(ORIGIN+"/dynamodb", {method:"POST",
+    headers:{"Content-Type":"application/x-amz-json-1.0","X-Amz-Target":"DynamoDB_20120810."+op,
+             "Authorization":"AWS4-HMAC-SHA256 Credential=test/20260531/us-east-1/dynamodb/aws4_request"},
+    body: JSON.stringify(payload||{})});
+  let j = {}; try { j = await r.json(); } catch(e) {}
+  return {ok:r.ok, status:r.status, json:j};
+}
+const ddbTable = async full => { const r = await ddbRpc("DescribeTable",{TableName:full.name}); return r.ok ? r.json.Table : null; };
+const ddbWhen = v => v ? new Date((typeof v === "number" ? v*1000 : v)).toISOString().replace("T"," ").slice(0,19)+" UTC" : "—";
+function ddbCard(host, title, rows){
+  const card = el("div",{class:"kv-card"}); card.append(el("div",{class:"h"}, title));
+  const g = el("div",{class:"kv-grid"});
+  rows.forEach(([k,v]) => g.append(el("div",{}, el("div",{class:"k"}, k),
+    el("div",{class:"v"+(/arn|id|name/i.test(k)?" mono":"")}, v == null || v === "" ? "None" : String(v)))));
+  card.append(g); host.append(card); return card;
+}
+function ddbTbl(host, cols, rows, empty){
+  if (!rows.length) { host.append(el("div",{class:"empty"}, empty)); return; }
+  const t = el("table",{class:"aws"}); t.append(el("tr",{}, ...cols.map(c => el("th",{}, c))));
+  rows.forEach(r => t.append(el("tr",{}, ...r.map(v => el("td",{class:"small"}, v == null || v === "" ? "—" : String(v))))));
+  host.append(t);
+}
+SUB_RENDERERS.ddbindexes = async function(svc, full, host){
+  const t = await ddbTable(full); if (!t) { host.append(el("div",{class:"alert err"}, "DescribeTable failed")); return; }
+  const key = ks => (ks||[]).map(k => k.AttributeName+" ("+k.KeyType+")").join(", ");
+  host.append(el("h3",{class:"page-h"}, "Global secondary indexes ("+(t.GlobalSecondaryIndexes||[]).length+")"));
+  ddbTbl(host, ["Name","Status","Keys","Projection","Items","ARN"],
+    (t.GlobalSecondaryIndexes||[]).map(i => [i.IndexName,i.IndexStatus||"ACTIVE",key(i.KeySchema),(i.Projection||{}).ProjectionType,i.ItemCount,i.IndexArn]),
+    "No global secondary indexes on "+t.TableName+".");
+  host.append(el("h3",{class:"page-h",style:"margin-top:16px"}, "Local secondary indexes ("+(t.LocalSecondaryIndexes||[]).length+")"));
+  ddbTbl(host, ["Name","Keys","Projection","Items","ARN"],
+    (t.LocalSecondaryIndexes||[]).map(i => [i.IndexName,key(i.KeySchema),(i.Projection||{}).ProjectionType,i.ItemCount,i.IndexArn]),
+    "No local secondary indexes on "+t.TableName+".");
+};
+SUB_RENDERERS.ddbstreams = async function(svc, full, host){
+  const t = await ddbTable(full); if (!t) return;
+  const sp = t.StreamSpecification || {};
+  ddbCard(host, "DynamoDB stream details", [
+    ["Stream", sp.StreamEnabled ? "Enabled" : "Disabled"], ["View type", sp.StreamViewType],
+    ["Latest stream ARN", t.LatestStreamArn], ["Latest stream label", t.LatestStreamLabel]]);
+};
+SUB_RENDERERS.ddbcapacity = async function(svc, full, host){
+  const t = await ddbTable(full); if (!t) return;
+  const pt = t.ProvisionedThroughput || {}, mode = (t.BillingModeSummary||{}).BillingMode || "PROVISIONED";
+  ddbCard(host, "Capacity mode", [["Billing mode", mode === "PAY_PER_REQUEST" ? "On-demand" : "Provisioned"],
+    ["Read capacity units", mode === "PAY_PER_REQUEST" ? "On-demand" : pt.ReadCapacityUnits],
+    ["Write capacity units", mode === "PAY_PER_REQUEST" ? "On-demand" : pt.WriteCapacityUnits],
+    ["Table class", (t.TableClassSummary||{}).TableClass || "STANDARD"],
+    ["Decreases today", pt.NumberOfDecreasesToday]]);
+  const card = el("div",{class:"kv-card"}); card.append(el("div",{class:"h"}, "Edit capacity"));
+  const sel = el("select",{"data-testid":"ddb-billing"}, el("option",{value:"PAY_PER_REQUEST"},"On-demand"), el("option",{value:"PROVISIONED"},"Provisioned"));
+  sel.value = mode;
+  const rcu = el("input",{type:"number",min:1,value:pt.ReadCapacityUnits||5,"data-testid":"ddb-rcu"});
+  const wcu = el("input",{type:"number",min:1,value:pt.WriteCapacityUnits||5,"data-testid":"ddb-wcu"});
+  card.append(el("div",{class:"field"}, el("label",{},"Capacity mode"), sel), el("div",{class:"field"}, el("label",{},"Read capacity units"), rcu),
+    el("div",{class:"field"}, el("label",{},"Write capacity units"), wcu),
+    el("button",{class:"btn primary","data-testid":"ddb-capacity-save",onclick:async()=>{
+      const body = {TableName:full.name, BillingMode: sel.value};
+      if (sel.value === "PROVISIONED") body.ProvisionedThroughput = {ReadCapacityUnits:+rcu.value, WriteCapacityUnits:+wcu.value};
+      const r = await ddbRpc("UpdateTable", body);
+      if (r.ok) { toast("Capacity saved"); host.innerHTML=""; SUB_RENDERERS.ddbcapacity(svc, full, host); }
+      else toast("Save failed: "+(r.json.message||r.status), "err");
+    }}, "Save changes"));
+  host.append(card);
+};
+SUB_RENDERERS.ddbencryption = async function(svc, full, host){
+  const t = await ddbTable(full); if (!t) return;
+  const sse = t.SSEDescription;
+  ddbCard(host, "Encryption at rest", [["Encryption type", sse ? (sse.SSEType === "KMS" ? "AWS Key Management Service (KMS)" : sse.SSEType) : "Owned by Amazon DynamoDB"],
+    ["Status", sse ? sse.Status : "ENABLED"], ["KMS key ARN", sse && sse.KMSMasterKeyArn]]);
+};
+SUB_RENDERERS.ddbttl = async function(svc, full, host){
+  const r = await ddbRpc("DescribeTimeToLive",{TableName:full.name});
+  const d = r.json.TimeToLiveDescription || {};
+  const on = d.TimeToLiveStatus === "ENABLED" || d.TimeToLiveStatus === "ENABLING";
+  ddbCard(host, "Time to live (TTL)", [["TTL status", d.TimeToLiveStatus || "DISABLED"], ["TTL attribute name", d.AttributeName]]);
+  const card = el("div",{class:"kv-card"}); card.append(el("div",{class:"h"}, on ? "Turn off TTL" : "Turn on TTL"));
+  const attr = el("input",{value:d.AttributeName||"ttl","data-testid":"ddb-ttl-attr"});
+  if (!on) card.append(el("div",{class:"field"}, el("label",{},"TTL attribute name"), attr));
+  card.append(el("button",{class:"btn primary","data-testid":"ddb-ttl-save",onclick:async()=>{
+    const u = await ddbRpc("UpdateTimeToLive",{TableName:full.name,TimeToLiveSpecification:{Enabled:!on,AttributeName:on?d.AttributeName:attr.value}});
+    if (u.ok) { toast("TTL updated"); host.innerHTML=""; SUB_RENDERERS.ddbttl(svc, full, host); } else toast("Update failed: "+(u.json.message||u.status),"err");
+  }}, on ? "Turn off TTL" : "Turn on TTL"));
+  host.append(card);
+};
+SUB_RENDERERS.ddbbackups = async function(svc, full, host){
+  const r = await ddbRpc("ListBackups",{TableName:full.name});
+  const rows = (r.json.BackupSummaries||[]);
+  const name = el("input",{placeholder:"Backup name",value:full.name+"-backup","data-testid":"ddb-backup-name"});
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"},"Create on-demand backup"), el("div",{class:"field"}, el("label",{},"Backup name"), name),
+    el("button",{class:"btn primary","data-testid":"ddb-backup-create",onclick:async()=>{
+      const c = await ddbRpc("CreateBackup",{TableName:full.name,BackupName:name.value});
+      if (c.ok) { toast("Backup created"); host.innerHTML=""; SUB_RENDERERS.ddbbackups(svc, full, host); } else toast("Backup failed: "+(c.json.message||c.status),"err");
+    }}, "Create backup")));
+  host.append(el("h3",{class:"page-h",style:"margin-top:16px"}, "Backups ("+rows.length+")"));
+  ddbTbl(host, ["Name","Status","Type","Size (bytes)","Created","ARN"],
+    rows.map(b => [b.BackupName,b.BackupStatus,b.BackupType,b.BackupSizeBytes,ddbWhen(b.BackupCreationDateTime),b.BackupArn]),
+    "No backups for "+full.name+".");
+};
+SUB_RENDERERS.ddbpitr = async function(svc, full, host){
+  const r = await ddbRpc("DescribeContinuousBackups",{TableName:full.name});
+  const d = (r.json.ContinuousBackupsDescription||{}), p = d.PointInTimeRecoveryDescription||{};
+  const on = p.PointInTimeRecoveryStatus === "ENABLED";
+  ddbCard(host, "Point-in-time recovery (PITR)", [["Status", on ? "On" : "Off"], ["Continuous backups", d.ContinuousBackupsStatus],
+    ["Earliest restore date", on ? ddbWhen(p.EarliestRestorableDateTime) : null], ["Latest restore date", on ? ddbWhen(p.LatestRestorableDateTime) : null]]);
+  host.append(el("button",{class:"btn primary","data-testid":"ddb-pitr-toggle",onclick:async()=>{
+    const u = await ddbRpc("UpdateContinuousBackups",{TableName:full.name,PointInTimeRecoverySpecification:{PointInTimeRecoveryEnabled:!on}});
+    if (u.ok) { toast("PITR "+(on?"turned off":"turned on")); host.innerHTML=""; SUB_RENDERERS.ddbpitr(svc, full, host); } else toast("Update failed","err");
+  }}, on ? "Turn off PITR" : "Turn on PITR"));
+};
+SUB_RENDERERS.ddbinsights = async function(svc, full, host){
+  const r = await ddbRpc("DescribeContributorInsights",{TableName:full.name});
+  const on = r.json.ContributorInsightsStatus === "ENABLED";
+  ddbCard(host, "Contributor Insights", [["Status", on ? "Enabled" : "Disabled"], ["Rules", (r.json.ContributorInsightsRuleList||[]).join(", ")]]);
+  host.append(el("button",{class:"btn primary","data-testid":"ddb-insights-toggle",onclick:async()=>{
+    const u = await ddbRpc("UpdateContributorInsights",{TableName:full.name,ContributorInsightsAction:on?"DISABLE":"ENABLE"});
+    if (u.ok) { toast("Contributor Insights "+(on?"disabled":"enabled")); host.innerHTML=""; SUB_RENDERERS.ddbinsights(svc, full, host); } else toast("Update failed","err");
+  }}, on ? "Disable" : "Enable"));
+};
+
 // RDS
 // ── RDS instance tabs ────────────────────────────────────────────────
 // Every tab re-reads the instance from the API (like the real console does when a
