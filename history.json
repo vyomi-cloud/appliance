@@ -1150,5 +1150,29 @@
   "gcp_findings": 50,
   "azure_checks_passed": 1262,
   "azure_findings": 62
+ },
+ {
+  "at": "2026-10-30T03:58:30+00:00",
+  "commit": "15074c62a075",
+  "suites_green": 218,
+  "suites_total": 226,
+  "checks_passed": 4774,
+  "checks_failed": 100,
+  "api_coverage_pct": 43.3,
+  "ui_findings": 156,
+  "agent": "",
+  "new_features": 7,
+  "parity_gaps": 9,
+  "ops_tested_pct": 82.9,
+  "ui_clean_nano": 44,
+  "ui_total_nano": 63,
+  "ui_clean_offline": 40,
+  "ui_total_offline": 58,
+  "aws_checks_passed": 1772,
+  "aws_findings": 58,
+  "gcp_checks_passed": 908,
+  "gcp_findings": 8,
+  "azure_checks_passed": 1271,
+  "azure_findings": 90
  }
 ]
