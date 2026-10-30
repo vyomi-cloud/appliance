@@ -165,6 +165,15 @@ async def _invalid_json_body(request: Request, exc: json.JSONDecodeError):
 
 # ── Backend route registration (EARLY) ───────────────────────────────
 _aws_xamz_dispatchers: dict = {}
+# v4 C0e — ONE engine + ONE messaging store for SQS / SNS / EventBridge / Scheduler: the
+# classic console REST (/api/sqs/*, /api/eventbridge/rules*, /api/aws/extras/eventbridge/*)
+# and the Scheduler REST are registered FIRST so they win over the nats / provider / extras
+# routes; opted-out services mount nothing here (the pre-v4 handlers stay).
+try:
+    from routes import aws_messaging_unified as _amu_unified
+    _amu_unified.register(app)
+except Exception as _e:   # never let this break appliance boot — legacy stays
+    print(f"[wire_ingress] SQS/SNS/EventBridge core mount skipped: {_e}")
 try:
     from core import vault_routes as _vault_routes
     _vault_routes.register(app, aws_dispatchers=_aws_xamz_dispatchers)
@@ -2804,9 +2813,14 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
     # Rail extras (generic create backend): billable AWS/GCP resources that live
     # under service_states["aws_extras"|"gcp_extras"][<svc>/<kind>]["items"].
     # (service, kind) pairs priced in core/cost_model.SERVICE_MONTHLY.
+    try:
+        from core import wire_ingress as _wi_eb
+        _eb_unified = _wi_eb.is_unified("events")
+    except Exception:
+        _eb_unified = False
     for provider, extras_key, scan in (
-        ("aws", "aws_extras", (("secretsmanager", "secrets"), ("kms", "keys"),
-                               ("eventbridge", "rules"), ("eventbridge", "event-buses"))),
+        ("aws", "aws_extras", (("secretsmanager", "secrets"), ("kms", "keys"))
+         + (() if _eb_unified else (("eventbridge", "rules"), ("eventbridge", "event-buses")))),
         ("gcp", "gcp_extras", (("secretmanager", "secrets"), ("kms", "keys"),
                                ("eventarc", "triggers"))),
     ):
@@ -2819,6 +2833,19 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
             for item_id, item in (items.items() if isinstance(items, dict) else []):
                 if isinstance(item, dict):
                     add(provider, svc, kind.rstrip("s"), str(item_id), item)
+
+    # v4 C0e: EventBridge rules / custom buses and Scheduler schedules served by the
+    # shared cores live in the space's service_states (eventbridge / scheduler).
+    try:
+        from routes import aws_messaging_unified as _amu_inv
+        from core import wire_ingress as _wi_eb2
+        for (_svc, _kind), _items in _amu_inv.inventory(space).items():
+            if not _wi_eb2.is_unified("events" if _svc == "eventbridge" else _svc):
+                continue
+            for _entry, _created in _items.items():
+                add("aws", _svc, _kind, f"core:{_svc}:{_entry}", {"name": _entry.split("|")[-1].rsplit("/", 1)[-1], "created": _created})
+    except Exception:
+        pass
 
     # v4 C0b: GCP Secret Manager secrets / Cloud KMS keys served by the shared cores
     # live in the space's service_states (gcp_gcp_secretmanager / gcp_gcp_kms).
@@ -4419,6 +4446,17 @@ def _sqs_redrive_queue_name(queue: dict) -> str:
 
 
 def _sqs_enqueue_message(queue: dict, body: str, attributes: dict | None = None, message_attributes: dict | None = None, group_id: str = "", dedup_id: str = "", source: str = "") -> dict:
+    from core import wire_ingress as _wi_sqs
+    if _wi_sqs.is_unified("sqs"):
+        # v4 C0e: the queue records are the shared SQS core's (S3 notifications, SNS, …
+        # enqueue through the core so the message is receivable over every wire).
+        from core import sqs_core as _sqs_core
+        _st = _wi_sqs.appliance_router().msg
+        _st.adopt()
+        _q = _st.get_queue(queue.get("queue_name", "")) or queue
+        body = body if isinstance(body, str) else json.dumps(body, default=str)
+        return _sqs_core.enqueue(_st, _q, body, message_attributes or None,
+                                 message_group_id=group_id or None, message_dedup_id=dedup_id or None)
     queue = _sqs_normalize_queue(queue)
     _sqs_sweep_queue(queue)
     body = body if isinstance(body, str) else json.dumps(body, default=str)
@@ -4504,6 +4542,10 @@ def _sqs_queue_from_name_or_url(name_or_url: str) -> dict | None:
     if ":queue/" in name_or_url:
         candidate = name_or_url.rsplit(":", 1)[-1]
         return _sqs_find_queue(candidate)
+    if name_or_url.startswith("arn:aws:sqs:"):
+        # the real queue ARN form (arn:aws:sqs:<region>:<account>:<name>) — what S3
+        # notifications / SNS subscriptions carry; pre-v4 only resolved ":queue/<name>"
+        return _sqs_find_queue(name_or_url.rsplit(":", 1)[-1])
     return _sqs_find_queue(name_or_url)
 
 

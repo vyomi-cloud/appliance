@@ -65,11 +65,12 @@ def run() -> int:
     # Force the first occurrence into the past by polling right after creation won't
     # fire yet (next run is ~1 minute out) — simulate time having passed instead.
     sched_key = "batch-jobs/heartbeat"
-    store.schedules[sched_key]["next_run_dt"] = near
+    store.schedules[sched_key]["next_run_dt"] = near.timestamp()   # epoch seconds (JSON-safe state)
     call("GET", "/schedules", query={"GroupName": "batch-jobs"})
     after_first = store.schedules[sched_key]
     _check("rate() schedule fired once it was due", after_first["last_run"] is not None)
-    _check("rate() schedule re-armed with a NEW future occurrence", after_first["next_run_dt"] > near)
+    _check("rate() schedule re-armed with a NEW future occurrence", after_first["next_run_dt"] > near.timestamp())
+    _check("schedule state is JSON-serializable (persists on every substrate)", bool(json.dumps(store.schedules)))
 
     # 4. List / delete.
     names = [s["Name"] for s in call("GET", "/schedules", query={"GroupName": "batch-jobs"}).json["Schedules"]]

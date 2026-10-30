@@ -356,20 +356,20 @@ try {
   check("Lambda function created over wire (CLI) → shown in Functions list", true);
   await shot("17-lambda-functions");
   // RDS: create a database through the UI (UI → CLI direction)
-  const R = `v4smoke-db-${Date.now() % 100000}`;
+  const DB = `v4smoke-db-${Date.now() % 100000}`;
   await page.goto(UI + "#/rds/create-database");
   await page.getByRole("radio", { name: "PostgreSQL", exact: true }).check();
-  await page.getByLabel("DB instance identifier").fill(R);
+  await page.getByLabel("DB instance identifier").fill(DB);
   await page.getByLabel("Master username").fill("admin");
   await page.getByRole("button", { name: "Create database" }).last().click();
-  await page.getByRole("heading", { name: R }).waitFor({ timeout: 10000 });
-  const desc = await rds("DescribeDBInstances", { DBInstanceIdentifier: R });
-  check("RDS create database (UI) → visible over native wire", desc.includes(`<DBInstanceIdentifier>${R}</DBInstanceIdentifier>`), desc.slice(0, 160));
+  await page.getByRole("heading", { name: DB }).waitFor({ timeout: 10000 });
+  const desc = await rds("DescribeDBInstances", { DBInstanceIdentifier: DB });
+  check("RDS create database (UI) → visible over native wire", desc.includes(`<DBInstanceIdentifier>${DB}</DBInstanceIdentifier>`), desc.slice(0, 160));
   await shot("15-rds-database-detail");
 
   // RDS: a snapshot created over the wire shows in the console (CLI → UI direction)
-  const SNAP = `${R}-snap`;
-  await rds("CreateDBSnapshot", { DBInstanceIdentifier: R, DBSnapshotIdentifier: SNAP });
+  const SNAP = `${DB}-snap`;
+  await rds("CreateDBSnapshot", { DBInstanceIdentifier: DB, DBSnapshotIdentifier: SNAP });
   await page.goto(UI + "#/rds/snapshots");
   await page.getByText(SNAP).first().waitFor({ timeout: 10000 });
   check("RDS snapshot created over wire → shown in Snapshots list", true);

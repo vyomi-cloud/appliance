@@ -41,6 +41,16 @@ core/appliance_stores.py. The classic console paths (/firestore/v1/…, /api/gcp
 /api/gcp/compute/v1/…, /api/gcp/vpc/*, /api/gcp/dynamodb/*) are aliases onto the same stores
 (routes/gcp_firestore_compute_unified.py, which also drives a Compute instance's real
 Docker / LXD / Multipass runtime exactly as the pre-v4 handler did).
+
+v4 C0e adds "sqs" (JSON 1.0 `AmazonSQS.*` AND the legacy Query protocol — core/sqs_core.py),
+"sns" (Query — core/sns_core.py), "events" (EventBridge `AWSEvents.*` — core/eventbridge_core.py)
+and "scheduler" (EventBridge Scheduler REST /schedules, /schedule-groups — core/scheduler_core.py),
+all over ONE messaging store (core/appliance_stores.AppStateMessagingStore), exactly as Nano's
+AwsWireRouter shares `self.msg`: an EventBridge rule's SQS / SNS / Lambda targets and an SNS
+topic's SQS subscriptions really deliver. Native wire on POST / and /_wire/ (routes/aws_s3.
+aws_query_root) and on the queue URL itself (`POST /<account>/<queue>`, routes/
+aws_messaging_unified.py); the classic console REST (/api/sqs/*, /api/aws/sns/*,
+/api/eventbridge/rules*, /api/aws/extras/eventbridge/*) reads/writes the same store.
 """
 from __future__ import annotations
 
@@ -54,9 +64,10 @@ def _cfg(key: str, default: str) -> str:
 
 
 _DEFAULT_SERVICES = ("s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager,"
-                     "gcp_firestore,gcp_compute")
+                     "gcp_firestore,gcp_compute,sqs,sns,events,scheduler")
 _KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
-                   "kms", "secretsmanager", "gcp_firestore", "gcp_compute")
+                   "kms", "secretsmanager", "gcp_firestore", "gcp_compute",
+                   "sqs", "sns", "events", "scheduler")
 
 
 def unified_services() -> frozenset:
@@ -87,14 +98,16 @@ def appliance_stores() -> dict:
             "az_blob": aps.az_blob_store(), "gcp_sec": aps.gcp_secrets_store(),
             "gcp_kms": aps.gcp_kms_store(), "kms": aps.aws_kms_store(),
             "sec": aps.aws_secrets_store(), "gcp_fs": aps.gcp_firestore_store(),
-            "gcp_compute": aps.gcp_compute_vpc_store(), "gcp_compute_vm": aps.gcp_compute_vm_store()}
+            "gcp_compute": aps.gcp_compute_vpc_store(), "gcp_compute_vm": aps.gcp_compute_vm_store(),
+            "msg": aps.messaging_store(), "sched": aps.scheduler_store()}
 
 
 # router store key -> unified service name (which stores a full-ingress router overrides)
 STORE_SERVICE = {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb", "az_blob": "azure_blob",
                  "gcp_sec": "gcp_secrets", "gcp_kms": "gcp_kms", "kms": "kms",
                  "sec": "secretsmanager", "gcp_fs": "gcp_firestore",
-                 "gcp_compute": "gcp_compute", "gcp_compute_vm": "gcp_compute"}
+                 "gcp_compute": "gcp_compute", "gcp_compute_vm": "gcp_compute",
+                 "msg": "sqs", "sched": "scheduler"}
 
 
 def appliance_router() -> AwsWireRouter:
@@ -221,7 +234,108 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         hdrs = dict(resp.headers or {})
         hdrs.setdefault("content-type", resp.media_type or "application/json")
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
+    if service in ("sqs", "sns", "events", "scheduler"):
+        return _dispatch_messaging(service, r, method, path, query, headers, body)
     raise ValueError(f"not a unified service: {service}")
+
+
+def _lam_store(r: AwsWireRouter):
+    """The Lambda function store EventBridge / Scheduler targets reach: the net-new
+    lambda_core router's (offline `/2015-03-31/functions/*` sub-resources); the appliance's
+    own function registry is reached through the messaging store's `deliver_lambda` hook."""
+    nr = new_services_router()
+    return nr.lam if nr is not None else r.lam
+
+
+def _dispatch_messaging(service: str, r: AwsWireRouter, method: str, path: str, query: dict,
+                        headers: dict, body: bytes) -> dict:
+    import json as _json
+    import uuid as _uuid
+    from urllib.parse import parse_qsl
+    from core import appliance_stores as aps
+    st = r.msg
+    aps.set_request_base(headers)
+    if hasattr(st, "adopt"):
+        st.adopt()                       # pre-v4 queues / rules / targets → this state (once per space)
+    lh = {str(k).lower(): v for k, v in (headers or {}).items()}
+    target = lh.get("x-amz-target", "") or ""
+    rid = str(_uuid.uuid4())
+    if service == "scheduler":
+        from core import scheduler_core
+        fired = {k: s.get("last_run") for k, s in r.sched.schedules.items()}
+        resp = scheduler_core.dispatch(r.sched, method, path, query or {}, headers or {}, body or b"",
+                                       msg_store=st, lam_store=_lam_store(r))
+        if method.upper() == "GET" and fired != {k: s.get("last_run") for k, s in r.sched.schedules.items()}:
+            try:   # a due schedule fired during a read: the middleware only flushes writes
+                from core import app_context as _ctx
+                _ctx.persist_state()
+            except Exception:
+                pass
+        hdrs = {"x-amzn-requestid": rid, **dict(resp.headers or {})}
+        if resp.media_type and not any(k.lower() == "content-type" for k in hdrs):
+            hdrs["content-type"] = resp.media_type
+        return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
+    if target:                           # JSON protocol (SQS JSON 1.0, EventBridge JSON 1.1)
+        try:
+            payload = _json.loads(body or b"{}")
+        except Exception:
+            payload = None
+        ct = "application/x-amz-json-1.0" if service == "sqs" else "application/x-amz-json-1.1"
+        if not isinstance(payload, dict):
+            return {"status": 400, "headers": {"content-type": ct, "x-amzn-requestid": rid},
+                    "body": _json.dumps({"__type": "SerializationException",
+                                         "message": "Request body is not valid JSON."}).encode()}
+        if service == "sqs":
+            from core import sqs_core
+            resp = sqs_core.dispatch(st, target, payload)
+        elif service == "events":
+            from core import eventbridge_core
+            resp = eventbridge_core.dispatch(st, target, payload, lam_store=_lam_store(r))
+        else:
+            return {"status": 400, "headers": {"content-type": ct, "x-amzn-requestid": rid},
+                    "body": _json.dumps({"__type": "UnknownOperationException",
+                                         "message": f"{target} is not an operation of {service}."}).encode()}
+        hdrs = {"x-amzn-requestid": rid, **dict(resp.headers or {})}
+        if resp.status >= 400 and "x-amzn-query-error" not in {k.lower() for k in hdrs} and service == "sqs":
+            code = str(resp.body.get("__type", "")).split("#")[-1]
+            from core.sqs_core import _QUERY_ERROR_CODE
+            hdrs["x-amzn-query-error"] = f"{_QUERY_ERROR_CODE.get(code, code)};Sender"
+        hdrs.setdefault("content-type", ct)
+        return {"status": resp.status, "headers": hdrs, "body": _json.dumps(resp.body).encode()}
+    # Query protocol (form body and/or query string): SQS legacy, SNS
+    params = dict(query or {})
+    if body:
+        try:
+            params.update(dict(parse_qsl(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body),
+                                         keep_blank_values=True)))
+        except Exception:
+            pass
+    if service == "sqs":
+        from core import sqs_core
+        if "QueueUrl" not in params:     # POSTed to the queue URL itself (Java v1 / .NET style)
+            segs = [x for x in (path or "").split("?", 1)[0].split("/") if x]
+            if len(segs) == 2:
+                params["QueueUrl"] = segs[1]
+        status, xml = sqs_core.dispatch_query(st, params)
+        return {"status": status, "headers": {"content-type": "text/xml", "x-amzn-requestid": rid},
+                "body": xml.encode()}
+    if service == "sns":
+        from core import sns_core
+        resp = sns_core.dispatch(st, params)
+        hdrs = {"x-amzn-requestid": rid, **dict(resp.headers or {})}
+        hdrs.setdefault("content-type", getattr(resp, "media_type", None) or "text/xml")
+        b = resp.body if isinstance(resp.body, (bytes, bytearray)) else str(resp.body).encode()
+        return {"status": resp.status, "headers": hdrs, "body": b}
+    return {"status": 400, "headers": {"content-type": "application/x-amz-json-1.1"},
+            "body": _json.dumps({"__type": "MissingAction", "message": "X-Amz-Target is required."}).encode()}
+
+
+_NEW_SERVICES_ROUTER: AwsWireRouter | None = None
+
+
+def new_services_router() -> AwsWireRouter | None:
+    """The router mount_new_services() serves the net-new paths with (None until mounted)."""
+    return _NEW_SERVICES_ROUTER
 
 
 def compute_project_of(path: str) -> str:
@@ -374,9 +488,11 @@ def build_backed_router(overrides: dict | None = None) -> AwsWireRouter:
         "cw": PersistentCloudWatchStore(
             SqliteStateBackend(_cfg("VYOMI_CW_DB", "/tmp/vyomi-cw.sqlite"))),
         # messaging — SQS/SNS + Pub/Sub on NATS JetStream (separate KV buckets)
-        "msg": NatsBackedMessagingStore(servers=nats_servers, bucket="aws_msg"),
+        "msg": overrides.get("msg") or NatsBackedMessagingStore(servers=nats_servers, bucket="aws_msg"),
         "gcp_msg": NatsBackedMessagingStore(servers=nats_servers, bucket="gcp_msg"),
     }
+    if overrides.get("sched") is not None:   # C0e: EventBridge Scheduler on the appliance state
+        stores["sched"] = overrides["sched"]
     for _k in ("gcp_compute", "gcp_compute_vm"):   # C0d: Compute Engine on the appliance state
         if overrides.get(_k) is not None:
             stores[_k] = overrides[_k]
@@ -448,6 +564,8 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     from core.gcp_monitoring_core import shared_store as _gcp_mon_store
     r = router or AwsWireRouter(stores={"apigwv2": _apigwv2_store(), "sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_redis": _gcp_redis_store(), "gcp_mon": _gcp_mon_store()})
     _sfn_lambda(r.lam)   # Step Functions Task states invoke the Lambdas this router serves
+    global _NEW_SERVICES_ROUTER
+    _NEW_SERVICES_ROUTER = r   # C0e: EventBridge / Scheduler Lambda targets reach these functions too
 
     async def _proxy(request: Request):
         body = await request.body()

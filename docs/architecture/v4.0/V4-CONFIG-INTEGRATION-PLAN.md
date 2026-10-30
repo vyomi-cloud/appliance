@@ -139,6 +139,34 @@ After C0, each feature is implemented once and appears on every substrate.
   with `VYOMI_LEGACY_WIRE=1`.
 - Pinned by `tests/conformance/test_c0d_legacy_parity_core.py` and `tests/test_c0d_unified_engine.py`.
 
+**Step C0e (done):** SQS, SNS, EventBridge and EventBridge Scheduler, on ONE messaging store.
+- Offline, CreateQueue → PutRule → PutTargets (SQS) → PutEvents all returned 200 but the queue
+  stayed empty: EventBridge was a process-local dict in `core/nats_routes.py` that only published
+  to NATS (rule ARNs carried account `000000000000`), SQS was the `server.py` `_sqs_*` handler
+  (Query requests proxied to ElasticMQ when it ran), and `/schedules` fell through to S3.
+- All four now run on the cores Nano uses (`core/sqs_core.py`, `core/sns_core.py`,
+  `core/eventbridge_core.py`, `core/scheduler_core.py`) over ONE store,
+  `core/appliance_stores.AppStateMessagingStore`, exactly as `AwsWireRouter` shares `self.msg`:
+  queues stay in `service_states["sqs"]["queues"]` (converted to the core shape), topics in
+  `service_states["sns"]` (already core-shaped), rules / buses / archives / replays in
+  `service_states["eventbridge"]`, schedules in `service_states["scheduler"]`. EventBridge →
+  SQS / SNS / Lambda targets, SNS → SQS subscriptions and S3 → SQS / SNS / EventBridge
+  notifications deliver for real. Lambda targets reach the appliance's function registry.
+- Native wire: `POST /` and `/_wire/` (JSON `AmazonSQS.*` / `AWSEvents.*`, Query SQS — new
+  `sqs_core.dispatch_query` — and SNS), and the queue URL itself (`POST /<account>/<queue>`;
+  queue URLs are now `<endpoint>/<account>/<queue>`, pre-v4 `/api/sqs/queues/<q>` URLs still
+  resolve). The classic console REST (`/api/sqs/*`, `/api/eventbridge/rules*`,
+  `/api/aws/extras/eventbridge/{rules,event-buses,archives,replays}`, `/api/aws/sns/*`) is
+  re-implemented on the same store (`routes/aws_messaging_unified.py`, `routes/aws_sns.py`).
+- Upgrade path, once per space: pre-v4 queue records are converted in place with their
+  messages (receive counts, running leases, FIFO group / dedup ids, redrive policies);
+  ElasticMQ-only queues (pre-v4 Query traffic) are adopted as definitions; the classic
+  console's EventBridge rows (minus its demo seeds) and the pre-v4 wire's in-process rules +
+  targets are adopted.
+- Opt out with `VYOMI_UNIFIED_INGRESS_SERVICES` without `sqs` / `sns` / `events` / `scheduler`,
+  or with `VYOMI_LEGACY_WIRE=1`.
+- Pinned by `tests/conformance/test_c0e_legacy_parity_core.py` and `tests/test_c0e_unified_engine.py`.
+
 ## 5. Triage — S3
 
 | Feature | Today | Target | How (backend) |

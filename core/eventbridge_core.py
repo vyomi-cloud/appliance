@@ -150,30 +150,122 @@ def _match_pattern(pattern: dict, event: dict) -> bool:
 
 
 # ── delivery (SQS / SNS / Lambda — the three target types Vyomi backs) ─────
-def deliver(store, lam_store, arn: str, body_str: str, event_obj: dict) -> bool:
+def deliver(store, lam_store, arn: str, body_str: str, event_obj: dict, group_id=None) -> bool:
+    """Deliver one event to a target ARN. A substrate may own the SQS queues or the
+    Lambda functions elsewhere (the offline appliance's opted-out handlers / its
+    function registry): it then exposes `store.deliver_sqs(arn, body, attrs, group, dedup)`
+    / `store.deliver_lambda(arn, event)` and those are used instead."""
+    if ":sqs:" in arn:
+        hook = getattr(store, "deliver_sqs", None)
+        if callable(hook):
+            return bool(hook(arn, body_str, None, group_id, None))
     queue = store.get_queue_by_arn(arn)
     if queue is not None:
-        sqs_core.enqueue(store, queue, body_str)
+        dedup = None
+        if queue.get("fifo"):
+            dedup = sqs_core._md5(body_str)
+            group_id = group_id or "default"
+        sqs_core.enqueue(store, queue, body_str, message_group_id=group_id, message_dedup_id=dedup)
         return True
     if ":sns:" in arn:
         return sns_mod.publish_arn(store, arn, body_str)
-    if ":lambda:" in arn and lam_store is not None:
-        return lam_mod.invoke_by_arn(lam_store, arn, event_obj)
+    if ":lambda:" in arn:
+        hook = getattr(store, "deliver_lambda", None)
+        if callable(hook):
+            try:
+                if hook(arn, event_obj):
+                    return True
+            except Exception:
+                pass
+        if lam_store is not None:
+            return lam_mod.invoke_by_arn(lam_store, arn, event_obj)
     return False  # target type Vyomi doesn't deliver to (stored, never invoked — see capability doc)
+
+
+def _json_path(doc, path: str):
+    """The JSONPath subset EventBridge's InputPath / InputPathsMap use: `$`, `$.a.b`,
+    `$.a[0]`, `$['a']`."""
+    p = str(path or "$").strip()
+    if not p.startswith("$"):
+        return None
+    cur = doc
+    import re as _re
+    for tok in _re.findall(r"\.([^.\[\]]+)|\[(\d+)\]|\['([^']+)'\]", p[1:]):
+        key, idx, qkey = tok
+        if idx:
+            cur = cur[int(idx)] if isinstance(cur, list) and int(idx) < len(cur) else None
+        else:
+            k = key or qkey
+            cur = cur.get(k) if isinstance(cur, dict) else None
+        if cur is None:
+            return None
+    return cur
+
+
+def target_payload(tgt: dict, envelope: dict) -> str:
+    """What a target receives: the whole event, or its Input (constant JSON), InputPath
+    (a part of the event) or InputTransformer (template over InputPathsMap) — as in AWS."""
+    if tgt.get("Input") not in (None, ""):
+        return str(tgt["Input"])
+    if tgt.get("InputPath"):
+        part = _json_path(envelope, tgt["InputPath"])
+        return json.dumps(part)
+    tr = tgt.get("InputTransformer")
+    if isinstance(tr, dict) and tr.get("InputTemplate") is not None:
+        values = {var: _json_path(envelope, path) for var, path in (tr.get("InputPathsMap") or {}).items()}
+        values["aws.events.event.json"] = envelope
+        values["aws.events.rule-arn"] = str(tgt.get("_rule_arn", ""))
+        return _render_template(str(tr["InputTemplate"]), values)
+    return json.dumps(envelope)
+
+
+def _render_template(tpl: str, values: dict) -> str:
+    """InputTemplate rendering as EventBridge does it: a `<var>` inside a JSON string
+    literal is replaced by the raw text; outside one, by the JSON value (strings quoted)."""
+    out, i, in_str = [], 0, False
+    while i < len(tpl):
+        ch = tpl[i]
+        if ch == '"' and (i == 0 or tpl[i - 1] != "\\"):
+            in_str = not in_str
+        if ch == "<":
+            j = tpl.find(">", i)
+            var = tpl[i + 1:j] if j > i else ""
+            if var in values:
+                v = values[var]
+                if in_str:
+                    out.append(v if isinstance(v, str) else json.dumps(v))
+                else:
+                    out.append(json.dumps(v))
+                i = j + 1
+                continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _notify(store, *args) -> None:
+    hook = getattr(store, "eventbridge_notify", None)
+    if callable(hook):
+        try:
+            hook(*args)
+        except Exception:
+            pass
 
 
 def _deliver_to_bus(store, lam_store, bus: str, envelope: dict, event_obj: dict) -> int:
     """Match `envelope` against every ENABLED rule on `bus` and deliver to targets.
     Returns the count of (rule, target) deliveries attempted."""
-    body_str = json.dumps(envelope)
     n = 0
-    for rule in _rules(store).values():
+    for rule in list(_rules(store).values()):
         if rule.get("bus", "default") != bus or rule.get("state") != "ENABLED":
             continue
         if not _match_pattern(rule.get("pattern", {}), event_obj):
             continue
-        for tgt in rule["targets"].values():
-            deliver(store, lam_store, tgt["Arn"], body_str, event_obj)
+        for tgt in list(rule["targets"].values()):
+            body_str = target_payload(dict(tgt, _rule_arn=rule.get("arn", "")), envelope)
+            group = (tgt.get("SqsParameters") or {}).get("MessageGroupId")
+            deliver(store, lam_store, tgt["Arn"], body_str, event_obj, group_id=group)
+            _notify(store, "target", rule.get("name", ""), tgt.get("Id", ""), envelope)
             n += 1
     return n
 
@@ -245,11 +337,13 @@ def _put_rule(store, body):
     if bus not in _buses(store):
         raise _E("ResourceNotFoundException", f"Event bus {bus} does not exist.")
     pattern = body.get("EventPattern")
-    if isinstance(pattern, str):
+    if isinstance(pattern, str) and pattern.strip():
         try:
             pattern = json.loads(pattern)
         except Exception:
-            pattern = {}
+            raise _E("InvalidEventPatternException", "Event pattern is not valid. Reason: it is not valid JSON.")
+        if not isinstance(pattern, dict):
+            raise _E("InvalidEventPatternException", "Event pattern is not valid. Reason: it must be a JSON object.")
     key = _rule_key(bus, name)
     rule = _rules(store).get(key) or {"targets": {}}
     tags = {t["Key"]: t.get("Value", "") for t in body.get("Tags") or []}
@@ -315,8 +409,12 @@ def _put_targets(store, body):
     rule = _require_rule(store, bus, str(body.get("Rule", "")))
     for t in body.get("Targets") or []:
         tid = str(t.get("Id") or uuid.uuid4().hex)
-        rule["targets"][tid] = {"Id": tid, "Arn": str(t.get("Arn", "")), "Input": t.get("Input"),
-                                 "RoleArn": t.get("RoleArn", "")}
+        rec = {"Id": tid, "Arn": str(t.get("Arn", ""))}
+        for k in ("RoleArn", "Input", "InputPath", "InputTransformer", "SqsParameters",
+                  "DeadLetterConfig", "RetryPolicy", "HttpParameters", "KinesisParameters"):
+            if t.get(k) not in (None, ""):
+                rec[k] = t[k]
+        rule["targets"][tid] = rec
     store.persist()
     return EventsResponse(body={"FailedEntryCount": 0, "FailedEntries": []})
 
@@ -360,8 +458,8 @@ def _put_events(store, body, lam_store=None):
             detail = json.loads(entry["Detail"]) if isinstance(entry.get("Detail"), str) else (entry.get("Detail") or {})
         except Exception:
             detail = {}
-        event_id = uuid.uuid4().hex
-        now = _now_iso()
+        event_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         # The event object rules are matched against (EventBridge's flat shape).
         event_obj = {"source": source, "detail-type": detail_type, "detail": detail,
                      "account": store.account_id, "region": REGION}
@@ -372,6 +470,7 @@ def _put_events(store, body, lam_store=None):
         log = _buses(store)[bus]["event_log"]
         log.append(envelope)
         del log[:-EVENT_LOG_MAX]
+        _notify(store, "put", bus, envelope)
         _deliver_to_bus(store, lam_store, bus, envelope, event_obj)
         entries_out.append({"EventId": event_id})
     store.persist()
