@@ -366,7 +366,15 @@ class AzureArm:
         if namespace.lower() == "microsoft.insights" and chain and chain[0].lower() == "eventtypes":
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "Activity log supports GET only.")
-            return _activity_log_query(query)
+            # One feed, two sources: the per-resource ARM entries this engine records
+            # (self.activity — e.g. Microsoft.Web writes) and the shared cloudsim event log
+            # (nano_events — e.g. Event Grid / locks). Newest first, same $filter scoping.
+            own = self._activity_log(method, query)["body"].get("value", [])
+            shared = _activity_log_query(query)["body"].get("value", [])
+            seen = {e.get("id") for e in own}
+            events = own + [e for e in shared if e.get("id") not in seen]
+            events.sort(key=lambda e: str(e.get("eventTimestamp") or ""), reverse=True)
+            return _ok({"value": events})
 
         # Microsoft.Authorization/locks: a real ARM extension resource scoped to ANY other
         # resource's own id (the chain re-enters "providers", like Event Grid's event
@@ -393,13 +401,6 @@ class AzureArm:
         # Microsoft.Network/dnsZones (+ record sets): the Azure DNS engine owns the zone semantics.
         if namespace.lower() == "microsoft.network" and dns_engine.handles(chain):
             return self._dns(method, sub, rg, chain, payload, query)
-
-        # Microsoft.Insights/eventtypes/management/values: the subscription-scoped Activity log
-        # feed (real ARM endpoint `az monitor activity-log list` / the portal's Activity log
-        # blade call), filtered to one resource via `$filter=resourceUri eq '...'`.
-        if (namespace.lower() == "microsoft.insights" and len(chain) >= 3
-                and chain[0].lower() == "eventtypes" and chain[1].lower() == "management" and chain[2].lower() == "values"):
-            return self._activity_log(method, query)
 
         # Microsoft.Insights (action groups, metric / activity log alerts, autoscale): the Azure Monitor engine.
         if namespace.lower() == "microsoft.insights" and monitor_engine.handles(chain):

@@ -72,6 +72,15 @@ try:                                              # Azure Cost Management + Cons
     from core import azure_cost_core as cost_engine
 except ImportError:
     import azure_cost_core as cost_engine          # type: ignore
+try:                                              # Event Grid event subscriptions (Microsoft.EventGrid, scoped to a topic)
+    from core import azure_eventgrid_core as eventgrid_engine
+except ImportError:
+    import azure_eventgrid_core as eventgrid_engine       # type: ignore
+
+try:                                              # Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
+    from core import azure_locks_core as locks_engine
+except ImportError:
+    import azure_locks_core as locks_engine        # type: ignore
 
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
@@ -79,6 +88,54 @@ DEFAULT_LOCATION = "eastus"
 
 _BY_TYPE = {(c["namespace"].lower(), c["type"].lower()): c for c in CATALOG}
 _WEB_WRITE_VERBS = {"put": "write", "patch": "write", "delete": "delete"}  # ARM activity-log verb convention
+
+
+def _record_activity(resource_name: str, action: str, detail: str = "") -> None:
+    """Best-effort: append to the shared cloudsim event log (core/nano_events.py) so a
+    resource's "Activity log" panel has something real to show. Lazily imported — nano_events
+    loads AFTER azure_arm_core in the Nano boot order (wasm/nano-boot.js), so a module-level
+    import would fail there; by the time a request is served, boot has finished and the
+    deferred import always succeeds."""
+    try:
+        try:
+            from core import nano_events
+        except ImportError:
+            import nano_events  # type: ignore
+        nano_events.record("azure", "arm", resource_name, action, "ok", detail)
+    except Exception:
+        pass
+
+
+def _activity_log_query(query: dict) -> dict:
+    """GET /subscriptions/{sub}/providers/Microsoft.Insights/eventtypes/management/values —
+    the real ARM activity-log read API every resource's "Activity log" blade calls, scoped
+    via an OData $filter containing ``resourceUri eq '{id}'``. Only that scoping predicate is
+    understood (not the full OData grammar); with no resourceUri filter the unfiltered feed
+    (every resource) is returned, matching the subscription-wide Activity log page."""
+    try:
+        try:
+            from core import nano_events
+        except ImportError:
+            import nano_events  # type: ignore
+    except Exception:
+        return _ok({"value": []})
+    filt = query.get("$filter") or ""
+    m = re.search(r"resourceUri\s+eq\s+'([^']*)'", filt)
+    resource = (m.group(1).rstrip("/").split("/")[-1]) if m else None
+    events = nano_events.list_events(resource=resource)
+    value = [{
+        "eventName": {"value": e["action"], "localizedValue": e["action"]},
+        "operationName": {"value": e["action"], "localizedValue": f"{e['action']}: {e['detail']}" if e["detail"] else e["action"]},
+        "status": {"value": e["status"], "localizedValue": e["status"]},
+        "eventTimestamp": e["ts"], "submissionTimestamp": e["ts"],
+        "subscriptionId": DEFAULT_SUBSCRIPTION,
+        "caller": "vyomi-console",
+        "resourceId": e["resource"],
+        "resourceGroupName": DEFAULT_RG,
+        "level": "Informational",
+        "id": str(e["id"]),
+    } for e in events]
+    return _ok({"value": value})
 
 
 def _now() -> str:
@@ -304,6 +361,30 @@ class AzureArm:
 
         namespace = after[0]
         chain = after[1:]
+
+        # Microsoft.Insights/eventtypes/management/values: the subscription-wide ARM activity
+        # log read API (not resource-scoped — no "providers" re-entry — so it must be caught
+        # before the generic type/name alternation below, which would misparse it).
+        if namespace.lower() == "microsoft.insights" and chain and chain[0].lower() == "eventtypes":
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Activity log supports GET only.")
+            # One feed, two sources: the per-resource ARM entries this engine records
+            # (self.activity — e.g. Microsoft.Web writes) and the shared cloudsim event log
+            # (nano_events — e.g. Event Grid / locks). Newest first, same $filter scoping.
+            own = self._activity_log(method, query)["body"].get("value", [])
+            shared = _activity_log_query(query)["body"].get("value", [])
+            seen = {e.get("id") for e in own}
+            events = own + [e for e in shared if e.get("id") not in seen]
+            events.sort(key=lambda e: str(e.get("eventTimestamp") or ""), reverse=True)
+            return _ok({"value": events})
+
+        # Microsoft.Authorization/locks: a real ARM extension resource scoped to ANY other
+        # resource's own id (the chain re-enters "providers", like Event Grid's event
+        # subscriptions) — generic over every catalog type, so caught before the alternation.
+        lock_marker = locks_engine.find_marker(chain)
+        if lock_marker is not None:
+            return self._locks(method, sub, rg, namespace, chain, lock_marker, payload)
+
         # ARM type path alternates type/name: providers/<ns>/<t1>/<n1>/<t2>/<n2>...
         type_chain = [namespace]
         names: list = []
@@ -322,13 +403,6 @@ class AzureArm:
         # Microsoft.Network/dnsZones (+ record sets): the Azure DNS engine owns the zone semantics.
         if namespace.lower() == "microsoft.network" and dns_engine.handles(chain):
             return self._dns(method, sub, rg, chain, payload, query)
-
-        # Microsoft.Insights/eventtypes/management/values: the subscription-scoped Activity log
-        # feed (real ARM endpoint `az monitor activity-log list` / the portal's Activity log
-        # blade call), filtered to one resource via `$filter=resourceUri eq '...'`.
-        if (namespace.lower() == "microsoft.insights" and len(chain) >= 3
-                and chain[0].lower() == "eventtypes" and chain[1].lower() == "management" and chain[2].lower() == "values"):
-            return self._activity_log(method, query)
 
         # Microsoft.Insights (action groups, metric / activity log alerts, autoscale): the Azure Monitor engine.
         if namespace.lower() == "microsoft.insights" and monitor_engine.handles(chain):
@@ -350,6 +424,11 @@ class AzureArm:
             return self._cost_consumption(method, sub, rg, chain, payload, query)
         if namespace.lower() == "microsoft.billingbenefits":
             return self._cost_billingbenefits(method, sub, rg, chain, payload, query)
+        # Microsoft.EventGrid/topics/{name}/providers/Microsoft.EventGrid/eventSubscriptions/{name}:
+        # a real ARM extension resource (scoped to the topic), so the chain re-enters "providers"
+        # instead of alternating type/name — the eventgrid engine owns that shape.
+        if namespace.lower() == "microsoft.eventgrid" and eventgrid_engine.handles(chain):
+            return self._eventgrid(method, sub, rg, chain, payload, query)
 
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
@@ -392,17 +471,49 @@ class AzureArm:
                 return _err(404, "ResourceNotFound", f"Resource '{rid}' not found.")
             return _ok(_view(rec))
         if method in ("PUT", "PATCH"):
+            existed_before = key in self.state
             resp = self._upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
             if lro:
                 resp["status"] = 200
                 op_id = self._make_operation(rid, method)
                 url = f"{base}/api/azure/operations/{op_id}?api-version={api_version}"
                 resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
+            _record_activity(leaf_name, "Update" if existed_before else "Create", f"{full_type} '{leaf_name}'")
             return resp
         if method == "DELETE":
             rec = self.state.pop(key, None)
+            if rec is not None:
+                _record_activity(leaf_name, "Delete", f"{full_type} '{leaf_name}'")
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+    def _locks(self, method, sub, rg, namespace, chain, marker, payload):
+        # Replay the SAME type/name alternation the main dispatcher uses (see `_arm` above)
+        # over everything before the "providers/Microsoft.Authorization/locks" marker.
+        stc, snames = [namespace], []
+        for n, token in enumerate(chain[:marker]):
+            (stc if n % 2 == 0 else snames).append(token)
+        scope_rid = _canonical_id(sub, rg, stc, snames)
+        rest = chain[marker + 3:]
+        if not rest:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+            r = locks_engine.list_for(self.state, scope_rid)
+        else:
+            name = rest[0]
+            if method == "GET":
+                r = locks_engine.get(self.state, scope_rid, name)
+            elif method in ("PUT", "PATCH"):
+                r = locks_engine.upsert(self.state, scope_rid, name, payload)
+                if r["status"] in (200, 201):
+                    _record_activity(snames[-1] if snames else scope_rid, "Create lock" if r["status"] == 201 else "Update lock", name)
+            elif method == "DELETE":
+                r = locks_engine.remove(self.state, scope_rid, name)
+                if r["status"] == 200:
+                    _record_activity(snames[-1] if snames else scope_rid, "Delete lock", name)
+            else:
+                return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+        return {"status": r["status"], "headers": {}, "body": r["body"]}
 
     def _dns(self, method, sub, rg, chain, payload, query):
         dn = dns_engine
@@ -437,6 +548,14 @@ class AzureArm:
             url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or cs.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
+
+    def _eventgrid(self, method, sub, rg, chain, payload, query):
+        r = eventgrid_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        # chain: ['topics', '<topic>', 'providers', 'Microsoft.EventGrid', 'eventSubscriptions', '<name>?']
+        if method in ("PUT", "PATCH", "DELETE") and r["status"] in (200, 201, 204) and len(chain) >= 6:
+            verb = {"PUT": "Update" if r["status"] == 200 else "Create", "PATCH": "Update", "DELETE": "Delete"}[method]
+            _record_activity(chain[1], f"{verb} subscription", chain[5])
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
 
     def _appconfig(self, method, sub, rg, chain, payload, query):
         ac = appconfig_engine
@@ -530,6 +649,8 @@ class AzureArm:
             rec["tags"] = _merge(rec.get("tags", {}), payload["tags"])
         if isinstance(payload.get("sku"), dict):
             rec["sku"] = _merge(rec.get("sku", {}), payload["sku"])
+        if isinstance(payload.get("identity"), dict):
+            rec["identity"] = _merge(rec.get("identity", {}), payload["identity"])
         if isinstance(payload.get("properties"), dict):
             rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
 
