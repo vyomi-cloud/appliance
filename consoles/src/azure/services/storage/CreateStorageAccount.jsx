@@ -235,7 +235,7 @@ export default function CreateStorageAccount() {
 
   return (
     <CreateWizard
-      title="Create a storage account" closeHref="#/storage" glyph={<Glyph text="SA" color="#0b7a75" />}
+      title="Create a storage account" closeHref="#/storage" glyph={<Glyph id="storage" />}
       tabs={[
         { id: "basics", label: "Basics", content: basics, validate: basicsErrors },
         { id: "advanced", label: "Advanced", content: advanced },

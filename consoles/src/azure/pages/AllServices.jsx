@@ -23,7 +23,7 @@ export default function AllServices() {
               <div className="vy-tiles">
                 {xs.map((s) => (
                   <a key={s.id} className="vy-tile" style={{ width: 132 }} href={`#/${s.id}`}>
-                    <Glyph text={s.glyph[0]} color={s.glyph[1]} />{s.title}
+                    <Glyph id={s.icon} />{s.title}
                     {!s.load && <Badge size="small" appearance="tint" color="informative">classic console</Badge>}
                   </a>
                 ))}

@@ -100,7 +100,7 @@ export default function StorageAccountBlade({ params, query }) {
 
   return (
     <ResourceBlade
-      title={name} subtitle="Storage account" glyph={<Glyph text="SA" color="#0b7a75" />} closeHref="#/storage"
+      title={name} subtitle="Storage account" glyph={<Glyph id="storage" />} closeHref="#/storage"
       menu={MENU} active={panel} hrefFor={(id) => (id === "overview" ? self : `${self}/${id}`)}
     >
       {body}

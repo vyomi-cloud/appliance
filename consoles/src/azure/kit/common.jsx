@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MessageBar, MessageBarBody, MessageBarTitle, Link, Spinner } from "@fluentui/react-components";
 import { ChevronDown16Regular, ChevronRight16Regular } from "@fluentui/react-icons";
+import ServiceIcon from "../../common/icons/ServiceIcon.jsx";
 
 /** A feature the real portal has but Vyomi does not back with a real backend. The
  *  data-vyomi-not-simulated attribute is the UI-conformance contract (same as the AWS lens):
@@ -66,10 +67,12 @@ export const InfoBar = ({ children, intent = "info", title }) => (
 
 export const Loading = ({ label = "Loading..." }) => <div style={{ padding: 32 }}><Spinner size="small" label={label} /></div>;
 
-/** Neutral initials glyph in place of a service icon (no Microsoft icons in Vyomi). */
-export const Glyph = ({ text, color, size = 32 }) => (
-  <span className="vy-glyph" aria-hidden style={{ "--vy-glyph": color, width: size, height: size, fontSize: size < 28 ? 10 : 13 }}>{text}</span>
-);
+/** A service icon: Vyomi's own original glyph set (common/icons/azure.js — no Microsoft icons).
+ *  Pass `id` (registry icon id); `text`/`color` keep the old initials badge for callers that
+ *  have no icon id. */
+export const Glyph = ({ id, text, color, size = 32 }) => id
+  ? <ServiceIcon cloud="azure" id={id} size={size} className="vy-svc-icon" />
+  : <span className="vy-glyph" aria-hidden style={{ "--vy-glyph": color, width: size, height: size, fontSize: size < 28 ? 10 : 13 }}>{text}</span>;
 
 export const fmtDate = (v) => {
   if (!v) return "--";

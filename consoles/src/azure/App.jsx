@@ -132,7 +132,7 @@ export default function App() {
               <a href="#/allservices"><Grid20Regular /> All services</a>
               <hr />
               <div className="vy-pm-head">FAVORITES</div>
-              {SERVICES.map((s) => <a key={s.id} href={`#/${s.id}`}><Glyph text={s.glyph[0]} color={s.glyph[1]} size={20} /> {s.title}</a>)}
+              {SERVICES.map((s) => <a key={s.id} href={`#/${s.id}`}><Glyph id={s.icon} size={20} /> {s.title}</a>)}
             </nav>
           </>}
 
@@ -225,7 +225,7 @@ function GlobalSearch() {
       {open && f && (
         <div className="vy-search-results" role="listbox" onClick={() => { setOpen(false); setQ(""); }}>
           <h4>Services</h4>
-          {services.length ? services.map((s) => <a key={s.id} href={`#/${s.id}`} role="option">{s.title}</a>) : <div className="vy-muted" style={{ padding: "4px 16px" }}>No results</div>}
+          {services.length ? services.map((s) => <a key={s.id} href={`#/${s.id}`} role="option"><Glyph id={s.icon} size={16} /> {s.title}</a>) : <div className="vy-muted" style={{ padding: "4px 16px" }}>No results</div>}
           <h4>Resources</h4>
           {resources.length ? resources.map((r) => <a key={r.id} href={`#/storage/${r.resourceGroup}/${r.name}`} role="option">{r.name} <span className="vy-muted">· Storage account</span></a>)
             : <div className="vy-muted" style={{ padding: "4px 16px" }}>No results</div>}

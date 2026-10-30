@@ -15,7 +15,7 @@ body { font-family: "Segoe UI", "Segoe UI Web (West European)", -apple-system, B
 .vy-search-results { position: absolute; top: 36px; width: min(560px, 100%); background: var(--colorNeutralBackground1); color: var(--colorNeutralForeground1);
   box-shadow: var(--shadow16); border-radius: 4px; padding: 8px 0; z-index: 200; }
 .vy-search-results h4 { margin: 6px 16px; font-size: 12px; color: var(--colorNeutralForeground3); font-weight: 600; }
-.vy-search-results a { display: block; padding: 6px 16px; color: inherit; text-decoration: none; }
+.vy-search-results a { display: flex; align-items: center; gap: 8px; padding: 6px 16px; color: inherit; text-decoration: none; }
 .vy-search-results a:hover, .vy-search-results a:focus { background: var(--colorNeutralBackground1Hover); }
 .vy-copilot { background: #fff !important; color: #242424 !important; height: 28px; margin: 0 6px; }
 .vy-account { display: flex; align-items: center; gap: 8px; padding: 0 6px; height: 40px; cursor: pointer; color: #fff; background: none; border: 0; font: inherit; }
