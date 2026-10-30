@@ -5,7 +5,8 @@ name: Release checks report
 # vyomi command (--version, help, doctor, status, logs, down, update), run the
 # real aws / gcloud / az CLIs against the released images (every CLI suite on
 # its own, plus CLI ↔ console both ways on the same account / project /
-# subscription: tests/release/cli_crosscheck.py), collect
+# subscription: tests/release/cli_crosscheck.py) — offline AND Nano through the
+# relay tunnel (tests/release/nano_cli_check.mjs) — collect
 # the MSI (Validate Windows MSI), startup (Validate release startup) and
 # Windows E2E (private vyomi-cloud/release-e2e) results, and commit one
 # RELEASE-CHECKS.md to the release/vX.Y.Z branch.
@@ -108,7 +109,7 @@ jobs:
   cli:
     needs: resolve
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150   # up to 75 min waiting for the images + the checks
     env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}', VER: '${{ needs.resolve.outputs.ver }}', TAG: '${{ needs.resolve.outputs.tag }}' }
     steps:
       - uses: actions/checkout@v4
@@ -117,6 +118,17 @@ jobs:
         run: |
           git fetch -q origin main
           git checkout -q origin/main -- tests/release tests/cli
+      # These checks start when the Release workflow ends, but Docker Publish builds the
+      # images in parallel and finishes later; boot only once this release's images exist.
+      - name: Wait for this release's Docker images
+        run: |
+          for i in $(seq 1 90); do
+            if docker manifest inspect "vyomi/appliance:$VER" >/dev/null 2>&1 && docker manifest inspect "vyomi/cloudsim:$VER" >/dev/null 2>&1; then
+              echo "vyomi/appliance:$VER and vyomi/cloudsim:$VER are published"; exit 0
+            fi
+            sleep 50
+          done
+          echo "::error::vyomi/appliance:$VER / vyomi/cloudsim:$VER not published after 75 min"; exit 1
       - name: Boot the release like `vyomi up`
         run: |
           gh release download "$TAG" -p "vyomi-$VER.tar.gz" -D /tmp/rel
@@ -145,8 +157,43 @@ jobs:
         if: always()
         with: { name: checks-cli, path: out/ }
 
+  # The same CLI checks against Nano — this release's wasm bundle in a real
+  # browser tab — with the CLIs going through the local relay tunnel (what
+  # `vyomi-tunnel` runs) and the console side served by the tab's service worker.
+  nano-cli:
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ needs.resolve.outputs.tag }}' }
+      - name: Use main's checks (they test this release, so they can be newer than it)
+        run: |
+          git fetch -q origin main
+          # The local relay too: users run the separately published vyomi-tunnel, built from main's copy.
+          git checkout -q origin/main -- tests/release tests/cli wasm/ui-tests/lib.mjs wasm/relay/local-relay.mjs
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Playwright + ws
+        run: |
+          mkdir -p .ci-node && cd .ci-node
+          echo '{"name":"vyomi-ci-node","private":true}' > package.json
+          npm install --silent playwright@1.47.2 ws@8.18.0
+          npx playwright install --with-deps chromium
+      - name: CLI versions
+        run: aws --version; gcloud --version | head -1; az version -o tsv 2>/dev/null | head -1
+      - name: Nano through the tunnel — CLI conformance + CLI ↔ console both ways
+        env: { NODE_PATH: '${{ github.workspace }}/.ci-node/node_modules', OUT: out }
+        run: node tests/release/nano_cli_check.mjs
+      - name: Job summary
+        if: always()
+        run: '[ -f out/summary.md ] && cat out/summary.md >> "$GITHUB_STEP_SUMMARY" || true'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: checks-nano-cli, path: out/ }
+
   report:
-    needs: [resolve, deb, rpm, brew, cli]
+    needs: [resolve, deb, rpm, brew, cli, nano-cli]
     if: always() && needs.resolve.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -213,6 +260,7 @@ jobs:
             echo "| RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | $(res "${{ needs.rpm.result }}") |"
             echo "| Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | $(res "${{ needs.brew.result }}") |"
             echo "| CLI: aws / gcloud / az suites + CLI ↔ console both ways $( [ -f arts/checks-cli/summary.md ] && grep -oE '[0-9]+/[0-9]+ checks passed' arts/checks-cli/summary.md | head -1 | sed 's/^/(/;s/$/)/') | Linux, release images | $(res "${{ needs.cli.result }}") |"
+            echo "| Nano CLI: aws / gcloud / az through the tunnel + CLI ↔ console both ways $( [ -f arts/checks-nano-cli/summary.md ] && grep -oE '[0-9]+/[0-9]+ checks passed' arts/checks-nano-cli/summary.md | head -1 | sed 's/^/(/;s/$/)/') | Chromium, release wasm bundle | $(res "${{ needs.nano-cli.result }}") |"
             while IFS='|' read -r label wf id concl; do
               case "$label" in
                 msi) name="MSI: install, upgrade, uninstall (+ signing)"; plat="Windows (GitHub)"; link="${{ github.server_url }}/$R/actions/runs/$id" ;;
@@ -226,6 +274,7 @@ jobs:
               [ -f "arts/checks-$k/summary.md" ] && { echo "## ${k^^}"; echo; cat "arts/checks-$k/summary.md"; echo; }
             done
             [ -f arts/checks-cli/summary.md ] && { echo "## CLI (aws / gcloud / az) and CLI ↔ console"; echo; cat arts/checks-cli/summary.md; echo; }
+            [ -f arts/checks-nano-cli/summary.md ] && { echo "## Nano CLI through the tunnel and CLI ↔ console"; echo; cat arts/checks-nano-cli/summary.md; echo; }
             [ -f ext/msi/summary.md ] && { echo "## MSI"; echo; cat ext/msi/summary.md; echo; }
             [ -f ext/startup/summary.md ] && { echo "## Startup (all services + UI)"; echo; cat ext/startup/summary.md; echo; }
             [ -f ext/windows-e2e/startup-check/summary.md ] && { echo "## Windows E2E"; echo; cat ext/windows-e2e/startup-check/summary.md; echo; }

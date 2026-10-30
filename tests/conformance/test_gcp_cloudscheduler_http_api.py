@@ -12,6 +12,10 @@ import uuid
 import requests
 
 BASE = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000")
+try:   # the GCP space's project ID
+    PROJECT = requests.get(f"{BASE}/api/gcp/catalog", timeout=60).json()["project"]
+except Exception:   # appliance not up yet (collection)
+    PROJECT = "vyomi-project"
 failed = False
 hits = []
 mode = {"code": 200}
@@ -53,10 +57,10 @@ def main():
     # maps it to loopback when it isn't resolvable, i.e. a non-Docker run).
     host = os.environ.get("HTTP_TARGET_HOST", "host.docker.internal")
     url = f"http://{host}:{srv.server_address[1]}/hook"
-    jobs = f"{BASE}/v1/projects/cloudlearn/locations/us-central1/jobs"
+    jobs = f"{BASE}/v1/projects/{PROJECT}/locations/us-central1/jobs"
     jid = f"http-{uuid.uuid4().hex[:6]}"
     r = requests.post(jobs, json={
-        "name": f"projects/cloudlearn/locations/us-central1/jobs/{jid}", "schedule": "0 0 1 1 *",
+        "name": f"projects/{PROJECT}/locations/us-central1/jobs/{jid}", "schedule": "0 0 1 1 *",
         "httpTarget": {"uri": url, "httpMethod": "PUT", "headers": {"X-Vyomi": "yes"},
                        "body": base64.b64encode(b"payload-1").decode(), "oidcToken": {"serviceAccountEmail": "a@b.iam"}}},
         timeout=60)

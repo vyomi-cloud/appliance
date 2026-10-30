@@ -9,7 +9,7 @@ export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}" AWS_PAGER=""
 if ! command -v aws >/dev/null 2>&1; then echo "SKIP aws-cli not installed"; exit 0; fi
 
 pass=0; fail=0
-chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: $3"; fail=$((fail+1)); fi; }
+chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 cw() { aws --endpoint-url "$BASE" cloudwatch "$@"; }
 
 S="$$"
@@ -24,7 +24,9 @@ out=$(cw put-metric-data --namespace "$NS" --metric-name Latency --dimensions Se
 out=$(cw put-metric-data --namespace "$NS" --metric-name Latency --dimensions Service=cart --statistic-values Sum=100,Minimum=10,Maximum=90,SampleCount=2 2>&1); chk $? "put-metric-data --statistic-values" "$out"
 out=$(cw list-metrics --namespace "$NS" --query 'Metrics[0].MetricName' --output text 2>&1); chk $([ "$out" = "Latency" ]; echo $?) "list-metrics" "$out"
 out=$(cw list-metrics --namespace "$NS" --query 'Metrics[0].Dimensions[0].Value' --output text 2>&1); chk $([ "$out" = "cart" ]; echo $?) "list-metrics shows dimensions" "$out"
-START=$(date -u -d '-10 minutes' +%Y-%m-%dT%H:%M:%SZ); END=$(date -u -d '+2 minutes' +%Y-%m-%dT%H:%M:%SZ)
+# python, not `date -d` (GNU-only): the suite also runs on macOS.
+iso() { python3 -c "import datetime as d,sys;print((d.datetime.now(d.timezone.utc)+d.timedelta(minutes=int(sys.argv[1]))).strftime('%Y-%m-%dT%H:%M:%SZ'))" "$1"; }
+START=$(iso -10); END=$(iso 2)
 out=$(cw get-metric-statistics --namespace "$NS" --metric-name Latency --dimensions Name=Service,Value=cart --start-time "$START" --end-time "$END" --period 3600 --statistics Sum SampleCount --query 'sum(Datapoints[].Sum)' --output text 2>&1); chk $([ "$out" = "350.0" ]; echo $?) "get-metric-statistics Sum=350" "$out"
 out=$(cw get-metric-statistics --namespace "$NS" --metric-name Latency --dimensions Name=Service,Value=cart --start-time "$START" --end-time "$END" --period 3600 --statistics SampleCount --query 'sum(Datapoints[].SampleCount)' --output text 2>&1); chk $([ "$out" = "3.0" ]; echo $?) "get-metric-statistics SampleCount=3" "$out"
 out=$(cw get-metric-data --start-time "$START" --end-time "$END" --metric-data-queries "[{\"Id\":\"m\",\"MetricStat\":{\"Metric\":{\"Namespace\":\"$NS\",\"MetricName\":\"Latency\",\"Dimensions\":[{\"Name\":\"Service\",\"Value\":\"cart\"}]},\"Period\":3600,\"Stat\":\"Maximum\"}}]" --query 'MetricDataResults[0].Values[0]' --output text 2>&1); chk $([ "$out" = "250.0" ]; echo $?) "get-metric-data Maximum=250" "$out"
@@ -54,7 +56,8 @@ out=$(cw get-dashboard --dashboard-name "$D" 2>&1); chk $([[ "$out" == *Resource
 out=$(cw delete-alarms --alarm-names "$A" 2>&1); chk $([[ "$out" == *ResourceConflict* ]]; echo $?) "delete-alarms keeps an alarm a composite uses" "$out"
 out=$(cw delete-alarms --alarm-names "$A-comp" "$A" 2>&1); chk $? "delete-alarms" "$out"
 out=$(cw describe-alarms --alarm-names "$A" --query 'length(MetricAlarms)' --output text 2>&1); chk $([ "$out" = "0" ]; echo $?) "alarm is gone" "$out"
-out=$(cw put-metric-alarm --alarm-name "$A-bad" 2>&1); chk $([[ "$out" == *MissingParameter* ]]; echo $?) "put-metric-alarm without a comparison operator → MissingParameter" "$out"
+# Older CLIs send it and the service answers MissingParameter; newer ones (2.3x) refuse it client-side.
+out=$(cw put-metric-alarm --alarm-name "$A-bad" 2>&1); chk $([[ "$out" == *MissingParameter* || "$out" == *"arguments are required"*"--comparison-operator"* ]]; echo $?) "put-metric-alarm without a comparison operator → MissingParameter" "$out"
 
 rm -rf "$T"
 echo; echo "$pass passed, $fail failed"

@@ -229,7 +229,8 @@ async function nanoCostSavings() {
 // the provider from the page making the request, so aws/gcp/azure consoles all
 // pass their gate from the same in-browser substrate.
 function nanoSpace(provider) {
-  const acct = provider === "gcp" ? "nano-project" : provider === "azure" ? "nano-sub" : "000000000000";
+  // AWS: the account Nano's engines use in ARNs and STS (wasm/build_fixtures.py NANO_AWS_ACCOUNT).
+  const acct = provider === "gcp" ? "nano-project" : provider === "azure" ? "nano-sub" : "123456789012";
   const region = provider === "gcp" ? "us-central1" : provider === "azure" ? "eastus" : "us-east-1";
   return { space_id: "nano-" + provider, name: "Nano " + provider.toUpperCase(), provider,
            status: "running", active_region: region, active_account: acct };

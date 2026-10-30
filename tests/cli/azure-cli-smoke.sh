@@ -13,6 +13,7 @@
 #        mcr.microsoft.com/azure-cli:latest bash azure-cli-smoke.sh'
 set -u
 BASE="${ENDPOINT:-http://127.0.0.1:9000}"
+CONSOLE="${CONSOLE:-$BASE}"   # the console's own API: the same server offline, the Nano tab on Nano
 # The subscription is discovered the way `az login` does (GET /subscriptions):
 # the space has exactly one, and any other id is SubscriptionNotFound.
 SUB="${AZURE_SUBSCRIPTION_ID:-$(python3 -c "import json,urllib.request;print(json.load(urllib.request.urlopen('$BASE/subscriptions?api-version=2022-12-01',timeout=10))['value'][0]['subscriptionId'])" 2>/dev/null)}"
@@ -25,7 +26,7 @@ if ! command -v az >/dev/null 2>&1; then
 fi
 
 pass=0; fail=0
-chk() { if [ "$1" = "0" ]; then echo "PASS $2"; pass=$((pass+1)); else echo "FAIL $2 :: $3"; fail=$((fail+1)); fi; }
+chk() { if [ "$1" = "0" ]; then echo "PASS $2"; pass=$((pass+1)); else echo "FAIL $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 
 echo "== az against $BASE subscription=$SUB =="
 az --version 2>&1 | head -1
@@ -42,7 +43,7 @@ export AZURE_CLI_DISABLE_CONNECTION_VERIFICATION=1
 AZ_SP=$(python3 -c "
 import json, urllib.request
 try:
-    d = json.load(urllib.request.urlopen('$BASE/api/spaces', timeout=5))
+    d = json.load(urllib.request.urlopen('$CONSOLE/api/spaces', timeout=5))
     print(next((s['space_id'] for s in d.get('spaces', []) if s.get('provider')=='azure'), ''))
 except Exception:
     print('')
@@ -50,7 +51,7 @@ except Exception:
 if [ -n "$AZ_SP" ]; then
     python3 -c "
 import urllib.request
-req = urllib.request.Request('$BASE/api/spaces/$AZ_SP/switch', method='POST')
+req = urllib.request.Request('$CONSOLE/api/spaces/$AZ_SP/switch', method='POST')
 urllib.request.urlopen(req, timeout=5).read()
 " >/dev/null 2>&1
     echo "switched to Azure space: $AZ_SP"

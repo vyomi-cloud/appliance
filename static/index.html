@@ -3279,8 +3279,11 @@ const gcpLastPath = (value='') => {
   const parts = String(value || '').split('/').filter(Boolean);
   return parts.length ? parts[parts.length - 1] : '';
 };
-// space = project: every GCP view resolves to the active space's project.
-const gcpProjectDefault = () => window.localStorage.getItem('cloudlearn.active.space') || window.localStorage.getItem('cloudlearn.gcp.project') || 'cloudlearn';
+// space = project: every GCP view resolves to the GCP space's project ID (the
+// one `gcloud projects list` shows), read once from the console catalog.
+window.__VYOMI_GCP_PROJECT = window.__VYOMI_GCP_PROJECT || '';
+fetch('/api/gcp/catalog').then(r => r.json()).then(c => { if (c && c.project) window.__VYOMI_GCP_PROJECT = c.project; }).catch(() => {});
+const gcpProjectDefault = () => window.__VYOMI_GCP_PROJECT || 'vyomi-project';
 const gcpComputeProjectDefault = () => gcpProjectDefault();
 const gcpComputeZoneDefault = () => window.localStorage.getItem('cloudlearn.gcp.zone') || 'us-central1-a';
 const gcpLocationDefault = () => window.localStorage.getItem('cloudlearn.gcp.location') || 'us-central1';
@@ -8006,7 +8009,7 @@ function GCPComputeView({notify, onBack, onOpen}) {
         layout="stacked"
         titleCardChips={(
           <>
-            <span className="gcp-list-head-chip">Project: {project || 'cloudlearn'}</span>
+            <span className="gcp-list-head-chip">Project: {project || gcpProjectDefault()}</span>
             <span className="gcp-list-head-chip">{computeItems.length} resource{computeItems.length === 1 ? '' : 's'}</span>
           </>
         )}
@@ -9088,7 +9091,7 @@ function GCPStorageView({notify, onBack, onOpen}) {
         layout="stacked"
         titleCardChips={(
           <>
-            <span className="gcp-list-head-chip">Project: {project || 'cloudlearn'}</span>
+            <span className="gcp-list-head-chip">Project: {project || gcpProjectDefault()}</span>
             <span className="gcp-list-head-chip">{bucketCount} resource{bucketCount === 1 ? '' : 's'}</span>
           </>
         )}

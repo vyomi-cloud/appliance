@@ -356,6 +356,10 @@ def check_gcp(endpoint: str) -> None:
         status = PASS if ok_cond else (WARN if st and 200 <= st < 500 else FAIL)
         record(svc, check, status, note or f"status={st}")
 
+    # The appliance's GCP project (Cloud Resource Manager — what `gcloud projects list` shows).
+    st, resp = call("GET", "/v1/projects")
+    project = ((resp.get("projects") or [{}])[0].get("projectId") if st == 200 else "") or project
+
     # ---- Cloud Storage: bucket + object data plane ----
     bucket = f"conf-gcs-{uuid.uuid4().hex[:8]}"
     st, resp = call("POST", f"/storage/v1/b?project={project}", {"name": bucket})

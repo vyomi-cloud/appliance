@@ -683,7 +683,61 @@ async def api_dynamodb_aws(request: Request):
 # ---------------------------------------------------------------------------
 
 
+def _ddb_local_call(op: str, body: dict) -> dict | None:
+    """One DynamoDB Local JSON call (None when it isn't reachable)."""
+    try:
+        from core import dynamodb_proxy as _ddbp
+        import urllib.request
+        req = urllib.request.Request(
+            _ddbp._DDB_URL, data=json.dumps(body).encode(), method="POST",
+            headers={"X-Amz-Target": f"DynamoDB_20120810.{op}", "Content-Type": "application/x-amz-json-1.0",
+                     "Authorization": "AWS4-HMAC-SHA256 Credential=test/20260531/us-east-1/dynamodb/aws4_request"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return json.loads(r.read() or b"{}")
+    except Exception:
+        return None
+
+
+def _ddb_sync_from_local() -> None:
+    """DynamoDB Local holds the tables the CLI and SDKs create (they reach it through
+    api_dynamodb_aws), so the console lists what is there: tables created outside the
+    console are added to its records, and records whose table was deleted there are
+    dropped. Without DynamoDB Local the console keeps its own records."""
+    names, start = [], None
+    while True:
+        page = _ddb_local_call("ListTables", {"ExclusiveStartTableName": start} if start else {})
+        if page is None:
+            return
+        names += page.get("TableNames") or []
+        start = page.get("LastEvaluatedTableName")
+        if not start:
+            break
+    tables, live = _ddb_tables(), set(names)
+    for name in names:
+        if name in tables:
+            continue
+        d = (_ddb_local_call("DescribeTable", {"TableName": name}) or {}).get("Table")
+        if not d:
+            continue
+        try:
+            _ddb_create_table_record({
+                "TableName": name, "KeySchema": d.get("KeySchema") or [],
+                "AttributeDefinitions": d.get("AttributeDefinitions") or [],
+                "BillingMode": (d.get("BillingModeSummary") or {}).get("BillingMode") or "PROVISIONED",
+                "ProvisionedThroughput": d.get("ProvisionedThroughput") or {},
+                "GlobalSecondaryIndexes": d.get("GlobalSecondaryIndexes") or [],
+                "LocalSecondaryIndexes": d.get("LocalSecondaryIndexes") or []})
+        except HTTPException:
+            pass
+    gone = [n for n in tables if n not in live]
+    for name in gone:
+        tables.pop(name, None)
+    if gone:
+        _persist_state()
+
+
 def api_dynamodb_list_tables():
+    _ddb_sync_from_local()
     return _ddb_list_tables_response()
 
 

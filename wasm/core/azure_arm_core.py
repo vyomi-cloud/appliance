@@ -582,7 +582,8 @@ class AzureArm:
 
     def _appconfig(self, method, sub, rg, chain, payload, query):
         ac = appconfig_engine
-        r = ac.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        # base: the store's data-plane endpoint is this origin's /azure-data/appconfig/{store}.
+        r = ac.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
         resp = {"status": r["status"], "headers": {}, "body": r["body"]}
         if r["lro"] and r["status"] < 300:
             resp["status"] = 200 if r["status"] == 201 else r["status"]

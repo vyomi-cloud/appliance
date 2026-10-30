@@ -3,10 +3,16 @@
 # ENDPOINT (default http://127.0.0.1:9000), PROJECT. One [PASS]/[FAIL] line per check.
 set -u
 BASE="${ENDPOINT:-http://127.0.0.1:9000}"
-PROJECT="${PROJECT:-cli-mon-proj}"
+# Default PROJECT: the appliance's GCP project, discovered the way a user's gcloud
+# sees it (Cloud Resource Manager) — the same project the GCP console works in.
+if [ -z "${PROJECT:-}" ]; then
+  PROJECT=$(CLOUDSDK_API_ENDPOINT_OVERRIDES_CLOUDRESOURCEMANAGER="$BASE/" CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 gcloud projects list --format='value(projectId)' --limit=1 2>/dev/null | head -1)
+  [ -n "$PROJECT" ] || { echo "FAIL discover project :: \`gcloud projects list\` against $BASE returned nothing"; exit 1; }
+fi
 SFX="$(date +%s)"
 pass=0; fail=0
-chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: $3"; fail=$((fail+1)); fi; }
+chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 export CLOUDSDK_CORE_PROJECT="$PROJECT"

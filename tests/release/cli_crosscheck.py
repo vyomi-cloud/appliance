@@ -20,6 +20,11 @@ Plus coverage: released services (services/registry.json) with no CLI suite.
 
     ENDPOINT=http://localhost:9000 OUT=cli-check python3 tests/release/cli_crosscheck.py
 
+Nano: the CLIs go through the relay tunnel (ENDPOINT = the local relay) and the
+console side is the Nano tab itself (CONSOLE = a bridge that runs each request
+as a fetch inside the SW-controlled page) — tests/release/nano_cli_check.mjs
+sets both up and runs this with TARGET=nano.
+
 Writes OUT/summary.md ("N/M checks passed" first) and OUT/results.json; exits
 1 if any check fails. CLI config goes to a temp dir, never the user's.
 """
@@ -33,10 +38,13 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 B = os.environ.get("ENDPOINT", "http://localhost:9000").rstrip("/")
+CONSOLE = os.environ.get("CONSOLE", B).rstrip("/")   # where the console's own API calls go
+TARGET = os.environ.get("TARGET", "offline")
 OUT = os.environ.get("OUT", "cli-check")
 T = str(int(time.time()))[-7:]
 TMP = tempfile.mkdtemp(prefix="vyomi-cli-")
@@ -55,6 +63,7 @@ ENV = dict(os.environ,
            AZURE_CORE_ONLY_SHOW_ERRORS="true")
 
 results: list[dict] = []
+not_applicable: list[dict] = []   # checks a target can't support, with the reason (see cli_suites)
 
 
 def check(section: str, name: str, ok: bool, detail: str = "") -> bool:
@@ -74,7 +83,7 @@ def run(*cmd: str, timeout: int = 120) -> tuple[int, str]:
 
 
 def http(method: str, path: str, body=None) -> tuple[int, object]:
-    req = urllib.request.Request(B + path, method=method, data=None if body is None else json.dumps(body).encode(),
+    req = urllib.request.Request(CONSOLE + path, method=method, data=None if body is None else json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
@@ -120,6 +129,18 @@ def wait_ready(timeout_s: int = int(os.environ.get("READY_TIMEOUT_S", "900"))) -
     """Wait for the appliance, then start every on-demand backend the way the
     UI does (tests/installer/startup_check.mjs), so the CLIs hit live backends."""
     t0, kicked, rd = time.time(), set(), {}
+    if TARGET == "nano":   # no backends to start: the tunnel needs a registered Nano tab
+        while time.time() - t0 < timeout_s:
+            try:
+                with urllib.request.urlopen(B + "/health", timeout=10) as r:
+                    h = json.loads(r.read().decode())
+            except Exception:  # noqa: BLE001
+                h = {}
+            if h.get("tab"):
+                break
+            time.sleep(3)
+        check("tools", "Nano tab registered with the relay tunnel", bool(h.get("tab")), json.dumps(h) or "relay not reachable")
+        return
     while time.time() - t0 < timeout_s:
         code, rd = http("GET", "/api/runtime/readiness")
         if code == 200 and isinstance(rd, dict):
@@ -172,17 +193,29 @@ def identities() -> dict:
 
 
 # ── 2. both directions ─────────────────────────────────────────────────────
+def eventually(list_fn, name: str, secs: float = 8) -> set:
+    """The listing, re-read until it has `name` or `secs` pass. Nano's console and
+    tunnel contexts share state through a debounced save, so a change can take a
+    moment to reach the other side; offline it is there on the first read."""
+    end = time.time() + secs
+    while True:
+        seen = list_fn()
+        if name in seen or time.time() >= end:
+            return seen
+        time.sleep(1)
+
+
 def roundtrip(cloud: str, kind: str, cli_create, console_list, console_create, cli_list, cleanup) -> None:
     tag = re.sub(r"[^a-z0-9]", "", kind.lower())[:4]
     a, b = f"cli{tag}{T}", f"con{tag}{T}"
     rc, out = cli_create(a)
     if check("both-ways", f"{cloud}: {kind} created with the CLI", rc == 0, out):
-        seen = console_list()
+        seen = eventually(console_list, a)
         check("both-ways", f"{cloud}: {kind} created with the CLI shows in the console", a in seen,
               f"console lists {sorted(seen)[-8:]}")
     code, body = console_create(b)
     if check("both-ways", f"{cloud}: {kind} created in the console", 200 <= code < 300, str(body)[-300:]):
-        seen = cli_list()
+        seen = eventually(cli_list, b)
         check("both-ways", f"{cloud}: {kind} created in the console shows in the CLI", b in seen,
               f"CLI lists {sorted(seen)[-8:]}")
     for n in (a, b):
@@ -285,8 +318,12 @@ def both_ways(ids: dict) -> None:
 
 # ── 3. every CLI suite, individually ───────────────────────────────────────
 def cli_suites(ids: dict) -> None:
-    env = {"ENDPOINT": B, "PROJECT": ids["gcp"]["console"], "AZURE_SUBSCRIPTION_ID": ids["azure"]["console"],
+    env = {"ENDPOINT": B, "CONSOLE": CONSOLE, "PROJECT": ids["gcp"]["console"], "AZURE_SUBSCRIPTION_ID": ids["azure"]["console"],
            "AZURE_RESOURCE_GROUP": ids["azure"]["rg"]}
+    if TARGET == "nano":   # HTTP API invoke URLs ({id}.execute-api.localhost) are served by the tunnel itself
+        env["GATEWAY_HTTP_PORT"] = str(urllib.parse.urlsplit(B).port or 80)
+        env["SNS_RECEIVER_HOST"] = "127.0.0.1"   # the browser runs on this host, not in a container
+        env["SNS_HTTP_PUSH"] = "0"   # a browser tab can't push to HTTP endpoints → reported N/A, not passed
     for f in sorted(glob.glob(os.path.join(ROOT, "tests", "cli", "*-cli-smoke.sh"))):
         name = os.path.basename(f)[:-len("-cli-smoke.sh")]
         try:
@@ -296,6 +333,11 @@ def cli_suites(ids: dict) -> None:
             out, rc = "timed out after 900s", 124
         # Two output styles: "PASS name" / "FAIL name :: why" and "[PASS] name" / "[FAIL] name :: why".
         np, nf = len(re.findall(r"^\[?PASS\]? ", out, re.M)), len(re.findall(r"^\[?FAIL\]? ", out, re.M))
+        # "[N/A] what :: why": a check this target can't support (e.g. Nano can't push to HTTP).
+        # Not a pass and not a failure — listed on its own in the summary.
+        for line in re.findall(r"^\[N/A\] (.*)$", out, re.M):
+            what, _, why = line.partition(" :: ")
+            not_applicable.append({"suite": name, "check": what, "reason": why})
         skipped = re.search(r"^SKIP ", out, re.M) is not None
         fails = "; ".join(re.sub(r"^\[?FAIL\]? ", "", l).split(" :: ")[0] for l in out.splitlines()
                           if re.match(r"\[?FAIL\]? ", l))[:400]
@@ -321,7 +363,8 @@ def main() -> int:
     titles = {"tools": "CLIs", "identity": "Identity: CLI and console use the same account / project / subscription",
               "both-ways": "Both directions: CLI → console and console → CLI",
               "cli-suite": "CLI suites, each on its own"}
-    md = [f"**{ok}/{len(results)} checks passed** against `{B}`.", ""]
+    where = f"Nano through the relay tunnel `{B}`" if TARGET == "nano" else f"`{B}`"
+    md = [f"**{ok}/{len(results)} checks passed** against {where}.", ""]
     for sec, title in titles.items():
         rs = [r for r in results if r["section"] == sec]
         if not rs:
@@ -329,10 +372,15 @@ def main() -> int:
         md += [f"### {title} ({sum(r['ok'] for r in rs)}/{len(rs)})", "", "| | Check | Detail |", "|---|---|---|"]
         md += [f"| {'✅' if r['ok'] else '❌'} | {r['name']} | {'' if r['ok'] else r['detail'][-240:].replace('|', '/').replace(chr(10), ' ')} |" for r in rs]
         md.append("")
+    if not_applicable:
+        md += [f"### Not applicable on this target ({len(not_applicable)}) — not counted as passed", "",
+               "| Suite | Check | Why |", "|---|---|---|"]
+        md += [f"| {n['suite']} | {n['check']} | {n['reason']} |" for n in not_applicable]
+        md.append("")
     if no_cli:
         md += [f"### Released services with no CLI suite yet ({len(no_cli)})", "", ", ".join(no_cli), ""]
     open(os.path.join(OUT, "summary.md"), "w").write("\n".join(md) + "\n")
-    json.dump({"endpoint": B, "identities": ids, "results": results, "no_cli_suite": no_cli},
+    json.dump({"endpoint": B, "console": CONSOLE, "target": TARGET, "identities": ids, "results": results, "not_applicable": not_applicable, "no_cli_suite": no_cli},
               open(os.path.join(OUT, "results.json"), "w"), indent=1)
     print(f"\n{ok}/{len(results)} checks passed → {OUT}/summary.md")
     return 0 if ok == len(results) else 1

@@ -16,7 +16,7 @@ if ! command -v aws >/dev/null 2>&1; then
 fi
 
 pass=0; fail=0
-chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: $3"; fail=$((fail+1)); fi; }
+chk() { if [ "$1" = "0" ]; then echo "[PASS] $2"; pass=$((pass+1)); else echo "[FAIL] $2 :: ${3:-}"; fail=$((fail+1)); fi; }
 el() { aws elbv2 --endpoint-url "$BASE" "$@" 2>&1; }
 # q <expected-substring> <description> <aws args...>: run and look for a substring.
 q() { local want="$1" what="$2"; shift 2; local out; out=$(el "$@"); local rc=$?

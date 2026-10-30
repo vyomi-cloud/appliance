@@ -164,11 +164,29 @@ def capture(obj) -> dict:
     return out
 
 
+def _gcp_project_migrate(snap: dict) -> dict:
+    """GCP state saved under the old console project ("demo") or the project
+    number → the Nano project ID (core/gcp_project), so snapshots written before
+    projects had one ID stay visible to the console and the CLI alike."""
+    try:
+        from core import gcp_project as gp
+        pid = gp.NANO_PROJECT["projectId"]
+        old = {gp.NANO_PROJECT["projectNumber"], *gp.LEGACY_PROJECT_IDS} - {pid}
+        txt = json.dumps(snap.get("state") or {})
+        if not any(f"projects/{o}" in txt or f'"{o}"' in txt for o in old):
+            return snap
+        return {**snap, "state": gp.rewrite_tree(copy.deepcopy(snap.get("state") or {}), old, pid)}
+    except Exception:
+        return snap
+
+
 def restore(obj, blob: dict) -> None:
     for name, snap in (blob or {}).items():
         st = _lookup(obj, name)
         if st is not None and isinstance(snap, dict):
             try:
+                if name == "gcs" or name.startswith("gcp_"):
+                    snap = _gcp_project_migrate(snap)
                 restore_store(st, snap)
             except Exception:
                 pass

@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import re
 from urllib.parse import parse_qsl
+from xml.sax.saxutils import escape as _xml_escape
 
 from core.object_store import InMemoryObjectStore
 from core import s3_object_core as s3
@@ -52,6 +53,7 @@ from core import sqs_core as sqs
 from core import sns_core as sns
 from core import elbv2_core as elbv2
 from core import rds_data_core as rds_data
+from core import gcp_project as gcp_proj   # GCP: the one project (ID + number) + Resource Manager
 from core import gcp_storage_core as gcs   # GCP: GCS JSON API, path-routed (not SigV4)
 from core import gcp_firestore_core as gcp_fs
 from core.gcp_firestore_core import FirestoreStore
@@ -71,6 +73,8 @@ from core import gcp_artifactregistry_core as gcp_ar
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
     client is pointed at the relay and the path is the service discriminator)."""
+    if gcp_proj.CRM_PATH_RE.match(path):   # Cloud Resource Manager (gcloud projects list/describe)
+        return "gcp-resourcemanager"
     if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1")):
         return "gcp-gcs"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
@@ -118,6 +122,7 @@ from core import logs_core as logs
 from core import lambda_core as lam
 from core import apigateway_core as apigw
 from core import apigatewayv2_core as apigw2
+from core import apigatewayv2_gateway as apigw2_gw
 from core import ssm_core as ssm
 from core import stepfunctions_core as sfn
 from core import vpc_core as vpc
@@ -125,6 +130,9 @@ from core import kinesis_core as kinesis
 from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
+from core.azure_arm_core import AzureArm
+from core import azure_appconfiguration_core as az_appcfg
+from core import azure_dns_core as az_dns
 import types as _types
 
 
@@ -176,6 +184,7 @@ _SIGNING = {
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
     "ssm": "ssm",
+    "sts": "sts",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
@@ -200,6 +209,8 @@ _JSON_CT = {
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
 # by credential scope). Small but covers the common verbs of each service.
 _QUERY_ACTION = {
+    # STS
+    "GetCallerIdentity": "sts",
     # SNS
     "CreateTopic": "sns", "DeleteTopic": "sns", "ListTopics": "sns",
     "Subscribe": "sns", "Unsubscribe": "sns", "ListSubscriptions": "sns",
@@ -234,6 +245,42 @@ for _a in elbv2.OPERATIONS:
 _GENERIC_ACTIONS = {"TagResource", "UntagResource", "ListTagsForResource"}
 
 
+# Azure RBAC role assignments / definitions / checkAccess stay on the IAM store
+# (shared with Azure SQL enforcement); every other ARM path goes to AzureArm.
+_AUTHZ_IAM = re.compile(r"/providers/microsoft\.authorization/(roleassignments|roledefinitions|checkaccess)", re.I)
+
+
+class ResourceCollections:
+    """Same public shape as wasm/backends/store.ResourceStore ({provider/account/service: {name:
+    record}}), so nano_persist snapshots move it between the console and the tunnel."""
+
+    def __init__(self) -> None:
+        self.collections: dict = {}
+
+
+def _execute_api_id(path, lheaders):
+    """The HTTP API an invoke-URL request is for: host `{id}.execute-api.<anything>` (as the CLI
+    prints it) or the path-style fallback `/apigw/{id}/…` (same as the offline gateway's)."""
+    host = (lheaders.get("host", "") or "").split(":", 1)[0].lower()
+    if ".execute-api." in host:
+        return host.split(".", 1)[0]
+    if path.startswith("/apigw/"):
+        return path[len("/apigw/"):].split("/", 1)[0].split("?", 1)[0]
+    return ""
+
+
+# A Microsoft.Sql database resource (GET/PUT answer carries its connectionInfo, like offline).
+_SQL_DB = re.compile(r"/providers/microsoft\.sql/servers/[^/]+/databases/[^/]+$", re.I)
+
+
+def _is_arm_path(path):
+    """Azure Resource Manager: the subscription list, anything under a
+    subscription, the tenant list, and the LRO poll URLs AzureArm hands out.
+    Checked before the S3 default so ARM never answers with S3 XML (#176)."""
+    p = path.split("?", 1)[0]
+    return p in ("/subscriptions", "/tenants") or p.startswith(("/subscriptions/", "/api/azure/operations/"))
+
+
 def _lower_headers(headers):
     return {str(k).lower(): v for k, v in (headers or {}).items()}
 
@@ -248,6 +295,14 @@ class AwsWireRouter:
         # Postgres, Vault, NATS) behind the identical seam. `sql_store` kept for
         # back-compat (the browser PGlite path).
         s = stores or {}
+        # The console's generic catalog store (EC2 instances, …) — wasm/backends/store.ResourceStore,
+        # registered in the shared registry as "resources". The tunnel never builds one, so give the
+        # registry a plain holder of the same shape: nano_persist then restores the console's
+        # resources into it, and DescribeInstances reads them. Looked up per request, because the
+        # console swaps in its full ResourceStore (adopting this one's contents) when it boots.
+        if isinstance(stores, dict):
+            stores.setdefault("resources", ResourceCollections())
+        self._stores = s
         self.s3 = s.get("s3") or InMemoryObjectStore()
         self.ddb = s.get("ddb") or InMemoryNoSqlStore()
         self.kms = s.get("kms") or InMemoryKeyStore()
@@ -269,6 +324,9 @@ class AwsWireRouter:
         self.gcp_iamc = s.get("gcp_iamc") or gcp_iamc.IamCredentialsStore()   # IAM Service Account Credentials issue log
         self.gcp_mon = s.get("gcp_mon") or gcp_mon.MonitoringStore()   # Cloud Monitoring (policies, channels, metrics, series)
         self.gcp_ar = s.get("gcp_ar") or gcp_ar.ArtifactRegistryStore()
+        # The GCP project every GCP request is normalized to (a dict, or a callable
+        # returning one): Nano's fixed project unless the host injects its own.
+        self.gcp_project = s.get("gcp_project") or dict(gcp_proj.NANO_PROJECT)
         # Azure data-plane services.
         self.az_blob = s.get("az_blob") or AzureBlobStore()
         self.az_cosmos = s.get("az_cosmos") or CosmosStore()
@@ -276,11 +334,14 @@ class AwsWireRouter:
         self.az_kvkeys = s.get("az_kvkeys") or InMemoryKeyStore()
         self.az_queue = s.get("az_queue") or AzureQueueStore()
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
+        self.az_arm = s.get("az_arm") or AzureArm()   # Azure Resource Manager — the console's ARM store
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
         # its own lightweight function registry (a namespace the core attaches to).
         self.events = s.get("events") or self.msg
         self.ssm = s.get("ssm") or ssm.SsmStore()   # Systems Manager (Parameter Store, documents, Run Command, …)
-        self.lam = s.get("lam") or _types.SimpleNamespace()
+        # Nano's shared registry calls it "compute" (Lambda functions + API Gateway APIs, the
+        # console's dataplane_adapter._COMPUTE): the same functions for the console and the CLI.
+        self.lam = s.get("lam") or s.get("compute") or _types.SimpleNamespace()
         # API Gateway shares the Lambda store so an AWS_PROXY integration can reach
         # the registered functions (the API-GW → Lambda synergy).
         self.apigw = s.get("apigw") or self.lam
@@ -351,6 +412,8 @@ class AwsWireRouter:
             return az
         if self._servicebus_service(method, path, lheaders):
             return "az-servicebus"
+        if _execute_api_id(path, lheaders):   # HTTP API invoke URL ({id}.execute-api.* or /apigw/{id}/…)
+            return "apigw-invoke"
         if "/2015-03-31/functions" in path:   # Lambda REST (native boto3 lambda wire)
             return "lambda"
         if path.startswith("/v2/") and path[4:].split("/", 1)[0] in (   # API Gateway V2 control plane
@@ -358,8 +421,14 @@ class AwsWireRouter:
             return "apigatewayv2"
         if "/restapis" in path:               # API Gateway v1 control plane
             return "apigateway"
-        if "microsoft.authorization" in path.lower():   # Azure RBAC checkAccess
+        if _AUTHZ_IAM.search(path):   # Azure RBAC role assignments/definitions + checkAccess
             return "azure-sql-iam-rbac"
+        if _is_arm_path(path):        # Azure Resource Manager (az, azure-mgmt-* SDKs)
+            return "azure-arm"
+        if path.startswith("/azure-data/appconfig/"):   # App Configuration data plane (store endpoint)
+            return "azure-appconfig"
+        if path.split("?", 1)[0] == "/azure-data/dns/query":   # Azure DNS resolution ("dig" over HTTP)
+            return "azure-dns-query"
         if path.startswith("/azure-sql/") or path == "/azure-sql":  # Azure SQL data plane
             return "azure-sql"
         if path.startswith("/service/" + cw.TARGET_PREFIX + "/") or lheaders.get("smithy-protocol") == "rpc-v2-cbor":
@@ -389,6 +458,86 @@ class AwsWireRouter:
         if rds_data.is_data_api_path(path):  # unsigned Data API (rest-json path)
             return "rds-data"
         return "s3"  # default: bucket/key path-style
+
+    def _azure_sql_conn(self, base):
+        """What a Microsoft.Sql database is backed by here: the tunnel's /azure-sql data plane on
+        the shared SqlStore — real Postgres when PGlite is loaded, SQLite otherwise. Nano has no TCP
+        database to connect to, so unlike offline there is no host/port, only the HTTP data plane."""
+        pg = type(self.rds).__name__ == "PGliteSqlStore"
+        return {"engine": "PostgreSQL (PGlite, in-browser)" if pg else "SQLite (in-browser)",
+                "dataPlane": f"{base}/azure-sql"}
+
+    _EC2_NS = "http://ec2.amazonaws.com/doc/2016-11-15/"
+    _EC2_STATE_CODES = {"pending": 0, "running": 16, "shutting-down": 32, "terminated": 48,
+                        "stopping": 64, "stopped": 80}
+
+    def _ec2_describe_instances(self, params):
+        """EC2 DescribeInstances over the instances the Nano console launched (the shared
+        "resources" store) — `aws ec2 describe-instances` sees what the console shows. Filters:
+        InstanceId.N and instance-state-name / tag:Name (the common ones)."""
+        res = self._stores.get("resources") if isinstance(self._stores, dict) else None
+        cols = getattr(res, "collections", {}) or {}
+        ids = {v for k, v in params.items() if k.startswith("InstanceId.")}
+        filters = {}
+        for k, v in params.items():
+            m = re.match(r"Filter\.(\d+)\.Name$", k)
+            if m:
+                filters[v] = {params[x] for x in params if x.startswith(f"Filter.{m.group(1)}.Value.")}
+        acct = self.iam.account_id
+        items = []
+        for ns, recs in cols.items():
+            parts = ns.split("/")
+            if len(parts) != 3 or parts[0] != "aws" or parts[2] != "ec2":
+                continue
+            for name, r in (recs or {}).items():
+                iid = str(r.get("instance_id") or "")
+                state = str(r.get("state") or r.get("status") or "running").lower()
+                if not iid or (ids and iid not in ids):
+                    continue
+                if "instance-state-name" in filters and state not in filters["instance-state-name"]:
+                    continue
+                if "tag:Name" in filters and name not in filters["tag:Name"]:
+                    continue
+                x = _xml_escape
+                items.append(
+                    f"<item><reservationId>r-{iid[2:]}</reservationId><ownerId>{acct}</ownerId><groupSet/>"
+                    f"<instancesSet><item><instanceId>{x(iid)}</instanceId>"
+                    f"<imageId>{x(str(r.get('image_id') or ''))}</imageId>"
+                    f"<instanceState><code>{self._EC2_STATE_CODES.get(state, 16)}</code><name>{x(state)}</name></instanceState>"
+                    f"<privateDnsName>ip-{x(str(r.get('private_ip') or '').replace('.', '-'))}.ec2.internal</privateDnsName>"
+                    f"<dnsName>{x(str(r.get('public_dns') or ''))}</dnsName>"
+                    f"<instanceType>{x(str(r.get('instance_type') or 't3.micro'))}</instanceType>"
+                    f"<launchTime>{x(str(r.get('launch_time') or ''))}</launchTime>"
+                    f"<placement><availabilityZone>{x(str(r.get('availability_zone') or 'us-east-1a'))}</availabilityZone></placement>"
+                    f"<privateIpAddress>{x(str(r.get('private_ip') or ''))}</privateIpAddress>"
+                    f"<ipAddress>{x(str(r.get('public_ip') or ''))}</ipAddress>"
+                    f"<tagSet><item><key>Name</key><value>{x(name)}</value></item></tagSet>"
+                    f"</item></instancesSet></item>")
+        body = (f'<?xml version="1.0" encoding="UTF-8"?><DescribeInstancesResponse xmlns="{self._EC2_NS}">'
+                f"<requestId>{iam._req_id()}</requestId><reservationSet>{''.join(items)}</reservationSet>"
+                "</DescribeInstancesResponse>")
+        return {"status": 200, "headers": {"content-type": "text/xml"}, "body": body.encode()}
+
+    _STS_NS = "https://sts.amazonaws.com/doc/2011-06-15/"
+
+    def _sts(self, params):
+        """STS GetCallerIdentity — `aws sts get-caller-identity`, the account the
+        CLI and SDKs use. The account is the IAM store's, so it matches the ARNs."""
+        rid = iam._req_id()   # IAM's request ids (STS sits beside IAM)
+        action = params.get("Action", "")
+        if action == "GetCallerIdentity":
+            acct = self.iam.account_id
+            body = ('<?xml version="1.0" encoding="UTF-8"?>'
+                    f'<GetCallerIdentityResponse xmlns="{self._STS_NS}"><GetCallerIdentityResult>'
+                    f"<Arn>arn:aws:iam::{acct}:root</Arn><UserId>{acct}</UserId><Account>{acct}</Account>"
+                    f"</GetCallerIdentityResult><ResponseMetadata><RequestId>{rid}</RequestId></ResponseMetadata>"
+                    "</GetCallerIdentityResponse>")
+            return {"status": 200, "headers": {"content-type": "text/xml"}, "body": body.encode()}
+        body = ('<?xml version="1.0" encoding="UTF-8"?>'
+                f'<ErrorResponse xmlns="{self._STS_NS}"><Error><Type>Sender</Type><Code>InvalidAction</Code>'
+                f"<Message>Unsupported STS action '{_xml_escape(action)}'.</Message></Error>"
+                f"<RequestId>{rid}</RequestId></ErrorResponse>")
+        return {"status": 400, "headers": {"content-type": "text/xml"}, "body": body.encode()}
 
     # ── body helpers ───────────────────────────────────────────────────
     @staticmethod
@@ -463,6 +612,32 @@ class AwsWireRouter:
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
+        if svc == "apigw-invoke":   # an HTTP API's invoke URL → the shared gateway engine
+            api_id = _execute_api_id(path, lheaders)
+            rest = path.split("?", 1)[0]
+            if rest.startswith(f"/apigw/{api_id}"):           # path-style: /apigw/{id}[/{stage}]/…
+                rest = rest[len(f"/apigw/{api_id}"):]
+            api = self.apigwv2.apis.get(api_id) or {}
+            first = rest.strip("/").split("/", 1)[0]
+            stage = first if first and first != "$default" and first in (api.get("stages") or {}) else "$default"
+            if stage != "$default":
+                rest = rest.strip("/")[len(stage):]
+            fstore = self.lam
+
+            def invoker(fn, event):   # the Lambda store this router serves (shared with the console)
+                fn = str(fn).split(":function:", 1)[-1].split(":", 1)[0]
+                out = lam.dispatch(fstore, "POST", f"/2015-03-31/functions/{fn}/invocations", {}, {},
+                                        json.dumps(event).encode())
+                if out.status >= 300 or (out.headers or {}).get("X-Amz-Function-Error"):
+                    return {"_error": True}
+                try:
+                    return json.loads((out.body or b"null").decode("utf-8"))
+                except Exception:
+                    return None
+            r = apigw2_gw.handle(self.apigwv2, api_id, stage, method, rest.lstrip("/"), headers or {},
+                                 query or {}, bytes(body), invoker=invoker)
+            return {"status": r.status, "headers": dict(r.headers or {}), "body": r.body or b""}
+
         if svc == "apigatewayv2":   # native API Gateway V2 control plane (/v2/apis, …)
             r = apigw2.dispatch(self.apigwv2, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
@@ -476,6 +651,37 @@ class AwsWireRouter:
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
+        if svc == "azure-arm":   # Azure Resource Manager → the same AzureArm the Nano console uses
+            host = lheaders.get("host", "")
+            # LRO poll URLs must be absolute for az / azure-mgmt pollers.
+            self.az_arm._base = f"{lheaders.get('x-forwarded-proto', 'http')}://{host}" if host else ""
+            r = self.az_arm.handle(method, path, query or {}, self._json_body(body) if body else None)
+            out = r.get("body")
+            if _SQL_DB.search(path.split("?", 1)[0]) and r["status"] < 300 and isinstance(out, dict):
+                out.setdefault("properties", {})["connectionInfo"] = self._azure_sql_conn(self.az_arm._base)
+            hdrs = dict(r.get("headers") or {})
+            if out is not None:
+                hdrs.setdefault("content-type", "application/json")
+            return {"status": r["status"], "headers": hdrs, "body": json.dumps(out).encode() if out is not None else b""}
+
+        if svc == "azure-appconfig":   # /azure-data/appconfig/{store}/... over the ARM state's stores
+            host = lheaders.get("host", "")
+            store, _, rest = path[len("/azure-data/appconfig/"):].partition("/")
+            base = f"{lheaders.get('x-forwarded-proto', 'http')}://{host}/azure-data/appconfig/{store}" if host else ""
+            r = az_appcfg.data_dispatch(self.az_arm.state, store, method, "/" + rest, query or {},
+                                        headers or {}, bytes(body) if method in ("PUT", "PATCH") else b"", base=base)
+            hdrs = dict(r.get("headers") or {})
+            hdrs.setdefault("Sync-Token", "zAJw6V16=Njo4NDk6;sn=849")
+            if r.get("body") is None:
+                return {"status": r["status"], "headers": hdrs, "body": b""}
+            hdrs.setdefault("content-type", r.get("media") or "application/json")
+            return {"status": r["status"], "headers": hdrs, "body": json.dumps(r["body"]).encode()}
+
+        if svc == "azure-dns-query":   # DNS-over-HTTP JSON answers from the ARM state's zones
+            r = az_dns.data_dispatch(self.az_arm.state, method, query or {})
+            return {"status": r["status"], "headers": {"content-type": "application/json"},
+                    "body": json.dumps(r["body"]).encode()}
 
         if svc == "azure-sql-iam-rbac":   # Azure RBAC checkAccess (shares the IAM store)
             r = az_iam.dispatch(self.iam, method, path, query or {}, headers or {}, bytes(body))
@@ -493,6 +699,15 @@ class AwsWireRouter:
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
         if svc and svc.startswith("gcp-"):   # GCP services — native google-cloud-* REST wire
+            # One project, by ID or number (core/gcp_project): normalize before the core sees it.
+            proj = self.gcp_project() if callable(self.gcp_project) else self.gcp_project
+            path, query, err = gcp_proj.normalize_request(path, dict(query or {}), method, proj)
+            if err is not None or svc == "gcp-resourcemanager":
+                st, obj = err if err is not None else gcp_proj.crm_dispatch(method, path, query, proj)
+                return {"status": st, "headers": {"content-type": "application/json"},
+                        "body": json.dumps(obj).encode()}
+            if svc != "gcp-gcs" and body[:1] in (b"{", b"["):   # object bytes are never rewritten
+                body = gcp_proj.rewrite_body(bytes(body), proj)
             _gcp_core = {
                 "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs),
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
@@ -564,6 +779,10 @@ class AwsWireRouter:
 
         # Query-protocol / XML services
         params = self._query_params(query, body)
+        if svc == "sts":
+            return self._sts(params)
+        if svc == "vpc" and params.get("Action") == "DescribeInstances":
+            return self._ec2_describe_instances(params)
         if svc == "iam":
             r = iam.dispatch(self.iam, params)
         elif svc == "rds":

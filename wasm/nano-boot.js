@@ -100,7 +100,7 @@ const CORES = [
   "azure_app_core.py",   // Azure Container Apps engine (Microsoft.App) — loaded before azure_arm_core which delegates to it
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
-  "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
+  "gcp_project.py", "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py",
   "gcp_console_tabs.py", "instance_catalog.py",   // GCP resource-detail tabs engine + machine-type catalog (gcp_core_adapter imports them)
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).
@@ -151,6 +151,9 @@ async function bootBackend() {
   let st = K.step("kernel", "loading Pyodide 0.26.2: CPython on WebAssembly");
   const { loadPyodide } = await import("https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs");
   const py = await loadPyodide();
+  // Time-zone database: Pyodide's zoneinfo has no zone files without it (Cloud
+  // Scheduler, Monitoring and the like would reject every zone but UTC).
+  try { await py.loadPackage("tzdata"); } catch (_) {}
   let pyv = ""; try { pyv = py.runPython("import sys; sys.version.split()[0]"); } catch (_) {}
   st.ok("Python " + (pyv || "3") + " · Pyodide " + (py.version || "0.26.2"));
   st = K.step("fs", "mounting /wasm: " + MODULES.length + " console modules");
@@ -245,6 +248,10 @@ import builtins; builtins._disp = _disp
   const STORE_KEY = "nano:stores";
   let _bc = null; try { _bc = new BroadcastChannel("nano-stores"); } catch (_) {}
   let _restoring = false, _storeTimer = null;
+  // The state this context last saved or restored. Only a change from it is published, so a
+  // read never writes back a snapshot that may be older than the other context's latest change
+  // (which would undo it — e.g. a CLI verify overwritten by the console's stale copy).
+  let _lastStores = null;
   function captureStores() {
     try { return py.runPython("import json; from core import nano_persist; json.dumps(nano_persist.capture_registry())"); }
     catch (_) { return null; }
@@ -254,11 +261,13 @@ import builtins; builtins._disp = _disp
     try {
       py.globals.set("_vy_blob", blobJson);
       py.runPython("import json; from core import nano_persist; nano_persist.restore_registry(json.loads(_vy_blob))");
+      _lastStores = captureStores();
     } catch (_) {}
   }
   async function writeStores(notify) {
     try {
-      const j = captureStores(); if (!j) return;
+      const j = captureStores(); if (!j || j === _lastStores) return;   // unchanged: nothing to publish
+      _lastStores = j;
       await nbMetaPut(STORE_KEY, j);
       if (notify && _bc) { try { _bc.postMessage({ k: STORE_KEY, t: Date.now() }); } catch (_) {} }
     } catch (_) { /* best-effort */ }
@@ -291,14 +300,18 @@ import builtins; builtins._disp = _disp
       // snapshot's shallow dict-merge would otherwise REPLACE a parent record
       // (e.g. a Cloud SQL instance) and drop a sub-resource just added to it
       // (a database) before the debounced save landed.
-      if (!_restoring && !_storeTimer) {
+      if (!_restoring) {
         _restoring = true;
         try { restoreStores(await nbMetaGet(STORE_KEY)); } catch (_) {} finally { _restoring = false; }
       }
       const [prov, svc, op, params] = ev.data.tuple;
-      port.postMessage(dispatch(prov, svc, op, params || {}));
+      const out = dispatch(prov, svc, op, params || {});
       scheduleCensus();       // any op may have mutated state — refresh the footprint
-      scheduleStoresSave();   // …and persist + notify the other context (Fix #1/#2)
+      // Persist + notify the other contexts BEFORE answering: when the console sees the
+      // response, the change is already in the shared snapshot, so a CLI call right after
+      // reads it (and a read changes nothing, so it publishes nothing — writeStores).
+      await writeStores(true);
+      port.postMessage(out);
     } catch (e) {
       port.postMessage({ ok: false, error: String(e) });
     }
