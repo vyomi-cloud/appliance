@@ -11,7 +11,7 @@ import { startServer, bootConsole, chromium, sleep, RAIL_SEL } from "./lib.mjs";
 
 const SERVICE = /Container Apps/i;
 const BLANK = /^\s*(|-|—|–|n\/a|undefined|null)\s*$/i;
-const SUB = "nano-sub";
+const SUB = "00000000-0000-0000-0000-cloudlearn01"; // the space's one subscription
 let fails = 0;
 const check = (ok, what, detail = "") => {
   console.log(`[${ok ? "PASS" : "FAIL"}] ${what}${!ok && detail ? ` :: ${detail}` : ""}`);
