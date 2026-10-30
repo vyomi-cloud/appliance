@@ -114,24 +114,28 @@ jobs:
           OUT=ui-out-before node consoles/tests/ui-conformance.mjs ${{ steps.tg.outputs.cloud }} ${{ steps.tg.outputs.service }} || true
           pkill -f dev_server.py || true
 
+      # Headless Claude Code CLI (claude-code-action rejects `push` events; this workflow is
+      # triggered by queue-file pushes on the v4 branch so it never has to live on main).
       - name: Console-UI agent — ${{ matrix.target }}
         timeout-minutes: 100
-        uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          allowed_bots: 'github-actions'
-          prompt: |
-            Follow consoles/AGENT-UI.md exactly.
-            Cloud lens: ${{ steps.tg.outputs.cloud }}. Service: ${{ steps.tg.outputs.service }}.
-            Spec: ui-spec/${{ steps.tg.outputs.cloud }}/${{ steps.tg.outputs.service }}.json.
-            Baseline UI conformance report: ui-out-before/${{ steps.tg.outputs.cloud }}.md (if present).
-            Reference captures: captures/ (present only if the private checkout succeeded).
-            Commit your work on the current branch ${{ steps.tg.outputs.branch }}; do not push.
-          claude_args: >-
-            --max-turns 250
-            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+        continue-on-error: true
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          npm i -g @anthropic-ai/claude-code >/dev/null 2>&1
+          git config user.name "vyomi-console-ui-agent"
+          git config user.email "console-ui-agent@users.noreply.github.com"
+          claude -p "Follow consoles/AGENT-UI.md exactly.
+          Cloud lens: ${{ steps.tg.outputs.cloud }}. Service: ${{ steps.tg.outputs.service }}.
+          Spec: ui-spec/${{ steps.tg.outputs.cloud }}/${{ steps.tg.outputs.service }}.json.
+          Baseline UI conformance report: ui-out-before/${{ steps.tg.outputs.cloud }}.md (if present).
+          Reference captures: captures/ (present only if the private checkout succeeded).
+          Commit your work on the current branch ${{ steps.tg.outputs.branch }}; do not push." \
+            --max-turns 250 \
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep" \
+            --permission-mode acceptEdits \
+            --output-format text 2>&1 | tee agent-summary.txt | tail -60
 
       # Independent gate — the agent's own claims are not trusted.
       - name: Gate — build, UI conformance, smoke, core conformance
@@ -177,6 +181,7 @@ jobs:
             ui-out-before/
             ui-out/
             smoke-out/
+            agent-summary.txt
           if-no-files-found: ignore
 
       - name: Fail if gate failed

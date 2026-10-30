@@ -15,18 +15,25 @@ const ROOT = join(HERE, "..");
 const TARGETS = [join(ROOT, "static", "v4"), join(ROOT, "wasm", "v4")];
 const argv = process.argv.slice(2);
 const only = argv.includes("--cloud") ? argv[argv.indexOf("--cloud") + 1] : null;
+const TITLES = { aws: "Vyomi · AWS", gcp: "Vyomi · Google Cloud", azure: "Vyomi · Azure" };
 const CLOUDS = ["aws"].filter((c) => !only || c === only);
 
-const html = (cloud, title) => `<!doctype html>
+// Nano: the page must boot the in-browser backend — nano-boot.js registers the service
+// worker (which answers /_wire) and runs Pyodide in this page; nano-kernel.js shows the
+// once-per-launch loader. Offline/sandbox pages talk to the appliance and need neither.
+const NANO_HEAD = `<script type="module" src="../../nano-boot.js?v=4"></script>\n`;
+const NANO_BODY = `<script src="../../nano-kernel.js"></script>\n<script>window.__nk = window.NanoKernel && NanoKernel.start("Vyomi console");</script>\n`;
+
+const html = (cloud, title, nano = false) => `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
 <link rel="stylesheet" href="./main.css">
-</head>
+${nano ? NANO_HEAD : ""}</head>
 <body>
-<div id="root"></div>
+${nano ? NANO_BODY : ""}<div id="root"></div>
 <script type="module" src="./main.js"></script>
 </body>
 </html>
@@ -52,7 +59,7 @@ async function buildCloud(cloud, watch) {
     define: { "process.env.NODE_ENV": watch ? '"development"' : '"production"' },
     logLevel: "info",
   };
-  await writeFile(join(out, "index.html"), html(cloud, { aws: "Vyomi · AWS" }[cloud]));
+  await writeFile(join(out, "index.html"), html(cloud, TITLES[cloud]));
   if (watch) {
     const ctx = await esbuild.context({ ...opts, plugins: [emit(cloud, out)] });
     await ctx.watch();
@@ -70,6 +77,7 @@ async function publish(cloud, out) {
     await rm(dst, { recursive: true, force: true });
     await mkdir(dst, { recursive: true });
     await cp(out, dst, { recursive: true });
+    if (t.includes(`${join("wasm", "v4")}`)) await writeFile(join(dst, "index.html"), html(cloud, TITLES[cloud], true));
   }
   console.log(`[v4] ${cloud} → static/v4/${cloud}, wasm/v4/${cloud}`);
 }

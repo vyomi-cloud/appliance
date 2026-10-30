@@ -20,11 +20,15 @@ const B = `v4-smoke-${Date.now() % 100000}`;
 const T = `v4smoke${Date.now() % 100000}`;
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
-const ddb = (target, body) => fetch(WIRE + "/", { method: "POST", headers: { "x-amz-target": `DynamoDB_20120810.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/dynamodb/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }).then((r) => r.json());
+let page;
+// Native-wire cross-checks run INSIDE the page (same origin) — on Nano only the service
+// worker answers /_wire, and it only sees requests from pages it controls.
+const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return r.text(); }, [WIRE + path, init]);
+const ddb = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `DynamoDB_20120810.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/dynamodb/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 
 await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 // Native 404s ("no tag set", "no encryption config") are expected answers, not page errors.
@@ -33,7 +37,9 @@ const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true })
 
 try {
   await page.goto(UI, { waitUntil: "networkidle" });
-  await page.getByRole("heading", { name: "Console Home" }).waitFor({ timeout: 15000 });
+  // Nano: the service worker must control the page (nano-boot reloads once) before /_wire works.
+  if (process.env.NANO) await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 180000, polling: 500 });
+  await page.getByRole("heading", { name: "Console Home" }).waitFor({ timeout: 120000 });
   await shot("01-home");
   check("home renders", true);
 
@@ -44,16 +50,16 @@ try {
   await shot("02-s3-create-filled");
   await page.getByRole("button", { name: "Create bucket" }).last().click();
   await page.getByRole("heading", { name: B }).waitFor({ timeout: 10000 });
-  const list = await (await fetch(WIRE + "/")).text();
+  const list = await wire("/");
   check("S3 create bucket → visible over native wire", list.includes(`<Name>${B}</Name>`));
-  const ver = await (await fetch(`${WIRE}/${B}?versioning=`)).text();
+  const ver = await wire(`/${B}?versioning=`);
   check("S3 versioning applied (native GetBucketVersioning)", /<Status>Enabled<\/Status>/.test(ver), ver.slice(0, 120));
   await shot("03-s3-bucket-objects");
 
   // Upload via UI, verify via wire
   await page.locator('input[type=file]').setInputFiles({ name: "hello.txt", mimeType: "text/plain", buffer: Buffer.from("hello v4") });
   await page.getByRole("link", { name: "hello.txt" }).waitFor({ timeout: 10000 });
-  const obj = await (await fetch(`${WIRE}/${B}/hello.txt`)).text();
+  const obj = await wire(`/${B}/hello.txt`);
   check("S3 upload → object readable over native wire", obj === "hello v4", obj);
   await shot("04-s3-uploaded");
   for (const tab of ["Properties", "Permissions", "Management"]) {
