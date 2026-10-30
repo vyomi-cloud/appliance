@@ -83,6 +83,20 @@ Today the same S3 feature had to be fixed twice:
 
 After C0, each feature is implemented once and appears on every substrate.
 
+**Step C0b (done):** the same move for three more services the v4 health checks flagged.
+- Offline Azure Blob now runs on `core/azure_blob_core.py` (was the `core/azure_dataplane.py`
+  `_blob_handle`, in memory unless Azurite was configured). Containers and blobs live in the
+  space-scoped appliance state; Azurite, when configured, is a write-through mirror, and blobs a
+  pre-v4 appliance stored there are adopted on first access.
+- Offline GCP Secret Manager and Cloud KMS now run on `core/gcp_secretmanager_core.py` and
+  `core/gcp_kms_core.py` (were Vault-only handlers in `core/vault_routes.py` that returned 404
+  for list and get). Secrets, keys, key material and key rings live in the space-scoped state.
+  Pre-v4 Vault secrets and key indexes are adopted, and Vault-transit ciphertext still decrypts.
+- The classic console REST (`/api/azure/storage/*`, `/api/gcp/secrets*`, `/api/gcp/kms/keys*`)
+  reads and writes the same stores. Opt out per service with `VYOMI_UNIFIED_INGRESS_SERVICES`
+  (`azure_blob`, `gcp_secrets`, `gcp_kms`) or `VYOMI_LEGACY_WIRE=1`.
+- The ported legacy behaviours are pinned by `tests/conformance/test_c0b_legacy_parity_core.py`.
+
 ## 5. Triage — S3
 
 | Feature | Today | Target | How (backend) |

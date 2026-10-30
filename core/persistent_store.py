@@ -140,7 +140,7 @@ class PersistentCloudWatchStore(_PersistentMixin, CloudWatchStore):
 
 class PersistentKeyStore(_PersistentMixin, InMemoryKeyStore):
     # engine is stateless logic (not persisted); keys/material/aliases are state.
-    _STATE_ATTRS = ("keys", "material", "aliases")
+    _STATE_ATTRS = ("keys", "material", "aliases", "gcp_key_rings")   # + the GCP KMS key rings
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "kms"):
         InMemoryKeyStore.__init__(self)

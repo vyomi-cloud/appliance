@@ -2784,13 +2784,27 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
                 if isinstance(item, dict):
                     add(provider, svc, kind.rstrip("s"), str(item_id), item)
 
-    # Vault-backed GCP Secret Manager secrets / Cloud KMS keys (console + SDK
-    # create them in Vault with a name index, not in service_states).
+    # v4 C0b: GCP Secret Manager secrets / Cloud KMS keys served by the shared cores
+    # live in the space's service_states (gcp_gcp_secretmanager / gcp_gcp_kms).
+    try:
+        from routes import gcp_secrets_kms_unified as _gsk
+        for (_svc, _kind), _items in _gsk.inventory(space).items():
+            for _entry, _created in _items.items():
+                _name = _entry.rsplit("/", 1)[-1]
+                add("gcp", _svc, _kind, f"core:{_svc}:{_entry}", {"name": _name, "created": _created})
+    except Exception:
+        pass
+
+    # Vault-backed GCP Secret Manager secrets / Cloud KMS keys (pre-v4 handlers, or
+    # opted out of the unified engine: Vault with a name index, not service_states).
     try:
         from core import vault_routes as _vr
+        from core import wire_ingress as _wi_inv
         _sid = next((k for k, v in _spaces_state().get("spaces", {}).items() if v is space), "")
         if _sid:
             for _svc, _kind, _vkind in (("secretmanager", "secret", "secrets"), ("kms", "key", "kms")):
+                if _wi_inv.is_unified("gcp_secrets" if _vkind == "secrets" else "gcp_kms"):
+                    continue
                 for _entry, _created in _vr.gcp_vault_index(_sid, _vkind).items():
                     _name = _entry.partition("/")[2] or _entry
                     add("gcp", _svc, _kind, f"vault:{_vkind}:{_entry}", {"name": _name, "created": _created})
@@ -23751,7 +23765,7 @@ else:
         _wire_ingress.mount_gcs(app)
     _wire_ingress.mount(app, _wire_ingress.build_backed_router(overrides={
         k: v for k, v in _wire_ingress.appliance_stores().items()
-        if {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb"}[k] in _wire_ingress.unified_services()}))
+        if _wire_ingress.STORE_SERVICE[k] in _wire_ingress.unified_services()}))
 
 # v4 consoles: `/_wire/<native path>` → same app at `/<native path>` (outermost middleware; see routes/wire_prefix.py).
 try:

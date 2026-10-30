@@ -20,6 +20,12 @@ VYOMI_LEGACY_WIRE=1 — restores the pre-v4 legacy handlers). `appliance_router(
 the router those services use: the shared cores over core/appliance_stores.py (the
 appliance's own space-scoped state, so the classic console REST sees the same
 buckets / tables). Every other service stays on its current handler.
+
+v4 C0b adds "azure_blob" (the Blob REST under /azure-data/blob/{account}, reached via the
+x-ms-version path rewrite — core/azure_blob_core.py), "gcp_secrets" (/v1/projects/{p}/secrets…
+— core/gcp_secretmanager_core.py) and "gcp_kms" (/v1/projects/{p}/locations/{l}/keyRings… —
+core/gcp_kms_core.py), each over core/appliance_stores.py; the classic console REST of each
+(/api/azure/storage/*, /api/gcp/secrets*, /api/gcp/kms/keys*) reads/writes the same stores.
 """
 from __future__ import annotations
 
@@ -32,8 +38,8 @@ def _cfg(key: str, default: str) -> str:
     return os.environ.get(key, default)
 
 
-_DEFAULT_SERVICES = "s3,dynamodb,gcs"
-_KNOWN_SERVICES = ("s3", "dynamodb", "gcs")
+_DEFAULT_SERVICES = "s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms"
+_KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms")
 
 
 def unified_services() -> frozenset:
@@ -56,9 +62,17 @@ _APPLIANCE_ROUTER: AwsWireRouter | None = None
 
 
 def appliance_stores() -> dict:
-    """The C0 stores (S3 / GCS / DynamoDB over the appliance's own state)."""
+    """The C0/C0b stores (S3 / GCS / DynamoDB / Azure Blob / GCP Secret Manager / Cloud
+    KMS over the appliance's own state)."""
     from core import appliance_stores as aps
-    return {"s3": aps.s3_store(), "gcs": aps.gcs_store(), "ddb": aps.ddb_store()}
+    return {"s3": aps.s3_store(), "gcs": aps.gcs_store(), "ddb": aps.ddb_store(),
+            "az_blob": aps.az_blob_store(), "gcp_sec": aps.gcp_secrets_store(),
+            "gcp_kms": aps.gcp_kms_store()}
+
+
+# router store key -> unified service name (which stores a full-ingress router overrides)
+STORE_SERVICE = {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb", "az_blob": "azure_blob",
+                 "gcp_sec": "gcp_secrets", "gcp_kms": "gcp_kms"}
 
 
 def appliance_router() -> AwsWireRouter:
@@ -85,8 +99,15 @@ async def serve(router: AwsWireRouter, request, path: str | None = None, body: b
     return to_response(out)
 
 
+def _project_of(path: str) -> str:
+    segs = [x for x in path.split("?", 1)[0].split("/") if x]
+    if segs and segs[0] in ("v1", "v1beta1"):
+        segs = segs[1:]
+    return segs[1] if len(segs) > 1 and segs[0] == "projects" else ""
+
+
 def dispatch_service(service: str, method: str, path: str, query: dict, headers: dict,
-                     body: bytes, router: AwsWireRouter | None = None) -> dict:
+                     body: bytes, router: AwsWireRouter | None = None, account: str | None = None) -> dict:
     """Serve one request of a KNOWN service (the route already identified it) with
     that service's core over the router's store. Skips the router's header/path
     sniffing on purpose: an S3 key like `a/restapis/b` or an upload carrying
@@ -116,17 +137,66 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         hdrs = {"x-amzn-requestid": _uuid.uuid4().hex.upper(), **dict(resp.headers or {})}
         hdrs.setdefault("content-type", "application/x-amz-json-1.0")
         return {"status": resp.status, "headers": hdrs, "body": resp.json_bytes()}
+    if service == "azure_blob":
+        from core import azure_blob_core
+        st = r.az_blob
+        if account is not None and hasattr(st, "adopt"):
+            st.adopt(account)            # pre-v4 Azurite blobs → this state (once)
+        resp = azure_blob_core.dispatch(st, method, path, query, headers, body, account=account)
+        hdrs = dict(resp.headers or {})
+        if resp.media_type and not any(k.lower() == "content-type" for k in hdrs):
+            hdrs["content-type"] = resp.media_type
+        return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
+    if service in ("gcp_secrets", "gcp_kms"):
+        from core import gcp_kms_core, gcp_secretmanager_core
+        mod, st = ((gcp_secretmanager_core, r.gcp_sec) if service == "gcp_secrets"
+                   else (gcp_kms_core, r.gcp_kms))
+        project = _project_of(path)
+        if project and hasattr(st, "adopt"):
+            st.adopt(project)            # pre-v4 Vault secrets / key index → this state (once)
+        resp = mod.dispatch(st, method, path, query, headers, body)
+        hdrs = dict(resp.headers or {})
+        hdrs.setdefault("content-type", resp.media_type or "application/json")
+        return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
     raise ValueError(f"not a unified service: {service}")
 
 
 async def serve_service(service: str, request, path: str | None = None, body: bytes | None = None,
-                        query: dict | None = None):
+                        query: dict | None = None, account: str | None = None):
     if body is None:
         body = await request.body()
     out = dispatch_service(service, request.method, path or request.url.path,
                            dict(request.query_params) if query is None else query,
-                           dict(request.headers), body)
+                           dict(request.headers), body, account=account)
     return to_response(out)
+
+
+def mount_gcp_secrets_kms(app) -> None:
+    """Register the native Secret Manager / Cloud KMS REST paths on the shared cores
+    (C0b). Call BEFORE any other /v1/projects/* route (core/vault_routes.register
+    does, at the very start of route registration)."""
+    methods = ["GET", "POST", "PATCH", "DELETE"]
+
+    def _raw(request) -> str:
+        raw = request.scope.get("raw_path")
+        p = raw.decode("utf-8", "replace") if isinstance(raw, (bytes, bytearray)) and raw else \
+            (request.scope.get("path") or request.url.path)
+        from urllib.parse import unquote
+        return unquote(p.split("?", 1)[0])    # ":access" may arrive as %3Aaccess
+
+    async def _secrets(request):
+        return await serve_service("gcp_secrets", request, path=_raw(request))
+
+    async def _kms(request):
+        return await serve_service("gcp_kms", request, path=_raw(request))
+
+    if is_unified("gcp_secrets"):
+        for v in ("/v1", "/v1beta1"):
+            app.add_route(v + "/projects/{project}/secrets", _secrets, methods=methods)
+            app.add_route(v + "/projects/{project}/secrets/{rest:path}", _secrets, methods=methods)
+    if is_unified("gcp_kms"):
+        app.add_route("/v1/projects/{project}/locations/{loc}/keyRings", _kms, methods=methods)
+        app.add_route("/v1/projects/{project}/locations/{loc}/keyRings/{rest:path}", _kms, methods=methods)
 
 
 _GCS_PREFIXES = ("/storage/v1/b", "/upload/storage/v1/b", "/download/storage/v1/b", "/api/gcp/storage/v1/b")
@@ -205,14 +275,14 @@ def build_backed_router(overrides: dict | None = None) -> AwsWireRouter:
         "gcp_sql": PostgresBackedSqlStore(pg_dsn, schema_prefix="gcpsql_"),
         # security / crypto — KMS + Cloud KMS + Azure KV keys on Vault Transit
         "kms": VaultBackedKeyStore(**vault),
-        "gcp_kms": VaultBackedKeyStore(**vault),
+        "gcp_kms": overrides.get("gcp_kms") or VaultBackedKeyStore(**vault),
         "az_kvkeys": VaultBackedKeyStore(**vault),
         # secrets (v2.5.0) — Vault KV v2, namespaced per cloud
         "sec": VaultBackedKvStore(prefix="aws-sec/", **vault),
-        "gcp_sec": VaultBackedKvStore(prefix="gcp-sec/", **vault),
+        "gcp_sec": overrides.get("gcp_sec") or VaultBackedKvStore(prefix="gcp-sec/", **vault),
         "az_kvsec": VaultBackedKvStore(prefix="az-sec/", **vault),
         # Azure Blob (v2.5.0) — durable via the file-backed substrate (was in-memory)
-        "az_blob": PersistentAzureBlobStore(
+        "az_blob": overrides.get("az_blob") or PersistentAzureBlobStore(
             SqliteStateBackend(_cfg("VYOMI_AZBLOB_DB", "/tmp/vyomi-azblob.sqlite"))),
         # DynamoDB (v2.5.0) — durable NoSQL via the file-backed substrate (was in-memory)
         "ddb": overrides.get("ddb") or PersistentNoSqlStore(

@@ -26,6 +26,14 @@ Wire shape recap (what google-cloud-secret-manager sends/expects):
   - disable ver.  : POST .../secrets/{s}/versions/{v}:disable -> version DISABLED
   - enable ver.   : POST .../secrets/{s}/versions/{v}:enable  -> version ENABLED
 
+v4 C0b — the offline appliance serves Secret Manager through THIS core (over
+core/appliance_stores.py) instead of the retired Vault-KV handlers in
+core/vault_routes.py. Legacy behaviours ported (tests/conformance/
+test_c0b_legacy_parity_core.py): `secretId` accepted from the JSON body as well as
+the query string, version numbers that survive a JSON round-trip of the store
+(persisted stores write int keys as strings). (Pre-v4 Vault secrets are imported
+by the appliance's store on first use — core/appliance_stores.py.)
+
 Versions are auto-incrementing integers (1, 2, 3...) per GCP semantics; payloads
 travel base64-encoded on the wire (the `data` field). All errors use the native
 GCP {"error":{"code","message","status"}} body.
@@ -111,6 +119,23 @@ def _version_view(project: str, secret_id: str, ver: int, v: dict) -> dict:
     }
 
 
+def _norm(secret: dict | None) -> dict | None:
+    """Version keys are ints; a JSON-persisted store hands them back as strings."""
+    if isinstance(secret, dict):
+        vers = secret.get("versions")
+        if isinstance(vers, dict) and any(not isinstance(k, int) for k in vers):
+            fixed = {int(k): v for k, v in vers.items()}
+            vers.clear()
+            vers.update(fixed)
+        if "version_counter" in secret:
+            secret["version_counter"] = int(secret["version_counter"] or 0)
+    return secret
+
+
+def _get(store: KvStore, key: str) -> dict | None:
+    return _norm(store.get_secret(key))
+
+
 # ── version resolution ─────────────────────────────────────────────────────
 def _resolve_version(secret: dict, ver_ref: str) -> int | None:
     """Map a version reference ("latest" or an integer) to a concrete version
@@ -151,7 +176,7 @@ def _create_secret(store: KvStore, project: str, secret_id: str, body: dict) -> 
 
 def _add_version(store: KvStore, project: str, secret_id: str, body: dict) -> GcpResponse:
     key = _key(project, secret_id)
-    secret = store.get_secret(key)
+    secret = _get(store, key)
     if secret is None:
         return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
     payload = body.get("payload") or {}
@@ -173,7 +198,7 @@ def _add_version(store: KvStore, project: str, secret_id: str, body: dict) -> Gc
 
 def _access_version(store: KvStore, project: str, secret_id: str, ver_ref: str) -> GcpResponse:
     key = _key(project, secret_id)
-    secret = store.get_secret(key)
+    secret = _get(store, key)
     if secret is None:
         return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
     ver = _resolve_version(secret, ver_ref)
@@ -194,13 +219,13 @@ def _access_version(store: KvStore, project: str, secret_id: str, ver_ref: str) 
 
 def _list_secrets(store: KvStore, project: str) -> GcpResponse:
     prefix = f"{project}/"
-    secrets = [_secret_view(store.get_secret(k)) for k in store.names() if k.startswith(prefix)]
+    secrets = [_secret_view(_get(store, k)) for k in store.names() if k.startswith(prefix)]
     return _json(200, {"secrets": secrets, "totalSize": len(secrets)})
 
 
 def _list_versions(store: KvStore, project: str, secret_id: str) -> GcpResponse:
     key = _key(project, secret_id)
-    secret = store.get_secret(key)
+    secret = _get(store, key)
     if secret is None:
         return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
     versions = [_version_view(project, secret_id, n, secret["versions"][n])
@@ -210,7 +235,7 @@ def _list_versions(store: KvStore, project: str, secret_id: str) -> GcpResponse:
 
 def _get_secret(store: KvStore, project: str, secret_id: str) -> GcpResponse:
     key = _key(project, secret_id)
-    secret = store.get_secret(key)
+    secret = _get(store, key)
     if secret is None:
         return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
     return _json(200, _secret_view(secret))
@@ -229,7 +254,7 @@ def _delete_secret(store: KvStore, project: str, secret_id: str) -> GcpResponse:
 def _set_version_state(store: KvStore, project: str, secret_id: str, ver_ref: str,
                        new_state: str) -> GcpResponse:
     key = _key(project, secret_id)
-    secret = store.get_secret(key)
+    secret = _get(store, key)
     if secret is None:
         return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
     ver = _resolve_version(secret, ver_ref)
@@ -284,7 +309,8 @@ def dispatch(store: KvStore, method: str, path: str,
     # ---- secrets collection: projects/{p}/secrets ----
     if len(segs) == 3:
         if method == "POST":
-            secret_id = query.get("secretId") or query.get("secret_id") or ""
+            secret_id = (query.get("secretId") or query.get("secret_id")
+                         or payload.get("secretId") or "")
             return _create_secret(store, project, secret_id, payload)
         if method == "GET":
             return _list_secrets(store, project)
@@ -321,7 +347,7 @@ def dispatch(store: KvStore, method: str, path: str,
             return _set_version_state(store, project, secret_id, ver_ref, ENABLED)
         if method == "GET":
             key = _key(project, secret_id)
-            secret = store.get_secret(key)
+            secret = _get(store, key)
             if secret is None:
                 return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
             ver = _resolve_version(secret, ver_ref)

@@ -20,8 +20,17 @@ Custom methods use the `:verb` suffix (`:encrypt`, `:decrypt`). `plaintext` /
 `ciphertext` fields are base64 per the REST wire. Errors use the Google shape
 `{"error":{"code","message","status"}}` (status e.g. NOT_FOUND / INVALID_ARGUMENT).
 
-Scope (v1 slice): keyRings create/get/list, cryptoKeys create/get/list,
-cryptoKeyVersions get/list, :encrypt, :decrypt. IAM policy, rotation, asymmetric
+Scope (v1 slice): keyRings create/get/list, cryptoKeys create/get/list/patch,
+cryptoKeyVersions get/list, :encrypt, :decrypt.
+
+v4 C0b — the offline appliance serves Cloud KMS through THIS core (over
+core/appliance_stores.py) instead of the retired Vault-transit handlers in
+core/vault_routes.py. Legacy behaviours ported here (pinned by
+tests/conformance/test_c0b_legacy_parity_core.py): key labels / rotationPeriod /
+nextRotationTime (the classic console's key settings) via PATCH cryptoKey with an
+updateMask, ciphertextCrc32c / plaintextCrc32c (real CRC32C) on the wire, key rings
+that persist with the store, and an optional `store.legacy_decrypt(name, blob)` hook
+so ciphertext minted by the pre-v4 Vault-transit handler still decrypts. IAM policy, rotation, asymmetric
 keys, and key-version lifecycle reuse the same helpers and slot in next.
 """
 from __future__ import annotations
@@ -64,8 +73,35 @@ def _json(status: int, obj: dict) -> GcpKmsResponse:
 # ── GCP key-ring bookkeeping (crypto-key material lives in the KeyStore seam) ─
 def _rings(store: KeyStore) -> dict:
     # Key rings hold no secret material, so they hang off the store instance
-    # (which is dedicated to this GCP KMS namespace) rather than the key map.
-    return store.__dict__.setdefault("gcp_key_rings", {})
+    # (which is dedicated to this GCP KMS namespace) rather than the key map. A
+    # store may expose its own `gcp_key_rings` mapping (the appliance's persisted
+    # state); otherwise a lazy instance dict is attached (persisted stores list it
+    # in their state attrs).
+    rings = getattr(store, "gcp_key_rings", None)
+    if rings is None:
+        rings = store.__dict__.setdefault("gcp_key_rings", {})
+    return rings
+
+
+# ── CRC32C (Castagnoli) — the checksum the Cloud KMS wire carries ──────────
+def _crc32c_table() -> list:
+    tbl = []
+    for i in range(256):
+        c = i
+        for _ in range(8):
+            c = (c >> 1) ^ 0x82F63B78 if c & 1 else c >> 1
+        tbl.append(c)
+    return tbl
+
+
+_CRC32C = _crc32c_table()
+
+
+def crc32c(data: bytes) -> int:
+    c = 0xFFFFFFFF
+    for b in data:
+        c = _CRC32C[(c ^ b) & 0xFF] ^ (c >> 8)
+    return c ^ 0xFFFFFFFF
 
 
 # ── resource views ─────────────────────────────────────────────────────────
@@ -92,16 +128,59 @@ def _crypto_key_view(store: KeyStore, name: str) -> dict:
     meta = store.get_key(name) or {}
     primary = str(meta.get("primary", "1"))
     versions = meta.get("versions", {primary: {}})
-    return {
+    view = {
         "name": name,
         "primary": _version_view(name, primary, versions.get(primary, {})),
-        "purpose": meta.get("purpose", "ENCRYPT_DECRYPT"),
+        "purpose": _enum(meta.get("purpose"), _PURPOSES, "ENCRYPT_DECRYPT"),
         "createTime": meta.get("createTime", _now()),
         "versionTemplate": {
             "protectionLevel": "SOFTWARE",
-            "algorithm": meta.get("algorithm", "GOOGLE_SYMMETRIC_ENCRYPTION"),
+            "algorithm": _enum(meta.get("algorithm"), _ALGORITHMS, "GOOGLE_SYMMETRIC_ENCRYPTION"),
         },
     }
+    if meta.get("labels"):
+        view["labels"] = dict(meta["labels"])
+    if meta.get("rotationPeriod"):
+        view["rotationPeriod"] = meta["rotationPeriod"]
+    if meta.get("nextRotationTime"):
+        view["nextRotationTime"] = meta["nextRotationTime"]
+    return view
+
+
+# google-cloud-* REST clients send enums as numbers (`$alt=json;enum-encoding=int`).
+_PURPOSES = {1: "ENCRYPT_DECRYPT", 5: "ASYMMETRIC_SIGN", 6: "ASYMMETRIC_DECRYPT",
+             7: "RAW_ENCRYPT_DECRYPT", 9: "MAC"}
+_ALGORITHMS = {1: "GOOGLE_SYMMETRIC_ENCRYPTION"}
+
+
+def _enum(value, table: dict, default: str) -> str:
+    if value in (None, "", 0, "0"):
+        return default
+    if isinstance(value, int) or (isinstance(value, str) and value.isdigit()):
+        return table.get(int(value), str(value))
+    return str(value)
+
+
+_MUTABLE = {"labels": "labels", "rotation_period": "rotationPeriod", "rotationPeriod": "rotationPeriod",
+            "next_rotation_time": "nextRotationTime", "nextRotationTime": "nextRotationTime"}
+
+
+def _apply_settings(meta: dict, payload: dict, mask: list) -> str | None:
+    """Apply the mutable CryptoKey fields named by `mask` (all present ones when
+    empty). Returns an error message for an unsupported mask path."""
+    fields = mask or [k for k in ("labels", "rotationPeriod", "nextRotationTime") if k in payload]
+    for f in fields:
+        attr = _MUTABLE.get(f.strip())
+        if not attr:
+            return f"Unsupported update_mask path: {f}"
+        val = payload.get(attr)
+        if attr == "labels":
+            meta["labels"] = {str(k): str(v) for k, v in (val or {}).items()} if isinstance(val, dict) else {}
+        elif val:
+            meta[attr] = str(val)
+        else:
+            meta.pop(attr, None)
+    return None
 
 
 # ── path parsing ───────────────────────────────────────────────────────────
@@ -154,6 +233,7 @@ def dispatch(store: KeyStore, method: str, path: str,
             if name in rings:
                 return _err(409, "ALREADY_EXISTS", f"KeyRing {name} already exists.")
             rings[name] = {"createTime": _now()}
+            store.persist()
             return _json(200, _key_ring_view(name, rings[name]))
         if method == "GET":
             items = [_key_ring_view(n, e) for n, e in sorted(rings.items())
@@ -190,14 +270,16 @@ def dispatch(store: KeyStore, method: str, path: str,
             if store.key_exists(name):
                 return _err(409, "ALREADY_EXISTS", f"CryptoKey {name} already exists.")
             now = _now()
-            store.put_key(name, {
-                "purpose": str(payload.get("purpose", "ENCRYPT_DECRYPT")),
-                "algorithm": (payload.get("versionTemplate", {}) or {}).get(
-                    "algorithm", "GOOGLE_SYMMETRIC_ENCRYPTION"),
+            meta = {
+                "purpose": _enum(payload.get("purpose"), _PURPOSES, "ENCRYPT_DECRYPT"),
+                "algorithm": _enum((payload.get("versionTemplate", {}) or {}).get("algorithm"),
+                                   _ALGORITHMS, "GOOGLE_SYMMETRIC_ENCRYPTION"),
                 "createTime": now,
                 "primary": "1",
                 "versions": {"1": {"state": "ENABLED", "createTime": now}},
-            }, store.engine.new_key_material())
+            }
+            _apply_settings(meta, payload, [])
+            store.put_key(name, meta, store.engine.new_key_material())
             store.persist()
             return _json(200, _crypto_key_view(store, name))
         if method == "GET":
@@ -219,6 +301,17 @@ def dispatch(store: KeyStore, method: str, path: str,
         if method == "GET":
             if not store.key_exists(name):
                 return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+            return _json(200, _crypto_key_view(store, name))
+        if method == "PATCH":                         # UpdateCryptoKey (labels / rotation)
+            if not store.key_exists(name):
+                return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+            mask = [m for m in str(query.get("updateMask") or query.get("update_mask") or "").split(",") if m]
+            meta = store.get_key(name)
+            bad = _apply_settings(meta, payload, mask)
+            if bad:
+                return _err(400, "INVALID_ARGUMENT", bad)
+            store.put_key(name, meta, store.get_material(name))
+            store.persist()
             return _json(200, _crypto_key_view(store, name))
         return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on cryptoKey")
 
@@ -253,12 +346,17 @@ def _encrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
     if not plaintext:
         return _err(400, "INVALID_ARGUMENT", "plaintext must not be empty.")
     blob = store.engine.encrypt(store.get_material(name), name, plaintext)
-    return _json(200, {
-        "name": name,
+    out = {
+        "name": f"{name}/cryptoKeyVersions/{(store.get_key(name) or {}).get('primary', '1')}",
         "ciphertext": _b64e(blob),
-        "ciphertextCrc32c": None,
+        "ciphertextCrc32c": str(crc32c(blob)),
         "protectionLevel": "SOFTWARE",
-    })
+    }
+    if payload.get("plaintextCrc32c") not in (None, ""):
+        if str(payload["plaintextCrc32c"]) != str(crc32c(plaintext)):
+            return _err(400, "INVALID_ARGUMENT", "The checksum in field plaintext_crc32c did not match the data in field plaintext.")
+        out["verifiedPlaintextCrc32c"] = True
+    return _json(200, out)
 
 
 def _decrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
@@ -268,8 +366,16 @@ def _decrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
         blob = base64.b64decode(payload.get("ciphertext", "") or "")
     except Exception:
         return _err(400, "INVALID_ARGUMENT", "ciphertext must be valid base64.")
+    if payload.get("ciphertextCrc32c") not in (None, "") and str(payload["ciphertextCrc32c"]) != str(crc32c(blob)):
+        return _err(400, "INVALID_ARGUMENT", "The checksum in field ciphertext_crc32c did not match the data in field ciphertext.")
     # The ciphertext self-identifies its crypto key; it must match this resource.
     embedded = store.engine.key_id_in(blob)
+    if not embedded and hasattr(store, "legacy_decrypt"):
+        # pre-v4 ciphertext (the appliance's retired Vault-transit handler)
+        legacy = store.legacy_decrypt(name, blob)
+        if legacy is not None:
+            return _json(200, {"plaintext": _b64e(legacy), "plaintextCrc32c": str(crc32c(legacy)),
+                               "usedPrimary": True, "protectionLevel": "SOFTWARE"})
     if embedded and embedded != name:
         return _err(400, "INVALID_ARGUMENT",
                     "Decryption failed: the ciphertext is for a different CryptoKey.")
@@ -277,4 +383,5 @@ def _decrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
         plaintext = store.engine.decrypt(store.get_material(name), blob)
     except Exception:
         return _err(400, "INVALID_ARGUMENT", "Decryption failed: the ciphertext is invalid.")
-    return _json(200, {"plaintext": _b64e(plaintext), "protectionLevel": "SOFTWARE"})
+    return _json(200, {"plaintext": _b64e(plaintext), "plaintextCrc32c": str(crc32c(plaintext)),
+                       "usedPrimary": True, "protectionLevel": "SOFTWARE"})
