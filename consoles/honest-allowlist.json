@@ -39,6 +39,10 @@
       "aws-cloudhsm-key-stores",
       "external-key-stores",
       "create-external-key-store"
+    ],
+    "apigateway": [
+      "portals",
+      "portal-products"
     ]
   },
   "_planned": {
