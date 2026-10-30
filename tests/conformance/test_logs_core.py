@@ -97,6 +97,12 @@ def run(store=None):
     qc = call("StartQuery", {"logGroupName": "/app/web", "startTime": now // 1000 - 60, "endTime": now // 1000 + 60, "queryString": "stats count(*) as n"}).body["queryId"]
     _check("insights stats", call("GetQueryResults", {"queryId": qc}).body["results"][0][0] == {"field": "n", "value": "4"})
 
+    _check("deletion protection create", call("CreateLogGroup", {"logGroupName": "/app/protected", "deletionProtectionEnabled": True}).status == 200
+           and call("DescribeLogGroups", {"logGroupNamePrefix": "/app/protected"}).body["logGroups"][0]["deletionProtectionEnabled"] is True)
+    _check("deletion protection blocks delete", err("DeleteLogGroup", {"logGroupName": "/app/protected"}, "OperationAbortedException"))
+    _check("deletion protection can be turned off", call("UpdateLogGroupDeletionProtection", {"logGroupName": "/app/protected", "deletionProtectionEnabled": False}).status == 200
+           and call("DeleteLogGroup", {"logGroupName": "/app/protected"}).status == 200)
+
     _check("delete stream", call("DeleteLogStream", {"logGroupName": "/app/web", "logStreamName": "j"}).status == 200)
     _check("delete group", call("DeleteLogGroup", {"logGroupName": "/app/web"}).status == 200
            and err("DeleteLogGroup", {"logGroupName": "/app/web"}, "ResourceNotFoundException"))

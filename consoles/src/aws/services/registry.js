@@ -21,7 +21,7 @@ export const SERVICES = [
   { id: "sqs", icon: "sqs", title: "Simple Queue Service", description: "Managed message queues", category: "Application Integration", load: () => import("./sqs/index.jsx") },
   { id: "sns", icon: "sns", title: "Simple Notification Service", description: "Pub/sub, SMS, email, and mobile push", category: "Application Integration", load: () => import("./sns/index.jsx") },
   { id: "eventbridge", icon: "eventbridge", title: "EventBridge", description: "Serverless event bus", category: "Application Integration", load: () => import("./eventbridge/index.jsx") },
-  { id: "cloudwatch", icon: "cloudwatch", title: "CloudWatch", description: "Monitor resources and applications", category: "Management & Governance", classic: "cloudwatch" },
+  { id: "cloudwatch", icon: "cloudwatch", title: "CloudWatch", description: "Monitor resources and applications", category: "Management & Governance", load: () => import("./cloudwatch/index.jsx") },
   { id: "cloudformation", icon: "cloudformation", title: "CloudFormation", description: "Create and manage resources with templates", category: "Management & Governance", classic: "cloudformation" },
 ];
 
