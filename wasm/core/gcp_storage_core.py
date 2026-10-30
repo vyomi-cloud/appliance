@@ -85,13 +85,18 @@ def _json(status: int, obj: dict) -> GcsResponse:
 
 
 # ── resource views ────────────────────────────────────────────────────────
-# Bucket fields a client may set on insert / PATCH and read back. Only fields Vyomi
-# either enforces (retentionPolicy) or that are pure metadata (labels, placement,
-# access-control mode, lifecycle rule definitions) are kept. Behaviour Vyomi does not
-# model (object versioning, soft delete, autoclass) is deliberately NOT echoed back, so
-# a client never reads a setting that has no effect.
+# Bucket fields a client may set on insert / PATCH and read back. retentionPolicy and
+# lifecycle (Delete / SetStorageClass, see _apply_lifecycle) are ENFORCED. cors, website
+# and billing round-trip exactly as a client sets them (config_only — Vyomi's wire layer
+# does not add CORS response headers, run a separate static-website serving host, or
+# model a distinct "requester" identity to bill). objectRetention is the bucket-level
+# switch that lets objects carry an enforced retention.retainUntilTime (see
+# _hold_block). Behaviour Vyomi does not model at all (object versioning, soft delete,
+# autoclass, CMEK) is deliberately NOT echoed back, so a client never reads a setting
+# that has no effect.
 _BUCKET_SETTABLE = ("labels", "iamConfiguration", "lifecycle", "retentionPolicy",
-                    "rpo", "customPlacementConfig", "storageClass")
+                    "rpo", "customPlacementConfig", "storageClass",
+                    "cors", "website", "billing", "objectRetention")
 _MULTI_REGIONS = {"US", "EU", "ASIA"}
 _DUAL_REGIONS = {"NAM4", "EUR4", "EUR5", "EUR7", "EUR8", "ASIA1"}
 
@@ -153,6 +158,13 @@ def _apply_bucket_fields(meta: dict, body: dict, patch: bool) -> GcsResponse | N
             if not isinstance(rules, list):
                 return _err(400, "invalid", "Invalid lifecycle configuration.")
             meta[k] = {"rule": rules}
+        elif k == "cors":
+            if not isinstance(v, list):
+                return _err(400, "invalid", "Invalid CORS configuration.")
+            meta[k] = v
+        elif k == "objectRetention":
+            mode = (v or {}).get("mode")
+            meta[k] = {"mode": "Enabled" if mode == "Enabled" else "Disabled"}
         else:
             meta[k] = v
     return None
@@ -179,7 +191,8 @@ def _bucket_view(store: ObjectStore, name: str) -> dict:
     }
     if view["rpo"] is None:
         view.pop("rpo")
-    for k in ("labels", "lifecycle", "retentionPolicy", "customPlacementConfig"):
+    for k in ("labels", "lifecycle", "retentionPolicy", "customPlacementConfig",
+              "cors", "website", "billing", "objectRetention"):
         if meta.get(k):
             view[k] = meta[k]
     return view
@@ -204,6 +217,13 @@ def _parse_ts(ts: str) -> float:
         return 0.0
 
 
+def _parse_date_only(d: str) -> float:
+    try:
+        return datetime.strptime(d[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()
+    except Exception:
+        return 0.0
+
+
 def _retention_block(store: ObjectStore, bucket: str, name: str, entry: dict | None) -> GcsResponse | None:
     """Bucket retention policy: an object can't be deleted or overwritten until it is
     older than the retention period (the native 403 retentionPolicyNotMet)."""
@@ -219,6 +239,86 @@ def _retention_block(store: ObjectStore, bucket: str, name: str, entry: dict | N
     return None
 
 
+def _hold_block(bucket: str, name: str, entry: dict | None) -> GcsResponse | None:
+    """Object holds (temporaryHold / eventBasedHold) and per-object retention
+    (retention.retainUntilTime) block delete and overwrite, same as real GCS."""
+    if entry is None:
+        return None
+    if entry.get("temporaryHold"):
+        return _err(403, "conditionNotMet", f"Object '{bucket}/{name}' has a temporary hold and "
+                    f"cannot be deleted or overwritten.")
+    if entry.get("eventBasedHold"):
+        return _err(403, "conditionNotMet", f"Object '{bucket}/{name}' has an event-based hold and "
+                    f"cannot be deleted or overwritten.")
+    ret = entry.get("retention") or {}
+    until = _parse_ts(ret.get("retainUntilTime") or "")
+    if until and datetime.now(timezone.utc).timestamp() < until:
+        return _err(403, "conditionNotMet", f"Object '{bucket}/{name}' is subject to object retention "
+                    f"and cannot be deleted or overwritten until {ret['retainUntilTime']}.")
+    return None
+
+
+# ── lifecycle rule enforcement (lazy sweep on every /o request, like DynamoDB's lazy
+# TTL expiry) — real GCS evaluates rules roughly once a day; Vyomi evaluates them on
+# every request against the bucket's objects, which is observably stricter but never
+# wrong (a matched object is always eligible to be acted on). ────────────────────────
+def _condition_met(cond: dict, name: str, entry: dict) -> bool:
+    if {"numNewerVersions", "daysSinceNoncurrentTime", "noncurrentTimeBefore"} & cond.keys():
+        return False   # Vyomi keeps no noncurrent versions, so these can never be satisfied.
+    created = _parse_ts(entry.get("timeCreated") or "")
+    now = datetime.now(timezone.utc).timestamp()
+    if "age" in cond and (not created or (now - created) / 86400 < int(cond["age"])):
+        return False
+    if cond.get("createdBefore"):
+        before = _parse_date_only(cond["createdBefore"])
+        if not created or not before or created >= before:
+            return False
+    if cond.get("matchesStorageClass") and entry.get("storageClass", "STANDARD") not in cond["matchesStorageClass"]:
+        return False
+    if cond.get("matchesPrefix") and not any(name.startswith(p) for p in cond["matchesPrefix"]):
+        return False
+    if cond.get("matchesSuffix") and not any(name.endswith(s) for s in cond["matchesSuffix"]):
+        return False
+    if cond.get("daysSinceCustomTime") is not None:
+        ct = _parse_ts(entry.get("customTime") or "")
+        if not ct or (now - ct) / 86400 < int(cond["daysSinceCustomTime"]):
+            return False
+    if cond.get("customTimeBefore"):
+        ct = _parse_ts(entry.get("customTime") or "")
+        before = _parse_date_only(cond["customTimeBefore"])
+        if not ct or not before or ct >= before:
+            return False
+    return True
+
+
+def _apply_lifecycle(store: ObjectStore, bucket: str) -> None:
+    rules = ((store.buckets.get(bucket) or {}).get("lifecycle") or {}).get("rule") or []
+    if not rules:
+        return
+    objs = store.bucket_objects(bucket)
+    changed = False
+    for name, entry in list(objs.items()):
+        if name.endswith("/"):             # folder placeholders aren't lifecycle-managed
+            continue
+        for rule in rules:
+            if not _condition_met(rule.get("condition") or {}, name, entry):
+                continue
+            action = rule.get("action") or {}
+            if action.get("type") == "Delete":
+                objs.pop(name, None)
+                store.mirror_delete(bucket, name)
+                changed = True
+                break
+            if action.get("type") == "SetStorageClass" and action.get("storageClass") and entry.get("storageClass", "STANDARD") != action["storageClass"]:
+                entry["storageClass"] = action["storageClass"]
+                changed = True
+                break
+            # AbortIncompleteMultipartUpload: Vyomi's resumable-upload sessions carry no
+            # persistent "incomplete upload" record to sweep against, so this action never fires.
+    if changed:
+        store.persist()
+
+
 def _object_view(bucket: str, name: str, entry: dict) -> dict:
     gen = str(entry.get("generation", "1"))
     enc = name.replace("/", "%2F")
@@ -232,7 +332,7 @@ def _object_view(bucket: str, name: str, entry: dict) -> dict:
         "contentType": entry.get("contentType", "application/octet-stream"),
         "timeCreated": entry.get("timeCreated", _now()),
         "updated": entry.get("updated", _now()),
-        "storageClass": "STANDARD",
+        "storageClass": entry.get("storageClass", "STANDARD"),
         "size": str(entry.get("size", 0)),
         "md5Hash": entry.get("md5Hash", ""),
         "crc32c": entry.get("crc32c", ""),
@@ -240,6 +340,7 @@ def _object_view(bucket: str, name: str, entry: dict) -> dict:
         "selfLink": f"https://www.googleapis.com/storage/v1/b/{bucket}/o/{enc}",
         "mediaLink": f"https://storage.googleapis.com/download/storage/v1/b/{bucket}/o/{enc}?alt=media",
         **({"metadata": entry["metadata"]} if entry.get("metadata") else {}),
+        **({"retention": entry["retention"]} if entry.get("retention") else {}),
         **{k: entry[k] for k in ("contentEncoding", "contentDisposition", "contentLanguage", "cacheControl",
                                  "temporaryHold", "eventBasedHold", "customTime", "componentCount")
            if entry.get(k) not in (None, "")},
@@ -262,17 +363,18 @@ def _entry_bytes(store: ObjectStore, bucket: str, name: str, entry: dict) -> byt
     return bytes(data or b"")
 
 
-def _new_entry(objs: dict, name: str, media: bytes, content_type: str, custom: dict) -> dict:
+def _new_entry(objs: dict, name: str, media: bytes, content_type: str, custom: dict, storage_class: str = "STANDARD") -> dict:
     gen = int(objs.get(name, {}).get("generation", "0") or 0) + 1
     return {"data": media, "size": len(media), "contentType": content_type,
             "timeCreated": objs.get(name, {}).get("timeCreated", _now()),
             "updated": _now(), "md5Hash": _md5_b64(media), "crc32c": _crc32c_b64(media),
-            "etag": _etag(), "generation": gen, "metageneration": 1, "metadata": custom or {}}
+            "etag": _etag(), "generation": gen, "metageneration": 1, "metadata": custom or {},
+            "storageClass": storage_class}
 
 
 # Object metadata fields settable via objects.patch / objects.update.
 _OBJECT_SETTABLE = ("contentType", "contentEncoding", "contentDisposition", "contentLanguage",
-                    "cacheControl", "metadata", "temporaryHold", "eventBasedHold", "customTime")
+                    "cacheControl", "metadata", "temporaryHold", "eventBasedHold", "customTime", "retention")
 
 
 def _compose(store: ObjectStore, bucket: str, dest: str, body: bytes) -> GcsResponse:
@@ -292,14 +394,15 @@ def _compose(store: ObjectStore, bucket: str, dest: str, body: bytes) -> GcsResp
         if ent is None:
             return _err(404, "notFound", f"No such object: {bucket}/{name}")
         chunks.append(_entry_bytes(store, bucket, name, ent))
-    blocked = _retention_block(store, bucket, dest, objs.get(dest))
+    blocked = _retention_block(store, bucket, dest, objs.get(dest)) or _hold_block(bucket, dest, objs.get(dest))
     if blocked:
         return blocked
     dmeta = req.get("destination") or {}
     media = b"".join(chunks)
     first = objs.get(sources[0].get("name", ""), {})
     entry = _new_entry(objs, dest, media, dmeta.get("contentType") or first.get("contentType") or
-                       "application/octet-stream", dmeta.get("metadata") or {})
+                       "application/octet-stream", dmeta.get("metadata") or {},
+                       store.buckets.get(bucket, {}).get("storageClass", "STANDARD"))
     entry["componentCount"] = len(sources)
     objs[dest] = entry
     store.mirror_put(bucket, dest, media, entry["contentType"], entry["metadata"])
@@ -364,6 +467,66 @@ def _gcs_resumable(store: ObjectStore) -> dict:
     return m
 
 
+# ── Batch Operations (Storage Intelligence) ───────────────────────────────
+# Modeled sub-resource under /storage/v1 (the real product is a separate API,
+# storagebatchoperations.googleapis.com, that no google-cloud-storage client calls —
+# Vyomi exposes an equivalent job resource on its own wire instead of replicating a
+# second service). A job runs synchronously and for real: it applies its action
+# (Delete / SetStorageClass) to every object under bucket+prefix right away, exactly
+# the single-bucket bulk edit the console's "Batch Operations" page offers.
+def _batch_jobs(store: ObjectStore) -> dict:
+    m = getattr(store, "_gcs_batch_jobs", None)
+    if m is None:
+        m = {}
+        store._gcs_batch_jobs = m
+    return m
+
+
+def _batch_job_view(job_id: str, job: dict) -> dict:
+    return {"name": f"batchOperations/{job_id}", "bucket": job["bucket"], "prefix": job.get("prefix", ""),
+            "action": job["action"], "state": job["state"], "createTime": job["createTime"],
+            "completeTime": job.get("completeTime"), "counts": job.get("counts", {})}
+
+
+def _run_batch_job(store: ObjectStore, bucket: str, prefix: str, action: dict) -> dict:
+    objs = store.bucket_objects(bucket)
+    matched = failed = succeeded = 0
+    for name, entry in list(objs.items()):
+        if name.endswith("/") or not name.startswith(prefix):
+            continue
+        matched += 1
+        if action.get("type") == "Delete":
+            if _retention_block(store, bucket, name, entry) or _hold_block(bucket, name, entry):
+                failed += 1
+                continue
+            objs.pop(name, None)
+            store.mirror_delete(bucket, name)
+            succeeded += 1
+        elif action.get("type") == "SetStorageClass" and action.get("storageClass"):
+            entry["storageClass"] = action["storageClass"]
+            succeeded += 1
+    store.persist()
+    return {"matched": matched, "succeeded": succeeded, "failed": failed}
+
+
+# ── Insights datasets (Storage Intelligence) ───────────────────────────────
+# Modeled sub-resource under /storage/v1 (the real product, storageinsights.
+# googleapis.com, exports an object inventory into a BigQuery dataset on a
+# schedule). Vyomi stores and returns the dataset config exactly as a client sets
+# it — config_only: no BigQuery export job ever actually runs.
+def _insights_datasets(store: ObjectStore) -> dict:
+    m = getattr(store, "_gcs_insights_datasets", None)
+    if m is None:
+        m = {}
+        store._gcs_insights_datasets = m
+    return m
+
+
+def _insights_dataset_view(ds_id: str, ds: dict) -> dict:
+    return {"name": f"insightsDatasets/{ds_id}", "displayName": ds.get("displayName", ds_id),
+            "sourceBucketPrefix": ds.get("sourceBucketPrefix", ""), "state": "ACTIVE", "createTime": ds["createTime"]}
+
+
 def dispatch(store: ObjectStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> GcsResponse:
@@ -380,6 +543,71 @@ def dispatch(store: ObjectStore, method: str, path: str,
             break
     p = p.split("?", 1)[0].rstrip("/")
     segs = [s for s in p.split("/") if s != ""]
+
+    # /batchOperations[/{id}] and /insightsDatasets[/{id}] — Storage Intelligence
+    # sub-resources (see _run_batch_job / _insights_datasets above), checked before the
+    # bucket-collection fallthrough since they don't start with "b".
+    if segs and segs[0] == "batchOperations":
+        jobs = _batch_jobs(store)
+        if len(segs) == 1:
+            if method == "POST":
+                try:
+                    req = json.loads(body.decode("utf-8")) if body else {}
+                except Exception:
+                    return _err(400, "parseError", "Parse Error")
+                bucket = req.get("bucket")
+                action = req.get("action") or {}
+                if not bucket or not store.bucket_exists(bucket):
+                    return _err(404, "notFound", "The specified bucket does not exist.")
+                if action.get("type") not in ("Delete", "SetStorageClass"):
+                    return _err(400, "invalid", "action.type must be Delete or SetStorageClass.")
+                job_id = req.get("jobId") or uuid.uuid4().hex[:12]
+                counts = _run_batch_job(store, bucket, req.get("prefix", ""), action)
+                jobs[job_id] = {"bucket": bucket, "prefix": req.get("prefix", ""), "action": action,
+                                "state": "SUCCEEDED", "createTime": _now(), "completeTime": _now(), "counts": counts}
+                return _json(200, _batch_job_view(job_id, jobs[job_id]))
+            if method == "GET":
+                return _json(200, {"jobs": [_batch_job_view(i, j) for i, j in sorted(jobs.items())]})
+            return _err(400, "invalid", f"Unsupported method {method} on batchOperations")
+        job_id = unquote(segs[1])
+        job = jobs.get(job_id)
+        if job is None:
+            return _err(404, "notFound", f"No such job: {job_id}")
+        if method == "GET":
+            return _json(200, _batch_job_view(job_id, job))
+        if method == "DELETE":
+            jobs.pop(job_id, None)
+            return GcsResponse(status=204, body=b"", media_type=None)
+        return _err(400, "invalid", f"Unsupported method {method} on a batch job")
+
+    if segs and segs[0] == "insightsDatasets":
+        datasets = _insights_datasets(store)
+        if len(segs) == 1:
+            if method == "POST":
+                try:
+                    req = json.loads(body.decode("utf-8")) if body else {}
+                except Exception:
+                    return _err(400, "parseError", "Parse Error")
+                if not req.get("displayName"):
+                    return _err(400, "invalid", "displayName is required.")
+                ds_id = req.get("datasetConfigId") or uuid.uuid4().hex[:12]
+                if ds_id in datasets:
+                    return _err(409, "conflict", f"Dataset config {ds_id} already exists.")
+                datasets[ds_id] = {"displayName": req["displayName"], "sourceBucketPrefix": req.get("sourceBucketPrefix", ""), "createTime": _now()}
+                return _json(200, _insights_dataset_view(ds_id, datasets[ds_id]))
+            if method == "GET":
+                return _json(200, {"datasets": [_insights_dataset_view(i, d) for i, d in sorted(datasets.items())]})
+            return _err(400, "invalid", f"Unsupported method {method} on insightsDatasets")
+        ds_id = unquote(segs[1])
+        ds = datasets.get(ds_id)
+        if ds is None:
+            return _err(404, "notFound", f"No such dataset config: {ds_id}")
+        if method == "GET":
+            return _json(200, _insights_dataset_view(ds_id, ds))
+        if method == "DELETE":
+            datasets.pop(ds_id, None)
+            return GcsResponse(status=204, body=b"", media_type=None)
+        return _err(400, "invalid", f"Unsupported method {method} on a dataset config")
 
     # /b            → buckets collection
     # /b/{bucket}   → one bucket
@@ -484,6 +712,7 @@ def dispatch(store: ObjectStore, method: str, path: str,
     # ---- objects ----
     if segs[2] == "o":
         objs = store.bucket_objects(bucket)
+        _apply_lifecycle(store, bucket)
 
         # object collection: /b/{bucket}/o
         if len(segs) == 3:
@@ -494,12 +723,12 @@ def dispatch(store: ObjectStore, method: str, path: str,
                     return _err(404, "notFound", "No such upload session.")
                 media = bytes(body or b"")
                 name = sess["name"]
-                blocked = _retention_block(store, bucket, name, objs.get(name))
+                blocked = _retention_block(store, bucket, name, objs.get(name)) or _hold_block(bucket, name, objs.get(name))
                 if blocked:
                     return blocked
                 content_type = sess.get("content_type") or headers.get("content-type") or "application/octet-stream"
                 custom = sess.get("metadata") or {}
-                entry = _new_entry(objs, name, media, content_type, custom)
+                entry = _new_entry(objs, name, media, content_type, custom, store.buckets.get(bucket, {}).get("storageClass", "STANDARD"))
                 objs[name] = entry
                 store.mirror_put(bucket, name, media, content_type, custom)
                 _gcs_resumable(store).pop(query.get("upload_id"), None)
@@ -551,10 +780,10 @@ def dispatch(store: ObjectStore, method: str, path: str,
                     custom = {}
                 if not name:
                     return _err(400, "required", "Object name is required.")
-                blocked = _retention_block(store, bucket, name, objs.get(name))
+                blocked = _retention_block(store, bucket, name, objs.get(name)) or _hold_block(bucket, name, objs.get(name))
                 if blocked:
                     return blocked
-                entry = _new_entry(objs, name, media, content_type, custom)
+                entry = _new_entry(objs, name, media, content_type, custom, store.buckets.get(bucket, {}).get("storageClass", "STANDARD"))
                 objs[name] = entry
                 store.mirror_put(bucket, name, media, content_type, custom)
                 store.persist()
@@ -632,6 +861,11 @@ def dispatch(store: ObjectStore, method: str, path: str,
                 if k not in patch:
                     continue
                 v = patch[k]
+                if k == "retention" and v is not None:
+                    if (store.buckets.get(bucket, {}).get("objectRetention") or {}).get("mode") != "Enabled":
+                        return _err(400, "invalid", "Object retention is not enabled on this bucket.")
+                    if not isinstance(v, dict) or not v.get("retainUntilTime"):
+                        return _err(400, "invalid", "retention.retainUntilTime is required.")
                 if k == "metadata" and isinstance(v, dict) and method == "PATCH":
                     cur = dict(entry.get("metadata") or {})
                     for mk, mv in v.items():
@@ -651,7 +885,7 @@ def dispatch(store: ObjectStore, method: str, path: str,
         if method == "DELETE":
             if entry is None:
                 return _err(404, "notFound", f"No such object: {bucket}/{name}")
-            blocked = _retention_block(store, bucket, name, entry)
+            blocked = _retention_block(store, bucket, name, entry) or _hold_block(bucket, name, entry)
             if blocked:
                 return blocked
             objs.pop(name, None)

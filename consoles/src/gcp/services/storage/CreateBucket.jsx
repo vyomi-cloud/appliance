@@ -49,6 +49,7 @@ export default function CreateBucket() {
   const [retention, setRetention] = useState(false);
   const [retN, setRetN] = useState("7");
   const [retUnit, setRetUnit] = useState("days");
+  const [objectRetention, setObjectRetention] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -66,6 +67,7 @@ export default function CreateBucket() {
       iamConfiguration: { uniformBucketLevelAccess: { enabled: access === "uniform" }, publicAccessPrevention: pap ? "enforced" : "inherited" },
       ...(labels.length ? { labels: Object.fromEntries(labels.map((l) => [l.key, l.value])) } : {}),
       ...(retention ? { retentionPolicy: { retentionPeriod: String(Number(retN) * UNIT_SECS[retUnit]) } } : {}),
+      ...(objectRetention ? { objectRetention: { mode: "Enabled" } } : {}),
     };
     try {
       await api.insertBucket(body);
@@ -97,6 +99,7 @@ export default function CreateBucket() {
             <Box><Button startIcon={<AddIcon />} onClick={() => setLabels([...labels, { key: "", value: "" }])}>Add label</Button></Box>
           </Stack>
         </Sub>
+        <NotSimulated compact feature="Tags (optional)" note="GCP resource tags (tagKeys/tagValues bindings) are a separate Resource Manager product Vyomi doesn't integrate with." />
       </Step>
       <Divider />
 
@@ -114,7 +117,7 @@ export default function CreateBucket() {
             {api.LOCATIONS[locType].map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
           </Select>
         </FormControl>
-        {locType === "dual-region" && <NotSimulated compact feature="Turbo replication" note="Dual-region buckets use default replication (RPO DEFAULT)." />}
+        <NotSimulated compact feature="Add turbo replication" note="Offered for dual-region buckets; Vyomi always uses default replication (RPO DEFAULT)." />
       </Step>
       <Divider />
 
@@ -125,7 +128,9 @@ export default function CreateBucket() {
           </RadioGroup>
         </Sub>
         <NotSimulated compact feature="Autoclass" note="Vyomi keeps objects in the bucket's default class; storage classes don't change pricing or retrieval here." />
-        <NotSimulated compact feature="Hierarchical namespace" />
+        <Sub title="Optimize storage for data-intensive workloads">
+          <NotSimulated compact feature="Enable hierarchical namespace on this bucket" note="Vyomi models every bucket as a flat namespace; it has no HNS mode with atomic folder rename/delete." />
+        </Sub>
       </Step>
       <Divider />
 
@@ -144,24 +149,31 @@ export default function CreateBucket() {
       <Divider />
 
       <Step n={5} title="Choose how to protect object data">
-        <NotSimulated compact feature="Soft delete policy (for data recovery)" />
-        <NotSimulated compact feature="Object versioning (for version control)" />
-        <Sub title="Data retention" help="Prevent deletion or modification of the bucket's objects for a specified minimum duration of time after being uploaded.">
-          <FormControlLabel control={<Checkbox size="small" checked={retention} onChange={(e) => setRetention(e.target.checked)} />} label="Set bucket retention policy" />
-          {retention && (
-            <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-              <TextField label="Retention period" type="number" value={retN} onChange={(e) => setRetN(e.target.value)} error={!!retErr} helperText={retErr || " "} sx={{ width: 180 }} />
-              <FormControl sx={{ width: 160 }}>
-                <InputLabel id="ret-unit">Unit</InputLabel>
-                <Select labelId="ret-unit" label="Unit" value={retUnit} onChange={(e) => setRetUnit(e.target.value)}>
-                  {Object.keys(UNIT_SECS).map((u) => <MenuItem key={u} value={u}>{u[0].toUpperCase() + u.slice(1)}</MenuItem>)}
-                </Select>
-              </FormControl>
-            </Stack>
-          )}
+        <Sub title="Data protection">
+          <Stack spacing={2.5}>
+            <NotSimulated compact feature="Soft delete policy (For data recovery)" note="Retention duration defaults to 7 days, but recovering a deleted/overwritten object needs the noncurrent-version history Vyomi doesn't keep." />
+            <NotSimulated compact feature="Object versioning (For version control)" />
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>Retention (For compliance)</Typography>
+              <FormControlLabel control={<Checkbox size="small" checked={retention} onChange={(e) => setRetention(e.target.checked)} />} label="Set bucket retention policy" />
+              {retention && (
+                <Stack direction="row" spacing={1} sx={{ mt: 1, mb: 1 }}>
+                  <TextField label="Retention period" type="number" value={retN} onChange={(e) => setRetN(e.target.value)} error={!!retErr} helperText={retErr || " "} sx={{ width: 180 }} />
+                  <FormControl sx={{ width: 160 }}>
+                    <InputLabel id="ret-unit">Unit</InputLabel>
+                    <Select labelId="ret-unit" label="Unit" value={retUnit} onChange={(e) => setRetUnit(e.target.value)}>
+                      {Object.keys(UNIT_SECS).map((u) => <MenuItem key={u} value={u}>{u[0].toUpperCase() + u.slice(1)}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                </Stack>
+              )}
+              <FormControlLabel control={<Checkbox size="small" checked={objectRetention} onChange={(e) => setObjectRetention(e.target.checked)} />} label="Enable object retention" />
+            </Box>
+          </Stack>
         </Sub>
-        <NotSimulated compact feature="Object retention (per-object retention and holds)" />
-        <NotSimulated compact feature="Data encryption with Cloud KMS keys (CMEK)" note="Vyomi stores object data unencrypted in its local store." />
+        <Sub title="Data encryption">
+          <NotSimulated compact feature="Data encryption with Cloud KMS keys (CMEK)" note="Vyomi always encrypts new objects with a Google-managed key; it does not delegate envelope encryption to Cloud KMS." />
+        </Sub>
       </Step>
       <Divider />
 

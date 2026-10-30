@@ -20,7 +20,8 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { ErrorAlert, fmtBytes, fmtDate, fmtDuration, KeyValue, NotSimulated, NotSimulatedContainer, PageHeader, Section } from "../../kit/common.jsx";
+import { ErrorAlert, fmtBytes, fmtDate, fmtDuration, KeyValue, NotSimulated, PageHeader, Section } from "../../kit/common.jsx";
+import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import * as api from "./api.js";
 
@@ -68,9 +69,9 @@ export default function BucketDetail({ params, query }) {
       {tab === "permissions" && b.data && <Permissions bucket={b.data} policy={pol} reload={reloadAll} />}
       {tab === "protection" && b.data && <Protection bucket={b.data} reload={b.reload} />}
       {tab === "lifecycle" && b.data && <Lifecycle bucket={b.data} reload={b.reload} />}
-      {tab === "observability" && <NotSimulatedContainer title="Observability" feature="Cloud Monitoring metrics for Cloud Storage (requests, bandwidth, total bytes)" />}
-      {tab === "inventory" && <NotSimulatedContainer title="Inventory reports" feature="Storage Insights inventory reports" />}
-      {tab === "operations" && <NotSimulatedContainer title="Operations" feature="Long-running bucket operations" />}
+      {tab === "observability" && <CapabilityContainer id="gcp.storage.observability" title="Monitoring" />}
+      {tab === "inventory" && <CapabilityContainer id="gcp.storage.inventory-reports" title="Inventory reports" />}
+      {tab === "operations" && <CapabilityContainer id="gcp.storage.operations" title="Long-running bucket operations" />}
     </>
   );
 }
@@ -141,7 +142,7 @@ function Objects({ bucket, prefix, meta, policy }) {
         ]}
         empty={<Typography variant="body2" color="text.secondary">No rows to display. Upload files or create a folder.</Typography>}
       />
-      <Box sx={{ mt: 1.5 }}><NotSimulated compact feature="Object version history, holds and per-object encryption" /></Box>
+      <Box sx={{ mt: 1.5 }}><NotSimulated compact feature="Object version history and per-object customer-managed encryption keys" note="Object holds and object retention are real — see the object's Protection section." /></Box>
       <DeleteDialog
         open={del}
         onClose={() => setDel(false)}
@@ -182,33 +183,61 @@ function Configuration({ bucket, reload }) {
   const notify = useNotify();
   const [editLabels, setEditLabels] = useState(false);
   const [editClass, setEditClass] = useState(false);
+  const [editWebsite, setEditWebsite] = useState(false);
   const ls = Object.entries(bucket.labels || {});
   const patch = async (body, msg) => { await api.patchBucket(bucket.name, body); notify.success(msg); reload(); };
   return (
     <Stack spacing={2}>
       <Section title="Overview">
         <KeyValue items={[
+          ["Created", fmtDate(bucket.timeCreated)],
+          ["Updated", fmtDate(bucket.updated)],
           ["Location type", api.LOCATION_TYPE_LABEL[bucket.locationType]],
           ["Location", bucket.location.toLowerCase()],
           ["Default storage class", api.classLabel(bucket.storageClass), <IconButton key="e" size="small" aria-label="Edit default storage class" onClick={() => setEditClass(true)}><EditIcon fontSize="inherit" /></IconButton>],
-          ["Created", fmtDate(bucket.timeCreated)],
-          ["Last modified", fmtDate(bucket.updated)],
+          ["Hierarchical namespace", "Disabled"],
+          ["Requester pays", bucket.billing?.requesterPays ? "Enabled" : "Not enabled"],
           ["Labels", ls.length ? <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>{ls.map(([k, v]) => <Chip key={k} size="small" label={`${k}: ${v}`} />)}</Stack> : "None",
             <IconButton key="e" size="small" aria-label="Edit labels" onClick={() => setEditLabels(true)}><EditIcon fontSize="inherit" /></IconButton>],
           ["gsutil URI", `gs://${bucket.name}`],
+          ["Cloud Console URL", `console.vyomi.cloud/storage/browser/${bucket.name}`],
           ["Metageneration", bucket.metageneration],
           ...(bucket.rpo ? [["Replication", bucket.rpo === "ASYNC_TURBO" ? "Turbo" : "Default"]] : []),
         ]} />
       </Section>
-      <NotSimulatedContainer title="Requester pays" />
-      <NotSimulatedContainer title="Static website configuration" feature="Static website hosting (main page / 404 page)" />
-      <NotSimulatedContainer title="Cross-origin resource sharing (CORS)" />
+      <CapabilityContainer id="gcp.storage.encryption" title="Data encryption">
+        <Typography variant="body2">Google-managed encryption key</Typography>
+      </CapabilityContainer>
+      <CapabilityContainer id="gcp.storage.cors" title="Cross-origin resource sharing (CORS)">
+        {bucket.cors?.length
+          ? <KeyValue items={bucket.cors.map((r, i) => [`Rule ${i + 1}`, `${(r.method || []).join(", ") || "*"} from ${(r.origin || []).join(", ") || "*"}`])} />
+          : <Typography variant="body2" color="text.secondary">CORS is not configured for this bucket.</Typography>}
+      </CapabilityContainer>
+      <CapabilityContainer id="gcp.storage.static-website" title="Static website configuration"
+        actions={<Button variant="outlined" startIcon={bucket.website ? <EditIcon /> : <AddIcon />} onClick={() => setEditWebsite(true)}>Edit website configuration</Button>}>
+        {bucket.website
+          ? <KeyValue items={[["Index (main) page suffix", bucket.website.mainPageSuffix || "—"], ["Error (404 not found) page", bucket.website.notFoundPage || "—"]]} />
+          : <Typography variant="body2" color="text.secondary">Static website hosting is not configured for this bucket.</Typography>}
+      </CapabilityContainer>
       {editLabels && <LabelsDialog labels={bucket.labels || {}} onClose={() => setEditLabels(false)} onSave={async (next) => {
         const body = { ...Object.fromEntries(Object.keys(bucket.labels || {}).map((k) => [k, null])), ...next };
         await patch({ labels: body }, "Updated labels");
       }} />}
       {editClass && <ClassDialog value={bucket.storageClass} onClose={() => setEditClass(false)} onSave={(v) => patch({ storageClass: v }, "Updated default storage class")} />}
+      {editWebsite && <WebsiteDialog website={bucket.website} onClose={() => setEditWebsite(false)}
+        onSave={(w) => patch({ website: w }, "Updated website configuration")} />}
     </Stack>
+  );
+}
+
+function WebsiteDialog({ website, onClose, onSave }) {
+  const [main, setMain] = useState(website?.mainPageSuffix || "index.html");
+  const [notFound, setNotFound] = useState(website?.notFoundPage || "404.html");
+  return (
+    <SaveDialog title="Edit website configuration" onClose={onClose} onSave={() => onSave({ mainPageSuffix: main, notFoundPage: notFound })}>
+      <TextField label="Index (main) page suffix" value={main} onChange={(e) => setMain(e.target.value)} />
+      <TextField label="Error (404 not found) page" value={notFound} onChange={(e) => setNotFound(e.target.value)} />
+    </SaveDialog>
   );
 }
 
@@ -285,7 +314,7 @@ function Permissions({ bucket, policy, reload }) {
   };
   return (
     <Stack spacing={2}>
-      <Section title="Public access" actions={
+      <Section title={<Stack direction="row" spacing={1} alignItems="center"><span>Public access</span><CapabilityBadge id="gcp.storage.permissions" /></Stack>} actions={
         <Button variant="outlined" disabled={busy} onClick={() => patchIam({ publicAccessPrevention: pap ? "inherited" : "enforced" }, pap ? "Removed public access prevention" : "Public access prevention enforced")}>
           {pap ? "Remove public access prevention" : "Prevent public access"}
         </Button>}>
@@ -300,7 +329,9 @@ function Permissions({ bucket, policy, reload }) {
       </Section>
       <Box>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-          <Typography variant="h3" component="h2" sx={{ flex: 1 }}>Permissions — View by principals</Typography>
+          <Typography variant="h3" component="h2">Permissions — View by principals</Typography>
+          <CapabilityBadge id="gcp.storage.permissions" />
+          <Box sx={{ flex: 1 }} />
           <Button startIcon={<AddIcon />} onClick={() => setGrant(true)}>Grant access</Button>
           <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={async () => {
             try {
@@ -318,7 +349,6 @@ function Permissions({ bucket, policy, reload }) {
             { id: "role", header: "Role", sortValue: (r) => roleName(r.role), cell: (r) => roleName(r.role) },
             { id: "roleId", header: "Role ID", cell: (r) => r.role, hidden: true },
           ]} />
-        <Box sx={{ mt: 1.5 }}><NotSimulated compact feature="IAM and ACL enforcement on data access" note="Policies are stored and returned to SDKs (getIamPolicy / setIamPolicy), but Vyomi doesn't check them on requests." /></Box>
       </Box>
       {grant && <GrantDialog onClose={() => setGrant(false)} onSave={async (member, role) => {
         const bs = (policy.data?.bindings || []).map((b) => ({ ...b, members: [...b.members] }));
@@ -353,10 +383,11 @@ function Protection({ bucket, reload }) {
   const [edit, setEdit] = useState(false);
   const [remove, setRemove] = useState(false);
   const rp = bucket.retentionPolicy;
+  const objRetEnabled = bucket.objectRetention?.mode === "Enabled";
   return (
     <Stack spacing={2}>
-      <NotSimulatedContainer title="Soft delete policy (for data recovery)" feature="Soft delete" />
-      <NotSimulatedContainer title="Object versioning (for version control)" feature="Object versioning" />
+      <CapabilityContainer id="gcp.storage.soft-delete" title="Soft delete policy (for data recovery)" />
+      <CapabilityContainer id="gcp.storage.versioning" title="Object versioning (for version control)" />
       <Section title="Bucket retention policy" description="Objects can't be deleted or replaced until they reach the age you set. Enforced by Vyomi."
         actions={<>
           <Button variant="outlined" startIcon={rp ? <EditIcon /> : <AddIcon />} onClick={() => setEdit(true)}>{rp ? "Edit retention policy" : "Set retention policy"}</Button>
@@ -365,8 +396,13 @@ function Protection({ bucket, reload }) {
         {rp ? <KeyValue items={[["Retention period", fmtDuration(rp.retentionPeriod)], ["Effective since", fmtDate(rp.effectiveTime)], ["Status", rp.isLocked ? "Locked" : "Unlocked"]]} />
           : <Typography variant="body2" color="text.secondary">No retention policy is set on this bucket.</Typography>}
       </Section>
-      <NotSimulatedContainer title="Object retention" feature="Object retention and object holds" />
-      <NotSimulatedContainer title="Data encryption" feature="Customer-managed encryption keys (CMEK)" />
+      <CapabilityContainer id="gcp.storage.object-holds" title="Object retention"
+        actions={<Button variant="outlined" onClick={async () => {
+          try { await api.patchBucket(bucket.name, { objectRetention: { mode: objRetEnabled ? "Disabled" : "Enabled" } }); notify.success(objRetEnabled ? "Object retention disabled" : "Object retention enabled"); reload(); }
+          catch (e) { notify.error(e); }
+        }}>{objRetEnabled ? "Disable" : "Enable object retention"}</Button>}>
+        <Typography variant="body2">{objRetEnabled ? "Object retention is enabled on this bucket. Objects can carry a retainUntilTime or a hold that blocks delete/overwrite." : "Object retention is not enabled on this bucket."}</Typography>
+      </CapabilityContainer>
       {edit && <RetentionDialog current={rp} onClose={() => setEdit(false)} onSave={async (secs) => {
         await api.patchBucket(bucket.name, { retentionPolicy: { retentionPeriod: String(secs) } }); notify.success("Retention policy saved"); reload();
       }} />}
@@ -417,14 +453,16 @@ function Lifecycle({ bucket, reload }) {
   return (
     <Stack spacing={2}>
       <Stack direction="row" alignItems="center" spacing={1}>
-        <Typography variant="h3" component="h2" sx={{ flex: 1 }}>Lifecycle rules</Typography>
+        <Typography variant="h3" component="h2">Lifecycle rules</Typography>
+        <CapabilityBadge id="gcp.storage.lifecycle" />
+        <Box sx={{ flex: 1 }} />
         <Button startIcon={<AddIcon />} onClick={() => setAdd(true)}>Add a rule</Button>
         <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={async () => {
           try { await save(rules.filter((r) => !sel.includes(r.key))); notify.success(`Deleted ${sel.length} rule${sel.length === 1 ? "" : "s"}`); setSel([]); reload(); } catch (e) { notify.error(e); }
         }}>Delete</Button>
         <Button disabled={!rules.length} onClick={() => setDelAll(true)}>Delete all</Button>
       </Stack>
-      <Typography variant="body2" color="text.secondary">Lifecycle rules let you apply actions to a bucket's objects when certain conditions are met.</Typography>
+      <Typography variant="body2" color="text.secondary">Lifecycle rules let you apply actions to a bucket's objects when certain conditions are met. Vyomi evaluates rules for real each time the bucket's objects are read.</Typography>
       <ResourceTable resourceName="lifecycle rules" items={rules} rowKey={(r) => r.key} selectable selected={sel} onSelectedChange={setSel} dense
         filterPlaceholder="Filter rules"
         columns={[
@@ -432,7 +470,6 @@ function Lifecycle({ bucket, reload }) {
           { id: "condition", header: "Object condition", wrap: true, cell: (r) => condText(r.condition || {}) },
         ]}
         empty={<Typography variant="body2" color="text.secondary">No lifecycle rules have been added to this bucket.</Typography>} />
-      <NotSimulated compact feature="Lifecycle rule execution" note="Rules are stored on the bucket and returned to SDKs, but Vyomi does not run them against objects." />
       {add && <RuleDialog onClose={() => setAdd(false)} onSave={async (rule) => { await save([...rules, rule]); notify.success("Lifecycle rule added"); reload(); }} />}
       <DeleteDialog open={delAll} onClose={() => setDelAll(false)} title="Delete all lifecycle rules?" confirmText="DELETE"
         onConfirm={async () => { await save([]); notify.success("Deleted all lifecycle rules"); setSel([]); reload(); }}>
@@ -446,18 +483,30 @@ function RuleDialog({ onClose, onSave }) {
   const [action, setAction] = useState("Delete");
   const [age, setAge] = useState("30");
   const [before, setBefore] = useState("");
+  const [storageClassMatches, setStorageClassMatches] = useState("");
+  const [newerVersions, setNewerVersions] = useState("");
+  const [daysNoncurrent, setDaysNoncurrent] = useState("");
+  const [noncurrentBefore, setNoncurrentBefore] = useState("");
+  const [daysCustomTime, setDaysCustomTime] = useState("");
+  const [customTimeBefore, setCustomTimeBefore] = useState("");
   const [prefix, setPrefix] = useState("");
   const [suffix, setSuffix] = useState("");
   const condition = {
     ...(age !== "" ? { age: Number(age) } : {}),
     ...(before ? { createdBefore: before } : {}),
+    ...(storageClassMatches ? { matchesStorageClass: [storageClassMatches] } : {}),
+    ...(newerVersions !== "" ? { numNewerVersions: Number(newerVersions) } : {}),
+    ...(daysNoncurrent !== "" ? { daysSinceNoncurrentTime: Number(daysNoncurrent) } : {}),
+    ...(noncurrentBefore ? { noncurrentTimeBefore: noncurrentBefore } : {}),
+    ...(daysCustomTime !== "" ? { daysSinceCustomTime: Number(daysCustomTime) } : {}),
+    ...(customTimeBefore ? { customTimeBefore } : {}),
     ...(prefix ? { matchesPrefix: prefix.split(",").map((s) => s.trim()).filter(Boolean) } : {}),
     ...(suffix ? { matchesSuffix: suffix.split(",").map((s) => s.trim()).filter(Boolean) } : {}),
   };
   const ok = Object.keys(condition).length > 0 && (age === "" || (Number.isInteger(Number(age)) && Number(age) >= 0));
   const act = action === "Delete" ? { type: "Delete" } : { type: "SetStorageClass", storageClass: action };
   return (
-    <SaveDialog title="Add a rule" onClose={onClose} disabled={!ok} onSave={() => onSave({ action: act, condition })}>
+    <SaveDialog title="Add an object lifecycle rule" onClose={onClose} disabled={!ok} onSave={() => onSave({ action: act, condition })}>
       <Typography variant="body2" sx={{ fontWeight: 500 }}>Select an action</Typography>
       <RadioGroup value={action} onChange={(e) => setAction(e.target.value)} aria-label="Lifecycle action">
         <FormControlLabel value="NEARLINE" control={<Radio size="small" />} label="Set storage class to Nearline" />
@@ -466,8 +515,22 @@ function RuleDialog({ onClose, onSave }) {
         <FormControlLabel value="Delete" control={<Radio size="small" />} label="Delete object" />
       </RadioGroup>
       <Typography variant="body2" sx={{ fontWeight: 500 }}>Select object conditions</Typography>
-      <TextField label="Age (days)" type="number" value={age} onChange={(e) => setAge(e.target.value)} />
+      <TextField label="Age" type="number" helperText="Days since object was created" value={age} onChange={(e) => setAge(e.target.value)} />
       <TextField label="Created before" type="date" value={before} onChange={(e) => setBefore(e.target.value)} InputLabelProps={{ shrink: true }} />
+      <FormControl><InputLabel id="rd-class">Storage class matches</InputLabel>
+        <Select labelId="rd-class" label="Storage class matches" value={storageClassMatches} onChange={(e) => setStorageClassMatches(e.target.value)}>
+          <MenuItem value="">Any</MenuItem>
+          {api.STORAGE_CLASSES.map(([c, l]) => <MenuItem key={c} value={c}>{l}</MenuItem>)}
+        </Select>
+      </FormControl>
+      <TextField label="Number of newer versions" type="number" value={newerVersions} onChange={(e) => setNewerVersions(e.target.value)}
+        helperText="Vyomi keeps no noncurrent object versions, so this condition never matches." />
+      <TextField label="Days since becoming noncurrent" type="number" value={daysNoncurrent} onChange={(e) => setDaysNoncurrent(e.target.value)}
+        helperText="Vyomi keeps no noncurrent object versions, so this condition never matches." />
+      <TextField label="Became noncurrent before" type="date" value={noncurrentBefore} onChange={(e) => setNoncurrentBefore(e.target.value)} InputLabelProps={{ shrink: true }}
+        helperText="Vyomi keeps no noncurrent object versions, so this condition never matches." />
+      <TextField label="Days since custom time" type="number" value={daysCustomTime} onChange={(e) => setDaysCustomTime(e.target.value)} />
+      <TextField label="Custom time before" type="date" value={customTimeBefore} onChange={(e) => setCustomTimeBefore(e.target.value)} InputLabelProps={{ shrink: true }} />
       <TextField label="Object name matches prefix" value={prefix} onChange={(e) => setPrefix(e.target.value)} helperText="Comma-separated" />
       <TextField label="Object name matches suffix" value={suffix} onChange={(e) => setSuffix(e.target.value)} helperText="Comma-separated" />
     </SaveDialog>
