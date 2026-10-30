@@ -9,13 +9,14 @@
  */
 import { Badge, Popover, PopoverSurface, PopoverTrigger } from "@fluentui/react-components";
 import { NotSimulatedContainer } from "./common.jsx";
+import cap_apim from "../../../../core/capabilities/azure/apim.json";
 import cap_appservices from "../../../../core/capabilities/azure/appservices.json";
 import cap_cost from "../../../../core/capabilities/azure/cost.json";
 import cap_eventgrid from "../../../../core/capabilities/azure/eventgrid.json";
 import cap_functionapp from "../../../../core/capabilities/azure/functionapp.json";
 import cap_keyvaults from "../../../../core/capabilities/azure/keyvaults.json";
 
-const REGISTRY = { ...cap_appservices, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults };
+const REGISTRY = { ...cap_apim, ...cap_appservices, ...cap_cost, ...cap_eventgrid, ...cap_functionapp, ...cap_keyvaults };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 
@@ -59,10 +60,10 @@ export function CapabilityBadge({ id }) {
 
 /** A console section whose header carries the capability badge; becomes the honest
  *  Not-simulated panel when the registry says so. */
-export function CapabilityContainer({ id, title, actions, children }) {
+export function CapabilityContainer({ id, title, actions, note, children }) {
   const c = capability(id);
   if (!c || c.level === "not_simulated") {
-    return <NotSimulatedContainer title={title} note={c?.limitations?.join(" ")} />;
+    return <NotSimulatedContainer title={title} note={note || c?.limitations?.join(" ")} />;
   }
   return (
     <section className="vy-form-section">

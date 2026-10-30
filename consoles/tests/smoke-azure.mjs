@@ -29,6 +29,8 @@ const EGT = `vyegtopic${n}`;       // Event Grid topic created through the UI
 const EGT2 = `vyegwire${n}`;       // Event Grid topic created over the wire
 const ES = `vyeges${n}`;           // event subscription created over the wire
 const LOCK = `vyeglock${n}`;       // management lock created through the UI
+const APIM = `vyapim${n}`;         // API Management service created through the UI
+const APIM2 = `vyapimwire${n}`;    // API Management service created over the wire
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -461,6 +463,81 @@ try {
   await page.getByRole("heading", { name: "Event Grid Topics" }).waitFor({ timeout: 10000 });
   const egGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}`);
   check("UI delete topic → ARM GET 404", egGone.status === 404, `HTTP ${egGone.status}`);
+
+  // ── API Management: service created through the wizard → visible over native ARM ──────
+  const apimWire = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2023-05-01-preview`,
+    { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  await page.goto(UI + "#/apim/create");
+  await page.getByLabel("Resource name", { exact: true }).fill(APIM);
+  await page.getByLabel("Organization name", { exact: true }).fill("CloudLearn");
+  await page.getByLabel("Administrator email", { exact: true }).fill("admin@cloudlearn.dev");
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await shot("23-apim-create-basics");
+  await page.getByRole("tab", { name: "Managed identity" }).click();
+  await page.getByLabel("Status", { exact: true }).check();
+  await page.getByRole("button", { name: "Review + install" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await shot("24-apim-create-review");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: APIM, exact: true }).waitFor({ timeout: 10000 });
+  const apimGot = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}`);
+  const apimSvc = apimGot.status === 200 ? JSON.parse(apimGot.text) : {};
+  check("UI create API Management service → visible over native ARM", apimGot.status === 200, `HTTP ${apimGot.status}`);
+  check("wizard settings reached ARM (publisher, identity)",
+    apimSvc.properties?.publisherEmail === "admin@cloudlearn.dev" && apimSvc.identity?.type === "SystemAssigned", JSON.stringify({ email: apimSvc.properties?.publisherEmail, identity: apimSvc.identity }));
+  await shot("25-apim-overview");
+
+  // ── API created through the UI → visible over native ARM (nested sub-resource) ─────────
+  await openPanel("APIs");
+  await page.getByRole("link", { name: "Add API", exact: true }).or(page.getByRole("button", { name: "Add API", exact: true })).first().click();
+  await page.getByLabel("Display name", { exact: true }).fill("Smoke API");
+  await page.getByLabel("Web service URL", { exact: true }).fill("https://example.com");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText("smoke-api", { exact: true }).waitFor({ timeout: 10000 });
+  const apiGot = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/apis/smoke-api`);
+  check("UI create API → visible over native ARM (nested sub-resource)", apiGot.status === 200, `HTTP ${apiGot.status}`);
+  await shot("26-apim-apis");
+
+  // ── Subscription created through the UI → visible over native ARM ──────────────────────
+  await openPanel("Subscriptions");
+  await page.getByRole("button", { name: "Add subscription", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill("Smoke Subscription");
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByText("smoke-subscription", { exact: true }).waitFor({ timeout: 10000 });
+  const subGot = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/subscriptions/smoke-subscription`);
+  check("UI create subscription → visible over native ARM, keys generated", subGot.status === 200 && !!JSON.parse(subGot.text).properties?.primaryKey, `HTTP ${subGot.status}`);
+  await shot("27-apim-subscriptions");
+
+  // ── Lock created in the UI → visible over the native ARM wire (extension resource) ─────
+  await openPanel("Locks");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const APIMLOCK = `smoke-apimlock-${n}`;
+  await page.getByLabel("Lock name", { exact: true }).fill(APIMLOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByText(APIMLOCK, { exact: true }).waitFor({ timeout: 10000 });
+  const apimLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/providers/Microsoft.Authorization/locks/${APIMLOCK}?api-version=2020-05-01`);
+  check("UI create lock → visible over native ARM (extension resource)", apimLockGet.status === 200, `HTTP ${apimLockGet.status}`);
+  await shot("28-apim-locks");
+
+  // ── API Management service created over the wire → visible in the UI (CLI → UI) ────────
+  const apimPut = await apimWire("PUT", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM2}`, { location: "eastus", properties: { publisherEmail: "a@b.com", publisherName: "CLI" } });
+  check("ARM PUT API Management service over wire", apimPut.status === 200 || apimPut.status === 201, `HTTP ${apimPut.status}`);
+  await page.goto(UI + "#/apim");
+  await page.getByRole("link", { name: APIM2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created API Management service shown in browse grid", true);
+  await shot("29-apim-browse");
+
+  // ── Delete through the overview command bar → gone over ARM ────────────────────────────
+  await page.goto(UI + `#/apim/${RG}/${APIM}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(APIM);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "API Management services" }).waitFor({ timeout: 10000 });
+  const apimGone = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}`);
+  check("UI delete API Management service → ARM GET 404", apimGone.status === 404, `HTTP ${apimGone.status}`);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});

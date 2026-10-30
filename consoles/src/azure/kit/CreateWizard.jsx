@@ -28,8 +28,8 @@ export function FormRow({ label, required, htmlFor, children, info }) {
 }
 
 /** tabs: [{id, label, content, validate?() → string[]}] ; the Review + create tab is appended. */
-export default function CreateWizard({ title, subtitle, closeHref, glyph, tabs, review, onCreate }) {
-  const all = [...tabs, { id: REVIEW, label: "Review + create" }];
+export default function CreateWizard({ title, subtitle, closeHref, glyph, tabs, review, onCreate, reviewLabel = "Review + create" }) {
+  const all = [...tabs, { id: REVIEW, label: reviewLabel }];
   const [tab, setTab] = useState(all[0].id);
   const [errors, setErrors] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -76,7 +76,7 @@ export default function CreateWizard({ title, subtitle, closeHref, glyph, tabs, 
           <>
             <Button disabled={idx === 0} onClick={() => go(all[idx - 1].id)}>Previous</Button>
             <Button onClick={() => go(all[idx + 1].id)}>Next</Button>
-            <Button appearance="primary" onClick={() => go(REVIEW)}>Review + create</Button>
+            <Button appearance="primary" onClick={() => go(REVIEW)}>{reviewLabel}</Button>
           </>
         )}
       </div>

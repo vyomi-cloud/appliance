@@ -1,0 +1,126 @@
+{
+ "$doc": "Vyomi capability registry — Azure API Management. See aws/s3.json for the contract.",
+ "azure.apim.service.crud": {
+  "title": "API Management services (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.service.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.service.identity": {
+  "title": "System-assigned managed identity",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.service.protocols": {
+  "title": "Protocol settings / Protocols + ciphers (properties.customProperties)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "TLS/SSL protocol and cipher flags round-trip through ARM exactly as configured, but Vyomi's gateway never negotiates TLS, so disabling a protocol here has no effect on anything."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.apis.crud": {
+  "title": "APIs (create, get, list, delete) — a real ARM sub-resource of the service",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.apis.createflows": {
+  "title": "Creating an API from WebSocket, GraphQL, gRPC, OpenAPI, WSDL, WADL, or an Azure resource (API App / Function App / Container App / Logic App); restricting a new API to specific gateways",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Only the HTTP creation flow (display name, name, web service URL, API URL suffix, description, URL scheme, product) is modeled. Every other creation source, and per-API gateway restriction, is not simulated — new APIs are always reachable on the managed gateway."
+  ]
+ },
+ "azure.apim.products.crud": {
+  "title": "Products (create, get, list, delete) and product↔API association — real ARM sub-resources of the service",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "The \"Visibility\" column (developer-portal group association) is not modeled; products always show no visibility groups."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.subscriptions.crud": {
+  "title": "Subscriptions (create, get, list, delete) — a real ARM sub-resource of the service",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Primary/secondary keys are simulator-generated tokens, not real signing keys; the Owner column is not modeled (no AAD identity is attached to a subscription)."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.namedvalues.crud": {
+  "title": "Named values, Plain and Secret (create, get, list, delete) — a real ARM sub-resource of the service",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.namedvalues.keyvaultref": {
+  "title": "Named values of type Key Vault",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "The Key Vault secret identifier round-trips through ARM exactly as configured, but Vyomi never resolves it against a live Key Vault secret — matching the real portal, which also never displays the resolved value in this grid."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.backends.crud": {
+  "title": "Backends (create, get, list, delete) — a real ARM sub-resource of the service",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to the service",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this service); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.activity_log": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the timespan picker are not modeled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "api": ["ActivityLogs_List"],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.iam": {
+  "title": "Access control (IAM) on a service",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Role assignments scoped to an individual resource are not modeled."]
+ },
+ "azure.apim.developerportal": {
+  "title": "Developer portal (overview, settings, Users, Groups, Identities, Delegation)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["The developer portal CMS, its user/group/identity-provider directory, and delegation are not modeled."]
+ },
+ "azure.apim.monitoring": {
+  "title": "Application Insights, Alerts, Metrics, Diagnostic settings, Logs, Analytics",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Metrics charts, alert rules, diagnostic-setting log routing, Log Analytics queries and API analytics are not modeled."]
+ },
+ "azure.apim.deployment": {
+  "title": "Network, Custom domains, Locations, Scale out and up, Pricing tier (post-creation), Managed identities (user-assigned), Certificates, Gateways, Self-hosted gateways, Defender for Cloud",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Multi-region deployment, VNet/custom-domain/certificate configuration, scale units, managed/self-hosted gateways and Defender for Cloud are not modeled."]
+ },
+ "azure.apim.tools": {
+  "title": "Diagnose and solve problems, Events, MCP Servers, API Tags, Policy fragments, Workspaces, Credential manager, Tasks, Support + Troubleshooting",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["These portal troubleshooting, catalog and support tools are not modeled."]
+ },
+ "azure.apim.exporttemplate": {
+  "title": "Export template",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["The ARM Template tab is generated from the live resource; Bicep and Terraform export are not modeled."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ }
+}
