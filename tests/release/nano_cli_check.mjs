@@ -5,16 +5,20 @@
  *   CLIs ──HTTP──▶ local relay (wasm/relay/local-relay.mjs, :8090)
  *                    │ WebSocket
  *                    ▼
- *                  Nano tab (wasm/, Pyodide + the cores) ◀── console API calls
- *                                                           (bridge :8091 → fetch
- *                                                            inside the SW-controlled page)
+ *                  Nano tunnel (relay shared worker, Pyodide + the cores)
+ *                    ⇅ shared state (IndexedDB + BroadcastChannel)
+ *                  Nano AWS / GCP / Azure console pages ◀── console API calls
+ *                                                          (bridge :8091 → fetch
+ *                                                           inside that cloud's page)
  *
- * The tab is a real Nano spaces page; the tunnel is started with its own
- * "Start tunnel" button, as a user does. The bridge runs each console request
- * as a fetch inside that page, so it is served by the Nano service worker —
- * exactly the calls the console makes.
+ * The tunnel is started from the spaces page's own "Start tunnel" button, as a
+ * user does. The service worker hands a console's API calls to a page whose
+ * in-browser backend is up, and picks the cloud from the page that asked, so the
+ * bridge runs each request as a fetch inside the console page of its cloud —
+ * exactly the calls that console makes.
  *
  *   NODE_PATH=<dir with playwright + ws> OUT=nano-cli-check node tests/release/nano_cli_check.mjs
+ *   HOLD=1 … keeps the tunnel and consoles up instead (run commands by hand)
  */
 import { spawn } from "node:child_process";
 import http from "node:http";
@@ -63,14 +67,31 @@ for (let i = 0; i < 120 && !(await health()).tab; i++) {
 if (!(await health()).tab) { console.log("FAIL: the Nano tab never registered with the relay"); await browser.close(); server.close(); stop(1); }
 console.log("Nano tab registered with the relay:", JSON.stringify(await health()));
 
-// 3. the console bridge: each request becomes a fetch inside the Nano page
+// 3. the three consoles, each with its in-browser backend up
+const consoles = {};
+for (const cloud of ["aws", "gcp", "azure"]) {
+  const p = await page.context().newPage();
+  p.on("pageerror", (e) => console.log(`[${cloud} console pageerror]`, e.message));
+  await p.goto(`${base}/${cloud}-console.html`, { waitUntil: "domcontentloaded" });
+  await p.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller
+    && /backend ready/.test((document.getElementById("nano-banner") || {}).textContent || ""),
+    null, { timeout: 300000, polling: 500 });
+  consoles[cloud] = p;
+  console.log(`${cloud} console: in-browser backend ready`);
+}
+const consoleFor = (url) =>
+  /^\/api\/gcp\//.test(url) ? consoles.gcp
+  : /^\/(subscriptions|tenants)(\/|\?|$)|^\/api\/azure\//.test(url) ? consoles.azure
+  : consoles.aws;
+
+// 4. the console bridge: each request becomes a fetch inside its cloud's console
 const bridge = http.createServer((req, res) => {
   const chunks = [];
   req.on("data", (c) => chunks.push(c));
   req.on("end", async () => {
     try {
       const body = chunks.length ? Buffer.concat(chunks).toString("utf8") : null;
-      const r = await page.evaluate(async ({ method, url, body, ct }) => {
+      const r = await consoleFor(req.url).evaluate(async ({ method, url, body, ct }) => {
         const resp = await fetch(url, { method, body: body ?? undefined, headers: ct ? { "content-type": ct } : {} });
         return { status: resp.status, ct: resp.headers.get("content-type") || "", text: await resp.text() };
       }, { method: req.method, url: req.url, body, ct: req.headers["content-type"] || "" });
@@ -84,7 +105,13 @@ const bridge = http.createServer((req, res) => {
 });
 await new Promise((r) => bridge.listen(BRIDGE_PORT, "127.0.0.1", r));
 
-// 4. the same release check the offline appliance runs
+// HOLD=1: keep the tunnel + consoles up for running commands by hand (debugging).
+if (process.env.HOLD) {
+  console.log(`HOLD: CLIs → ${RELAY}, console → http://127.0.0.1:${BRIDGE_PORT}. Ctrl-C to stop.`);
+  await new Promise(() => {});
+}
+
+// 5. the same release check the offline appliance runs
 const check = spawn("python3", [resolve(ROOT, "tests/release/cli_crosscheck.py")], {
   cwd: ROOT, stdio: "inherit",
   env: { ...process.env, ENDPOINT: RELAY, CONSOLE: `http://127.0.0.1:${BRIDGE_PORT}`, TARGET: "nano", OUT },

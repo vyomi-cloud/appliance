@@ -151,6 +151,9 @@ async function bootBackend() {
   let st = K.step("kernel", "loading Pyodide 0.26.2: CPython on WebAssembly");
   const { loadPyodide } = await import("https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.mjs");
   const py = await loadPyodide();
+  // Time-zone database: Pyodide's zoneinfo has no zone files without it (Cloud
+  // Scheduler, Monitoring and the like would reject every zone but UTC).
+  try { await py.loadPackage("tzdata"); } catch (_) {}
   let pyv = ""; try { pyv = py.runPython("import sys; sys.version.split()[0]"); } catch (_) {}
   st.ok("Python " + (pyv || "3") + " · Pyodide " + (py.version || "0.26.2"));
   st = K.step("fs", "mounting /wasm: " + MODULES.length + " console modules");

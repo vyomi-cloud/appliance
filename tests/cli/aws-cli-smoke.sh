@@ -11,6 +11,7 @@
 #     'docker exec cloud-learn-simulator-1 bash /app/tests/conformance/aws-cli-smoke.sh'
 set -u
 BASE="${ENDPOINT:-http://127.0.0.1:9000}"
+CONSOLE="${CONSOLE:-$BASE}"   # the console's own API: the same server offline, the Nano tab on Nano
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
@@ -34,7 +35,7 @@ aws --version 2>&1 | head -1
 AWS_SP=$(python3 -c "
 import json, urllib.request
 try:
-    d = json.load(urllib.request.urlopen('$BASE/api/spaces', timeout=5))
+    d = json.load(urllib.request.urlopen('$CONSOLE/api/spaces', timeout=5))
     print(next((s['space_id'] for s in d.get('spaces', []) if s.get('provider')=='aws'), ''))
 except Exception:
     print('')
@@ -42,7 +43,7 @@ except Exception:
 if [ -n "$AWS_SP" ]; then
     python3 -c "
 import urllib.request
-req = urllib.request.Request('$BASE/api/spaces/$AWS_SP/switch', method='POST')
+req = urllib.request.Request('$CONSOLE/api/spaces/$AWS_SP/switch', method='POST')
 urllib.request.urlopen(req, timeout=5).read()
 " >/dev/null 2>&1
     echo "switched to AWS space: $AWS_SP"

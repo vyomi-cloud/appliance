@@ -41,10 +41,15 @@ def _load_by_path(modname, relpath):
     return m
 
 
+# The AWS account Nano's engines put in ARNs and STS answers with (the same as
+# offline), so the console shows the account the CLI sees.
+NANO_AWS_ACCOUNT = "123456789012"
+
+
 def _aws_catalog():
     m = _load_by_path("providers.aws_catalog", "providers/aws_catalog.py")
     return m.build_console_payload(active_region="us-east-1",
-                                   active_account="000000000000")
+                                   active_account=NANO_AWS_ACCOUNT)
 
 
 def _gcp_catalog():
@@ -123,7 +128,7 @@ def _azure_catalog():
 # account/region chrome renders. Mirrors server.py's _space_payload defaults.
 def _space(provider):
     region = {"gcp": "us-central1", "azure": "eastus"}.get(provider, "us-east-1")
-    account = {"gcp": "nano-project", "azure": "nano-sub"}.get(provider, "000000000000")
+    account = {"gcp": "nano-project", "azure": "nano-sub"}.get(provider, NANO_AWS_ACCOUNT)
     return {
         "space_id": f"nano-{provider}",
         "name": f"Nano {provider.upper()}",

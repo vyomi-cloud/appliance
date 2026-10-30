@@ -3,6 +3,7 @@
 #   ENDPOINT=http://127.0.0.1:9000 bash tests/cli/aws-apigatewayv2-cli-smoke.sh
 set -u
 BASE="${ENDPOINT:-http://127.0.0.1:9000}"
+CONSOLE="${CONSOLE:-$BASE}"   # the console's own API: the same server offline, the Nano tab on Nano
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}" AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}" AWS_PAGER=""
 if ! command -v aws >/dev/null 2>&1; then echo "[FAIL] aws-cli not installed"; exit 1; fi
@@ -85,7 +86,7 @@ A update-stage --api-id "$QA" --stage-name '$default' --route-settings '{"GET /a
 c1=$(curl -s -o /dev/null -w '%{http_code}' -m 20 "$URL/added-later"); c2=$(curl -s -o /dev/null -w '%{http_code}' -m 20 "$URL/added-later")
 [ "$c1" = "200" ] && [ "$c2" = "429" ]; chk $? "second call within a second is throttled (429)" "$c1,$c2"
 A delete-api --api-id "$QA" >/dev/null 2>&1; chk $? "delete quick-created API"
-curl -s -m 20 -X DELETE "$BASE/api/lambda/functions/$FN" >/dev/null 2>&1
+curl -s -m 20 -X DELETE "$CONSOLE/api/lambda/functions/$FN" >/dev/null 2>&1
 
 echo; echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

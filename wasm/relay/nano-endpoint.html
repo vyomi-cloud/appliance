@@ -77,6 +77,7 @@ async function boot() {
   // RDS's SQL data-plane uses sqlite3 (a loadable Pyodide package); the control
   // plane doesn't, but load it so SQL-over-RDS works through the relay too.
   try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
+  try { await py.loadPackage("tzdata"); } catch (e) { log("tzdata load skipped: " + e, "dim"); }   // zoneinfo zones (Cloud Scheduler time zones)
   // RDS data-plane engine swap: prefer REAL Postgres (PGlite) when it loads,
   // else keep the sqlite3 default. Both run behind the same SqlStore seam.
   const hasPg = await installPGlite();

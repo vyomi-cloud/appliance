@@ -191,17 +191,29 @@ def identities() -> dict:
 
 
 # ── 2. both directions ─────────────────────────────────────────────────────
+def eventually(list_fn, name: str, secs: float = 8) -> set:
+    """The listing, re-read until it has `name` or `secs` pass. Nano's console and
+    tunnel contexts share state through a debounced save, so a change can take a
+    moment to reach the other side; offline it is there on the first read."""
+    end = time.time() + secs
+    while True:
+        seen = list_fn()
+        if name in seen or time.time() >= end:
+            return seen
+        time.sleep(1)
+
+
 def roundtrip(cloud: str, kind: str, cli_create, console_list, console_create, cli_list, cleanup) -> None:
     tag = re.sub(r"[^a-z0-9]", "", kind.lower())[:4]
     a, b = f"cli{tag}{T}", f"con{tag}{T}"
     rc, out = cli_create(a)
     if check("both-ways", f"{cloud}: {kind} created with the CLI", rc == 0, out):
-        seen = console_list()
+        seen = eventually(console_list, a)
         check("both-ways", f"{cloud}: {kind} created with the CLI shows in the console", a in seen,
               f"console lists {sorted(seen)[-8:]}")
     code, body = console_create(b)
     if check("both-ways", f"{cloud}: {kind} created in the console", 200 <= code < 300, str(body)[-300:]):
-        seen = cli_list()
+        seen = eventually(cli_list, b)
         check("both-ways", f"{cloud}: {kind} created in the console shows in the CLI", b in seen,
               f"CLI lists {sorted(seen)[-8:]}")
     for n in (a, b):
@@ -304,7 +316,7 @@ def both_ways(ids: dict) -> None:
 
 # ── 3. every CLI suite, individually ───────────────────────────────────────
 def cli_suites(ids: dict) -> None:
-    env = {"ENDPOINT": B, "PROJECT": ids["gcp"]["console"], "AZURE_SUBSCRIPTION_ID": ids["azure"]["console"],
+    env = {"ENDPOINT": B, "CONSOLE": CONSOLE, "PROJECT": ids["gcp"]["console"], "AZURE_SUBSCRIPTION_ID": ids["azure"]["console"],
            "AZURE_RESOURCE_GROUP": ids["azure"]["rg"]}
     for f in sorted(glob.glob(os.path.join(ROOT, "tests", "cli", "*-cli-smoke.sh"))):
         name = os.path.basename(f)[:-len("-cli-smoke.sh")]

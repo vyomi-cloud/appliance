@@ -4,6 +4,7 @@
 # One [PASS]/[FAIL] line per check.
 set -u
 BASE="${ENDPOINT:-http://127.0.0.1:9000}"
+CONSOLE="${CONSOLE:-$BASE}"   # the console's own API: the same server offline, the Nano tab on Nano
 # Default PROJECT: the appliance's GCP project, discovered the way a user's gcloud
 # sees it (Cloud Resource Manager) — the same project the GCP console works in.
 if [ -z "${PROJECT:-}" ]; then
@@ -50,7 +51,7 @@ out=$(gcloud iam service-accounts sign-blob "$TMP/in.txt" "$TMP/out2.sig" --iam-
 [ $? -ne 0 ] && echo "$out" | grep -qi "permission\|denied\|403"
 chk $? "unknown service account is rejected (PERMISSION_DENIED)" "$out"
 
-out=$(curl -s "$BASE/api/gcp/iamcredentials/credentials")
+out=$(curl -s "$CONSOLE/api/gcp/iamcredentials/credentials")
 echo "$out" | grep -q "$SA" && echo "$out" | grep -q '"Signed blob"' && echo "$out" | grep -q '"Signed JWT"'
 chk $? "console log shows the signed blob + JWT issued by the CLI" "$(echo "$out" | head -c 160)"
 

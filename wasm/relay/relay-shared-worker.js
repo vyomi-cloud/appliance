@@ -108,6 +108,7 @@ async function bootPyodide() {
     log("loading Pyodide…", "dim");
     py = await loadPyodide({ indexURL: PYODIDE_INDEX });   // explicit indexURL: required in a worker
     try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
+    try { await py.loadPackage("tzdata"); } catch (e) { log("tzdata load skipped: " + e, "dim"); }   // zoneinfo zones (Cloud Scheduler time zones)
     const hasPg = await installPGlite();
     py.globals.set("_USE_PGLITE", hasPg);
     py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");

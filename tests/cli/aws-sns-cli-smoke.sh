@@ -5,6 +5,7 @@
 #   ENDPOINT=http://127.0.0.1:9000 bash tests/cli/aws-sns-cli-smoke.sh
 set -u
 BASE="${ENDPOINT:-http://127.0.0.1:9000}"
+CONSOLE="${CONSOLE:-$BASE}"   # the console's own API: the same server offline, the Nano tab on Nano
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
@@ -29,7 +30,7 @@ v() { local what="$1"; shift; OUT=$(sns "$@"); local rc=$?
 f() { local want="$1" what="$2"; shift 2; local out; out=$(sns "$@"); local rc=$?
       if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q -- "$want"; then chk 0 "$what"; else chk 1 "$what" "$(printf '%s' "$out" | head -c 300)"; fi; }
 # log <jq-free python expr over the delivery log item list `items`> -> prints result
-logq() { curl -s "$BASE/api/aws/sns/deliveries" | python3 -c "import json,sys; items=json.load(sys.stdin)['items']; print($1)"; }
+logq() { curl -s "$CONSOLE/api/aws/sns/deliveries" | python3 -c "import json,sys; items=json.load(sys.stdin)['items']; print($1)"; }
 
 SFX=$(date +%s | tail -c 6)
 TOPIC="cli-topic-$SFX"

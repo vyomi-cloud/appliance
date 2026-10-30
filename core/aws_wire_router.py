@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import re
 from urllib.parse import parse_qsl
+from xml.sax.saxutils import escape as _xml_escape
 
 from core.object_store import InMemoryObjectStore
 from core import s3_object_core as s3
@@ -127,6 +128,8 @@ from core import cloudwatch_core as cw
 from core import azure_sql_core as az_sql
 from core import azure_iam_core as az_iam
 from core.azure_arm_core import AzureArm
+from core import azure_appconfiguration_core as az_appcfg
+from core import azure_dns_core as az_dns
 import types as _types
 
 
@@ -178,6 +181,7 @@ _SIGNING = {
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
     "ssm": "ssm",
+    "sts": "sts",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
@@ -202,6 +206,8 @@ _JSON_CT = {
 # Query-protocol Action → service, for UNSIGNED query requests (signed ones route
 # by credential scope). Small but covers the common verbs of each service.
 _QUERY_ACTION = {
+    # STS
+    "GetCallerIdentity": "sts",
     # SNS
     "CreateTopic": "sns", "DeleteTopic": "sns", "ListTopics": "sns",
     "Subscribe": "sns", "Unsubscribe": "sns", "ListSubscriptions": "sns",
@@ -381,6 +387,10 @@ class AwsWireRouter:
             return "azure-sql-iam-rbac"
         if _is_arm_path(path):        # Azure Resource Manager (az, azure-mgmt-* SDKs)
             return "azure-arm"
+        if path.startswith("/azure-data/appconfig/"):   # App Configuration data plane (store endpoint)
+            return "azure-appconfig"
+        if path.split("?", 1)[0] == "/azure-data/dns/query":   # Azure DNS resolution ("dig" over HTTP)
+            return "azure-dns-query"
         if path.startswith("/azure-sql/") or path == "/azure-sql":  # Azure SQL data plane
             return "azure-sql"
         if path.startswith("/service/" + cw.TARGET_PREFIX + "/") or lheaders.get("smithy-protocol") == "rpc-v2-cbor":
@@ -410,6 +420,27 @@ class AwsWireRouter:
         if rds_data.is_data_api_path(path):  # unsigned Data API (rest-json path)
             return "rds-data"
         return "s3"  # default: bucket/key path-style
+
+    _STS_NS = "https://sts.amazonaws.com/doc/2011-06-15/"
+
+    def _sts(self, params):
+        """STS GetCallerIdentity — `aws sts get-caller-identity`, the account the
+        CLI and SDKs use. The account is the IAM store's, so it matches the ARNs."""
+        rid = iam._req_id()   # IAM's request ids (STS sits beside IAM)
+        action = params.get("Action", "")
+        if action == "GetCallerIdentity":
+            acct = self.iam.account_id
+            body = ('<?xml version="1.0" encoding="UTF-8"?>'
+                    f'<GetCallerIdentityResponse xmlns="{self._STS_NS}"><GetCallerIdentityResult>'
+                    f"<Arn>arn:aws:iam::{acct}:root</Arn><UserId>{acct}</UserId><Account>{acct}</Account>"
+                    f"</GetCallerIdentityResult><ResponseMetadata><RequestId>{rid}</RequestId></ResponseMetadata>"
+                    "</GetCallerIdentityResponse>")
+            return {"status": 200, "headers": {"content-type": "text/xml"}, "body": body.encode()}
+        body = ('<?xml version="1.0" encoding="UTF-8"?>'
+                f'<ErrorResponse xmlns="{self._STS_NS}"><Error><Type>Sender</Type><Code>InvalidAction</Code>'
+                f"<Message>Unsupported STS action '{_xml_escape(action)}'.</Message></Error>"
+                f"<RequestId>{rid}</RequestId></ErrorResponse>")
+        return {"status": 400, "headers": {"content-type": "text/xml"}, "body": body.encode()}
 
     # ── body helpers ───────────────────────────────────────────────────
     @staticmethod
@@ -509,6 +540,24 @@ class AwsWireRouter:
                 hdrs.setdefault("content-type", "application/json")
             return {"status": r["status"], "headers": hdrs, "body": json.dumps(out).encode() if out is not None else b""}
 
+        if svc == "azure-appconfig":   # /azure-data/appconfig/{store}/... over the ARM state's stores
+            host = lheaders.get("host", "")
+            store, _, rest = path[len("/azure-data/appconfig/"):].partition("/")
+            base = f"{lheaders.get('x-forwarded-proto', 'http')}://{host}/azure-data/appconfig/{store}" if host else ""
+            r = az_appcfg.data_dispatch(self.az_arm.state, store, method, "/" + rest, query or {},
+                                        headers or {}, bytes(body) if method in ("PUT", "PATCH") else b"", base=base)
+            hdrs = dict(r.get("headers") or {})
+            hdrs.setdefault("Sync-Token", "zAJw6V16=Njo4NDk6;sn=849")
+            if r.get("body") is None:
+                return {"status": r["status"], "headers": hdrs, "body": b""}
+            hdrs.setdefault("content-type", r.get("media") or "application/json")
+            return {"status": r["status"], "headers": hdrs, "body": json.dumps(r["body"]).encode()}
+
+        if svc == "azure-dns-query":   # DNS-over-HTTP JSON answers from the ARM state's zones
+            r = az_dns.data_dispatch(self.az_arm.state, method, query or {})
+            return {"status": r["status"], "headers": {"content-type": "application/json"},
+                    "body": json.dumps(r["body"]).encode()}
+
         if svc == "azure-sql-iam-rbac":   # Azure RBAC checkAccess (shares the IAM store)
             r = az_iam.dispatch(self.iam, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
@@ -605,6 +654,8 @@ class AwsWireRouter:
 
         # Query-protocol / XML services
         params = self._query_params(query, body)
+        if svc == "sts":
+            return self._sts(params)
         if svc == "iam":
             r = iam.dispatch(self.iam, params)
         elif svc == "rds":

@@ -25,6 +25,9 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+
+# The space project's number (core/gcp_project.DEFAULT_PROJECT_NUMBER), as buckets report it.
+PROJECT_NUMBER = "123456789012"
 from urllib.parse import unquote
 
 from core.object_store import ObjectStore
@@ -198,6 +201,9 @@ def apply_bucket_patch(meta: dict, fields: dict) -> None:
     for k, v in fields.items():
         if v is None:
             meta.pop(k, None)
+        elif k == "versioning":
+            # The object store's own status (shared with S3), so versioning takes effect.
+            meta[k] = "Enabled" if v.get("enabled") else ("Suspended" if meta.get(k) == "Enabled" else "Disabled")
         else:
             meta[k] = v
     meta["updated"] = _now()
@@ -232,7 +238,12 @@ def retention_blocks(meta: dict, bucket: str, name: str, entry: dict) -> str | N
 
 
 def bucket_settings_view(meta: dict) -> dict:
-    out = {k: meta[k] for k in BUCKET_SETTINGS if k in meta and k not in ("storageClass", "labels")}
+    out = {k: meta[k] for k in BUCKET_SETTINGS if k in meta and k not in ("storageClass", "labels", "versioning")}
+    # The store keeps S3's status string; the JSON API's field is {"enabled": bool},
+    # absent until versioning was ever turned on.
+    status = meta.get("versioning")
+    if status in ("Enabled", "Suspended"):
+        out["versioning"] = {"enabled": status == "Enabled"}
     return out
 
 
@@ -246,7 +257,7 @@ def _bucket_view(store: ObjectStore, name: str) -> dict:
         "id": name,
         "name": name,
         "selfLink": f"https://www.googleapis.com/storage/v1/b/{name}",
-        "projectNumber": "000000000000",
+        "projectNumber": PROJECT_NUMBER,
         "metageneration": str(meta.get("metageneration") or "1"),
         "location": meta.get("location", "US"),
         "storageClass": meta.get("storageClass", "STANDARD"),
@@ -288,21 +299,25 @@ def _parse_multipart_related(body: bytes, content_type: str) -> tuple[dict, byte
     for seg in content_type.split(";"):
         seg = seg.strip()
         if seg.startswith("boundary="):
-            boundary = seg[len("boundary="):].strip().strip('"')
+            boundary = seg[len("boundary="):].strip().strip("\"'")   # gcloud quotes it with '
     if not boundary:
         return {}, body, "application/octet-stream"
     delim = ("--" + boundary).encode()
-    parts = [p for p in body.split(delim) if p not in (b"", b"--", b"--\r\n", b"\r\n")]
+    # Parts may use CRLF (most SDKs) or bare LF (gcloud's email.generator) line endings.
+    parts = [p for p in body.split(delim) if p.strip(b"\r\n") and not p.startswith(b"--")]
     meta: dict = {}
     media = b""
     media_ct = "application/octet-stream"
     for idx, part in enumerate(parts):
-        part = part.lstrip(b"\r\n")
-        if b"\r\n\r\n" in part:
-            head, payload = part.split(b"\r\n\r\n", 1)
+        part = part[2:] if part.startswith(b"\r\n") else part[1:] if part.startswith(b"\n") else part
+        m = re.search(rb"\r?\n\r?\n", part)
+        if m:
+            head, payload = part[:m.start()], part[m.end():]
         else:
             head, payload = b"", part
-        payload = payload.rstrip(b"\r\n")
+        # Only the line break before the next delimiter belongs to it; the media's own
+        # trailing newlines are data.
+        payload = payload[:-2] if payload.endswith(b"\r\n") else payload[:-1] if payload.endswith(b"\n") else payload
         head_l = head.decode("latin-1").lower()
         if idx == 0 and (not head or "application/json" in head_l):
             try:
@@ -311,7 +326,7 @@ def _parse_multipart_related(body: bytes, content_type: str) -> tuple[dict, byte
                 meta = {}
         else:
             media = payload
-            for line in head.decode("latin-1").split("\r\n"):
+            for line in head.decode("latin-1").splitlines():
                 if line.lower().startswith("content-type:"):
                     media_ct = line.split(":", 1)[1].strip()
     return meta, media, media_ct
