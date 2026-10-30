@@ -7,7 +7,7 @@ export const CATEGORIES = ["Compute", "Storage", "Database", "Networking & Conte
 export const SERVICES = [
   { id: "s3", title: "S3", description: "Scalable storage in the cloud", category: "Storage", load: () => import("./s3/index.jsx") },
   { id: "dynamodb", title: "DynamoDB", description: "Managed NoSQL database", category: "Database", load: () => import("./dynamodb/index.jsx") },
-  { id: "ec2", title: "EC2", description: "Virtual servers in the cloud", category: "Compute", classic: "ec2" },
+  { id: "ec2", title: "EC2", description: "Virtual servers in the cloud", category: "Compute", load: () => import("./ec2/index.jsx") },
   { id: "lambda", title: "Lambda", description: "Run code without thinking about servers", category: "Compute", classic: "lambda" },
   { id: "rds", title: "RDS", description: "Managed relational database service", category: "Database", classic: "rds" },
   { id: "vpc", title: "VPC", description: "Isolated cloud resources", category: "Networking & Content Delivery", classic: "vpc" },

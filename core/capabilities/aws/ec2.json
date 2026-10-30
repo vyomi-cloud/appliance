@@ -1,0 +1,275 @@
+{
+ "$doc": "Vyomi capability registry — EC2. See s3.json for the contract.",
+ "ec2.instances.lifecycle": {
+  "title": "Instances (launch, start, stop, reboot, terminate)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.instances.details": {
+  "title": "Instance details, tags, security groups, block devices",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.instances.monitoring": {
+  "title": "Detailed monitoring flag",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Enabling detailed monitoring is stored and returned from DescribeInstances, but Vyomi has no CloudWatch metrics pipeline for EC2 — no CPU/network data points are actually collected."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.instances.status-alarms": {
+  "title": "Status checks, CloudWatch alarms, and instance metrics",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "System/instance status checks and CloudWatch alarms for an instance aren't modeled by Vyomi; a running instance has no real health-check or alarm backend.",
+   "No CloudWatch metrics are collected: CPU utilization (%), Network in (bytes), Network out (bytes), Network packets in (count), Network packets out (count), Status check failed (any) (count), CPU credit usage (count), CPU credit balance (count)."
+  ]
+ },
+ "ec2.instances.connect": {
+  "title": "Connect (SSH / RDP / EC2 Instance Connect / Session Manager)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi instances aren't real virtual machines with a reachable network stack, so there is nothing to SSH, RDP or Session-Manager into."
+  ]
+ },
+ "ec2.instance-types": {
+  "title": "Instance type catalog (DescribeInstanceTypes)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.launch-templates": {
+  "title": "Launch templates",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Create/describe/delete is real and stateful, but CreateLaunchTemplateVersion and per-version default selection aren't modeled — every template has exactly one version."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.amis": {
+  "title": "AMIs (CreateImage from an instance, describe, deregister, copy, launch permissions)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.ami-catalog.quickstart": {
+  "title": "AMI catalog — Quickstart AMIs",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A fixed curated set of distros (Amazon Linux, Ubuntu, Debian, RHEL, SUSE, Windows), not AWS's live quickstart catalog."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.ami-catalog.marketplace-community": {
+  "title": "AMI catalog — AWS Marketplace AMIs / Community AMIs",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi has no connection to AWS Marketplace or the community AMI catalog; only AMIs you've created or the built-in quickstart set are available."
+  ]
+ },
+ "ec2.volumes": {
+  "title": "EBS volumes (create, attach, detach, modify, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.snapshots": {
+  "title": "EBS snapshots (create, copy, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A snapshot completes instantly (100%) instead of over minutes; incremental snapshot sizing isn't modeled."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.lifecycle-manager": {
+  "title": "Amazon Data Lifecycle Manager (automated snapshot/AMI policies)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Scheduled lifecycle policies aren't modeled; create snapshots and AMIs directly instead."
+  ]
+ },
+ "ec2.security-groups": {
+  "title": "Security groups (create, authorize/revoke rules, delete, default-SG protection)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.security-groups.sharing": {
+  "title": "Security group sharing (AWS RAM) and VPC associations",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Cross-account sharing via AWS Resource Access Manager isn't modeled; every security group stays scoped to this account and its one default VPC."
+  ]
+ },
+ "ec2.elastic-ips": {
+  "title": "Elastic IPs (allocate, associate, disassociate, release)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Allocated addresses are synthetic (not real internet-routable IPs)."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.placement-groups": {
+  "title": "Placement groups",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Create/describe/delete is real and stateful, but cluster/spread/partition placement has no physical effect — Vyomi has no real racks or hosts to place instances on."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.key-pairs": {
+  "title": "Key pairs (create, import, delete)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "CreateKeyPair returns a private-key-shaped document and a fingerprint derived from it, but it is not real RSA/ED25519 key material — it cannot be used to open a real SSH session (see ec2.instances.connect)."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.network-interfaces": {
+  "title": "Elastic network interfaces (create, attach, detach, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.settings.ebs-encryption-default": {
+  "title": "Default EBS encryption + default KMS key",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "New volumes and launched instances' root volumes honor this account setting."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py"
+  ]
+ },
+ "ec2.settings.other": {
+  "title": "Allowed AMIs, Managed resources, EC2 Serial Console, Auto Scaling group defaults, Zones",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "These account-wide EC2 settings aren't modeled; they have no effect in Vyomi."
+  ]
+ },
+ "ec2.load-balancing": {
+  "title": "Load balancers, target groups, trust stores",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Elastic Load Balancing isn't part of the EC2 console surface Vyomi simulates."
+  ]
+ },
+ "ec2.auto-scaling": {
+  "title": "Auto Scaling groups",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Auto Scaling isn't modeled; launch and manage instances directly."
+  ]
+ },
+ "ec2.purchasing-options": {
+  "title": "Spot Requests, Savings Plans, Reserved Instances, Dedicated Hosts, Capacity Reservations, UltraServers, Capacity Manager",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi has one simple on-demand pricing/availability model; these purchasing and capacity-planning products aren't simulated."
+  ]
+ }
+}
