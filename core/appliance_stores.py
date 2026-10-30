@@ -2197,3 +2197,46 @@ def gcp_pubsub_store() -> AppStatePubsubStore:
     if _GPS is None:
         _GPS = AppStatePubsubStore()
     return _GPS
+
+
+# ── Microsoft Graph (Entra ID directory: users / groups / apps / SPs / …) ──────────────
+from core.azure_graph_core import GraphStore as _GraphStore   # noqa: E402
+
+
+class AppStateGraphStore(_GraphStore):
+    """azure_graph_core store over the space's `azure_graph` slot. Every GraphStore
+    attribute resolves to that slot (seeded with the core's defaults — default domain,
+    organization, directory settings), so the directory persists with the kernel state."""
+
+    _FIELDS = tuple(vars(_GraphStore()).keys())
+
+    def __init__(self):        # NB: no GraphStore.__init__ — the attributes are the slot's
+        pass
+
+    def _dir(self) -> dict:
+        slot = _proxy("azure_graph", lambda: {"directory": {}}, "directory")._target()
+        if len(slot) < len(self._FIELDS):
+            for k, v in vars(_GraphStore()).items():
+                slot.setdefault(k, v)
+        return slot
+
+    def __getattr__(self, name):
+        if name in AppStateGraphStore._FIELDS:
+            return self._dir()[name]
+        raise AttributeError(name)
+
+    def __setattr__(self, name, value):
+        if name in AppStateGraphStore._FIELDS:
+            self._dir()[name] = value
+        else:
+            object.__setattr__(self, name, value)
+
+
+_GRAPH = None
+
+
+def graph_store() -> AppStateGraphStore:
+    global _GRAPH
+    if _GRAPH is None:
+        _GRAPH = AppStateGraphStore()
+    return _GRAPH

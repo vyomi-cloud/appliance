@@ -218,6 +218,12 @@ try:
     _gps_unified.register(app)
 except Exception as _e:   # never let this break appliance boot — legacy stays
     print(f"[wire_ingress] Pub/Sub core mount skipped: {_e}")
+# v4 C0h — ONE engine: Microsoft Graph (Entra ID directory, /v1.0 + /beta) on the shared core.
+try:
+    from routes import azure_graph_unified as _graph_unified
+    _graph_unified.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[wire_ingress] Microsoft Graph core mount skipped: {_e}")
 
 # ── Provider route registration ──────────────────────────────────────
 register_aws_ec2_routes(app, None)

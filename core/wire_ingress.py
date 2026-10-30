@@ -73,6 +73,12 @@ counts and quantity caps read the core's own records). The classic console REST
 the same store (routes/gcp_pubsub_unified.py). Pre-v4 the hand-written handlers (or the
 Pub/Sub emulator, when PUBSUB_EMULATOR_HOST was set) served it, and snapshots / seek /
 schemas:validate / modifyPushConfig fell through to the S3 catch-all.
+
+v4 C0h adds "azure_graph" (Microsoft Graph /v1.0 + /beta — the Entra ID directory,
+core/azure_graph_core.py) over core/appliance_stores.AppStateGraphStore (the space's
+`azure_graph` slot), mounted by routes/azure_graph_unified.py. Pre-v4 the appliance had no
+Graph wire at all: the v4 Entra console's user/group create fell through to the S3 catch-all
+(405 MethodNotAllowed).
 """
 from __future__ import annotations
 
@@ -87,11 +93,12 @@ def _cfg(key: str, default: str) -> str:
 
 _DEFAULT_SERVICES = ("s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager,"
                      "gcp_firestore,gcp_compute,sqs,sns,events,scheduler,"
-                     "lambda,azure_keyvault,azure_acr,azure_servicebus,gcp_pubsub")
+                     "lambda,azure_keyvault,azure_acr,azure_servicebus,gcp_pubsub,azure_graph")
 _KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
                    "kms", "secretsmanager", "gcp_firestore", "gcp_compute",
                    "sqs", "sns", "events", "scheduler",
-                   "lambda", "azure_keyvault", "azure_acr", "azure_servicebus", "gcp_pubsub")
+                   "lambda", "azure_keyvault", "azure_acr", "azure_servicebus", "gcp_pubsub",
+                   "azure_graph")
 
 
 def unified_services() -> frozenset:
@@ -127,7 +134,7 @@ def appliance_stores() -> dict:
             "lam": aps.lambda_store(), "az_kvsec": aps.az_kv_secrets_store(),
             "az_kvkeys": aps.az_kv_keys_store(), "az_kvcerts": aps.az_kv_certs_store(),
             "az_acr": aps.acr_store(), "az_sb": aps.az_servicebus_store(),
-            "gcp_msg": aps.gcp_pubsub_store()}
+            "gcp_msg": aps.gcp_pubsub_store(), "az_graph": aps.graph_store()}
 
 
 # router store key -> unified service name (which stores a full-ingress router overrides)
@@ -138,7 +145,7 @@ STORE_SERVICE = {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb", "az_blob": "azure_
                  "msg": "sqs", "sched": "scheduler", "lam": "lambda",
                  "az_kvsec": "azure_keyvault", "az_kvkeys": "azure_keyvault",
                  "az_kvcerts": "azure_keyvault", "az_acr": "azure_acr", "az_sb": "azure_servicebus",
-                 "gcp_msg": "gcp_pubsub"}
+                 "gcp_msg": "gcp_pubsub", "az_graph": "azure_graph"}
 
 
 def appliance_router() -> AwsWireRouter:
@@ -287,6 +294,17 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         if hasattr(st, "adopt"):
             st.adopt()                   # pre-v4 records / emulator resources → the core shape
         resp = gcp_pubsub_core.dispatch(st, method, path, query or {}, headers or {}, body or b"")
+        hdrs = dict(resp.headers or {})
+        hdrs.setdefault("content-type", resp.media_type or "application/json")
+        return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
+    if service == "azure_graph":
+        from core import azure_graph_core
+        from core import app_context as _ctx
+        tok = _ctx.REQUEST_PROVIDER.set("azure")   # the directory lives in the Azure space
+        try:
+            resp = azure_graph_core.dispatch(r.az_graph, method, path, query or {}, headers or {}, body or b"")
+        finally:
+            _ctx.REQUEST_PROVIDER.reset(tok)
         hdrs = dict(resp.headers or {})
         hdrs.setdefault("content-type", resp.media_type or "application/json")
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
