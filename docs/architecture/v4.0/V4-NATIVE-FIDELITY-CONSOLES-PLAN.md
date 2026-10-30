@@ -1,6 +1,6 @@
 # v4.0.0 — Native-fidelity consoles on real Vyomi backends
 
-**Status:** proposal (awaiting sign-off) · **Scope:** appliance (offline + Codespaces sandbox) and Nano · **Date:** 2026-10-30
+**Status:** approved 2026-10-30 (all five decisions in §7: yes) — P0 done, P1 pilot in progress · **Scope:** appliance (offline + Codespaces sandbox) and Nano · **Date:** 2026-10-30
 
 ## 1. Goal
 
@@ -118,3 +118,16 @@ only cuts patch releases.
 3. Create the private `vyomi-cloud/console-captures` repo.
 4. Pilot on AWS S3 + DynamoDB before fanning out.
 5. Integration branch `release/v4.0.0-dev`, tagged by hand.
+
+## 8. Progress log
+
+| Date | Phase | What landed |
+|---|---|---|
+| 2026-10-30 | P0 | `consoles/` (React + Cloudscape AWS lens, kit, build to static/v4 + wasm/v4); `/_wire` transport (offline ASGI rewrite, Nano SW → Pyodide AwsWireRouter); `consoles/dev_server.py`; UI spec schema + extractor + reviewed S3/DynamoDB specs + 15 draft AWS specs; `consoles/tests/ui-conformance.mjs` gate; `console-ui-agent.yml` runner (headless Claude Code, queue files) |
+| 2026-10-30 | P0 | Backend honesty fixes found by the console: S3 bucket sub-resources (core + offline), offline signed `GET /`, offline DynamoDB native fallback |
+| 2026-10-30 | P1 | AWS S3 + DynamoDB smoke 9/9 on dev server, Nano and offline appliance; UI-conformance baseline S3 73.3 % / DynamoDB 54.7 %; pilot agents queued on the runner; GCP (MUI) + Azure (Fluent) lens shells in progress |
+
+### Open items
+- `CAPTURES_DEPLOY_KEY` secret (read-only deploy key on vyomi-cloud/console-captures) — needs the owner to add; agents run spec-only until then.
+- Nano: `/_wire` RDS Data API (async-only path), registry key mismatches (`lam`/`vpc`), EventBridge store wiring (see the wire-transport report in the P0 commit).
+- Azure captures were taken without a subscription (create wizards not captured); GCP project had no billing (Compute/SQL create forms show "Enable billing").
