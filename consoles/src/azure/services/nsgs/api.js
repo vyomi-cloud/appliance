@@ -9,6 +9,8 @@ import { armType, getSubscription, parseId } from "../../kit/arm.js";
 
 export const ARM = armType("Microsoft.Network", "networkSecurityGroups", "2023-11-01");
 const RULE_API_VERSION = "2023-11-01";
+const NIC_ARM = armType("Microsoft.Network", "networkInterfaces", "2023-11-01");
+const VNET_ARM = armType("Microsoft.Network", "virtualNetworks", "2023-11-01");
 
 const shape = (v) => ({ ...v, resourceGroup: parseId(v.id).resourceGroup });
 
@@ -53,6 +55,28 @@ export const listActivityLog = async (rg, name) => {
   const rid = ARM.path(rg, name);
   const query = { "api-version": "2015-04-01", "$filter": `resourceUri eq '${rid}'` };
   return (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/eventtypes/management/values`, { query })).value || [];
+};
+
+// ── Associations (Network interfaces / Subnets) — real ARM reads, no dedicated service
+// owns these resource types in this lens yet, so the console can't offer an "Associate"
+// picker, but any networkInterface or subnet an external tool pointed at this NSG shows up
+// here (subscription-wide scan, matched by properties.networkSecurityGroup.id). ──────────
+const sameNsg = (nsgId) => {
+  const target = nsgId.toLowerCase();
+  return (r) => (r.properties?.networkSecurityGroup?.id || "").toLowerCase() === target;
+};
+
+export const listNetworkInterfacesForNsg = async (nsgId) => (await NIC_ARM.list()).filter(sameNsg(nsgId));
+
+export const listSubnetsForNsg = async (nsgId) => {
+  const vnets = await VNET_ARM.list();
+  const out = [];
+  for (const vnet of vnets) {
+    const { resourceGroup, name } = parseId(vnet.id);
+    const subnets = (await restJson("GET", `${VNET_ARM.path(resourceGroup, name)}/subnets`, { query: { "api-version": "2023-11-01" } })).value || [];
+    out.push(...subnets.filter(sameNsg(nsgId)).map((s) => ({ ...s, vnetName: name })));
+  }
+  return out;
 };
 
 // ── create-NSG form model → ARM body ────────────────────────────────────────────────────

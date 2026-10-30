@@ -440,7 +440,10 @@ class AzureArm:
         if is_collection:
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "Collection supports GET only.")
-            return self._list(sub, rg, full_type)
+            # A nested type (e.g. networkSecurityGroups/securityRules) must scope the
+            # collection to its own parent, not every resource of that type in the RG.
+            parent_prefix = _canonical_id(sub, rg, type_chain[:-1], names).lower() + "/" if len(type_chain) > 2 else None
+            return self._list(sub, rg, full_type, parent_prefix)
 
         rid = _canonical_id(sub, rg, type_chain, names)
         key = rid.lower()
@@ -469,10 +472,11 @@ class AzureArm:
             rec = self.state.pop(key, None)
             if rec is not None:
                 _record_activity(leaf_name, "Delete", f"{full_type} '{leaf_name}'")
-                # Extension resources (locks, …) are stored under the SAME flat state map,
-                # keyed "{parent id}/providers/<ext ns>/<ext type>/<name>" — real ARM cascades
-                # their deletion with the parent, so sweep them here too.
-                prefix = key + "/providers/"
+                # Extension resources (locks, …) and nested same-namespace children
+                # (e.g. a networkSecurityGroup's securityRules) are stored under the SAME
+                # flat state map, keyed with the parent id as a path prefix — real ARM
+                # cascades their deletion with the parent, so sweep them here too.
+                prefix = key + "/"
                 for ext_key in [k for k in self.state if k.startswith(prefix)]:
                     del self.state[ext_key]
             return _ok(None, status=200 if rec is not None else 204)
@@ -593,7 +597,7 @@ class AzureArm:
         return resp
 
     # ── CRUD primitives ───────────────────────────────────────────────────
-    def _list(self, sub, rg, full_type):
+    def _list(self, sub, rg, full_type, parent_prefix=None):
         ft = full_type.lower()
         items = []
         for rec in self.state.values():
@@ -602,6 +606,8 @@ class AzureArm:
             if rec.get("_sub") != sub:
                 continue
             if rg is not None and (rec.get("_rg") or "").lower() != rg.lower():
+                continue
+            if parent_prefix and not rec.get("id", "").lower().startswith(parent_prefix):
                 continue
             items.append(_view(rec))
         return _ok({"value": items})

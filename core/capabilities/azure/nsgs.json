@@ -63,9 +63,10 @@
  },
  "azure.nsgs.associations": {
   "title": "Network interfaces, Subnets (NSG associations)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "No standalone Network Interface or Subnet resource type is simulated in this lens yet, so there is nothing to Associate this network security group with: the Network interfaces list (Name, Public IP address, Private IP address, Virtual machine columns, Search network interfaces placeholder) and the Subnets list (Name, Address range, Virtual network columns, Search subnets placeholder) are both an honest gap."
-  ]
+   "The Network interfaces and Subnets lists are real ARM reads (every Microsoft.Network/networkInterfaces and virtualNetworks/subnets resource in the subscription whose properties.networkSecurityGroup.id matches this network security group), so an association made via ARM/the CLI/another tool shows up here. The 'Associate' button itself is an honest gap: this lens does not yet build a standalone Network interfaces or Virtual networks console to pick an existing resource from."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  }
 }

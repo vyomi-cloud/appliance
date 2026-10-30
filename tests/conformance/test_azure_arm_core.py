@@ -259,6 +259,35 @@ def run() -> int:
     r = arm.handle("GET", nsg2 + "/securityRules", {"api-version": "2023-11-01"})
     _check("sibling NSG's rules survive an unrelated NSG delete", [x["name"] for x in r["body"]["value"]] == ["other-nsg-rule"])
 
+    # 22. NSG associations — a network interface and a (nested) subnet pointing at an NSG via
+    # properties.networkSecurityGroup.id, the real ARM shape the console's "Network interfaces"
+    # / "Subnets" association tabs read back (Microsoft.Network/networkInterfaces is a plain
+    # catalog type; a vnet's subnets are nested same-namespace children, same mechanic as #21).
+    nsg3 = _p(RG, "Microsoft.Network", "networkSecurityGroups", "nsg3")
+    arm.handle("PUT", nsg3, {"api-version": "2023-11-01"}, {"location": "eastus"})
+    nic = _p(RG, "Microsoft.Network", "networkInterfaces", "nic1")
+    r = arm.handle("PUT", nic, {"api-version": "2023-11-01"},
+                   {"location": "eastus", "properties": {"networkSecurityGroup": {"id": nsg3}}})
+    _check("network interface put 200 (LRO, top-level type)", r["status"] == 200 and r["body"]["name"] == "nic1")
+    _check("network interface has a private IP from its catalog defaults", r["body"]["properties"]["ipConfigurations"][0]["properties"]["privateIPAddress"])
+    nic_collection = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Network/networkInterfaces"
+    r = arm.handle("GET", nic_collection, {"api-version": "2023-11-01"})
+    _check("network interfaces list", r["status"] == 200 and [x["name"] for x in r["body"]["value"]] == ["nic1"])
+    nic_rec = r["body"]["value"][0]
+    _check("network interface carries its NSG association", nic_rec["properties"]["networkSecurityGroup"]["id"].lower() == nsg3.lower())
+
+    vnet = _p(RG, "Microsoft.Network", "virtualNetworks", "vnet1")
+    arm.handle("PUT", vnet, {"api-version": "2023-11-01"}, {"location": "eastus"})
+    subnet = vnet + "/subnets/default"
+    r = arm.handle("PUT", subnet, {"api-version": "2023-11-01"},
+                   {"properties": {"addressPrefix": "10.0.1.0/24", "networkSecurityGroup": {"id": nsg3}}})
+    _check("subnet put 201", r["status"] == 201 and r["body"]["name"] == "default")
+    r = arm.handle("GET", vnet + "/subnets", {"api-version": "2023-11-01"})
+    _check("subnets list scoped to its own vnet", r["status"] == 200 and [x["name"] for x in r["body"]["value"]] == ["default"])
+    subnet_rec = r["body"]["value"][0]
+    _check("subnet carries its NSG association and address prefix",
+           subnet_rec["properties"]["networkSecurityGroup"]["id"].lower() == nsg3.lower() and subnet_rec["properties"]["addressPrefix"] == "10.0.1.0/24")
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 

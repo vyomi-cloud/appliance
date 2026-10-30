@@ -48,4 +48,26 @@ export default {
       { svc: null, body: { properties: { level: "ReadOnly", notes: "uic" } } });
     return uniq;
   },
+
+  // Network interfaces / Subnets tabs: a uniquely named NIC, and a uniquely named vnet +
+  // subnet, both pointing at the shared "uicnsg" NSG via properties.networkSecurityGroup.id
+  // — the same subscription-wide association scan a real `az network nic/vnet subnet list`
+  // would show, filtered client-side by the NSG's id (see api.js).
+  "live-nic": async (wire, uniq) => {
+    await ensureNsg(wire);
+    await wire("PUT", `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${uniq}?api-version=2023-11-01`, {
+      svc: null, body: { location: "eastus", properties: { networkSecurityGroup: { id: nsgPath(NSG).split("?")[0] } } },
+    });
+    return uniq;
+  },
+
+  "live-subnet": async (wire, uniq) => {
+    await ensureNsg(wire);
+    const vnetPath = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${uniq}-vnet?api-version=2023-11-01`;
+    await wire("PUT", vnetPath, { svc: null, body: { location: "eastus" } });
+    await wire("PUT", `${vnetPath.split("?")[0]}/subnets/${uniq}?api-version=2023-11-01`, {
+      svc: null, body: { properties: { addressPrefix: "10.0.1.0/24", networkSecurityGroup: { id: nsgPath(NSG).split("?")[0] } } },
+    });
+    return uniq;
+  },
 };

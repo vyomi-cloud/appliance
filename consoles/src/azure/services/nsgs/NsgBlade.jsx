@@ -1,8 +1,8 @@
 /* Network security group resource blade: left resource menu + panels. Overview, Tags,
- * Inbound/Outbound security rules, Locks, Activity log, Properties and Export template are
- * backed by real ARM calls; Access control (IAM) and the remaining menu items are honest
- * CapabilityContainer gaps (core/capabilities/azure/nsgs.json is the single source of truth
- * for which). */
+ * Inbound/Outbound security rules, Locks, Activity log, Properties, Export template and the
+ * Network interfaces / Subnets association lists are backed by real ARM calls; Access control
+ * (IAM) and the remaining menu items are honest CapabilityContainer gaps
+ * (core/capabilities/azure/nsgs.json is the single source of truth for which). */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -12,7 +12,7 @@ import { Add20Regular, ArrowClockwise20Regular, ArrowDownload20Regular, Delete20
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
-import { locationLabel } from "../../kit/arm.js";
+import { locationLabel, parseId } from "../../kit/arm.js";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
@@ -44,7 +44,6 @@ const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).
 const GAP_CAP = {
   diagnose: "azure.nsgs.tools", tasks: "azure.nsgs.tools", support: "azure.nsgs.tools", effectivesecurityrules: "azure.nsgs.tools",
   alerts: "azure.nsgs.monitoring", diagnosticsettings: "azure.nsgs.monitoring", logs: "azure.nsgs.monitoring", flowlogs: "azure.nsgs.monitoring",
-  nics: "azure.nsgs.associations", subnets: "azure.nsgs.associations",
 };
 
 export default function NsgBlade({ params }) {
@@ -65,6 +64,8 @@ export default function NsgBlade({ params }) {
       tags: () => <Tags a={a} reload={reload} />,
       inbound: () => <RuleList key="inbound" rg={rg} name={name} direction="Inbound" />,
       outbound: () => <RuleList key="outbound" rg={rg} name={name} direction="Outbound" />,
+      nics: () => <NetworkInterfaces a={a} />,
+      subnets: () => <Subnets a={a} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
       activitylog: () => <ActivityLog a={a} />,
@@ -379,6 +380,71 @@ function AddRuleDialog({ open, direction, existing, onClose, onCreate }) {
         </DialogBody>
       </DialogSurface>
     </Dialog>
+  );
+}
+
+// ── Network interfaces / Subnets (NSG associations) — real ARM reads, scanned subscription-
+// wide and matched by properties.networkSecurityGroup.id (see api.js); the "Associate" picker
+// is the honest gap, since this lens has no standalone Network interfaces / Virtual networks
+// console to choose an existing resource from. ─────────────────────────────────────────
+function AssociateGap({ open, onClose, resourceType }) {
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Associate">
+        <DialogBody>
+          <DialogTitle>Associate</DialogTitle>
+          <DialogContent><NotSimulated feature={`Picking an existing ${resourceType} to associate`} note="This lens does not build a standalone Network interfaces or Virtual networks console yet; associations made elsewhere (ARM/CLI) still show up in this list." /></DialogContent>
+          <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  );
+}
+
+const nicPublicIp = (r) => r.properties?.ipConfigurations?.[0]?.properties?.publicIPAddress?.id;
+const nicPrivateIp = (r) => r.properties?.ipConfigurations?.[0]?.properties?.privateIPAddress;
+const nicVm = (r) => r.properties?.virtualMachine?.id;
+
+function NetworkInterfaces({ a }) {
+  const { data, loading, error, reload } = useAsync(() => api.listNetworkInterfacesForNsg(a.id), [a.id]);
+  const [assoc, setAssoc] = useState(false);
+  return (
+    <CapabilityContainer id="azure.nsgs.associations" title={`${a.name} | Network interfaces`}>
+      <BrowseGrid
+        resourceName="network interface" rowKey={(r) => r.id} filterPlaceholder="Search network interfaces"
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton onClick={() => setAssoc(true)}>Associate</ToolbarButton>}
+        csvName="network-interfaces.csv"
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "publicip", label: "Public IP address", value: (r) => (nicPublicIp(r) ? parseId(nicPublicIp(r)).name : "--") },
+          { key: "privateip", label: "Private IP address", value: (r) => nicPrivateIp(r) || "--" },
+          { key: "vm", label: "Virtual machine", value: (r) => (nicVm(r) ? parseId(nicVm(r)).name : "--") },
+        ]}
+      />
+      <AssociateGap open={assoc} onClose={() => setAssoc(false)} resourceType="network interface" />
+    </CapabilityContainer>
+  );
+}
+
+function Subnets({ a }) {
+  const { data, loading, error, reload } = useAsync(() => api.listSubnetsForNsg(a.id), [a.id]);
+  const [assoc, setAssoc] = useState(false);
+  return (
+    <CapabilityContainer id="azure.nsgs.associations" title={`${a.name} | Subnets`}>
+      <BrowseGrid
+        resourceName="subnet" rowKey={(r) => r.id} filterPlaceholder="Search subnets"
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton onClick={() => setAssoc(true)}>Associate</ToolbarButton>}
+        csvName="subnets.csv"
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "range", label: "Address range", value: (r) => r.properties?.addressPrefix || (r.properties?.addressPrefixes || []).join(", ") || "--" },
+          { key: "vnet", label: "Virtual network", value: (r) => r.vnetName },
+        ]}
+      />
+      <AssociateGap open={assoc} onClose={() => setAssoc(false)} resourceType="subnet" />
+    </CapabilityContainer>
   );
 }
 
