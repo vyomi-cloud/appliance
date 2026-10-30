@@ -111,6 +111,42 @@ def run() -> int:
     _check("deleted secret access 404", miss.status == 404)
     _check("deleted secret NOT_FOUND", _jbody(miss)["error"]["status"] == "NOT_FOUND")
 
+    # 7. create with labels, annotations, rotation, ttl, topics, versionAliases -> all echoed
+    create2 = sm.dispatch(st, "POST", base, {"secretId": "api-key"}, {}, json.dumps({
+        "replication": {"automatic": {}},
+        "labels": {"env": "prod"},
+        "annotations": {"owner": "team-x"},
+        "rotation": {"rotationPeriod": "2592000s"},
+        "ttl": "86400s",
+        "topics": [{"name": "projects/demo-project/topics/notify"}],
+        "versionAliases": {"stable": 1},
+    }).encode())
+    _check("create2 200", create2.status == 200)
+    c2b = _jbody(create2)
+    _check("create2 labels echoed", c2b["labels"] == {"env": "prod"})
+    _check("create2 annotations echoed", c2b["annotations"] == {"owner": "team-x"})
+    _check("create2 rotation echoed", c2b["rotation"] == {"rotationPeriod": "2592000s"})
+    _check("create2 ttl converted to expireTime", "expireTime" in c2b)
+    _check("create2 topics echoed", c2b["topics"][0]["name"].endswith("/topics/notify"))
+    _check("create2 versionAliases echoed", c2b["versionAliases"] == {"stable": 1})
+
+    # 8. patch secret (updateMask=labels) -> only labels change
+    patch = sm.dispatch(st, "PATCH", f"{base}/api-key", {"updateMask": "labels"}, {},
+                        json.dumps({"labels": {"env": "staging"}, "annotations": {"owner": "team-y"}}).encode())
+    _check("patch secret 200", patch.status == 200)
+    pb = _jbody(patch)
+    _check("patch updates labels", pb["labels"] == {"env": "staging"})
+    _check("patch respects updateMask (annotations untouched)", pb["annotations"] == {"owner": "team-x"})
+
+    # 8b. patch secret with no updateMask -> every field present in the body applies
+    patch2 = sm.dispatch(st, "PATCH", f"{base}/api-key", {}, {},
+                         json.dumps({"annotations": {"owner": "team-z"}}).encode())
+    _check("patch2 updates annotations with no updateMask", _jbody(patch2)["annotations"] == {"owner": "team-z"})
+
+    # 8c. patch unknown secret -> 404
+    pmiss = sm.dispatch(st, "PATCH", f"{base}/does-not-exist", {}, {}, json.dumps({"labels": {}}).encode())
+    _check("patch unknown secret 404", pmiss.status == 404)
+
     print("\nGCP Secret Manager core conformance: ALL GREEN")
     return 0
 

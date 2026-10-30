@@ -671,6 +671,49 @@ try {
   check("grant access via UI → getIamPolicy shows binding",
     (kmsPol.bindings || []).some((b) => b.role === "roles/cloudkms.cryptoKeyEncrypterDecrypter" && b.members.includes("user:dev@example.com")));
   await shot("21-kms-permissions");
+  // Secret Manager: create a secret (with an initial value) via the UI → visible over the
+  // native wire; add a version from the detail page; a version added over the wire shows up
+  // in the UI; delete from the list → gone over the native wire.
+  const SM = `v4-gcp-sm-${Date.now() % 100000}`;
+  await page.goto(UI + "#/security/secret-manager/create");
+  await page.getByLabel("Name").fill(SM);
+  await page.getByLabel("Secret value").fill("smoke-value-1");
+  await page.getByRole("button", { name: "Create secret", exact: true }).click();
+  await page.getByRole("heading", { name: SM }).waitFor({ timeout: 10000 });
+  const sec = await wjson(`/v1/projects/vyomi-project/secrets/${SM}`);
+  check("create secret via UI → visible over native wire (secrets.get)", sec.name?.endsWith(`/secrets/${SM}`));
+  const v1 = await wjson(`/v1/projects/vyomi-project/secrets/${SM}/versions/latest:access`);
+  check("initial value accessible over native wire", Buffer.from(v1.payload?.data || "", "base64").toString() === "smoke-value-1");
+  await shot("12-secret-detail");
+
+  // Add a version through the UI → the latest value changes over the native wire
+  await page.getByRole("button", { name: "New version", exact: true }).click();
+  await page.getByRole("dialog").getByLabel("Secret value").fill("smoke-value-2");
+  await page.getByRole("dialog").getByRole("button", { name: "Add new version", exact: true }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  await page.getByRole("cell", { name: "2", exact: true }).waitFor({ timeout: 10000 });
+  const v2 = await wjson(`/v1/projects/vyomi-project/secrets/${SM}/versions/latest:access`);
+  check("add version via UI → latest value over native wire", Buffer.from(v2.payload?.data || "", "base64").toString() === "smoke-value-2");
+  await shot("13-secret-versions");
+
+  // Reverse direction: add a version over the wire → shown in the UI's Versions table
+  await wire(`/v1/projects/vyomi-project/secrets/${SM}:addVersion`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ payload: { data: Buffer.from("smoke-value-3").toString("base64") } }),
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("cell", { name: "3", exact: true }).waitFor({ timeout: 10000 });
+  check("version added over wire → shown in UI versions table", true);
+
+  // Delete from the list → gone over the native wire
+  await page.goto(UI + "#/security/secret-manager");
+  await page.getByRole("link", { name: SM }).waitFor({ timeout: 10000 });
+  await page.getByRole("checkbox", { name: `Select projects/vyomi-project/secrets/${SM}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(SM);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  check("delete secret via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/secrets/${SM}`)).status === 404);
 
   // Dark mode
   await page.goto(UI + "#/storage/browser");

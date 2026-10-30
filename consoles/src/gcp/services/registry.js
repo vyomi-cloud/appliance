@@ -33,7 +33,7 @@ export const PRODUCTS = [
   { id: "functions", title: "Cloud Functions", description: "Event-driven serverless functions", category: "Serverless", icon: FunctionsIcon, load: () => import("./functions/index.jsx") },
   { id: "pubsub", title: "Pub/Sub", description: "Global real-time messaging", category: "Integration Services", icon: MessageIcon, classic: "pubsub" },
   { id: "cloudscheduler", title: "Cloud Scheduler", description: "Fully managed cron job service", category: "Integration Services", icon: ScheduleIcon, load: () => import("./cloudscheduler/index.jsx") },
-  { id: "security/secret-manager", title: "Secret Manager", description: "Store API keys, passwords and other secrets", category: "Security", icon: SecretIcon, classic: "secretmanager" },
+  { id: "security/secret-manager", title: "Secret Manager", description: "Store API keys, passwords and other secrets", category: "Security", icon: SecretIcon, load: () => import("./security/secret-manager/index.jsx") },
   { id: "security/kms", title: "Cloud KMS", description: "Manage encryption keys", category: "Security", icon: KeyIcon, load: () => import("./security/kms/index.jsx") },
   { id: "iam-admin", title: "IAM & Admin", description: "Resource access control", category: "Management", icon: IamIcon, load: () => import("./iam-admin/index.jsx") },
   { id: "artifacts", title: "Artifact Registry", description: "Store, manage and secure container images and packages", category: "CI/CD", icon: ArtifactIcon, load: () => import("./artifacts/index.jsx") },
