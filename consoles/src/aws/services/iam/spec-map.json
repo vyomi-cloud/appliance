@@ -1,0 +1,143 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap (NOT USED for iam — no aws/iam entry in honest-allowlist.json). Unlisted spec pages count as missing.",
+  "dashboard": {
+    "route": "#/iam/dashboard",
+    "fixtures": ["iam-user", "iam-role", "iam-policy", "iam-group"]
+  },
+  "users": {
+    "route": "#/iam/users",
+    "fixtures": ["iam-user"],
+    "live": "live-user"
+  },
+  "user-detail": {
+    "route": "#/iam/users/uic-user",
+    "fixtures": ["iam-user"],
+    "vars": { "resource-name": "uic-user" }
+  },
+  "create-user": {
+    "route": "#/iam/create-user",
+    "expand": [
+      "role=checkbox[name=\"Provide user access to the AWS Management Console - optional\"]",
+      "role=radio[name=\"I want to create an IAM user\"]",
+      "role=button[name=\"Next\"]",
+      "role=radio[name=\"Attach policies directly\"]",
+      "role=button[name=\"Next\"]"
+    ]
+  },
+  "user-groups": {
+    "route": "#/iam/groups",
+    "fixtures": ["iam-group"],
+    "live": "live-group"
+  },
+  "group-detail": {
+    "route": "#/iam/groups/uic-group",
+    "fixtures": ["iam-group"],
+    "vars": { "resource-name": "uic-group" }
+  },
+  "create-user-group": {
+    "route": "#/iam/create-user-group"
+  },
+  "roles": {
+    "route": "#/iam/roles",
+    "fixtures": ["iam-role"],
+    "live": "live-role"
+  },
+  "role-detail": {
+    "route": "#/iam/roles/uic-role",
+    "fixtures": ["iam-role"],
+    "vars": { "resource-name": "uic-role" }
+  },
+  "create-role": {
+    "route": "#/iam/create-role",
+    "expand": [
+      "role=button[name=\"Next\"]",
+      "role=button[name=\"Next\"]"
+    ]
+  },
+  "policies": {
+    "route": "#/iam/policies",
+    "fixtures": ["iam-policy"],
+    "live": "live-policy"
+  },
+  "policy-detail": {
+    "route": "#/iam/policies/uic-policy",
+    "fixtures": ["iam-policy"],
+    "vars": { "resource-name": "uic-policy" }
+  },
+  "create-policy": {
+    "route": "#/iam/create-policy",
+    "expand": [
+      "role=button[name=\"Next\"]"
+    ]
+  },
+  "create-access-key": {
+    "route": "#/iam/users/uic-user/create-access-key",
+    "fixtures": ["iam-user"],
+    "vars": { "resource-name": "uic-user" },
+    "expand": [
+      "role=button[name=\"Next\"]",
+      "role=button[name=\"Next\"]"
+    ]
+  },
+  "security-credentials": {
+    "route": "#/iam/security-credentials"
+  },
+  "identity-providers": {
+    "route": "#/iam/identity-providers",
+    "live": "live-idp"
+  },
+  "account-settings": {
+    "route": "#/iam/account-settings"
+  },
+  "edit-password-policy": {
+    "route": "#/iam/account-settings/edit-password-policy",
+    "expand": [
+      "text=Custom"
+    ]
+  },
+  "assign-delegated-administrator": {
+    "route": "#/iam/account-settings/assign-delegated-administrator"
+  },
+  "root-access-management": {
+    "route": "#/iam/root-access-management"
+  },
+  "temporary-delegation-requests": {
+    "route": "#/iam/temporary-delegation-requests"
+  },
+  "policy-simulator": {
+    "route": "#/iam/policy-simulator",
+    "fixtures": ["iam-user"]
+  },
+  "credential-report": {
+    "route": "#/iam/credential-report",
+    "fixtures": ["iam-user"]
+  },
+  "organization-activity": {
+    "route": "#/iam/organization-activity"
+  },
+  "service-control-policies": {
+    "route": "#/iam/service-control-policies"
+  },
+  "service-control-policy-detail": {
+    "route": "#/iam/service-control-policies/example",
+    "vars": { "resource-name": "example" }
+  },
+  "resource-control-policies": {
+    "route": "#/iam/resource-control-policies"
+  },
+  "access-analyzer": {
+    "route": "#/iam/access-analyzer"
+  },
+  "resource-analysis": {
+    "route": "#/iam/resource-analysis"
+  },
+  "unused-access": {
+    "route": "#/iam/unused-access"
+  },
+  "analyzer-settings": {
+    "route": "#/iam/analyzer-settings"
+  },
+  "account-access-manager": {
+    "route": "#/iam/account-access-manager"
+  }
+}

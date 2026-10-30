@@ -164,6 +164,109 @@ def run() -> int:
     _check("unknown action InvalidAction", "<Code>InvalidAction</Code>" in iam.dispatch(st, {"Action": "Nope"}).body)
     _check("missing action MissingAction", "<Code>MissingAction</Code>" in iam.dispatch(st, {}).body)
 
+    # 15. Groups: list/get/membership/inline + attached policies, remove, delete
+    iam.dispatch(st, {"Action": "AddUserToGroup", "GroupName": "Admins", "UserName": "alice"})
+    gg = iam.dispatch(st, {"Action": "GetGroup", "GroupName": "Admins"}).body
+    _check("get group shows member", "<UserName>alice</UserName>" in gg)
+    lgfu = iam.dispatch(st, {"Action": "ListGroupsForUser", "UserName": "alice"}).body
+    _check("list groups for user", "<GroupName>Admins</GroupName>" in lgfu)
+    iam.dispatch(st, {"Action": "PutGroupPolicy", "GroupName": "Admins", "PolicyName": "inline-ec2",
+                      "PolicyDocument": _policy({"Effect": "Allow", "Action": "ec2:Describe*", "Resource": "*"})})
+    _check("group inline policy enforced",
+           iam.is_authorized(st, "alice", "ec2:DescribeInstances", "*")["allowed"] is True)
+    iam.dispatch(st, {"Action": "RemoveUserFromGroup", "GroupName": "Admins", "UserName": "alice"})
+    _check("group inline policy revoked on removal",
+           iam.is_authorized(st, "alice", "ec2:DescribeInstances", "*")["allowed"] is False)
+    lag = iam.dispatch(st, {"Action": "ListAttachedGroupPolicies", "GroupName": "Admins"}).body
+    _check("attached group policy listed", "<PolicyName>EC2Full</PolicyName>" in lag)
+    iam.dispatch(st, {"Action": "DetachGroupPolicy", "GroupName": "Admins", "PolicyArn":
+                      "arn:aws:iam::123456789012:policy/EC2Full"})
+    iam.dispatch(st, {"Action": "DeleteGroupPolicy", "GroupName": "Admins", "PolicyName": "inline-ec2"})
+    iam.dispatch(st, {"Action": "RemoveUserFromGroup", "GroupName": "Admins", "UserName": "carol"})
+    del_g = iam.dispatch(st, {"Action": "DeleteGroup", "GroupName": "Admins"})
+    _check("delete empty group ok", del_g.status == 200)
+    lg = iam.dispatch(st, {"Action": "ListGroups"}).body
+    _check("deleted group gone", "<GroupName>Admins</GroupName>" not in lg)
+
+    # 16. Access keys: deactivate + delete
+    ak2 = iam.dispatch(st, {"Action": "CreateAccessKey", "UserName": "bob"}).body
+    akid2 = ak2.split("<AccessKeyId>")[1].split("<")[0]
+    iam.dispatch(st, {"Action": "UpdateAccessKey", "UserName": "bob", "AccessKeyId": akid2, "Status": "Inactive"})
+    lk2 = iam.dispatch(st, {"Action": "ListAccessKeys", "UserName": "bob"}).body
+    _check("access key deactivated", f"<AccessKeyId>{akid2}</AccessKeyId><Status>Inactive</Status>" in lk2)
+    iam.dispatch(st, {"Action": "DeleteAccessKey", "UserName": "bob", "AccessKeyId": akid2})
+    _check("access key deleted", akid2 not in iam.dispatch(st, {"Action": "ListAccessKeys", "UserName": "bob"}).body)
+
+    # 17. Login profile (console password) — limited: stored, never actually authenticates
+    iam.dispatch(st, {"Action": "CreateLoginProfile", "UserName": "alice", "PasswordResetRequired": "true"})
+    glp = iam.dispatch(st, {"Action": "GetLoginProfile", "UserName": "alice"}).body
+    _check("login profile created", "<PasswordResetRequired>true</PasswordResetRequired>" in glp)
+    iam.dispatch(st, {"Action": "DeleteLoginProfile", "UserName": "alice"})
+    _check("login profile deleted", "<Code>NoSuchEntity</Code>" in iam.dispatch(st, {"Action": "GetLoginProfile", "UserName": "alice"}).body)
+
+    # 18. Tags on users and roles
+    iam.dispatch(st, {"Action": "TagUser", "UserName": "alice", "Tags.member.1.Key": "team", "Tags.member.1.Value": "sec"})
+    _check("user tag listed", "<Key>team</Key><Value>sec</Value>" in iam.dispatch(st, {"Action": "ListUserTags", "UserName": "alice"}).body)
+    iam.dispatch(st, {"Action": "UntagUser", "UserName": "alice", "TagKeys.member.1": "team"})
+    _check("user tag removed", "<Key>team</Key>" not in iam.dispatch(st, {"Action": "ListUserTags", "UserName": "alice"}).body)
+    iam.dispatch(st, {"Action": "TagRole", "RoleName": "AppRole", "Tags.member.1.Key": "env", "Tags.member.1.Value": "prod"})
+    _check("role tag listed", "<Key>env</Key><Value>prod</Value>" in iam.dispatch(st, {"Action": "ListRoleTags", "RoleName": "AppRole"}).body)
+
+    # 19. Role trust policy edit + max session duration + inline role policy
+    iam.dispatch(st, {"Action": "UpdateAssumeRolePolicy", "RoleName": "AppRole",
+                      "PolicyDocument": json.dumps({"Version": "2012-10-17",
+                          "Statement": [{"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"},
+                                         "Action": "sts:AssumeRole"}]})})
+    iam.dispatch(st, {"Action": "UpdateRole", "RoleName": "AppRole", "MaxSessionDuration": "7200"})
+    gr2 = iam.dispatch(st, {"Action": "GetRole", "RoleName": "AppRole"}).body
+    _check("trust policy updated", "lambda.amazonaws.com" in gr2)
+    _check("max session duration updated", "<MaxSessionDuration>7200</MaxSessionDuration>" in gr2)
+    iam.dispatch(st, {"Action": "PutRolePolicy", "RoleName": "AppRole", "PolicyName": "inline-logs",
+                      "PolicyDocument": _policy({"Effect": "Allow", "Action": "logs:*", "Resource": "*"})})
+    _check("role inline policy enforced", iam.is_authorized(st, "AppRole", "logs:PutLogEvents", "*")["allowed"] is True)
+    iam.dispatch(st, {"Action": "DeleteRolePolicy", "RoleName": "AppRole", "PolicyName": "inline-logs"})
+    iam.dispatch(st, {"Action": "ListAttachedRolePolicies", "RoleName": "AppRole"})
+    iam.dispatch(st, {"Action": "DetachRolePolicy", "RoleName": "AppRole", "PolicyArn": policy_arn})
+
+    # 20. Permissions boundaries (stored + reflected in ListEntitiesForPolicy, not enforced)
+    iam.dispatch(st, {"Action": "PutUserPermissionsBoundary", "UserName": "bob", "PermissionsBoundary": policy_arn})
+    lep = iam.dispatch(st, {"Action": "ListEntitiesForPolicy", "PolicyArn": policy_arn}).body
+    _check("boundary user listed", "<PolicyBoundaryUsers><member><UserName>bob</UserName></member>" in lep)
+    iam.dispatch(st, {"Action": "DeleteUserPermissionsBoundary", "UserName": "bob"})
+
+    # 21. Managed policy versions
+    v2 = iam.dispatch(st, {"Action": "CreatePolicyVersion", "PolicyArn": policy_arn,
+                           "PolicyDocument": _policy({"Effect": "Allow", "Action": "s3:*", "Resource": "*"}),
+                           "SetAsDefault": "true"}).body
+    _check("policy version created", "<VersionId>v2</VersionId>" in v2)
+    lpv = iam.dispatch(st, {"Action": "ListPolicyVersions", "PolicyArn": policy_arn}).body
+    _check("both versions listed", "<VersionId>v1</VersionId>" in lpv and "<VersionId>v2</VersionId>" in lpv)
+    _check("v2 is default", iam.dispatch(st, {"Action": "GetPolicy", "PolicyArn": policy_arn}).body.count("<DefaultVersionId>v2</DefaultVersionId>") == 1)
+    conflict = iam.dispatch(st, {"Action": "DeletePolicyVersion", "PolicyArn": policy_arn, "VersionId": "v2"})
+    _check("cannot delete default version", "<Code>DeleteConflict</Code>" in conflict.body)
+    iam.dispatch(st, {"Action": "SetDefaultPolicyVersion", "PolicyArn": policy_arn, "VersionId": "v1"})
+    iam.dispatch(st, {"Action": "DeletePolicyVersion", "PolicyArn": policy_arn, "VersionId": "v2"})
+
+    # 22. Identity providers (SAML + OIDC)
+    samlc = iam.dispatch(st, {"Action": "CreateSAMLProvider", "Name": "okta", "SAMLMetadataDocument": "<meta/>"}).body
+    _check("saml provider created", "saml-provider/okta" in samlc)
+    _check("saml provider listed", "saml-provider/okta" in iam.dispatch(st, {"Action": "ListSAMLProviders"}).body)
+    oidcc = iam.dispatch(st, {"Action": "CreateOpenIDConnectProvider", "Url": "https://token.actions.githubusercontent.com",
+                              "ClientIDList.member.1": "sts.amazonaws.com"}).body
+    _check("oidc provider created", "oidc-provider/token.actions.githubusercontent.com" in oidcc)
+    _check("oidc provider listed", "token.actions.githubusercontent.com" in iam.dispatch(st, {"Action": "ListOpenIDConnectProviders"}).body)
+
+    # 23. Account settings: password policy, account alias, credential report
+    iam.dispatch(st, {"Action": "UpdateAccountPasswordPolicy", "MinimumPasswordLength": "14", "RequireSymbols": "true"})
+    pp = iam.dispatch(st, {"Action": "GetAccountPasswordPolicy"}).body
+    _check("password policy round-trips", "<MinimumPasswordLength>14</MinimumPasswordLength>" in pp and "<RequireSymbols>true</RequireSymbols>" in pp)
+    iam.dispatch(st, {"Action": "CreateAccountAlias", "AccountAlias": "vyomi-demo"})
+    _check("account alias listed", "<member>vyomi-demo</member>" in iam.dispatch(st, {"Action": "ListAccountAliases"}).body)
+    gen = iam.dispatch(st, {"Action": "GenerateCredentialReport"}).body
+    _check("credential report generated", "<State>COMPLETE</State>" in gen)
+    rep = iam.dispatch(st, {"Action": "GetCredentialReport"}).body
+    _check("credential report content present", "<Content>" in rep and "<ReportFormat>text/csv</ReportFormat>" in rep)
+
     print("\nRESULT: PASS — IAM core conforms (native Query-protocol wire + real policy evaluation) on this substrate.")
     return 0
 

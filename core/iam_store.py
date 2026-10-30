@@ -26,6 +26,11 @@ State shapes (record shapes owned by iam_core):
     roles    : { role_name -> role }
     policies : { policy_arn -> managed-policy }
     access_keys : { access_key_id -> key }
+    saml_providers : { arn -> provider }
+    oidc_providers : { arn -> provider }
+    account_aliases : [alias, ...]        (IAM allows at most one in real AWS; we allow a small list)
+    password_policy : dict | None          (GetAccountPasswordPolicy shape, or None = IAM default)
+    credential_report : {"generated": iso8601, "content": csv-str} | None
 """
 from __future__ import annotations
 
@@ -146,6 +151,11 @@ class IamStore:
         self.roles: dict[str, dict[str, Any]] = {}
         self.policies: dict[str, dict[str, Any]] = {}      # keyed by ARN
         self.access_keys: dict[str, dict[str, Any]] = {}   # keyed by AccessKeyId
+        self.saml_providers: dict[str, dict[str, Any]] = {}     # keyed by ARN
+        self.oidc_providers: dict[str, dict[str, Any]] = {}     # keyed by ARN
+        self.account_aliases: list[str] = []
+        self.password_policy: dict[str, Any] | None = None
+        self.credential_report: dict[str, Any] | None = None
         self.engine: AuthzEngine = engine or NativeIamEvaluator()
         self.account_id = account_id
 

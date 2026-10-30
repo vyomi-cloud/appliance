@@ -29,6 +29,7 @@ const kms = async (target, body) => JSON.parse(await wire("/", { method: "POST",
 const sm = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `secretsmanager.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/secretsmanager/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const sqs = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `AmazonSQS.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/sqs/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const sns = async (action, body) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/sns/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...body }).toString() });
+const iamXml = async (body) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/iam/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams(body).toString() });
 
 await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch();
@@ -293,6 +294,26 @@ try {
   await page.getByText(H).waitFor({ timeout: 10000 });
   check("API Gateway create HTTP API (wire) → shown in UI APIs list", true);
   await shot("16-apigateway-apis-list");
+
+  // IAM: create a user through the 3-step wizard (UI → CLI direction)
+  const U = `v4smoke-user-${Date.now() % 100000}`;
+  await page.goto(UI + "#/iam/create-user");
+  await page.getByLabel("User name").fill(U);
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Create user" }).last().click();
+  await page.getByRole("heading", { name: U }).waitFor({ timeout: 10000 });
+  const usersXml = await iamXml({ Action: "ListUsers" });
+  check("IAM create user (UI wizard) → visible over native wire", usersXml.includes(`<UserName>${U}</UserName>`), usersXml.slice(0, 200));
+  await shot("15-iam-user-detail");
+
+  // IAM: role created over the wire shows in the Roles list (CLI → UI direction)
+  const R = `v4smoke-role-${Date.now() % 100000}`;
+  await iamXml({ Action: "CreateRole", RoleName: R, AssumeRolePolicyDocument: JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Principal: { Service: "ec2.amazonaws.com" }, Action: "sts:AssumeRole" }] }) });
+  await page.goto(UI + "#/iam/roles");
+  await page.getByText(R).first().waitFor({ timeout: 10000 });
+  check("IAM role created over wire → shown in Roles list", true);
+  await shot("17-iam-roles");
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));

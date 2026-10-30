@@ -15,7 +15,7 @@ export const SERVICES = [
   { id: "rds", icon: "rds", title: "RDS", description: "Managed relational database service", category: "Database", classic: "rds" },
   { id: "vpc", icon: "vpc", title: "VPC", description: "Isolated cloud resources", category: "Networking & Content Delivery", classic: "vpc" },
   { id: "apigateway", icon: "apigateway", title: "API Gateway", description: "Build, deploy, and manage APIs", category: "Networking & Content Delivery", load: () => import("./apigateway/index.jsx") },
-  { id: "iam", icon: "iam", title: "IAM", description: "Manage access to AWS resources", category: "Security, Identity, & Compliance", classic: "iam" },
+  { id: "iam", icon: "iam", title: "IAM", description: "Manage access to AWS resources", category: "Security, Identity, & Compliance", load: () => import("./iam/index.jsx") },
   { id: "kms", icon: "kms", title: "Key Management Service", description: "Create and control encryption keys", category: "Security, Identity, & Compliance", load: () => import("./kms/index.jsx") },
   { id: "secretsmanager", icon: "secretsmanager", title: "Secrets Manager", description: "Store, manage, and retrieve secrets", category: "Security, Identity, & Compliance", load: () => import("./secretsmanager/index.jsx") },
   { id: "sqs", icon: "sqs", title: "Simple Queue Service", description: "Managed message queues", category: "Application Integration", load: () => import("./sqs/index.jsx") },
