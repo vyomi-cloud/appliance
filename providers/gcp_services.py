@@ -607,6 +607,11 @@ def api_gcp_pubsub_get_topic(project: str, topic: str):
         t = _ps_emu.get_topic(project, topic)
         if not t:
             raise HTTPException(404, detail="Topic not found")
+        # The Pub/Sub emulator rejects updateMask=labels, so labels set through
+        # topics.patch live in the simulator's own record: they win over the emulator's.
+        own = gcp_pubsub_state.get("topics", {}).get(topic) or {}
+        if isinstance(own.get("labels"), dict) and own["labels"]:
+            t = {**t, "labels": own["labels"]}
         return s._gcp_pubsub_topic_view(project, t)
     rec = gcp_pubsub_state.get("topics", {}).get(topic)
     if not rec or str(rec.get("project") or project) != project:
@@ -623,8 +628,11 @@ async def api_gcp_pubsub_update_topic(project: str, topic: str, request: Request
         raise HTTPException(404, detail="Topic not found")
     payload = await request.json() if request is not None else {}
     payload = payload if isinstance(payload, dict) else {}
+    # Real topics.patch wraps the fields: {"topic": {...}, "updateMask": "labels"}.
+    if isinstance(payload.get("topic"), dict):
+        payload = payload["topic"]
     if isinstance(payload.get("labels"), dict):
-        rec["labels"] = payload["labels"]
+        rec["labels"] = {str(k): str(v) for k, v in payload["labels"].items()}
     if "messageRetentionDuration" in payload:
         rec["messageRetentionDuration"] = str(payload.get("messageRetentionDuration") or rec.get("messageRetentionDuration") or "604800s")
     if "kmsKeyName" in payload:

@@ -137,6 +137,23 @@ def register(app: FastAPI) -> None:
         _persist_state()
         return payload
 
+    @app.patch("/api/gcp/extras/{stub_path:path}", include_in_schema=False)
+    def api_gcp_extras_patch(stub_path: str, payload: dict[str, Any] | None = None):
+        from core.gcp_rail_extras import EXTRAS
+        parent, _, name = stub_path.rpartition("/")
+        schema = EXTRAS.get(parent)
+        if not schema or schema.get("category") == "config":
+            raise HTTPException(status_code=404, detail=f"Unknown GCP stub: {stub_path}")
+        _gcp_extras_seed_if_needed(parent)
+        item = _gcp_extras_state(parent)["items"].get(name)
+        if item is None:
+            raise HTTPException(status_code=404, detail=f"Not found: {parent}/{name}")
+        payload = dict(payload or {})
+        if isinstance(payload.get("labels"), dict):
+            item["labels"] = {str(k): str(v) for k, v in payload["labels"].items()}
+        _persist_state()
+        return item
+
     @app.delete("/api/gcp/extras/{stub_path:path}", include_in_schema=False)
     def api_gcp_extras_delete_one(stub_path: str):
         from core.gcp_rail_extras import EXTRAS

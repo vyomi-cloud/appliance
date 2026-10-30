@@ -1272,21 +1272,60 @@ async function renderSublistTab(host, svc, item, tab){
   }
   await load();
 }
+// Label write paths per service (the real APIs: Compute instances.setLabels, Pub/Sub
+// topics.patch with updateMask=labels; Eventarc rows live in the extras store).
+const LABEL_WRITERS = {
+  compute:  (svc, name, labels) => api("POST", fillCommon(svc.resource_path, {name}) + "/setLabels", {labels, labelFingerprint: ""}),
+  pubsub:   (svc, name, labels) => api("PATCH", fillCommon(svc.resource_path, {name}), {topic: {labels}, updateMask: "labels"}),
+  eventarc: (svc, name, labels) => api("PATCH", fillCommon(svc.resource_path, {name}), {labels}),
+};
 function renderLabelsTab(host, svc, item){
-  const labels = (item.labels && typeof item.labels === "object") ? item.labels : {};
-  if (!Object.keys(labels).length) {
-    host.append(el("div",{class:"empty"},
-      el("span",{class:"ic material-symbols-outlined"}, "sell"),
-      el("div",{}, "No labels attached."),
-      el("div",{style:"font-size:11.5px;color:var(--hint);margin-top:6px"},
-        "Labels are key-value pairs that help organize and filter resources.")));
-    return;
+  const name = String((item && item.name) || getPath(item, svc.name_field) || "").split("/").pop();
+  const writer = LABEL_WRITERS[svc.key];
+  let labels = (item.labels && typeof item.labels === "object") ? {...item.labels} : {};
+  let editing = false;
+  const panel = el("div",{class:"panel"}); host.append(panel);
+  async function load(){
+    try{
+      const r = await api("GET", fillCommon(svc.resource_path,{name}));
+      if(r.ok && r.json && r.json.labels && typeof r.json.labels === "object") labels = {...r.json.labels};
+    }catch(_){}
+    render();
   }
-  const card = el("div",{class:"kv-card"});
-  const g = el("div",{class:"kv-grid"});
-  Object.entries(labels).forEach(([k,v]) =>
-    g.append(el("div",{}, el("div",{class:"k"}, k), el("div",{class:"v"}, String(v)))));
-  card.append(g); host.append(card);
+  function render(){
+    panel.innerHTML = "";
+    const body = el("div",{style:"padding:14px"}); panel.append(body);
+    const tbl = el("table",{class:"gc",style:"width:100%;max-width:540px"});
+    const hr = el("tr",{},el("th",{},"Key"),el("th",{},"Value")); if(editing) hr.append(el("th",{style:"width:44px"},"")); tbl.append(hr);
+    const inputs = [];
+    function addRow(k,v){
+      const mk = () => el("input",{style:"width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:3px;padding:4px"});
+      const ki = mk(), vi = mk(); ki.value = k; vi.value = v; ki.readOnly = vi.readOnly = !editing;
+      const pair = {ki,vi}; inputs.push(pair);
+      const tr = el("tr",{},el("td",{},ki),el("td",{},vi));
+      if(editing) tr.append(el("td",{}, el("button",{class:"btn del",title:"Remove",onclick:()=>{const i=inputs.indexOf(pair); if(i>=0) inputs.splice(i,1); tr.remove();}}, "✕")));
+      tbl.append(tr);
+    }
+    Object.entries(labels).forEach(([k,v]) => addRow(k,String(v)));
+    if(!Object.keys(labels).length && !editing){
+      body.append(el("div",{style:"color:var(--sub);margin-bottom:8px"}, "No labels on " + name + ". Labels are key-value pairs that help organize and filter resources."));
+    } else body.append(tbl);
+    if(!writer){ panel.append(body); return; }
+    if(editing) body.append(el("button",{class:"btn",style:"margin-top:10px",onclick:()=>addRow("","")}, icon("add"), "Add label"));
+    const bar = el("div",{style:"display:flex;gap:8px;margin-top:16px"});
+    if(!editing){
+      bar.append(el("button",{class:"btn",onclick:()=>{editing=true;render();}}, icon("edit"), Object.keys(labels).length ? "Edit labels" : "Add labels"));
+    } else {
+      bar.append(el("button",{class:"btn primary",onclick:async()=>{
+        const next = Object.fromEntries(inputs.map(p=>[p.ki.value.trim(),p.vi.value]).filter(e=>e[0]));
+        const r = await writer(svc, name, next);
+        if(r.ok){ labels = next; editing = false; toast("Labels saved"); load(); } else toast("Save failed","err");
+      }}, icon("save"), "Save"));
+      bar.append(el("button",{class:"btn",onclick:()=>{editing=false;render();}}, "Cancel"));
+    }
+    body.append(bar);
+  }
+  render(); load();
 }
 // Measured request metrics: charts are drawn from GET /api/metrics/series (what the
 // simulator actually served for this resource in the last hour), never from a seed.

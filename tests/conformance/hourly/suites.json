@@ -1657,6 +1657,14 @@
       "timeout": 600
     },
     {
+      "id": "offline-ui-gcp-labels-tab",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} node tests/conformance/ui/gcp-labels-tab.mjs",
+      "timeout": 600
+    },
+    {
       "id": "nano-ui-aws-kinesis",
       "target": "nano",
       "cloud": "aws",

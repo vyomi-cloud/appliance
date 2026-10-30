@@ -396,6 +396,7 @@ def register(app, h) -> None:
         ("GET", "/v1/projects/{project}/topics/{topic}", "api_gcp_pubsub_get_topic", "(project: str, topic: str)"),
         ("GET", "/api/gcp/sqs/queues/{topic}", "api_gcp_pubsub_get_topic", "(project: str, topic: str)"),
         ("PATCH", "/v1/projects/{project}/topics/{topic}", "api_gcp_pubsub_update_topic", "(project: str, topic: str, request: Request)"),
+        ("PATCH", "/api/gcp/pubsub/v1/projects/{project}/topics/{topic}", "api_gcp_pubsub_update_topic", "(project: str, topic: str, request: Request)"),
         ("PATCH", "/api/gcp/sqs/queues/{topic}", "api_gcp_pubsub_update_topic", "(project: str, topic: str, request: Request)"),
         ("GET", "/v1/projects/{project}/topics/{topic}/messages", "api_gcp_pubsub_list_topic_messages", "(project: str, topic: str)"),
         ("DELETE", "/v1/projects/{project}/topics/{topic}", "api_gcp_pubsub_delete_topic", "(project: str, topic: str)"),
