@@ -83,5 +83,16 @@
         "instance-type-detail"
       ]
     }
+  },
+  "azure": {
+    "aks": [
+      "aks-workloads",
+      "aks-services-and-ingresses"
+    ],
+    "monitor": [
+      "monitor-dashboards-with-grafana",
+      "monitor-managed-prometheus",
+      "monitor-diagnostic-settings"
+    ]
   }
 }
