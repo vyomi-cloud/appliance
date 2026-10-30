@@ -49,8 +49,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: gh release download "v$VER" -p "*_${VER}_all.deb" -D pkgs
-      - name: cloud-learn (.deb)
-        run: tests/installer/pkg_checks.sh deb "pkgs/cloud-learn_${VER}_all.deb" "$VER" out
+      - name: vyomi (.deb)
+        run: tests/installer/pkg_checks.sh deb "pkgs/vyomi_${VER}_all.deb" "$VER" out
       - name: vyomi-docker (.deb)
         if: always()
         run: tests/installer/pkg_checks.sh deb "pkgs/vyomi-docker_${VER}_all.deb" "$VER" out
@@ -62,7 +62,7 @@ jobs:
     needs: resolve
     runs-on: ubuntu-latest
     container: fedora:40
-    env: { VER: '${{ needs.resolve.outputs.ver }}' }
+    env: { VER: '${{ needs.resolve.outputs.ver }}', GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
     steps:
       - run: dnf install -y -q git tar curl findutils which >/dev/null
       - uses: actions/checkout@v4
@@ -70,9 +70,9 @@ jobs:
         run: |
           base="https://github.com/${{ github.repository }}/releases/download/v$VER"
           mkdir -p pkgs
-          for f in "cloud-learn-$VER-1.noarch.rpm" "vyomi-docker-$VER-1.noarch.rpm"; do curl -fsSL "$base/$f" -o "pkgs/$f"; done
-      - name: cloud-learn (.rpm)
-        run: tests/installer/pkg_checks.sh rpm "pkgs/cloud-learn-$VER-1.noarch.rpm" "$VER" out
+          for f in "vyomi-$VER-1.noarch.rpm" "vyomi-docker-$VER-1.noarch.rpm"; do curl -fsSL "$base/$f" -o "pkgs/$f"; done
+      - name: vyomi (.rpm)
+        run: tests/installer/pkg_checks.sh rpm "pkgs/vyomi-$VER-1.noarch.rpm" "$VER" out
       - name: vyomi-docker (.rpm)
         if: always()
         run: tests/installer/pkg_checks.sh rpm "pkgs/vyomi-docker-$VER-1.noarch.rpm" "$VER" out
@@ -83,7 +83,7 @@ jobs:
   brew:
     needs: resolve
     runs-on: macos-latest
-    env: { VER: '${{ needs.resolve.outputs.ver }}' }
+    env: { VER: '${{ needs.resolve.outputs.ver }}', GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
     steps:
       - uses: actions/checkout@v4
       - name: Tap
@@ -161,8 +161,8 @@ jobs:
             echo
             echo "| Package / check | Platform | Result |"
             echo "|---|---|---|"
-            echo "| DEB: cloud-learn + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | $(res "${{ needs.deb.result }}") |"
-            echo "| RPM: cloud-learn + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | $(res "${{ needs.rpm.result }}") |"
+            echo "| DEB: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | $(res "${{ needs.deb.result }}") |"
+            echo "| RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | $(res "${{ needs.rpm.result }}") |"
             echo "| Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | $(res "${{ needs.brew.result }}") |"
             while IFS='|' read -r label wf id concl; do
               case "$label" in

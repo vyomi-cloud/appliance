@@ -116,12 +116,10 @@ fetches the same Docker images.
 
 | Platform | Install command |
 |---|---|
-| macOS / Linux (Brew) | `brew install cloudlearn/tap/cloud-learn && cloud-learn up` |
-| Ubuntu / Debian | `sudo apt install cloud-learn && cloud-learn up` |
-| Fedora / RHEL | `sudo dnf install cloud-learn && cloud-learn up` |
-| Ubuntu (Snap) | `sudo snap install cloud-learn --classic` |
-| Windows (Scoop) | `scoop bucket add cloudlearn https://github.com/vyomi-cloud/scoop-bucket && scoop install cloud-learn` |
-| Windows (MSI) | Download `cloud-learn-<ver>-x64.msi` from the [GitHub Release](https://github.com/vyomi-cloud/appliance/releases/latest) and run it |
+| macOS / Linux (Brew) | `brew install vyomi-cloud/tap/vyomi && vyomi up` |
+| Ubuntu / Debian | Download `vyomi_<ver>_all.deb` from the [GitHub Release](https://github.com/vyomi-cloud/appliance/releases/latest), then `sudo apt install ./vyomi_<ver>_all.deb && vyomi up` |
+| Fedora / RHEL | Download `vyomi-<ver>-1.noarch.rpm`, then `sudo dnf install ./vyomi-<ver>-1.noarch.rpm && vyomi up` |
+| Windows (MSI) | Download `vyomi-<ver>-x64.msi` from the [GitHub Release](https://github.com/vyomi-cloud/appliance/releases/latest) and run it |
 
 Use these if you need the Multipass-VM isolation. The `curl-bash` path
 above is simpler if you already have Docker.

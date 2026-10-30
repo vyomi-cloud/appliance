@@ -98,7 +98,8 @@ fi
 # (3) Deployment evidence on vyomi-ec2-rc
 if [ "$FORCE" -eq 0 ]; then
   echo "▸ Checking $RC_TAG was deployed to $VM_NAME..."
-  DEPLOY_DIR_NAME="cloud-learn-${RC_TAG#v}"
+  DEPLOY_DIR_NAME="vyomi-${RC_TAG#v}"
+  multipass exec "$VM_NAME" -- test -d "/home/ubuntu/$DEPLOY_DIR_NAME" 2>/dev/null || DEPLOY_DIR_NAME="cloud-learn-${RC_TAG#v}"
   if ! multipass exec "$VM_NAME" -- test -d "/home/ubuntu/$DEPLOY_DIR_NAME" 2>/dev/null; then
     echo "✗ /home/ubuntu/$DEPLOY_DIR_NAME does not exist on $VM_NAME." >&2
     echo "  This means the RC was never deployed for validation." >&2
