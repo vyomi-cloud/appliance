@@ -35,6 +35,8 @@ const rds = async (action, body = {}) => wire("/", { method: "POST", headers: { 
 const iamXml = async (body) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/iam/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams(body).toString() });
 // EC2 Query protocol: form-encoded Action=..., XML response — extract tags with a small regex (no DOMParser in this context).
 const ec2 = async (action, params = {}) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/ec2/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...params }).toString() });
+const cw = async (op, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `GraniteServiceVersion20100801.${op}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/monitoring/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
+const cwlogs = async (op, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `Logs_20140328.${op}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/logs/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const xtag = (xml, tag) => { const m = xml.match(new RegExp(`<${tag}>(.*?)</${tag}>`)); return m ? m[1] : null; };
 
 await mkdir(OUT, { recursive: true });
@@ -423,6 +425,32 @@ try {
   // EC2: terminate the smoke instance and clean up the security group over the wire.
   if (instanceId) await ec2("TerminateInstances", { "InstanceId.1": instanceId });
   await ec2("DeleteSecurityGroup", { GroupId: sgId });
+
+  // CloudWatch: create an alarm through the UI wizard, verify over native wire (UI → CLI direction)
+  const CWA = `v4-smoke-alarm-${Date.now() % 100000}`;
+  await cw("PutMetricData", { Namespace: "VyomiSmoke/EC2", MetricData: [{ MetricName: "CPUUtilization", Value: 12.5 }] });
+  await page.goto(UI + "#/cloudwatch/alarms/create");
+  await page.getByRole("tab", { name: "Specify metric and conditions" }).click();
+  await page.getByRole("button", { name: "Namespace" }).click();
+  await page.getByRole("option", { name: "VyomiSmoke/EC2" }).click();
+  await page.getByRole("button", { name: "Metric name" }).click();
+  await page.getByRole("option", { name: "CPUUtilization" }).click();
+  await page.getByLabel("Threshold value").fill("80");
+  await page.getByRole("tab", { name: "Add alarm details" }).click();
+  await page.getByLabel("Alarm name").fill(CWA);
+  await page.getByRole("button", { name: "Create alarm", exact: true }).click();
+  await page.getByRole("heading", { name: CWA }).waitFor({ timeout: 10000 });
+  const alarmsOut = await cw("DescribeAlarms", { AlarmNames: [CWA] });
+  check("CloudWatch create alarm (UI wizard) → visible over native wire", alarmsOut.MetricAlarms?.[0]?.AlarmName === CWA, JSON.stringify(alarmsOut.MetricAlarms?.[0]));
+  await shot("18-cloudwatch-alarm-detail");
+
+  // CloudWatch Logs: create a log group over the wire, verify it shows in the UI (CLI → UI direction)
+  const CWG = `v4-smoke-logs-${Date.now() % 100000}`;
+  await cwlogs("CreateLogGroup", { logGroupName: CWG });
+  await page.goto(UI + "#/cloudwatch/logs");
+  await page.getByText(CWG).first().waitFor({ timeout: 10000 });
+  check("CloudWatch Logs log group created over wire → shown in Log management list", true, CWG);
+  await shot("19-cloudwatch-log-groups");
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));

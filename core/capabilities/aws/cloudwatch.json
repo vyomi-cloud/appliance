@@ -1,0 +1,244 @@
+{
+ "$doc": "Vyomi capability registry — CloudWatch (metrics, alarms, dashboards) + CloudWatch Logs. See s3.json for the contract.",
+ "aws.cloudwatch.metrics": {
+  "title": "Metrics (PutMetricData, ListMetrics, GetMetricStatistics, GetMetricData incl. metric math)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.alarms.metric": {
+  "title": "Metric alarms (create, evaluate on every PutMetricData, state + history)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Static threshold alarms are evaluated live; anomaly-detection-band alarms are stored but never transition out of the initial state (no trained model).",
+   "Alarm actions (SNS/Lambda/Auto Scaling/EC2) are recorded in history as executed when the alarm transitions, but Vyomi does not actually publish to SNS or invoke the target — no notification is delivered."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.alarms.composite": {
+  "title": "Composite alarms (AlarmRule grammar over child alarm states)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.alarms.history": {
+  "title": "Alarm history (configuration + state + action records)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.alarms.actions.compute": {
+  "title": "Lambda / Auto Scaling / EC2 alarm actions",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Only an SNS topic ARN notification action can be configured. Lambda, Auto Scaling and EC2 actions are not offered."
+  ]
+ },
+ "aws.cloudwatch.anomaly-detection": {
+  "title": "Anomaly detection bands",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "No anomaly model is trained; detectors stay PENDING_TRAINING and anomaly-threshold alarms never evaluate."
+  ]
+ },
+ "aws.cloudwatch.dashboards": {
+  "title": "Custom dashboards (create, add widgets, save, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
+  ]
+ },
+ "aws.cloudwatch.dashboards.automatic": {
+  "title": "Automatic dashboards",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Per-service automatic dashboards are an AWS-curated view over service metrics; Vyomi does not generate them."
+  ]
+ },
+ "aws.cloudwatch.metrics.multi-source-query": {
+  "title": "Multi source query, cross-account Options and Source selection",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi simulates a single account/region, so cross-account/cross-region metric source selection has nothing to select."
+  ]
+ },
+ "aws.cloudwatch.logs.groups": {
+  "title": "Log groups (create, retention, log class, KMS association, deletion protection, tags)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.streams": {
+  "title": "Log streams",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.events": {
+  "title": "Log events (PutLogEvents, GetLogEvents, FilterLogEvents)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.metric-filters": {
+  "title": "Metric filters (create, test, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.subscription-filters": {
+  "title": "Subscription filters",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A subscription filter is stored and matched against incoming events, but delivery to the destination (Lambda/Kinesis/Firehose) is kept as a counter — there is no cross-service fan-out."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.insights": {
+  "title": "Logs Insights queries (Logs Insights QL)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Supported: fields/display, filter (=, !=, >, <, >=, <=, like), sort, limit, stats count(*) [by field]. OpenSearch PPL and OpenSearch SQL query languages are not offered; Patterns and Visualization tabs are not computed."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.patterns-visualization": {
+  "title": "Logs Insights Patterns and Visualization tabs",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Pattern mining and chart aggregation over query results are not computed."
+  ]
+ },
+ "aws.cloudwatch.logs.live-tail": {
+  "title": "Live Tail",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi polls FilterLogEvents on an interval instead of the real bidirectional Live Tail streaming protocol, so new events can take a few seconds to appear."
+  ],
+  "tests": [
+   "tests/conformance/test_logs_core.py"
+  ]
+ },
+ "aws.cloudwatch.logs.data-sources": {
+  "title": "Log management Data sources tab",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vended log sources (data source onboarding across accounts/services) are not modeled."
+  ]
+ },
+ "aws.cloudwatch.logs.anomaly-detection": {
+  "title": "Log group anomaly detection",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": []
+ },
+ "aws.cloudwatch.logs.data-protection": {
+  "title": "Log group data protection (sensitive data masking)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": []
+ },
+ "aws.cloudwatch.logs.field-indexes": {
+  "title": "Log group field indexes",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": []
+ },
+ "aws.cloudwatch.logs.transformer": {
+  "title": "Log group transformer",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": []
+ },
+ "aws.cloudwatch.logs.contributor-insights": {
+  "title": "Log group Contributor Insights rules",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": []
+ }
+}

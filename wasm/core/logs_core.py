@@ -120,6 +120,7 @@ def _group_view(store, g):
         out["retentionInDays"] = g["retentionInDays"]
     if g.get("kmsKeyId"):
         out["kmsKeyId"] = g["kmsKeyId"]
+    out["deletionProtectionEnabled"] = bool(g.get("deletionProtectionEnabled", False))
     return out
 
 
@@ -157,7 +158,8 @@ def _create_log_group(store, body):
     g = {"name": name, "arn": _group_arn(store, name), "creationTime": store.now_ms(),
          "storedBytes": 0, "tags": dict(body.get("tags") or {}), "streams": {},
          "metricFilters": {}, "subscriptionFilters": {},
-         "logGroupClass": body.get("logGroupClass") or "STANDARD"}
+         "logGroupClass": body.get("logGroupClass") or "STANDARD",
+         "deletionProtectionEnabled": bool(body.get("deletionProtectionEnabled", False))}
     if body.get("kmsKeyId"):
         g["kmsKeyId"] = body["kmsKeyId"]
     store.log_groups[name] = g
@@ -167,8 +169,17 @@ def _create_log_group(store, body):
 
 def _delete_log_group(store, body):
     name = str(_req(body, "logGroupName"))
-    _group(store, name)
+    g = _group(store, name)
+    if g.get("deletionProtectionEnabled"):
+        raise _E("OperationAbortedException", "The specified log group is protected from deletion. Turn off deletion protection to delete it.")
     del store.log_groups[name]
+    store.persist()
+    return LogsResponse(body={})
+
+
+def _update_log_group_deletion_protection(store, body):
+    g = _group(store, str(_req(body, "logGroupName")))
+    g["deletionProtectionEnabled"] = bool(body.get("deletionProtectionEnabled", False))
     store.persist()
     return LogsResponse(body={})
 
@@ -773,6 +784,7 @@ _OPS = {
     "DeleteQueryDefinition": _delete_query_definition,
     "StartQuery": _start_query, "GetQueryResults": _get_query_results,
     "StopQuery": _stop_query, "DescribeQueries": _describe_queries,
+    "UpdateLogGroupDeletionProtection": _update_log_group_deletion_protection,
 }
 OPERATIONS = sorted(_OPS)
 
@@ -818,6 +830,7 @@ def _group_row(g):
             "subscription_filter_count": len(g["subscriptionFilters"]),
             "stored": _human_bytes(g["storedBytes"]),
             "kms_key": g.get("kmsKeyId") or "Not associated",
+            "deletion_protection": bool(g.get("deletionProtectionEnabled", False)),
             "created": _iso_ms(g["creationTime"]),
             "tags": dict(g["tags"])}
 
@@ -846,7 +859,8 @@ def console_dispatch(store: LogsStore, method: str, path: str, query: dict | Non
                 cls = str(body.get("log_group_class") or "STANDARD")
                 _create_log_group(store, {"logGroupName": name, "tags": body.get("tags") or {},
                                           "logGroupClass": {"Standard": "STANDARD", "Infrequent Access": "INFREQUENT_ACCESS"}.get(cls, cls),
-                                          "kmsKeyId": body.get("kms_key_id") or None})
+                                          "kmsKeyId": body.get("kms_key_id") or None,
+                                          "deletionProtectionEnabled": bool(body.get("deletion_protection"))})
                 days = body.get("retention_in_days")
                 if days not in (None, "", 0, "0", "never"):
                     _put_retention_policy(store, {"logGroupName": name, "retentionInDays": int(days)})
@@ -872,6 +886,8 @@ def console_dispatch(store: LogsStore, method: str, path: str, query: dict | Non
                         g.pop("retentionInDays", None)
                     else:
                         _put_retention_policy(store, {"logGroupName": name, "retentionInDays": int(days)})
+                if "deletion_protection" in body:
+                    _update_log_group_deletion_protection(store, {"logGroupName": name, "deletionProtectionEnabled": bool(body["deletion_protection"])})
                 store.persist()
                 return 200, _group_row(g)
             return _cerr(405, "method not allowed")
