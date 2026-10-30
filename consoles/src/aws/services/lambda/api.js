@@ -13,7 +13,10 @@ export const createFunction = (body) => restJson("POST", F, { body });
 export const deleteFunction = (name) => restJson("DELETE", `${F}/${enc(name)}`);
 export const updateFunctionCode = (name, code) => restJson("PUT", `${F}/${enc(name)}/code`, { body: code });
 export const updateFunctionConfiguration = (name, body) => restJson("PUT", `${F}/${enc(name)}/configuration`, { body });
-export const invoke = (name, payload) => restJson("POST", `${F}/${enc(name)}/invocations`, { body: payload ?? {} });
+export const invoke = (name, payload, invocationType = "RequestResponse") => restJson("POST", `${F}/${enc(name)}/invocations`, {
+  body: payload ?? {},
+  headers: invocationType === "RequestResponse" ? {} : { "X-Amz-Invocation-Type": invocationType },
+});
 export const recentInvocations = (name) => restJson("GET", `${F}/${enc(name)}/invocations`);
 
 // ── Tags ────────────────────────────────────────────────────────────────────────────────
