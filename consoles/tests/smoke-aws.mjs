@@ -96,6 +96,26 @@ try {
   await page.getByRole("tab", { name: "Overview" }).waitFor();
   await shot("10-ddb-overview");
 
+  // PartiQL editor: INSERT through the UI, verify over the wire (UI → CLI direction)
+  await page.goto(UI + "#/dynamodb/partiql");
+  await page.getByLabel("PartiQL").fill(`INSERT INTO "${T}" VALUE {'pk': 'partiql-1', 'total': 7}`);
+  await page.getByRole("button", { name: "Run" }).click();
+  await page.waitForTimeout(800);
+  const got = await ddb("GetItem", { TableName: T, Key: { pk: { S: "partiql-1" } } });
+  check("DynamoDB PartiQL INSERT (UI) → readable over native wire", got.Item?.total?.N === "7", JSON.stringify(got));
+  await shot("11-ddb-partiql");
+
+  // Backups: create on-demand backup through the UI, verify over the wire (CLI direction)
+  await page.goto(UI + "#/dynamodb/backups");
+  await page.getByRole("button", { name: "Create backup" }).first().click();
+  await page.getByLabel("Source table").first().click();
+  await page.getByRole("option", { name: T }).click();
+  await page.getByRole("button", { name: "Create backup" }).last().click();
+  await page.waitForTimeout(800);
+  const backups = await ddb("ListBackups", { TableName: T });
+  check("DynamoDB create backup (UI) → visible over native wire", (backups.BackupSummaries || []).some((b) => b.TableName === T), JSON.stringify(backups));
+  await shot("12-ddb-backups");
+
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));
   await page.reload();

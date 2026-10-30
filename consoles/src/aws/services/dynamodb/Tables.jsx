@@ -9,6 +9,7 @@ import DeleteModal from "../../kit/DeleteModal.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
+import { isFavoriteTable, toggleFavoriteTable } from "./prefs.js";
 import * as api from "./api.js";
 
 export const keyOf = (t, type) => t.KeySchema?.find((k) => k.KeyType === type)?.AttributeName;
@@ -21,6 +22,7 @@ export default function Tables() {
   const notify = useNotify();
   const [sel, setSel] = useState([]);
   const [del, setDel] = useState(false);
+  const [favTick, setFavTick] = useState(0);
   const { data = [], loading, error, reload } = useAsync(async () => Promise.all((await api.listTables()).map(api.describeTable)));
 
   return (
@@ -44,7 +46,11 @@ export default function Tables() {
           { id: "indexes", header: "Indexes", cell: (t) => (t.GlobalSecondaryIndexes?.length || 0) + (t.LocalSecondaryIndexes?.length || 0) },
           { id: "replication", header: "Replication Regions", cell: (t) => t.Replicas?.length || 0 },
           { id: "protection", header: "Deletion protection", cell: (t) => t.DeletionProtectionEnabled ? "On" : "Off" },
-          { id: "favorite", header: "Favorite", cell: () => "☆" },
+          { id: "favorite", header: "Favorite", cell: (t) => (
+            <Button variant="icon" iconName={isFavoriteTable(t.TableName) ? "star-filled" : "star"}
+              ariaLabel={isFavoriteTable(t.TableName) ? `Remove ${t.TableName} from favorites` : `Add ${t.TableName} to favorites`}
+              onClick={() => { toggleFavoriteTable(t.TableName); setFavTick((n) => n + 1); }} />
+          ) },
           { id: "readcap", header: "Read capacity mode", cell: (t) => capacity(t) },
           { id: "writecap", header: "Write capacity mode", cell: (t) => capacity(t) },
           { id: "size", header: "Total size", cell: (t) => `${t.TableSizeBytes ?? 0} bytes` },

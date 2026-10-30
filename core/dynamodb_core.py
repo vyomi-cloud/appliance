@@ -12,9 +12,15 @@ adapter (Pro/Max) or the service-worker / relay bridge (Nano) maps
 Request<->DdbResponse and JSON-serialises the body.
 
 Scope (v1 slice — the conformance core): CreateTable, DescribeTable, ListTables,
-DeleteTable, PutItem, GetItem, DeleteItem, UpdateItem (AttributeUpdates + SET
-UpdateExpression), Query (KeyConditionExpression: =, begins_with, BETWEEN),
-Scan, BatchGetItem, BatchWriteItem, TagResource/UntagResource/ListTagsOfResource.
+DeleteTable (honours DeletionProtectionEnabled), UpdateTable (billing mode,
+throughput, deletion protection, table class, GSI create/delete), PutItem,
+GetItem, DeleteItem, UpdateItem (AttributeUpdates + SET UpdateExpression),
+Query (KeyConditionExpression: =, begins_with, BETWEEN), Scan, BatchGetItem,
+BatchWriteItem, TagResource/UntagResource/ListTagsOfResource,
+UpdateTimeToLive/DescribeTimeToLive (lazy expiry on read), UpdateContinuousBackups/
+DescribeContinuousBackups (PITR flag), CreateBackup/ListBackups/DescribeBackup/
+DeleteBackup/RestoreTableFromBackup (snapshot copies inside the store),
+ExecuteStatement (PartiQL: SELECT/INSERT/UPDATE/DELETE).
 DynamoDB Streams (DescribeStream/GetShardIterator/GetRecords/ListStreams) reuse
 the same helpers and slot in next.
 
@@ -27,6 +33,7 @@ asserts on every substrate.
 """
 from __future__ import annotations
 
+import ast
 import copy
 import json
 import re
@@ -197,6 +204,10 @@ def _normalize_table(store: NoSqlStore, table_name: str, table: dict) -> dict:
     table.setdefault("items", {})
     table.setdefault("created", _now())
     table.setdefault("last_modified", _now())
+    table.setdefault("ttl_attribute_name", "")
+    table.setdefault("ttl_enabled", False)
+    table.setdefault("pitr_enabled", False)
+    table.setdefault("pitr_earliest", "")
     return table
 
 
@@ -358,6 +369,176 @@ def _delete_table_record(store: NoSqlStore, table_name: str) -> None:
     store.drop_table(table_name)
     store.mirror_delete_table(table_name)
     store.persist()
+
+
+def _update_table_record(store: NoSqlStore, table: dict, payload: dict[str, Any]) -> dict:
+    if "BillingMode" in payload or "billing_mode" in payload:
+        table["billing_mode"] = str(payload.get("BillingMode") or payload.get("billing_mode")).strip().upper()
+    if "ProvisionedThroughput" in payload or "provisioned_throughput" in payload:
+        pt = payload.get("ProvisionedThroughput") or payload.get("provisioned_throughput") or {}
+        current = table.get("provisioned_throughput", {})
+        table["provisioned_throughput"] = {
+            "ReadCapacityUnits": int(pt.get("ReadCapacityUnits", current.get("ReadCapacityUnits", 5)) or 5),
+            "WriteCapacityUnits": int(pt.get("WriteCapacityUnits", current.get("WriteCapacityUnits", 5)) or 5),
+        }
+    if "DeletionProtectionEnabled" in payload or "deletion_protection_enabled" in payload:
+        table["deletion_protection_enabled"] = bool(payload.get("DeletionProtectionEnabled",
+                                                                 payload.get("deletion_protection_enabled")))
+    if "TableClass" in payload or "table_class" in payload:
+        table["table_class"] = str(payload.get("TableClass") or payload.get("table_class")).strip().upper()
+    for upd in payload.get("GlobalSecondaryIndexUpdates") or payload.get("global_secondary_index_updates") or []:
+        if not isinstance(upd, dict):
+            continue
+        if "Create" in upd:
+            g = upd["Create"]
+            gks = g.get("KeySchema") or []
+            g_pk = next((str(k.get("AttributeName", "")) for k in gks
+                         if str(k.get("KeyType", "")).upper() == "HASH"), "")
+            g_sk = next((str(k.get("AttributeName", "")) for k in gks
+                         if str(k.get("KeyType", "")).upper() == "RANGE"), "")
+            table.setdefault("indexes", []).append({
+                "name": str(g.get("IndexName", "")), "key_schema": gks,
+                "partition_key_name": g_pk, "sort_key_name": g_sk,
+                "projection": g.get("Projection") or {"ProjectionType": "ALL"},
+                "index_status": "ACTIVE",
+            })
+        elif "Delete" in upd:
+            name = str(upd["Delete"].get("IndexName", ""))
+            table["indexes"] = [g for g in table.get("indexes", []) if g.get("name") != name]
+    table["last_modified"] = _now()
+    store.persist()
+    return table
+
+
+# ── TTL (faithful lazy-expiry: items past their TTL are dropped on read) ───
+def _is_expired(table: dict, item: dict[str, Any]) -> bool:
+    attr = table.get("ttl_attribute_name") or ""
+    if not table.get("ttl_enabled") or not attr:
+        return False
+    value = item.get(attr)
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    return value <= datetime.now(timezone.utc).timestamp()
+
+
+def _expire_table_items(table: dict) -> None:
+    items = table.get("items") or {}
+    expired = [key for key, rec in items.items() if _is_expired(table, rec.get("item", {}))]
+    for key in expired:
+        items.pop(key, None)
+    if expired:
+        _refresh_table_metrics(table)
+
+
+def _ttl_view(table: dict) -> dict:
+    attr = table.get("ttl_attribute_name") or ""
+    view = {"TimeToLiveStatus": "ENABLED" if table.get("ttl_enabled") and attr else "DISABLED"}
+    if attr:
+        view["AttributeName"] = attr
+    return view
+
+
+def _update_ttl(store: NoSqlStore, table: dict, spec: dict[str, Any]) -> dict:
+    attr = str(spec.get("AttributeName") or "").strip()
+    enabled = bool(spec.get("Enabled"))
+    if enabled and not attr:
+        raise DdbError("ValidationException", "AttributeName is required to enable TTL.", 400)
+    if attr:
+        table["ttl_attribute_name"] = attr
+    table["ttl_enabled"] = enabled
+    table["last_modified"] = _now()
+    store.persist()
+    return {"AttributeName": table.get("ttl_attribute_name", ""), "Enabled": enabled}
+
+
+# ── Point-in-time recovery (continuous backups) ────────────────────────────
+def _continuous_backups_view(table: dict) -> dict:
+    enabled = bool(table.get("pitr_enabled"))
+    desc = {"PointInTimeRecoveryStatus": "ENABLED" if enabled else "DISABLED"}
+    if enabled:
+        desc["EarliestRestorableDateTime"] = table.get("pitr_earliest") or _now()
+        desc["LatestRestorableDateTime"] = _now()
+    return {"ContinuousBackupsStatus": "ENABLED", "PointInTimeRecoveryDescription": desc}
+
+
+def _update_continuous_backups(store: NoSqlStore, table: dict, spec: dict[str, Any]) -> None:
+    enabled = bool(spec.get("PointInTimeRecoveryEnabled"))
+    table["pitr_enabled"] = enabled
+    if enabled and not table.get("pitr_earliest"):
+        table["pitr_earliest"] = _now()
+    table["last_modified"] = _now()
+    store.persist()
+
+
+# ── on-demand backups (snapshot copies inside the store) ───────────────────
+def _backup_summary(backup: dict) -> dict:
+    return {
+        "TableName": backup["table_name"], "TableArn": backup["table_arn"],
+        "BackupArn": backup["backup_arn"], "BackupName": backup["backup_name"],
+        "BackupStatus": backup.get("backup_status", "AVAILABLE"),
+        "BackupType": backup.get("backup_type", "USER"),
+        "BackupSizeBytes": int(backup.get("backup_size_bytes", 0) or 0),
+        "BackupCreationDateTime": backup["backup_creation_datetime"],
+    }
+
+
+def _backup_description(backup: dict) -> dict:
+    src = backup.get("source_table") or {}
+    return {
+        "BackupDetails": _backup_summary(backup),
+        "SourceTableDetails": {
+            "TableName": src.get("table_name", ""), "TableArn": src.get("table_arn", ""),
+            "TableSizeBytes": int(src.get("table_size_bytes", 0) or 0),
+            "KeySchema": src.get("key_schema", []),
+            "TableCreationDateTime": src.get("created", ""),
+            "ItemCount": int(src.get("item_count", 0) or 0),
+            "BillingMode": src.get("billing_mode", "PAY_PER_REQUEST"),
+        },
+        "SourceTableFeatureDetails": {},
+    }
+
+
+def _create_backup_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
+    table_name = str(payload.get("TableName") or "").strip()
+    table = _require_table(store, table_name)
+    backup_name = str(payload.get("BackupName") or "").strip()
+    if not backup_name:
+        raise DdbError("ValidationException", "BackupName is required.", 400)
+    _refresh_table_metrics(table)
+    backup_id = uuid.uuid4().hex[:16]
+    backup_arn = f"{table['table_arn']}/backup/{backup_id}"
+    backup = {
+        "backup_arn": backup_arn, "backup_name": backup_name, "table_name": table_name,
+        "table_arn": table["table_arn"], "backup_status": "AVAILABLE", "backup_type": "USER",
+        "backup_size_bytes": int(table.get("table_size_bytes", 0) or 0),
+        "backup_creation_datetime": _now(),
+        "source_table": copy.deepcopy(table),
+    }
+    store.put_backup(backup_arn, backup)
+    store.persist()
+    return backup
+
+
+def _restore_table_from_backup(store: NoSqlStore, payload: dict[str, Any]) -> dict:
+    arn = str(payload.get("BackupArn") or "").strip()
+    target = str(payload.get("TargetTableName") or "").strip()
+    backup = store.get_backup(arn)
+    if not backup:
+        raise DdbError("BackupNotFoundException", f"Backup not found: {arn}", 400)
+    if not target:
+        raise DdbError("ValidationException", "TargetTableName is required.", 400)
+    if store.table_exists(target):
+        raise DdbError("ResourceInUseException", f"Table already exists: {target}", 400)
+    restored = copy.deepcopy(backup.get("source_table") or {})
+    restored["table_name"] = target
+    restored["table_arn"] = _table_arn(store, target)
+    restored["table_status"] = "ACTIVE"
+    restored["created"] = _now()
+    restored["last_modified"] = _now()
+    store.put_table(target, restored)
+    store.mirror_create_table(target, restored)
+    store.persist()
+    return restored
 
 
 # ── item CRUD (faithful ports over the store) ──────────────────────────────
@@ -536,6 +717,135 @@ def _set_tags(store: NoSqlStore, table: dict, tags: dict[str, str]) -> None:
     store.persist()
 
 
+# ── PartiQL (ExecuteStatement) ──────────────────────────────────────────────
+# A pragmatic subset — SELECT (WHERE on key/attributes), INSERT ... VALUE,
+# UPDATE ... SET ... WHERE and DELETE FROM ... WHERE — sufficient for the
+# console's PartiQL editor and ordinary CLI usage against a single table.
+_SELECT_RE = re.compile(r'^\s*SELECT\s+.+?\s+FROM\s+"?([\w.-]+)"?(?:\s+WHERE\s+(.+))?\s*$', re.I | re.S)
+_INSERT_RE = re.compile(r'^\s*INSERT\s+INTO\s+"?([\w.-]+)"?\s+VALUE\s+(\{.*\})\s*$', re.I | re.S)
+_UPDATE_RE = re.compile(r'^\s*UPDATE\s+"?([\w.-]+)"?\s+SET\s+(.+?)(?:\s+WHERE\s+(.+))?\s*$', re.I | re.S)
+_DELETE_RE = re.compile(r'^\s*DELETE\s+FROM\s+"?([\w.-]+)"?(?:\s+WHERE\s+(.+))?\s*$', re.I | re.S)
+_AND_RE = re.compile(r"\s+AND\s+", re.I)
+_COMMA_RE = re.compile(r"\s*,\s*")
+
+
+def _split_unquoted(text: str, sep_re: re.Pattern) -> list[str]:
+    """Split on a top-level separator, ignoring matches inside '...' strings
+    or {}/[] nesting (so literal maps/lists aren't torn apart)."""
+    parts, buf, depth, in_str, i, n = [], [], 0, False, 0, len(text)
+    while i < n:
+        ch = text[i]
+        if in_str:
+            buf.append(ch)
+            in_str = ch != "'"
+            i += 1
+            continue
+        if ch == "'":
+            in_str = True
+            buf.append(ch)
+            i += 1
+            continue
+        if ch in "{[":
+            depth += 1
+        elif ch in "}]":
+            depth -= 1
+        if depth == 0:
+            m = sep_re.match(text, i)
+            if m:
+                parts.append("".join(buf))
+                buf = []
+                i = m.end()
+                continue
+        buf.append(ch)
+        i += 1
+    parts.append("".join(buf))
+    return parts
+
+
+def _partiql_literal(token: str, params: iter) -> Any:
+    token = token.strip()
+    if token == "?":
+        try:
+            return json_to_native(next(params))
+        except StopIteration:
+            raise DdbError("ValidationException", "Not enough Parameters for the statement.", 400)
+    py = re.sub(r"\btrue\b", "True", token, flags=re.I)
+    py = re.sub(r"\bfalse\b", "False", py, flags=re.I)
+    py = re.sub(r"\bnull\b", "None", py, flags=re.I)
+    try:
+        return ast.literal_eval(py)
+    except Exception:
+        raise DdbError("ValidationException", f"Unable to parse PartiQL literal: {token}", 400)
+
+
+def _partiql_where(clause: str | None, params: iter) -> dict[str, Any]:
+    conds: dict[str, Any] = {}
+    for part in _split_unquoted(clause, _AND_RE) if clause else []:
+        m = re.match(r'^\s*"?([\w.]+)"?\s*=\s*(.+?)\s*$', part.strip())
+        if m:
+            conds[m.group(1)] = _partiql_literal(m.group(2), params)
+    return conds
+
+
+def _partiql_key(table: dict, conds: dict[str, Any], op: str) -> dict[str, Any]:
+    pk_name, sk_name = _table_key_fields(table)
+    if pk_name not in conds:
+        raise DdbError("ValidationException", f"{op} requires the primary key in WHERE.", 400)
+    key = {pk_name: conds[pk_name]}
+    if sk_name and sk_name in conds:
+        key[sk_name] = conds[sk_name]
+    return key
+
+
+def _execute_statement(store: NoSqlStore, payload: dict[str, Any]) -> DdbResponse:
+    stmt = str(payload.get("Statement") or "").strip()
+    params = iter(payload.get("Parameters") or [])
+
+    m = _SELECT_RE.match(stmt)
+    if m:
+        table = _require_table(store, m.group(1))
+        _expire_table_items(table)
+        conds = _partiql_where(m.group(2), params)
+        matched = [r for r in _sorted_records(table)
+                   if all(r.get("item", {}).get(k) == v for k, v in conds.items())]
+        return _ok({"Items": [native_item_to_json(r["item"]) for r in matched], "Count": len(matched)})
+
+    m = _INSERT_RE.match(stmt)
+    if m:
+        table = _require_table(store, m.group(1))
+        value = _partiql_literal(m.group(2), params)
+        if not isinstance(value, dict):
+            raise DdbError("ValidationException", "INSERT VALUE must be a map.", 400)
+        _put_item_record(store, table, {"Item": native_item_to_json(value)})
+        return _ok({})
+
+    m = _UPDATE_RE.match(stmt)
+    if m:
+        table = _require_table(store, m.group(1))
+        conds = _partiql_where(m.group(3), params)
+        key = _partiql_key(table, conds, "UPDATE")
+        sets: dict[str, Any] = {}
+        for assign in _split_unquoted(m.group(2), _COMMA_RE):
+            am = re.match(r'^\s*"?([\w.]+)"?\s*=\s*(.+?)\s*$', assign.strip())
+            if am:
+                sets[am.group(1)] = _partiql_literal(am.group(2), params)
+        updated = _update_item_record(store, table, {
+            "Key": native_item_to_json(key),
+            "AttributeUpdates": {k: {"Action": "PUT", "Value": native_to_json(v)} for k, v in sets.items()},
+        })
+        return _ok({"Attributes": native_item_to_json(updated.get("item", {}))})
+
+    m = _DELETE_RE.match(stmt)
+    if m:
+        table = _require_table(store, m.group(1))
+        conds = _partiql_where(m.group(2), params)
+        key = _partiql_key(table, conds, "DELETE")
+        removed = _delete_item_record(store, table, {"Key": native_item_to_json(key)})
+        return _ok({"Attributes": native_item_to_json(removed.get("item", {}))} if removed else {})
+
+    raise DdbError("ValidationException", f"Unable to parse PartiQL statement: {stmt}", 400)
+
+
 # ── response builders ───────────────────────────────────────────────────────
 def _ok(body: dict | None = None) -> DdbResponse:
     return DdbResponse(status=200, body=body or {}, headers={"x-amzn-requestid": _req_id()})
@@ -608,8 +918,71 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None) -> Ddb
 
         if action == "DeleteTable":
             name = table_name()
+            table = _require_table(store, name)
+            if table.get("deletion_protection_enabled"):
+                raise DdbError("ValidationException",
+                               f"Table cannot be deleted while DeletionProtectionEnabled is set to true. "
+                               f"Table: {name}", 400)
             _delete_table_record(store, name)
             return _ok({"TableDescription": {"TableName": name, "TableStatus": "DELETING"}})
+
+        if action == "UpdateTable":
+            table = _require_table(store, table_name())
+            _update_table_record(store, table, payload)
+            return _ok({"TableDescription": _table_view(store, table, include_items=False)})
+
+        if action == "UpdateTimeToLive":
+            table = _require_table(store, table_name())
+            spec = _update_ttl(store, table, payload.get("TimeToLiveSpecification") or {})
+            return _ok({"TimeToLiveSpecification": spec})
+
+        if action == "DescribeTimeToLive":
+            table = _require_table(store, table_name())
+            return _ok({"TimeToLiveDescription": _ttl_view(table)})
+
+        if action == "UpdateContinuousBackups":
+            table = _require_table(store, table_name())
+            _update_continuous_backups(store, table, payload.get("PointInTimeRecoverySpecification") or {})
+            return _ok({"ContinuousBackupsDescription": _continuous_backups_view(table)})
+
+        if action == "DescribeContinuousBackups":
+            table = _require_table(store, table_name())
+            return _ok({"ContinuousBackupsDescription": _continuous_backups_view(table)})
+
+        if action == "CreateBackup":
+            backup = _create_backup_record(store, payload)
+            return _ok({"BackupDetails": _backup_summary(backup)})
+
+        if action == "ListBackups":
+            tname = table_name()
+            rows = [b for b in store.list_backups() if not tname or b["table_name"] == tname]
+            rows.sort(key=lambda b: b["backup_creation_datetime"])
+            return _ok({"BackupSummaries": [_backup_summary(b) for b in rows]})
+
+        if action == "DescribeBackup":
+            arn = str(payload.get("BackupArn") or "").strip()
+            backup = store.get_backup(arn)
+            if not backup:
+                raise DdbError("BackupNotFoundException", f"Backup not found: {arn}", 400)
+            return _ok({"BackupDescription": _backup_description(backup)})
+
+        if action == "DeleteBackup":
+            arn = str(payload.get("BackupArn") or "").strip()
+            backup = store.get_backup(arn)
+            if not backup:
+                raise DdbError("BackupNotFoundException", f"Backup not found: {arn}", 400)
+            backup["backup_status"] = "DELETED"
+            desc = _backup_description(backup)
+            store.drop_backup(arn)
+            store.persist()
+            return _ok({"BackupDescription": desc})
+
+        if action == "RestoreTableFromBackup":
+            restored = _restore_table_from_backup(store, payload)
+            return _ok({"TableDescription": _table_view(store, restored, include_items=False)})
+
+        if action == "ExecuteStatement":
+            return _execute_statement(store, payload)
 
         if action == "PutItem":
             table = _require_table(store, table_name())
@@ -620,6 +993,7 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None) -> Ddb
 
         if action == "GetItem":
             table = _require_table(store, table_name())
+            _expire_table_items(table)
             record = _get_item_record(store, table, payload)
             return _ok({"Item": native_item_to_json(record.get("item", {}))} if record else {})
 
@@ -637,12 +1011,14 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None) -> Ddb
 
         if action == "Query":
             table = _require_table(store, table_name())
+            _expire_table_items(table)
             matched, scanned = _query_filter(table, payload)
             return _ok({"Items": [native_item_to_json(r.get("item", {})) for r in matched],
                         "Count": len(matched), "ScannedCount": scanned})
 
         if action == "Scan":
             table = _require_table(store, table_name())
+            _expire_table_items(table)
             matched, scanned = _scan_filter(table, payload)
             return _ok({"Items": [native_item_to_json(r.get("item", {})) for r in matched],
                         "Count": len(matched), "ScannedCount": scanned})
@@ -653,6 +1029,7 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None) -> Ddb
                 table = _find_table(store, str(tname))
                 if not table:
                     continue
+                _expire_table_items(table)
                 rows = []
                 for key in (req or {}).get("Keys") or []:
                     record = _get_item_record(store, table, {"Key": key})

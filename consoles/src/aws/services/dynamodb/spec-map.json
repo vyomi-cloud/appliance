@@ -4,34 +4,46 @@
     "route": "#/dynamodb/dashboard"
   },
   "partiql-editor": {
-    "route": "#/dynamodb/partiql"
+    "route": "#/dynamodb/partiql",
+    "fixtures": [
+      "ddb-table"
+    ]
   },
   "backups": {
-    "route": "#/dynamodb/backups"
+    "route": "#/dynamodb/backups",
+    "fixtures": [
+      "ddb-table"
+    ]
   },
   "create-backup": {
-    "route": "#/dynamodb/backups"
+    "route": "#/dynamodb/backups",
+    "fixtures": [
+      "ddb-table"
+    ],
+    "expand": [
+      "text=Create backup"
+    ]
   },
   "exports-to-s3": {
     "route": "#/dynamodb/exports"
   },
   "export-to-s3": {
-    "route": "#/dynamodb/exports"
+    "route": "#/dynamodb/exports/create"
   },
   "imports-from-s3": {
     "route": "#/dynamodb/imports"
   },
   "import-from-s3": {
-    "route": "#/dynamodb/imports"
+    "route": "#/dynamodb/imports/create"
   },
   "settings": {
     "route": "#/dynamodb/settings"
   },
   "edit-layout-settings": {
-    "route": "#/dynamodb/settings"
+    "route": "#/dynamodb/settings/layout"
   },
   "edit-explore-items-settings": {
-    "route": "#/dynamodb/settings"
+    "route": "#/dynamodb/settings/explore-items"
   },
   "tables": {
     "route": "#/dynamodb/tables",
