@@ -25,6 +25,9 @@ Wire shape recap (what google-cloud-secret-manager sends/expects):
   - destroy ver.  : POST .../secrets/{s}/versions/{v}:destroy -> version DESTROYED
   - disable ver.  : POST .../secrets/{s}/versions/{v}:disable -> version DISABLED
   - enable ver.   : POST .../secrets/{s}/versions/{v}:enable  -> version ENABLED
+  - update secret : PATCH .../secrets/{s}?updateMask=... body merges into the secret
+                    (labels, annotations, rotation, expireTime, ttl, topics,
+                    versionAliases) -> updated secret resource
 
 v4 C0b — the offline appliance serves Secret Manager through THIS core (over
 core/appliance_stores.py) instead of the retired Vault-KV handlers in
@@ -65,6 +68,17 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000000Z")
 
 
+def _ttl_to_expire_time(ttl: str) -> str | None:
+    """Google Duration string ("2592000s") -> an absolute Timestamp, the same
+    conversion the real API performs for a create/patch request that sends `ttl`."""
+    try:
+        secs = float(str(ttl).rstrip("s"))
+    except (TypeError, ValueError):
+        return None
+    from datetime import timedelta
+    return (datetime.now(timezone.utc) + timedelta(seconds=secs)).strftime("%Y-%m-%dT%H:%M:%S.000000Z")
+
+
 def _json(status: int, obj: dict) -> GcpResponse:
     return GcpResponse(status=status, body=json.dumps(obj).encode())
 
@@ -99,12 +113,15 @@ def _version_name(project: str, secret_id: str, ver: int) -> str:
 
 
 # ── resource views ────────────────────────────────────────────────────────
+_OPTIONAL_SECRET_FIELDS = ("labels", "annotations", "rotation", "expireTime", "topics", "versionAliases")
+
+
 def _secret_view(secret: dict) -> dict:
     return {
         "name": secret["name"],
         "createTime": secret["createTime"],
         "replication": secret.get("replication", {"automatic": {}}),
-        **({"labels": secret["labels"]} if secret.get("labels") else {}),
+        **{k: secret[k] for k in _OPTIONAL_SECRET_FIELDS if secret.get(k)},
         "etag": secret.get("etag", "\"0\""),
     }
 
@@ -158,6 +175,7 @@ def _create_secret(store: KvStore, project: str, secret_id: str, body: dict) -> 
     key = _key(project, secret_id)
     if store.secret_exists(key):
         return _err(409, f"Secret [{_resource_name(project, secret_id)}] already exists.")
+    expire_time = body.get("expireTime") or (_ttl_to_expire_time(body["ttl"]) if body.get("ttl") else None)
     secret = {
         "name": _resource_name(project, secret_id),
         "project": project,
@@ -165,6 +183,11 @@ def _create_secret(store: KvStore, project: str, secret_id: str, body: dict) -> 
         "createTime": _now(),
         "replication": body.get("replication") or {"automatic": {}},
         "labels": body.get("labels") or {},
+        "annotations": body.get("annotations") or {},
+        "rotation": body.get("rotation") or {},
+        "topics": body.get("topics") or [],
+        "versionAliases": body.get("versionAliases") or {},
+        **({"expireTime": expire_time} if expire_time else {}),
         "versions": {},
         "version_counter": 0,
     }
@@ -238,6 +261,29 @@ def _get_secret(store: KvStore, project: str, secret_id: str) -> GcpResponse:
     secret = _get(store, key)
     if secret is None:
         return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
+    return _json(200, _secret_view(secret))
+
+
+_PATCHABLE_FIELDS = ("labels", "annotations", "rotation", "expireTime", "ttl", "topics", "versionAliases")
+
+
+def _update_secret(store: KvStore, project: str, secret_id: str, body: dict, update_mask: str) -> GcpResponse:
+    key = _key(project, secret_id)
+    secret = _get(store, key)
+    if secret is None:
+        return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
+    fields = [f.strip() for f in update_mask.split(",") if f.strip()] if update_mask else list(_PATCHABLE_FIELDS)
+    for f in fields:
+        if f not in _PATCHABLE_FIELDS or f not in body:
+            continue
+        if f == "ttl":
+            expire_time = _ttl_to_expire_time(body["ttl"])
+            if expire_time:
+                secret["expireTime"] = expire_time
+        else:
+            secret[f] = body[f]
+    store.mirror_put(key, secret)
+    store.persist()
     return _json(200, _secret_view(secret))
 
 
@@ -324,6 +370,8 @@ def dispatch(store: KvStore, method: str, path: str,
             return _add_version(store, project, secret_id, payload)
         if method == "GET":
             return _get_secret(store, project, secret_id)
+        if method == "PATCH":
+            return _update_secret(store, project, secret_id, payload, query.get("updateMask") or "")
         if method == "DELETE":
             return _delete_secret(store, project, secret_id)
         return _err(400, f"Unsupported operation on secret ({method} :{verb}).")

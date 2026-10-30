@@ -21,8 +21,9 @@ import cap_kubernetes from "../../../../core/capabilities/gcp/kubernetes.json";
 import cap_logs from "../../../../core/capabilities/gcp/logs.json";
 import cap_monitoring from "../../../../core/capabilities/gcp/monitoring.json";
 import cap_networking from "../../../../core/capabilities/gcp/networking.json";
+import cap_secret_manager from "../../../../core/capabilities/gcp/secret-manager.json";
 
-const REGISTRY = { ...cap_artifacts, ...cap_cloudscheduler, ...cap_compute, ...cap_firestore, ...cap_functions, ...cap_iam_admin, ...cap_kubernetes, ...cap_logs, ...cap_monitoring, ...cap_networking };
+const REGISTRY = { ...cap_artifacts, ...cap_cloudscheduler, ...cap_compute, ...cap_firestore, ...cap_functions, ...cap_iam_admin, ...cap_kubernetes, ...cap_logs, ...cap_monitoring, ...cap_networking, ...cap_secret_manager };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 
