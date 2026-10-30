@@ -1,0 +1,102 @@
+{
+ "$doc": "Vyomi capability registry — Azure SQL databases. See aws/s3.json for the contract.",
+ "azure.sql.server.crud": {
+  "title": "Servers (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.database.crud": {
+  "title": "Databases (create, get, list, delete) over ARM",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "The subscription-wide \"SQL databases\" browse grid aggregates the native per-server Databases_List call across every known server (the ARM core's generic list does not scope by the server segment in the path) instead of calling a real Azure Resource Graph query, which is what the actual portal uses for this one blade."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.firewallrules": {
+  "title": "Server firewall rules (Microsoft.Sql/servers/firewallRules)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.networking": {
+  "title": "Server public network access toggle",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "publicNetworkAccess round-trips through ARM, but the azure-sql data-plane query wire never enforces it — a query still runs regardless of the configured setting."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.query_editor": {
+  "title": "Query editor (real SQL execution over the azure-sql data plane)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Runs on the same SqlStore seam as RDS/Cloud SQL (sqlite in Nano); T-SQL-specific syntax, stored procedures and SQL-authentication credential checks beyond a plain login/password string compare are not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_sql_core.py"]
+ },
+ "azure.sql.sample_data": {
+  "title": "\"Use existing data: Sample\" canned dataset load",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Loads a small fixed Customer/Product/SalesOrderHeader schema with a few rows via the query data plane — not the real AdventureWorksLT sample database."
+  ],
+  "tests": ["tests/conformance/test_azure_sql_core.py"]
+ },
+ "azure.sql.compute_storage": {
+  "title": "Compute + storage (service/compute tier, vCore auto-scaling, auto-pause, max size, zone redundancy)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "sku and the related properties round-trip through ARM exactly as written, but Vyomi does not enforce vCore limits, auto-pause behaviour, storage caps or zone placement — the query data plane runs unchanged regardless of the configured tier."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.transparent_data_encryption": {
+  "title": "Transparent data encryption on/off",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "properties.transparentDataEncryption.state round-trips through ARM, but data at rest is never actually encrypted or decrypted based on it."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.identity": {
+  "title": "System-assigned managed identity",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "The identity block (including a generated principalId) round-trips through ARM, but it is never actually usable for Microsoft Entra authentication to other Vyomi services."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.automatic_tuning": {
+  "title": "Automatic tuning options (FORCE_LAST_GOOD_PLAN, CREATE_INDEX, DROP_INDEX)",
+  "level": { "nano": "config_only", "offline": "config_only" },
+  "limitations": [
+   "properties.automaticTuning round-trips through ARM, but Vyomi never generates or applies tuning recommendations."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.locks": {
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to a database",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Locks are only simulated at the resource scope (this database); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.activity_log": {
+  "title": "Activity log",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+  ],
+  "api": ["ActivityLogs_List"],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.sql.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ }
+}

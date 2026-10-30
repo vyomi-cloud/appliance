@@ -26,6 +26,7 @@ State shapes:
 """
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 DEFAULT_ACCOUNT_ID = "123456789012"  # matches core.app_context.AWS_ACCOUNT_ID
@@ -40,6 +41,7 @@ class SqlStore:
         self.snapshots: dict[str, dict[str, Any]] = {}
         self.account_id = account_id
         self._conns: dict[str, Any] = {}  # instance_id -> live DB connection
+        self._lock = threading.RLock()    # serializes sqlite3 access across request threads
 
     # ── instance metadata accessors ───────────────────────────────────
     def instance_exists(self, db_id: str) -> bool:
@@ -81,9 +83,13 @@ class SqlStore:
     # ── the SQL engine (data plane) ───────────────────────────────────
     def _connect(self):
         """Open a fresh DB connection. Override to back the engine with a real
-        Postgres/MySQL or PGlite. Default: an in-memory sqlite3 database."""
+        Postgres/MySQL or PGlite. Default: an in-memory sqlite3 database.
+        `check_same_thread=False` because a threading HTTP server (dev_server.py, the
+        offline appliance) may service the request that opens an instance and the request
+        that later queries it on two different worker threads; `self._lock` below is what
+        actually serializes access, the same pairing core/vyomi_platform.py uses."""
         import sqlite3  # lazy: a loadable package under Pyodide, stdlib on host
-        return sqlite3.connect(":memory:")
+        return sqlite3.connect(":memory:", check_same_thread=False)
 
     def open_engine(self, db_id: str):
         if db_id not in self._conns:
@@ -101,20 +107,21 @@ class SqlStore:
     def execute_sql(self, db_id: str, sql: str, params: list | None = None) -> dict:
         """Run ONE SQL statement against the instance's real engine. Returns
         {columns, rows, rowcount} — rows for a SELECT, rowcount for DML."""
-        conn = self.open_engine(db_id)
-        cur = conn.cursor()
-        try:
-            cur.execute(sql, list(params or []))
-            if cur.description:
-                columns = [d[0] for d in cur.description]
-                rows = [list(r) for r in cur.fetchall()]
-                result = {"columns": columns, "rows": rows, "rowcount": len(rows)}
-            else:
-                result = {"columns": [], "rows": [], "rowcount": cur.rowcount}
-            conn.commit()
-            return result
-        finally:
-            cur.close()
+        with self._lock:
+            conn = self.open_engine(db_id)
+            cur = conn.cursor()
+            try:
+                cur.execute(sql, list(params or []))
+                if cur.description:
+                    columns = [d[0] for d in cur.description]
+                    rows = [list(r) for r in cur.fetchall()]
+                    result = {"columns": columns, "rows": rows, "rowcount": len(rows)}
+                else:
+                    result = {"columns": [], "rows": [], "rowcount": cur.rowcount}
+                conn.commit()
+                return result
+            finally:
+                cur.close()
 
     async def aexecute_sql(self, db_id: str, sql: str, params: list | None = None) -> dict:
         """Async data-plane entry (same {columns, rows, rowcount} contract). The
