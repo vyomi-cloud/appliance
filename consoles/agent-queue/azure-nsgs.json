@@ -13,5 +13,6 @@
   "Capability feature ids MUST start with 'azure.' (e.g. 'azure.nsgs.<section>') — ids share one namespace with the AWS registry",
   "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
  ],
- "attempt": 1
+ "attempt": 2,
+ "note": "RESUME: first `git fetch origin v4/ui-azure-nsgs-41076515994 && git merge --no-edit origin/v4/ui-azure-nsgs-41076515994` (previous: 99.4% fidelity / 90.9% real). Fix ONLY the gate failure: 'nsg-network-interfaces' and 'nsg-subnets' need a \"live\" check + fixture — create a uniquely named subnet (or NIC) over ARM with networkSecurityGroup.id set to the NSG, then the page must list it from the ARM state. Keep consoles/src/azure/kit/Capability.jsx as on base (just add your capability JSON), list your service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py, write 'Vyomi' as plain text, and COMMIT your source (the runner now commits leftovers, but commit anyway). Rebuild after merging."
 }

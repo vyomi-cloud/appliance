@@ -13,5 +13,6 @@
   "Capability feature ids MUST start with 'azure.' (e.g. 'azure.cosmos.<section>') — ids share one namespace with the AWS registry",
   "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
  ],
- "attempt": 1
+ "attempt": 2,
+ "note": "Your previous run built the console but never committed the source (the PR had only bundles), so start fresh on the base branch. Keep consoles/src/azure/kit/Capability.jsx as on base (just add your capability JSON), list your service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py, write 'Vyomi' as plain text, and COMMIT your source (the runner now commits leftovers, but commit anyway). Rebuild after merging."
 }
