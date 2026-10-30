@@ -11,7 +11,8 @@ export const ARM = armType("Microsoft.Web", "sites", "2023-12-01");
 
 const shape = (s) => ({ ...s, resourceGroup: parseId(s.id).resourceGroup });
 
-export const listFunctionApps = async () => (await ARM.list()).map(shape);
+// Microsoft.Web/sites lists BOTH kinds, like real ARM; this blade shows kind=functionapp only.
+export const listFunctionApps = async () => (await ARM.list()).filter((s) => /functionapp/i.test(s.kind || "")).map(shape);
 export const getFunctionApp = async (rg, name) => shape(await ARM.get(rg, name));
 export const createFunctionApp = (rg, name, body) => ARM.put(rg, name, body);
 export const updateFunctionApp = (rg, name, body) => ARM.patch(rg, name, body);

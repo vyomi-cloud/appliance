@@ -1,0 +1,127 @@
+{
+ "$doc": "Vyomi capability registry — Azure App Services. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI. GCP/Azure probes aren't understood by the shared probe() helper (it speaks AWS wire), so every claim here is proven by `tests` instead.",
+ "azure.appservices.webapp.crud": {
+  "title": "Web Apps (create, list, get, delete, start/stop/restart)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["sites CreateOrUpdate", "sites Get", "sites List", "sites Delete", "sites start/stop/restart"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py"]
+ },
+ "azure.appservices.plan.crud": {
+  "title": "App Service plans (create, list, get, delete)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Capacity/worker metrics are not simulated; SKU is stored but does not change quota enforcement."],
+  "api": ["serverfarms CreateOrUpdate", "serverfarms Get", "serverfarms List", "serverfarms Delete"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py"]
+ },
+ "azure.appservices.webapp.config": {
+  "title": "Configuration (General settings: stack, platform, TLS, debugging, client certificates)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Settings are stored and returned to SDKs/az CLI; most (TLS version, FTP state, Always On, ...) are not enforced by a running workload."],
+  "api": ["sites/config/web CreateOrUpdate", "sites/config/web Get"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py"]
+ },
+ "azure.appservices.webapp.appsettings": {
+  "title": "Environment variables (App settings, Connection strings)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["sites/config/appsettings CreateOrUpdate", "sites/config/appsettings List", "sites/config/connectionstrings CreateOrUpdate", "sites/config/connectionstrings List"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py"]
+ },
+ "azure.appservices.webapp.slots": {
+  "title": "Deployment slots (create, list, delete, swap)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Swap exchanges config/app settings/connection strings only; no real traffic routing or warm-up."],
+  "api": ["sites/slots CreateOrUpdate", "sites/slots List", "sites/slots Delete", "sites slotsswap"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py"]
+ },
+ "azure.appservices.webapp.customdomains": {
+  "title": "Custom domains (hostname bindings)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["No real DNS/TXT ownership verification or TLS binding; the hostname is accepted and attached to the site."],
+  "api": ["sites/hostNameBindings CreateOrUpdate", "sites/hostNameBindings List", "sites/hostNameBindings Delete"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py"]
+ },
+ "azure.appservices.webapp.locks": {
+  "title": "Locks (resource-scoped management locks)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Locks are stored and listed; they are not enforced against delete/write requests on the resource."],
+  "api": ["Microsoft.Authorization/locks CreateOrUpdate", "Microsoft.Authorization/locks List", "Microsoft.Authorization/locks Delete"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py"]
+ },
+ "azure.appservices.webapp.logs": {
+  "title": "App Service logs (application logging level, HTTP logs quota/retention)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Settings round-trip; there is no running workload to actually emit application/HTTP logs."],
+  "api": ["sites/config/logs CreateOrUpdate", "sites/config/logs Get"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py"]
+ },
+ "azure.appservices.webapp.tags": {
+  "title": "Tags",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "api": ["sites Update (tags)"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py"]
+ },
+ "azure.appservices.webapp.activitylog": {
+  "title": "Activity log",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Records create/update/delete/start/stop/restart/swap operations on the Web App and its sub-resources (slots, custom domains, locks, configuration); filters (severity, timespan, resource group) and export/columns actions are not simulated."],
+  "api": ["Microsoft.Insights/eventtypes/management/values List"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py", "tests/conformance/test_azure_monitor_core.py"]
+ },
+ "azure.appservices.webapp.iam": {
+  "title": "Access control (IAM)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Role assignments/definitions scoped to a single Web App, deny assignments and classic administrators are not modelled."],
+  "api": []
+ },
+ "azure.appservices.webapp.deploymentcenter": {
+  "title": "Deployment Center (CI/CD source, FTPS credentials)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["No source-control integration, build pipeline or FTPS deployment credentials."],
+  "api": []
+ },
+ "azure.appservices.webapp.monitoring": {
+  "title": "Monitoring (Alerts, Metrics, Logs, Advisor recommendations, Health check, Diagnostic settings, Log stream, Process explorer)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["No metrics pipeline, alert evaluation, Log Analytics export or live log/process streaming for Web Apps."],
+  "api": []
+ },
+ "azure.appservices.webapp.devtools": {
+  "title": "Development Tools (Clone App, Console, Advanced Tools, App Service Editor, Extensions)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["No Kudu/SCM console, in-browser editor or site extension gallery."],
+  "api": []
+ },
+ "azure.appservices.webapp.api": {
+  "title": "API (API Management link, API definition, CORS)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["No API Management linkage, OpenAPI definition import or CORS rule enforcement."],
+  "api": []
+ },
+ "azure.appservices.webapp.platform": {
+  "title": "Authentication, Identity, Application Insights, Microsoft Defender for Cloud, Backups, Certificates, Networking, WebJobs, Service Connector",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Auth providers, managed identity, App Insights linkage, Defender, backups/restore, TLS certificates, VNet integration, WebJobs and Service Connector are not modelled."],
+  "api": []
+ },
+ "azure.appservices.webapp.scale": {
+  "title": "Scale up/out, Change App Service plan, Quotas",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["Plan SKU is stored but changing it does not resize or move the app, and quota usage is not tracked."],
+  "api": []
+ },
+ "azure.appservices.webapp.automation": {
+  "title": "Automation (Tasks, Export template)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["No Automation Tasks or ARM/Bicep/Terraform template export for the Web App."],
+  "api": []
+ },
+ "azure.appservices.webapp.support": {
+  "title": "Diagnose and solve problems, Microsoft Defender for Cloud, Events (preview), Resource visualizer, Resource health, New support request",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": ["No diagnostics engine, Event Grid wiring, resource visualizer, resource-health telemetry or support-ticket flow."],
+  "api": []
+ }
+}

@@ -85,7 +85,7 @@ CORES = [
     "azure_appconfiguration_core.py",             # expansion Azure: App Configuration (stores, key-values, snapshots) — vendored VERBATIM
     "azure_app_core.py",                            # expansion Azure: Container Apps (Microsoft.App: environments, apps, revisions, jobs) — vendored VERBATIM
     "azure_cost_core.py",                          # expansion Azure: Cost Management + Consumption (query/alerts/exports/budgets over real inventory) — vendored VERBATIM
-    "azure_webapp_core.py",                         # expansion Azure: Function Apps (Microsoft.Web/sites: functions, config, keys) — vendored VERBATIM
+    "azure_webapp_core.py",                         # Azure: App Service (Microsoft.Web: web apps + function apps by kind, serverfarms) — vendored VERBATIM
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
     "console_conformance.py",                       # console-next capability manifest: per-service conformance signal (pure, `os` only)
     "nano_events.py",                               # per-resource cloudsim event/activity log (recorded on every mutating dispatch; MUST precede nano_registry which imports it)
