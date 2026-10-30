@@ -1,0 +1,123 @@
+{
+ "$doc": "Vyomi capability registry — SQS. One entry per console feature; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
+ "sqs.queue.crud": {
+  "title": "Queues (create, list, delete, standard + FIFO)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_console_v4_core.py"
+  ]
+ },
+ "sqs.queue.attributes": {
+  "title": "Queue configuration (visibility timeout, retention, delay, max size, wait time, encryption, access policy)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_console_v4_core.py"
+  ]
+ },
+ "sqs.queue.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_console_v4_core.py"
+  ]
+ },
+ "sqs.messages.send-receive": {
+  "title": "Send, receive, delete and purge messages",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_fifo_dlq_core.py"
+  ]
+ },
+ "sqs.queue.fifo": {
+  "title": "FIFO queues (message group ordering, content-based + explicit deduplication)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_fifo_dlq_core.py"
+  ]
+ },
+ "sqs.queue.dlq-redrive": {
+  "title": "Dead-letter queue redrive (automatic, after maxReceiveCount)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_fifo_dlq_core.py"
+  ]
+ },
+ "sqs.queue.redrive-allow-policy": {
+  "title": "Redrive allow policy",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "The redrive allow policy document is stored and returned exactly as written, but Vyomi does not enforce it — any queue can be set as another queue's dead-letter target regardless of this policy."
+  ],
+  "tests": [
+   "tests/conformance/test_sqs_console_v4_core.py"
+  ]
+ },
+ "sqs.dlq.redrive-task": {
+  "title": "Dead-letter queue redrive tasks (StartMessageMoveTask)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Moving messages back from a DLQ to a source queue with a tracked, resumable redrive task isn't modeled. Receive and re-send the messages directly, or delete the DLQ's messages, from Send and receive messages."
+  ]
+ },
+ "sqs.sns-subscriptions": {
+  "title": "SNS subscriptions (subscribe/unsubscribe this queue to an SNS topic)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_sqs_console_v4_core.py"
+  ]
+ },
+ "sqs.lambda-triggers": {
+  "title": "Lambda triggers (event source mappings)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Lambda event source mappings that poll a queue and invoke a function aren't modeled; there is no Lambda poller in Vyomi."
+  ]
+ },
+ "sqs.eventbridge-pipes": {
+  "title": "EventBridge Pipes (queue as a pipe source)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "EventBridge Pipes aren't modeled by Vyomi."
+  ]
+ }
+}

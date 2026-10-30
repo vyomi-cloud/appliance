@@ -1,0 +1,42 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "amazon-sqs": {
+    "route": "#/sqs/home"
+  },
+  "queues": {
+    "route": "#/sqs/queues",
+    "live": "live-queue"
+  },
+  "create-queue": {
+    "route": "#/sqs/create-queue",
+    "expand": [
+      "role=radio[name=\"FIFO\"]",
+      "role=radio[name=\"AWS Key Management Service key (SSE-KMS)\"]",
+      "role=radio[name=\"Enabled\"] >> nth=1",
+      "role=radio[name=\"Enabled\"] >> nth=2"
+    ]
+  },
+  "queue-detail": {
+    "route": "#/sqs/queues/uic-queue.fifo",
+    "fixtures": ["sqs-queue"],
+    "vars": { "resource-name": "uic-queue.fifo" },
+    "live": "live-queue-tag"
+  },
+  "edit-queue": {
+    "route": "#/sqs/queues/uic-queue.fifo/edit",
+    "fixtures": ["sqs-queue"],
+    "vars": { "resource-name": "uic-queue.fifo" }
+  },
+  "send-receive-messages": {
+    "route": "#/sqs/queues/uic-queue.fifo/send-receive",
+    "fixtures": ["sqs-queue"]
+  },
+  "purge-queue": {
+    "route": "#/sqs/queues/uic-queue.fifo/purge",
+    "fixtures": ["sqs-queue"]
+  },
+  "delete-queue": {
+    "route": "#/sqs/queues/uic-queue.fifo/delete",
+    "fixtures": ["sqs-queue"]
+  }
+}

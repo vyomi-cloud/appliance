@@ -26,6 +26,7 @@ let page;
 const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return r.text(); }, [WIRE + path, init]);
 const ddb = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `DynamoDB_20120810.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/dynamodb/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const kms = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `TrentService.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/kms/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
+const sqs = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `AmazonSQS.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/sqs/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 
 await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch();
@@ -185,6 +186,26 @@ try {
   await page.getByText(`aws/${svc}`).waitFor({ timeout: 10000 });
   check("KMS Encrypt over wire against an unseen aws/ alias → AWS managed key shown in UI", true);
   await shot("14-kms-aws-managed-keys");
+
+  // SQS: create a queue through the UI, verify over native wire (UI → CLI direction)
+  const Q = `v4smoke-queue-${Date.now() % 100000}`;
+  await page.goto(UI + "#/sqs/create-queue");
+  await page.getByLabel("Name", { exact: true }).fill(Q);
+  await page.getByRole("button", { name: "Create queue" }).last().click();
+  await page.getByRole("heading", { name: Q }).waitFor({ timeout: 10000 });
+  const queues = await sqs("ListQueues", {});
+  check("SQS create queue (UI) → visible over native wire", (queues.QueueUrls || []).some((u) => u.endsWith(`/${Q}`)), JSON.stringify(queues));
+  await shot("15-sqs-queue-detail");
+
+  // SQS: send a message over the wire (CLI direction), poll for it in the UI (CLI → UI direction)
+  const qUrl = (await sqs("GetQueueUrl", { QueueName: Q })).QueueUrl;
+  await sqs("SendMessage", { QueueUrl: qUrl, MessageBody: `v4smoke-msg-${Date.now() % 100000}` });
+  await page.goto(UI + `#/sqs/queues/${Q}/send-receive`);
+  await page.getByRole("button", { name: "Poll for messages" }).click();
+  await page.waitForTimeout(800);
+  const afterPoll = await sqs("GetQueueAttributes", { QueueUrl: qUrl, AttributeNames: ["All"] });
+  check("SQS SendMessage over wire → received via UI poll (now in-flight)", afterPoll.Attributes?.ApproximateNumberOfMessagesNotVisible === "1", JSON.stringify(afterPoll.Attributes));
+  await shot("16-sqs-send-receive");
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));

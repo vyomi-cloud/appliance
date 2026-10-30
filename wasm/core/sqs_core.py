@@ -129,6 +129,8 @@ def _create_queue(store, body):
             "tags": dict(body.get("tags") or {}),
             "messages": [],
             "created": _now_iso(),
+            "created_epoch": store.now(),
+            "last_modified_epoch": store.now(),
             "fifo": is_fifo,
             "content_based_dedup": str(attrs.get("ContentBasedDeduplication", "")).lower() == "true",
             "dedup_seen": {},   # dedup_id -> message_id (5-min window, simplified to lifetime)
@@ -177,6 +179,8 @@ def _get_queue_attributes(store, body):
         "ApproximateNumberOfMessages": str(visible),
         "ApproximateNumberOfMessagesNotVisible": str(not_visible),
         "VisibilityTimeout": str(q.get("visibility_timeout", _DEFAULT_VISIBILITY)),
+        "CreatedTimestamp": str(int(q.get("created_epoch", 0))),
+        "LastModifiedTimestamp": str(int(q.get("last_modified_epoch", q.get("created_epoch", 0)))),
     })
     return SqsResponse(body={"Attributes": attrs})
 
@@ -187,6 +191,9 @@ def _set_queue_attributes(store, body):
     q.setdefault("attributes", {}).update(incoming)
     if "VisibilityTimeout" in incoming:
         q["visibility_timeout"] = int(incoming["VisibilityTimeout"])
+    if "ContentBasedDeduplication" in incoming:
+        q["content_based_dedup"] = str(incoming["ContentBasedDeduplication"]).lower() == "true"
+    q["last_modified_epoch"] = store.now()
     store.persist()
     return SqsResponse(body={})
 
@@ -345,12 +352,35 @@ def _purge_queue(store, body):
     return SqsResponse(body={})
 
 
+# ── tags ─────────────────────────────────────────────────────────────────
+def _tag_queue(store, body):
+    q = _require_queue(store, body.get("QueueUrl", ""))
+    q.setdefault("tags", {}).update(dict(body.get("Tags") or {}))
+    store.persist()
+    return SqsResponse(body={})
+
+
+def _untag_queue(store, body):
+    q = _require_queue(store, body.get("QueueUrl", ""))
+    tags = q.setdefault("tags", {})
+    for k in body.get("TagKeys") or []:
+        tags.pop(k, None)
+    store.persist()
+    return SqsResponse(body={})
+
+
+def _list_queue_tags(store, body):
+    q = _require_queue(store, body.get("QueueUrl", ""))
+    return SqsResponse(body={"Tags": q.get("tags", {})})
+
+
 _OPS = {
     "CreateQueue": _create_queue, "GetQueueUrl": _get_queue_url, "ListQueues": _list_queues,
     "DeleteQueue": _delete_queue, "GetQueueAttributes": _get_queue_attributes,
     "SetQueueAttributes": _set_queue_attributes, "SendMessage": _send_message,
     "ReceiveMessage": _receive_message, "DeleteMessage": _delete_message,
     "ChangeMessageVisibility": _change_message_visibility, "PurgeQueue": _purge_queue,
+    "TagQueue": _tag_queue, "UntagQueue": _untag_queue, "ListQueueTags": _list_queue_tags,
 }
 
 
