@@ -114,13 +114,11 @@
     ]
   },
   "storage-account-tables": {
-    "route": "#/storage/uic-rg/uicstorage/tables",
-    "fixtures": [
-      "az-storage-account"
-    ],
-    "vars": {
-      "resource-name": "uicstorage"
-    }
+    "route": "#/storage/uic-rg/{live}/tables",
+    "live": "live-table",
+    "expand": [
+      "button:has-text(\"Table\")"
+    ]
   },
   "storage-account-networking": {
     "route": "#/storage/uic-rg/uicstorage/networking",
@@ -222,13 +220,8 @@
     }
   },
   "storage-account-lifecycle-management": {
-    "route": "#/storage/uic-rg/uicstorage/lifecycle",
-    "fixtures": [
-      "az-storage-account"
-    ],
-    "vars": {
-      "resource-name": "uicstorage"
-    }
+    "route": "#/storage/uic-rg/{live}/lifecycle",
+    "live": "live-lifecycle"
   },
   "storage-account-azure-ai-search": {
     "route": "#/storage/uic-rg/uicstorage/azureaisearch",

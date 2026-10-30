@@ -111,9 +111,9 @@
  },
  "azure.storage.storagebrowser": {
   "title": "Storage browser",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["A separate in-portal blob/queue/table GUI; the console's own Containers/Queues/Tables pages are the Vyomi equivalent."],
-  "tests": []
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["A real master-detail view over the account's own containers and blobs (the same Blob REST calls the Containers page uses) — uploads, access tiers and SAS stay on the Containers/Blob pages rather than being duplicated here, same as the real portal's own cross-links."],
+  "tests": ["tests/conformance/test_azure_blob_core.py"]
  },
  "azure.storage.storagemover": {
   "title": "Storage Mover",
@@ -135,9 +135,9 @@
  },
  "azure.storage.tables": {
   "title": "Table storage",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["The classic Table service (account.table.core.windows.net) is a distinct OData data plane with no core in this repo yet — not yet implemented (Microsoft.DocumentDB Cosmos DB's Table API, a different product, is already simulated)."],
-  "tests": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["core/azure_table_core.py models table create/list/delete and entity insert/get/query/replace/merge/delete over the native OData/JSON wire, in ONE global namespace per Nano instance (the same simplification Queues makes — tables are not isolated per storage account). $filter supports only `Field eq 'value'` terms joined by `and`; batch/transaction (EntityGroupTransaction), continuation-token paging and complex OData queries are not simulated."],
+  "tests": ["tests/conformance/test_azure_table_core.py"]
  },
  "azure.storage.frontdoorcdn": {
   "title": "Front Door and CDN",
@@ -171,15 +171,15 @@
  },
  "azure.storage.staticwebsite": {
   "title": "Static website hosting (properties.staticWebsite on blobServices/default)",
-  "level": { "nano": "config_only", "offline": "config_only" },
-  "limitations": ["enabled/indexDocument/errorDocument404Path round-trip through ARM exactly as configured, but core/azure_blob_core.py does not serve blob content as an HTTP website — there is no $web container or public website front end."],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Enforced: core/azure_blob_core.py serves the $web container's blobs (indexDocument for '/', errorDocument404Path on a miss) once staticWebsite.enabled is set. Served at a synthetic /{account}/__website__/ path rather than a distinct public hostname — this single-origin relay has no separate account.z#.web.core.windows.net host to route on."],
+  "tests": ["tests/conformance/test_azure_storage_depth_core.py"]
  },
  "azure.storage.lifecycle": {
   "title": "Lifecycle management policies",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Tiering/expiry rules evaluated on a daily schedule against blob age — Vyomi has no background scheduler wired to the Blob core to evaluate and apply rules."],
-  "tests": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Enforced, but lazily: core/azure_blob_core.py re-evaluates every enabled rule's prefixMatch filter against blob age on each list/get (not a daily background job) and applies the most aggressive matching baseBlob action (delete > tierToArchive > tierToCool), setting a real x-ms-access-tier / <AccessTier> or removing the blob. blobTypes beyond blockBlob, snapshot/version actions and the 'days after last access/creation' trigger variants are not modelled."],
+  "tests": ["tests/conformance/test_azure_storage_depth_core.py"]
  },
  "azure.storage.azureaisearch": {
   "title": "Azure AI Search (index this storage account)",
@@ -195,9 +195,9 @@
  },
  "azure.storage.cors": {
   "title": "Resource sharing (CORS) rules",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["core/azure_blob_core.py does not serve CORS preflight (OPTIONS) responses or enforce configured origins, so storing CORS rules here would be cosmetic."],
-  "tests": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Enforced for the Blob service only: core/azure_blob_core.py answers an OPTIONS preflight against the configured corsRules, denying (403 CorsPreflightFailure) any Origin/method/header combination that matches no rule and 200ing with real Access-Control-* headers for one that does. File/Queue/Table service CORS are honest gaps — Set/Get Service Properties isn't implemented on those data planes."],
+  "tests": ["tests/conformance/test_azure_storage_depth_core.py"]
  },
  "azure.storage.advisor": {
   "title": "Advisor recommendations",

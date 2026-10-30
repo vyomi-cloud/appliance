@@ -43,6 +43,24 @@ account in its first path segment is scoped to THAT account — its containers
 are invisible to other accounts, like separate `{account}.blob.core.windows.net`
 endpoints. Requests without a SharedKey account (or for `devstoreaccount1`)
 use the default namespace, exactly as before.
+
+v4 depth — CORS / lifecycle / static website, ENFORCED (not just stored). The caller
+(core/aws_wire_router.py) passes the Azure ARM core's `state` dict (`arm_state=`) — the
+same record the Configuration/CORS/Lifecycle/Static website console panels write through
+ARM's `blobServices/default` and `managementPolicies/default` sub-resources — so this
+module reads config out of the ONE place it is written, no duplicate store:
+  - CORS: an `OPTIONS` preflight is matched against the account's `cors.corsRules`; a
+    match gets `Access-Control-Allow-*` headers + 200, no match (or no rules at all) a
+    403 `CorsPreflightFailure`. Matching rules are also reflected onto real responses.
+  - Lifecycle: `managementPolicies/default`'s `policy.rules` are applied lazily — every
+    blob list/get re-evaluates each enabled rule's `prefixMatch` filter against blob age
+    (now - last_modified) and applies the most aggressive matching action (delete >
+    tierToArchive > tierToCool), same semantics as the daily background job, without a
+    scheduler.
+  - Static website: a GET to the synthetic `/{account}/__website__/{path}` segment (this
+    single-origin relay has no distinct per-account public hostname) serves the `$web`
+    container's blobs, falling back to `indexDocument` for `/` and `errorDocument404Path`
+    for a miss, when `staticWebsite.enabled` is set.
 """
 from __future__ import annotations
 
@@ -182,10 +200,158 @@ def _account_scope(p: str, headers: dict) -> tuple[str, str]:
     return "", p
 
 
+# ── ARM config lookup (CORS / lifecycle / static website) ──────────────────
+def _arm_properties(arm_state: dict | None, acct: str, suffix: str) -> dict:
+    """The `properties` of the storage account's ARM `blobServices/default` or
+    `managementPolicies/default` sub-resource — looked up by account name since the
+    data plane (unlike ARM) never learns the subscription/resource-group it lives
+    under. Account names are globally unique, so a suffix match is unambiguous."""
+    if not arm_state:
+        return {}
+    want = f"/storageaccounts/{acct.lower()}/{suffix}" if acct else f"/storageaccounts/"
+    for key, rec in arm_state.items():
+        kl = key.lower()
+        if acct:
+            if kl.endswith(want):
+                return (rec or {}).get("properties", {}) or {}
+        elif f"/{suffix}" in kl and "/storageaccounts/" in kl:
+            # default namespace: any account's record is a loose match (good enough for
+            # the simulator's single-tenant default namespace with no explicit account).
+            return (rec or {}).get("properties", {}) or {}
+    return {}
+
+
+def _cors_rules(arm_state: dict | None, acct: str) -> list:
+    return _arm_properties(arm_state, acct, "blobservices/default").get("cors", {}).get("corsRules", []) or []
+
+
+def _static_website(arm_state: dict | None, acct: str) -> dict:
+    return _arm_properties(arm_state, acct, "blobservices/default").get("staticWebsite", {}) or {}
+
+
+def _lifecycle_rules(arm_state: dict | None, acct: str) -> list:
+    policy = _arm_properties(arm_state, acct, "managementpolicies/default").get("policy", {}) or {}
+    return policy.get("rules", []) or []
+
+
+# ── CORS (Set/Get Blob Service Properties → corsRules, enforced on preflight) ──────────
+def _cors_match(rules: list, origin: str, method: str, req_headers: str) -> dict | None:
+    req_hdrs = [h.strip().lower() for h in (req_headers or "").split(",") if h.strip()]
+    for rule in rules:
+        origins = rule.get("allowedOrigins", []) or []
+        methods = [m.upper() for m in (rule.get("allowedMethods", []) or [])]
+        allowed_hdrs = [h.strip().lower() for h in (rule.get("allowedHeaders", []) or [])]
+        if "*" not in origins and origin not in origins:
+            continue
+        if method.upper() not in methods:
+            continue
+        if not all(h in allowed_hdrs or "*" in allowed_hdrs for h in req_hdrs):
+            continue
+        return rule
+    return None
+
+
+def _cors_preflight(arm_state: dict | None, acct: str, headers: dict) -> Response | None:
+    origin = headers.get("origin")
+    if origin is None:
+        return None
+    req_method = headers.get("access-control-request-method", "")
+    req_headers = headers.get("access-control-request-headers", "")
+    rules = _cors_rules(arm_state, acct)
+    rule = _cors_match(rules, origin, req_method, req_headers) if rules else None
+    if rule is None:
+        return _err(403, "CorsPreflightFailure", "CORS not enabled or no matching rule found for this request.")
+    h = _base_headers()
+    h["access-control-allow-origin"] = origin if "*" not in rule.get("allowedOrigins", []) else "*"
+    h["access-control-allow-methods"] = ", ".join(rule.get("allowedMethods", []))
+    if req_headers:
+        h["access-control-allow-headers"] = req_headers
+    h["access-control-max-age"] = str(rule.get("maxAgeInSeconds", 0))
+    h["access-control-expose-headers"] = ", ".join(rule.get("exposedHeaders", []) or [])
+    return Response(status=200, headers=h, body=b"", media_type=None)
+
+
+# ── Lifecycle management (managementPolicies/default → policy.rules, ENFORCED lazily) ──
+def _parse_http_date(s: str):
+    try:
+        return datetime.strptime(s, "%a, %d %b %Y %H:%M:%S GMT").replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def _apply_lifecycle(store: AzureBlobStore, container: str, acct: str, arm_state: dict | None) -> None:
+    rules = [r for r in _lifecycle_rules(arm_state, acct) if r.get("enabled", True)]
+    if not rules:
+        return
+    blobs = store.container_blobs(container)
+    now = _now()
+    changed = False
+    for name in list(blobs):
+        entry = blobs[name]
+        modified = _parse_http_date(entry.get("last_modified", ""))
+        if modified is None:
+            continue
+        age_days = (now - modified).total_seconds() / 86400.0
+        for rule in rules:
+            definition = rule.get("definition", {}) or {}
+            flt = definition.get("filters", {}) or {}
+            prefixes = flt.get("prefixMatch") or []
+            if prefixes and not any(name.startswith(p) for p in prefixes):
+                continue
+            actions = (definition.get("actions", {}) or {}).get("baseBlob", {}) or {}
+            delete_after = actions.get("delete", {}).get("daysAfterModificationGreaterThan")
+            archive_after = actions.get("tierToArchive", {}).get("daysAfterModificationGreaterThan")
+            cool_after = actions.get("tierToCool", {}).get("daysAfterModificationGreaterThan")
+            if delete_after is not None and age_days > float(delete_after):
+                blobs.pop(name, None)
+                changed = True
+                break
+            if archive_after is not None and age_days > float(archive_after):
+                if entry.get("access_tier") != "Archive":
+                    entry["access_tier"] = "Archive"
+                    changed = True
+                break
+            if cool_after is not None and age_days > float(cool_after):
+                if entry.get("access_tier") != "Cool":
+                    entry["access_tier"] = "Cool"
+                    changed = True
+                break
+    if changed:
+        store.persist()
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+# ── Static website ($web container, served at the synthetic /__website__/ path) ────────
+def _serve_website(store: AzureBlobStore, acct: str, tail: str, arm_state: dict | None) -> Response:
+    site = _static_website(arm_state, acct)
+    if not site.get("enabled"):
+        return _err(404, "StaticWebsiteNotEnabled", "Static website hosting is not enabled for this account.")
+    container = f"{acct}/$web" if acct else "$web"
+    blob_name = tail.lstrip("/") or (site.get("indexDocument") or "index.html")
+    blobs = store.container_blobs(container) if store.container_exists(container) else {}
+    entry = blobs.get(blob_name)
+    if entry is not None:
+        h = _base_headers()
+        h["content-type"] = entry["content_type"]
+        h["etag"] = entry["etag"]
+        h["last-modified"] = entry["last_modified"]
+        return Response(status=200, headers=h, body=_entry_bytes(store, container, blob_name, entry), media_type=entry["content_type"])
+    err_doc = site.get("errorDocument404Path")
+    err_entry = blobs.get(err_doc) if err_doc else None
+    if err_entry is not None:
+        h = _base_headers()
+        h["content-type"] = err_entry["content_type"]
+        return Response(status=404, headers=h, body=_entry_bytes(store, container, err_doc, err_entry), media_type=err_entry["content_type"])
+    return _err(404, "BlobNotFound", f"'{blob_name}' was not found in the $web container.")
+
+
 # ── dispatch ────────────────────────────────────────────────────────────────
 def dispatch(store: AzureBlobStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"", account: str | None = None) -> Response:
+             body: bytes = b"", account: str | None = None, arm_state: dict | None = None) -> Response:
     """`account` (appliance): the storage account the route already resolved — the
     path is then relative to it (`/{container}[/{blob}]`) and the namespace is that
     account's. None (Nano / dev_server): the account is read from SharedKey."""
@@ -202,6 +368,18 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         acct, p = _account_scope(p, headers)
     p = p.rstrip("/") if p != "/" else p
     segs = [unquote(s) for s in p.split("/") if s != ""]
+
+    # ---- CORS preflight: any OPTIONS carrying an Origin header ----
+    if method == "OPTIONS":
+        pre = _cors_preflight(arm_state, acct, headers)
+        if pre is not None:
+            return pre
+
+    # ---- static website: GET /{account}/__website__/{path...} (synthetic — see module docstring) ----
+    if segs and segs[0] == "__website__":
+        if method not in ("GET", "HEAD"):
+            return _err(400, "UnsupportedHttpVerb", f"Unsupported website operation {method}")
+        return _serve_website(store, acct, "/".join(segs[1:]), arm_state)
 
     comp = query.get("comp", "")
     restype = query.get("restype", "")
@@ -243,6 +421,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                 if not store.container_exists(container):
                     return _err(404, "ContainerNotFound",
                                 "The specified container does not exist.")
+                _apply_lifecycle(store, container, acct, arm_state)
                 return _list_blobs(store, container, query, display)
             if method in ("GET", "HEAD"):             # get container props
                 if not store.container_exists(container):
@@ -292,6 +471,8 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         h["x-ms-request-server-encrypted"] = "true"
         return Response(status=201, headers=h, body=b"", media_type=None)
 
+    if method in ("GET", "HEAD") and store.container_exists(container):
+        _apply_lifecycle(store, container, acct, arm_state)
     blobs = store.container_blobs(container) if store.container_exists(container) else {}
     entry = blobs.get(blob)
 
@@ -309,6 +490,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         if entry.get("md5"):
             h["content-md5"] = entry["md5"]
         h["x-ms-blob-type"] = entry["blob_type"]
+        h["x-ms-access-tier"] = entry.get("access_tier", "Hot")
         h["accept-ranges"] = "bytes"
         h["x-ms-server-encrypted"] = "true"
         h["x-ms-creation-time"] = entry.get("created") or entry["last_modified"]
@@ -413,6 +595,7 @@ def _list_blobs(store: AzureBlobStore, container: str, query: dict, display: str
             f"<Content-Type>{escape(e['content_type'])}</Content-Type>"
             + (f"<Content-MD5>{escape(e['md5'])}</Content-MD5>" if e.get("md5") else "") +
             f"<BlobType>{escape(e['blob_type'])}</BlobType>"
+            f"<AccessTier>{escape(e.get('access_tier', 'Hot'))}</AccessTier>"
             "<LeaseStatus>unlocked</LeaseStatus><LeaseState>available</LeaseState>"
             f"<Creation-Time>{escape(e.get('created') or e['last_modified'])}</Creation-Time>"
             "</Properties>"

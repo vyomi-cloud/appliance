@@ -49,11 +49,9 @@ const NS_NOTES = {
   iam: "Role assignments scoped to a storage account (Access control (IAM))",
   datamigration: "Data migration tools",
   events: "Event Grid subscriptions on storage events",
-  storagebrowser: "Storage browser",
   storagemover: "Storage Mover",
   partnersolutions: "Partner solutions",
   fileshares: "Azure Files (file shares)",
-  tables: "Table storage",
   frontdoorcdn: "Front Door and CDN",
   sas: "Shared access signature (SAS) generation",
   defender: "Microsoft Defender for Cloud",
@@ -108,6 +106,8 @@ export default function StorageAccountBlade({ params, query }) {
       activitylog: () => <ActivityLog a={a} />,
       locks: () => <Locks a={a} />,
       queues: () => (query.queue ? <QueueDetail name={query.queue} self={self} /> : <Queues self={self} />),
+      tables: () => (query.table ? <TableDetail name={query.table} self={self} /> : <Tables self={self} />),
+      storagebrowser: () => <StorageBrowser account={name} self={self} />,
     }[panel];
     body = P ? P() : <NotSimulatedContainer title={`${a.name} | ${LABEL[panel] || panel}`} feature={NS_NOTES[panel] || `The ${LABEL[panel] || panel} panel`} />;
   }
@@ -235,7 +235,7 @@ function Properties({ a }) {
         <KV label="Approximate messaging" value="Shared across every storage account on this Vyomi — see Queues." />
       </section>
       <section className="vy-section"><h3>Table service</h3>
-        <KV label="Table storage" value={ns("Table storage")} />
+        <KV label="Table storage" value="A single namespace shared by every storage account — see Tables." />
       </section>
     </div>
   );
@@ -565,8 +565,16 @@ function Endpoints({ a }) {
         <h3>Queue service</h3>
         <Field label="Queue service (this Vyomi)" hint="The Queue data plane is a single namespace shared by every storage account — see Queues."><Input readOnly value={api.queueUrl("")} /></Field>
       </section>
+      <section className="vy-section" style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 10 }}>
+        <h3>Table service</h3>
+        <Field label="Table service (this Vyomi)" hint="The Table data plane is a single namespace shared by every storage account — see Tables."><Input readOnly value={api.tableUrl("")} /></Field>
+      </section>
+      <section className="vy-section" style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 10 }}>
+        <h3>Static website</h3>
+        <Field label="Primary endpoint" hint="Enabled on the Static website page."><Input readOnly value={api.websiteEndpoint(a.name)} /></Field>
+      </section>
       <NotSimulatedContainer title="File service" feature="Azure Files (file shares) endpoints" />
-      <NotSimulatedContainer title="Other services" feature="Data Lake Storage, Static website and Table service endpoints in the v4 portal lens" />
+      <NotSimulatedContainer title="Other services" feature="Data Lake Storage Gen2 endpoints in the v4 portal lens" />
     </>
   );
 }
@@ -636,35 +644,119 @@ function Encryption({ a }) {
 
 // ── Static website (Microsoft.Storage/storageAccounts/blobServices/default, properties.staticWebsite) ──
 // ── Access control (IAM) — tabs are real; every panel is an honest gap ────────────────
-// ── Lifecycle management — tabs are real; both views are an honest gap ─────────────────
+// ── Lifecycle management (Microsoft.Storage/storageAccounts/managementPolicies/default) —
+// ENFORCED lazily by core/azure_blob_core.py on every blob list/get (see its module
+// docstring): tierToCool/tierToArchive/delete really retier or expire a blob once it is
+// older than the rule's threshold, evaluated on access rather than a daily background job.
+function ruleSummary(rule) {
+  const a = rule.definition?.actions?.baseBlob || {};
+  const parts = [];
+  if (a.tierToCool) parts.push(`Tier to cool after ${a.tierToCool.daysAfterModificationGreaterThan} days`);
+  if (a.tierToArchive) parts.push(`Tier to archive after ${a.tierToArchive.daysAfterModificationGreaterThan} days`);
+  if (a.delete) parts.push(`Delete after ${a.delete.daysAfterModificationGreaterThan} days`);
+  return parts.join(", ") || "--";
+}
+
 function Lifecycle({ a }) {
   const [tab, setTab] = useState("list");
-  const [gap, setGap] = useState(null);
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.getManagementPolicy(a.resourceGroup, a.name), [a.id]);
+  const rules = data || [];
+  const [add, setAdd] = useState(false);
+  const save = async (next) => {
+    try { await api.putManagementPolicy(a.resourceGroup, a.name, next); reload(); }
+    catch (e) { notify.error(e, "Saving the lifecycle policy failed"); }
+  };
   return (
-    <>
-      <div className="vy-panel-title">{a.name} | Lifecycle management</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Lifecycle management commands">
-        <ToolbarButton icon={<Add20Regular />} onClick={() => setGap("Add a rule")}>Add a rule</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Enable")}>Enable</ToolbarButton>
-        <ToolbarButton onClick={() => setGap("Disable")}>Disable</ToolbarButton>
-        <ToolbarButton icon={<Delete20Regular />} onClick={() => setGap("Delete")}>Delete</ToolbarButton>
-      </div>
+    <CapabilityContainer id="azure.storage.lifecycle" title={`${a.name} | Lifecycle management`}
+      actions={<>
+        <ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add a rule</ToolbarButton>
+        <ToolbarButton onClick={() => save(rules.map((r) => ({ ...r, enabled: true })))} disabled={!rules.length}>Enable</ToolbarButton>
+        <ToolbarButton onClick={() => save(rules.map((r) => ({ ...r, enabled: false })))} disabled={!rules.length}>Disable</ToolbarButton>
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
+      </>}>
       <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Lifecycle management tabs">
         <Tab value="list">List View</Tab>
         <Tab value="code">Code View</Tab>
       </TabList>
-      {tab === "list" && <NotSimulatedContainer title="Rules" feature="Lifecycle management rules (columns: Name, Status, Blob type, Base blobs, Snapshots, Versions) that tier or expire blobs on a schedule" />}
-      {tab === "code" && <NotSimulatedContainer title="Policy JSON" feature="The lifecycle management policy JSON editor" />}
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature="Lifecycle management rules" /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </>
+      <ErrorBar error={error} />
+      {tab === "list" && (
+        <BrowseGrid
+          resourceName="rule" rowKey={(r) => r.name}
+          items={rules} loading={loading} onRefresh={reload}
+          onDelete={async (sel) => { await save(rules.filter((r) => !sel.some((s) => s.name === r.name))); notify.success(`Deleted ${sel.length} rule${sel.length === 1 ? "" : "s"}.`, "Delete succeeded"); }}
+          csvName="lifecycle-rules.csv"
+          columns={[
+            { key: "name", label: "Name" },
+            { key: "status", label: "Status", value: (r) => (r.enabled ? "Enabled" : "Disabled") },
+            { key: "blobtype", label: "Blob type", value: () => "Block blobs" },
+            { key: "basebolbs", label: "Base blobs", value: (r) => ruleSummary(r) },
+            { key: "snapshots", label: "Snapshots", value: () => "--" },
+            { key: "versions", label: "Versions", value: () => "--" },
+          ]}
+        />
+      )}
+      {tab === "code" && (
+        <pre className="vy-mono" style={{ maxHeight: 420, overflow: "auto", background: "var(--colorNeutralBackground3)", padding: 12, borderRadius: 4 }}>
+          {JSON.stringify({ rules }, null, 2)}
+        </pre>
+      )}
+      <AddRuleDialog open={add} onClose={() => setAdd(false)} onCreate={(rule) => save([...rules, rule])} />
+    </CapabilityContainer>
+  );
+}
+
+function AddRuleDialog({ open, onClose, onCreate }) {
+  const notify = useNotify();
+  const [name, setName] = useState("");
+  const [prefix, setPrefix] = useState("");
+  const [cool, setCool] = useState("");
+  const [archive, setArchive] = useState("");
+  const [del, setDel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const valid = /^[a-zA-Z0-9-_]{1,256}$/.test(name) && (cool || archive || del);
+  const go = async () => {
+    setBusy(true);
+    try {
+      const actions = {};
+      if (cool) actions.tierToCool = { daysAfterModificationGreaterThan: Number(cool) };
+      if (archive) actions.tierToArchive = { daysAfterModificationGreaterThan: Number(archive) };
+      if (del) actions.delete = { daysAfterModificationGreaterThan: Number(del) };
+      await onCreate({
+        name, enabled: true, type: "Lifecycle",
+        definition: {
+          filters: { blobTypes: ["blockBlob"], prefixMatch: prefix.split(",").map((s) => s.trim()).filter(Boolean) },
+          actions: { baseBlob: actions },
+        },
+      });
+      notify.success(`Rule '${name}' was added.`, "Rule added");
+      setName(""); setPrefix(""); setCool(""); setArchive(""); setDel(""); onClose();
+    } catch (e) { notify.error(e, "Failed to add the rule"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Add a rule">
+        <DialogBody>
+          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Add a rule</DialogTitle>
+          <DialogContent>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Field label="Name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Rule name" /></Field>
+              <Field label="Blob prefix match (comma-separated)" hint="Leave blank to match every blob in the account.">
+                <Input value={prefix} onChange={(_, d) => setPrefix(d.value)} aria-label="Blob prefix match" />
+              </Field>
+              <Field label="Move to cool storage after (days since modification)"><Input type="number" value={cool} onChange={(_, d) => setCool(d.value)} /></Field>
+              <Field label="Move to archive storage after (days since modification)"><Input type="number" value={archive} onChange={(_, d) => setArchive(d.value)} /></Field>
+              <Field label="Delete the blob after (days since modification)"><Input type="number" value={del} onChange={(_, d) => setDel(d.value)} /></Field>
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={!valid || busy} onClick={go}>Add</Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
 }
 
@@ -784,6 +876,16 @@ function Sas({ a }) {
 
 function Cors({ a }) {
   const [tab, setTab] = useState("blob");
+  const notify = useNotify();
+  const svc = useAsync(() => api.getBlobServiceProperties(a.resourceGroup, a.name), [a.id]);
+  const rules = svc.data?.cors?.corsRules || [];
+  const [add, setAdd] = useState(false);
+  const save = async (next) => {
+    try {
+      await api.putBlobServiceProperties(a.resourceGroup, a.name, { cors: { corsRules: next } });
+      svc.reload();
+    } catch (e) { notify.error(e, "Saving CORS rules failed"); }
+  };
   return (
     <>
       <div className="vy-panel-title">{a.name} | Resource sharing (CORS)</div>
@@ -793,11 +895,82 @@ function Cors({ a }) {
         <Tab value="queue">Queue service</Tab>
         <Tab value="table">Table service</Tab>
       </TabList>
-      {tab === "blob" && <NotSimulatedContainer title="Blob service" feature="CORS rules for the Blob service" />}
-      {tab === "file" && <NotSimulatedContainer title="File service" feature="CORS rules for the File service" />}
-      {tab === "queue" && <NotSimulatedContainer title="Queue service" feature="CORS rules for the Queue service" />}
-      {tab === "table" && <NotSimulatedContainer title="Table service" feature="CORS rules for the Table service" />}
+      {tab === "blob" && (
+        <CapabilityContainer id="azure.storage.cors" title="Blob service"
+          actions={<>
+            <ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add CORS rule</ToolbarButton>
+            <ToolbarButton icon={<Delete20Regular />} disabled={!rules.length} onClick={() => save([])}>Delete all</ToolbarButton>
+          </>}>
+          <ErrorBar error={svc.error} />
+          <table className="vy-grid">
+            <thead><tr><th>Allowed origins</th><th>Allowed methods</th><th>Allowed headers</th><th>Exposed headers</th><th>Max age</th><th /></tr></thead>
+            <tbody>
+              {rules.length ? rules.map((r, i) => (
+                <tr key={i}>
+                  <td>{(r.allowedOrigins || []).join(", ")}</td>
+                  <td>{(r.allowedMethods || []).join(", ")}</td>
+                  <td>{(r.allowedHeaders || []).join(", ") || "--"}</td>
+                  <td>{(r.exposedHeaders || []).join(", ") || "--"}</td>
+                  <td>{r.maxAgeInSeconds ?? 0}</td>
+                  <td><Button appearance="subtle" icon={<Delete20Regular />} aria-label="Remove rule" onClick={() => save(rules.filter((_, j) => j !== i))} /></td>
+                </tr>
+              )) : <tr><td colSpan={6} className="vy-muted">No CORS rules have been added.</td></tr>}
+            </tbody>
+          </table>
+        </CapabilityContainer>
+      )}
+      {tab === "file" && <NotSimulatedContainer title="File service" feature="CORS rules for the File service" note="Azure Files has no core in this repo yet — see Lifecycle/CORS limitations." />}
+      {tab === "queue" && <NotSimulatedContainer title="Queue service" feature="CORS rules for the Queue service" note="core/azure_queue_core.py does not serve Set/Get Queue Service Properties." />}
+      {tab === "table" && <NotSimulatedContainer title="Table service" feature="CORS rules for the Table service" note="core/azure_table_core.py does not serve Set/Get Table Service Properties." />}
+      <AddCorsRuleDialog open={add} onClose={() => setAdd(false)} onCreate={(rule) => save([...rules, rule])} />
     </>
+  );
+}
+
+function AddCorsRuleDialog({ open, onClose, onCreate }) {
+  const notify = useNotify();
+  const [origins, setOrigins] = useState("*");
+  const [methods, setMethods] = useState(["GET"]);
+  const [headers, setHeaders] = useState("*");
+  const [exposed, setExposed] = useState("*");
+  const [maxAge, setMaxAge] = useState("200");
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try {
+      await onCreate({
+        allowedOrigins: origins.split(",").map((s) => s.trim()).filter(Boolean),
+        allowedMethods: methods,
+        allowedHeaders: headers.split(",").map((s) => s.trim()).filter(Boolean),
+        exposedHeaders: exposed.split(",").map((s) => s.trim()).filter(Boolean),
+        maxAgeInSeconds: Number(maxAge) || 0,
+      });
+      notify.success("CORS rule added.", "Rule added");
+      onClose();
+    } catch (e) { notify.error(e, "Failed to add the CORS rule"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Add CORS rule">
+        <DialogBody>
+          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Add CORS rule</DialogTitle>
+          <DialogContent>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Field label="Allowed origins" hint="Comma-separated, or * for any origin."><Input value={origins} onChange={(_, d) => setOrigins(d.value)} /></Field>
+              <CheckboxRow label="Allowed methods" options={["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS", "MERGE"]} checked={methods} onChange={setMethods} />
+              <Field label="Allowed headers" hint="Comma-separated, or * for any header."><Input value={headers} onChange={(_, d) => setHeaders(d.value)} /></Field>
+              <Field label="Exposed headers"><Input value={exposed} onChange={(_, d) => setExposed(d.value)} /></Field>
+              <Field label="Max age (seconds)"><Input type="number" value={maxAge} onChange={(_, d) => setMaxAge(d.value)} /></Field>
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={busy || !methods.length} onClick={go}>Save</Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
 }
 
@@ -839,7 +1012,12 @@ function StaticWebsite({ a }) {
         </div>
         <Field label="Index document name"><Input value={f.indexDocument} onChange={(_, d) => setF((x) => ({ ...x, indexDocument: d.value }))} /></Field>
         <Field label="Error document path"><Input value={f.errorDocument} onChange={(_, d) => setF((x) => ({ ...x, errorDocument: d.value }))} /></Field>
-        <Field label="Primary endpoint"><Input readOnly value={`${api.blobEndpoint(a.name)}/$web`} /></Field>
+        <Field label="Primary endpoint" hint={f.enabled ? "Served from the $web container (upload index.html/404.html there)." : "Enable and Save to serve $web content here."}>
+          <div style={{ display: "flex", gap: 4 }}>
+            <Input readOnly value={api.websiteEndpoint(a.name)} style={{ flex: 1 }} />
+            <Button as="a" href={api.websiteEndpoint(a.name)} target="_blank" rel="noreferrer" disabled={!svc.data?.staticWebsite?.enabled}>Browse</Button>
+          </div>
+        </Field>
       </section>
     </CapabilityContainer>
   );
@@ -1247,5 +1425,200 @@ function SendMessageDialog({ open, onClose, onSend }) {
         </DialogBody>
       </DialogSurface>
     </Dialog>
+  );
+}
+
+// ── Tables (Azure Table REST / OData, a global data plane — see api.js) ────────────────
+function Tables({ self }) {
+  const notify = useNotify();
+  const account = self.split("/").pop();
+  const { data, loading, error, reload } = useAsync(api.listTables, []);
+  const [create, setCreate] = useState(false);
+  const [gap, setGap] = useState(false);
+  return (
+    <CapabilityContainer id="azure.storage.tables" title={`${account} | Tables`}>
+      <BrowseGrid
+        resourceName="table" rowKey={(r) => r.TableName} filterPlaceholder="Search tables by prefix"
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<>
+          <ToolbarButton icon={<Add20Regular />} onClick={() => setCreate(true)}>Table</ToolbarButton>
+          <ToolbarButton onClick={() => setGap(true)}>Give feedback</ToolbarButton>
+        </>}
+        onDelete={async (rows) => {
+          for (const r of rows) await api.deleteTable(r.TableName);
+          notify.success(`Deleted ${rows.length} table${rows.length === 1 ? "" : "s"}.`, "Delete succeeded");
+          reload();
+        }}
+        csvName="tables.csv"
+        columns={[
+          { key: "name", label: "Table", render: (r) => <Link href={`${self}/tables?table=${encodeURIComponent(r.TableName)}`}>{r.TableName}</Link> },
+          { key: "url", label: "Url", value: (r) => api.tableUrl(r.TableName) },
+        ]}
+      />
+      <NewTableDialog open={create} onClose={() => setCreate(false)} onCreated={reload} />
+      <Dialog open={gap} onOpenChange={(_, d) => setGap(d.open)}>
+        <DialogSurface aria-label="Give feedback">
+          <DialogBody>
+            <DialogTitle>Give feedback</DialogTitle>
+            <DialogContent><NotSimulated feature="Sending product feedback" /></DialogContent>
+            <DialogActions><Button onClick={() => setGap(false)}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+function NewTableDialog({ open, onClose, onCreated }) {
+  const notify = useNotify();
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const valid = /^[A-Za-z][A-Za-z0-9]{2,62}$/.test(name);
+  const go = async () => {
+    setBusy(true);
+    try {
+      await api.createTable(name);
+      notify.success(`Successfully created table '${name}'.`, "Table created");
+      setName(""); onClose(); onCreated();
+    } catch (e) { notify.error(e, "Failed to create table"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Add table">
+        <DialogBody>
+          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Add table</DialogTitle>
+          <DialogContent>
+            <Field label="Table name" required validationMessage={name && !valid ? "Table names must be 3-63 alphanumeric characters, starting with a letter." : undefined}>
+              <Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Table name" />
+            </Field>
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={!valid || busy} onClick={go}>OK</Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  );
+}
+
+function TableDetail({ name, self }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listEntities(name), [name]);
+  const [add, setAdd] = useState(false);
+  // Columns are fixed (not derived from the loaded rows): BrowseGrid picks its initial
+  // shown-column set from whatever `columns` it saw on its FIRST render, so a column list
+  // that grows once `data` arrives would silently stay hidden.
+  const otherProps = (r) => JSON.stringify(Object.fromEntries(Object.entries(r)
+    .filter(([k]) => !["PartitionKey", "RowKey", "Timestamp", "_key"].includes(k) && !k.startsWith("odata."))));
+  const rows = (data || []).map((e) => ({ ...e, _key: `${e.PartitionKey}/${e.RowKey}` }));
+  return (
+    <>
+      <div style={{ fontSize: 13, marginTop: 12 }}><Link href={`${self}/tables`}>Tables</Link> <span className="vy-muted">&gt;</span> {name}</div>
+      <div className="vy-panel-title">{name} <span className="vy-muted" style={{ fontWeight: 400, fontSize: 13 }}>Table</span></div>
+      <BrowseGrid
+        resourceName="entity" rowKey={(r) => r._key}
+        items={rows} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add entity</ToolbarButton>}
+        onDelete={async (sel) => {
+          for (const r of sel) await api.deleteEntity(name, r.PartitionKey, r.RowKey);
+          notify.success(`Deleted ${sel.length} entit${sel.length === 1 ? "y" : "ies"}.`, "Delete succeeded");
+          reload();
+        }}
+        csvName={`${name}-entities.csv`}
+        columns={[
+          { key: "pk", label: "PartitionKey", value: (r) => r.PartitionKey },
+          { key: "rk", label: "RowKey", value: (r) => r.RowKey },
+          { key: "props", label: "Properties", value: otherProps },
+        ]}
+      />
+      <AddEntityDialog open={add} onClose={() => setAdd(false)}
+        onCreate={async (entity) => { await api.insertEntity(name, entity); reload(); }} />
+    </>
+  );
+}
+
+function AddEntityDialog({ open, onClose, onCreate }) {
+  const notify = useNotify();
+  const [pk, setPk] = useState("");
+  const [rk, setRk] = useState("");
+  const [props, setProps] = useState("{}");
+  const [busy, setBusy] = useState(false);
+  const parsed = (() => { try { return JSON.parse(props || "{}"); } catch { return null; } })();
+  const valid = pk && rk && parsed !== null;
+  const go = async () => {
+    setBusy(true);
+    try {
+      await onCreate({ PartitionKey: pk, RowKey: rk, ...parsed });
+      notify.success("Entity added.", "Entity added");
+      setPk(""); setRk(""); setProps("{}"); onClose();
+    } catch (e) { notify.error(e, "Failed to add entity"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Add entity">
+        <DialogBody>
+          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Add entity</DialogTitle>
+          <DialogContent>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Field label="PartitionKey" required><Input value={pk} onChange={(_, d) => setPk(d.value)} /></Field>
+              <Field label="RowKey" required><Input value={rk} onChange={(_, d) => setRk(d.value)} /></Field>
+              <Field label="Other properties (JSON)" validationMessage={props && parsed === null ? "Invalid JSON" : undefined}>
+                <Textarea value={props} onChange={(_, d) => setProps(d.value)} />
+              </Field>
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={!valid || busy} onClick={go}>OK</Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  );
+}
+
+// ── Storage browser (a unified view over Containers + Blobs this Vyomi already models) ──
+function StorageBrowser({ account, self }) {
+  const { data, loading, error, reload } = useAsync(() => api.listContainers(account), [account]);
+  const [open, setOpen] = useState(null);
+  const blobs = useAsync(() => (open ? api.listBlobs(account, open) : Promise.resolve([])), [account, open]);
+  return (
+    <CapabilityContainer id="azure.storage.storagebrowser" title={`${account} | Storage browser`}>
+      <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
+        <section className="vy-section" style={{ minWidth: 220 }}>
+          <h3>Containers</h3>
+          <ErrorBar error={error} />
+          {loading ? <Loading /> : (
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {(data || []).map((c) => (
+                <li key={c.name}>
+                  <Link as="button" onClick={() => setOpen(c.name)} style={{ fontWeight: open === c.name ? 600 : 400 }}>{c.name}</Link>
+                </li>
+              ))}
+              {!(data || []).length && <li className="vy-muted">No containers yet.</li>}
+            </ul>
+          )}
+          <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
+        </section>
+        <section className="vy-section" style={{ flex: 1 }}>
+          <h3>{open ? `Blobs in ${open}` : "Select a container"}</h3>
+          <ErrorBar error={blobs.error} />
+          {open && (blobs.loading ? <Loading /> : (
+            <table className="vy-grid">
+              <thead><tr><th>Name</th><th>Access tier</th><th>Size</th><th>Modified</th></tr></thead>
+              <tbody>
+                {(blobs.data || []).length ? blobs.data.map((b) => (
+                  <tr key={b.name}><td>{b.name}</td><td>{b.tier}</td><td>{fmtBytes(b.size)}</td><td>{fmtDate(b.modified)}</td></tr>
+                )) : <tr><td colSpan={4} className="vy-muted">This container has no blobs.</td></tr>}
+              </tbody>
+            </table>
+          ))}
+        </section>
+      </div>
+      <p style={{ fontSize: 13, marginTop: 12 }}>For uploads, access tiers and SAS, use <Link href={`${self}/containers`}>Containers</Link>.</p>
+    </CapabilityContainer>
   );
 }

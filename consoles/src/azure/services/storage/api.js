@@ -115,6 +115,23 @@ export const getBlobServiceProperties = async (rg, name) => {
 export const putBlobServiceProperties = (rg, name, properties) =>
   restJson("PUT", blobServicesPath(rg, name), { query: { "api-version": "2023-01-01" }, body: { properties } });
 
+/** Static website endpoint on this Vyomi — a synthetic path (core/azure_blob_core.py
+ * `__website__`), since a single-origin relay has no distinct per-account public hostname
+ * the way `account.z#.web.core.windows.net` is a different host from `account.blob...`. */
+export const websiteEndpoint = (account) => `${location.origin}${WIRE_BASE}/${account}/__website__/`;
+
+// ── Lifecycle management (Microsoft.Storage/storageAccounts/managementPolicies/default) ──
+// A real nested ARM resource (ManagementPolicies_CreateOrUpdate/Get) — core/azure_blob_core.py
+// reads it back (via the router's `arm_state=`) to really tier/expire blobs lazily on
+// list/get, the daily-background-job behaviour without a scheduler.
+const managementPolicyPath = (rg, name) => `${ARM.path(rg, name)}/managementPolicies/default`;
+export const getManagementPolicy = async (rg, name) => {
+  try { return (await restJson("GET", managementPolicyPath(rg, name), { query: { "api-version": "2023-01-01" } })).properties?.policy?.rules || []; }
+  catch { return []; }
+};
+export const putManagementPolicy = (rg, name, rules) =>
+  restJson("PUT", managementPolicyPath(rg, name), { query: { "api-version": "2023-01-01" }, body: { properties: { policy: { rules } } } });
+
 // ── Queues data plane (Azure Storage Queue REST) ────────────────────────────────────────
 // core/azure_queue_core.py keeps a single global queue namespace per Nano instance (the
 // same simplification the Key Vault keys/secrets stores make) — queues are not isolated
@@ -163,6 +180,31 @@ export async function receiveMessages(name, num = 32) {
 export const sendMessage = (name, text) => queueReq("POST", `/${encodeURIComponent(name)}/messages`, { body: `<QueueMessage><MessageText>${escXml(text)}</MessageText></QueueMessage>` });
 export const deleteMessage = (name, id, popReceipt) => queueReq("DELETE", `/${encodeURIComponent(name)}/messages/${encodeURIComponent(id)}`, { query: { popreceipt: popReceipt } });
 export const clearMessages = (name) => queueReq("DELETE", `/${encodeURIComponent(name)}/messages`);
+
+// ── Tables data plane (Azure Table REST / OData — core/azure_table_core.py) ────────────
+// Like Queues, a single global namespace per Nano instance (no SharedKey account
+// scoping) — the account segment in tableUrl() is cosmetic, matching the real per-
+// account Table service URL shape.
+async function tableReq(method, path, { query, body } = {}) {
+  const qs = query ? "?" + new URLSearchParams(query).toString() : "";
+  const res = await fetch(`${WIRE_BASE}${path}${qs}`, {
+    method, headers: { "content-type": "application/json", accept: "application/json;odata=nometadata" },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const text = res.status === 204 ? "" : await res.text();
+  const data = text ? (() => { try { return JSON.parse(text); } catch { return {}; } })() : {};
+  if (!res.ok) throw new WireError(res.status, data["odata.error"]?.code, data["odata.error"]?.message?.value, text);
+  return data;
+}
+
+export const tableUrl = (name) => `${location.origin}${WIRE_BASE}/${encodeURIComponent(name)}`;
+export const listTables = async () => (await tableReq("GET", "/Tables")).value || [];
+export const createTable = (name) => tableReq("POST", "/Tables", { body: { TableName: name } });
+export const deleteTable = (name) => tableReq("DELETE", `/Tables('${encodeURIComponent(name)}')`);
+export const listEntities = async (table) => (await tableReq("GET", `/${encodeURIComponent(table)}`)).value || [];
+export const insertEntity = (table, entity) => tableReq("POST", `/${encodeURIComponent(table)}`, { body: entity });
+const entityKey = (pk, rk) => `(PartitionKey='${encodeURIComponent(pk)}',RowKey='${encodeURIComponent(rk)}')`;
+export const deleteEntity = (table, pk, rk) => tableReq("DELETE", `/${encodeURIComponent(table)}${entityKey(pk, rk)}`);
 
 export function toArmBody(f) {
   const red = f.performance === "Standard" && f.readAccess && (f.redundancy === "GRS" || f.redundancy === "GZRS") ? `RA${f.redundancy}` : f.redundancy;

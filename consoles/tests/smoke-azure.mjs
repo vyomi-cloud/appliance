@@ -23,6 +23,8 @@ const n = Date.now() % 100000;
 const SA = `vysmoke${n}`;          // created through the UI
 const SA2 = `vywire${n}`;          // created over the wire (CLI → UI direction)
 const C = `smoke-${n}`;
+const TBL = `vysmoketbl${n}`;      // Table created through the UI
+const TBL2 = `vywiretbl${n}`;      // Table created over the wire (CLI → UI direction)
 const APP = `vysmokeapp${n}`;      // app service created through the UI
 const APP2 = `vywireapp${n}`;      // app service created over the wire (CLI → UI direction)
 const EGT = `vyegtopic${n}`;       // Event Grid topic created through the UI
@@ -63,6 +65,7 @@ const armAks = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.
 const graph = (method, path, body) => wire(`/v1.0${path}`, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
 const blobHdr = (acct) => ({ "x-ms-version": "2021-12-02", authorization: `SharedKey ${acct}:c21va2U=` });
 const blob = (method, acct, path, { query = "", headers = {}, body } = {}) => wire(`/${acct}${path}${query}`, { method, headers: { ...blobHdr(acct), ...headers }, body });
+const table = (method, path, body) => wire(path, { method, headers: { "content-type": "application/json", accept: "application/json;odata=nometadata" }, body: body !== undefined ? JSON.stringify(body) : undefined });
 
 await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch();
@@ -135,6 +138,27 @@ try {
   const other = await blob("GET", SA2, `/${C}/hello.txt`);
   check("blob namespaces are per storage account", other.status === 404, `HTTP ${other.status}`);
   await shot("07-container-blobs");
+
+  // ── Table created through the UI → visible over the native Table REST wire, and the reverse ──
+  await openPanel("Tables");
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Table" }).click();
+  await page.getByLabel("Table name").fill(TBL);
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByRole("link", { name: TBL, exact: true }).waitFor({ timeout: 10000 });
+  const lt = await table("GET", "/Tables");
+  check("UI create table → listed over Table wire", lt.text.includes(`"TableName":"${TBL}"`) || lt.text.includes(`"TableName": "${TBL}"`), `HTTP ${lt.status}`);
+  await shot("07b-tables");
+  const putTbl = await table("POST", "/Tables", { TableName: TBL2 });
+  check("Table wire create", putTbl.status === 201, `HTTP ${putTbl.status}`);
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Refresh" }).click();
+  await page.getByRole("link", { name: TBL2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created table shown in Tables grid", true);
+  const ins = await table("POST", `/${TBL2}`, { PartitionKey: "smoke", RowKey: "r1", Greeting: "hello v4 azure tables" });
+  check("Table wire insert entity", ins.status === 201, `HTTP ${ins.status}`);
+  await page.getByRole("link", { name: TBL2, exact: true }).click();
+  await page.getByText("hello v4 azure tables").waitFor({ timeout: 10000 });
+  check("wire-inserted entity shown in table detail", true);
+  await shot("07c-table-entities");
 
   // ── Blades / panels render; gaps are honest ───────────────────────────────────────────
   for (const [label, file] of [["Access keys", "08-access-keys"], ["Configuration", "09-configuration"], ["Endpoints", "10-endpoints"], ["Tags", "11-tags"]]) {

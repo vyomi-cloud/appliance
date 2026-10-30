@@ -59,4 +59,30 @@ export default {
     await wire("PUT", `/${uniq}`, { svc: null, headers: { "x-ms-version": X_MS_VERSION } });
     return uniq;
   },
+
+  // Tables are ALSO a global data plane (core/azure_table_core.py, no SharedKey account
+  // scoping) — same "reuse `uniq` for both the account and the table" trick as live-queue.
+  // Routed by the Accept header (odata), not x-ms-version, so no auth header is needed.
+  "live-table": async (wire, uniq) => {
+    await ensureAccount(wire, uniq);
+    await wire("POST", "/Tables", {
+      svc: null, headers: { "content-type": "application/json", accept: "application/json;odata=nometadata" },
+      body: { TableName: uniq },
+    });
+    return uniq;
+  },
+
+  // A lifecycle rule is a real nested ARM resource (managementPolicies/default) scoped to
+  // the fresh account — the rule's own Name is the uniquely-named thing the List View shows.
+  "live-lifecycle": async (wire, uniq) => {
+    await ensureAccount(wire, uniq);
+    await wire("PUT", `${acctPath(uniq).split("?")[0]}/managementPolicies/default?api-version=2023-01-01`, {
+      svc: null,
+      body: { properties: { policy: { rules: [{
+        name: uniq, enabled: true, type: "Lifecycle",
+        definition: { filters: { blobTypes: ["blockBlob"] }, actions: { baseBlob: { tierToCool: { daysAfterModificationGreaterThan: 30 } } } },
+      }] } } },
+    });
+    return uniq;
+  },
 };
