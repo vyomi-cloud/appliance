@@ -15,9 +15,10 @@ import Popover from "@cloudscape-design/components/popover";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import s3 from "../../../../core/capabilities/aws/s3.json";
 import dynamodb from "../../../../core/capabilities/aws/dynamodb.json";
+import eventbridge from "../../../../core/capabilities/aws/eventbridge.json";
 import { NotSimulatedContainer } from "./common.jsx";
 
-const REGISTRY = { ...s3, ...dynamodb };
+const REGISTRY = { ...s3, ...dynamodb, ...eventbridge };
 
 export const SUBSTRATE = (typeof document !== "undefined" && document.querySelector('meta[name="vyomi-substrate"]')?.content) || "offline";
 

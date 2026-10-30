@@ -194,6 +194,21 @@ def _invoke(store, name, body):
                               headers={"X-Amz-Function-Error": "Unhandled"})
 
 
+def invoke_by_arn(store, arn: str, event: dict) -> bool:
+    """Public cross-core seam: asynchronously invoke a function by ARN with an
+    event payload, for callers that only have an ARN (EventBridge targets).
+    Returns False if the function does not exist; the result is discarded,
+    same as a real Lambda event-source invocation (fire-and-forget)."""
+    name = str(arn).rsplit(":", 1)[-1]
+    if name not in _functions(store):
+        return False
+    try:
+        _invoke(store, name, json.dumps(event).encode())
+    except Exception:
+        pass
+    return True
+
+
 # ── dispatch ────────────────────────────────────────────────────────────────
 def dispatch(store, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,

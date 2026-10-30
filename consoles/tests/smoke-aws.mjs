@@ -26,6 +26,8 @@ let page;
 const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return r.text(); }, [WIRE + path, init]);
 const ddb = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `DynamoDB_20120810.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/dynamodb/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const kms = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `TrentService.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/kms/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
+const sqs = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `AmazonSQS.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/sqs/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
+const events = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `AWSEvents.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/events/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 
 await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch();
@@ -185,6 +187,39 @@ try {
   await page.getByText(`aws/${svc}`).waitFor({ timeout: 10000 });
   check("KMS Encrypt over wire against an unseen aws/ alias → AWS managed key shown in UI", true);
   await shot("14-kms-aws-managed-keys");
+
+  // EventBridge: create a rule + SQS target through the UI (UI → CLI direction), then
+  // PutEvents over the wire and confirm it was really delivered (not a log line).
+  const EBQ = `v4smoke-eb-q-${Date.now() % 100000}`;
+  const ebQueueUrl = (await sqs("CreateQueue", { QueueName: EBQ })).QueueUrl;
+  const R = `v4smoke-rule-${Date.now() % 100000}`;
+  await page.goto(UI + "#/eventbridge/create-rule");
+  await page.getByRole("tab", { name: "Build" }).click();
+  await page.getByRole("button", { name: "Add target" }).click();
+  await page.getByLabel("Select a target").first().click();
+  await page.getByRole("option", { name: new RegExp(`SQS queue: ${EBQ}$`) }).click();
+  await page.getByRole("tab", { name: "Configure" }).click();
+  await page.getByLabel("Rule name").fill(R);
+  await page.getByRole("button", { name: "Create rule" }).click();
+  await page.getByRole("heading", { name: "Rules", level: 1 }).waitFor({ timeout: 10000 });
+  const rules = await events("ListRules", { EventBusName: "default" });
+  check("EventBridge create rule (UI) → visible over native wire", (rules.Rules || []).some((r) => r.Name === R), JSON.stringify(rules.Rules?.slice(-1)));
+  const ebTargets = await events("ListTargetsByRule", { Rule: R, EventBusName: "default" });
+  check("EventBridge rule's SQS target attached (UI) → visible over native wire", (ebTargets.Targets || []).some((t) => t.Arn.endsWith(`:${EBQ}`)), JSON.stringify(ebTargets));
+  await shot("15-eventbridge-create-rule");
+
+  // PutEvents over the wire (CLI direction) must really deliver to the UI-created rule's target.
+  await events("PutEvents", { Entries: [{ Source: "my.app", DetailType: "x", Detail: "{}", EventBusName: "default" }] });
+  const ebMsgs = await sqs("ReceiveMessage", { QueueUrl: ebQueueUrl, MaxNumberOfMessages: 10 });
+  check("EventBridge PutEvents over wire → really delivered to the UI-created rule's SQS target", (ebMsgs.Messages || []).length > 0, JSON.stringify(ebMsgs));
+
+  // Custom event bus created over the wire (CLI direction) must show up in the UI (wire → UI).
+  const EBUS = `v4smoke-bus-${Date.now() % 100000}`;
+  await events("CreateEventBus", { Name: EBUS });
+  await page.goto(UI + "#/eventbridge/event-buses");
+  await page.getByText(EBUS).first().waitFor({ timeout: 10000 });
+  check("EventBridge CreateEventBus over wire → shown in UI (CLI → UI direction)", true);
+  await shot("16-eventbridge-event-buses");
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));

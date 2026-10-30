@@ -1,18 +1,19 @@
-"""EventBridge core — substrate-independent event-bus data plane (PARITY P4 #15).
-The first real event-bus data plane in the simulator: rules with event patterns +
-targets, and PutEvents that MATCHES each event against every rule and DELIVERS it
-to the matching rules' targets (SQS queues) — the canonical EventBridge→SQS path.
+"""EventBridge core — substrate-independent event-bus data plane (PARITY P4 #15,
+extended for the v4 native-fidelity console).
 
 Speaks the native **EventBridge JSON protocol** (X-Amz-Target `AWSEvents.<Op>`,
 JSON body) so an unmodified boto3 `events` client works. NO fastapi / boto3 / socket
 imports → loads under Pyodide. Reuses the SAME MessagingStore seam as SQS/SNS
-(rules live in `store.event_rules`; delivery uses `sqs_core.enqueue`), so an event
-routed to a queue is a real, receivable SQS message.
+(rules live in `store.event_rules`; delivery uses `sqs_core.enqueue` /
+`sns_core.publish_arn` / `lambda_core.invoke_by_arn`), so an event routed to a
+queue/topic/function is a real, receivable delivery, not a log line.
 
-Scope (v1 slice): PutRule, DeleteRule, ListRules, PutTargets, RemoveTargets,
-ListTargetsByRule, PutEvents (pattern match → SQS fan-out). Event-pattern operators:
-exact value lists + {"prefix"}, {"anything-but"}, {"exists"} — mirroring SNS filter
-policies. Archives, replays, schedules and non-SQS targets slot in next.
+Scope: event buses (default + custom), rules with event patterns + targets
+(enable/disable), PutEvents (pattern match → SQS/SNS/Lambda fan-out), archives +
+replay (a bounded per-bus event log stands in for AWS's unlimited archive
+retention — see the `eventbridge.archives` capability entry for the honest
+limitation), tags. Event-pattern operators: exact value lists + {"prefix"},
+{"anything-but"}, {"exists"} — mirroring SNS filter policies.
 """
 from __future__ import annotations
 
@@ -23,6 +24,10 @@ from datetime import datetime, timezone
 
 from core.messaging_store import MessagingStore, REGION
 from core import sqs_core
+from core import sns_core as sns_mod
+from core import lambda_core as lam_mod
+
+EVENT_LOG_MAX = 500  # per bus — bounds the archive/replay window (documented limitation)
 
 
 @dataclass
@@ -36,7 +41,40 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
-def _rules(store: MessagingStore) -> dict:
+def _parse_iso(s):
+    if not s:
+        return None
+    try:
+        return datetime.strptime(str(s)[:23], "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=timezone.utc)
+    except Exception:
+        try:
+            return datetime.strptime(str(s)[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+
+
+# ── buses ────────────────────────────────────────────────────────────────────
+def _bus_arn(store, name: str) -> str:
+    return f"arn:aws:events:{REGION}:{store.account_id}:event-bus/{name}"
+
+
+def _new_bus(store, name, description="", tags=None):
+    return {"name": name, "arn": _bus_arn(store, name), "description": description or "",
+            "created": _now_iso(), "tags": dict(tags or {}), "event_log": [], "policy": None}
+
+
+def _buses(store) -> dict:
+    m = getattr(store, "event_buses", None)
+    if m is None:
+        m = {}
+        store.event_buses = m
+    if "default" not in m:
+        m["default"] = _new_bus(store, "default", "The default event bus for this account.")
+    return m
+
+
+# ── rules ────────────────────────────────────────────────────────────────────
+def _rules(store) -> dict:
     m = getattr(store, "event_rules", None)
     if m is None:
         m = {}
@@ -44,8 +82,41 @@ def _rules(store: MessagingStore) -> dict:
     return m
 
 
+def _rule_key(bus: str, name: str) -> str:
+    return f"{bus}|{name}"
+
+
 def _rule_arn(store, bus: str, name: str) -> str:
-    return f"arn:aws:events:{REGION}:{store.account_id}:rule/{name}"
+    return f"arn:aws:events:{REGION}:{store.account_id}:rule/{bus}/{name}" if bus != "default" \
+        else f"arn:aws:events:{REGION}:{store.account_id}:rule/{name}"
+
+
+def _require_rule(store, bus, name):
+    rule = _rules(store).get(_rule_key(bus, name))
+    if not rule:
+        raise _E("ResourceNotFoundException", f"Rule {name} does not exist on EventBus {bus}.")
+    return rule
+
+
+# ── archives / replays ──────────────────────────────────────────────────────
+def _archives(store) -> dict:
+    m = getattr(store, "event_archives", None)
+    if m is None:
+        m = {}
+        store.event_archives = m
+    return m
+
+
+def _replays(store) -> dict:
+    m = getattr(store, "event_replays", None)
+    if m is None:
+        m = {}
+        store.event_replays = m
+    return m
+
+
+def _archive_arn(store, name: str) -> str:
+    return f"arn:aws:events:{REGION}:{store.account_id}:archive/{name}"
 
 
 # ── event-pattern matching (a faithful subset) ─────────────────────────────
@@ -78,56 +149,181 @@ def _match_pattern(pattern: dict, event: dict) -> bool:
     return True
 
 
-# ── operations ──────────────────────────────────────────────────────────────
+# ── delivery (SQS / SNS / Lambda — the three target types Vyomi backs) ─────
+def deliver(store, lam_store, arn: str, body_str: str, event_obj: dict) -> bool:
+    queue = store.get_queue_by_arn(arn)
+    if queue is not None:
+        sqs_core.enqueue(store, queue, body_str)
+        return True
+    if ":sns:" in arn:
+        return sns_mod.publish_arn(store, arn, body_str)
+    if ":lambda:" in arn and lam_store is not None:
+        return lam_mod.invoke_by_arn(lam_store, arn, event_obj)
+    return False  # target type Vyomi doesn't deliver to (stored, never invoked — see capability doc)
+
+
+def _deliver_to_bus(store, lam_store, bus: str, envelope: dict, event_obj: dict) -> int:
+    """Match `envelope` against every ENABLED rule on `bus` and deliver to targets.
+    Returns the count of (rule, target) deliveries attempted."""
+    body_str = json.dumps(envelope)
+    n = 0
+    for rule in _rules(store).values():
+        if rule.get("bus", "default") != bus or rule.get("state") != "ENABLED":
+            continue
+        if not _match_pattern(rule.get("pattern", {}), event_obj):
+            continue
+        for tgt in rule["targets"].values():
+            deliver(store, lam_store, tgt["Arn"], body_str, event_obj)
+            n += 1
+    return n
+
+
+# ── operations: event buses ─────────────────────────────────────────────────
+def _create_event_bus(store, body):
+    name = str(body.get("Name", "")).strip()
+    if not name:
+        raise _E("ValidationException", "Name is required.")
+    buses = _buses(store)
+    if name in buses:
+        raise _E("ResourceAlreadyExistsException", f"Event bus {name} already exists.")
+    tags = {t["Key"]: t.get("Value", "") for t in body.get("Tags") or []}
+    buses[name] = _new_bus(store, name, body.get("Description", ""), tags)
+    store.persist()
+    return EventsResponse(body={"EventBusArn": buses[name]["arn"]})
+
+
+def _delete_event_bus(store, body):
+    name = str(body.get("Name", ""))
+    if name == "default":
+        raise _E("ValidationException", "Cannot delete the default event bus.")
+    buses = _buses(store)
+    if buses.pop(name, None) is not None:
+        for key in [k for k, r in _rules(store).items() if r.get("bus") == name]:
+            _rules(store).pop(key, None)
+        for key in [k for k, a in _archives(store).items() if a.get("bus") == name]:
+            _archives(store).pop(key, None)
+        store.persist()
+    return EventsResponse(body={})
+
+
+def _list_event_buses(store, body):
+    prefix = str(body.get("NamePrefix", "") or "")
+    buses = [{"Name": b["name"], "Arn": b["arn"], "Description": b.get("description", ""),
+              "Policy": b.get("policy")}
+             for b in _buses(store).values() if b["name"].startswith(prefix)]
+    return EventsResponse(body={"EventBuses": buses})
+
+
+def _update_event_bus(store, body):
+    name = str(body.get("Name", "default") or "default")
+    bus = _buses(store).get(name)
+    if not bus:
+        raise _E("ResourceNotFoundException", f"Event bus {name} does not exist.")
+    if "Description" in body:
+        bus["description"] = body.get("Description") or ""
+    if "Policy" in body:
+        bus["policy"] = body.get("Policy")
+    store.persist()
+    return EventsResponse(body={"Name": bus["name"], "Arn": bus["arn"], "Description": bus.get("description", "")})
+
+
+def _describe_event_bus(store, body):
+    name = str(body.get("Name", "default") or "default")
+    bus = _buses(store).get(name)
+    if not bus:
+        raise _E("ResourceNotFoundException", f"Event bus {name} does not exist.")
+    return EventsResponse(body={"Name": bus["name"], "Arn": bus["arn"],
+                                 "Description": bus.get("description", ""), "Policy": bus.get("policy")})
+
+
+# ── operations: rules ───────────────────────────────────────────────────────
 def _put_rule(store, body):
     name = str(body.get("Name", "")).strip()
     if not name:
         raise _E("ValidationException", "Name is required.")
     bus = str(body.get("EventBusName", "default") or "default")
+    if bus not in _buses(store):
+        raise _E("ResourceNotFoundException", f"Event bus {bus} does not exist.")
     pattern = body.get("EventPattern")
     if isinstance(pattern, str):
         try:
             pattern = json.loads(pattern)
         except Exception:
             pattern = {}
-    rule = _rules(store).get(name) or {"targets": {}}
+    key = _rule_key(bus, name)
+    rule = _rules(store).get(key) or {"targets": {}}
+    tags = {t["Key"]: t.get("Value", "") for t in body.get("Tags") or []}
     rule.update({"name": name, "bus": bus, "pattern": pattern or {},
                  "state": str(body.get("State", "ENABLED")),
+                 "description": body.get("Description", ""),
+                 "schedule": body.get("ScheduleExpression", ""),
                  "arn": _rule_arn(store, bus, name)})
     rule.setdefault("targets", {})
-    _rules(store)[name] = rule
+    if tags:
+        rule["tags"] = tags
+    else:
+        rule.setdefault("tags", {})
+    _rules(store)[key] = rule
     store.persist()
     return EventsResponse(body={"RuleArn": rule["arn"]})
 
 
 def _delete_rule(store, body):
-    _rules(store).pop(str(body.get("Name", "")), None)
+    bus = str(body.get("EventBusName", "default") or "default")
+    _rules(store).pop(_rule_key(bus, str(body.get("Name", ""))), None)
     store.persist()
     return EventsResponse(body={})
 
 
+def _describe_rule(store, body):
+    bus = str(body.get("EventBusName", "default") or "default")
+    rule = _require_rule(store, bus, str(body.get("Name", "")))
+    return EventsResponse(body={"Name": rule["name"], "Arn": rule["arn"], "EventBusName": rule["bus"],
+                                 "EventPattern": json.dumps(rule.get("pattern", {})),
+                                 "State": rule.get("state", "ENABLED"), "Description": rule.get("description", ""),
+                                 "ScheduleExpression": rule.get("schedule", "")})
+
+
 def _list_rules(store, body):
     prefix = str(body.get("NamePrefix", "") or "")
+    bus = str(body.get("EventBusName", "default") or "default")
     rules = [{"Name": r["name"], "Arn": r["arn"], "State": r.get("state", "ENABLED"),
-              "EventPattern": json.dumps(r.get("pattern", {}))}
-             for r in _rules(store).values() if r["name"].startswith(prefix)]
+              "EventBusName": r.get("bus", "default"), "Description": r.get("description", ""),
+              "EventPattern": json.dumps(r.get("pattern", {})), "ScheduleExpression": r.get("schedule", "")}
+             for r in _rules(store).values() if r.get("bus", "default") == bus and r["name"].startswith(prefix)]
     return EventsResponse(body={"Rules": rules})
 
 
+def _enable_rule(store, body):
+    bus = str(body.get("EventBusName", "default") or "default")
+    rule = _require_rule(store, bus, str(body.get("Name", "")))
+    rule["state"] = "ENABLED"
+    store.persist()
+    return EventsResponse(body={})
+
+
+def _disable_rule(store, body):
+    bus = str(body.get("EventBusName", "default") or "default")
+    rule = _require_rule(store, bus, str(body.get("Name", "")))
+    rule["state"] = "DISABLED"
+    store.persist()
+    return EventsResponse(body={})
+
+
 def _put_targets(store, body):
-    name = str(body.get("Rule", "")).strip()
-    rule = _rules(store).get(name)
-    if not rule:
-        raise _E("ResourceNotFoundException", f"Rule {name} does not exist.")
+    bus = str(body.get("EventBusName", "default") or "default")
+    rule = _require_rule(store, bus, str(body.get("Rule", "")))
     for t in body.get("Targets") or []:
         tid = str(t.get("Id") or uuid.uuid4().hex)
-        rule["targets"][tid] = {"Id": tid, "Arn": str(t.get("Arn", ""))}
+        rule["targets"][tid] = {"Id": tid, "Arn": str(t.get("Arn", "")), "Input": t.get("Input"),
+                                 "RoleArn": t.get("RoleArn", "")}
     store.persist()
     return EventsResponse(body={"FailedEntryCount": 0, "FailedEntries": []})
 
 
 def _remove_targets(store, body):
-    rule = _rules(store).get(str(body.get("Rule", "")))
+    bus = str(body.get("EventBusName", "default") or "default")
+    rule = _rules(store).get(_rule_key(bus, str(body.get("Rule", ""))))
     if rule:
         for tid in body.get("Ids") or []:
             rule["targets"].pop(str(tid), None)
@@ -136,41 +332,225 @@ def _remove_targets(store, body):
 
 
 def _list_targets_by_rule(store, body):
-    rule = _rules(store).get(str(body.get("Rule", "")))
-    if not rule:
-        raise _E("ResourceNotFoundException", "Rule does not exist.")
+    bus = str(body.get("EventBusName", "default") or "default")
+    rule = _require_rule(store, bus, str(body.get("Rule", "")))
     return EventsResponse(body={"Targets": list(rule["targets"].values())})
 
 
-def _put_events(store, body):
+def _list_rule_names_by_target(store, body):
+    bus = str(body.get("EventBusName", "default") or "default")
+    arn = str(body.get("TargetArn", ""))
+    names = [r["name"] for r in _rules(store).values()
+             if r.get("bus", "default") == bus and any(t["Arn"] == arn for t in r["targets"].values())]
+    return EventsResponse(body={"RuleNames": names})
+
+
+# ── operations: events ──────────────────────────────────────────────────────
+def _put_events(store, body, lam_store=None):
     entries_out = []
     for entry in body.get("Entries") or []:
+        bus = str(entry.get("EventBusName", "default") or "default")
+        if bus not in _buses(store):
+            entries_out.append({"ErrorCode": "ResourceNotFoundException",
+                                 "ErrorMessage": f"Event bus {bus} does not exist."})
+            continue
         source = entry.get("Source", "")
         detail_type = entry.get("DetailType", "")
         try:
             detail = json.loads(entry["Detail"]) if isinstance(entry.get("Detail"), str) else (entry.get("Detail") or {})
         except Exception:
             detail = {}
-        bus = str(entry.get("EventBusName", "default") or "default")
         event_id = uuid.uuid4().hex
+        now = _now_iso()
         # The event object rules are matched against (EventBridge's flat shape).
         event_obj = {"source": source, "detail-type": detail_type, "detail": detail,
                      "account": store.account_id, "region": REGION}
         envelope = {"version": "0", "id": event_id, "source": source,
-                    "detail-type": detail_type, "detail": detail, "time": _now_iso()}
-        body_str = json.dumps(envelope)
-        for rule in _rules(store).values():
-            if rule.get("bus", "default") != bus or rule.get("state") != "ENABLED":
-                continue
-            if not _match_pattern(rule.get("pattern", {}), event_obj):
-                continue
-            for tgt in rule["targets"].values():
-                queue = store.get_queue_by_arn(tgt["Arn"])
-                if queue is not None:
-                    sqs_core.enqueue(store, queue, body_str)
+                    "detail-type": detail_type, "detail": detail, "time": now,
+                    "account": store.account_id, "region": REGION,
+                    "resources": entry.get("Resources") or []}
+        log = _buses(store)[bus]["event_log"]
+        log.append(envelope)
+        del log[:-EVENT_LOG_MAX]
+        _deliver_to_bus(store, lam_store, bus, envelope, event_obj)
         entries_out.append({"EventId": event_id})
     store.persist()
-    return EventsResponse(body={"FailedEntryCount": 0, "Entries": entries_out})
+    failed = sum(1 for e in entries_out if "ErrorCode" in e)
+    return EventsResponse(body={"FailedEntryCount": failed, "Entries": entries_out})
+
+
+# ── operations: archives / replay ───────────────────────────────────────────
+def _create_archive(store, body):
+    name = str(body.get("ArchiveName", "")).strip()
+    if not name:
+        raise _E("ValidationException", "ArchiveName is required.")
+    if name in _archives(store):
+        raise _E("ResourceAlreadyExistsException", f"Archive {name} already exists.")
+    source_arn = str(body.get("EventSourceArn", ""))
+    bus = source_arn.rsplit("/", 1)[-1] if source_arn else "default"
+    if bus not in _buses(store):
+        raise _E("ResourceNotFoundException", f"Event bus {bus} does not exist.")
+    pattern = body.get("EventPattern")
+    if isinstance(pattern, str):
+        try:
+            pattern = json.loads(pattern)
+        except Exception:
+            pattern = {}
+    archive = {"name": name, "arn": _archive_arn(store, name), "bus": bus,
+               "source_arn": source_arn or _bus_arn(store, bus), "pattern": pattern or {},
+               "retention_days": int(body.get("RetentionDays") or 0),
+               "description": body.get("Description", ""), "created": _now_iso(), "state": "ENABLED"}
+    _archives(store)[name] = archive
+    store.persist()
+    return EventsResponse(body={"ArchiveArn": archive["arn"], "State": "ENABLED", "CreationTime": archive["created"]})
+
+
+def _archived_events(store, archive):
+    log = _buses(store).get(archive["bus"], {}).get("event_log", [])
+    return [e for e in log if _match_pattern(archive.get("pattern", {}), {
+        "source": e.get("source"), "detail-type": e.get("detail-type"), "detail": e.get("detail")})]
+
+
+def _describe_archive(store, body):
+    archive = _archives(store).get(str(body.get("ArchiveName", "")))
+    if not archive:
+        raise _E("ResourceNotFoundException", "Archive does not exist.")
+    events_ = _archived_events(store, archive)
+    return EventsResponse(body={"ArchiveName": archive["name"], "ArchiveArn": archive["arn"],
+                                 "EventSourceArn": archive["source_arn"], "State": archive["state"],
+                                 "EventPattern": json.dumps(archive.get("pattern", {})),
+                                 "RetentionDays": archive["retention_days"], "Description": archive.get("description", ""),
+                                 "SizeBytes": sum(len(json.dumps(e)) for e in events_), "EventCount": len(events_),
+                                 "CreationTime": archive["created"]})
+
+
+def _list_archives(store, body):
+    prefix = str(body.get("NamePrefix", "") or "")
+    source_arn = body.get("EventSourceArn")
+    out = []
+    for a in _archives(store).values():
+        if not a["name"].startswith(prefix):
+            continue
+        if source_arn and a["source_arn"] != source_arn:
+            continue
+        out.append({"ArchiveName": a["name"], "EventSourceArn": a["source_arn"], "State": a["state"],
+                     "RetentionDays": a["retention_days"], "SizeBytes": sum(len(json.dumps(e)) for e in _archived_events(store, a)),
+                     "EventCount": len(_archived_events(store, a)), "CreationTime": a["created"]})
+    return EventsResponse(body={"Archives": out})
+
+
+def _delete_archive(store, body):
+    _archives(store).pop(str(body.get("ArchiveName", "")), None)
+    store.persist()
+    return EventsResponse(body={})
+
+
+def _update_archive(store, body):
+    archive = _archives(store).get(str(body.get("ArchiveName", "")))
+    if not archive:
+        raise _E("ResourceNotFoundException", "Archive does not exist.")
+    if "Description" in body:
+        archive["description"] = body.get("Description") or ""
+    if "RetentionDays" in body:
+        archive["retention_days"] = int(body.get("RetentionDays") or 0)
+    pattern = body.get("EventPattern")
+    if pattern is not None:
+        if isinstance(pattern, str):
+            try:
+                pattern = json.loads(pattern)
+            except Exception:
+                pattern = {}
+        archive["pattern"] = pattern or {}
+    store.persist()
+    return EventsResponse(body={"ArchiveArn": archive["arn"], "State": archive["state"], "CreationTime": archive["created"]})
+
+
+def _start_replay(store, body, lam_store=None):
+    name = str(body.get("ReplayName", "")).strip()
+    if not name:
+        raise _E("ValidationException", "ReplayName is required.")
+    source_arn = str(body.get("EventSourceArn", ""))
+    archive = next((a for a in _archives(store).values() if a["arn"] == source_arn), None)
+    if not archive:
+        raise _E("ResourceNotFoundException", "Archive does not exist.")
+    dest_arn = str((body.get("Destination") or {}).get("Arn", "")) or _bus_arn(store, archive["bus"])
+    dest_bus = dest_arn.rsplit("/", 1)[-1]
+    start = _parse_iso(body.get("EventStartTime"))
+    end = _parse_iso(body.get("EventEndTime"))
+    replayed = 0
+    for envelope in _archived_events(store, archive):
+        t = _parse_iso(envelope.get("time"))
+        if start and t and t < start:
+            continue
+        if end and t and t > end:
+            continue
+        event_obj = {"source": envelope.get("source"), "detail-type": envelope.get("detail-type"),
+                     "detail": envelope.get("detail"), "account": store.account_id, "region": REGION}
+        replay_envelope = dict(envelope, id=uuid.uuid4().hex, **{"replay-name": name})
+        _deliver_to_bus(store, lam_store, dest_bus, replay_envelope, event_obj)
+        replayed += 1
+    replay = {"name": name, "arn": f"arn:aws:events:{REGION}:{store.account_id}:replay/{name}",
+              "source_arn": source_arn, "destination_arn": dest_arn, "state": "COMPLETED",
+              "event_count": replayed, "started": _now_iso(), "finished": _now_iso()}
+    _replays(store)[name] = replay
+    store.persist()
+    return EventsResponse(body={"ReplayArn": replay["arn"], "State": "COMPLETED", "ReplayStartTime": replay["started"]})
+
+
+def _describe_replay(store, body):
+    replay = _replays(store).get(str(body.get("ReplayName", "")))
+    if not replay:
+        raise _E("ResourceNotFoundException", "Replay does not exist.")
+    return EventsResponse(body={"ReplayName": replay["name"], "ReplayArn": replay["arn"], "State": replay["state"],
+                                 "EventSourceArn": replay["source_arn"], "Destination": {"Arn": replay["destination_arn"]},
+                                 "EventLastReplayedTime": replay["finished"], "ReplayStartTime": replay["started"],
+                                 "ReplayEndTime": replay["finished"]})
+
+
+def _list_replays(store, body):
+    prefix = str(body.get("NamePrefix", "") or "")
+    out = [{"ReplayName": r["name"], "State": r["state"], "EventSourceArn": r["source_arn"],
+            "EventCount": r["event_count"], "ReplayStartTime": r["started"], "ReplayEndTime": r["finished"]}
+           for r in _replays(store).values() if r["name"].startswith(prefix)]
+    return EventsResponse(body={"Replays": out})
+
+
+# ── operations: tags ────────────────────────────────────────────────────────
+def _taggable(store, arn):
+    for b in _buses(store).values():
+        if b["arn"] == arn:
+            return b
+    for r in _rules(store).values():
+        if r["arn"] == arn:
+            return r
+    for a in _archives(store).values():
+        if a["arn"] == arn:
+            return a
+    return None
+
+
+def _tag_resource(store, body):
+    res = _taggable(store, str(body.get("ResourceARN", "")))
+    if res is None:
+        raise _E("ResourceNotFoundException", "Resource does not exist.")
+    res.setdefault("tags", {}).update({t["Key"]: t.get("Value", "") for t in body.get("Tags") or []})
+    store.persist()
+    return EventsResponse(body={})
+
+
+def _untag_resource(store, body):
+    res = _taggable(store, str(body.get("ResourceARN", "")))
+    if res is not None:
+        for k in body.get("TagKeys") or []:
+            res.get("tags", {}).pop(k, None)
+        store.persist()
+    return EventsResponse(body={})
+
+
+def _list_tags_for_resource(store, body):
+    res = _taggable(store, str(body.get("ResourceARN", "")))
+    tags = (res or {}).get("tags", {})
+    return EventsResponse(body={"Tags": [{"Key": k, "Value": v} for k, v in tags.items()]})
 
 
 class _E(Exception):
@@ -182,21 +562,37 @@ class _E(Exception):
 
 _OPS = {
     "PutRule": _put_rule, "DeleteRule": _delete_rule, "ListRules": _list_rules,
+    "DescribeRule": _describe_rule, "EnableRule": _enable_rule, "DisableRule": _disable_rule,
     "PutTargets": _put_targets, "RemoveTargets": _remove_targets,
-    "ListTargetsByRule": _list_targets_by_rule, "PutEvents": _put_events,
+    "ListTargetsByRule": _list_targets_by_rule, "ListRuleNamesByTarget": _list_rule_names_by_target,
+    "CreateEventBus": _create_event_bus, "DeleteEventBus": _delete_event_bus,
+    "ListEventBuses": _list_event_buses, "DescribeEventBus": _describe_event_bus,
+    "UpdateEventBus": _update_event_bus,
+    "CreateArchive": _create_archive, "DescribeArchive": _describe_archive,
+    "ListArchives": _list_archives, "DeleteArchive": _delete_archive, "UpdateArchive": _update_archive,
+    "StartReplay": _start_replay, "DescribeReplay": _describe_replay, "ListReplays": _list_replays,
+    "TagResource": _tag_resource, "UntagResource": _untag_resource, "ListTagsForResource": _list_tags_for_resource,
 }
 
+# Ops that need the Lambda function store for target delivery.
+_NEEDS_LAMBDA = {"PutEvents", "StartReplay"}
 
-def dispatch(store: MessagingStore, target: str, payload: dict | None = None) -> EventsResponse:
+
+def dispatch(store: MessagingStore, target: str, payload: dict | None = None, lam_store=None) -> EventsResponse:
     """Native EventBridge JSON router. `target` is the X-Amz-Target header,
-    e.g. "AWSEvents.PutEvents"."""
+    e.g. "AWSEvents.PutEvents". `lam_store` (optional) is the Lambda function
+    registry, needed only to deliver to Lambda targets."""
     body = payload if isinstance(payload, dict) else {}
     action = target.rsplit(".", 1)[-1] if target else ""
-    op = _OPS.get(action)
-    if op is None:
-        return EventsResponse(status=400, body={"__type": "UnknownOperationException",
-                                                "message": f"Unknown operation {action}."})
     try:
+        if action == "PutEvents":
+            return _put_events(store, body, lam_store)
+        if action == "StartReplay":
+            return _start_replay(store, body, lam_store)
+        op = _OPS.get(action)
+        if op is None:
+            return EventsResponse(status=400, body={"__type": "UnknownOperationException",
+                                                    "message": f"Unknown operation {action}."})
         return op(store, body)
     except _E as e:
         return EventsResponse(status=400, body={"__type": e.code, "message": e.message})

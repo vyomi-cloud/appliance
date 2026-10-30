@@ -893,6 +893,22 @@ def _publish_to_phone(store, phone: str, msg: dict) -> str:
     return message_id
 
 
+def publish_arn(store, topic_arn: str, message: str) -> bool:
+    """Public cross-core seam: publish a raw message to an SNS topic by ARN,
+    for callers that already have an envelope ready (EventBridge targets).
+    Returns False if the topic does not exist, instead of raising."""
+    topic = store.get_topic(topic_arn)
+    if not topic:
+        return False
+    msg = {"Message": message, "Subject": None, "MessageStructure": None,
+           "attrs": {}, "group": None, "dedup": None}
+    try:
+        _publish_to_topic(store, topic, msg)
+    except Exception:
+        return False
+    return True
+
+
 def _msg_from_params(params: dict) -> dict:
     return {"Message": params.get("Message"), "Subject": params.get("Subject"),
             "MessageStructure": _p(params, "MessageStructure"),

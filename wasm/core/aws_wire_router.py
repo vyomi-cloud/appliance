@@ -114,6 +114,7 @@ from core import azure_queue_core as az_queue
 from core.azure_queue_core import AzureQueueStore
 from core import azure_servicebus_core as az_sb
 from core import eventbridge_core as events
+from core import scheduler_core as sched
 from core import logs_core as logs
 from core import lambda_core as lam
 from core import apigateway_core as apigw
@@ -180,7 +181,7 @@ _SIGNING = {
     "rds-data": "rds-data",   # the Aurora HTTP SQL surface (async path)
     "events": "events", "lambda": "lambda", "ec2": "vpc", "kinesis": "kinesis", "monitoring": "cloudwatch", "logs": "logs", "states": "stepfunctions",
     "elasticloadbalancing": "elbv2",
-    "ssm": "ssm",
+    "ssm": "ssm", "scheduler": "scheduler",
 }
 
 # X-Amz-Target prefix → our core key (the JSON-wire services).
@@ -284,6 +285,7 @@ class AwsWireRouter:
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
         # its own lightweight function registry (a namespace the core attaches to).
         self.events = s.get("events") or self.msg
+        self.sched = s.get("sched") or sched.SchedulerStore()   # EventBridge Scheduler (schedules + groups)
         self.ssm = s.get("ssm") or ssm.SsmStore()   # Systems Manager (Parameter Store, documents, Run Command, …)
         self.lam = s.get("lam") or _types.SimpleNamespace()
         # API Gateway shares the Lambda store so an AWS_PROXY integration can reach
@@ -482,6 +484,14 @@ class AwsWireRouter:
                 hdrs["content-type"] = r.media_type
             return {"status": r.status, "headers": hdrs, "body": r.body or b""}
 
+        if svc == "scheduler":   # native EventBridge Scheduler REST (/schedules, /schedule-groups)
+            r = sched.dispatch(self.sched, method, path, query or {}, headers or {}, bytes(body),
+                                msg_store=self.msg, lam_store=self.lam)
+            hdrs = dict(r.headers or {})
+            if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
+                hdrs["content-type"] = r.media_type
+            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+
         if svc == "azure-sql-iam-rbac":   # Azure RBAC checkAccess (shares the IAM store)
             r = az_iam.dispatch(self.iam, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
@@ -551,7 +561,7 @@ class AwsWireRouter:
             elif svc == "secretsmanager":
                 r = secrets.dispatch(self.sec, target, payload)
             elif svc == "events":
-                r = events.dispatch(self.events, target, payload)
+                r = events.dispatch(self.events, target, payload, lam_store=self.lam)
             elif svc == "kinesis":
                 r = kinesis.dispatch(self.kinesis, target, payload)
             elif svc == "logs":
