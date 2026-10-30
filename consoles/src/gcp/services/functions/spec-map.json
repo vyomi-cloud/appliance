@@ -3,7 +3,7 @@
   "services": { "route": "#/functions/services", "fixtures": ["fn-service"], "live": "live-service" },
   "create-function": { "route": "#/functions/create", "expand": ["text=Containers, Networking, Security", "text=Internal"] },
   "function-details": { "route": "#/functions/detail/us-central1/uic-function", "fixtures": ["fn-service"], "vars": { "resource-name": "uic-function" }, "live": "live-function-detail" },
-  "function-source": { "route": "#/functions/detail/us-central1/uic-function?tab=source", "fixtures": ["fn-service"], "vars": { "resource-name": "uic-function" } },
+  "function-source": { "route": "#/functions/detail/us-central1/uic-function?tab=source", "fixtures": ["fn-service"], "vars": { "resource-name": "uic-function" }, "live": "live-function-source" },
   "overview": { "route": "#/functions/overview" },
   "jobs": { "route": "#/functions/jobs", "live": "live-job" },
   "worker-pools": { "route": "#/functions/worker-pools", "live": "live-workerpool" },

@@ -28,8 +28,8 @@ export default function ServiceDetail({ params, query }) {
   const { region, name } = params;
   const tab = TABS.some(([t]) => t === query.tab) ? query.tab : "observability";
   const notify = useNotify();
-  const svc = useAsync(() => api.getService(region, name), [region, name]);
-  const pol = useAsync(() => api.getIamPolicy(region, name).catch(() => null), [region, name]);
+  const svc = useAsync(() => api.getService(region, name), [region, name, tab]);
+  const pol = useAsync(() => api.getIamPolicy(region, name).catch(() => null), [region, name, tab]);
   const [del, setDel] = useState(false);
   const reloadAll = () => { svc.reload(); pol.reload(); };
   const tabHref = (t) => hashHref("functions", "detail", region, name) + (t === "observability" ? "" : `?tab=${t}`);

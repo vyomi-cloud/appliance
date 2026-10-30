@@ -77,12 +77,12 @@ from core import gcp_run_core as gcp_run
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
     client is pointed at the relay and the path is the service discriminator)."""
-    if path.startswith("/v2/projects/") or path.lstrip("/").startswith(("apis/serving.knative.dev/", "apis/domains.cloudrun.com/")):
+    if re.match(r"^/v2/projects/[^/]+/locations/[^/]+/(services|jobs|workerPools|operations)([/:]|$)", path) \
+            or path.lstrip("/").startswith(("apis/serving.knative.dev/", "apis/domains.cloudrun.com/")):
         # Cloud Run Admin API v2 (+ its Knative v1 facades for `gcloud run` and
-        # `gcloud run domain-mappings`) — /v2/ is not used by any other wired-in GCP
-        # service, so this is unambiguous and must be checked before the
-        # /v1/.../locations/.../jobs family below (Cloud Scheduler jobs share that
-        # exact path shape one version down).
+        # `gcloud run domain-mappings`) — gated on its specific kinds (services/jobs/
+        # workerPools/operations) because Cloud Logging also lives under /v2/projects/,
+        # and Cloud Scheduler's /v1/.../locations/.../jobs shares the shape one version down.
         return "gcp-run"
     if path.startswith(("/storage/v1", "/upload/storage/v1", "/download/storage/v1")):
         return "gcp-gcs"

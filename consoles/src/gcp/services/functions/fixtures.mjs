@@ -29,6 +29,13 @@ export default {
     await wire("PATCH", `${svcPath("uic-function")}?updateMask=annotations`, { svc: null, body: { annotations } });
     return uniq;
   },
+  "live-function-source": async (wire, uniq) => {
+    await ensureFunctionService(wire, "uic-function");
+    const svc = await wire("GET", svcPath("uic-function"), { svc: null }).catch(() => ({}));
+    const annotations = { ...(svc.annotations || {}), [SRC_ANN]: `// ${uniq}\nexports.handler = (event) => event;` };
+    await wire("PATCH", `${svcPath("uic-function")}?updateMask=annotations`, { svc: null, body: { annotations } });
+    return uniq;
+  },
   "live-job": async (wire, uniq) => {
     await wire("POST", `/v2/projects/${PROJECT}/locations/${REGION}/jobs?jobId=${uniq}`, { svc: null, body: { template: { template: { containers: [{ image: IMAGE }] } } } });
     return uniq;
