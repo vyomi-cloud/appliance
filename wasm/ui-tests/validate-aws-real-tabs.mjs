@@ -362,8 +362,12 @@ const SECTIONS = {
     await page.locator("#main [data-testid=apigw-dep-stage]").fill("rtstage");
     await page.locator("#main [data-testid=apigw-deploy]").click();
     await sleep(1500);
-    await tab("Models");
-    const dep = await tab("Deployments");
+    let dep = "";
+    for (let i = 0; i < 6 && !/rtstage/.test(dep); i++) {   // the deploy is async on a loaded host: poll, don't guess
+      await tab("Models");
+      dep = await tab("Deployments");
+      if (!/rtstage/.test(dep)) await sleep(1500);
+    }
     check("apigateway Deployments: deployment made in the tab is listed", /rtstage/.test(dep), dep);
     await tab("Settings");
     await page.locator("#main [data-testid=apigw-settings-save]").click();

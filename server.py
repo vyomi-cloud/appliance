@@ -18812,7 +18812,16 @@ def _rds_runtime_delete(db: dict) -> None:
 
 
 def _rds_vpc_id() -> str:
-    for vpc_id in sorted(vpc_state.get("vpcs", {})):
+    # RDS places an instance in the account's default VPC unless told otherwise; a custom
+    # VPC without subnets can't host a DB subnet group, so it is the last resort.
+    vpcs = vpc_state.get("vpcs", {})
+    for vpc_id in sorted(vpcs):
+        if vpcs[vpc_id].get("is_default"):
+            return vpc_id
+    for vpc_id in sorted(vpcs):
+        if _rds_default_subnet_ids(vpc_id):
+            return vpc_id
+    for vpc_id in sorted(vpcs):
         return vpc_id
     return ""
 
