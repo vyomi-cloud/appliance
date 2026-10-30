@@ -13,7 +13,7 @@ export const SERVICES = [
   { id: "vpc", title: "VPC", description: "Isolated cloud resources", category: "Networking & Content Delivery", classic: "vpc" },
   { id: "apigateway", title: "API Gateway", description: "Build, deploy, and manage APIs", category: "Networking & Content Delivery", classic: "apigateway" },
   { id: "iam", title: "IAM", description: "Manage access to AWS resources", category: "Security, Identity, & Compliance", classic: "iam" },
-  { id: "kms", title: "Key Management Service", description: "Create and control encryption keys", category: "Security, Identity, & Compliance", classic: "kms" },
+  { id: "kms", title: "Key Management Service", description: "Create and control encryption keys", category: "Security, Identity, & Compliance", load: () => import("./kms/index.jsx") },
   { id: "secretsmanager", title: "Secrets Manager", description: "Store, manage, and retrieve secrets", category: "Security, Identity, & Compliance", classic: "secretsmanager" },
   { id: "sqs", title: "Simple Queue Service", description: "Managed message queues", category: "Application Integration", classic: "sqs" },
   { id: "sns", title: "Simple Notification Service", description: "Pub/sub, SMS, email, and mobile push", category: "Application Integration", classic: "sns" },

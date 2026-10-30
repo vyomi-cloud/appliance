@@ -1,0 +1,135 @@
+{
+ "$doc": "Vyomi capability registry — KMS. See s3.json for the contract.",
+ "kms.key.crud": {
+  "title": "Keys (create, describe, list)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kms_core.py"
+  ]
+ },
+ "kms.key.lifecycle": {
+  "title": "Key state (enable, disable, schedule/cancel deletion)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kms_core.py",
+   "tests/conformance/test_kms_console_v4_core.py"
+  ]
+ },
+ "kms.key.policy": {
+  "title": "Key policy",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The key policy document is stored and returned exactly as written, but Vyomi does not evaluate it — it never denies or allows a KMS call based on policy content."
+  ],
+  "tests": [
+   "tests/conformance/test_kms_console_v4_core.py"
+  ]
+ },
+ "kms.key.tags": {
+  "title": "Tags",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kms_console_v4_core.py"
+  ]
+ },
+ "kms.key.rotation": {
+  "title": "Key rotation (automatic flag + on-demand)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Automatic rotation (EnableKeyRotation) is recorded with its period and reflected in GetKeyRotationStatus, but Vyomi has no background scheduler — it never fires on its own. Use on-demand rotation (RotateKeyOnDemand) to actually rotate the backing key material; ciphertext from before a rotation keeps decrypting, exactly like AWS."
+  ],
+  "tests": [
+   "tests/conformance/test_kms_secrets_rotation_core.py",
+   "tests/conformance/test_kms_console_v4_core.py"
+  ]
+ },
+ "kms.key.aliases": {
+  "title": "Aliases",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kms_core.py",
+   "tests/conformance/test_kms_console_v4_core.py"
+  ]
+ },
+ "kms.crypto.symmetric": {
+  "title": "Encrypt / Decrypt / GenerateDataKey / GenerateRandom",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kms_core.py"
+  ]
+ },
+ "kms.crypto.asymmetric": {
+  "title": "Sign / Verify, GenerateMac / VerifyMac, Encapsulate / Decapsulate",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Signatures, MACs and ML-KEM shared secrets are produced with Vyomi's own authenticated primitive (the same construction as Encrypt/Decrypt), not real RSA/ECC/ML-DSA math or ML-KEM lattice math. They are genuine, tamper-detected and key-separated, but only verifiable inside Vyomi — not with a real public key outside it."
+  ],
+  "tests": [
+   "tests/conformance/test_kms_core.py",
+   "tests/conformance/test_kms_console_v4_core.py"
+  ]
+ },
+ "kms.aws-managed-keys": {
+  "title": "AWS managed keys (aws/<service>)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kms_console_v4_core.py"
+  ]
+ },
+ "kms.key-administrators": {
+  "title": "Key administrators / key users / other AWS accounts pickers",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "The visual policy editor's IAM-principal pickers (key administrators, key users, other AWS accounts) aren't modeled; edit the key policy JSON directly in the Key policy tab, which is real."
+  ]
+ },
+ "kms.custom-key-stores": {
+  "title": "Custom key stores (AWS CloudHSM / external key stores)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Creating, listing, updating and deleting a custom key store record is real and stateful. Connecting one is not: Vyomi has no real CloudHSM cluster or external XKS proxy to reach, so ConnectCustomKeyStore always ends in a FAILED connection state, same as AWS would report without reachable backing infrastructure. No key's material is ever stored in a custom key store."
+  ],
+  "tests": [
+   "tests/conformance/test_kms_console_v4_core.py"
+  ]
+ }
+}

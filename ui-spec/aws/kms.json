@@ -553,6 +553,7 @@
             {
               "title": "Key spec",
               "provenance": "reference",
+              "notes": "Fixed extraction error: the captured 'visible_when' lumped the asymmetric key specs (RSA/ECC/ML-DSA) together with the HMAC key-usage branch, but AWS shows distinct HMAC_* specs for 'Generate and verify MAC' keys, not RSA/ECC ones. Split into two fields.",
               "fields": [
                 {
                   "label": "Key spec",
@@ -570,7 +571,20 @@
                     "ML_DSA_65",
                     "ML_DSA_87"
                   ],
-                  "visible_when": "Key type = Asymmetric or Key usage = Generate and verify MAC",
+                  "visible_when": "Key type = Asymmetric",
+                  "confidence": "medium"
+                },
+                {
+                  "label": "Key spec",
+                  "type": "radio",
+                  "required": true,
+                  "options": [
+                    "HMAC_224",
+                    "HMAC_256",
+                    "HMAC_384",
+                    "HMAC_512"
+                  ],
+                  "visible_when": "Key usage = Generate and verify MAC",
                   "confidence": "medium"
                 }
               ]

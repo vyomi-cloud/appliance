@@ -34,6 +34,11 @@
       "export-to-s3",
       "imports-from-s3",
       "import-from-s3"
+    ],
+    "kms": [
+      "aws-cloudhsm-key-stores",
+      "external-key-stores",
+      "create-external-key-store"
     ]
   },
   "_planned": {

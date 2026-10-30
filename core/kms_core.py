@@ -25,6 +25,9 @@ tagging reuse the same helpers and slot in next.
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
+import json
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -90,8 +93,10 @@ def _resolve_key_id(store: KeyStore, ref: str) -> str | None:
     return ref if store.key_exists(ref) else None
 
 
-def _require_active_key(store: KeyStore, ref: str) -> str:
+def _require_active_key(store: KeyStore, ref: str, auto_provision: bool = False) -> str:
     key_id = _resolve_key_id(store, ref)
+    if not key_id and auto_provision and _is_aws_managed_ref(ref):
+        key_id = _provision_aws_managed_key(store, ref)
     if not key_id or not store.key_exists(key_id):
         raise KmsError("NotFoundException", f"Key '{ref}' does not exist.", 400)
     state = store.get_key(key_id).get("KeyState", "Enabled")
@@ -114,37 +119,110 @@ def _key_metadata(store: KeyStore, key_id: str) -> dict:
         "KeyUsage": k.get("KeyUsage", "ENCRYPT_DECRYPT"),
         "KeyState": k.get("KeyState", "Enabled"),
         "Origin": k.get("Origin", "AWS_KMS"),
-        "KeyManager": "CUSTOMER",
+        "KeyManager": k.get("KeyManager", "CUSTOMER"),
         "KeySpec": spec,
         "CustomerMasterKeySpec": spec,
         "MultiRegion": False,
     }
     if md["KeyUsage"] == "ENCAPSULATE_DECAPSULATE":
         md["EncapsulationAlgorithms"] = ["ML_KEM"]
+    elif md["KeyUsage"] == "SIGN_VERIFY":
+        md["SigningAlgorithms"] = sorted(_SIGNING_ALGORITHMS)
+    elif md["KeyUsage"] == "GENERATE_VERIFY_MAC":
+        md["MacAlgorithms"] = sorted(_MAC_ALGORITHMS)
     else:
         md["EncryptionAlgorithms"] = ["SYMMETRIC_DEFAULT"]
     if "DeletionDate" in k:
         md["DeletionDate"] = k["DeletionDate"]
+    if k.get("MaterialId"):
+        md["KeyMaterialId"] = k["MaterialId"]
+    if k.get("LastUsedDate"):
+        md["LastUsedDate"] = k["LastUsedDate"]
+    if k.get("KeyRotationEnabled"):
+        md["RotationPeriodInDays"] = int(k.get("RotationPeriodInDays", 365))
     return md
+
+
+def _touch_last_used(store: KeyStore, key_id: str) -> None:
+    k = store.get_key(key_id)
+    if k is not None:
+        k["LastUsedDate"] = time.time()
 
 
 _DATA_KEY_BYTES = {"AES_256": 32, "AES_128": 16}
 
 
+def _default_key_policy(store: KeyStore) -> str:
+    return json.dumps({
+        "Version": "2012-10-17",
+        "Id": "key-default-1",
+        "Statement": [{
+            "Sid": "Enable IAM User Permissions",
+            "Effect": "Allow",
+            "Principal": {"AWS": f"arn:aws:iam::{store.account_id}:root"},
+            "Action": "kms:*",
+            "Resource": "*",
+        }],
+    }, indent=2)
+
+
 # ── operations ──────────────────────────────────────────────────────────────
 def _create_key(store: KeyStore, body: dict) -> dict:
     key_id = uuid.uuid4().hex
+    material_id = uuid.uuid4().hex
     store.put_key(key_id, {
         "KeyState": "Enabled",
         "Description": str(body.get("Description", "")),
         "KeyUsage": str(body.get("KeyUsage", "ENCRYPT_DECRYPT")),
         "KeySpec": str(body.get("KeySpec") or body.get("CustomerMasterKeySpec") or "SYMMETRIC_DEFAULT"),
         "Origin": str(body.get("Origin", "AWS_KMS")),
+        "KeyManager": "CUSTOMER",
         "CreationDate": time.time(),
+        "MaterialId": material_id,
+        "Tags": {t["TagKey"]: t.get("TagValue", "") for t in body.get("Tags") or [] if t.get("TagKey")},
     }, store.engine.new_key_material())
-    store.mirror_create_key(key_id, store.get_key(key_id))
+    k = store.get_key(key_id)
+    k["Policy"] = str(body.get("Policy") or "") or _default_key_policy(store)
+    store.mirror_create_key(key_id, k)
     store.persist()
     return {"KeyMetadata": _key_metadata(store, key_id)}
+
+
+def _is_aws_managed_ref(ref: str) -> bool:
+    ref = ref or ""
+    if ":alias/" in ref:
+        ref = "alias/" + ref.split(":alias/", 1)[1]
+    return ref.startswith("alias/aws/")
+
+
+def _provision_aws_managed_key(store: KeyStore, ref: str) -> str:
+    """AWS provisions the `aws/<service>` managed key the first time a service
+    uses it (Encrypt/GenerateDataKey with that alias) rather than at account
+    creation. Vyomi mirrors that: the alias auto-provisions its key on first use
+    instead of raising NotFoundException."""
+    alias = ref
+    if ":alias/" in alias:
+        alias = "alias/" + alias.split(":alias/", 1)[1]
+    service = alias[len("alias/aws/"):] or "service"
+    key_id = uuid.uuid4().hex
+    material_id = uuid.uuid4().hex
+    store.put_key(key_id, {
+        "KeyState": "Enabled",
+        "Description": f"Default master key that protects my {service} data when no other key is defined",
+        "KeyUsage": "ENCRYPT_DECRYPT",
+        "KeySpec": "SYMMETRIC_DEFAULT",
+        "Origin": "AWS_KMS",
+        "KeyManager": "AWS",
+        "CreationDate": time.time(),
+        "MaterialId": material_id,
+        "Tags": {},
+    }, store.engine.new_key_material())
+    k = store.get_key(key_id)
+    k["Policy"] = _default_key_policy(store)
+    store.mirror_create_key(key_id, k)
+    store.set_alias(alias, key_id)
+    store.persist()
+    return key_id
 
 
 def _describe_key(store: KeyStore, body: dict) -> dict:
@@ -160,13 +238,31 @@ def _list_keys(store: KeyStore, body: dict) -> dict:
 
 
 def _encrypt(store: KeyStore, body: dict) -> dict:
-    key_id = _require_active_key(store, body.get("KeyId", ""))
+    key_id = _require_active_key(store, body.get("KeyId", ""), auto_provision=True)
     plaintext = _b64d(body.get("Plaintext", ""))
     if not plaintext:
         raise KmsError("ValidationException", "Plaintext must not be empty.", 400)
     blob = store.engine.encrypt(store.get_material(key_id), key_id, plaintext)
+    _touch_last_used(store, key_id)
     return {"KeyId": _key_arn(store, key_id), "CiphertextBlob": _b64e(blob),
             "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"}
+
+
+def _decrypt_with_history(store: KeyStore, key_id: str, blob: bytes) -> bytes:
+    """KMS keeps old key material after a rotation so ciphertext encrypted under
+    an earlier backing key still decrypts. Try the current material first, then
+    prior versions (newest first)."""
+    k = store.get_key(key_id) or {}
+    candidates = [store.get_material(key_id), *reversed(k.get("MaterialHistory", []))]
+    last_exc: Exception | None = None
+    for mat in candidates:
+        if not mat:
+            continue
+        try:
+            return store.engine.decrypt(mat, blob)
+        except Exception as e:  # noqa: BLE001 - try the next material version
+            last_exc = e
+    raise last_exc or ValueError("no key material")
 
 
 def _decrypt(store: KeyStore, body: dict) -> dict:
@@ -187,9 +283,10 @@ def _decrypt(store: KeyStore, body: dict) -> dict:
     if state != "Enabled":
         raise KmsError("KMSInvalidStateException", f"{_key_arn(store, key_id)} is {state}.", 400)
     try:
-        plaintext = store.engine.decrypt(store.get_material(key_id), blob)
+        plaintext = _decrypt_with_history(store, key_id, blob)
     except Exception as e:
         raise KmsError("InvalidCiphertextException", str(e), 400)
+    _touch_last_used(store, key_id)
     return {"KeyId": _key_arn(store, key_id), "Plaintext": _b64e(plaintext),
             "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"}
 
@@ -217,6 +314,7 @@ def _encapsulate(store: KeyStore, body: dict) -> dict:
     key_id = _encapsulation_key(store, body)
     secret = os.urandom(_SHARED_SECRET_BYTES)
     blob = store.engine.encrypt(store.get_material(key_id), key_id, secret)
+    _touch_last_used(store, key_id)
     return {"KeyId": _key_arn(store, key_id), "SharedSecret": _b64e(secret),
             "SharedSecretCiphertextBlob": _b64e(blob), "EncapsulationAlgorithm": "ML_KEM"}
 
@@ -231,18 +329,96 @@ def _decapsulate(store: KeyStore, body: dict) -> dict:
         secret = store.engine.decrypt(store.get_material(key_id), blob)
     except Exception as e:
         raise KmsError("InvalidCiphertextException", str(e), 400)
+    _touch_last_used(store, key_id)
     return {"KeyId": _key_arn(store, key_id), "SharedSecret": _b64e(secret),
             "EncapsulationAlgorithm": "ML_KEM"}
 
 
-def _generate_data_key(store: KeyStore, body: dict, with_plaintext: bool = True) -> dict:
+# ── asymmetric sign/verify + HMAC generate/verify-mac (simulated: same stdlib-only
+# authenticated primitive as encrypt/decrypt — wire shape and key-usage/state rules
+# match AWS; no real RSA/ECC/ML-DSA math, exactly the ML-KEM Encapsulate pattern above) ─
+_SIGNING_ALGORITHMS = {
+    "RSASSA_PKCS1_V1_5_SHA_256", "RSASSA_PKCS1_V1_5_SHA_384", "RSASSA_PKCS1_V1_5_SHA_512",
+    "RSASSA_PSS_SHA_256", "RSASSA_PSS_SHA_384", "RSASSA_PSS_SHA_512",
+    "ECDSA_SHA_256", "ECDSA_SHA_384", "ECDSA_SHA_512",
+    "ML_DSA_SHAKE_256",
+}
+_MAC_ALGORITHMS = {
+    "HMAC_SHA_224": hashlib.sha224, "HMAC_SHA_256": hashlib.sha256,
+    "HMAC_SHA_384": hashlib.sha384, "HMAC_SHA_512": hashlib.sha512,
+}
+
+
+def _require_usage_key(store: KeyStore, body: dict, usage: str) -> str:
     key_id = _require_active_key(store, body.get("KeyId", ""))
+    if store.get_key(key_id).get("KeyUsage") != usage:
+        raise KmsError("InvalidKeyUsageException",
+                       f"{_key_arn(store, key_id)} key usage is not {usage}.", 400)
+    return key_id
+
+
+def _sign(store: KeyStore, body: dict) -> dict:
+    algo = str(body.get("SigningAlgorithm") or "")
+    if algo not in _SIGNING_ALGORITHMS:
+        raise KmsError("ValidationException", f"Unsupported SigningAlgorithm '{algo}'.", 400)
+    key_id = _require_usage_key(store, body, "SIGN_VERIFY")
+    message = _b64d(body.get("Message", ""))
+    if not message:
+        raise KmsError("ValidationException", "Message must not be empty.", 400)
+    sig = hmac.new(store.get_material(key_id), algo.encode() + b"|" + message, hashlib.sha256).digest()
+    _touch_last_used(store, key_id)
+    return {"KeyId": _key_arn(store, key_id), "Signature": _b64e(sig), "SigningAlgorithm": algo}
+
+
+def _verify(store: KeyStore, body: dict) -> dict:
+    algo = str(body.get("SigningAlgorithm") or "")
+    if algo not in _SIGNING_ALGORITHMS:
+        raise KmsError("ValidationException", f"Unsupported SigningAlgorithm '{algo}'.", 400)
+    key_id = _require_usage_key(store, body, "SIGN_VERIFY")
+    message = _b64d(body.get("Message", ""))
+    signature = _b64d(body.get("Signature", ""))
+    expected = hmac.new(store.get_material(key_id), algo.encode() + b"|" + message, hashlib.sha256).digest()
+    _touch_last_used(store, key_id)
+    return {"KeyId": _key_arn(store, key_id), "SignatureValid": hmac.compare_digest(expected, signature),
+            "SigningAlgorithm": algo}
+
+
+def _generate_mac(store: KeyStore, body: dict) -> dict:
+    algo = str(body.get("MacAlgorithm") or "")
+    digest = _MAC_ALGORITHMS.get(algo)
+    if not digest:
+        raise KmsError("ValidationException", f"Unsupported MacAlgorithm '{algo}'.", 400)
+    key_id = _require_usage_key(store, body, "GENERATE_VERIFY_MAC")
+    message = _b64d(body.get("Message", ""))
+    if not message:
+        raise KmsError("ValidationException", "Message must not be empty.", 400)
+    mac = hmac.new(store.get_material(key_id), message, digest).digest()
+    _touch_last_used(store, key_id)
+    return {"KeyId": _key_arn(store, key_id), "Mac": _b64e(mac), "MacAlgorithm": algo}
+
+
+def _verify_mac(store: KeyStore, body: dict) -> dict:
+    algo = str(body.get("MacAlgorithm") or "")
+    digest = _MAC_ALGORITHMS.get(algo)
+    if not digest:
+        raise KmsError("ValidationException", f"Unsupported MacAlgorithm '{algo}'.", 400)
+    key_id = _require_usage_key(store, body, "GENERATE_VERIFY_MAC")
+    message = _b64d(body.get("Message", ""))
+    mac = _b64d(body.get("Mac", ""))
+    expected = hmac.new(store.get_material(key_id), message, digest).digest()
+    _touch_last_used(store, key_id)
+    return {"KeyId": _key_arn(store, key_id), "MacValid": hmac.compare_digest(expected, mac), "MacAlgorithm": algo}
+
+
+def _generate_data_key(store: KeyStore, body: dict, with_plaintext: bool = True) -> dict:
+    key_id = _require_active_key(store, body.get("KeyId", ""), auto_provision=True)
     n = int(body.get("NumberOfBytes") or _DATA_KEY_BYTES.get(str(body.get("KeySpec", "AES_256")), 32))
     if n < 1 or n > 1024:
         raise KmsError("ValidationException", "NumberOfBytes must be 1..1024.", 400)
     import os
     data_key = os.urandom(n)
     blob = store.engine.encrypt(store.get_material(key_id), key_id, data_key)
+    _touch_last_used(store, key_id)
     out = {"KeyId": _key_arn(store, key_id), "CiphertextBlob": _b64e(blob)}
     if with_plaintext:
         out["Plaintext"] = _b64e(data_key)
@@ -294,19 +470,37 @@ def _get_key_rotation_status(store: KeyStore, body: dict) -> dict:
     return out
 
 
-def _rotate_key_on_demand(store: KeyStore, body: dict) -> dict:
+def _rotate_key_on_demand(store: KeyStore, body: dict, rotation_type: str = "CUSTOMER_INITIATED") -> dict:
     """Rotate the backing key material now: fresh material, but the key id and all
-    prior ciphertexts stay valid (KMS keeps old versions for decrypt). We keep the
-    current material as a prior version so existing ciphertext still decrypts."""
+    prior ciphertexts stay valid (KMS keeps old versions for decrypt — see
+    _decrypt_with_history)."""
     key_id = _resolve_key_id(store, body.get("KeyId", ""))
     if not key_id or not store.key_exists(key_id):
         raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
     k = store.get_key(key_id)
     if k.get("KeyState") == "PendingDeletion":
         raise KmsError("KMSInvalidStateException", "Key is pending deletion.", 400)
+    old_material = store.get_material(key_id)
+    if old_material:
+        k.setdefault("MaterialHistory", []).append(old_material)
+    store.material[key_id] = store.engine.new_key_material()
+    material_id = uuid.uuid4().hex
+    k["MaterialId"] = material_id
+    k.setdefault("RotationHistory", []).append({
+        "KeyMaterialId": material_id, "RotationDate": time.time(), "RotationType": rotation_type,
+    })
     k["RotationCount"] = int(k.get("RotationCount", 0)) + 1
     store.persist()
     return {"KeyId": _key_arn(store, key_id)}
+
+
+def _list_key_rotations(store: KeyStore, body: dict) -> dict:
+    key_id = _resolve_key_id(store, body.get("KeyId", ""))
+    if not key_id or not store.key_exists(key_id):
+        raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    history = store.get_key(key_id).get("RotationHistory", [])
+    rotations = [{"KeyId": key_id, **r} for r in history]
+    return {"Rotations": rotations, "Truncated": False}
 
 
 def _schedule_key_deletion(store: KeyStore, body: dict) -> dict:
@@ -348,6 +542,211 @@ def _list_aliases(store: KeyStore, body: dict) -> dict:
         aliases.append({"AliasName": alias, "AliasArn": _alias_arn(store, alias),
                         "TargetKeyId": key_id})
     return {"Aliases": aliases, "Truncated": False}
+
+
+def _delete_alias(store: KeyStore, body: dict) -> dict:
+    alias = str(body.get("AliasName", ""))
+    if not alias or store.alias_target(alias) is None:
+        raise KmsError("NotFoundException", f"Alias '{alias}' does not exist.", 400)
+    store.aliases.pop(alias, None)
+    store.persist()
+    return {}
+
+
+def _update_alias(store: KeyStore, body: dict) -> dict:
+    alias = str(body.get("AliasName", ""))
+    if store.alias_target(alias) is None:
+        raise KmsError("NotFoundException", f"Alias '{alias}' does not exist.", 400)
+    target = body.get("TargetKeyId", "")
+    key_id = _resolve_key_id(store, target)
+    if not key_id or not store.key_exists(key_id):
+        raise KmsError("NotFoundException", f"Target key '{target}' does not exist.", 400)
+    store.set_alias(alias, key_id)
+    store.persist()
+    return {}
+
+
+def _cancel_key_deletion(store: KeyStore, body: dict) -> dict:
+    key_id = _resolve_key_id(store, body.get("KeyId", ""))
+    if not key_id or not store.key_exists(key_id):
+        raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    k = store.get_key(key_id)
+    if k.get("KeyState") != "PendingDeletion":
+        raise KmsError("KMSInvalidStateException", "Key is not pending deletion.", 400)
+    k["KeyState"] = "Disabled"
+    k.pop("DeletionDate", None)
+    store.persist()
+    return {"KeyId": _key_arn(store, key_id), "KeyState": "Disabled"}
+
+
+# ── tags ─────────────────────────────────────────────────────────────────
+def _tag_resource(store: KeyStore, body: dict) -> dict:
+    key_id = _resolve_key_id(store, body.get("KeyId", ""))
+    if not key_id or not store.key_exists(key_id):
+        raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    tags = store.get_key(key_id).setdefault("Tags", {})
+    for t in body.get("Tags") or []:
+        if t.get("TagKey"):
+            tags[t["TagKey"]] = t.get("TagValue", "")
+    store.persist()
+    return {}
+
+
+def _untag_resource(store: KeyStore, body: dict) -> dict:
+    key_id = _resolve_key_id(store, body.get("KeyId", ""))
+    if not key_id or not store.key_exists(key_id):
+        raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    tags = store.get_key(key_id).setdefault("Tags", {})
+    for tag_key in body.get("TagKeys") or []:
+        tags.pop(tag_key, None)
+    store.persist()
+    return {}
+
+
+def _list_resource_tags(store: KeyStore, body: dict) -> dict:
+    key_id = _resolve_key_id(store, body.get("KeyId", ""))
+    if not key_id or not store.key_exists(key_id):
+        raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    tags = store.get_key(key_id).get("Tags", {})
+    return {"Tags": [{"TagKey": k, "TagValue": v} for k, v in tags.items()], "Truncated": False}
+
+
+# ── key policy (stored, not evaluated — Vyomi does not authorize calls against it) ─
+def _put_key_policy(store: KeyStore, body: dict) -> dict:
+    key_id = _resolve_key_id(store, body.get("KeyId", ""))
+    if not key_id or not store.key_exists(key_id):
+        raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    policy = body.get("Policy")
+    if not policy:
+        raise KmsError("ValidationException", "Policy must not be empty.", 400)
+    try:
+        json.loads(policy)
+    except Exception:
+        raise KmsError("MalformedPolicyDocumentException", "The policy document is not valid JSON.", 400)
+    store.get_key(key_id)["Policy"] = policy
+    store.persist()
+    return {}
+
+
+def _get_key_policy(store: KeyStore, body: dict) -> dict:
+    key_id = _resolve_key_id(store, body.get("KeyId", ""))
+    if not key_id or not store.key_exists(key_id):
+        raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    return {"Policy": store.get_key(key_id).get("Policy") or _default_key_policy(store)}
+
+
+def _list_key_policies(store: KeyStore, body: dict) -> dict:
+    key_id = _resolve_key_id(store, body.get("KeyId", ""))
+    if not key_id or not store.key_exists(key_id):
+        raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    return {"PolicyNames": ["default"], "Truncated": False}
+
+
+# ── custom key stores (AWS CloudHSM / external key stores) ─────────────────
+# Metadata CRUD is real and stateful. Connecting is honestly simulated: Vyomi has
+# no real CloudHSM cluster or external XKS proxy to reach, so ConnectCustomKeyStore
+# fails exactly as it would in AWS without live backing infrastructure — never a
+# faked CONNECTED state. No key ever stores its material in a custom key store.
+def _custom_key_stores(store: KeyStore) -> dict:
+    return store.__dict__.setdefault("_custom_key_stores", {})
+
+
+def _create_custom_key_store(store: KeyStore, body: dict) -> dict:
+    name = str(body.get("CustomKeyStoreName") or "")
+    if not name:
+        raise KmsError("ValidationException", "CustomKeyStoreName is required.", 400)
+    stores = _custom_key_stores(store)
+    if any(s["CustomKeyStoreName"] == name for s in stores.values()):
+        raise KmsError("CustomKeyStoreNameInUseException",
+                       f"Custom key store name '{name}' is already in use.", 400)
+    store_type = str(body.get("CustomKeyStoreType") or "AWS_CLOUDHSM")
+    store_id = "cks-" + uuid.uuid4().hex[:16]
+    record = {
+        "CustomKeyStoreId": store_id,
+        "CustomKeyStoreName": name,
+        "CustomKeyStoreType": store_type,
+        "ConnectionState": "DISCONNECTED",
+        "CreationDate": time.time(),
+    }
+    if store_type == "EXTERNAL_KEY_STORE":
+        record["XksProxyConfiguration"] = {
+            "Connectivity": str(body.get("XksProxyConnectivity") or "PUBLIC_ENDPOINT"),
+            "UriEndpoint": str(body.get("XksProxyUriEndpoint") or ""),
+            "UriPath": str(body.get("XksProxyUriPath") or "/kms/xks/v1"),
+        }
+    else:
+        record["CloudHsmClusterId"] = str(body.get("CloudHsmClusterId") or "")
+        record["TrustAnchorCertificate"] = str(body.get("TrustAnchorCertificate") or "")
+    stores[store_id] = record
+    store.persist()
+    return {"CustomKeyStoreId": store_id}
+
+
+def _require_custom_key_store(store: KeyStore, body: dict) -> dict:
+    rec = _custom_key_stores(store).get(body.get("CustomKeyStoreId"))
+    if not rec:
+        raise KmsError("CustomKeyStoreNotFoundException",
+                       "The request was rejected because the custom key store was not found.", 400)
+    return rec
+
+
+def _describe_custom_key_stores(store: KeyStore, body: dict) -> dict:
+    want_id, want_name = body.get("CustomKeyStoreId"), body.get("CustomKeyStoreName")
+    out = []
+    for rec in _custom_key_stores(store).values():
+        if want_id and rec["CustomKeyStoreId"] != want_id:
+            continue
+        if want_name and rec["CustomKeyStoreName"] != want_name:
+            continue
+        out.append(dict(rec))
+    if (want_id or want_name) and not out:
+        raise KmsError("CustomKeyStoreNotFoundException",
+                       "The request was rejected because the custom key store was not found.", 400)
+    return {"CustomKeyStores": out, "Truncated": False}
+
+
+def _connect_custom_key_store(store: KeyStore, body: dict) -> dict:
+    rec = _require_custom_key_store(store, body)
+    rec["ConnectionState"] = "FAILED"
+    rec["ConnectionErrorCode"] = "NETWORK_ERRORS"
+    store.persist()
+    return {}
+
+
+def _disconnect_custom_key_store(store: KeyStore, body: dict) -> dict:
+    rec = _require_custom_key_store(store, body)
+    rec["ConnectionState"] = "DISCONNECTED"
+    rec.pop("ConnectionErrorCode", None)
+    store.persist()
+    return {}
+
+
+def _update_custom_key_store(store: KeyStore, body: dict) -> dict:
+    rec = _require_custom_key_store(store, body)
+    if body.get("NewCustomKeyStoreName"):
+        rec["CustomKeyStoreName"] = str(body["NewCustomKeyStoreName"])
+    if body.get("CloudHsmClusterId"):
+        rec["CloudHsmClusterId"] = str(body["CloudHsmClusterId"])
+    if "XksProxyConfiguration" in rec:
+        for field in ("XksProxyUriEndpoint", "XksProxyUriPath"):
+            if field in body:
+                rec["XksProxyConfiguration"][field[len("XksProxy"):]] = str(body[field])
+    store.persist()
+    return {}
+
+
+def _delete_custom_key_store(store: KeyStore, body: dict) -> dict:
+    stores = _custom_key_stores(store)
+    rec = stores.get(body.get("CustomKeyStoreId"))
+    if not rec:
+        raise KmsError("CustomKeyStoreNotFoundException",
+                       "The request was rejected because the custom key store was not found.", 400)
+    if rec["ConnectionState"] not in ("DISCONNECTED", "FAILED"):
+        raise KmsError("KMSInvalidStateException",
+                       "The custom key store must be disconnected before it can be deleted.", 400)
+    del stores[body["CustomKeyStoreId"]]
+    store.persist()
+    return {}
 
 
 # ── native-wire dispatcher (X-Amz-Target action → operation) ───────────────
@@ -394,10 +793,50 @@ def dispatch(store: KeyStore, target: str, payload: dict | None = None) -> KmsRe
             return _ok(_get_key_rotation_status(store, body))
         if action == "RotateKeyOnDemand":
             return _ok(_rotate_key_on_demand(store, body))
+        if action == "ListKeyRotations":
+            return _ok(_list_key_rotations(store, body))
+        if action == "CancelKeyDeletion":
+            return _ok(_cancel_key_deletion(store, body))
         if action == "CreateAlias":
             return _ok(_create_alias(store, body))
         if action == "ListAliases":
             return _ok(_list_aliases(store, body))
+        if action == "DeleteAlias":
+            return _ok(_delete_alias(store, body))
+        if action == "UpdateAlias":
+            return _ok(_update_alias(store, body))
+        if action == "TagResource":
+            return _ok(_tag_resource(store, body))
+        if action == "UntagResource":
+            return _ok(_untag_resource(store, body))
+        if action == "ListResourceTags":
+            return _ok(_list_resource_tags(store, body))
+        if action == "PutKeyPolicy":
+            return _ok(_put_key_policy(store, body))
+        if action == "GetKeyPolicy":
+            return _ok(_get_key_policy(store, body))
+        if action == "ListKeyPolicies":
+            return _ok(_list_key_policies(store, body))
+        if action == "Sign":
+            return _ok(_sign(store, body))
+        if action == "Verify":
+            return _ok(_verify(store, body))
+        if action == "GenerateMac":
+            return _ok(_generate_mac(store, body))
+        if action == "VerifyMac":
+            return _ok(_verify_mac(store, body))
+        if action == "CreateCustomKeyStore":
+            return _ok(_create_custom_key_store(store, body))
+        if action == "DescribeCustomKeyStores":
+            return _ok(_describe_custom_key_stores(store, body))
+        if action == "ConnectCustomKeyStore":
+            return _ok(_connect_custom_key_store(store, body))
+        if action == "DisconnectCustomKeyStore":
+            return _ok(_disconnect_custom_key_store(store, body))
+        if action == "UpdateCustomKeyStore":
+            return _ok(_update_custom_key_store(store, body))
+        if action == "DeleteCustomKeyStore":
+            return _ok(_delete_custom_key_store(store, body))
         return _error("UnknownOperationException", f"The action {action} is not implemented.", 400)
     except KmsError as e:
         return _error(e.code, e.message, e.status)
