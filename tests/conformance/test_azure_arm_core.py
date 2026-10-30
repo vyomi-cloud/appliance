@@ -216,6 +216,49 @@ def run() -> int:
     r = arm.handle("GET", kv + "/providers/Microsoft.Authorization/locks", {"api-version": "2020-05-01"})
     _check("locks cascade-deleted with resource", r["body"]["value"] == [])
 
+    # 21. Network security groups + security rules — a nested, same-namespace child
+    # resource (Microsoft.Network/networkSecurityGroups/{nsg}/securityRules/{rule}), the
+    # real ARM shape every azure-mgmt-network client/CLI uses (NOT an extension resource
+    # like locks — it stays inside the SAME provider namespace, alternating type/name).
+    nsg1 = _p(RG, "Microsoft.Network", "networkSecurityGroups", "nsg1")
+    nsg2 = _p(RG, "Microsoft.Network", "networkSecurityGroups", "nsg2")
+    arm.handle("PUT", nsg1, {"api-version": "2023-11-01"}, {"location": "eastus"})
+    arm.handle("PUT", nsg2, {"api-version": "2023-11-01"}, {"location": "eastus"})
+    rule = nsg1 + "/securityRules/allow-ssh"
+    r = arm.handle("PUT", rule, {"api-version": "2023-11-01"},
+                   {"properties": {"priority": 100, "direction": "Inbound", "access": "Allow",
+                                    "protocol": "Tcp", "sourceAddressPrefix": "*", "sourcePortRange": "*",
+                                    "destinationAddressPrefix": "*", "destinationPortRange": "22"}})
+    _check("security rule put 201", r["status"] == 201 and r["body"]["name"] == "allow-ssh")
+    _check("security rule id canonical", r["body"]["id"].lower() == rule.lower())
+    _check("security rule properties", r["body"]["properties"]["destinationPortRange"] == "22")
+    r = arm.handle("GET", rule, {"api-version": "2023-11-01"})
+    _check("security rule get 200", r["status"] == 200 and r["body"]["properties"]["priority"] == 100)
+    arm.handle("PUT", nsg1 + "/securityRules/deny-all", {"api-version": "2023-11-01"},
+               {"properties": {"priority": 4096, "direction": "Inbound", "access": "Deny", "protocol": "*",
+                                "sourceAddressPrefix": "*", "sourcePortRange": "*",
+                                "destinationAddressPrefix": "*", "destinationPortRange": "*"}})
+    arm.handle("PUT", nsg2 + "/securityRules/other-nsg-rule", {"api-version": "2023-11-01"},
+               {"properties": {"priority": 100, "direction": "Inbound", "access": "Allow", "protocol": "*",
+                                "sourceAddressPrefix": "*", "sourcePortRange": "*",
+                                "destinationAddressPrefix": "*", "destinationPortRange": "*"}})
+    r = arm.handle("GET", nsg1 + "/securityRules", {"api-version": "2023-11-01"})
+    names1 = sorted(x["name"] for x in r["body"]["value"])
+    _check("security rules list scoped to its own NSG (not leaked from another NSG)",
+           r["status"] == 200 and names1 == ["allow-ssh", "deny-all"])
+    r = arm.handle("GET", nsg2 + "/securityRules", {"api-version": "2023-11-01"})
+    _check("security rules list isolated per NSG", [x["name"] for x in r["body"]["value"]] == ["other-nsg-rule"])
+    r = arm.handle("DELETE", nsg1 + "/securityRules/deny-all", {"api-version": "2023-11-01"})
+    _check("security rule delete 200", r["status"] == 200)
+    r = arm.handle("GET", nsg1 + "/securityRules", {"api-version": "2023-11-01"})
+    _check("deleted rule gone from the list", [x["name"] for x in r["body"]["value"]] == ["allow-ssh"])
+    # deleting the NSG cascades to its (same-namespace, nested) security rules
+    arm.handle("DELETE", nsg1, {"api-version": "2023-11-01"})
+    r = arm.handle("GET", nsg1 + "/securityRules", {"api-version": "2023-11-01"})
+    _check("security rules cascade-deleted with their NSG", r["body"]["value"] == [])
+    r = arm.handle("GET", nsg2 + "/securityRules", {"api-version": "2023-11-01"})
+    _check("sibling NSG's rules survive an unrelated NSG delete", [x["name"] for x in r["body"]["value"]] == ["other-nsg-rule"])
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 
