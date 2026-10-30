@@ -108,6 +108,8 @@ def _gcp_service(path):
     # Predefined roles catalog (no project scope): /v1/roles
     if path.startswith("/v1/roles"):
         return "gcp-iam"
+    if re.search(r"^/v1/projects/[^/]+/(dashboards|snoozes)([/:]|$)", path):   # Dashboards / Snoozes APIs (v1)
+        return "gcp-monitoring"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
     # /keys, /topics never collide (GCP always scopes these under a project).
     if "/projects/" in path:

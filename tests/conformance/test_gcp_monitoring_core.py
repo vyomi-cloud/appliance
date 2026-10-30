@@ -17,11 +17,17 @@ def check(name, ok, detail=""):
 
 
 P = "/v3/projects/p1"
+P1 = "/v1/projects/p1"
 
 
 def call(st, method, path, body=None, query=None):
     r = mon.dispatch(st, method, P + path if path.startswith("/") and not path.startswith("/v3") else path,
                      query or {}, {}, json.dumps(body).encode() if body is not None else b"")
+    return r.status, json.loads(r.body or b"{}")
+
+
+def call1(st, method, path, body=None, query=None):
+    r = mon.dispatch(st, method, P1 + path, query or {}, {}, json.dumps(body).encode() if body is not None else b"")
     return r.status, json.loads(r.body or b"{}")
 
 
@@ -219,6 +225,86 @@ def main():
                           "channels_text", "combiner_text", "last_modified", "incidents", "documentation_text") if v.get(k) in (None, "")]
     check("console view has no blank columns", not blanks, blanks)
     check("unknown path → 404", call(st, "GET", "/v3/nope")[0] == 404)
+
+    # dashboards (v1 API)
+    s, d = call1(st, "POST", "/dashboards", {"displayName": "My Dashboard"})
+    check("create dashboard", s == 200 and d["name"].startswith("projects/p1/dashboards/")
+          and d["mosaicLayout"]["tiles"] == [] and d["etag"], d)
+    s, b = call1(st, "POST", "/dashboards", {"displayName": ""})
+    check("dashboard missing displayName → 400", s == 400, b)
+    did = d["name"].rsplit("/", 1)[-1]
+    s, b = call1(st, "GET", "/dashboards/" + did)
+    check("get dashboard", s == 200 and b["displayName"] == "My Dashboard", b)
+    s, b = call1(st, "GET", "/dashboards/nope")
+    check("get missing dashboard → 404", s == 404, b)
+    s, b = call1(st, "PATCH", "/dashboards/" + did, {"displayName": "Renamed", "etag": d["etag"]})
+    check("patch dashboard (etag ok)", s == 200 and b["displayName"] == "Renamed" and b["etag"] != d["etag"], b)
+    s, b = call1(st, "PATCH", "/dashboards/" + did, {"displayName": "Stale", "etag": "wrong"})
+    check("patch dashboard stale etag → 409", s == 409, b)
+    call1(st, "POST", "/dashboards", {"displayName": "Second"})
+    s, b = call1(st, "GET", "/dashboards")
+    check("list dashboards", s == 200 and len(b["dashboards"]) == 2, b)
+    s, b = call1(st, "DELETE", "/dashboards/" + did)
+    check("delete dashboard", s == 200 and b == {}, b)
+    s, b = call1(st, "GET", "/dashboards/" + did)
+    check("get deleted dashboard → 404", s == 404, b)
+
+    # snoozes (v1 API)
+    s, pol = call(st, "POST", "/alertPolicies", policy("snooze-target"))
+    snooze = {"displayName": "maintenance", "criteria": {"policies": [pol["name"]]},
+              "interval": {"startTime": iso(now), "endTime": iso(now + timedelta(hours=1))}}
+    s, sn = call1(st, "POST", "/snoozes", snooze)
+    check("create snooze", s == 200 and sn["name"].startswith("projects/p1/snoozes/")
+          and sn["criteria"]["policies"] == [pol["name"]], sn)
+    s, b = call1(st, "POST", "/snoozes", dict(snooze, criteria={"policies": ["projects/p1/alertPolicies/nope"]}))
+    check("snooze unknown policy → 400", s == 400, b)
+    s, b = call1(st, "POST", "/snoozes", dict(snooze, interval={"startTime": iso(now), "endTime": iso(now)}))
+    check("snooze end before/eq start → 400", s == 400, b)
+    sid = sn["name"].rsplit("/", 1)[-1]
+    s, b = call1(st, "GET", "/snoozes/" + sid)
+    check("get snooze", s == 200 and b["displayName"] == "maintenance", b)
+    s, b = call1(st, "PATCH", "/snoozes/" + sid, {"displayName": "extended"}, {"updateMask": "display_name"})
+    check("patch snooze", s == 200 and b["displayName"] == "extended" and b["criteria"]["policies"] == [pol["name"]], b)
+    s, b = call1(st, "GET", "/snoozes")
+    check("list snoozes", s == 200 and len(b["snoozes"]) == 1, b)
+    check("unknown v1 path → 404", call1(st, "GET", "/nope")[0] == 404)
+
+    # services & SLOs (Service Monitoring API, v3)
+    s, svc = call(st, "POST", "/services", {"displayName": "checkout"})
+    check("create service", s == 200 and svc["name"].startswith("projects/p1/services/") and svc["custom"] == {}, svc)
+    s, b = call(st, "POST", "/services", {"displayName": ""})
+    check("service missing displayName → 400", s == 400, b)
+    svcid = svc["name"].rsplit("/", 1)[-1]
+    slo = {"displayName": "99% availability", "goal": 0.99, "rollingPeriod": "2592000s",
+           "serviceLevelIndicator": {"basicSli": {"availability": {}}}}
+    s, o = call(st, "POST", "/services/%s/serviceLevelObjectives" % svcid, slo)
+    check("create SLO", s == 200 and o["name"].startswith(svc["name"] + "/serviceLevelObjectives/") and o["goal"] == 0.99, o)
+    s, b = call(st, "POST", "/services/%s/serviceLevelObjectives" % svcid, dict(slo, goal=1.5))
+    check("SLO bad goal → 400", s == 400, b)
+    s, b = call(st, "POST", "/services/%s/serviceLevelObjectives" % svcid, dict(slo, rollingPeriod="2592000s", calendarPeriod="MONTH"))
+    check("SLO both periods → 400", s == 400, b)
+    oid = o["name"].rsplit("/", 1)[-1]
+    s, b = call(st, "GET", "/services/%s/serviceLevelObjectives/%s" % (svcid, oid))
+    check("get SLO", s == 200 and b["displayName"] == "99% availability", b)
+    s, b = call(st, "GET", "/services/%s/serviceLevelObjectives" % svcid)
+    check("list SLOs", s == 200 and len(b["serviceLevelObjectives"]) == 1, b)
+    s, b = call(st, "GET", "/services")
+    check("list services", s == 200 and len(b["services"]) == 1, b)
+    s, b = call(st, "DELETE", "/services/" + svcid)
+    check("delete service cascades SLOs", s == 200 and not st.slos and not st.services, b)
+
+    # uptime check with a synthetic-monitor target (same collection, different check type)
+    s, sm = call(st, "POST", "/uptimeCheckConfigs", {
+        "displayName": "synthetic-login", "monitoredResource": {"type": "uptime_url", "labels": {"host": "example.com"}},
+        "syntheticMonitor": {"cloudFunctionV2": {"name": "projects/p1/locations/us-central1/functions/login-check"}},
+        "period": "300s", "timeout": "10s"})
+    check("create synthetic monitor (uptime check with synthetic_monitor target)", s == 200 and sm["syntheticMonitor"]["cloudFunctionV2"]["name"].endswith("login-check"), sm)
+    s, b = call(st, "POST", "/uptimeCheckConfigs", {
+        "displayName": "both", "monitoredResource": {"type": "uptime_url", "labels": {"host": "example.com"}},
+        "httpCheck": {"path": "/"}, "syntheticMonitor": {"cloudFunctionV2": {"name": "x"}}, "period": "300s", "timeout": "10s"})
+    check("synthetic monitor + http_check → 400", s == 400, b)
+    call(st, "DELETE", "/uptimeCheckConfigs/" + sm["name"].rsplit("/", 1)[-1])
+
     print(f"\n{PASS} passed, {FAIL} failed")
     sys.exit(1 if FAIL else 0)
 
