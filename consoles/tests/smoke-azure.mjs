@@ -29,6 +29,9 @@ const EGT = `vyegtopic${n}`;       // Event Grid topic created through the UI
 const EGT2 = `vyegwire${n}`;       // Event Grid topic created over the wire
 const ES = `vyeges${n}`;           // event subscription created over the wire
 const LOCK = `vyeglock${n}`;       // management lock created through the UI
+const RGUI = `vyrg${n}`;           // resource group created through the UI
+const RGWIRE = `vyrgwire${n}`;     // resource group created over the wire (CLI → UI direction)
+const RGLOCK = `vyrglock${n}`;     // resource-group-scoped lock created through the UI
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -461,6 +464,53 @@ try {
   await page.getByRole("heading", { name: "Event Grid Topics" }).waitFor({ timeout: 10000 });
   const egGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}`);
   check("UI delete topic → ARM GET 404", egGone.status === 404, `HTTP ${egGone.status}`);
+
+  // ── Resource groups: created through the UI wizard → visible over native ARM ───────────
+  await page.goto(UI + "#/resourcegroups/create");
+  await page.getByLabel("Resource group name", { exact: true }).fill(RGUI);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: RGUI, exact: true }).waitFor({ timeout: 10000 });
+  const gotRg = await arm("GET", `/resourceGroups/${RGUI}`);
+  check("UI create resource group → visible over native ARM", gotRg.status === 200, `HTTP ${gotRg.status}`);
+  await shot("22-resourcegroup-overview");
+
+  // ── Tags applied in the UI → persisted over ARM ─────────────────────────────────────────
+  await openPanel("Tags");
+  await page.getByLabel("Tag name 1", { exact: true }).fill("env");
+  await page.getByLabel("Tag value 1", { exact: true }).fill("smoke");
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await page.waitForTimeout(600);
+  const rgTags = await arm("GET", `/resourceGroups/${RGUI}`);
+  check("UI tag apply → persisted on the resource group over ARM", JSON.parse(rgTags.text).tags?.env === "smoke", rgTags.text);
+
+  // ── Lock created in the UI, scoped to the resource group itself → visible over ARM ──────
+  await openPanel("Locks");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByLabel("Lock name", { exact: true }).fill(RGLOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByText(RGLOCK, { exact: true }).waitFor({ timeout: 10000 });
+  const rgLockGet = await arm("GET", `/resourceGroups/${RGUI}/providers/Microsoft.Authorization/locks/${RGLOCK}`);
+  check("UI add resource-group-scoped lock → visible over native ARM", rgLockGet.status === 200, `HTTP ${rgLockGet.status}`);
+
+  // ── Resource group created over the wire → visible in the UI browse grid (CLI → UI) ─────
+  const rgPut = await arm("PUT", `/resourceGroups/${RGWIRE}`, { location: "eastus" });
+  check("ARM PUT resource group over wire", rgPut.status === 200, `HTTP ${rgPut.status}`);
+  await page.goto(UI + "#/resourcegroups");
+  await page.getByRole("link", { name: RGWIRE, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created resource group shown in browse grid", true);
+  await shot("23-resourcegroups-list");
+
+  // ── Delete through the dedicated delete page → gone over ARM, cascading to its lock ─────
+  await page.goto(UI + `#/resourcegroups/${RGUI}/delete`);
+  await page.getByLabel("Enter resource group name to confirm deletion", { exact: true }).fill(RGUI);
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("heading", { name: "Resource groups" }).waitFor({ timeout: 10000 });
+  const rgGone = await arm("GET", `/resourceGroups/${RGUI}`);
+  check("UI delete resource group → ARM GET 404", rgGone.status === 404, `HTTP ${rgGone.status}`);
+  const rgLockGone = await arm("GET", `/resourceGroups/${RGUI}/providers/Microsoft.Authorization/locks/${RGLOCK}`);
+  check("deleted resource group's own lock cascades away", rgLockGone.status === 404, `HTTP ${rgLockGone.status}`);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});

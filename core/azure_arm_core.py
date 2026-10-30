@@ -326,6 +326,19 @@ class AzureArm:
                 return _err(400, "BadRequest", "Missing resource group name.")
             rg = rest_segs[1]
             idx = 2
+
+        # GET .../resourceGroups/{rg}/resources — the generic "resources in this group"
+        # list every resource-group blade's Overview/Resources tab and delete confirmation
+        # call (az resource list -g / Resources.list_by_resource_group), scoped across every
+        # catalog type at once (not alternating type/name like the "providers" branch below).
+        if rg is not None and idx < len(rest_segs) and rest_segs[idx].lower() == "resources" and len(rest_segs) == idx + 1:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Use GET to list resources in a resource group.")
+            items = [_view(r) for r in self.state.values()
+                     if r.get("_sub") == sub and (r.get("_rg") or "").lower() == rg.lower()
+                     and r.get("_type", "").lower() != "microsoft.resources/resourcegroups"]
+            return _ok({"value": items})
+
         if idx >= len(rest_segs) or rest_segs[idx].lower() != "providers":
             return _err(400, "BadRequest", f"Unrecognized ARM path: /subscriptions/{rest}")
         after = rest_segs[idx + 1:]
@@ -358,6 +371,14 @@ class AzureArm:
             events = own + [e for e in shared if e.get("id") not in seen]
             events.sort(key=lambda e: str(e.get("eventTimestamp") or ""), reverse=True)
             return _ok({"value": events})
+
+        # Microsoft.Authorization/locks scoped directly to the RESOURCE GROUP itself (not a
+        # resource inside it): .../resourceGroups/{rg}/providers/Microsoft.Authorization/locks
+        # — namespace IS Microsoft.Authorization already (no resource type precedes it), so
+        # the marker search below (which looks for a re-entrant "providers" INSIDE chain)
+        # never fires; caught here instead, scope_rid = the resource group's own id.
+        if namespace.lower() == "microsoft.authorization" and chain and chain[0].lower() == "locks" and rg is not None:
+            return self._locks_crud(method, f"/subscriptions/{sub}/resourceGroups/{rg}", chain[1:], payload, rg)
 
         # Microsoft.Authorization/locks: a real ARM extension resource scoped to ANY other
         # resource's own id (the chain re-enters "providers", like Event Grid's event
@@ -484,6 +505,9 @@ class AzureArm:
             (stc if n % 2 == 0 else snames).append(token)
         scope_rid = _canonical_id(sub, rg, stc, snames)
         rest = chain[marker + 3:]
+        return self._locks_crud(method, scope_rid, rest, payload, snames[-1] if snames else scope_rid)
+
+    def _locks_crud(self, method, scope_rid, rest, payload, activity_name):
         if not rest:
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "Collection supports GET only.")
@@ -495,11 +519,11 @@ class AzureArm:
             elif method in ("PUT", "PATCH"):
                 r = locks_engine.upsert(self.state, scope_rid, name, payload)
                 if r["status"] in (200, 201):
-                    _record_activity(snames[-1] if snames else scope_rid, "Create lock" if r["status"] == 201 else "Update lock", name)
+                    _record_activity(activity_name, "Create lock" if r["status"] == 201 else "Update lock", name)
             elif method == "DELETE":
                 r = locks_engine.remove(self.state, scope_rid, name)
                 if r["status"] == 200:
-                    _record_activity(snames[-1] if snames else scope_rid, "Delete lock", name)
+                    _record_activity(activity_name, "Delete lock", name)
             else:
                 return _err(405, "MethodNotAllowed", f"{method} not allowed.")
         return {"status": r["status"], "headers": {}, "body": r["body"]}
@@ -676,24 +700,77 @@ class AzureArm:
                 "namespace": namespace, "registrationState": "Registered",
                 "registrationPolicy": "RegistrationRequired", "resourceTypes": types}
 
+    def _rg_key(self, sub, rg):
+        return f"/subscriptions/{sub}/resourcegroups/{rg}".lower()
+
+    def _default_rg_view(self, sub, rg):
+        return {"id": f"/subscriptions/{sub}/resourceGroups/{rg}", "name": rg,
+                "type": "Microsoft.Resources/resourceGroups", "location": DEFAULT_LOCATION,
+                "tags": {}, "properties": {"provisioningState": "Succeeded"}}
+
     def _list_resource_groups(self, sub):
-        names = {DEFAULT_RG: True}
+        out, seen = [], set()
         for rec in self.state.values():
-            if rec.get("_sub") == sub and rec.get("_rg"):
-                names[rec["_rg"]] = True
-        return [{"id": f"/subscriptions/{sub}/resourceGroups/{n}", "name": n,
-                 "type": "Microsoft.Resources/resourceGroups", "location": DEFAULT_LOCATION,
-                 "properties": {"provisioningState": "Succeeded"}} for n in names]
+            if rec.get("_sub") == sub and rec.get("_type", "").lower() == "microsoft.resources/resourcegroups":
+                out.append(_view(rec))
+                seen.add(rec["name"])
+        for rec in self.state.values():   # implicit groups: resources created without an explicit PUT on the group
+            if rec.get("_sub") == sub and rec.get("_rg") and rec["_rg"] not in seen:
+                seen.add(rec["_rg"])
+                out.append(self._default_rg_view(sub, rec["_rg"]))
+        if DEFAULT_RG not in seen:
+            out.append(self._default_rg_view(sub, DEFAULT_RG))
+        return out
 
     def _resource_group_item(self, method, sub, rg, payload):
-        body = {"id": f"/subscriptions/{sub}/resourceGroups/{rg}", "name": rg,
-                "type": "Microsoft.Resources/resourceGroups",
-                "location": (payload or {}).get("location") or DEFAULT_LOCATION,
-                "tags": (payload or {}).get("tags", {}),
-                "properties": {"provisioningState": "Succeeded"}}
+        payload = payload or {}
+        key = self._rg_key(sub, rg)
+        rid = f"/subscriptions/{sub}/resourceGroups/{rg}"
+        implicit = any(r.get("_sub") == sub and r.get("_rg") == rg for r in self.state.values()) or rg == DEFAULT_RG
+
+        if method == "GET":
+            rec = self.state.get(key)
+            if rec:
+                return _ok(_view(rec))
+            if implicit:
+                return _ok(self._default_rg_view(sub, rg))
+            return _err(404, "ResourceGroupNotFound", f"Resource group '{rg}' could not be found.")
+
+        if method in ("PUT", "PATCH"):
+            existed = key in self.state
+            prior = self.state.get(key)
+            # A PUT replaces the tag set exactly (like any generic catalog resource — see
+            # AzureArm._upsert); a PATCH on an existing group merges it instead.
+            rec = dict(prior) if (method == "PATCH" and prior) else {
+                "id": rid, "name": rg, "type": "Microsoft.Resources/resourceGroups",
+                "location": DEFAULT_LOCATION, "tags": {},
+                "_type": "Microsoft.Resources/resourceGroups", "_sub": sub, "_created": _now(),
+            }
+            if payload.get("location"):
+                rec["location"] = payload["location"]
+            if isinstance(payload.get("tags"), dict):
+                rec["tags"] = _merge(rec.get("tags", {}), payload["tags"]) if (method == "PATCH" and prior) else dict(payload["tags"])
+            rec["id"], rec["name"], rec["type"] = rid, rg, "Microsoft.Resources/resourceGroups"
+            rec["properties"] = {"provisioningState": "Succeeded"}
+            self.state[key] = rec
+            _record_activity(rg, "Update" if (existed or implicit) else "Create", f"Microsoft.Resources/resourceGroups '{rg}'")
+            return _ok(_view(rec), status=200)
+
         if method == "DELETE":
+            existed = self.state.pop(key, None) is not None
+            # Deleting a resource group cascades to every resource it contains (real ARM
+            # behaviour) — including that group's own locks, extension resources, …
+            removed_any = False
+            for k in [k for k, r in self.state.items()
+                      if (r.get("_sub") == sub and (r.get("_rg") or "") == rg) or k.startswith(key + "/providers/")]:
+                del self.state[k]
+                removed_any = True
+            if not (existed or removed_any or implicit):
+                return _err(404, "ResourceGroupNotFound", f"Resource group '{rg}' could not be found.")
+            _record_activity(rg, "Delete", f"Microsoft.Resources/resourceGroups '{rg}'")
             return _ok(None, status=200)
-        return _ok(body, status=200 if method in ("PUT", "PATCH", "GET") else 405)
+
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
     def _make_operation(self, resource_id, method, result=None):
         op_id = uuid.uuid4().hex
