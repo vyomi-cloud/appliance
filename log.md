@@ -1,3 +1,13 @@
+### Upstream watch — 2026-10-30T04:51:33+00:00
+
+Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**2 change(s), 0 actionable.**
+- · `announcement` Google Kubernetes Engine: Feature (October 29, 2026) ([link](https://docs.cloud.google.com/release-notes#October_29_2026))
+- · `announcement` Identity and Access Management: Feature (October 29, 2026) ([link](https://docs.cloud.google.com/release-notes#October_29_2026))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-10-30T03:51:33+00:00
 
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.

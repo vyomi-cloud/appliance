@@ -1,6 +1,27 @@
 {
- "at": "2026-10-30T03:51:33+00:00",
+ "at": "2026-10-30T04:51:33+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:340f224b2601",
+   "title": "Google Kubernetes Engine: Feature (October 29, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_29_2026",
+   "detail": "Managed OpenTelemetry for GKE is generally available (GA) on clusters running GKE version 1.37.1-gke.1697000 or later. You can collect OpenTelemetry Protocol (OTLP) traces, metrics, and logs from your workloads with a Google-managed collector instead of a self-managed OpenTelemetry Collector deployment: Configure otlp_grpc in the Instrumentation custom resource (GKE version 1.37.1-gke.1697000 or later), or send telemetry directly to the in-cluster collector's gRPC endpoint on port 4317 in addition to HTTP on port 4318. The managed collector routes logs alongside traces and metrics through the ",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Identity and Access Management",
+   "kind": "announcement",
+   "key": "feed:gcp:44eeeb38acf7",
+   "title": "Identity and Access Management: Feature (October 29, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_29_2026",
+   "detail": "The Admin ( roles/admin ), Writer ( roles/writer ), and Reader ( roles/reader ) basic roles are generally available ( GA ). For more information, see Basic roles . The legacy basic roles\u2014Owner ( roles/owner ), Editor ( roles/editor ), and Viewer ( roles/viewer )\u2014are still available for use and are being actively maintained. However, if you need to grant a basic role, we recommend granting the Admin, Writer, or Reader role instead of a legacy basic role. This is because the newer roles support additional features, such as the use of IAM Conditions .",
+   "actionable": false
+  }
+ ],
  "errors": []
 }
