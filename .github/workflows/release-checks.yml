@@ -170,7 +170,8 @@ jobs:
       - name: Use main's checks (they test this release, so they can be newer than it)
         run: |
           git fetch -q origin main
-          git checkout -q origin/main -- tests/release tests/cli wasm/ui-tests/lib.mjs
+          # The local relay too: users run the separately published vyomi-tunnel, built from main's copy.
+          git checkout -q origin/main -- tests/release tests/cli wasm/ui-tests/lib.mjs wasm/relay/local-relay.mjs
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - name: Playwright + ws

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // GENERATED — canonical source: wasm/relay/local-relay.mjs
-// Re-sync:  (echo "#!/usr/bin/env node"; echo "// GENERATED — canonical source: wasm/relay/local-relay.mjs"; echo "// Re-sync: see packaging/tunnel/bin/vyomi-tunnel.mjs header"; cat wasm/relay/local-relay.mjs) > packaging/tunnel/bin/vyomi-tunnel.mjs
+// Re-sync: see packaging/tunnel/bin/vyomi-tunnel.mjs header
 /* Vyomi-Nano local relay — the local, zero-cloud reverse-tunnel. The
  * install-once counterpart to the Cloudflare Worker (worker.js): same WS
  * protocol, same external HTTP surface, but everything stays on your machine
@@ -13,8 +13,11 @@
  *                                      Nano tab (Pyodide + conformance cores)
  *
  * The tab connects out to ws://host:PORT/register and is held here; external
- * HTTP requests are forwarded over that WS and correlated by id. Single active
- * tab (MVP) — the Cloudflare version keys this per-session via a Durable Object.
+ * HTTP requests are forwarded over that WS and correlated by id. MULTIPLE tabs may
+ * register (shared worker + standalone endpoint + extra views); we keep them all,
+ * prune dead ones via ping/pong liveness, and forward to the freshest OPEN one —
+ * their stores are synced (nano_registry + IndexedDB) so any live tab answers
+ * consistently. The Cloudflare version keys this per-session via a Durable Object.
  *
  * A GET /health endpoint (CORS + Private-Network-Access enabled) lets the Nano
  * bundle AUTO-DETECT this relay from an HTTPS tab and prefer it over the cloud
@@ -30,11 +33,24 @@ import { createRequire } from "node:module";
 // resolves wherever it's installed (e.g. NODE_PATH=/tmp/node_modules for tests).
 const { WebSocketServer } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 
-const VERSION = "1.0.0";
+const VERSION = "1.0.1";
 const PORT = Number(process.env.RELAY_PORT || 8090);
 const HOST = process.env.RELAY_HOST || "127.0.0.1";   // loopback-only by default; 0.0.0.0 to expose on LAN
 const pending = new Map();     // id -> {resolve}
-let tab = null;                // the single registered tab socket (MVP)
+// All registered tab sockets (shared worker, standalone endpoint, extra views).
+// Previously a single `tab` var was OVERWRITTEN on each /register, so N contexts
+// fought — requests routed to whoever registered last (often a mid-boot/empty or
+// orphaned socket) and the losers churned with code-1006. Now we keep every tab,
+// prune dead ones via ping/pong liveness, and forward to the freshest OPEN one.
+// Store state is synced across contexts (nano_registry + IndexedDB), so ANY live
+// tab answers consistently — no need to force-close others (which would war with
+// their auto-reconnect).
+const tabs = new Set();        // live registrant sockets, insertion-ordered
+function pickTab() {           // most-recently-registered OPEN socket, or null
+  let chosen = null;
+  for (const ws of tabs) if (ws.readyState === ws.OPEN) chosen = ws;
+  return chosen;
+}
 
 // CORS + Private-Network-Access headers so an HTTPS Nano tab (a "public" origin)
 // may probe/reach this loopback ("private") server. Chrome ≥104 gates public→
@@ -60,17 +76,19 @@ const server = http.createServer((req, res) => {
     cors(res, 204); return res.end();
   }
   if (url.pathname === "/health") {
+    let open = 0; for (const ws of tabs) if (ws.readyState === ws.OPEN) open++;
     cors(res, 200, { "content-type": "application/json" });
     return res.end(JSON.stringify({
       ok: true, relay: "vyomi-local", version: VERSION,
-      tab: !!(tab && tab.readyState === tab.OPEN),
+      tab: open > 0, tabs: open,
     }));
   }
   // Collect the external request body, forward to the tab, await the response.
   const chunks = [];
   req.on("data", (c) => chunks.push(c));
   req.on("end", () => {
-    if (!tab || tab.readyState !== tab.OPEN) {
+    const tab = pickTab();
+    if (!tab) {
       cors(res, 503, { "content-type": "text/plain" });
       return res.end("no Nano tab registered");
     }
@@ -87,13 +105,18 @@ const server = http.createServer((req, res) => {
       // the relay is authoritative for the actual byte count (a duplicate
       // Content-Length makes undici/fetch reject the response).
       const headers = { "access-control-allow-origin": "*" };
+      let declared = null;
       for (const [k, v] of Object.entries(resp.headers || {})) {
-        if (k.toLowerCase() === "content-length") continue;
+        if (k.toLowerCase() === "content-length") { declared = v; continue; }
         headers[k.toLowerCase()] = v;
       }
-      headers["content-length"] = String(buf.length);
+      // A HEAD answer has no body but declares the size of what GET would return (S3's
+      // object size): keep the handler's value there. Clients size downloads from it —
+      // aws-cli 2.3x writes nothing for an object a HEAD says is 0 bytes.
+      const head = req.method === "HEAD";
+      headers["content-length"] = head && declared != null ? String(declared) : String(buf.length);
       res.writeHead(resp.status || 200, headers);
-      res.end(buf);
+      res.end(head ? undefined : buf);
     });
     tab.send(JSON.stringify({
       id, method: req.method, path: url.pathname, query,
@@ -104,16 +127,33 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server, path: "/register" });
 wss.on("connection", (ws) => {
-  tab = ws;
-  console.log("[relay] tab registered");
+  ws.isAlive = true;
+  tabs.add(ws);
+  console.log(`[relay] tab registered (${tabs.size} active)`);
   ws.on("message", (data) => {
     let msg; try { msg = JSON.parse(data.toString()); } catch { return; }
-    if (msg.type === "pong") return;
+    if (msg.type === "pong") { ws.isAlive = true; return; }
     const done = pending.get(msg.id);
     if (done) { pending.delete(msg.id); done(msg); }
   });
-  ws.on("close", () => { if (tab === ws) tab = null; console.log("[relay] tab gone"); });
+  ws.on("close", () => { tabs.delete(ws); console.log(`[relay] tab gone (${tabs.size} active)`); });
+  ws.on("error", () => { try { ws.terminate(); } catch (_) {} tabs.delete(ws); });
 });
+
+// Liveness: ping every tab on an interval and drop any that didn't pong since the
+// last tick (dead/zombie sockets). The tab side already answers {type:"ping"} with
+// a pong, so this is protocol-compatible with existing endpoints. This is what
+// clears the orphaned sockets that used to linger and misroute requests.
+const PING_MS = 10000;
+const liveness = setInterval(() => {
+  for (const ws of tabs) {
+    if (ws.readyState !== ws.OPEN) { tabs.delete(ws); continue; }
+    if (ws.isAlive === false) { try { ws.terminate(); } catch (_) {} tabs.delete(ws); continue; }
+    ws.isAlive = false;
+    try { ws.send(JSON.stringify({ type: "ping" })); } catch (_) {}
+  }
+}, PING_MS);
+wss.on("close", () => clearInterval(liveness));
 
 server.listen(PORT, HOST, () => {
   const shown = HOST === "0.0.0.0" ? "<this-machine-ip>" : HOST;

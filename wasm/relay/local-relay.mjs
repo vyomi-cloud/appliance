@@ -30,7 +30,7 @@ import { createRequire } from "node:module";
 // resolves wherever it's installed (e.g. NODE_PATH=/tmp/node_modules for tests).
 const { WebSocketServer } = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 
-const VERSION = "1.0.0";
+const VERSION = "1.0.1";
 const PORT = Number(process.env.RELAY_PORT || 8090);
 const HOST = process.env.RELAY_HOST || "127.0.0.1";   // loopback-only by default; 0.0.0.0 to expose on LAN
 const pending = new Map();     // id -> {resolve}
@@ -102,13 +102,18 @@ const server = http.createServer((req, res) => {
       // the relay is authoritative for the actual byte count (a duplicate
       // Content-Length makes undici/fetch reject the response).
       const headers = { "access-control-allow-origin": "*" };
+      let declared = null;
       for (const [k, v] of Object.entries(resp.headers || {})) {
-        if (k.toLowerCase() === "content-length") continue;
+        if (k.toLowerCase() === "content-length") { declared = v; continue; }
         headers[k.toLowerCase()] = v;
       }
-      headers["content-length"] = String(buf.length);
+      // A HEAD answer has no body but declares the size of what GET would return (S3's
+      // object size): keep the handler's value there. Clients size downloads from it —
+      // aws-cli 2.3x writes nothing for an object a HEAD says is 0 bytes.
+      const head = req.method === "HEAD";
+      headers["content-length"] = head && declared != null ? String(declared) : String(buf.length);
       res.writeHead(resp.status || 200, headers);
-      res.end(buf);
+      res.end(head ? undefined : buf);
     });
     tab.send(JSON.stringify({
       id, method: req.method, path: url.pathname, query,
