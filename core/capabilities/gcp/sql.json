@@ -50,10 +50,11 @@
   },
   "gcp.sql.replicas": {
     "title": "Read replicas",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi has no replication engine, so a 'read replica' instance does not actually mirror its primary's data — the Replicas list (Instance ID, Type, Region, Replication lag, Status) can't be shown from real data."
-    ]
+      "A read replica is a real instance created with masterInstanceName and listed from the same instances collection, but Vyomi has no replication engine: it does not mirror the primary's data, and Replication lag always reads \"—\"."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
   },
   "gcp.sql.connections-security": {
     "title": "Connections: Security (SSL/TLS enforcement, client/server certificates)",

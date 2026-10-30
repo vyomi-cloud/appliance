@@ -31,6 +31,9 @@ export const deleteBackup = (instance, id) => restJson("DELETE", `${base()}/${e(
 
 export const listOperations = async (instance) => (await restJson("GET", `/sql/v1beta4/projects/${e(getProject())}/operations`, { query: { instance } })).items || [];
 
+export const listReplicas = async (masterName) => (await listInstances()).filter((i) => i.masterInstanceName === masterName);
+export const createReplica = (masterName, name) => insertInstance({ name, masterInstanceName: masterName });
+
 export const ENGINES = [
   ["MySQL", "MYSQL"], ["PostgreSQL", "POSTGRES"], ["SQL Server", "SQLSERVER"],
 ];
