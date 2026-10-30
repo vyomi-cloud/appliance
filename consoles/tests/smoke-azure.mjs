@@ -23,6 +23,8 @@ const n = Date.now() % 100000;
 const SA = `vysmoke${n}`;          // created through the UI
 const SA2 = `vywire${n}`;          // created over the wire (CLI → UI direction)
 const C = `smoke-${n}`;
+const APP = `vysmokeapp${n}`;      // app service created through the UI
+const APP2 = `vywireapp${n}`;      // app service created over the wire (CLI → UI direction)
 const EGT = `vyegtopic${n}`;       // Event Grid topic created through the UI
 const EGT2 = `vyegwire${n}`;       // Event Grid topic created over the wire
 const ES = `vyeges${n}`;           // event subscription created over the wire
@@ -247,6 +249,67 @@ try {
   await page.getByRole("heading", { name: "Function App", exact: true }).waitFor({ timeout: 10000 });
   const faGone = await armWeb("GET", `/resourceGroups/${FARG}/providers/Microsoft.Web/sites/${FA}`);
   check("UI delete function app → ARM GET 404", faGone.status === 404, `HTTP ${faGone.status}`);
+
+  // ── App Service created through the UI → visible over native ARM ──────────────────────
+  await page.goto(UI + "#/appservices/create");
+  await page.getByLabel("Name", { exact: true }).fill(APP);
+  await page.getByLabel("Resource Group", { exact: true }).selectOption(RG);
+  await shot("18-appservices-create-basics");
+  for (const t of ["Database", "Container", "Deployment", "Networking", "Monitor + secure", "Tags"]) {
+    await page.getByRole("tab", { name: t, exact: true }).click();
+    await page.waitForTimeout(200);
+  }
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await shot("19-appservices-create-review");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: APP, exact: true }).waitFor({ timeout: 10000 });
+  const siteGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP}`);
+  const site = siteGet.status === 200 ? JSON.parse(siteGet.text) : {};
+  check("UI create app service → visible over native ARM", siteGet.status === 200, `HTTP ${siteGet.status}`);
+  check("wizard settings reached ARM (OS, runtime, plan)",
+    site.kind === "app,linux" && site.properties?.siteConfig?.linuxFxVersion === "PYTHON|3.12" && !!site.properties?.serverFarmId,
+    JSON.stringify({ kind: site.kind, fx: site.properties?.siteConfig?.linuxFxVersion, plan: site.properties?.serverFarmId }));
+  await shot("20-appservices-blade-overview");
+
+  // ── Stop through the Overview command bar → ARM state ──────────────────────────────────
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Stop" }).click();
+  await page.waitForTimeout(600);
+  const stopped = JSON.parse((await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP}`)).text);
+  check("UI Stop → ARM state Stopped", stopped.properties?.state === "Stopped", stopped.properties?.state);
+
+  // ── Environment variables → ARM config/appsettings round-trip ─────────────────────────
+  await page.goto(UI + `#/appservices/${RG}/${APP}/envvars`);
+  await page.getByRole("textbox", { name: "Name" }).first().fill("SMOKE_KEY");
+  await page.getByRole("textbox", { name: "Value" }).first().fill("smoke-value");
+  await shot("21-appservices-envvars");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await page.waitForTimeout(600);
+  const webSettings = JSON.parse((await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP}/config/appsettings`)).text);
+  check("UI app setting → ARM config/appsettings", webSettings.properties?.SMOKE_KEY === "smoke-value", JSON.stringify(webSettings.properties));
+
+  // ── App Service created over the wire → visible in the UI (CLI → UI) ──────────────────
+  await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${APP2}-plan`, { location: "eastus", sku: { name: "B1" }, properties: { reserved: true } });
+  await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP2}`,
+    { location: "eastus", kind: "app,linux", properties: { serverFarmId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/serverfarms/${APP2}-plan` } });
+  await page.goto(UI + "#/appservices");
+  await page.getByRole("link", { name: APP2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created app service shown in browse grid", true);
+  await shot("22-appservices-browse");
+
+  // ── Delete through the browse grid → gone over ARM ─────────────────────────────────────
+  await page.getByRole("checkbox", { name: `Select /subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP2}` }).click();
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(APP2);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("link", { name: APP2, exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  // The grid drops the row as soon as it starts reloading; on Nano the DELETE may still be in flight.
+  let gone2 = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP2}`);
+  for (let i = 0; i < 20 && gone2.status !== 404; i++) {
+    await page.waitForTimeout(500);
+    gone2 = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP2}`);
+  }
+  check("UI delete app service → ARM GET 404", gone2.status === 404, `HTTP ${gone2.status}`);
 
   // ── Shell: unbacked service is honest; dark mode ───────────────────────────────────────
   await page.goto(UI + "#/vms");

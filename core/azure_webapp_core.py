@@ -1,44 +1,55 @@
-"""Azure Web Apps core (``Microsoft.Web``) — substrate-independent, Function Apps slice.
+"""Azure App Service core (``Microsoft.Web``) — substrate-independent, ONE engine for
+Web Apps, Function Apps and App Service plans.
 
 Speaks the ARM control-plane REST API of the ``web`` resource provider
-(azure-rest-api-specs ``specification/web``, api-version 2023-12-01) for the ``sites``
-resource (``kind=functionapp``) and its sub-resources, so the native
-``azure-mgmt-web`` / ``armappservice`` SDKs and ``az functionapp`` / ``az rest`` work
-unchanged against it.
+(azure-rest-api-specs ``specification/web``, api-version 2023-12-01), so the native
+``azure-mgmt-web`` / ``armappservice`` / ``com.azure.resourcemanager.appservice`` SDKs and
+``az webapp`` / ``az functionapp`` / ``az appservice plan`` / ``az rest`` work unchanged
+against it.
 
 NO fastapi / azure-sdk / socket / subprocess imports → loads under Pyodide, so the SAME
 file runs offline and in Nano. It does not own a store: it mutates the ARM resource map
 the dispatchers already keep (``{lower-cased resource id: record}``), which is
 space-scoped and persisted by the existing seams (offline ``azure_arm_state``; Nano
-``az_arm`` via core/nano_persist). Functions, app settings, connection strings and host
-keys live INSIDE the site record (underscore keys, never serialised to clients).
+``az_arm`` via core/nano_persist).
+
+Like real ARM, web apps and function apps are the SAME resource type
+(``Microsoft.Web/sites``) told apart by ``kind`` (``app``, ``app,linux``, ``functionapp``…):
+a sites list returns both and each portal blade filters by kind. Create-time defaults and
+the kind-specific sub-resources are chosen by kind; everything else is shared.
 
 Resource types
-    Microsoft.Web/sites                (kind=functionapp) + start/stop/restart,
-                                        config/appsettings, config/connectionstrings,
-                                        config/web, host/default/listkeys,
-                                        host/default/functionkeys|systemkeys/{name},
-                                        publishxml, resetpublishxml
-    Microsoft.Web/sites/functions      + listkeys, keys/{name}, invoke (console Test/Run)
-    Microsoft.Web/sites/locks          a pragmatic resource-scoped lock list (the real
-                                        ``Microsoft.Authorization/locks`` extension resource
-                                        nests a second ``providers`` segment that the shared
-                                        ARM path parser does not split; modelled as a site
-                                        sub-resource instead so the console's Locks page is
-                                        still backed by a real create/list/delete round-trip).
-Errors use the ARM shape ``{"error":{"code","message"}}``.
+    Microsoft.Web/serverfarms   App Service plans (numberOfSites, in-use delete guard)
+    Microsoft.Web/sites         both kinds:
+        shared       start/stop/restart, publishxml/resetpublishxml,
+                     config/web|appsettings|connectionstrings|logs (GET, POST [.../list], PUT, PATCH),
+                     providers/Microsoft.Authorization/locks/{name} and the short ``locks/{name}``
+                     form — both stored by core/azure_locks_core.py (one lock store for all of ARM)
+        web apps     slots/{name} (+ start/stop/restart), slotsswap, hostNameBindings/{host}
+        functionapp  functions/{name} (+ listkeys, keys/{name}, invoke), host/default/listkeys,
+                     host/default/functionkeys|systemkeys/{name}
+
+App settings, connection strings, functions, keys, slots and custom domains live
+INSIDE the site record (underscore keys, never serialised to clients) — on the wire they
+are separate sub-resources; GET on the site itself never returns them.
+
+Activity log: every successful mutating call drops a ``Microsoft.Insights/eventtypes``
+record into the same shared ARM map (``_record_event``); core/azure_monitor_core.py's
+``eventtypes/management/values`` feed reads them back (the real API behind
+``az monitor activity-log list`` / the portal's Activity log blade). Persisted with the
+rest of ARM; capped per resource.
 
 Function invoke is a REAL, sandboxed Python execution (no process/filesystem/network
-access) — the same restricted-exec technique as core/lambda_core.py's Invoke, so the
-Code + Test "Run" panel and `az functionapp function invoke`-style calls actually run
-the user's code against the request payload.
+access) — the same restricted-exec technique as core/lambda_core.py's Invoke.
 
-``dispatch`` returns ``{"status","headers","body","lro","rid","verb"}``; the caller adds
-the Azure-AsyncOperation headers when ``lro`` is true.
+Errors use the ARM shape ``{"error":{"code","message"}}``. ``dispatch`` returns
+``{"status","headers","body","lro","rid","verb"}``; the caller adds the
+Azure-AsyncOperation headers when ``lro`` is true.
 """
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import re
 import uuid
@@ -47,12 +58,33 @@ from datetime import datetime, timezone
 NAMESPACE = "Microsoft.Web"
 API_VERSION = "2023-12-01"
 DEFAULT_LOCATION = "eastus"
-TYPES = ("sites",)
+DOMAIN = "azurewebsites.net"
+TYPES = ("serverfarms", "sites")
+SITES_TYPE = f"{NAMESPACE}/sites"
+PLANS_TYPE = f"{NAMESPACE}/serverfarms"
+EVENT_TYPE = "microsoft.insights/eventtypes"
+EVENTS_PER_RESOURCE = 200
+
+PLAN_SKUS = {
+    "F1": ("Free", 1), "D1": ("Shared", 1), "B1": ("Basic", 1), "B2": ("Basic", 2), "B3": ("Basic", 3),
+    "S1": ("Standard", 1), "S2": ("Standard", 2), "S3": ("Standard", 3),
+    "P1v2": ("PremiumV2", 1), "P2v2": ("PremiumV2", 2), "P3v2": ("PremiumV2", 3),
+    "P1v3": ("PremiumV3", 1), "P2v3": ("PremiumV3", 2), "P3v3": ("PremiumV3", 3),
+    "Y1": ("Dynamic", 0), "FC1": ("FlexConsumption", 0), "EP1": ("ElasticPremium", 1),
+}
 RUNTIME_VERSIONS = {
     ".NET": ["8.0", "6.0"], "Java": ["21", "17", "11"], "Node.js": ["20 LTS", "18 LTS"],
     "PowerShell Core": ["7.4", "7.2"], "Python": ["3.12", "3.11", "3.10", "3.9"], "Custom Handler": ["-"],
 }
-LOCK_TYPES = ("ReadOnly", "CanNotDelete")
+LOCK_LEVELS = ("CanNotDelete", "ReadOnly")
+DEFAULT_LOGS = {"applicationLogs": {"fileSystem": {"level": "Off"}},
+                "httpLogs": {"fileSystem": {"retentionInMb": 35, "retentionInDays": 0, "enabled": False}},
+                "detailedErrorMessages": {"enabled": False}, "failedRequestsTracing": {"enabled": False}}
+# Site properties a client may not set (server-computed).
+_READONLY_PROPS = {"state", "defaultHostName", "hostNames", "enabledHostNames", "usageState", "availabilityState",
+                   "provisioningState", "outboundIpAddresses", "possibleOutboundIpAddresses", "repositorySiteName",
+                   "defaultHostNameSslState", "serverFarmId", "siteConfig", "functionAppConfig"}
+_BOOL_PROPS = {"httpsOnly", "clientAffinityEnabled", "enabled", "reserved"}
 
 # A curated safe builtins subset for function invoke — no open / exec / eval / compile /
 # __import__ of anything outside _SAFE_MODULES. Mirrors core/lambda_core.py's sandbox.
@@ -87,6 +119,7 @@ class _E(Exception):
         self.status, self.code, self.message = status, code, message
 
 
+# ── small helpers ───────────────────────────────────────────────────────────
 def _now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
@@ -108,6 +141,25 @@ def _err(status, code, message):
             "lro": False, "rid": "", "verb": ""}
 
 
+def _merge(a, b):
+    out = dict(a or {})
+    for k, v in (b or {}).items():
+        out[k] = _merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def _to_bool(v, default=False):
+    if v is None:
+        return default
+    return v if isinstance(v, bool) else str(v).strip().lower() in ("true", "1", "yes", "on")
+
+
+def _props(payload):
+    """The ``properties`` bag of a sub-resource PUT; bare bodies are accepted too."""
+    payload = payload if isinstance(payload, dict) else {}
+    return payload["properties"] if isinstance(payload.get("properties"), dict) else payload
+
+
 def _canon(sub, rg, chain, names):
     seg = ["/subscriptions/" + sub] + (["resourceGroups/" + rg] if rg else []) + ["providers", NAMESPACE]
     for i, t in enumerate(chain):
@@ -117,34 +169,241 @@ def _canon(sub, rg, chain, names):
     return "/".join(seg)
 
 
-def _not_found(name, rg):
+def _not_found(kind, name, rg):
     return _E(404, "ResourceNotFound",
-              f"The Resource '{NAMESPACE}/sites/{name}' under resource group '{rg}' was not found. "
+              f"The Resource '{NAMESPACE}/{kind}/{name}' under resource group '{rg}' was not found. "
               "For more details please go to https://aka.ms/ARMResourceNotFoundFix")
 
 
-def _sysdata():
-    n = _now()
-    return {"createdBy": "vyomi@example.com", "createdByType": "User", "createdAt": n,
-            "lastModifiedBy": "vyomi@example.com", "lastModifiedByType": "User", "lastModifiedAt": n}
+def _is_type(rec, full_type):
+    return str(rec.get("_type", "")).lower() == full_type.lower()
 
 
-def _to_bool(v, default=False):
-    if isinstance(v, bool):
-        return v
-    if v is None:
-        return default
-    return str(v).strip().lower() in ("true", "1", "yes", "on")
+def _is_fn(rec_or_kind):
+    kind = rec_or_kind.get("kind") if isinstance(rec_or_kind, dict) else rec_or_kind
+    return "functionapp" in str(kind or "").lower()
 
 
-def _to_int(v, default=0):
-    try:
-        return int(v)
-    except (TypeError, ValueError):
-        return default
+def _label(rec):
+    return "Function App" if _is_fn(rec) else "Web App"
 
 
-# ── sites ─────────────────────────────────────────────────────────────────
+_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,58}[A-Za-z0-9]|[A-Za-z0-9]{1,2}")
+
+
+def _validate_name(name, what, fn=False):
+    if name and _NAME_RE.fullmatch(name):
+        return
+    if fn:   # `az functionapp create` surfaces the RP's BadRequest wording
+        raise _E(400, "BadRequest", f"Site name '{name}' is invalid. Site names must consist of alphanumeric "
+                 "characters and hyphens only, cannot start or end in a hyphen and must be <= 60 characters.")
+    raise _E(400, "InvalidResourceName", f"{what} name '{name}' is invalid: use 1-60 letters, digits or hyphens, "
+             "and don't start or end with a hyphen.")
+
+
+# ── activity log (Microsoft.Insights/eventtypes in the shared ARM map) ─────────
+_EVENT_SEQ = itertools.count()
+
+
+def _record_event(state, sub, rg, resource_id, op_value, op_text, status="Succeeded"):
+    """Append one Activity Log entry for ``resource_id``. Read back by core/azure_monitor_core.py's
+    ``eventtypes/management/values`` feed (``$filter=resourceUri eq '{resourceId}'``)."""
+    eid = f"{resource_id}/__event__/{uuid.uuid4().hex}"
+    state[eid.lower()] = {
+        "id": eid, "_type": EVENT_TYPE, "_sub": sub, "_seq": next(_EVENT_SEQ),
+        "eventTimestamp": _now(), "submissionTimestamp": _now(),
+        "resourceId": resource_id, "subscriptionId": sub, "resourceGroupName": rg or "",
+        "resourceProviderName": {"value": NAMESPACE, "localizedValue": "Microsoft Web"},
+        "caller": "admin@vyomi.local", "level": "Informational",
+        "eventName": {"value": "EndRequest", "localizedValue": "End request"},
+        "operationName": {"value": op_value, "localizedValue": op_text},
+        "status": {"value": status, "localizedValue": status},
+        "subStatus": {"value": "", "localizedValue": ""},
+    }
+    mine = [(k, r) for k, r in state.items() if _is_type(r, EVENT_TYPE)
+            and str(r.get("resourceId", "")).lower() == resource_id.lower()]
+    if len(mine) > EVENTS_PER_RESOURCE:
+        mine.sort(key=lambda kv: (kv[1].get("eventTimestamp") or "", kv[1].get("_seq", 0)))
+        for k, _ in mine[: len(mine) - EVENTS_PER_RESOURCE]:
+            state.pop(k, None)
+
+
+_SUB_LABELS = {"functions": "function", "keys": "function key", "host": "host key", "locks": "lock",
+               "slots": "deployment slot", "hostnamebindings": "custom domain"}
+_CONFIG_LABELS = {"web": "configuration", "appsettings": "application settings",
+                  "connectionstrings": "connection strings", "logs": "App Service logs"}
+_LOGGED_ACTIONS = {"start", "stop", "restart", "slotsswap", "resetpublishxml"}
+_READ_ACTIONS = {"list", "listkeys", "invoke", "publishxml"}
+
+
+def _norm_rest(rest):
+    """Fold the native lock path ``providers/Microsoft.Authorization/locks/{n}`` onto ``locks/{n}``."""
+    if len(rest) >= 3 and rest[0].lower() == "providers" and rest[1].lower() == "microsoft.authorization" \
+            and rest[2].lower() == "locks":
+        return ["locks"] + list(rest[3:])
+    return list(rest)
+
+
+def _log_site_call(state, rec, rest, method, resp, existed_before):
+    """One activity-log row per successful mutating call on a site or one of its sub-resources.
+    ``operationName.value`` follows ``Microsoft.Web/sites[/{sub-path}]/{write|delete|action}``."""
+    if resp["status"] >= 300 or method == "GET" or (method == "DELETE" and resp["status"] == 204):
+        return
+    label, name = _label(rec), rec["name"]
+    if not rest:
+        verb = "delete" if method == "DELETE" else "write"
+        what = "Delete" if method == "DELETE" else ("Update" if existed_before else "Create")
+        _record_event(state, rec["_sub"], rec["_rg"], rec["id"], f"{SITES_TYPE}/{verb}", f"{what} {label} '{name}'")
+        return
+    rest = _norm_rest(rest)
+    head, tail = rest[0].lower(), rest[-1].lower()
+    if len(rest) == 1 and head in _LOGGED_ACTIONS:
+        text = "Swap deployment slots of" if head == "slotsswap" else (
+            "Reset publish profile of" if head == "resetpublishxml" else head.capitalize())
+        _record_event(state, rec["_sub"], rec["_rg"], rec["id"], f"{SITES_TYPE}/{head}/action", f"{text} {label} '{name}'")
+        return
+    if tail in _READ_ACTIONS or len(rest) == 1:
+        return
+    if head == "config":
+        if method == "POST":   # POST config/{x}[/list] is a read
+            return
+        kind = rest[1].lower()
+        _record_event(state, rec["_sub"], rec["_rg"], rec["id"], f"{SITES_TYPE}/config/{kind}/write",
+                      f"Update {_CONFIG_LABELS.get(kind, kind)} for {label} '{name}'")
+        return
+    if head == "slots" and len(rest) == 3:  # slots/{n}/{start|stop|restart}
+        _record_event(state, rec["_sub"], rec["_rg"], rec["id"], f"{SITES_TYPE}/slots/{rest[2].lower()}/action",
+                      f"{rest[2].capitalize()} deployment slot '{rest[1]}' on {label} '{name}'")
+        return
+    verb = "delete" if method == "DELETE" else "write"
+    what = "Delete" if method == "DELETE" else ("Create" if resp["status"] == 201 else "Update")
+    sub_label = _SUB_LABELS.get(rest[-2].lower(), _SUB_LABELS.get(head, head))
+    _record_event(state, rec["_sub"], rec["_rg"], rec["id"], f"{SITES_TYPE}/{'/'.join(rest)}/{verb}",
+                  f"{what} {sub_label} '{rest[-1]}' on {label} '{name}'")
+
+
+# ── App Service plans (Microsoft.Web/serverfarms) ────────────────────────────
+def _plan_defaults(sub, rg, name, payload):
+    sku_name = (payload.get("sku") or {}).get("name") or "B1"
+    tier, cap = PLAN_SKUS.get(sku_name, ("Basic", 1))
+    is_linux = _to_bool((payload.get("properties") or {}).get("reserved"))
+    rid = _canon(sub, rg, ["serverfarms"], [name])
+    return {
+        "id": rid, "name": name, "type": PLANS_TYPE,
+        "location": payload.get("location") or DEFAULT_LOCATION,
+        "kind": payload.get("kind") or ("linux" if is_linux else "app"),
+        "tags": payload.get("tags") or {},
+        "sku": {"name": sku_name, "tier": tier, "size": sku_name, "family": sku_name[0], "capacity": cap},
+        "properties": {"reserved": is_linux, "maximumNumberOfWorkers": 30 if tier != "Free" else 1,
+                       "zoneRedundant": _to_bool((payload.get("properties") or {}).get("zoneRedundant")),
+                       "provisioningState": "Succeeded", "status": "Ready"},
+        "_type": PLANS_TYPE, "_sub": sub, "_rg": rg, "_created": _now(),
+    }
+
+
+def _sites_on(state, plan_id):
+    return [r for r in state.values() if _is_type(r, SITES_TYPE)
+            and str((r.get("properties") or {}).get("serverFarmId", "")).lower() == plan_id.lower()]
+
+
+def _plan_view(state, rec):
+    v = _view(rec)
+    v["properties"] = dict(v["properties"], numberOfSites=len(_sites_on(state, rec["id"])))
+    return v
+
+
+def _plan_ops(state, sub, rg, chain, method, payload):
+    if len(chain) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        items = [_plan_view(state, r) for r in state.values()
+                 if _is_type(r, PLANS_TYPE) and r.get("_sub") == sub
+                 and (rg is None or (r.get("_rg") or "").lower() == rg.lower())]
+        return _ok({"value": items})
+    name = chain[1]
+    rid = _canon(sub, rg, ["serverfarms"], [name])
+    rec = state.get(rid.lower())
+    if len(chain) > 2:
+        if rec is None:
+            raise _not_found("serverfarms", name, rg)
+        if chain[2].lower() == "sites" and method == "GET":
+            return _ok({"value": [_view(s) for s in _sites_on(state, rid)]})
+        return _err(404, "ResourceTypeNotSupported", f"'{'/'.join(chain[2:])}' is not supported on serverfarms.")
+    if method == "GET":
+        if not rec:
+            raise _not_found("serverfarms", name, rg)
+        return _ok(_plan_view(state, rec))
+    if method in ("PUT", "PATCH"):
+        if rg is None:
+            return _err(400, "InvalidResourceId", "App Service plans must be created in a resource group.")
+        _validate_name(name, "App Service plan")
+        existed = rec is not None
+        if method == "PATCH" and rec:
+            if isinstance(payload.get("tags"), dict):
+                rec["tags"] = payload["tags"]
+            sku = (payload.get("sku") or {}).get("name")
+            if sku:
+                tier, cap = PLAN_SKUS.get(sku, (rec["sku"]["tier"], rec["sku"]["capacity"]))
+                rec["sku"] = {"name": sku, "tier": tier, "size": sku, "family": sku[0], "capacity": cap}
+            resp = _ok(_plan_view(state, rec), 200)
+        else:
+            rec = _plan_defaults(sub, rg, name, payload)
+            state[rid.lower()] = rec
+            resp = _ok(_plan_view(state, rec), 200 if existed else 201, lro=True, rid=rid, verb=method.lower())
+        _record_event(state, sub, rg, rid, f"{PLANS_TYPE}/write",
+                      f"{'Update' if existed else 'Create'} App Service plan '{name}'")
+        return resp
+    if method == "DELETE":
+        if rec:
+            in_use = _sites_on(state, rid)
+            if in_use:
+                raise _E(409, "ServerFarmInUse", f"App Service plan '{name}' still has {len(in_use)} app(s). Delete them first.")
+            _record_event(state, sub, rg, rid, f"{PLANS_TYPE}/delete", f"Delete App Service plan '{name}'")
+        state.pop(rid.lower(), None)
+        return _ok(None, 200 if rec else 204, rid=rid, verb="delete")
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+def _ensure_plan(state, sub, rg, site_name, payload, fn):
+    """The plan a new site lands on. An explicit ``serverFarmId`` must exist; without one a plan is
+    auto-provisioned, like the portal wizards do (web apps: ``{site}-plan``; function apps: the
+    resource group's shared Flex Consumption / Consumption plan)."""
+    pay = payload.get("properties") or {}
+    sf = pay.get("serverFarmId")
+    if sf:
+        rec = state.get(sf.lower())
+        if not rec or not _is_type(rec, PLANS_TYPE):
+            raise _E(400, "ServerFarmNotFound", f"App Service plan '{sf}' was not found.")
+        return rec["id"]
+    is_linux = "linux" in (payload.get("kind") or "").lower() or _to_bool(pay.get("reserved"))
+    if fn:
+        flex = bool(pay.get("functionAppConfig"))
+        plan_name, sku = (f"FLEX-{rg}", "FC1") if flex else (f"ASP-{rg}-consumption", "Y1")
+    else:
+        plan_name, sku = f"{site_name}-plan", "B1"
+    rid = _canon(sub, rg, ["serverfarms"], [plan_name])
+    if rid.lower() not in state:
+        state[rid.lower()] = _plan_defaults(sub, rg, plan_name, {
+            "location": payload.get("location"), "sku": {"name": sku},
+            "kind": "functionapp" if fn else None, "properties": {"reserved": is_linux}})
+    return state[rid.lower()]["id"]
+
+
+# ── sites (Microsoft.Web/sites, both kinds) ───────────────────────────────────
+def _default_site_config(is_linux):
+    return {
+        "numberOfWorkers": 1, "defaultDocuments": ["Default.htm", "Default.html", "Default.asp", "index.htm", "index.html", "iisstart.htm"],
+        "netFrameworkVersion": "v4.0", "phpVersion": "", "pythonVersion": "", "linuxFxVersion": "", "windowsFxVersion": "",
+        "requestTracingEnabled": False, "remoteDebuggingEnabled": False, "httpLoggingEnabled": False,
+        "alwaysOn": False, "use32BitWorkerProcess": not is_linux, "webSocketsEnabled": False,
+        "managedPipelineMode": "Integrated", "ftpsState": "AllAllowed", "http20Enabled": False,
+        "minTlsVersion": "1.2", "scmMinTlsVersion": "1.2", "clientCertEnabled": False, "clientCertMode": "Required",
+        "healthCheckPath": "", "scmType": "None", "appCommandLine": "",
+        "scmBasicAuthEnabled": True, "ftpBasicAuthEnabled": True, "sessionAffinityEnabled": True,
+        "continuousDeploymentEnabled": False, "basicAuthEnabled": False,
+    }
+
+
 def _fx_version(runtime, version):
     tag = {"Python": "PYTHON", "Node.js": "NODE", ".NET": "DOTNET-ISOLATED", "Java": "JAVA",
            "PowerShell Core": "POWERSHELL", "Custom Handler": "CUSTOM"}.get(runtime, "PYTHON")
@@ -152,99 +411,393 @@ def _fx_version(runtime, version):
     return f"{tag}|{v}" if v and v != "-" else tag
 
 
-def _new_site(rid, name, sub, rg, payload):
-    loc = payload.get("location") or DEFAULT_LOCATION
+def _absorb_site_config(rec, cfg):
+    """Merge a client ``siteConfig`` into the site: ``appSettings`` / ``connectionStrings`` arrays go
+    to their sub-resource stores (never onto the record), console-only ``_runtime`` hints are dropped."""
+    cfg = dict(cfg or {})
+    for k in ("_runtime", "_version"):
+        cfg.pop(k, None)
+    for s in cfg.pop("appSettings", None) or []:
+        if isinstance(s, dict) and s.get("name"):
+            rec["_appsettings"][s["name"]] = s.get("value", "")
+    for c in cfg.pop("connectionStrings", None) or []:
+        if isinstance(c, dict) and c.get("name"):
+            rec["_connectionstrings"][c["name"]] = {"value": c.get("connectionString", c.get("value", "")),
+                                                    "type": c.get("type", "Custom")}
+    rec["properties"]["siteConfig"] = _merge(rec["properties"].get("siteConfig"), cfg)
+
+
+def _ensure(rec):
+    """Every site carries every store (records written by older builds are upgraded in place)."""
+    if "_connstrings" in rec and "_connectionstrings" not in rec:
+        rec["_connectionstrings"] = rec.pop("_connstrings")
+    for k, v in (("_appsettings", {}), ("_connectionstrings", {}), ("_logs", None),
+                 ("_slots", {}), ("_hostnamebindings", {}), ("_functions", {}), ("_host", None)):
+        if k not in rec:
+            rec[k] = dict(DEFAULT_LOGS) if k == "_logs" else (
+                {"masterKey": _h(rec["id"], "master", n=40), "functionKeys": {"default": _h(rec["id"], "default", n=40)},
+                 "systemKeys": {}} if k == "_host" else dict(v))
+    return rec
+
+
+def _new_site(state, sub, rg, name, payload):
+    fn = _is_fn(payload.get("kind"))
     pay = payload.get("properties") or {}
-    host = f"{name}.azurewebsites.net"
-    cfg = dict(pay.get("siteConfig") or {})
-    runtime = cfg.pop("_runtime", "Python")
-    version = cfg.pop("_version", "3.12")
-    cfg.setdefault("functionAppScaleLimit", 0)
-    cfg.setdefault("minimumElasticInstanceCount", 0)
-    app_settings = {s["name"]: s.get("value", "") for s in cfg.pop("appSettings", []) if s.get("name")}
-    app_settings.setdefault("FUNCTIONS_EXTENSION_VERSION", "~4")
-    app_settings.setdefault("FUNCTIONS_WORKER_RUNTIME", runtime.lower().replace(".net", "dotnet-isolated").replace(" core", "").replace(".js", ""))
-    app_settings.setdefault("AzureWebJobsStorage", f"DefaultEndpointsProtocol=https;AccountName=vyomi{_h(name, n=10)};AccountKey=sim;")
-    app_settings.setdefault("APPINSIGHTS_INSTRUMENTATIONKEY", _h(rid, "aik", n=32))
-    conn_strings = {c["name"]: {"value": c.get("value", ""), "type": c.get("type", "Custom")} for c in cfg.pop("connectionStrings", []) if c.get("name")}
-    scale_cfg = pay.get("functionAppConfig", {}).get("scaleAndConcurrency") or {}
+    rid = _canon(sub, rg, ["sites"], [name])
+    host = f"{name}.{DOMAIN}"
+    plan_id = _ensure_plan(state, sub, rg, name, payload, fn)
+    hx = _h(rid, n=6)
+    ip = "52.%d.%d.%d" % (int(hx[0:2], 16) % 200 + 1, int(hx[2:4], 16), int(hx[4:6], 16) % 250 + 1)
+    if fn:
+        reserved = _to_bool(pay.get("reserved"), False)
+        is_linux = _to_bool(pay.get("reserved"), True)
+        kind = payload.get("kind") or "functionapp"
+    else:
+        is_linux = "linux" in (payload.get("kind") or "").lower() or _to_bool(pay.get("reserved"))
+        reserved = is_linux
+        kind = payload.get("kind") or ("app,linux" if is_linux else "app")
     rec = {
-        "id": rid, "name": name, "type": f"{NAMESPACE}/sites", "kind": "functionapp",
-        "location": loc, "tags": payload.get("tags") or {}, "systemData": _sysdata(),
-        "_type": f"{NAMESPACE}/sites", "_sub": sub, "_rg": rg, "_created": _now(),
-        "_functions": {}, "_appsettings": app_settings, "_connstrings": conn_strings,
-        "_host": {"masterKey": _h(rid, "master", n=40), "functionKeys": {"default": _h(rid, "default", n=40)}, "systemKeys": {}},
-        "_locks": {},
+        "id": rid, "name": name, "type": SITES_TYPE, "kind": kind,
+        "location": payload.get("location") or DEFAULT_LOCATION, "tags": payload.get("tags") or {},
+        "_type": SITES_TYPE, "_sub": sub, "_rg": rg, "_created": _now(),
         "properties": {
-            "state": "Running", "enabled": True, "hostNames": [host], "defaultHostName": host,
-            "reserved": _to_bool(pay.get("reserved"), False), "isXenon": False, "hyperV": False,
-            "usageState": "Normal", "availabilityState": "Normal", "httpsOnly": _to_bool(pay.get("httpsOnly"), True),
-            "serverFarmId": pay.get("serverFarmId") or f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/serverfarms/FLEX-{rg}",
-            "sku": "FlexConsumption" if pay.get("functionAppConfig") else "Dynamic",
-            "functionAppConfig": pay.get("functionAppConfig") or {"runtime": {"name": runtime.lower(), "version": version},
-                                                                   "scaleAndConcurrency": {"instanceMemoryMB": scale_cfg.get("instanceMemoryMB", 2048),
-                                                                                           "maximumInstanceCount": scale_cfg.get("maximumInstanceCount", 100),
-                                                                                           "triggers": scale_cfg.get("triggers") or {"http": {"perInstanceConcurrency": 16}}}},
-            "siteConfig": dict(cfg, linuxFxVersion=_fx_version(runtime, version) if _to_bool(pay.get("reserved"), True) else "",
-                               windowsFxVersion="" if _to_bool(pay.get("reserved"), True) else _fx_version(runtime, version)),
-            "outboundIpAddresses": "52.%d.%d.%d" % (int(_h(rid, n=6)[0:2], 16) % 200 + 1, int(_h(rid, n=6)[2:4], 16), int(_h(rid, n=6)[4:6], 16) % 250 + 1),
+            "serverFarmId": plan_id, "state": "Running", "enabled": True,
+            "defaultHostName": host, "hostNames": [host], "enabledHostNames": [host, f"{name}.scm.{DOMAIN}"],
+            "repositorySiteName": name, "usageState": "Normal", "availabilityState": "Normal",
+            "reserved": reserved, "isXenon": False, "hyperV": False,
+            "httpsOnly": _to_bool(pay.get("httpsOnly"), fn),
+            "clientAffinityEnabled": _to_bool(pay.get("clientAffinityEnabled"), not fn),
+            "publicNetworkAccess": pay.get("publicNetworkAccess") or "Enabled",
+            "siteConfig": _default_site_config(is_linux),
+            "outboundIpAddresses": ip, "possibleOutboundIpAddresses": ",".join([ip, ip.rsplit(".", 1)[0] + ".200"]),
             "defaultHostNameSslState": {"name": host, "sslState": "Disabled", "hostType": "Standard"},
+            "provisioningState": "Succeeded",
         },
     }
+    _ensure(rec)
+    for k, v in pay.items():
+        if k not in _READONLY_PROPS and k not in rec["properties"]:
+            rec["properties"][k] = v
+    cfg = dict(pay.get("siteConfig") or {})
+    if fn:
+        runtime, version = cfg.get("_runtime", "Python"), cfg.get("_version", "3.12")
+        cfg.setdefault("functionAppScaleLimit", 0)
+        cfg.setdefault("minimumElasticInstanceCount", 0)
+        cfg["linuxFxVersion"] = _fx_version(runtime, version) if is_linux else ""
+        cfg["windowsFxVersion"] = "" if is_linux else _fx_version(runtime, version)
+        worker = runtime.lower().replace(".net", "dotnet-isolated").replace(" core", "").replace(".js", "")
+        rec["_appsettings"].update({"FUNCTIONS_EXTENSION_VERSION": "~4", "FUNCTIONS_WORKER_RUNTIME": worker,
+                                    "AzureWebJobsStorage": f"DefaultEndpointsProtocol=https;AccountName=vyomi{_h(name, n=10)};AccountKey=sim;",
+                                    "APPINSIGHTS_INSTRUMENTATIONKEY": _h(rid, "aik", n=32)})
+        scale = (pay.get("functionAppConfig") or {}).get("scaleAndConcurrency") or {}
+        rec["properties"]["sku"] = "FlexConsumption" if pay.get("functionAppConfig") else "Dynamic"
+        rec["properties"]["functionAppConfig"] = pay.get("functionAppConfig") or {
+            "runtime": {"name": worker, "version": version},
+            "scaleAndConcurrency": {"instanceMemoryMB": scale.get("instanceMemoryMB", 2048),
+                                    "maximumInstanceCount": scale.get("maximumInstanceCount", 100),
+                                    "triggers": scale.get("triggers") or {"http": {"perInstanceConcurrency": 16}}}}
+    _absorb_site_config(rec, cfg)
+    if not fn:
+        rec["properties"]["runtime"] = rec["properties"]["siteConfig"].get("linuxFxVersion") or ""
     return rec
 
 
-def _site_view(rec):
-    out = _view(rec)
-    out["properties"] = dict(out["properties"])
-    return out
+def _update_site(state, rec, payload, method):
+    """PUT on an existing site / PATCH: merge the client-settable parts; kind never changes."""
+    if method == "PUT" and payload.get("location"):
+        rec["location"] = payload["location"]
+    if isinstance(payload.get("tags"), dict):
+        rec["tags"] = payload["tags"]
+    pay = payload.get("properties") or {}
+    if pay.get("serverFarmId"):
+        rec["properties"]["serverFarmId"] = _ensure_plan(state, rec["_sub"], rec["_rg"], rec["name"], payload, _is_fn(rec))
+    if "siteConfig" in pay:
+        _absorb_site_config(rec, pay["siteConfig"])
+    if "functionAppConfig" in pay:
+        rec["properties"]["functionAppConfig"] = _merge(rec["properties"].get("functionAppConfig"), pay["functionAppConfig"])
+    for k, v in pay.items():
+        if k in _READONLY_PROPS:
+            continue
+        rec["properties"][k] = _to_bool(v) if k in _BOOL_PROPS else v
 
 
-def _put_site(state, sub, rg, rid, name, payload, method):
-    existed = state.get(rid.lower())
-    if method == "PATCH":
-        if not existed:
-            raise _not_found(name, rg)
-        if isinstance(payload.get("tags"), dict):
-            existed["tags"] = payload["tags"]
-        pr = payload.get("properties") or {}
-        existed["properties"].update({k: v for k, v in pr.items() if k not in ("siteConfig", "functionAppConfig")})
-        if "siteConfig" in pr:
-            existed["properties"]["siteConfig"].update(pr["siteConfig"])
-        if "functionAppConfig" in pr:
-            existed["properties"]["functionAppConfig"] = {**existed["properties"].get("functionAppConfig", {}), **pr["functionAppConfig"]}
-        return existed
-    if not re.fullmatch(r"[A-Za-z0-9][-A-Za-z0-9]{0,58}[A-Za-z0-9]", name) and not re.fullmatch(r"[A-Za-z0-9]", name):
-        raise _E(400, "BadRequest", f"Site name '{name}' is invalid. Site names must consist of alphanumeric characters and hyphens only, "
-                  "cannot start or end in a hyphen and must be <= 60 characters.")
-    if existed is None:
-        rec = _new_site(rid, name, sub, rg, payload)
-        state[rid.lower()] = rec
+def _site_ops(state, sub, rg, chain, method, payload):
+    if len(chain) == 1:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        items = [_view(r) for r in state.values() if _is_type(r, SITES_TYPE) and r.get("_sub") == sub
+                 and (rg is None or (r.get("_rg") or "").lower() == rg.lower())]
+        return _ok({"value": items})
+    name = chain[1]
+    rid = _canon(sub, rg, ["sites"], [name])
+    rec = state.get(rid.lower())
+    rest = chain[2:]
+    if rest:
+        if rec is None:
+            raise _not_found("sites", name, rg)
+        _ensure(rec)
+        _migrate_locks(state, rec)
+        resp = _site_subresource(state, rec, rest, method, payload)
+        _log_site_call(state, rec, rest, method, resp, True)
+        return resp
+    if method == "GET":
+        if rec is None:
+            raise _not_found("sites", name, rg)
+        return _ok(_view(rec))
+    if method in ("PUT", "PATCH"):
+        if rg is None:
+            return _err(400, "InvalidResourceId", "Web sites must be created in a resource group.")
+        existed = rec is not None
+        if method == "PATCH" and not existed:
+            raise _not_found("sites", name, rg)
+        if existed:
+            _ensure(rec)
+            _update_site(state, rec, payload, method)
+        else:
+            _validate_name(name, "Web app", fn=_is_fn(payload.get("kind")))
+            rec = _new_site(state, sub, rg, name, payload)
+            state[rid.lower()] = rec
+        resp = _ok(_view(rec), 200 if existed else 201, lro=True, rid=rid, verb=method.lower())
+        _log_site_call(state, rec, [], method, resp, existed)
+        return resp
+    if method == "DELETE":
+        state.pop(rid.lower(), None)
+        resp = _ok(None, 200 if rec is not None else 204, rid=rid, verb="delete")
+        if rec is not None:
+            _log_site_call(state, rec, [], method, resp, True)
+        return resp
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+_WEB_ONLY = ("slots", "slotsswap", "hostnamebindings")
+_FN_ONLY = ("functions", "host")
+
+
+def _site_subresource(state, rec, rest, method, payload):
+    r0 = rest[0].lower()
+    fn = _is_fn(rec)
+    if (r0 in _WEB_ONLY and fn) or (r0 in _FN_ONLY and not fn):
+        return _err(404, "ResourceTypeNotSupported",
+                    f"'{rest[0]}' is not supported on a {_label(rec)} (kind '{rec.get('kind')}').")
+    if r0 == "config":
+        return _config_ops(rec, rest[1:], method, payload)
+    if r0 == "locks":
+        return _lock_ops(state, rec, rest[1:], method, payload)
+    if r0 == "providers" and len(rest) >= 3 and rest[1].lower() == "microsoft.authorization" and rest[2].lower() == "locks":
+        return _lock_ops(state, rec, rest[3:], method, payload)
+    if r0 == "functions":
+        return _functions_ops(rec, rest[1:], method, payload)
+    if r0 == "host":
+        return _host_ops(rec, rest[1:], method, payload)
+    if r0 == "slots":
+        return _slot_ops(rec, rest[1:], method, payload)
+    if r0 == "hostnamebindings":
+        return _hostname_ops(rec, rest[1:], method, payload)
+    if len(rest) == 1:
+        return _site_action(rec, r0, method, payload)
+    return _err(404, "ResourceTypeNotSupported", f"'{'/'.join(rest)}' is not supported on sites.")
+
+
+def _site_action(rec, action, method, payload):
+    if method != "POST":
+        return _err(405, "MethodNotAllowed", f"{method} not allowed on '{action}'.")
+    if action in ("start", "stop", "restart"):
+        rec["properties"]["state"] = "Stopped" if action == "stop" else "Running"
+        return _ok(None, 200, lro=True, rid=rec["id"], verb=action)
+    if action == "slotsswap":
+        _swap(rec, (payload or {}).get("targetSlot") or "production")
+        return _ok(None, 200, lro=True, rid=rec["id"], verb="slotsswap")
+    if action in ("publishxml", "resetpublishxml"):
+        token = _h(rec["id"], "publish", _now() if action == "resetpublishxml" else "", n=24)
+        prof = (f'<publishData><publishProfile profileName="{rec["name"]} - Web Deploy" '
+                f'publishUrl="{rec["name"]}.scm.{DOMAIN}:443" userName="${rec["name"]}" '
+                f'userPWD="{token}" destinationAppUrl="https://{rec["properties"]["defaultHostName"]}" '
+                f'/></publishData>')
+        return _ok({"value": prof})
+    return _err(404, "ResourceTypeNotSupported", f"Action '{action}' is not supported on sites.")
+
+
+# ── shared: config ────────────────────────────────────────────────────────────
+def _config_ops(rec, rest, method, payload):
+    if not rest:
+        return _err(404, "NotFound", "Missing config name.")
+    kind = rest[0].lower()
+    if kind not in _CONFIG_LABELS:
+        return _err(404, "ResourceTypeNotSupported", f"config/{kind} is not supported.")
+    tail = [t.lower() for t in rest[1:]]
+    if tail not in ([], ["list"]):
+        return _err(404, "ResourceTypeNotSupported", f"config/{'/'.join(rest)} is not supported.")
+    # GET, or POST (real ARM: POST config/{x}/list — the short POST form is accepted too) reads.
+    read = method == "GET" or method == "POST"
+    if kind == "web":
+        if read:
+            return _ok({"properties": rec["properties"]["siteConfig"]})
+        if method in ("PUT", "PATCH"):
+            _absorb_site_config(rec, _props(payload))
+            return _ok({"properties": rec["properties"]["siteConfig"]})
+    elif kind in ("appsettings", "connectionstrings"):
+        key = "_" + kind
+        if read:
+            return _ok({"properties": dict(rec[key])})
+        if method == "PUT":
+            rec[key] = dict(_props(payload))
+            return _ok({"properties": dict(rec[key])})
+        if method == "PATCH":
+            rec[key].update(_props(payload))
+            return _ok({"properties": dict(rec[key])})
+    elif kind == "logs":
+        if read:
+            return _ok({"properties": rec["_logs"]})
+        if method in ("PUT", "PATCH"):
+            rec["_logs"] = _merge(rec["_logs"], _props(payload))
+            return _ok({"properties": rec["_logs"]})
+    return _err(405, "MethodNotAllowed", f"{method} not supported on config/{kind}.")
+
+
+# ── shared: resource-scoped locks (stored by the generic Microsoft.Authorization/locks engine) ──
+def _locks_engine():
+    try:
+        from core import azure_locks_core as m
+    except ImportError:
+        import azure_locks_core as m      # type: ignore  (Nano: flat module path)
+    return m
+
+
+def _migrate_locks(state, rec):
+    """Site records from older builds kept locks inside the site; move them to the locks engine."""
+    old = rec.pop("_locks", None) or {}
+    for name, lk in old.items():
+        props = lk.get("properties", lk) if isinstance(lk, dict) else {}
+        _locks_engine().upsert(state, rec["id"], name, {"properties": {"level": props.get("level"), "notes": props.get("notes", "")}})
+
+
+def _lock_ops(state, rec, rest, method, payload):
+    """Both ``sites/{n}/locks/{lock}`` (short form the Function App blade uses) and the native
+    ``sites/{n}/providers/Microsoft.Authorization/locks/{lock}`` land in ONE store: the generic
+    locks engine (core/azure_locks_core.py), scoped to the site id — the same records AzureArm
+    serves for Microsoft.Authorization/locks on any resource."""
+    lk = _locks_engine()
+    if not rest:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        r = lk.list_for(state, rec["id"])
     else:
-        rec = existed
-        rec["location"] = payload.get("location") or rec["location"]
-        if isinstance(payload.get("tags"), dict):
-            rec["tags"] = payload["tags"]
-        pr = payload.get("properties") or {}
-        if "siteConfig" in pr:
-            rec["properties"]["siteConfig"].update(pr["siteConfig"])
-        if "functionAppConfig" in pr:
-            rec["properties"]["functionAppConfig"] = {**rec["properties"].get("functionAppConfig", {}), **pr["functionAppConfig"]}
-    return rec
+        name = rest[0]
+        if method == "GET":
+            r = lk.get(state, rec["id"], name)
+        elif method in ("PUT", "PATCH"):
+            level = _props(payload).get("level") or "CanNotDelete"
+            if level not in LOCK_LEVELS:
+                return _err(400, "InvalidLockLevel", f"Invalid lock level '{level}'; use one of {', '.join(LOCK_LEVELS)}.")
+            r = lk.upsert(state, rec["id"], name, {"properties": {"level": level, "notes": _props(payload).get("notes", "")}})
+        elif method == "DELETE":
+            r = lk.remove(state, rec["id"], name)
+        else:
+            return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+    return _ok(r["body"], r["status"]) if r["status"] < 300 else _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
 
 
-# ── functions ────────────────────────────────────────────────────────────────
+# ── web apps: deployment slots + swap, custom domains ─────────────────────────
+def _slot_view(site, slot_name, slot):
+    host = f"{site['name']}-{slot_name}.{DOMAIN}"
+    return {
+        "id": f"{site['id']}/slots/{slot_name}", "name": f"{site['name']}/{slot_name}",
+        "type": f"{SITES_TYPE}/slots", "location": site["location"], "kind": site["kind"], "tags": {},
+        "properties": {
+            "serverFarmId": site["properties"]["serverFarmId"], "state": slot.get("state", "Running"),
+            "enabled": True, "defaultHostName": host, "hostNames": [host],
+            "siteConfig": slot.get("siteConfig") or _default_site_config("linux" in site["kind"]),
+            "targetSwapSlot": None, "provisioningState": "Succeeded",
+        },
+    }
+
+
+def _swap(rec, target):
+    if target == "production":
+        return
+    slot = rec["_slots"].get(target)
+    if slot is None:
+        raise _E(404, "SlotNotFound", f"Deployment slot '{target}' was not found.")
+    prod = (rec["properties"]["siteConfig"], rec["_appsettings"], rec["_connectionstrings"])
+    rec["properties"]["siteConfig"] = slot.get("siteConfig") or _default_site_config("linux" in rec["kind"])
+    rec["_appsettings"] = slot.get("appsettings") or {}
+    rec["_connectionstrings"] = slot.get("connectionstrings") or {}
+    slot["siteConfig"], slot["appsettings"], slot["connectionstrings"] = prod
+
+
+def _slot_ops(rec, rest, method, payload):
+    slots = rec["_slots"]
+    if not rest:
+        if method == "GET":
+            return _ok({"value": [_slot_view(rec, n, s) for n, s in sorted(slots.items())]})
+        return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+    name = rest[0]
+    tail = rest[1:]
+    if tail:
+        if name not in slots:
+            raise _E(404, "SlotNotFound", f"Deployment slot '{name}' was not found.")
+        if len(tail) == 1 and tail[0].lower() in ("start", "stop", "restart") and method == "POST":
+            slots[name]["state"] = "Stopped" if tail[0].lower() == "stop" else "Running"
+            return _ok(None, 200)
+        return _err(404, "ResourceTypeNotSupported", f"slots/{'/'.join(tail)} is not supported.")
+    if method == "GET":
+        if name not in slots:
+            raise _E(404, "SlotNotFound", f"Deployment slot '{name}' was not found.")
+        return _ok(_slot_view(rec, name, slots[name]))
+    if method == "PUT":
+        _validate_name(name, "Deployment slot")
+        existed = name in slots
+        slots[name] = {"state": "Running", "siteConfig": dict(rec["properties"]["siteConfig"]),
+                       "appsettings": {}, "connectionstrings": {}}
+        return _ok(_slot_view(rec, name, slots[name]), 200 if existed else 201, lro=True,
+                   rid=f"{rec['id']}/slots/{name}", verb="put")
+    if method == "DELETE":
+        had = slots.pop(name, None)
+        return _ok(None, 200 if had is not None else 204)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+def _hostname_doc(rec, host):
+    b = rec["_hostnamebindings"][host]
+    return {"id": f"{rec['id']}/hostNameBindings/{host}", "name": host, "type": f"{SITES_TYPE}/hostNameBindings",
+            "properties": {"siteName": rec["name"], "hostNameType": "Verified", "sslState": b.get("sslState", "Disabled")}}
+
+
+def _hostname_ops(rec, rest, method, payload):
+    binds = rec["_hostnamebindings"]
+    if not rest:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        return _ok({"value": [_hostname_doc(rec, h) for h in binds]})
+    host = rest[0]
+    if method == "GET":
+        if host not in binds:
+            raise _E(404, "HostNameBindingNotFound", f"Custom domain '{host}' was not found.")
+        return _ok(_hostname_doc(rec, host))
+    if method == "PUT":
+        existed = host in binds
+        binds[host] = {"sslState": _props(payload).get("sslState", "Disabled")}
+        rec["properties"]["hostNames"] = sorted(set(rec["properties"]["hostNames"]) | {host})
+        return _ok(_hostname_doc(rec, host), 200 if existed else 201)
+    if method == "DELETE":
+        had = binds.pop(host, None)
+        if had is not None:
+            rec["properties"]["hostNames"] = [h for h in rec["properties"]["hostNames"] if h != host]
+        return _ok(None, 200 if had is not None else 204)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+# ── function apps: functions, host keys, invoke ────────────────────────────────
 _FN_NAME_RE = re.compile(r"^[A-Za-z][-A-Za-z0-9_]{0,127}$")
 
 
 def _new_function(site_rid, name, payload):
-    pay = payload if isinstance(payload, dict) else {}
-    props = pay.get("properties") or {}
+    props = (payload if isinstance(payload, dict) else {}).get("properties") or {}
     cfg = props.get("config") or {"bindings": [{"authLevel": "function", "type": "httpTrigger", "direction": "in", "name": "req",
                                                 "methods": ["get", "post"]}, {"type": "http", "direction": "out", "name": "$return"}]}
     code = props.get("files", {}).get("__init__.py") if isinstance(props.get("files"), dict) else None
     trigger = next((b.get("type") for b in cfg.get("bindings", []) if b.get("direction") == "in"), "httpTrigger")
-    return {"id": f"{site_rid}/functions/{name}", "name": name, "type": f"{NAMESPACE}/sites/functions",
+    return {"id": f"{site_rid}/functions/{name}", "name": name, "type": f"{SITES_TYPE}/functions",
             "properties": {"config": cfg, "language": props.get("language", "python"), "isDisabled": _to_bool(props.get("isDisabled"), False),
                            "invoke_url_template": f"https://{{host}}/api/{name}" if trigger == "httpTrigger" else "",
                            "trigger": trigger},
@@ -272,7 +825,13 @@ def _invoke_function(fn, req):
         return {"ok": False, "status": 500, "body": None, "error": f"{type(e).__name__}: {e}"}
 
 
-def _functions_ops(state, rec, rest, method, payload):
+def _put_key(bucket, owner_id, name, payload):
+    existed = name in bucket
+    bucket[name] = (payload or {}).get("properties", {}).get("value") or _h(owner_id, name, n=40)
+    return _ok({"properties": {"name": name, "value": bucket[name]}}, 200 if existed else 201)
+
+
+def _functions_ops(rec, rest, method, payload):
     fns = rec["_functions"]
     if not rest:
         if method != "GET":
@@ -304,169 +863,60 @@ def _functions_ops(state, rec, rest, method, payload):
     if action == "listkeys" and method == "POST":
         return _ok({"default": fn["_keys"].get("default", "")})
     if action == "keys" and len(rest) == 3:
-        kname = rest[2]
         if method in ("PUT", "POST"):
-            fn["_keys"][kname] = (payload or {}).get("properties", {}).get("value") or _h(fn["id"], kname, n=40)
-            return _ok({"properties": {"name": kname, "value": fn["_keys"][kname]}})
+            return _put_key(fn["_keys"], fn["id"], rest[2], payload)
         if method == "DELETE":
-            had = fn["_keys"].pop(kname, None)
+            had = fn["_keys"].pop(rest[2], None)
             return _ok(None, 200 if had else 204)
     if action == "invoke" and method == "POST":
-        req = {"method": (payload or {}).get("method", "GET"), "query": (payload or {}).get("query", {}),
-               "headers": (payload or {}).get("headers", {}), "body": (payload or {}).get("body")}
+        p = payload or {}
+        req = {"method": p.get("method", "GET"), "query": p.get("query", {}), "headers": p.get("headers", {}), "body": p.get("body")}
         return _ok(_invoke_function(fn, req))
     return _err(404, "ResourceTypeNotSupported", f"Action '{action}' is not supported on functions.")
 
 
-# ── config / host keys / locks ──────────────────────────────────────────────
-def _config_ops(rec, rest, method, payload):
-    kind = rest[0].lower()
-    if kind == "appsettings":
-        store = rec["_appsettings"]
-        if method in ("GET", "POST"):
-            return _ok({"properties": dict(store)})
-        if method == "PUT":
-            rec["_appsettings"] = dict((payload or {}).get("properties") or {})
-            return _ok({"properties": dict(rec["_appsettings"])})
-    elif kind == "connectionstrings":
-        store = rec["_connstrings"]
-        if method in ("GET", "POST"):
-            return _ok({"properties": dict(store)})
-        if method == "PUT":
-            rec["_connstrings"] = dict((payload or {}).get("properties") or {})
-            return _ok({"properties": dict(rec["_connstrings"])})
-    elif kind == "web":
-        if method == "GET":
-            return _ok({"properties": rec["properties"]["siteConfig"]})
-        if method in ("PUT", "PATCH"):
-            rec["properties"]["siteConfig"].update((payload or {}).get("properties") or {})
-            return _ok({"properties": rec["properties"]["siteConfig"]})
-    return _err(405, "MethodNotAllowed", f"{method} not supported on config/{kind}.")
-
-
 def _host_ops(rec, rest, method, payload):
     # rest: ["default", "listKeys"] | ["default", "functionKeys"|"systemKeys", name]
-    if rest[0].lower() != "default":
+    if not rest or rest[0].lower() != "default":
         return _err(404, "ResourceNotFound", "Only the 'default' host is simulated.")
     host = rec["_host"]
     if len(rest) == 2 and rest[1].lower() == "listkeys" and method == "POST":
         return _ok({"masterKey": host["masterKey"], "functionKeys": dict(host["functionKeys"]), "systemKeys": dict(host["systemKeys"])})
     if len(rest) == 3 and rest[1].lower() in ("functionkeys", "systemkeys"):
         bucket = host["functionKeys"] if rest[1].lower() == "functionkeys" else host["systemKeys"]
-        name = rest[2]
         if method in ("PUT", "POST"):
-            bucket[name] = (payload or {}).get("properties", {}).get("value") or _h(rec["id"], name, n=40)
-            return _ok({"properties": {"name": name, "value": bucket[name]}})
+            return _put_key(bucket, rec["id"], rest[2], payload)
         if method == "DELETE":
-            had = bucket.pop(name, None)
+            had = bucket.pop(rest[2], None)
             return _ok(None, 200 if had else 204)
     return _err(404, "ResourceTypeNotSupported", f"'{'/'.join(rest)}' is not supported on host.")
 
 
-def _locks_ops(rec, rest, method, payload):
-    locks = rec["_locks"]
-    if not rest:
-        if method != "GET":
-            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
-        return _ok({"value": list(locks.values())})
-    name = rest[0]
-    if method in ("PUT",):
-        pr = (payload or {}).get("properties") or {}
-        lt = pr.get("level", "ReadOnly")
-        if lt not in LOCK_TYPES:
-            raise _E(400, "InvalidLockType", f"Invalid lock level '{lt}'; use one of {', '.join(LOCK_TYPES)}.")
-        locks[name] = {"id": f"{rec['id']}/locks/{name}", "name": name, "type": f"{NAMESPACE}/sites/locks",
-                       "properties": {"level": lt, "notes": pr.get("notes", "")}}
-        return _ok(locks[name])
-    if method == "GET":
-        if name not in locks:
-            raise _E(404, "ResourceNotFound", f"Lock '{name}' was not found.")
-        return _ok(locks[name])
-    if method == "DELETE":
-        had = locks.pop(name, None)
-        return _ok(None, 200 if had else 204)
-    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
-
-
-def _site_action(rec, action, method):
-    if action in ("start", "stop", "restart") and method == "POST":
-        rec["properties"]["state"] = "Stopped" if action == "stop" else "Running"
-        return _ok(None, 200, lro=True, rid=rec["id"], verb=action)
-    if action in ("publishxml", "resetpublishxml") and method == "POST":
-        token = _h(rec["id"], "publish", _now() if action == "resetpublishxml" else "", n=24)
-        prof = (f'<publishData><publishProfile profileName="{rec["name"]} - Web Deploy" '
-               f'publishUrl="{rec["name"]}.scm.azurewebsites.net:443" userName="${rec["name"]}" '
-               f'userPWD="{token}" destinationAppUrl="https://{rec["properties"]["defaultHostName"]}" '
-               f'/></publishData>')
-        return _ok({"value": prof})
-    return _err(404, "ResourceTypeNotSupported", f"Action '{action}' is not supported on sites.")
-
-
-# ── dispatch ────────────────────────────────────────────────────────────────
-def _list(state, sub, rg):
-    items = []
-    for rec in state.values():
-        if str(rec.get("_type", "")).lower() != f"{NAMESPACE}/sites".lower() or rec.get("_sub") != sub:
-            continue
-        if rg is not None and (rec.get("_rg") or "").lower() != rg.lower():
-            continue
-        items.append(_site_view(rec))
-    return _ok({"value": items})
-
-
+# ── dispatch ─────────────────────────────────────────────────────────────────
 def dispatch(state, method, sub, rg, chain, names, payload=None, query=None):
-    """Handle one ``Microsoft.Web/sites`` ARM request.
+    """Handle one ``Microsoft.Web`` ARM request.
 
-    ``chain``  = path tokens after the namespace, e.g. ``["sites", "fn1", "functions", "f1"]``
-    ``state``  = the ARM resource map (lower-cased id → record).
+    ``chain`` = path tokens after the namespace, e.g. ``["sites", "my-app", "config", "web"]``
+    ``state`` = the ARM resource map (lower-cased id → record), shared with the rest of ARM.
     """
     method = (method or "GET").upper()
-    payload = payload if isinstance(payload, dict) else {}
+    # Own copy: records keep parts of the body, and callers may reuse theirs.
+    payload = json.loads(json.dumps(payload)) if isinstance(payload, dict) else {}
+    chain = list(chain or [])
     try:
-        return _dispatch(state, method, sub, rg, list(chain), payload)
+        kind = chain[0].lower() if chain else ""
+        if kind == "serverfarms":
+            return _plan_ops(state, sub, rg, chain, method, payload)
+        if kind == "sites":
+            return _site_ops(state, sub, rg, chain, method, payload)
+        return _err(404, "ResourceTypeNotSupported", f"The resource type '{NAMESPACE}/{chain[0] if chain else ''}' is not supported.")
     except _E as e:
         return _err(e.status, e.code, e.message)
 
 
-def _dispatch(state, method, sub, rg, chain, payload):
-    if not chain or chain[0].lower() not in TYPES:
-        return _err(404, "ResourceTypeNotSupported", f"The resource type '{NAMESPACE}/{chain[0] if chain else ''}' is not supported.")
-    if len(chain) == 1:
-        if method != "GET":
-            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
-        return _list(state, sub, rg)
-    name = chain[1]
-    rid = _canon(sub, rg, ["sites"], [name])
-    rec = state.get(rid.lower())
-    rest = chain[2:]
-    if rest:
-        if rec is None:
-            raise _not_found(name, rg)
-        r0 = rest[0].lower()
-        if r0 == "functions":
-            return _functions_ops(state, rec, rest[1:], method, payload)
-        if r0 == "config":
-            return _config_ops(rec, rest[1:], method, payload)
-        if r0 == "host":
-            return _host_ops(rec, rest[1:], method, payload)
-        if r0 == "locks":
-            return _locks_ops(rec, rest[1:], method, payload)
-        return _site_action(rec, r0, method)
-    if method == "GET":
-        if rec is None:
-            raise _not_found(name, rg)
-        return _ok(_site_view(rec))
-    if method in ("PUT", "PATCH"):
-        if rg is None:
-            return _err(400, "InvalidResourceId", "Web sites must be created in a resource group.")
-        existed = rec is not None
-        rec = _put_site(state, sub, rg, rid, name, payload, method)
-        return _ok(_site_view(rec), 200 if existed else 201, lro=True, rid=rid, verb=method.lower())
-    if method == "DELETE":
-        state.pop(rid.lower(), None)
-        return _ok(None, 200 if rec is not None else 204, rid=rid, verb="delete")
-    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+def handles(chain):
+    return bool(chain) and chain[0].lower() in TYPES
 
 
 def resource_types():
-    return [("sites", API_VERSION)]
+    return [(t, API_VERSION) for t in TYPES]

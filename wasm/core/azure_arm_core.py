@@ -38,7 +38,7 @@ try:                                              # Container Apps engine (Micro
 except ImportError:
     import azure_app_core as app_engine            # type: ignore
 
-try:                                              # Web Apps / Function Apps engine (Microsoft.Web)
+try:                                              # App Service engine (Microsoft.Web: web apps, function apps, plans)
     from core import azure_webapp_core as web_engine
 except ImportError:
     import azure_webapp_core as web_engine          # type: ignore
@@ -87,7 +87,6 @@ DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
 
 _BY_TYPE = {(c["namespace"].lower(), c["type"].lower()): c for c in CATALOG}
-_WEB_WRITE_VERBS = {"put": "write", "patch": "write", "delete": "delete"}  # ARM activity-log verb convention
 
 
 def _record_activity(resource_name: str, action: str, detail: str = "") -> None:
@@ -266,37 +265,21 @@ class AzureArm:
     def __init__(self, base: str = ""):
         self.state: dict = {}
         self.operations: dict = {}
-        self.activity: dict = {}                # resource id (lower) -> [Microsoft.Insights eventtypes entries]
         self._base = base                       # endpoint/LRO URL prefix (relative by default)
 
-    # ── Microsoft.Insights/eventtypes (resource-scoped Activity log) ───────
+    # ── per-resource ARM activity entries (Microsoft.Insights/eventtypes rows) ──
+    # Kept IN self.state (so they persist with the rest of ARM, offline and Nano alike) by the one
+    # writer, azure_webapp_core._record_event — the Microsoft.Web engine records its own writes
+    # through it, and anything else here can via _record_activity. Read back by the single
+    # eventtypes handler in _arm, merged with the shared nano_events feed.
     def _record_activity(self, rid: str, operation_name: str, sub: str, status: str = "Succeeded"):
-        entry = {
-            "eventTimestamp": _now(), "submissionTimestamp": _now(),
-            "eventName": {"value": status, "localizedValue": status},
-            "operationName": {"value": operation_name, "localizedValue": operation_name},
-            "status": {"value": status, "localizedValue": status},
-            "subStatus": {"value": "", "localizedValue": ""},
-            "resourceId": rid, "resourceGroupName": _rg_from_id(rid) or "",
-            "resourceProviderName": {"value": "Microsoft.Web", "localizedValue": "Microsoft Web"},
-            "subscriptionId": sub, "caller": "admin@vyomi.local", "level": "Informational",
-            "id": f"{rid}/events/{uuid.uuid4().hex}",
-        }
-        bucket = self.activity.setdefault(rid.lower(), [])
-        bucket.append(entry)
-        if len(bucket) > 200:
-            del bucket[: len(bucket) - 200]
+        web_engine._record_event(self.state, sub, _rg_from_id(rid), rid, operation_name, operation_name, status)
 
-    def _activity_log(self, method: str, query: dict):
+    def _activity_log(self, method: str, query: dict, sub: str = DEFAULT_SUBSCRIPTION):
         if method != "GET":
             return _err(405, "MethodNotAllowed", "The activity log supports GET only.")
-        m = re.search(r"resourceUri eq '([^']+)'", query.get("$filter") or "")
-        if m:
-            events = list(self.activity.get(m.group(1).lower(), []))
-        else:
-            events = [e for bucket in self.activity.values() for e in bucket]
-        events.sort(key=lambda e: e.get("eventTimestamp") or "", reverse=True)
-        return _ok({"value": events})
+        r = monitor_engine.dispatch(self.state, "GET", sub, None, ["eventtypes", "management", "values"], [], {}, query)
+        return {"status": r["status"], "headers": {}, "body": r["body"]}
 
     # ── public entry ──────────────────────────────────────────────────────
     def handle(self, method: str, path: str, query=None, body=None):
@@ -369,9 +352,9 @@ class AzureArm:
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "Activity log supports GET only.")
             # One feed, two sources: the per-resource ARM entries this engine records
-            # (self.activity — e.g. Microsoft.Web writes) and the shared cloudsim event log
+            # (eventtypes rows in self.state — e.g. Microsoft.Web writes) and the shared cloudsim event log
             # (nano_events — e.g. Event Grid / locks). Newest first, same $filter scoping.
-            own = self._activity_log(method, query)["body"].get("value", [])
+            own = self._activity_log(method, query, sub)["body"].get("value", [])
             shared = _activity_log_query(query)["body"].get("value", [])
             seen = {e.get("id") for e in own}
             events = own + [e for e in shared if e.get("id") not in seen]
@@ -430,6 +413,13 @@ class AzureArm:
         if namespace.lower() == "microsoft.eventgrid" and eventgrid_engine.handles(chain):
             return self._eventgrid(method, sub, rg, chain, payload, query)
 
+        # Microsoft.Web (App Service: web apps + function apps by `kind`, App Service plans): the
+        # substrate-free engine owns the semantics (and writes the Activity log rows the
+        # Microsoft.Insights eventtypes feed in the monitor engine reads back); this class's flat
+        # store is its resource map (so it persists with the rest of ARM).
+        if namespace.lower() == "microsoft.web":
+            return self._web(method, sub, rg, chain, payload, query)
+
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
             supported = ", ".join(sorted(c["namespace"] + "/" + c["type"] for c in CATALOG))
@@ -440,11 +430,6 @@ class AzureArm:
         # class's flat store is its resource map (so it persists with the rest of ARM).
         if namespace.lower() == "microsoft.app":
             return self._app(method, sub, rg, chain, payload, query)
-
-        # Microsoft.Web (Function Apps): the substrate-free engine owns the semantics; this
-        # class's flat store is its resource map (so it persists with the rest of ARM).
-        if namespace.lower() == "microsoft.web":
-            return self._web(method, sub, rg, chain, payload, query)
 
         # POST action verbs (listKeys / start / powerOff / …)
         if method == "POST" and is_collection and len(type_chain) >= 3 and names:
@@ -592,23 +577,13 @@ class AzureArm:
         r = cost_engine.dispatch_billingbenefits(self.state, method, sub, chain, payload, query, base=self._base)
         return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
     def _web(self, method, sub, rg, chain, payload, query):
-        web = web_engine
-        r = web.dispatch(self.state, method, sub, rg, chain, [], payload, query)
+        r = web_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query)
         resp = {"status": r["status"], "headers": {}, "body": r["body"]}
         if r["lro"] and r["status"] < 300:
             resp["status"] = 200 if r["status"] == 201 else r["status"]
             op_id = self._make_operation(r["rid"], method)
-            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or web.API_VERSION}"
+            url = f"{self._base}/api/azure/operations/{op_id}?api-version={query.get('api-version') or web_engine.API_VERSION}"
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
-        if r["status"] < 300 and method in ("PUT", "PATCH", "DELETE", "POST") and len(chain) >= 2 and chain[0].lower() == "sites":
-            site_rid = _canonical_id(sub, rg, ["Microsoft.Web", "sites"], [chain[1]])
-            # Sub-resource writes (functions/{name}, locks/{name}, host/default/...) fold their
-            # own path tail into the operation name, same as the real ARM convention of one
-            # activity-log row per resource instance touched (not just the top-level site).
-            tail = "/".join(chain[2:]) if len(chain) > 3 or (len(chain) == 3 and chain[2].lower() in ("functions", "config", "host", "locks")) else ""
-            verb = r.get("verb") or method.lower()
-            verb = _WEB_WRITE_VERBS.get(verb, verb)
-            self._record_activity(site_rid, f"Microsoft.Web/sites/{(tail + '/') if tail else ''}{verb}", sub)
         return resp
 
     # ── CRUD primitives ───────────────────────────────────────────────────

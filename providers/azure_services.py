@@ -874,6 +874,12 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if namespace.lower() == "microsoft.billingbenefits":
         return await _handle_billingbenefits(request, method, sub, chain, base)
 
+    # Microsoft.Web (App Service: web apps + function apps by `kind`, App Service plans): a
+    # dedicated engine (core/azure_webapp_core.py) owns the semantics and writes the Activity
+    # log rows the Microsoft.Insights eventtypes feed reads back; the ARM store is its map.
+    if namespace.lower() == "microsoft.web":
+        return await _handle_webapp(request, method, sub, rg, chain, names, base)
+
     top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
     if top is None:
         return _error(404, "ResourceTypeNotSupported",
@@ -884,11 +890,6 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     # environment/app/revision/job semantics; the ARM store below is its resource map.
     if namespace.lower() == "microsoft.app":
         return await _handle_app(request, method, sub, rg, chain, names, base)
-
-    # Microsoft.Web (Function Apps): a dedicated engine (core/azure_webapp_core.py) owns the
-    # site/function/config/keys semantics; the ARM store below is its resource map.
-    if namespace.lower() == "microsoft.web":
-        return await _handle_webapp(request, method, sub, rg, chain, names, base)
 
     # POST action verbs (listKeys, regenerateKey, listConnectionStrings, …):
     # the trailing type segment is the action, names[-1] the target resource.
