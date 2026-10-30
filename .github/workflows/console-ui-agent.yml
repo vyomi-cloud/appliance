@@ -52,7 +52,7 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      max-parallel: 3   # shared Claude subscription (CLAUDE_CODE_OAUTH_TOKEN): keep batches small
+      max-parallel: 5
       matrix:
         target: ${{ fromJson(needs.plan.outputs.targets) }}
     concurrency:
