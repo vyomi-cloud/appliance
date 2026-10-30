@@ -5,8 +5,8 @@
  *                  (http://host/{account}), so the console and an SDK share one namespace per account.
  * The SharedKey header carries the account name (the routing signal Vyomi reads); like SigV4
  * in the AWS lens, the signature itself is not verified by the simulator. */
-import { asList, WIRE_BASE, WireError, xmlToObj } from "../../../common/wire.js";
-import { armType, parseId } from "../../kit/arm.js";
+import { asList, restJson, WIRE_BASE, WireError, xmlToObj } from "../../../common/wire.js";
+import { armType, getSubscription, parseId } from "../../kit/arm.js";
 
 export const ARM = armType("Microsoft.Storage", "storageAccounts", "2023-05-01");
 export const X_MS_VERSION = "2021-12-02";
@@ -88,6 +88,82 @@ export function skuLabel(sku = "") {
   return ra ? `Read-access ${label.charAt(0).toLowerCase()}${label.slice(1)}`.replace(/\((\w+)\)/, "(RA-$1)") : label;
 }
 
+// ── Locks (Microsoft.Authorization/locks, resource-scoped extension resource) ──────────
+const LOCK_API_VERSION = "2020-05-01";
+const lockPath = (rg, name, lockName) => `${ARM.path(rg, name)}/providers/Microsoft.Authorization/locks${lockName ? `/${encodeURIComponent(lockName)}` : ""}`;
+
+export const listLocks = async (rg, name) => (await restJson("GET", lockPath(rg, name), { query: { "api-version": LOCK_API_VERSION } })).value || [];
+export const putLock = (rg, name, lockName, body) => restJson("PUT", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION }, body });
+export const deleteLock = (rg, name, lockName) => restJson("DELETE", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION } });
+
+// ── activity log (Microsoft.Insights/eventtypes/management/values, filtered to this account) ──
+export const listActivityLog = async (rg, name) => {
+  const rid = ARM.path(rg, name);
+  const query = { "api-version": "2015-04-01", "$filter": `resourceUri eq '${rid}'` };
+  return (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/eventtypes/management/values`, { query })).value || [];
+};
+
+// ── Data protection (Microsoft.Storage/storageAccounts/blobServices/default) ───────────
+// A real nested ARM resource (BlobServices_SetServiceProperties / GetServiceProperties),
+// round-tripped exactly as configured — Vyomi stores these flags but the Blob data plane
+// (core/azure_blob_core.py) does not enforce soft delete, versioning or the change feed.
+const blobServicesPath = (rg, name) => `${ARM.path(rg, name)}/blobServices/default`;
+export const getBlobServiceProperties = async (rg, name) => {
+  try { return (await restJson("GET", blobServicesPath(rg, name), { query: { "api-version": "2023-01-01" } })).properties || {}; }
+  catch { return {}; }
+};
+export const putBlobServiceProperties = (rg, name, properties) =>
+  restJson("PUT", blobServicesPath(rg, name), { query: { "api-version": "2023-01-01" }, body: { properties } });
+
+// ── Queues data plane (Azure Storage Queue REST) ────────────────────────────────────────
+// core/azure_queue_core.py keeps a single global queue namespace per Nano instance (the
+// same simplification the Key Vault keys/secrets stores make) — queues are not isolated
+// per storage account. No Authorization header is sent: the account segment below is
+// cosmetic (it shapes the URL like the real per-account Queue service) and the router's
+// SharedKey-name heuristic that disambiguates blob-vs-queue only fires when a SharedKey
+// header names that same segment, so omitting it keeps every call routed to the queue core.
+async function queueReq(method, path, { query, body } = {}) {
+  const qs = query ? "?" + new URLSearchParams(query).toString() : "";
+  const res = await fetch(`${WIRE_BASE}${path}${qs}`, { method, body, headers: { "x-ms-version": X_MS_VERSION, "x-ms-date": new Date().toUTCString() } });
+  const text = method === "HEAD" || res.status === 204 ? "" : await res.text();
+  if (!res.ok) {
+    let code = res.headers.get("x-ms-error-code"), message;
+    if (text.trim().startsWith("<")) {
+      const doc = new DOMParser().parseFromString(text, "application/xml");
+      code = code || doc.querySelector("Code")?.textContent;
+      message = doc.querySelector("Message")?.textContent;
+    }
+    throw new WireError(res.status, code, message, text);
+  }
+  return { res, text };
+}
+const escXml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const msgXml = (text) => xml(text).QueueMessagesList?.QueueMessage;
+
+export const queueUrl = (name) => `${location.origin}${WIRE_BASE}/${encodeURIComponent(name)}`;
+
+export async function listQueues(account) {
+  const { text } = await queueReq("GET", `/${encodeURIComponent(account)}`, { query: { comp: "list" } });
+  return asList(xml(text).Queues?.Queue).map((q) => ({ name: q.Name }));
+}
+export const createQueue = (name) => queueReq("PUT", `/${encodeURIComponent(name)}`);
+export const deleteQueue = (name) => queueReq("DELETE", `/${encodeURIComponent(name)}`);
+export async function getQueueMetadata(name) {
+  const { res } = await queueReq("GET", `/${encodeURIComponent(name)}`, { query: { comp: "metadata" } });
+  return { approximateMessageCount: Number(res.headers.get("x-ms-approximate-messages-count") || 0) };
+}
+export async function peekMessages(name, num = 32) {
+  const { text } = await queueReq("GET", `/${encodeURIComponent(name)}/messages`, { query: { peekonly: "true", numofmessages: String(num) } });
+  return asList(msgXml(text)).map((m) => ({ id: m.MessageId, insertionTime: m.InsertionTime, expirationTime: m.ExpirationTime, dequeueCount: Number(m.DequeueCount || 0), text: m.MessageText }));
+}
+export async function receiveMessages(name, num = 32) {
+  const { text } = await queueReq("GET", `/${encodeURIComponent(name)}/messages`, { query: { numofmessages: String(num) } });
+  return asList(msgXml(text)).map((m) => ({ id: m.MessageId, popReceipt: m.PopReceipt, insertionTime: m.InsertionTime, expirationTime: m.ExpirationTime, dequeueCount: Number(m.DequeueCount || 0), text: m.MessageText }));
+}
+export const sendMessage = (name, text) => queueReq("POST", `/${encodeURIComponent(name)}/messages`, { body: `<QueueMessage><MessageText>${escXml(text)}</MessageText></QueueMessage>` });
+export const deleteMessage = (name, id, popReceipt) => queueReq("DELETE", `/${encodeURIComponent(name)}/messages/${encodeURIComponent(id)}`, { query: { popreceipt: popReceipt } });
+export const clearMessages = (name) => queueReq("DELETE", `/${encodeURIComponent(name)}/messages`);
+
 export function toArmBody(f) {
   const red = f.performance === "Standard" && f.readAccess && (f.redundancy === "GRS" || f.redundancy === "GZRS") ? `RA${f.redundancy}` : f.redundancy;
   return {
@@ -103,6 +179,7 @@ export function toArmBody(f) {
       minimumTlsVersion: f.minimumTls,
       allowedCopyScope: f.copyScope === "any" ? undefined : f.copyScope,
       isHnsEnabled: f.hns,
+      allowCrossTenantReplication: f.allowCrossTenantReplication,
       ...(f.performance === "Standard" ? { accessTier: f.accessTier } : {}),
       publicNetworkAccess: f.networkAccess === "disabled" ? "Disabled" : "Enabled",
       networkAcls: { defaultAction: f.networkAccess === "all" ? "Allow" : "Deny", bypass: "AzureServices", virtualNetworkRules: [], ipRules: [] },

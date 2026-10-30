@@ -26,7 +26,7 @@ export default function CreateStorageAccount() {
     resourceGroup: DEFAULT_RG, name: "", location: "eastus", performance: "Standard", premiumKind: "BlockBlobStorage",
     redundancy: "GRS", readAccess: true,
     secureTransfer: true, allowBlobPublicAccess: false, allowSharedKeyAccess: true, defaultToOAuth: false, minimumTls: "TLS1_2", copyScope: "any",
-    hns: false, accessTier: "Hot",
+    hns: false, accessTier: "Hot", allowCrossTenantReplication: false, primaryService: "blob",
     networkAccess: "all", routing: "MicrosoftRouting",
     tags: [{ name: "", value: "" }],
   });
@@ -78,19 +78,24 @@ export default function CreateStorageAccount() {
             {LOCATIONS.map(([id, l]) => <option key={id} value={id}>({id.includes("us") ? "US" : id.includes("europe") || id === "uksouth" ? "Europe" : "Asia Pacific"}) {l}</option>)}
           </Select>
         </FormRow>
+        <FormRow label="Primary service" htmlFor="sa-primaryservice">
+          <Select id="sa-primaryservice" value={f.primaryService} onChange={set("primaryService")} aria-label="Primary service">
+            <option value="blob">Azure Blob Storage or Azure Data Lake Storage Gen 2</option>
+            <option value="files">Azure Files</option>
+            <option value="other">Other (tables and queues)</option>
+          </Select>
+        </FormRow>
         <FormRow label="Performance" required>
           <RadioGroup value={f.performance} onChange={(_, d) => setF((x) => ({ ...x, performance: d.value, redundancy: d.value === "Premium" ? "LRS" : x.redundancy }))} aria-label="Performance">
             <Radio value="Standard" label="Standard: Recommended for most scenarios (general-purpose v2 account)" />
             <Radio value="Premium" label="Premium: Recommended for scenarios that require low latency." />
           </RadioGroup>
         </FormRow>
-        {f.performance === "Premium" && (
-          <FormRow label="Premium account type" required htmlFor="sa-pk">
-            <Select id="sa-pk" value={f.premiumKind} onChange={set("premiumKind")} aria-label="Premium account type">
-              {api.PREMIUM_KINDS.map(([k, l]) => <option key={l} value={k}>{l}</option>)}
-            </Select>
-          </FormRow>
-        )}
+        <FormRow label="Premium account type" required={f.performance === "Premium"} htmlFor="sa-pk">
+          <Select id="sa-pk" disabled={f.performance !== "Premium"} value={f.premiumKind} onChange={set("premiumKind")} aria-label="Premium account type">
+            {api.PREMIUM_KINDS.map(([k, l]) => <option key={l} value={k}>{l}</option>)}
+          </Select>
+        </FormRow>
         <FormRow label="Redundancy" required htmlFor="sa-red">
           <Select id="sa-red" value={f.redundancy} onChange={set("redundancy")} aria-label="Redundancy">
             {redOpts.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
@@ -126,7 +131,7 @@ export default function CreateStorageAccount() {
       <FormSection title="Hierarchical Namespace" description="Hierarchical namespace, complemented by Data Lake Storage Gen2 endpoint, enables file and directory semantics.">
         <FormRow label="Enable hierarchical namespace"><Checkbox checked={f.hns} onChange={chk("hns")} aria-label="Enable hierarchical namespace" /></FormRow>
       </FormSection>
-      <NotSimulatedContainer title="Access protocols" feature="SFTP and network file system (NFS v3) access" />
+      <NotSimulatedContainer title="Access protocols" feature="Enable SFTP and Enable network file system v3 access" />
       {f.performance === "Standard" && (
         <FormSection title="Blob storage">
           <FormRow label="Access tier">
@@ -136,9 +141,10 @@ export default function CreateStorageAccount() {
               <Radio value="Cold" label="Cold: Optimized for rarely accessed data and backup scenarios" />
             </RadioGroup>
           </FormRow>
+          <FormRow label="Allow cross-tenant replication"><Checkbox checked={f.allowCrossTenantReplication} onChange={chk("allowCrossTenantReplication")} aria-label="Allow cross-tenant replication" /></FormRow>
         </FormSection>
       )}
-      <NotSimulatedContainer title="Azure Files" feature="Azure Files (large file shares)" />
+      <NotSimulatedContainer title="Azure Files" feature="Enable large file shares" />
     </>
   );
 
@@ -146,13 +152,20 @@ export default function CreateStorageAccount() {
     <>
       <InfoBar>{ENFORCEMENT}</InfoBar>
       <FormSection title="Network connectivity" description="You can connect to your storage account either publicly, via public IP addresses or service endpoints, or privately, using a private endpoint.">
-        <FormRow label="Network access" required>
-          <RadioGroup value={f.networkAccess} onChange={set("networkAccess")} aria-label="Network access">
-            <Radio value="all" label="Enable public access from all networks" />
-            <Radio value="selected" label="Enable public access from selected virtual networks and IP addresses" />
-            <Radio value="disabled" label="Disable public access and use private access" />
+        <FormRow label="Public network access" required>
+          <RadioGroup value={f.networkAccess === "disabled" ? "disabled" : "enabled"}
+            onChange={(_, d) => setF((x) => ({ ...x, networkAccess: d.value === "disabled" ? "disabled" : "all" }))} aria-label="Public network access">
+            <Radio value="enabled" label="Enabled" /><Radio value="disabled" label="Disabled" />
           </RadioGroup>
         </FormRow>
+        {f.networkAccess !== "disabled" && (
+          <FormRow label="Public network access scope" required>
+            <RadioGroup value={f.networkAccess} onChange={set("networkAccess")} aria-label="Public network access scope">
+              <Radio value="all" label="Enable from all networks" />
+              <Radio value="selected" label="Enable from selected virtual networks and IP addresses" />
+            </RadioGroup>
+          </FormRow>
+        )}
       </FormSection>
       {f.networkAccess === "selected" && <NotSimulatedContainer title="Virtual networks" feature="Virtual network and IP address rules for storage accounts" />}
       <NotSimulatedContainer title="Private endpoint" feature="Private endpoints for storage accounts" />
@@ -169,10 +182,11 @@ export default function CreateStorageAccount() {
 
   const dataProtection = (
     <>
-      <NotSimulatedContainer title="Recovery" feature="Point-in-time restore and soft delete for blobs, containers and file shares"
-        note="Deleted blobs and containers are removed immediately in Vyomi." />
-      <NotSimulatedContainer title="Tracking" feature="Blob versioning and the blob change feed" />
-      <NotSimulatedContainer title="Access control" feature="Version-level immutability support" />
+      <NotSimulatedContainer title="Recovery"
+        feature="Enable point-in-time restore for containers, Enable soft delete for blobs, Days to retain deleted blobs, Enable soft delete for containers, Days to retain deleted containers, Enable permanent delete for soft deleted items, Enable soft delete for file shares and Days to retain deleted file shares"
+        note="Deleted blobs and containers are removed immediately in Vyomi. These can be changed later under Data protection." />
+      <NotSimulatedContainer title="Tracking" feature="Enable versioning for blobs and Enable blob change feed" />
+      <NotSimulatedContainer title="Access control" feature="Enable version-level immutability support" />
     </>
   );
 
@@ -185,8 +199,8 @@ export default function CreateStorageAccount() {
           </RadioGroup>
         </FormRow>
       </FormSection>
-      <NotSimulatedContainer title="Customer-managed keys (CMK)" feature="Customer-managed keys for storage encryption" />
-      <NotSimulatedContainer title="Infrastructure encryption" feature="Infrastructure (double) encryption" />
+      <NotSimulatedContainer title="Customer-managed keys (CMK)" feature="Enable support for customer-managed keys for storage encryption" />
+      <NotSimulatedContainer title="Infrastructure encryption" feature="Enable infrastructure encryption (double encryption)" />
     </>
   );
 
