@@ -1,33 +1,6 @@
 {
- "at": "2026-10-29T23:51:23+00:00",
+ "at": "2026-10-30T00:51:26+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "sdk",
-   "service": "pypi:azure-storage-blob",
-   "kind": "release",
-   "key": "ver:pypi:azure-storage-blob:12.31.1",
-   "title": "pypi:azure-storage-blob: 12.31.0 \u2192 12.31.1",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:azure-storage-queue",
-   "kind": "release",
-   "key": "ver:pypi:azure-storage-queue:12.18.1",
-   "title": "pypi:azure-storage-queue: 12.18.0 \u2192 12.18.1",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:170ad3ea8496",
-   "title": "Amazon Managed Grafana now supports in-place upgrade to Grafana version 13.2",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/managed-grafana-upgrade-version-13-2/",
-   "detail": "Amazon Managed Grafana now supports in-place upgrade from Grafana version 12.4 to 13.2. Upgrading to version 13.2 brings features launched as part of open-source Grafana versions 13.0 to 13.2. These include Git Sync for dashboards, dynamic dashboards, and PromQL query support in the Amazon CloudWatch data source plugin. With Git Sync, you can treat dashboards as code by linking a workspace to a Git repository. Dashboard modifications can be tracked, reviewed, and reverted through version control. Dynamic dashboards bring a more adaptable approach to layout and paneling. You can construct respo",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
