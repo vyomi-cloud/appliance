@@ -1,0 +1,93 @@
+{
+  "_doc": "ui-spec page id -> v4 route (same contract as consoles/src/aws/services/*/spec-map.json).",
+  "event-grid-overview": { "route": "#/eventgrid" },
+  "event-grid-namespaces": { "route": "#/eventgrid/namespaces" },
+  "event-grid-system-topics": { "route": "#/eventgrid/systemtopics" },
+  "event-grid-topics": { "route": "#/eventgrid/topics", "live": "live-topic", "csvName": "event-grid-topics.csv" },
+  "event-grid-domains": { "route": "#/eventgrid/domains" },
+  "event-grid-partner-configurations": { "route": "#/eventgrid/partnerconfigurations" },
+  "event-grid-partner-topics": { "route": "#/eventgrid/partnertopics" },
+  "event-grid-partner-registrations": { "route": "#/eventgrid/partnerregistrations" },
+  "event-grid-partner-namespaces": { "route": "#/eventgrid/partnernamespaces" },
+  "create-event-grid-topic": { "route": "#/eventgrid/topics/create" },
+  "create-event-subscription": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/subscriptions/create",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-overview": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }, "live": "live-subscription"
+  },
+  "event-grid-topic-activity-log": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/activitylog",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-access-control-iam": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/accesscontrol",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-tags": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/tags",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-diagnose-and-solve-problems": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/diagnose",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-event-subscriptions": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/eventsubscriptions",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }, "live": "live-subscription"
+  },
+  "event-grid-topic-networking": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/networking",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-identity": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/identity",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-configuration": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/configuration",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-access-keys": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/accesskeys",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-properties": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/properties",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-locks": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/locks",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-alerts": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/alerts",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-metrics": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/metrics",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-diagnostic-settings": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/diagnosticsettings",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-logs": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/logs",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-tasks": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/tasks",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-export-template": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/exporttemplate",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  },
+  "event-grid-topic-support-troubleshooting": {
+    "route": "#/eventgrid/topics/cloudlearn-rg/uic-eg-topic/support",
+    "fixtures": ["az-eventgrid-topic"], "vars": { "resource-name": "uic-eg-topic" }
+  }
+}

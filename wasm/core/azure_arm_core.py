@@ -62,6 +62,11 @@ try:                                              # Azure Log Analytics engine (
 except ImportError:
     import azure_operationalinsights_core as oi_engine   # type: ignore
 
+try:                                              # Event Grid event subscriptions (Microsoft.EventGrid, scoped to a topic)
+    from core import azure_eventgrid_core as eventgrid_engine
+except ImportError:
+    import azure_eventgrid_core as eventgrid_engine       # type: ignore
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -292,6 +297,12 @@ class AzureArm:
         if namespace.lower() == "microsoft.cognitiveservices":
             return self._cogs(method, sub, rg, chain, payload, query)
 
+        # Microsoft.EventGrid/topics/{name}/providers/Microsoft.EventGrid/eventSubscriptions/{name}:
+        # a real ARM extension resource (scoped to the topic), so the chain re-enters "providers"
+        # instead of alternating type/name — the eventgrid engine owns that shape.
+        if namespace.lower() == "microsoft.eventgrid" and eventgrid_engine.handles(chain):
+            return self._eventgrid(method, sub, rg, chain, payload, query)
+
         top = _BY_TYPE.get((namespace.lower(), type_chain[1].lower()))
         if top is None:
             supported = ", ".join(sorted(c["namespace"] + "/" + c["type"] for c in CATALOG))
@@ -374,6 +385,10 @@ class AzureArm:
             resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
         return resp
 
+    def _eventgrid(self, method, sub, rg, chain, payload, query):
+        r = eventgrid_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query, base=self._base)
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
     def _appconfig(self, method, sub, rg, chain, payload, query):
         ac = appconfig_engine
         r = ac.dispatch(self.state, method, sub, rg, chain, [], payload, query)
@@ -435,6 +450,8 @@ class AzureArm:
             rec["tags"] = _merge(rec.get("tags", {}), payload["tags"])
         if isinstance(payload.get("sku"), dict):
             rec["sku"] = _merge(rec.get("sku", {}), payload["sku"])
+        if isinstance(payload.get("identity"), dict):
+            rec["identity"] = _merge(rec.get("identity", {}), payload["identity"])
         if isinstance(payload.get("properties"), dict):
             rec["properties"] = _merge(rec.get("properties", {}), payload["properties"])
 
