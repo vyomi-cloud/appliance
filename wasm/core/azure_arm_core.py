@@ -83,6 +83,11 @@ try:                                              # Management locks (Microsoft.
 except ImportError:
     import azure_locks_core as locks_engine        # type: ignore
 
+try:                                              # VM size catalog (vcpu/ram/family per real Azure size name)
+    from core import instance_catalog
+except ImportError:
+    import instance_catalog                        # type: ignore
+
 DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
@@ -253,6 +258,43 @@ def _rg_from_id(rid: str):
     return None
 
 
+# GET .../Microsoft.Compute/locations/{location}/vmSizes and GET .../virtualMachines/{vm}/vmSizes
+# (azure.vms.size): real ARM VirtualMachineSize shape plus two reference-only extras (series,
+# maxIops) the console's Size table shows — all numbers derived from instance_catalog.AZURE
+# (the same catalog CloudSimBridge uses), never baked into the console itself.
+_VM_SIZE_OS_DISK_MB = 1047552  # real Azure constant: max OS disk size for a generalized image
+_SERIES_LABEL = {"burstable": "B-series", "general": "Dsv5-series", "compute": "Fsv2-series",
+                  "memory": "Esv5-series", "storage": "Lsv3-series", "gpu": "NC-series"}
+# Real published Azure max uncached disk IOPS, by vCPU count — shared across the general /
+# compute / memory families at the same vCPU count (confirmed against Dsv5/Fsv2/Esv5 docs).
+_IOPS_BY_VCPU = {1: 400, 2: 3750, 4: 6400, 8: 12800, 16: 25600, 32: 51200}
+_IOPS_BURSTABLE = {1: 400, 2: 1300, 4: 2400, 8: 4800}
+
+
+def _max_iops(family: str, vcpu: int) -> int:
+    if family == "burstable":
+        return _IOPS_BURSTABLE.get(vcpu, min(vcpu * 600, 4800))
+    if family in ("storage", "gpu"):
+        return 20000
+    return _IOPS_BY_VCPU.get(vcpu, min(vcpu * 1600, 80000))
+
+
+def _vm_size_entry(name: str, shape: dict) -> dict:
+    vcpu, ram_mb, family = shape["vcpu"], shape["ram_mb"], shape["family"]
+    max_data_disks = min(vcpu * (4 if family == "gpu" else 2), 64 if family == "gpu" else 32)
+    resource_disk_gib = {"burstable": vcpu * 4, "storage": vcpu * 240, "gpu": vcpu * 55}.get(family, 0)
+    series = "M-series" if name.startswith("Standard_M") else _SERIES_LABEL.get(family, "General purpose")
+    return {
+        "name": name, "numberOfCores": vcpu, "memoryInMB": ram_mb,
+        "osDiskSizeInMB": _VM_SIZE_OS_DISK_MB, "resourceDiskSizeInMB": resource_disk_gib * 1024,
+        "maxDataDiskCount": max_data_disks, "series": series, "maxIops": _max_iops(family, vcpu),
+    }
+
+
+def _vm_sizes() -> list:
+    return [_vm_size_entry(name, shape) for name, shape in sorted(instance_catalog.AZURE.items())]
+
+
 def _ok(body, status=200, headers=None):
     return {"status": status, "headers": headers or {}, "body": body}
 
@@ -410,6 +452,15 @@ class AzureArm:
                 self.sub_tags.pop(key, None)
                 return _ok(None, status=200)
             return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+        # Microsoft.Compute/.../vmSizes (azure.vms.size): subscription+location scoped
+        # (.../providers/Microsoft.Compute/locations/{location}/vmSizes) or resource-scoped to
+        # an existing VM (.../virtualMachines/{vm}/vmSizes) — a derived read, not a stored
+        # resource, so it's caught before the generic type/name alternation below (which would
+        # 404 "locations" as an unknown Microsoft.Compute type).
+        if namespace.lower() == "microsoft.compute" and chain and chain[-1].lower() == "vmsizes":
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "vmSizes supports GET only.")
+            return _ok({"value": _vm_sizes()})
 
         # Microsoft.Insights/eventtypes/management/values: the subscription-wide ARM activity
         # log read API (not resource-scoped — no "providers" re-entry — so it must be caught
