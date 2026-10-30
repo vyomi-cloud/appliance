@@ -1,0 +1,246 @@
+{
+ "$doc": "Vyomi capability registry — Pub/Sub. One entry per console section; level per substrate (nano = shared core, also dev_server/unified ingress; offline = appliance). Proven by tests/conformance/test_capabilities.py — a claim the backend does not honour fails CI.",
+ "gcp.pubsub.topics.crud": {
+  "title": "Topics (create, list, get, patch, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "topics.create",
+   "topics.get",
+   "topics.list",
+   "topics.patch",
+   "topics.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.topics.config": {
+  "title": "Topic labels, message retention and CMEK",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "Labels and messageRetentionDuration are stored and returned exactly as configured.",
+   "kmsKeyName is stored and returned, but Vyomi does not call Cloud KMS to encrypt/decrypt message data — there is no real encryption-at-rest difference between a Google-managed key and a customer-managed one in Vyomi."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.topics.schema": {
+  "title": "Attach a schema to a topic",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "schemaSettings (schema name + encoding) is stored on the topic and returned as configured.",
+   "Published messages are never validated against the schema — a payload that violates the schema still publishes successfully."
+  ],
+  "api": [
+   "topics.create",
+   "schemas.create",
+   "schemas.get",
+   "schemas.list",
+   "schemas.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.publish": {
+  "title": "Publish messages (attributes, ordering key)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "topics.publish"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.crud": {
+  "title": "Subscriptions (create, list, get, patch, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "subscriptions.create",
+   "subscriptions.get",
+   "subscriptions.list",
+   "subscriptions.patch",
+   "subscriptions.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.pull-ack": {
+  "title": "Pull, acknowledge, ack-deadline redelivery, message retention",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "A message not acknowledged within ackDeadlineSeconds becomes eligible for redelivery the next time the subscription is pulled, rather than on a background timer."
+  ],
+  "api": [
+   "subscriptions.pull",
+   "subscriptions.acknowledge"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.dead-lettering": {
+  "title": "Dead-letter topic after maxDeliveryAttempts",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "subscriptions.create",
+   "subscriptions.pull"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.push": {
+  "title": "Push delivery config",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "pushConfig.pushEndpoint is stored and returned exactly as configured.",
+   "Vyomi never makes the outbound HTTP call — a push subscriber is not actually invoked. Use Pull delivery to receive messages in Vyomi."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.ordering-exactly-once": {
+  "title": "Message ordering and exactly-once delivery flags",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "enableMessageOrdering and enableExactlyOnceDelivery are stored and returned as configured.",
+   "Vyomi does not enforce per-key ordering or deduplicate redelivered messages — a subscriber may still see messages out of order or more than once."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.retry-policy": {
+  "title": "Retry policy (immediate vs. exponential backoff)",
+  "level": {
+   "nano": "config_only",
+   "offline": "config_only"
+  },
+  "limitations": [
+   "retryPolicy is stored and returned as configured; Vyomi redelivers on the next pull after the ack deadline regardless of the configured backoff timing."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.subscriptions.filter": {
+  "title": "Subscription message filter",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Pub/Sub's filter expression language isn't implemented — every message is delivered to every subscription on its topic regardless of attributes."
+  ]
+ },
+ "gcp.pubsub.subscriptions.bigquery-gcs-delivery": {
+  "title": "Write to BigQuery / write to Cloud Storage delivery",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "BigQuery and Cloud Storage aren't Vyomi products yet, so there is nowhere for this delivery type to write. Choose Pull or Push instead."
+  ]
+ },
+ "gcp.pubsub.topics.ingestion": {
+  "title": "Topic ingestion from external sources (AWS/Azure/Kafka/CDC)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi has no connectors to AWS, Azure, Kafka or database CDC sources, so a topic can't be configured to ingest from them."
+  ]
+ },
+ "gcp.pubsub.topics.message-transforms": {
+  "title": "Message transforms (JavaScript UDFs on publish)",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi does not run a JavaScript transform pipeline on published messages."
+  ]
+ },
+ "gcp.pubsub.metrics": {
+  "title": "Topic / subscription metrics and monitoring charts",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Vyomi does not collect the time-series metrics (throughput, backlog, oldest unacked age) the console's Metrics tab charts."
+  ]
+ },
+ "gcp.pubsub.snapshots.crud": {
+  "title": "Snapshots (create, list, get, delete) and seek",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "snapshots.create",
+   "snapshots.get",
+   "snapshots.list",
+   "snapshots.delete",
+   "subscriptions.seek"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ },
+ "gcp.pubsub.schemas.crud": {
+  "title": "Schemas (create, list, get, delete)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "api": [
+   "schemas.create",
+   "schemas.get",
+   "schemas.list",
+   "schemas.delete"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_pubsub_core.py"
+  ]
+ }
+}
