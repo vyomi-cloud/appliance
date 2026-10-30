@@ -45,6 +45,15 @@ from . import vault_client as vc
 _kms_keys: dict[str, dict] = {}
 # Module-level KMS alias store: alias_name -> key_id
 _kms_aliases: dict[str, str] = {}
+_kms_alias_created: dict[str, float] = {}
+_kms_grants: dict[str, dict[str, dict]] = {}
+
+
+def _kms_default_policy() -> str:
+    root = "arn:aws:iam::000000000000:root"
+    return json.dumps({"Version": "2012-10-17", "Id": "key-default-1", "Statement": [
+        {"Sid": "Enable IAM User Permissions", "Effect": "Allow", "Principal": {"AWS": root},
+         "Action": "kms:*", "Resource": "*"}]}, indent=2)
 
 
 def _active_space_id(request: Request) -> str:
@@ -231,14 +240,60 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
         _kms_aliases[alias_name] = target_key_id
         return {}
     if op == "ListAliases":
+        want = _kms_resolve_key_name({"KeyId": body["KeyId"]}) if body.get("KeyId") else ""
         aliases = []
         for alias_name, target_key_id in _kms_aliases.items():
+            if want and target_key_id != want:
+                continue
             aliases.append({
                 "AliasName": alias_name,
                 "AliasArn": f"arn:aws:kms:us-east-1:000000000000:{alias_name}",
                 "TargetKeyId": target_key_id,
+                "CreationDate": _kms_alias_created.setdefault(alias_name, time.time()),
             })
         return {"Aliases": aliases, "Truncated": False}
+    if op in ("DeleteAlias", "UpdateAlias"):
+        alias_name = body.get("AliasName", "")
+        if alias_name not in _kms_aliases:
+            return {"__type": "NotFoundException", "message": f"Alias arn:aws:kms:us-east-1:000000000000:{alias_name} is not found."}
+        if op == "DeleteAlias":
+            _kms_aliases.pop(alias_name, None)
+        else:
+            _kms_aliases[alias_name] = _kms_resolve_key_name({"KeyId": body.get("TargetKeyId", "")})
+        return {}
+    if op in ("GetKeyPolicy", "PutKeyPolicy", "ListKeyPolicies", "ListGrants", "CreateGrant", "RevokeGrant", "RetireGrant"):
+        stored = _kms_keys.get(key_name)
+        if not stored:
+            return {"__type": "NotFoundException", "message": f"Key 'arn:aws:kms:us-east-1:000000000000:key/{key_name}' does not exist"}
+        if op == "ListKeyPolicies":
+            return {"PolicyNames": ["default"], "Truncated": False}
+        if op == "GetKeyPolicy":
+            return {"Policy": stored.get("Policy") or _kms_default_policy(), "PolicyName": "default"}
+        if op == "PutKeyPolicy":
+            try:
+                json.loads(body.get("Policy", ""))
+            except ValueError:
+                return {"__type": "MalformedPolicyDocumentException", "message": "Policy is not valid JSON."}
+            stored["Policy"] = body["Policy"]
+            return {}
+        grants = _kms_grants.setdefault(stored["KeyId"], {})
+        if op == "CreateGrant":
+            import uuid as _uuid
+            gid = _uuid.uuid4().hex + _uuid.uuid4().hex
+            grants[gid] = {"KeyId": stored["Arn"], "GrantId": gid, "Name": body.get("Name", ""),
+                           "CreationDate": time.time(), "GranteePrincipal": body.get("GranteePrincipal", ""),
+                           "RetiringPrincipal": body.get("RetiringPrincipal", ""),
+                           "IssuingAccount": "arn:aws:iam::000000000000:root",
+                           "Operations": list(body.get("Operations") or []),
+                           **({"Constraints": body["Constraints"]} if body.get("Constraints") else {})}
+            return {"GrantToken": gid[:64], "GrantId": gid}
+        if op == "ListGrants":
+            return {"Grants": [g for g in grants.values()], "Truncated": False}
+        gid = body.get("GrantId", "")
+        if gid not in grants:
+            return {"__type": "NotFoundException", "message": f"Grant ID {gid} not found"}
+        grants.pop(gid)
+        return {}
     return None
 
 

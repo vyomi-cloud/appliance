@@ -3516,6 +3516,107 @@ SUB_RENDERERS.dynamoquery = function(svc, full, host){
   host.append(out);
 };
 
+// ── KMS key tabs ─────────────────────────────────────────────────────
+// Read and written through the KMS wire API (ListAliases, GetKeyRotationStatus, GetKeyPolicy,
+// ListGrants, ...), the same operations the SDK/CLI use, so edits persist.
+async function kmsRpc(op, payload){
+  const r = await fetch(ORIGIN+"/", {method:"POST",
+    headers:{"Content-Type":"application/x-amz-json-1.1","X-Amz-Target":"TrentService."+op,
+             "Authorization":"AWS4-HMAC-SHA256 Credential=test/20260531/us-east-1/kms/aws4_request"},
+    body: JSON.stringify(payload||{})});
+  let j = {}; try { j = await r.json(); } catch(e) {}
+  return {ok:r.ok && !j.__type, status:r.status, json:j};
+}
+const kmsId = full => String(full.key_id || full.KeyId || full.name || "");
+function kmsReload(fn, svc, full, host, tab){ host.innerHTML = ""; return fn(svc, full, host, tab); }
+SUB_RENDERERS.kmsaliases = async function(svc, full, host){
+  const id = kmsId(full), r = await kmsRpc("ListAliases",{KeyId:id}), rows = r.json.Aliases || [];
+  host.append(el("h3",{class:"page-h"}, "Aliases ("+rows.length+")"));
+  if (!rows.length) host.append(el("div",{class:"empty"}, "This key has no aliases."));
+  else {
+    const t = el("table",{class:"aws"}); t.append(el("tr",{}, ...["Alias name","Alias ARN","Created",""].map(h => el("th",{}, h))));
+    rows.forEach(a => t.append(el("tr",{}, el("td",{class:"small"}, a.AliasName), el("td",{class:"small mono"}, a.AliasArn),
+      el("td",{class:"small"}, ddbWhen(a.CreationDate)),
+      el("td",{}, el("button",{class:"btn","data-testid":"kms-alias-del",onclick:async()=>{
+        await kmsRpc("DeleteAlias",{AliasName:a.AliasName}); kmsReload(SUB_RENDERERS.kmsaliases, svc, full, host); }}, "Delete")))));
+    host.append(t);
+  }
+  const inp = el("input",{placeholder:"alias/my-alias","data-testid":"kms-alias-name"});
+  host.append(el("div",{class:"kv-card",style:"margin-top:14px"}, el("div",{class:"h"},"Create alias"),
+    el("div",{class:"field"}, el("label",{},"Alias name"), inp),
+    el("button",{class:"btn primary","data-testid":"kms-alias-add",onclick:async()=>{
+      const n = inp.value.startsWith("alias/") ? inp.value : "alias/"+inp.value;
+      const c = await kmsRpc("CreateAlias",{AliasName:n,TargetKeyId:id});
+      if (c.ok) { toast("Alias created"); kmsReload(SUB_RENDERERS.kmsaliases, svc, full, host); } else toast("Create failed: "+(c.json.message||c.status),"err");
+    }}, "Create alias")));
+};
+SUB_RENDERERS.kmsrotation = async function(svc, full, host){
+  const id = kmsId(full), r = await kmsRpc("GetKeyRotationStatus",{KeyId:id}), on = !!r.json.KeyRotationEnabled;
+  ddbCard(host, "Automatic key rotation", [["Status", on ? "Enabled" : "Disabled"], ["Rotation period (days)", on ? r.json.RotationPeriodInDays : null]]);
+  const days = el("input",{type:"number",min:90,max:2560,value:r.json.RotationPeriodInDays||365,"data-testid":"kms-rotation-days"});
+  host.append(el("div",{class:"kv-card"}, ...(on ? [] : [el("div",{class:"field"}, el("label",{},"Rotation period (days)"), days)]),
+    el("button",{class:"btn primary","data-testid":"kms-rotation-toggle",onclick:async()=>{
+      const u = await kmsRpc(on ? "DisableKeyRotation" : "EnableKeyRotation", on ? {KeyId:id} : {KeyId:id,RotationPeriodInDays:+days.value});
+      if (u.ok) { toast("Rotation "+(on?"disabled":"enabled")); kmsReload(SUB_RENDERERS.kmsrotation, svc, full, host); } else toast("Update failed","err");
+    }}, on ? "Disable automatic rotation" : "Enable automatic rotation")));
+};
+SUB_RENDERERS.kmspolicy = async function(svc, full, host){
+  const id = kmsId(full), r = await kmsRpc("GetKeyPolicy",{KeyId:id,PolicyName:"default"});
+  const ta = el("textarea",{style:"width:100%;min-height:260px;font-family:Consolas,Menlo,monospace","data-testid":"kms-policy"}); ta.value = r.json.Policy || "";
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"},"Key policy"), el("div",{class:"field"}, ta),
+    el("button",{class:"btn primary","data-testid":"kms-policy-save",onclick:async()=>{
+      const u = await kmsRpc("PutKeyPolicy",{KeyId:id,PolicyName:"default",Policy:ta.value});
+      if (u.ok) toast("Key policy saved"); else toast("Save failed: "+(u.json.message||u.status),"err");
+    }}, "Save changes")));
+};
+// Key users / administrators are the principals of the matching key-policy statement
+// (the console's "Allow use of the key" / "Allow access for Key Administrators" statements).
+SUB_RENDERERS.kmsprincipals = async function(svc, full, host, tab){
+  const id = kmsId(full), admins = /admin/i.test(tab.label || tab.key);
+  const sid = admins ? "Allow access for Key Administrators" : "Allow use of the key";
+  const r = await kmsRpc("GetKeyPolicy",{KeyId:id,PolicyName:"default"});
+  let doc = {Version:"2012-10-17",Statement:[]}; try { doc = JSON.parse(r.json.Policy); } catch(e) {}
+  doc.Statement = [].concat(doc.Statement || []);
+  const st = doc.Statement.find(x => x.Sid === sid);
+  const ps = st ? [].concat((st.Principal||{}).AWS || []) : [];
+  host.append(el("h3",{class:"page-h"}, (admins ? "Key administrators" : "Key users")+" ("+ps.length+")"));
+  if (!ps.length) host.append(el("div",{class:"empty"}, "No "+(admins ? "key administrators" : "key users")+" are defined in the key policy."));
+  else { const t = el("table",{class:"aws"}); t.append(el("tr",{}, el("th",{},"Principal"), el("th",{},"")));
+    ps.forEach(p => t.append(el("tr",{}, el("td",{class:"small mono"}, p), el("td",{}, el("button",{class:"btn","data-testid":"kms-principal-del",onclick:async()=>{
+      st.Principal.AWS = ps.filter(x => x !== p);
+      if (!st.Principal.AWS.length) doc.Statement = doc.Statement.filter(x => x !== st);
+      await kmsRpc("PutKeyPolicy",{KeyId:id,PolicyName:"default",Policy:JSON.stringify(doc)}); kmsReload(SUB_RENDERERS.kmsprincipals, svc, full, host, tab);
+    }}, "Remove")))));
+    host.append(t); }
+  const inp = el("input",{placeholder:"arn:aws:iam::000000000000:user/name","data-testid":"kms-principal-arn"});
+  host.append(el("div",{class:"kv-card",style:"margin-top:14px"}, el("div",{class:"h"},"Add principal"), el("div",{class:"field"}, el("label",{},"IAM user or role ARN"), inp),
+    el("button",{class:"btn primary","data-testid":"kms-principal-add",onclick:async()=>{
+      if (st) st.Principal.AWS = ps.concat([inp.value]);
+      else doc.Statement.push(admins
+        ? {Sid:sid,Effect:"Allow",Principal:{AWS:[inp.value]},Action:["kms:Create*","kms:Describe*","kms:Enable*","kms:List*","kms:Put*","kms:Update*","kms:Revoke*","kms:Disable*","kms:Get*","kms:Delete*","kms:ScheduleKeyDeletion","kms:CancelKeyDeletion"],Resource:"*"}
+        : {Sid:sid,Effect:"Allow",Principal:{AWS:[inp.value]},Action:["kms:Encrypt","kms:Decrypt","kms:ReEncrypt*","kms:GenerateDataKey*","kms:DescribeKey"],Resource:"*"});
+      const u = await kmsRpc("PutKeyPolicy",{KeyId:id,PolicyName:"default",Policy:JSON.stringify(doc)});
+      if (u.ok) { toast("Principal added"); kmsReload(SUB_RENDERERS.kmsprincipals, svc, full, host, tab); } else toast("Save failed","err");
+    }}, "Add")));
+};
+SUB_RENDERERS.kmsgrants = async function(svc, full, host){
+  const id = kmsId(full), r = await kmsRpc("ListGrants",{KeyId:id}), rows = r.json.Grants || [];
+  host.append(el("h3",{class:"page-h"}, "Grants ("+rows.length+")"));
+  if (!rows.length) host.append(el("div",{class:"empty"}, "This key has no grants."));
+  else { const t = el("table",{class:"aws"}); t.append(el("tr",{}, ...["Grant ID","Grantee principal","Operations","Created",""].map(h => el("th",{}, h))));
+    rows.forEach(g => t.append(el("tr",{}, el("td",{class:"small mono"}, g.GrantId.slice(0,16)+"…"), el("td",{class:"small mono"}, g.GranteePrincipal),
+      el("td",{class:"small"}, (g.Operations||[]).join(", ")), el("td",{class:"small"}, ddbWhen(g.CreationDate)),
+      el("td",{}, el("button",{class:"btn","data-testid":"kms-grant-revoke",onclick:async()=>{
+        await kmsRpc("RevokeGrant",{KeyId:id,GrantId:g.GrantId}); kmsReload(SUB_RENDERERS.kmsgrants, svc, full, host); }}, "Revoke")))));
+    host.append(t); }
+  const who = el("input",{value:"arn:aws:iam::000000000000:role/app","data-testid":"kms-grant-principal"});
+  host.append(el("div",{class:"kv-card",style:"margin-top:14px"}, el("div",{class:"h"},"Create grant"), el("div",{class:"field"}, el("label",{},"Grantee principal"), who),
+    el("button",{class:"btn primary","data-testid":"kms-grant-add",onclick:async()=>{
+      const c = await kmsRpc("CreateGrant",{KeyId:id,GranteePrincipal:who.value,Operations:["Encrypt","Decrypt"]});
+      if (c.ok) { toast("Grant created"); kmsReload(SUB_RENDERERS.kmsgrants, svc, full, host); } else toast("Create failed: "+(c.json.message||c.status),"err");
+    }}, "Create grant")));
+};
+
 // ── DynamoDB settings tabs ───────────────────────────────────────────
 // Each tab reads the table through the DynamoDB wire API (DescribeTable, DescribeTimeToLive,
 // DescribeContinuousBackups, ...), exactly what the SDK/CLI sees, and Save writes through the

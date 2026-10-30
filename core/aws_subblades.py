@@ -376,14 +376,14 @@ _KMS_SUB = [
     *_UNIVERSAL_TOP,
     {"group": "Key", "items": [
         {"key": "details",       "label": "General configuration",  "icon": "info",          "type": "kmsconfig"},
-        {"key": "policy",        "label": "Key policy",             "icon": "policy",        "type": "iam"},
-        {"key": "aliases",       "label": "Aliases",                "icon": "label",         "type": "stub"},
-        {"key": "rotation",      "label": "Key rotation",           "icon": "autorenew",     "type": "stub"},
+        {"key": "policy",        "label": "Key policy",             "icon": "policy",        "type": "kmsPolicy"},
+        {"key": "aliases",       "label": "Aliases",                "icon": "label",         "type": "kmsAliases"},
+        {"key": "rotation",      "label": "Key rotation",           "icon": "autorenew",     "type": "kmsRotation"},
     ]},
     {"group": "Permissions", "items": [
-        {"key": "keyUsers",      "label": "Key users",              "icon": "group",         "type": "stub"},
-        {"key": "keyAdmins",     "label": "Key administrators",     "icon": "admin_panel_settings","type": "stub"},
-        {"key": "grants",        "label": "Grants",                 "icon": "fact_check",    "type": "stub"},
+        {"key": "keyUsers",      "label": "Key users",              "icon": "group",         "type": "kmsPrincipals"},
+        {"key": "keyAdmins",     "label": "Key administrators",     "icon": "admin_panel_settings","type": "kmsPrincipals"},
+        {"key": "grants",        "label": "Grants",                 "icon": "fact_check",    "type": "kmsGrants"},
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
