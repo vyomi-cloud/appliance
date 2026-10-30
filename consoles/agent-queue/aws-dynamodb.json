@@ -1,1 +1,1 @@
-{"cloud":"aws","service":"dynamodb","goal":"P1 pilot: fidelity >= 90%"}
+{"cloud":"aws","service":"dynamodb","goal":"P1 pilot: fidelity >= 90%","attempt":2}

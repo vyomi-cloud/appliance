@@ -1,1 +1,1 @@
-{"cloud":"aws","service":"s3","goal":"P1 pilot: fidelity >= 90%"}
+{"cloud":"aws","service":"s3","goal":"P1 pilot: fidelity >= 90%","attempt":2}
