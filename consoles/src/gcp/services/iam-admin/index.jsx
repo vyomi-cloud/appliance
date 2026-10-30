@@ -96,6 +96,7 @@ export default {
     { text: "Identity-Aware Proxy", href: "#/iam-admin/iap", icon: VpnLockIcon },
   ],
   routes: [
+    { pattern: "/iam-admin", component: IamAllow },   // the product root opens IAM, as in the native console
     { pattern: "/iam-admin/iam", component: IamAllow },
     { pattern: "/iam-admin/iam/grant-access", component: IamGrant },
     { pattern: "/iam-admin/iam/deny", component: IamDeny },
