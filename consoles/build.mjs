@@ -6,7 +6,8 @@
  *   node build.mjs [--watch] [--cloud aws]
  */
 import * as esbuild from "esbuild";
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +26,9 @@ const CLOUDS = ["aws", "gcp", "azure"].filter((c) => (!only || c === only) && ex
 const NANO_HEAD = `<script type="module" src="../../nano-boot.js?v=4"></script>\n`;
 const NANO_BODY = `<script src="../../nano-kernel.js"></script>\n<script>window.__nk = window.NanoKernel && NanoKernel.start("Vyomi console");</script>\n`;
 
+// Cache-busting: asset URLs carry a hash of the bundle, so browsers (and Nano's service
+// worker) fetch the new build after every rebuild/upgrade instead of a stale main.js.
+let assetVersion = "dev";
 const html = (cloud, title, nano = false) => `<!doctype html>
 <html lang="en">
 <head>
@@ -32,11 +36,11 @@ const html = (cloud, title, nano = false) => `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
 <meta name="vyomi-substrate" content="${nano ? "nano" : "offline"}">
-<link rel="stylesheet" href="./main.css">
+<link rel="stylesheet" href="./main.css?v=${assetVersion}">
 ${nano ? NANO_HEAD : ""}</head>
 <body>
 ${nano ? NANO_BODY : ""}<div id="root"></div>
-<script type="module" src="./main.js"></script>
+<script type="module" src="./main.js?v=${assetVersion}"></script>
 </body>
 </html>
 `;
@@ -74,6 +78,10 @@ async function buildCloud(cloud, watch) {
 const emit = (cloud, out) => ({ name: "emit", setup(b) { b.onEnd(() => publish(cloud, out)); } });
 
 async function publish(cloud, out) {
+  const h = createHash("sha256");
+  for (const f of ["main.js", "main.css"]) h.update(await readFile(join(out, f)).catch(() => ""));
+  assetVersion = h.digest("hex").slice(0, 12);
+  await writeFile(join(out, "index.html"), html(cloud, TITLES[cloud]));
   for (const t of TARGETS) {
     const dst = join(t, cloud);
     await rm(dst, { recursive: true, force: true });
