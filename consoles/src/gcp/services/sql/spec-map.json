@@ -1,0 +1,20 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap. Unlisted spec pages count as missing.",
+  "get-started": { "route": "#/sql/get-started" },
+  "instances": { "route": "#/sql", "fixtures": ["sql-instance"], "live": "live-instance" },
+  "choose-engine": { "route": "#/sql/create" },
+  "create-instance": { "route": "#/sql/create/instance?engine=POSTGRES" },
+  "instance-overview": { "route": "#/sql/instances/uic-instance/overview", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" }, "live": "live-label" },
+  "users": { "route": "#/sql/instances/uic-instance/users", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" }, "live": "live-user" },
+  "add-user": { "route": "#/sql/instances/uic-instance/users/add", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" } },
+  "databases": { "route": "#/sql/instances/uic-instance/databases", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" }, "live": "live-database" },
+  "create-database": { "route": "#/sql/instances/uic-instance/databases/create", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" } },
+  "instance-backups": { "route": "#/sql/instances/uic-instance/backups", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" }, "live": "live-backup" },
+  "connections": { "route": "#/sql/instances/uic-instance/connections", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" } },
+  "replicas": { "route": "#/sql/instances/uic-instance/replicas", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" } },
+  "operations": { "route": "#/sql/instances/uic-instance/operations", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" } },
+  "backups": { "route": "#/sql/backups", "fixtures": ["sql-instance"], "live": "live-backup" },
+  "system-insights": { "route": "#/sql/instances/uic-instance/system-insights", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" } },
+  "query-insights": { "route": "#/sql/instances/uic-instance/query-insights", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" } },
+  "cloud-sql-studio": { "route": "#/sql/instances/uic-instance/studio", "fixtures": ["sql-instance"], "vars": { "resource-name": "uic-instance" } }
+}

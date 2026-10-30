@@ -524,6 +524,33 @@ try {
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete database via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/databases/${FSDB}`)).status === 404);
 
+  // Cloud SQL: create instance via UI → native Admin API, add a database over the wire →
+  // shown in the UI, then delete the instance via UI → gone over the wire.
+  const SQLI = `v4-gcp-sql-${Date.now() % 100000}`;
+  await page.goto(UI + "#/sql/create/instance?engine=POSTGRES");
+  await page.getByLabel("Instance ID").fill(SQLI);
+  await page.getByLabel("Password", { exact: true }).fill("Sm0ke-Passw0rd!");
+  await page.getByRole("button", { name: "Create instance", exact: true }).click();
+  await page.getByRole("heading", { name: SQLI }).waitFor({ timeout: 10000 });
+  const sqlInstances = await wjson(`/sql/v1beta4/projects/vyomi-project/instances`);
+  check("create instance via UI → visible over native wire (instances.list)", (sqlInstances.items || []).some((i) => i.name === SQLI));
+  await shot("15-sql-instance-overview");
+
+  const SQLDB = `wiredb${Date.now() % 100000}`;
+  await wire(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}/databases`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: SQLDB }),
+  });
+  await page.goto(UI + `#/sql/instances/${SQLI}/databases`);
+  await page.getByText(SQLDB, { exact: true }).waitFor({ timeout: 10000 });
+  check("database created over wire → shown in Databases UI", true);
+
+  await page.goto(UI + `#/sql/instances/${SQLI}/overview`);
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(SQLI);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "Instances" }).waitFor({ timeout: 10000 });
+  check("delete instance via UI → gone over native wire", (await wire(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}`)).status === 404);
+
   // Dark mode
   await page.goto(UI + "#/storage/browser");
   await page.getByRole("button", { name: "More options" }).click();          // ⋮ menu, as in the native top bar

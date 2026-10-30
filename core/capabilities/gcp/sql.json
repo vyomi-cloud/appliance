@@ -1,0 +1,72 @@
+{
+  "$doc": "Vyomi capability registry — GCP Cloud SQL. See aws/s3.json for the contract. Feature ids share one namespace with the AWS registry, so they are prefixed gcp.sql.*",
+  "gcp.sql.instances": {
+    "title": "Instances (create, list, get, patch, delete, restart, stop/start)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Instances are RUNNABLE immediately; Vyomi has no provisioning delay (PENDING_CREATE) to model.",
+      "Stop/start is simulated by toggling settings.activationPolicy; Vyomi does not actually tear down compute."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.databases": {
+    "title": "Databases (create, list, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.users": {
+    "title": "Users (add, list, change password, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Cloud IAM authentication type is stored and returned, but Vyomi never checks IAM identity on connect — only the stored password gates access."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.backups": {
+    "title": "Backups (on-demand backupRuns: create, list, delete)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "A backupRun is recorded as SUCCESSFUL immediately; it does not capture an actual point-in-time copy of the instance's data, so restoring from one is not supported.",
+      "Automated (scheduled) backups are not taken in the background — only on-demand backupRuns created from the console or API exist."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.operations": {
+    "title": "Operations log (list per-instance and project-wide)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Every operation completes synchronously and is logged with status DONE; Vyomi has no asynchronous lifecycle to show PENDING/RUNNING operations."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.connections": {
+    "title": "Connections (public/private IP toggle, authorized networks)",
+    "level": { "nano": "config_only", "offline": "config_only" },
+    "limitations": [
+      "ipConfiguration (ipv4Enabled, authorizedNetworks, privateNetwork) round-trips through instances.patch exactly as set, but Vyomi does not enforce it — a client can reach a simulated instance regardless of the authorized networks list or whether public IP is disabled."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
+  },
+  "gcp.sql.replicas": {
+    "title": "Read replicas",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Vyomi has no replication engine, so a 'read replica' instance does not actually mirror its primary's data — the Replicas list (Instance ID, Type, Region, Replication lag, Status) can't be shown from real data."
+    ]
+  },
+  "gcp.sql.connections-security": {
+    "title": "Connections: Security (SSL/TLS enforcement, client/server certificates)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Vyomi has no certificate authority and does not negotiate TLS for simulated connections, so it cannot issue client certificates or enforce 'Require SSL/TLS'."
+    ]
+  },
+  "gcp.sql.insights": {
+    "title": "System insights, Query insights and Cloud SQL Studio",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Vyomi collects no CPU/memory/query telemetry for Cloud SQL instances and has no in-console SQL editor backed by the native Admin API, so these dashboards cannot be rendered from real data."
+    ]
+  }
+}
