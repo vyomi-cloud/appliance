@@ -1,0 +1,215 @@
+{
+  "$doc": "Vyomi capability registry — Azure Monitor. One entry per console section that makes a backend claim (proven by tests/conformance/test_capabilities.py). Pure navigation/reference sections (Overview, Insights Hub) carry no backend claim and are intentionally not listed here. level.nano = core/azure_monitor_core.py + core/azure_operationalinsights_core.py in-process (Nano / dev_server, checked by this test without CAP_BASE). level.offline = the full appliance (providers/azure_services.py), which wires the SAME core modules over its own ARM resource store.",
+  "azure.monitor.alert_rules": {
+    "title": "Alert rules (metric + activity log alert rules: create, list, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "api": ["MetricAlerts.CreateOrUpdate", "MetricAlerts.List", "MetricAlerts.Delete", "ActivityLogAlerts.List"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py"]
+  },
+  "azure.monitor.action_groups": {
+    "title": "Action groups (create, list, delete, test notification, enable receiver)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "api": ["ActionGroups.CreateOrUpdate", "ActionGroups.List", "ActionGroups.Delete", "ActionGroups.CreateNotifications"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py"]
+  },
+  "azure.monitor.autoscale": {
+    "title": "Autoscale settings (create, list, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Scaling never actually runs (there is no live metric stream to evaluate rules against); the setting is stored and returned exactly as configured."
+    ],
+    "api": ["AutoscaleSettings.CreateOrUpdate", "AutoscaleSettings.List", "AutoscaleSettings.Delete"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py"]
+  },
+  "azure.monitor.activity_log": {
+    "title": "Activity log (subscription-wide feed of real ARM writes)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "Only control-plane writes Vyomi itself performs are recorded; there is no data-plane or sign-in activity."
+    ],
+    "api": ["ActivityLogs.List"],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.monitor.log_analytics_workspaces": {
+    "title": "Log Analytics workspaces (create, list, delete, keys, usage, tables)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "api": ["Workspaces.CreateOrUpdate", "Workspaces.List", "Workspaces.Delete", "Workspaces.GetSharedKeys"],
+    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
+  },
+  "azure.monitor.resource_insights": {
+    "title": "Per-resource-type Insights dashboards (Applications, Virtual Machines, Storage accounts, Networks, Azure Cosmos DB, Key Vaults, Service Bus)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Shows Vyomi's real resource inventory for the type; there is no request/exception/dependency telemetry, VM guest metrics, or health rollup — those need an agent-based collection pipeline Vyomi does not run."
+    ],
+    "api": ["Resources.List"],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.monitor.metrics_scope": {
+    "title": "Metrics — scope picker (resource types, locations)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Scope, resource-type and location pickers are real (drawn from your inventory); the chart itself is not — metric definitions/values are not modelled."
+    ],
+    "api": ["Resources.List"],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.monitor.monitoring_coverage": {
+    "title": "Monitoring Coverage (resources with vs. without an alert rule)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Coverage is approximated as \"referenced by at least one alert rule's scopes\"; Azure's own per-signal telemetry coverage model is not reproduced."
+    ],
+    "api": ["Resources.List", "MetricAlerts.List"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.monitor.advisor_recommendations": {
+    "title": "Advisor recommendations (resources with no alert rule, derived from real inventory)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Recommendations are \"this resource has no alert rule\", not Azure Advisor's own usage-pattern heuristics."
+    ],
+    "api": ["Resources.List", "MetricAlerts.List"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.monitor.metrics_charts": {
+    "title": "Metrics charts (metric definitions and time-series values)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Metric definitions and metric values are not modelled — there is no time-series store to chart.",
+      "Not simulated: Scope, Metric Namespace, Metric, Aggregation, Add metric, Add filter, Apply splitting, Line chart, Drill into Logs, New alert rule, Save to dashboard."
+    ]
+  },
+  "azure.monitor.log_query": {
+    "title": "Log Analytics query (KQL)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["The KQL query data plane (api.loganalytics.io) is not modelled; workspaces, tables and saved searches are, over ARM."]
+  },
+  "azure.monitor.observability_agents": {
+    "title": "Observability agents (preview)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Agent-based collector management is out of scope for a simulator."]
+  },
+  "azure.monitor.issues": {
+    "title": "Issues",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Cross-signal issue correlation is not modelled."]
+  },
+  "azure.monitor.health_models": {
+    "title": "Health models",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Health model authoring and evaluation is not modelled."]
+  },
+  "azure.monitor.change_analysis": {
+    "title": "Change Analysis (derived from the real Activity log)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Change type/Name/Resource type are derived from the Activity log feed (real ARM writes), not from Azure Resource Graph's property-level snapshots — there is no before/after diff of individual properties.",
+      "Toolbar actions not simulated: Open query, Group by none."
+    ],
+    "api": ["ActivityLogs.List"],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
+  },
+  "azure.monitor.service_health": {
+    "title": "Service health",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["There is no Azure service-health incident feed to mirror; every simulated service is always healthy."]
+  },
+  "azure.monitor.workbooks": {
+    "title": "Workbooks (Gallery): create, list, delete",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "A workbook is stored as a name/category/serializedData document, the same shape the real resource has; there is no visual report editor to author the serializedData JSON.",
+      "Toolbar actions not simulated: New (visual editor), Feedback, Help, Community Git repo, Browse across galleries, Recycle Bin."
+    ],
+    "api": ["Workbooks.CreateOrUpdate", "Workbooks.List", "Workbooks.Delete"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py"]
+  },
+  "azure.monitor.grafana_dashboards": {
+    "title": "Dashboards with Grafana",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Azure Managed Grafana is a separate managed service Vyomi does not run.",
+      "Toolbar actions would be New, Explore, Browse Grafana dashboards Gallery, Browse Saved dashboards, Help, Feedback, Group by."
+    ]
+  },
+  "azure.monitor.containers_insights": {
+    "title": "Container insights",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["AKS/ACI are not modelled by any Vyomi core, so there is no container inventory to show."]
+  },
+  "azure.monitor.redis_insights": {
+    "title": "Azure Cache for Redis insights",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Azure Cache for Redis is not modelled by any Vyomi core."]
+  },
+  "azure.monitor.data_explorer_insights": {
+    "title": "Azure Data Explorer Clusters insights",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Azure Data Explorer is not modelled by any Vyomi core."]
+  },
+  "azure.monitor.azure_local_insights": {
+    "title": "Azure Local insights",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Azure Local (hybrid hardware) is out of scope for a cloud simulator."]
+  },
+  "azure.monitor.managed_prometheus": {
+    "title": "Managed Prometheus",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Azure Kubernetes Service and the managed Prometheus add-on are not modelled.",
+      "Grid columns would be Name, Resource group, Metrics collection; toolbar actions would be View manual setup, Feedback."
+    ]
+  },
+  "azure.monitor.managed_grafana": {
+    "title": "Azure Managed Grafana",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Azure Managed Grafana is a separate managed service Vyomi does not run."]
+  },
+  "azure.monitor.scom_managed_instance": {
+    "title": "Azure Monitor SCOM managed instance",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["SCOM managed instance is out of scope for a simulator."]
+  },
+  "azure.monitor.diagnostic_settings": {
+    "title": "Diagnostic settings",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": [
+      "Diagnostic settings (resource-scoped extension resources that route platform logs/metrics) are not modelled.",
+      "Grid columns would be Name, Resource type, Resource group, Diagnostics status."
+    ]
+  },
+  "azure.monitor.data_collection_rules": {
+    "title": "Data Collection Rules (create, list, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "A rule's data flows and destinations are stored and validated exactly as the real resource requires; data is never actually collected or routed (there is no agent fleet to configure).",
+      "Toolbar actions not simulated: Feedback, Use preview. Summary counts not simulated: Resources collecting, Not collecting."
+    ],
+    "api": ["DataCollectionRules.CreateOrUpdate", "DataCollectionRules.List", "DataCollectionRules.Delete"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py"]
+  },
+  "azure.monitor.data_collection_endpoints": {
+    "title": "Data Collection Endpoints",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Microsoft.Insights/dataCollectionEndpoints is not modelled."]
+  },
+  "azure.monitor.pipelines": {
+    "title": "Azure Monitor pipelines",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Azure Monitor pipelines (on-premises collector fleet management) are out of scope for a simulator."]
+  },
+  "azure.monitor.private_link_scopes": {
+    "title": "Private Link Scopes",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Private networking/Private Link is not modelled anywhere in Vyomi."]
+  },
+  "azure.monitor.new_support_request": {
+    "title": "New support request (file a Microsoft support ticket)",
+    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "limitations": ["Vyomi does not file real Microsoft support tickets."]
+  }
+}

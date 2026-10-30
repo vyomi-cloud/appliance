@@ -78,6 +78,17 @@ r = cp(st, "PUT", ["autoscaleSettings", "web"], {"location": "eastus", "properti
 check("create autoscale → 201, enabled, name", r["status"] == 201 and r["body"]["properties"]["name"] == "web", r["body"])
 check("capacity min>max → 400", cp(st, "PUT", ["autoscaleSettings", "y"], {"properties": {"profiles": [dict(prof, capacity={"minimum": "6", "maximum": "5", "default": "5"})]}})["status"] == 400)
 
+r = cp(st, "PUT", ["workbooks", "wb1"], {"location": "eastus", "properties": {"displayName": "CPU overview", "category": "workbook", "serializedData": "{}"}})
+check("create workbook → 201", r["status"] == 201 and r["body"]["properties"]["displayName"] == "CPU overview", r["body"])
+check("workbook missing displayName → 400", cp(st, "PUT", ["workbooks", "wb2"], {"properties": {"category": "workbook", "serializedData": "{}"}})["status"] == 400)
+check("list workbooks", len(cp(st, "GET", ["workbooks"])["body"]["value"]) == 1)
+
+dcr = {"location": "eastus", "properties": {"dataSources": {}, "destinations": {"logAnalytics": [{"name": "dest1", "workspaceResourceId": "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/ws1"}]},
+       "dataFlows": [{"streams": ["Microsoft-Perf"], "destinations": ["dest1"]}]}}
+r = cp(st, "PUT", ["dataCollectionRules", "dcr1"], dcr)
+check("create data collection rule → 201", r["status"] == 201 and r["body"]["properties"]["destinations"]["logAnalytics"][0]["name"] == "dest1", r["body"])
+check("DCR missing dataFlows → 400", cp(st, "PUT", ["dataCollectionRules", "dcr2"], {"properties": {"destinations": dcr["properties"]["destinations"]}})["status"] == 400)
+
 check("delete → 200 then 204", cp(st, "DELETE", ["metricAlerts", "cpu"])["status"] == 200 and cp(st, "DELETE", ["metricAlerts", "cpu"])["status"] == 204)
 
 arm = AzureArm()
