@@ -350,7 +350,9 @@ class AwsWireRouter:
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
         # its own lightweight function registry (a namespace the core attaches to).
-        self.events = s.get("events") or self.msg
+        # EventBridge shares the messaging store (rule targets deliver into the real SQS/SNS).
+        # Not "events": in Nano's registry that key is the cloudsim activity log (nano_events).
+        self.events = s.get("eventbridge") or self.msg
         self.sched = s.get("sched") or sched.SchedulerStore()   # EventBridge Scheduler (schedules + groups)
         self.ssm = s.get("ssm") or ssm.SsmStore()   # Systems Manager (Parameter Store, documents, Run Command, …)
         # Nano's registry names these "compute" / "vpc_net" (persisted via their private

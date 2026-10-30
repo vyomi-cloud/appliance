@@ -27,7 +27,7 @@ if missing:
 # Every store the router reads from its `stores` dict must exist in Nano's registry under that name
 # (or a declared alias) AND be persisted — otherwise the router silently builds a private store
 # whose state is lost on reload and invisible to the SDK relay.
-ALIASES = {"lam": "compute", "apigw": "compute", "vpc": "vpc_net"}
+ALIASES = {"lam": "compute", "apigw": "compute", "vpc": "vpc_net", "eventbridge": "msg"}
 reg = (ROOT / "core/nano_registry.py").read_text()
 per = (ROOT / "core/nano_persist.py").read_text()
 in_reg = set(re.findall(r'^\s*"([a-z0-9_]+)":', reg, re.M))
