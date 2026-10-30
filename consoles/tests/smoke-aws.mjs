@@ -26,6 +26,7 @@ let page;
 const wire = (path, init = {}) => page.evaluate(async ([u, i]) => { const r = await fetch(u, i); return r.text(); }, [WIRE + path, init]);
 const ddb = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `DynamoDB_20120810.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/dynamodb/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const kms = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `TrentService.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/kms/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
+const lam = async (method, path, body) => { const t = await wire(path, { method, body: body === undefined ? undefined : JSON.stringify(body) }); try { return JSON.parse(t); } catch { return t; } };
 
 await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch();
@@ -185,6 +186,33 @@ try {
   await page.getByText(`aws/${svc}`).waitFor({ timeout: 10000 });
   check("KMS Encrypt over wire against an unseen aws/ alias → AWS managed key shown in UI", true);
   await shot("14-kms-aws-managed-keys");
+
+  // Lambda: create a function through the UI (UI → CLI direction), invoke it for real via
+  // the Test tab, then prove a function created directly over the wire (CLI → UI direction)
+  // shows up in the Functions list.
+  const FN = `v4smoke-fn-${Date.now() % 100000}`;
+  await page.goto(UI + "#/lambda/create/function");
+  await page.getByLabel("Function name").fill(FN);
+  await page.getByRole("button", { name: "Create Event Function" }).last().click();
+  await page.getByRole("heading", { name: FN }).waitFor({ timeout: 10000 });
+  const fns = await lam("GET", "/2015-03-31/functions");
+  check("Lambda create function (UI) → visible over native wire", (fns.Functions || []).some((f) => f.FunctionName === FN));
+  await shot("15-lambda-create");
+
+  await page.getByRole("tab", { name: "Test" }).click();
+  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByText("Execution result").waitFor({ timeout: 10000 });
+  await shot("16-lambda-test");
+  const inv = await lam("GET", `/2015-03-31/functions/${FN}/invocations`);
+  check("Lambda Test tab Invoke (UI) → recorded over native wire", (inv.Metrics?.Invocations || 0) >= 1, JSON.stringify(inv.Metrics));
+
+  const FN2 = `v4smoke-fn2-${Date.now() % 100000}`;
+  await lam("POST", "/2015-03-31/functions", { FunctionName: FN2, Runtime: "python3.12", Code: { Source: "def handler(e,c):\n    return {'ok': True}\n" } });
+  await page.goto(UI + "#/lambda/functions");
+  await page.getByPlaceholder("Search by attributes or search by keyword").fill(FN2);
+  await page.getByRole("link", { name: FN2 }).waitFor({ timeout: 10000 });
+  check("Lambda function created over wire (CLI) → shown in Functions list", true);
+  await shot("17-lambda-functions");
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));

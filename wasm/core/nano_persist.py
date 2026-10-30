@@ -76,7 +76,7 @@ def _dec(v):
 # their model lazily on the store (getattr/setattr) rather than as a public dict.
 # Without these, a Lambda function / API / VPC created in the console vanishes on
 # the next reload. Add a core's attr here when it keeps state this way.
-_DURABLE_PRIVATE = ("_lambda_functions", "_apigateway_apis", "_vpc_model")
+_DURABLE_PRIVATE = ("_lambda_functions", "_lambda_layers", "_lambda_esms", "_apigateway_apis", "_vpc_model")
 
 
 def _public_state(store) -> dict:

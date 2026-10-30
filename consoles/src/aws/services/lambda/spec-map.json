@@ -1,0 +1,109 @@
+{
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap (out-of-scope products: Applications/SAM, EC2 capacity providers, code signing, MicroVMs + their network connectors, Lambda@Edge replicas, Step Functions cross-link). Unlisted spec pages count as missing.",
+  "dashboard": {
+    "route": "#/lambda/home",
+    "vars": { "region": "us-east-1" }
+  },
+  "get-started": {
+    "route": "#/lambda/get-started"
+  },
+  "extensions": {
+    "route": "#/lambda/extensions"
+  },
+  "event-functions": {
+    "route": "#/lambda/functions",
+    "fixtures": ["lambda-fn"],
+    "live": "live-function"
+  },
+  "web-functions": {
+    "route": "#/lambda/web-functions",
+    "fixtures": ["lambda-fn"],
+    "live": "live-web-function"
+  },
+  "create-function": {
+    "route": "#/lambda/create/function",
+    "expand": ["text=Additional settings", "text=Enable function URL"]
+  },
+  "create-web-function": {
+    "route": "#/lambda/create/web-function",
+    "expand": ["text=Additional configurations - optional"]
+  },
+  "function-detail": {
+    "route": "#/lambda/functions/{live}",
+    "fixtures": ["lambda-fn"],
+    "live": "live-function"
+  },
+  "create-alias": {
+    "route": "#/lambda/functions/uic-function/create-alias",
+    "fixtures": ["lambda-fn"]
+  },
+  "add-trigger": {
+    "route": "#/lambda/functions/uic-function/add-trigger",
+    "fixtures": ["lambda-fn"]
+  },
+  "layers": {
+    "route": "#/lambda/layers",
+    "live": "live-layer"
+  },
+  "create-layer": {
+    "route": "#/lambda/create/layer",
+    "expand": ["text=Create from a file in Amazon S3"]
+  },
+  "event-source-mappings": {
+    "route": "#/lambda/event-source-mappings",
+    "fixtures": ["lambda-fn"],
+    "live": "live-trigger"
+  },
+  "applications": {
+    "route": "#/lambda/applications",
+    "honest_page": true
+  },
+  "create-application": {
+    "route": "#/lambda/create/application",
+    "honest_page": true
+  },
+  "capacity-providers": {
+    "route": "#/lambda/capacity-providers",
+    "honest_page": true
+  },
+  "create-capacity-provider": {
+    "route": "#/lambda/create/capacity-provider",
+    "honest_page": true
+  },
+  "code-signing-configurations": {
+    "route": "#/lambda/code-signing-configurations",
+    "honest_page": true
+  },
+  "replicas": {
+    "route": "#/lambda/replicas",
+    "honest_page": true
+  },
+  "microvm-images": {
+    "route": "#/lambda/microvm-images",
+    "honest_page": true
+  },
+  "create-microvm-image": {
+    "route": "#/lambda/create/microvm-image",
+    "honest_page": true
+  },
+  "microvms": {
+    "route": "#/lambda/microvms",
+    "honest_page": true
+  },
+  "run-microvm": {
+    "route": "#/lambda/create/microvm",
+    "honest_page": true
+  },
+  "network-connectors": {
+    "route": "#/lambda/network-connectors",
+    "honest_page": true
+  },
+  "create-network-connector": {
+    "route": "#/lambda/create/network-connector",
+    "honest_page": true
+  },
+  "step-functions-state-machines": {
+    "route": "#/lambda/statemachines",
+    "honest_page": true
+  }
+}

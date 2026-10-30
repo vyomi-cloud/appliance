@@ -1,26 +1,45 @@
 # GENERATED — vendored from core/ by wasm/build_cores.py. DO NOT EDIT.
 # Edit the canonical core/ source, then re-run: python3 wasm/build_cores.py
-"""Lambda core — substrate-independent serverless data plane (PARITY P4 #14). The
-first real function-invoke path in the simulator: register a function's code, then
-synchronously **Invoke** it — the code actually runs against the event payload and
-its return value is the response.
+"""Lambda core — substrate-independent serverless data plane (PARITY P4 #14, extended for
+the v4 console). The first real function-invoke path in the simulator: register a
+function's code, then synchronously **Invoke** it — the code actually runs against the
+event payload and its return value is the response.
 
-Speaks the native **Lambda REST API** (`/2015-03-31/functions/...`) so an unmodified
-boto3 `lambda` client works: CreateFunction / GetFunction / ListFunctions /
-DeleteFunction / UpdateFunctionCode / Invoke. NO fastapi / boto3 / socket imports →
-loads under Pyodide.
+Speaks the native **Lambda REST API** (`/2015-03-31/functions/...` plus the handful of
+versioned sibling paths real Lambda uses for sub-resources — `layers`,
+`event-source-mappings`, `.../url`, `.../aliases`, `.../versions`, `.../tags`,
+`.../concurrency`, `.../recursion-config`, `.../event-invoke-config`) so an unmodified
+boto3 `lambda` client works for the core lifecycle: CreateFunction / GetFunction /
+ListFunctions / DeleteFunction / UpdateFunctionCode / UpdateFunctionConfiguration / Invoke,
+plus Tags, Function URLs, Aliases, Versions, Layers, Event source mappings, reserved
+concurrency and recursive-loop detection. NO fastapi / boto3 / socket imports → loads
+under Pyodide.
 
-Runtime: a **sandboxed Python runtime**. The function code (Code.ZipFile as base64,
-or the simulator-friendly Code.Source string) must define `handler(event, context)`.
-Invoke execs it in a restricted namespace — a curated safe builtins subset, `json`
-available, and NO __import__ / open / exec / eval / compile / file or network access.
-This is a real, deterministic simulation of a Python-runtime function; other runtimes
-(node/go) and async/event-source invokes slot in behind the same seam.
+Runtime: a **sandboxed Python runtime**. The function code (Code.ZipFile as base64, or the
+simulator-friendly Code.Source string) must define `handler(event, context)`. Invoke execs
+it in a restricted namespace — a curated safe builtins subset, `json` available, and NO
+__import__ / open / exec / eval / compile / file or network access. This is a real,
+deterministic simulation of a Python-runtime function; other runtimes (node/go) and
+async/event-source invokes slot in behind the same seam.
+
+Honest scope (declared in core/capabilities/aws/lambda.json, not hidden):
+  * "Triggers" (Add trigger / event source mappings) are stored and listed for real for
+    every source type the console offers (SQS, DynamoDB, Kinesis, S3, SNS, EventBridge,
+    API Gateway, CloudWatch Logs), but Vyomi never polls/subscribes the other service — no
+    trigger ever actually invokes the function on its own. Only direct Invoke (Test tab /
+    native API) runs code.
+  * Code signing configurations are not modeled (no cryptographic signing pipeline).
+  * VPC / file-system / destination config is stored and returned exactly as configured
+    (config_only) — Vyomi doesn't attach a real ENI, mount EFS, or deliver async failures.
+  * "Recent invocations" / Metrics are Vyomi's own lightweight read of the last invocations
+    the sandbox actually ran — not a real CloudWatch Logs Insights / X-Ray integration.
 """
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
+import time
 import uuid
 from dataclasses import dataclass, field
 
@@ -41,6 +60,13 @@ _SAFE_BUILTINS = {
 _SAFE_MODULES = {"json", "math", "datetime", "base64", "re", "random", "uuid",
                  "hashlib", "hmac", "itertools", "functools", "collections",
                  "string", "decimal", "statistics", "textwrap", "time"}
+
+ACCOUNT_ID = "123456789012"
+REGION = "us-east-1"
+ACCOUNT_CONCURRENCY_LIMIT = 1000
+TRIGGER_SOURCES = ("SQS", "DynamoDB", "Kinesis", "S3", "SNS", "EventBridge (CloudWatch Events)",
+                   "API Gateway", "CloudWatch Logs")
+RECENT_INVOCATIONS_KEPT = 20
 
 
 def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
@@ -67,15 +93,35 @@ def _json(status: int, obj: dict, headers: dict | None = None) -> LambdaResponse
 
 
 def _err(status: int, err_type: str, message: str) -> LambdaResponse:
-    return LambdaResponse(status=status, body=json.dumps({"Message": message}).encode(),
+    # Body carries BOTH the real-Lambda shape (top-level "Message") and an
+    # "error": {code, message} wrapper — the latter is what the console's generic
+    # restJson() wire helper (consoles/src/common/wire.js) parses errors with.
+    return LambdaResponse(status=status, body=json.dumps({"Message": message, "error": {"code": err_type, "message": message}}).encode(),
                           headers={"x-amzn-errortype": err_type})
 
 
+# ── store accessors (public dict attrs are the persistence seam) ───────────────────────
 def _functions(store) -> dict:
     m = getattr(store, "_lambda_functions", None)
     if m is None:
         m = {}
         store._lambda_functions = m
+    return m
+
+
+def _layers(store) -> dict:
+    m = getattr(store, "_lambda_layers", None)
+    if m is None:
+        m = {}
+        store._lambda_layers = m
+    return m
+
+
+def _esms(store) -> dict:
+    m = getattr(store, "_lambda_esms", None)
+    if m is None:
+        m = {}
+        store._lambda_esms = m
     return m
 
 
@@ -111,49 +157,185 @@ def _now_iso() -> str:
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
 
 
-def _fn_view(fn: dict) -> dict:
-    return {"FunctionName": fn["name"], "FunctionArn": fn["arn"],
-            "Runtime": fn.get("runtime", "python3.12"), "Handler": fn.get("handler", "index.handler"),
-            "CodeSize": len(fn.get("source", "")), "Version": "$LATEST",
-            "MemorySize": fn.get("memory_size", 128), "Timeout": fn.get("timeout", 3),
-            "Role": fn.get("role", ""), "Description": fn.get("description", ""),
-            "PackageType": "Zip", "State": "Active", "Architectures": ["x86_64"],
-            "LastModified": fn.get("last_modified", "")}
+def _fn_arn(name: str, qualifier: str | None = None) -> str:
+    base = f"arn:aws:lambda:{REGION}:{ACCOUNT_ID}:function:{name}"
+    return f"{base}:{qualifier}" if qualifier else base
 
 
-# ── control plane ───────────────────────────────────────────────────────────
+def _layer_arn(name: str, version: int | None = None) -> str:
+    base = f"arn:aws:lambda:{REGION}:{ACCOUNT_ID}:layer:{name}"
+    return f"{base}:{version}" if version else base
+
+
+def _fn_view(fn: dict, qualifier: str | None = None) -> dict:
+    out = {
+        "FunctionName": fn["name"], "FunctionArn": _fn_arn(fn["name"], qualifier),
+        "Runtime": fn.get("runtime", "python3.12"), "Handler": fn.get("handler", "index.handler"),
+        "CodeSize": len(fn.get("source", "")), "CodeSha256": fn.get("code_sha256", ""),
+        "Version": qualifier or "$LATEST",
+        "MemorySize": fn.get("memory_size", 128), "Timeout": fn.get("timeout", 3),
+        "Role": fn.get("role", ""), "Description": fn.get("description", ""),
+        "PackageType": "Zip", "State": "Active", "LastUpdateStatus": "Successful",
+        "Architectures": fn.get("architectures", ["x86_64"]),
+        "EphemeralStorage": {"Size": fn.get("ephemeral_storage_mb", 512)},
+        "SnapStart": {"ApplyOn": fn.get("snap_start", "None"), "OptimizationStatus": "Off"},
+        "Environment": {"Variables": fn.get("env", {})},
+        "LastModified": fn.get("last_modified", ""),
+        "RevisionId": fn.get("revision_id", ""),
+        "TracingConfig": {"Mode": fn.get("tracing_mode", "PassThrough")},
+        "LoggingConfig": {"LogFormat": fn.get("log_format", "Text")},
+    }
+    if fn.get("layers"):
+        out["Layers"] = [{"Arn": a, "CodeSize": 0} for a in fn["layers"]]
+    if fn.get("vpc_config"):
+        out["VpcConfig"] = fn["vpc_config"]
+    if fn.get("dead_letter_config"):
+        out["DeadLetterConfig"] = fn["dead_letter_config"]
+    if fn.get("file_systems"):
+        out["FileSystemConfigs"] = fn["file_systems"]
+    if fn.get("recursive_loop"):
+        out["RecursiveLoop"] = fn["recursive_loop"]
+    return out
+
+
+def _find_fn(store, name) -> dict | None:
+    return _functions(store).get(name)
+
+
+def _require_fn(store, name) -> dict:
+    fn = _find_fn(store, name)
+    if not fn:
+        raise _NotFound(f"Function not found: {_fn_arn(name)}")
+    return fn
+
+
+class _NotFound(Exception):
+    pass
+
+
+class _BadInput(Exception):
+    pass
+
+
+# ── control plane: functions ────────────────────────────────────────────────────────────
 def _create_function(store, body):
     name = str(body.get("FunctionName", "")).strip()
     if not name:
         return _err(400, "InvalidParameterValueException", "FunctionName is required.")
-    fn = {"name": name, "arn": f"arn:aws:lambda:us-east-1:123456789012:function:{name}",
-          "runtime": str(body.get("Runtime", "python3.12")),
-          "handler": str(body.get("Handler", "index.handler")),
-          "source": _extract_source(body.get("Code") or {}),
-          "env": (body.get("Environment") or {}).get("Variables") or {},
-          "memory_size": int(body.get("MemorySize") or 128), "timeout": int(body.get("Timeout") or 3),
-          "role": str(body.get("Role") or "arn:aws:iam::123456789012:role/service-role/lambda-basic-execution"),
-          "description": str(body.get("Description") or ""),
-          "last_modified": _now_iso()}
+    if name in _functions(store):
+        return _err(409, "ResourceConflictException", f"Function already exist: {name}")
+    source = _extract_source(body.get("Code") or {})
+    fn = {
+        "name": name, "arn": _fn_arn(name), "runtime": str(body.get("Runtime", "python3.12")),
+        "handler": str(body.get("Handler", "index.handler")), "source": source,
+        "code_sha256": base64.b64encode(hashlib.sha256(source.encode()).digest()).decode(),
+        "env": dict((body.get("Environment") or {}).get("Variables") or {}),
+        "memory_size": int(body.get("MemorySize") or 128), "timeout": int(body.get("Timeout") or 3),
+        "role": str(body.get("Role") or "arn:aws:iam::123456789012:role/service-role/lambda-basic-execution"),
+        "description": str(body.get("Description") or ""),
+        "architectures": list(body.get("Architectures") or ["x86_64"]),
+        "ephemeral_storage_mb": int((body.get("EphemeralStorage") or {}).get("Size") or 512),
+        "snap_start": (body.get("SnapStart") or {}).get("ApplyOn", "None"),
+        "tags": dict(body.get("Tags") or {}),
+        "layers": list(body.get("Layers") or []),
+        "vpc_config": body.get("VpcConfig") or None,
+        "dead_letter_config": body.get("DeadLetterConfig") or None,
+        "file_systems": body.get("FileSystemConfigs") or [],
+        "recursive_loop": "Terminate",
+        "tracing_mode": (body.get("TracingConfig") or {}).get("Mode", "PassThrough"),
+        "log_format": (body.get("LoggingConfig") or {}).get("LogFormat", "Text"),
+        "reserved_concurrency": None,
+        "function_url": None,
+        "event_invoke_config": None,
+        "policy_statements": {},
+        "aliases": {},
+        "versions": {}, "next_version": 1,
+        "invocations": [],
+        "last_modified": _now_iso(), "revision_id": uuid.uuid4().hex,
+    }
     _functions(store)[name] = fn
     _persist(store)
     return _json(201, _fn_view(fn))
 
 
 def _update_function_code(store, name, body):
-    fn = _functions(store).get(name)
-    if not fn:
-        return _err(404, "ResourceNotFoundException", f"Function not found: {name}")
-    fn["source"] = _extract_source(body) or fn["source"]
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    source = _extract_source(body)
+    if source:
+        fn["source"] = source
+        fn["code_sha256"] = base64.b64encode(hashlib.sha256(source.encode()).digest()).decode()
+    if body.get("Architectures"):
+        fn["architectures"] = list(body["Architectures"])
+    fn["last_modified"] = _now_iso()
+    fn["revision_id"] = uuid.uuid4().hex
     _persist(store)
     return _json(200, _fn_view(fn))
 
 
-def _get_function(store, name):
-    fn = _functions(store).get(name)
+_CONFIG_FIELDS = {
+    "Description": "description", "MemorySize": "memory_size", "Timeout": "timeout",
+    "Handler": "handler", "Runtime": "runtime", "Role": "role",
+}
+
+
+def _update_function_configuration(store, name, body):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    for api_key, local_key in _CONFIG_FIELDS.items():
+        if api_key in body and body[api_key] is not None:
+            fn[local_key] = body[api_key]
+    if "Environment" in body:
+        fn["env"] = dict((body.get("Environment") or {}).get("Variables") or {})
+    if "Layers" in body:
+        fn["layers"] = list(body["Layers"] or [])
+    if "Architectures" in body:
+        fn["architectures"] = list(body["Architectures"] or ["x86_64"])
+    if "VpcConfig" in body:
+        fn["vpc_config"] = body["VpcConfig"] or None
+    if "DeadLetterConfig" in body:
+        fn["dead_letter_config"] = body["DeadLetterConfig"] or None
+    if "FileSystemConfigs" in body:
+        fn["file_systems"] = body["FileSystemConfigs"] or []
+    if "EphemeralStorage" in body:
+        fn["ephemeral_storage_mb"] = int((body.get("EphemeralStorage") or {}).get("Size") or 512)
+    if "SnapStart" in body:
+        fn["snap_start"] = (body.get("SnapStart") or {}).get("ApplyOn", "None")
+    if "TracingConfig" in body:
+        fn["tracing_mode"] = (body.get("TracingConfig") or {}).get("Mode", "PassThrough")
+    if "LoggingConfig" in body:
+        fn["log_format"] = (body.get("LoggingConfig") or {}).get("LogFormat", "Text")
+    fn["last_modified"] = _now_iso()
+    fn["revision_id"] = uuid.uuid4().hex
+    _persist(store)
+    return _json(200, _fn_view(fn))
+
+
+def _get_function(store, name, qualifier=None):
+    fn = _find_fn(store, name)
     if not fn:
-        return _err(404, "ResourceNotFoundException", f"Function not found: {name}")
-    return _json(200, {"Configuration": _fn_view(fn), "Code": {"RepositoryType": "S3"}})
+        return _err(404, "ResourceNotFoundException", f"Function not found: {_fn_arn(name)}")
+    if qualifier and qualifier != "$LATEST":
+        snap = fn["versions"].get(qualifier)
+        if not snap:
+            if qualifier not in fn["aliases"]:
+                return _err(404, "ResourceNotFoundException", f"Version not found: {qualifier}")
+        cfg = _version_view(fn, qualifier) if snap else _fn_view(fn, fn["aliases"][qualifier]["FunctionVersion"])
+    else:
+        cfg = _fn_view(fn)
+    return _json(200, {"Configuration": cfg, "Tags": fn.get("tags", {}),
+                       "Code": {"RepositoryType": "S3", "Location": f"https://vyomi-lambda.example/{name}", "Source": fn.get("source", "")}})
+
+
+def _get_function_configuration(store, name):
+    fn = _find_fn(store, name)
+    if not fn:
+        return _err(404, "ResourceNotFoundException", f"Function not found: {_fn_arn(name)}")
+    return _json(200, _fn_view(fn))
 
 
 def _list_functions(store):
@@ -162,24 +344,474 @@ def _list_functions(store):
 
 def _delete_function(store, name):
     if _functions(store).pop(name, None) is None:
-        return _err(404, "ResourceNotFoundException", f"Function not found: {name}")
+        return _err(404, "ResourceNotFoundException", f"Function not found: {_fn_arn(name)}")
+    _esms(store)
+    store._lambda_esms = {k: v for k, v in _esms(store).items() if v.get("FunctionName") != name}
     _persist(store)
     return LambdaResponse(status=204)
 
 
-# ── data plane: synchronous Invoke ─────────────────────────────────────────
+def _delete_version(store, name, version):
+    fn = _find_fn(store, name)
+    if not fn or fn["versions"].pop(version, None) is None:
+        return _err(404, "ResourceNotFoundException", f"Version not found: {version}")
+    _persist(store)
+    return LambdaResponse(status=204)
+
+
+# ── tags ─────────────────────────────────────────────────────────────────────────────────
+def _tag_resource(store, name, body):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    fn["tags"].update({str(k): str(v) for k, v in (body.get("Tags") or {}).items()})
+    _persist(store)
+    return _json(200, {})
+
+
+def _untag_resource(store, name, keys):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    for k in keys:
+        fn["tags"].pop(k, None)
+    _persist(store)
+    return _json(200, {})
+
+
+def _list_tags(store, name):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    return _json(200, {"Tags": fn.get("tags", {})})
+
+
+# ── function URL ─────────────────────────────────────────────────────────────────────────
+def _url_view(name, cfg):
+    return {"FunctionUrl": f"https://{name.lower()}.lambda-url.{REGION}.on.vyomi/",
+            "FunctionArn": _fn_arn(name), "AuthType": cfg.get("AuthType", "AWS_IAM"),
+            "Cors": cfg.get("Cors") or {}, "InvokeMode": cfg.get("InvokeMode", "BUFFERED"),
+            "CreationTime": cfg.get("CreationTime", _now_iso()), "LastModifiedTime": _now_iso()}
+
+
+def _create_function_url_config(store, name, body):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    if fn.get("function_url"):
+        return _err(409, "ResourceConflictException", "Function URL config already exists.")
+    fn["function_url"] = {"AuthType": body.get("AuthType", "AWS_IAM"), "Cors": body.get("Cors") or {},
+                          "InvokeMode": body.get("InvokeMode", "BUFFERED"), "CreationTime": _now_iso()}
+    _persist(store)
+    return _json(201, _url_view(name, fn["function_url"]))
+
+
+def _get_function_url_config(store, name):
+    fn = _find_fn(store, name)
+    if not fn:
+        return _err(404, "ResourceNotFoundException", f"Function not found: {_fn_arn(name)}")
+    if not fn.get("function_url"):
+        return _err(404, "ResourceNotFoundException", "The resource you requested doesn't exist.")
+    return _json(200, _url_view(name, fn["function_url"]))
+
+
+def _update_function_url_config(store, name, body):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    if not fn.get("function_url"):
+        return _err(404, "ResourceNotFoundException", "The resource you requested doesn't exist.")
+    fn["function_url"].update({k: v for k, v in body.items() if k in ("AuthType", "Cors", "InvokeMode")})
+    _persist(store)
+    return _json(200, _url_view(name, fn["function_url"]))
+
+
+def _delete_function_url_config(store, name):
+    fn = _find_fn(store, name)
+    if not fn or not fn.get("function_url"):
+        return _err(404, "ResourceNotFoundException", "The resource you requested doesn't exist.")
+    fn["function_url"] = None
+    _persist(store)
+    return LambdaResponse(status=204)
+
+
+# ── aliases ──────────────────────────────────────────────────────────────────────────────
+def _alias_view(name, a):
+    return {"AliasArn": _fn_arn(name, a["Name"]), "Name": a["Name"], "FunctionVersion": a["FunctionVersion"],
+            "Description": a.get("Description", ""), "RoutingConfig": a.get("RoutingConfig"),
+            "RevisionId": a.get("RevisionId", "")}
+
+
+def _create_alias(store, name, body):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    alias_name = str(body.get("Name", "")).strip()
+    if not alias_name:
+        return _err(400, "InvalidParameterValueException", "Name is required.")
+    if alias_name in fn["aliases"]:
+        return _err(409, "ResourceConflictException", f"Alias already exists: {alias_name}")
+    a = {"Name": alias_name, "FunctionVersion": str(body.get("FunctionVersion", "$LATEST")),
+        "Description": body.get("Description", ""), "RoutingConfig": body.get("RoutingConfig"),
+        "RevisionId": uuid.uuid4().hex}
+    fn["aliases"][alias_name] = a
+    _persist(store)
+    return _json(201, _alias_view(name, a))
+
+
+def _list_aliases(store, name):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    return _json(200, {"Aliases": [_alias_view(name, a) for a in fn["aliases"].values()]})
+
+
+def _get_alias(store, name, alias_name):
+    fn = _find_fn(store, name)
+    a = fn and fn["aliases"].get(alias_name)
+    if not a:
+        return _err(404, "ResourceNotFoundException", f"Alias not found: {alias_name}")
+    return _json(200, _alias_view(name, a))
+
+
+def _update_alias(store, name, alias_name, body):
+    fn = _find_fn(store, name)
+    a = fn and fn["aliases"].get(alias_name)
+    if not a:
+        return _err(404, "ResourceNotFoundException", f"Alias not found: {alias_name}")
+    for k in ("FunctionVersion", "Description", "RoutingConfig"):
+        if k in body:
+            a[k] = body[k]
+    a["RevisionId"] = uuid.uuid4().hex
+    _persist(store)
+    return _json(200, _alias_view(name, a))
+
+
+def _delete_alias(store, name, alias_name):
+    fn = _find_fn(store, name)
+    if not fn or fn["aliases"].pop(alias_name, None) is None:
+        return _err(404, "ResourceNotFoundException", f"Alias not found: {alias_name}")
+    _persist(store)
+    return LambdaResponse(status=204)
+
+
+# ── versions ─────────────────────────────────────────────────────────────────────────────
+def _version_view(fn, version):
+    snap = fn["versions"][version]
+    v = _fn_view({**fn, **snap}, qualifier=version)
+    return v
+
+
+def _publish_version(store, name, body):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    version = str(fn["next_version"])
+    fn["next_version"] += 1
+    fn["versions"][version] = {
+        "source": fn["source"], "code_sha256": fn["code_sha256"], "runtime": fn["runtime"],
+        "handler": fn["handler"], "memory_size": fn["memory_size"], "timeout": fn["timeout"],
+        "env": dict(fn["env"]), "description": body.get("Description", fn["description"]),
+        "last_modified": _now_iso(),
+    }
+    _persist(store)
+    return _json(201, _version_view(fn, version))
+
+
+def _list_versions_by_function(store, name):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    versions = [_fn_view(fn, "$LATEST")] + [_version_view(fn, v) for v in sorted(fn["versions"], key=int)]
+    return _json(200, {"Versions": versions})
+
+
+# ── layers ───────────────────────────────────────────────────────────────────────────────
+def _layer_version_view(layer_name, version, v):
+    return {"LayerVersionArn": _layer_arn(layer_name, version), "LayerArn": _layer_arn(layer_name),
+            "Version": version, "Description": v.get("Description", ""),
+            "CreatedDate": v.get("CreatedDate", ""), "CompatibleRuntimes": v.get("CompatibleRuntimes", []),
+            "CompatibleArchitectures": v.get("CompatibleArchitectures", []),
+            "LicenseInfo": v.get("LicenseInfo", ""), "Content": {"CodeSize": v.get("CodeSize", 0)}}
+
+
+def _publish_layer_version(store, layer_name, body):
+    layers = _layers(store)
+    entry = layers.setdefault(layer_name, {"versions": {}, "next_version": 1})
+    version = entry["next_version"]
+    entry["next_version"] += 1
+    source = _extract_source(body.get("Content") or {}) or str((body.get("Content") or {}).get("S3Key") or "")
+    entry["versions"][version] = {
+        "Description": body.get("Description", ""), "CreatedDate": _now_iso(),
+        "CompatibleRuntimes": body.get("CompatibleRuntimes") or [],
+        "CompatibleArchitectures": body.get("CompatibleArchitectures") or [],
+        "LicenseInfo": body.get("LicenseInfo", ""), "CodeSize": len(source),
+    }
+    _persist(store)
+    return _json(201, _layer_version_view(layer_name, version, entry["versions"][version]))
+
+
+def _list_layers(store, body=None):
+    out = []
+    for layer_name, entry in _layers(store).items():
+        if not entry["versions"]:
+            continue
+        latest = max(entry["versions"])
+        lv = _layer_version_view(layer_name, latest, entry["versions"][latest])
+        out.append({"LayerName": layer_name, "LayerArn": _layer_arn(layer_name),
+                    "LatestMatchingVersion": lv})
+    return _json(200, {"Layers": out})
+
+
+def _list_layer_versions(store, layer_name):
+    entry = _layers(store).get(layer_name, {"versions": {}})
+    rows = [_layer_version_view(layer_name, v, entry["versions"][v]) for v in sorted(entry["versions"], reverse=True)]
+    return _json(200, {"LayerVersions": rows})
+
+
+def _get_layer_version(store, layer_name, version):
+    entry = _layers(store).get(layer_name)
+    v = entry and entry["versions"].get(int(version))
+    if not v:
+        return _err(404, "ResourceNotFoundException", f"Layer version not found: {layer_name}:{version}")
+    return _json(200, _layer_version_view(layer_name, int(version), v))
+
+
+def _delete_layer_version(store, layer_name, version):
+    entry = _layers(store).get(layer_name)
+    if not entry or entry["versions"].pop(int(version), None) is None:
+        return _err(404, "ResourceNotFoundException", f"Layer version not found: {layer_name}:{version}")
+    _persist(store)
+    return LambdaResponse(status=204)
+
+
+# ── event source mappings ("Triggers") ──────────────────────────────────────────────────
+# Modeled for every source the console offers (SQS/DynamoDB/Kinesis/S3/SNS/EventBridge/
+# API Gateway/CloudWatch Logs) as one UUID-keyed, listable, deletable record — but Vyomi
+# never polls or subscribes the other service, so LastProcessingResult always reads
+# "No records processed" and the trigger never fires on its own (see module docstring).
+def _esm_view(e):
+    return {"UUID": e["UUID"], "EventSourceArn": e.get("EventSourceArn", ""),
+            "FunctionArn": _fn_arn(e["FunctionName"]), "FunctionName": e["FunctionName"],
+            "EventSourceType": e.get("EventSourceType", "Unknown"),
+            "State": e.get("State", "Enabled"), "StateTransitionReason": "USER_INITIATED",
+            "BatchSize": e.get("BatchSize", 10), "LastModified": e.get("LastModified", ""),
+            "LastProcessingResult": "No records processed"}
+
+
+def _create_event_source_mapping(store, body):
+    fn_name = str(body.get("FunctionName", "")).strip()
+    try:
+        _require_fn(store, fn_name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    uid = str(uuid.uuid4())
+    e = {"UUID": uid, "FunctionName": fn_name, "EventSourceArn": body.get("EventSourceArn", ""),
+        "EventSourceType": body.get("EventSourceType") or _esm_source_type(body.get("EventSourceArn", "")),
+        "State": "Enabled" if body.get("Enabled", True) else "Disabled",
+        "BatchSize": int(body.get("BatchSize") or 10), "LastModified": _now_iso()}
+    _esms(store)[uid] = e
+    _persist(store)
+    return _json(202, _esm_view(e))
+
+
+def _esm_source_type(arn: str) -> str:
+    for token, label in (("sqs", "SQS"), ("dynamodb", "DynamoDB"), ("kinesis", "Kinesis"),
+                        ("s3", "S3"), ("sns", "SNS"), ("events", "EventBridge (CloudWatch Events)"),
+                        ("logs", "CloudWatch Logs"), ("execute-api", "API Gateway")):
+        if f":{token}:" in arn or arn.startswith(token):
+            return label
+    return "Unknown"
+
+
+def _list_event_source_mappings(store, function_name=None):
+    rows = [e for e in _esms(store).values() if not function_name or e["FunctionName"] == function_name]
+    rows.sort(key=lambda e: e["LastModified"])
+    return _json(200, {"EventSourceMappings": [_esm_view(e) for e in rows]})
+
+
+def _get_event_source_mapping(store, uid):
+    e = _esms(store).get(uid)
+    if not e:
+        return _err(404, "ResourceNotFoundException", f"Event source mapping not found: {uid}")
+    return _json(200, _esm_view(e))
+
+
+def _update_event_source_mapping(store, uid, body):
+    e = _esms(store).get(uid)
+    if not e:
+        return _err(404, "ResourceNotFoundException", f"Event source mapping not found: {uid}")
+    if "Enabled" in body:
+        e["State"] = "Enabled" if body["Enabled"] else "Disabled"
+    if "BatchSize" in body:
+        e["BatchSize"] = int(body["BatchSize"])
+    e["LastModified"] = _now_iso()
+    _persist(store)
+    return _json(200, _esm_view(e))
+
+
+def _delete_event_source_mapping(store, uid):
+    e = _esms(store).pop(uid, None)
+    if not e:
+        return _err(404, "ResourceNotFoundException", f"Event source mapping not found: {uid}")
+    e["State"] = "Deleting"
+    _persist(store)
+    return _json(200, _esm_view(e))
+
+
+# ── resource policy (AddPermission / GetPolicy / RemovePermission) ─────────────────────
+def _add_permission(store, name, body):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    sid = str(body.get("StatementId", "")).strip()
+    if not sid:
+        return _err(400, "InvalidParameterValueException", "StatementId is required.")
+    if sid in fn["policy_statements"]:
+        return _err(409, "ResourceConflictException", f"Statement already exists: {sid}")
+    stmt = {"Sid": sid, "Effect": "Allow", "Action": body.get("Action", "lambda:InvokeFunction"),
+            "Principal": body.get("Principal", "*"), "Resource": _fn_arn(name)}
+    if body.get("PrincipalOrgID"):
+        stmt["Condition"] = {"StringEquals": {"aws:PrincipalOrgID": body["PrincipalOrgID"]}}
+    fn["policy_statements"][sid] = stmt
+    _persist(store)
+    return _json(201, {"Statement": json.dumps(stmt)})
+
+
+def _get_policy(store, name):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    if not fn["policy_statements"]:
+        return _err(404, "ResourceNotFoundException", "The resource you requested doesn't exist.")
+    policy = {"Version": "2012-10-17", "Id": "default", "Statement": list(fn["policy_statements"].values())}
+    return _json(200, {"Policy": json.dumps(policy), "RevisionId": uuid.uuid4().hex})
+
+
+def _remove_permission(store, name, sid):
+    fn = _find_fn(store, name)
+    if not fn or fn["policy_statements"].pop(sid, None) is None:
+        return _err(404, "ResourceNotFoundException", f"Statement not found: {sid}")
+    _persist(store)
+    return LambdaResponse(status=204)
+
+
+# ── concurrency / recursion ──────────────────────────────────────────────────────────────
+def _put_function_concurrency(store, name, body):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    fn["reserved_concurrency"] = int(body.get("ReservedConcurrentExecutions", 0))
+    _persist(store)
+    return _json(200, {"ReservedConcurrentExecutions": fn["reserved_concurrency"]})
+
+
+def _get_function_concurrency(store, name):
+    fn = _find_fn(store, name)
+    if not fn:
+        return _err(404, "ResourceNotFoundException", f"Function not found: {_fn_arn(name)}")
+    return _json(200, {"ReservedConcurrentExecutions": fn.get("reserved_concurrency")})
+
+
+def _delete_function_concurrency(store, name):
+    fn = _find_fn(store, name)
+    if not fn:
+        return _err(404, "ResourceNotFoundException", f"Function not found: {_fn_arn(name)}")
+    fn["reserved_concurrency"] = None
+    _persist(store)
+    return LambdaResponse(status=204)
+
+
+def _put_function_recursion_config(store, name, body):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    value = body.get("RecursiveLoop", "Terminate")
+    if value not in ("Allow", "Terminate"):
+        return _err(400, "InvalidParameterValueException", "RecursiveLoop must be Allow or Terminate.")
+    fn["recursive_loop"] = value
+    _persist(store)
+    return _json(200, {"RecursiveLoop": value})
+
+
+def _get_function_recursion_config(store, name):
+    fn = _find_fn(store, name)
+    if not fn:
+        return _err(404, "ResourceNotFoundException", f"Function not found: {_fn_arn(name)}")
+    return _json(200, {"RecursiveLoop": fn.get("recursive_loop", "Terminate")})
+
+
+# ── event invoke config ("Destinations") ────────────────────────────────────────────────
+def _put_function_event_invoke_config(store, name, body):
+    try:
+        fn = _require_fn(store, name)
+    except _NotFound as e:
+        return _err(404, "ResourceNotFoundException", str(e))
+    cfg = {"DestinationConfig": body.get("DestinationConfig") or {},
+          "MaximumRetryAttempts": body.get("MaximumRetryAttempts", 2),
+          "MaximumEventAgeInSeconds": body.get("MaximumEventAgeInSeconds", 21600),
+          "LastModified": _now_iso()}
+    fn["event_invoke_config"] = cfg
+    _persist(store)
+    return _json(200, {"FunctionArn": _fn_arn(name), **cfg})
+
+
+def _get_function_event_invoke_config(store, name):
+    fn = _find_fn(store, name)
+    if not fn or not fn.get("event_invoke_config"):
+        return _err(404, "ResourceNotFoundException", "The resource you requested doesn't exist.")
+    return _json(200, {"FunctionArn": _fn_arn(name), **fn["event_invoke_config"]})
+
+
+def _delete_function_event_invoke_config(store, name):
+    fn = _find_fn(store, name)
+    if not fn or not fn.get("event_invoke_config"):
+        return _err(404, "ResourceNotFoundException", "The resource you requested doesn't exist.")
+    fn["event_invoke_config"] = None
+    _persist(store)
+    return LambdaResponse(status=204)
+
+
+# ── data plane: synchronous Invoke ──────────────────────────────────────────────────────
+def _record_invocation(fn, request_id, duration_ms, error):
+    fn["invocations"].insert(0, {
+        "Timestamp": _now_iso(), "RequestId": request_id,
+        "LogStream": f"{time.strftime('%Y/%m/%d')}/[$LATEST]{uuid.uuid4().hex}",
+        "DurationInMS": round(duration_ms, 2), "BilledDurationInMS": max(1, round(duration_ms)),
+        "MemorySetInMB": fn.get("memory_size", 128),
+        "MemoryUsedInMB": max(16, round(fn.get("memory_size", 128) * 0.35)),
+        "Error": bool(error),
+    })
+    del fn["invocations"][RECENT_INVOCATIONS_KEPT:]
+
+
 def _invoke(store, name, body):
     fn = _functions(store).get(name)
     if not fn:
-        return _err(404, "ResourceNotFoundException", f"Function not found: {name}")
+        return _err(404, "ResourceNotFoundException", f"Function not found: {_fn_arn(name)}")
     try:
         event = json.loads(body.decode("utf-8")) if body else {}
     except Exception:
         event = {}
     source = fn.get("source", "")
     sandbox_globals = {"__builtins__": dict(_SAFE_BUILTINS), "json": json}
-    context = {"function_name": name, "aws_request_id": uuid.uuid4().hex,
-               "invoked_function_arn": fn["arn"]}
+    request_id = uuid.uuid4().hex
+    context = {"function_name": name, "aws_request_id": request_id,
+               "invoked_function_arn": _fn_arn(name)}
+    start = time.perf_counter()
     try:
         exec(compile(source, f"<lambda:{name}>", "exec"), sandbox_globals)
         handler = sandbox_globals.get(fn.get("handler", "index.handler").split(".")[-1]) \
@@ -187,37 +819,111 @@ def _invoke(store, name, body):
         if not callable(handler):
             raise RuntimeError("handler is not defined")
         result = handler(event, context)
+        duration_ms = (time.perf_counter() - start) * 1000
+        _record_invocation(fn, request_id, duration_ms, error=False)
+        _persist(store)
         return LambdaResponse(status=200, body=json.dumps(result).encode(),
                               headers={"X-Amz-Executed-Version": "$LATEST"})
     except Exception as e:
+        duration_ms = (time.perf_counter() - start) * 1000
+        _record_invocation(fn, request_id, duration_ms, error=True)
+        _persist(store)
         # Handled-error response: 200 with X-Amz-Function-Error, like real Lambda.
         payload = {"errorType": type(e).__name__, "errorMessage": str(e)}
         return LambdaResponse(status=200, body=json.dumps(payload).encode(),
                               headers={"X-Amz-Function-Error": "Unhandled"})
 
 
-# ── dispatch ────────────────────────────────────────────────────────────────
+def _recent_invocations(store, name):
+    fn = _functions(store).get(name)
+    if not fn:
+        return _err(404, "ResourceNotFoundException", f"Function not found: {_fn_arn(name)}")
+    rows = fn.get("invocations", [])
+    n = len(rows)
+    errors = sum(1 for r in rows if r["Error"])
+    avg_ms = round(sum(r["DurationInMS"] for r in rows) / n, 2) if n else 0
+    metrics = {
+        "Invocations": n, "AvgDurationMs": avg_ms,
+        "ErrorCount": errors, "SuccessRatePct": round((n - errors) / n * 100, 1) if n else 100.0,
+        "Throttles": 0, "AsyncDeliveryFailures": 0, "ConcurrentExecutions": 0,
+    }
+    return _json(200, {"Invocations": rows, "Metrics": metrics})
+
+
+# ── dispatch ────────────────────────────────────────────────────────────────────────────
 def dispatch(store, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> LambdaResponse:
-    """Native Lambda REST router:
-        POST   /2015-03-31/functions                       CreateFunction
-        GET    /2015-03-31/functions                       ListFunctions
-        GET    /2015-03-31/functions/{name}                GetFunction
-        DELETE /2015-03-31/functions/{name}                DeleteFunction
-        PUT    /2015-03-31/functions/{name}/code           UpdateFunctionCode
-        POST   /2015-03-31/functions/{name}/invocations    Invoke
+    """Native Lambda REST router. Paths are versioned like real Lambda:
+        /2015-03-31/functions[...]                CRUD, code, configuration, invoke(s),
+                                                    aliases, versions, policy, tags
+        /2015-03-31/functions/{name}/url           Function URL config
+        /2015-03-31/functions/{name}/concurrency   Reserved concurrency
+        /2015-03-31/functions/{name}/recursion-config
+        /2015-03-31/functions/{name}/event-invoke-config
+        /2015-03-31/layers[...]                    PublishLayerVersion / List* / Get* / Delete*
+        /2015-03-31/event-source-mappings[...]     Triggers (see module docstring)
     """
     method = (method or "GET").upper()
+    query = query or {}
     p = path.split("?", 1)[0]
     segs = [s for s in p.split("/") if s != ""]
-    # find the 'functions' marker (after the /2015-03-31 api version)
-    if "functions" not in segs:
+    if not segs or not segs[0].startswith("20"):
         return _err(404, "ResourceNotFoundException", f"Unknown path: {path}")
-    i = segs.index("functions")
-    tail = segs[i + 1:]
+    rest = segs[1:]
+    if not rest:
+        return _err(404, "ResourceNotFoundException", f"Unknown path: {path}")
+    kind, tail = rest[0], rest[1:]
 
-    if not tail:                                   # collection
+    if kind == "layers":
+        return _dispatch_layers(store, method, tail, body)
+    if kind == "event-source-mappings":
+        return _dispatch_esms(store, method, tail, query, body)
+    if kind == "functions":
+        return _dispatch_functions(store, method, tail, query, body)
+    return _err(404, "ResourceNotFoundException", f"Unknown path: {path}")
+
+
+def _dispatch_layers(store, method, tail, body):
+    if not tail:
+        if method == "GET":
+            return _list_layers(store)
+        return _err(405, "MethodNotAllowed", "Unsupported method on layers")
+    layer_name = tail[0]
+    if len(tail) >= 2 and tail[1] == "versions":
+        if len(tail) == 2:
+            if method == "POST":
+                return _publish_layer_version(store, layer_name, _parse(body))
+            if method == "GET":
+                return _list_layer_versions(store, layer_name)
+        if len(tail) == 3:
+            version = tail[2]
+            if method == "GET":
+                return _get_layer_version(store, layer_name, version)
+            if method == "DELETE":
+                return _delete_layer_version(store, layer_name, version)
+    return _err(404, "ResourceNotFoundException", "Unknown layers path")
+
+
+def _dispatch_esms(store, method, tail, query, body):
+    if not tail:
+        if method == "POST":
+            return _create_event_source_mapping(store, _parse(body))
+        if method == "GET":
+            return _list_event_source_mappings(store, query.get("FunctionName"))
+        return _err(405, "MethodNotAllowed", "Unsupported method on event-source-mappings")
+    uid = tail[0]
+    if method == "GET":
+        return _get_event_source_mapping(store, uid)
+    if method == "PUT":
+        return _update_event_source_mapping(store, uid, _parse(body))
+    if method == "DELETE":
+        return _delete_event_source_mapping(store, uid)
+    return _err(405, "MethodNotAllowed", "Unsupported method on event-source-mapping")
+
+
+def _dispatch_functions(store, method, tail, query, body):
+    if not tail:
         if method == "POST":
             return _create_function(store, _parse(body))
         if method == "GET":
@@ -227,15 +933,103 @@ def dispatch(store, method: str, path: str,
     name = tail[0]
     if len(tail) == 1:
         if method == "GET":
-            return _get_function(store, name)
+            return _get_function(store, name, query.get("Qualifier"))
         if method == "DELETE":
+            qualifier = query.get("Qualifier")
+            if qualifier and qualifier != "$LATEST":
+                return _delete_version(store, name, qualifier)
             return _delete_function(store, name)
         return _err(405, "MethodNotAllowed", f"Unsupported {method} on function")
-    if len(tail) == 2 and tail[1] == "invocations" and method == "POST":
-        return _invoke(store, name, body)
-    if len(tail) == 2 and tail[1] == "code" and method in ("PUT", "POST"):
+
+    sub, rest = tail[1], tail[2:]
+
+    if sub == "invocations" and not rest:
+        if method == "POST":
+            return _invoke(store, name, body)
+        if method == "GET":
+            return _recent_invocations(store, name)
+
+    if sub == "code" and not rest and method in ("PUT", "POST"):
         return _update_function_code(store, name, _parse(body))
-    return _err(404, "ResourceNotFoundException", f"Unknown path: {path}")
+
+    if sub == "configuration" and not rest:
+        if method == "PUT":
+            return _update_function_configuration(store, name, _parse(body))
+        if method == "GET":
+            return _get_function_configuration(store, name)
+
+    if sub == "url" and not rest:
+        if method == "POST":
+            return _create_function_url_config(store, name, _parse(body))
+        if method == "GET":
+            return _get_function_url_config(store, name)
+        if method == "PUT":
+            return _update_function_url_config(store, name, _parse(body))
+        if method == "DELETE":
+            return _delete_function_url_config(store, name)
+
+    if sub == "tags" and not rest:
+        if method == "GET":
+            return _list_tags(store, name)
+        if method == "POST":
+            return _tag_resource(store, name, _parse(body))
+        if method == "DELETE":
+            keys = query.get("tagKeys") or ""
+            return _untag_resource(store, name, [k for k in keys.split(",") if k])
+
+    if sub == "concurrency" and not rest:
+        if method == "PUT":
+            return _put_function_concurrency(store, name, _parse(body))
+        if method == "GET":
+            return _get_function_concurrency(store, name)
+        if method == "DELETE":
+            return _delete_function_concurrency(store, name)
+
+    if sub == "recursion-config" and not rest:
+        if method == "PUT":
+            return _put_function_recursion_config(store, name, _parse(body))
+        if method == "GET":
+            return _get_function_recursion_config(store, name)
+
+    if sub == "event-invoke-config" and not rest:
+        if method in ("PUT", "POST"):
+            return _put_function_event_invoke_config(store, name, _parse(body))
+        if method == "GET":
+            return _get_function_event_invoke_config(store, name)
+        if method == "DELETE":
+            return _delete_function_event_invoke_config(store, name)
+
+    if sub == "aliases":
+        if not rest:
+            if method == "POST":
+                return _create_alias(store, name, _parse(body))
+            if method == "GET":
+                return _list_aliases(store, name)
+        elif len(rest) == 1:
+            alias_name = rest[0]
+            if method == "GET":
+                return _get_alias(store, name, alias_name)
+            if method == "PUT":
+                return _update_alias(store, name, alias_name, _parse(body))
+            if method == "DELETE":
+                return _delete_alias(store, name, alias_name)
+
+    if sub == "versions" and not rest:
+        if method == "POST":
+            return _publish_version(store, name, _parse(body))
+        if method == "GET":
+            return _list_versions_by_function(store, name)
+
+    if sub == "policy":
+        if not rest:
+            if method == "POST":
+                return _add_permission(store, name, _parse(body))
+            if method == "GET":
+                return _get_policy(store, name)
+        elif len(rest) == 1 and method == "DELETE":
+            return _remove_permission(store, name, rest[0])
+
+    return _err(404, "ResourceNotFoundException", f"Unknown functions path: /{name}/{sub}")
 
 
 def _parse(body: bytes) -> dict:
