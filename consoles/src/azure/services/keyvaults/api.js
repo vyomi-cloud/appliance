@@ -50,6 +50,32 @@ export const parseSecretId = (id = "") => {
   return { name: m?.[1] || "", version: m?.[2] || "" };
 };
 
+// ── Certificates data plane (Key Vault Certificates REST) ──────────────────────────────
+export const listCertificates = async () => (await kv("GET", "/certificates")).value || [];
+export const createCertificate = (name, body) => kv("POST", `/certificates/${encodeURIComponent(name)}/create`, { body });
+export const getCertificate = (name) => kv("GET", `/certificates/${encodeURIComponent(name)}`);
+export const deleteCertificate = (name) => kv("DELETE", `/certificates/${encodeURIComponent(name)}`);
+
+/** base64url (no padding) -> uppercase hex, the portal's thumbprint display for `x5t`. */
+export const thumbprintHex = (x5t) => {
+  const b64 = (x5t || "").replace(/-/g, "+").replace(/_/g, "/");
+  return atob(b64).split("").map((c) => c.charCodeAt(0).toString(16).padStart(2, "0")).join("").toUpperCase();
+};
+
+/** certificate id (https://vault/certificates/{name}) -> {name}. */
+export const parseCertId = (id = "") => {
+  const m = id.match(/\/certificates\/([^/]+)$/);
+  return { name: m?.[1] || "" };
+};
+
+// ── Locks (Microsoft.Authorization/locks, resource-scoped extension resource) ──────────
+const LOCK_API_VERSION = "2020-05-01";
+const lockPath = (rg, name, lockName) => `${ARM.path(rg, name)}/providers/Microsoft.Authorization/locks${lockName ? `/${encodeURIComponent(lockName)}` : ""}`;
+
+export const listLocks = async (rg, name) => (await restJson("GET", lockPath(rg, name), { query: { "api-version": LOCK_API_VERSION } })).value || [];
+export const putLock = (rg, name, lockName, body) => restJson("PUT", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION }, body });
+export const deleteLock = (rg, name, lockName) => restJson("DELETE", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION } });
+
 // ── create-vault form model → ARM body ──────────────────────────────────────────────────
 export function toArmBody(f) {
   return {

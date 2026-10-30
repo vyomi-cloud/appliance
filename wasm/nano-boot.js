@@ -102,7 +102,7 @@ const CORES = [
   "gcp_secretmanager_core.py", "gcp_pubsub_core.py", "gcp_iam_core.py", "gcp_cloudsql_core.py", "gcp_artifactregistry_core.py", "gcp_logging_core.py", "gcp_compute_core.py", "instance_catalog.py", "gcp_compute_instances_core.py", "gcp_resourcemanager_core.py", "gcp_pam_core.py",
   // Azure data-plane cores — the azure_core_adapter data-plane (console CRUD).
   "azure_blob_core.py", "azure_cosmos_core.py", "azure_keyvault_secrets_core.py",
-  "azure_keyvault_keys_core.py", "azure_queue_core.py",
+  "azure_keyvault_keys_core.py", "azure_keyvault_certificates_core.py", "azure_queue_core.py",
   // Generic child/sub-resource store (SQL databases+firewall rules, SB queues) +
   // durable editable settings — azure_core_adapter imports it. Pure stdlib; its
   // state rides az_cosmos's public `nano_sub` attr so nano_persist persists it.

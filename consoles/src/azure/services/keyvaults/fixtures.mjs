@@ -45,4 +45,17 @@ export default {
     await wire("PATCH", vaultPath(uniq), { svc: null, body: { properties: { accessPolicies: [{ tenantId: "00000000-0000-0000-0000-000000000000", objectId: uniq, permissions: { keys: ["get"], secrets: [], certificates: [] } }] } } });
     return uniq;
   },
+
+  "live-lock": async (wire, uniq) => {
+    await ensureVault(wire);
+    await wire("PUT", `${vaultPath(VAULT).split("?")[0]}/providers/Microsoft.Authorization/locks/${uniq}?api-version=2020-05-01`,
+      { svc: null, body: { properties: { level: "CanNotDelete", notes: "uic" } } });
+    return uniq;
+  },
+
+  "live-cert": async (wire, uniq) => {
+    await ensureVault(wire);
+    await wire("POST", `/certificates/${uniq}/create?api-version=7.4`, { svc: null, body: { policy: { x509_certificate_properties: { subject: "CN=uic" } } } });
+    return uniq;
+  },
 };

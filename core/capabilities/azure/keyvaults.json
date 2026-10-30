@@ -97,26 +97,30 @@
   ]
  },
  "azure.keyvaults.certificates": {
-  "title": "Certificates",
+  "title": "Certificates (generate self-signed, get, list, delete) over the Key Vault Certificates REST API",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi has no Key Vault Certificates REST core; the Certificates panel is an honest 'Not simulated' gap."
+   "Certificate creation completes synchronously (no pending CertificateOperation to poll) and only issues self-signed certificates — CA-issued and imported (PFX/PEM) certificates are not simulated. The `cer`/`x5t` fields are deterministic cosmetic bytes, not real X.509 DER."
   ],
-  "tests": []
+  "tests": [
+   "tests/conformance/test_azure_keyvault_certificates_core.py"
+  ]
  },
  "azure.keyvaults.locks": {
-  "title": "Resource locks (Microsoft.Authorization/locks)",
+  "title": "Resource locks (Microsoft.Authorization/locks), scoped to this vault",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "full",
+   "offline": "full"
   },
   "limitations": [
-   "Vyomi's ARM core has no resource-scoped Microsoft.Authorization/locks support; the Locks panel is an honest 'Not simulated' gap."
+   "Locks are only simulated at the resource scope (this vault); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
   ],
-  "tests": []
+  "tests": [
+   "tests/conformance/test_azure_arm_core.py"
+  ]
  },
  "azure.keyvaults.activity_log": {
   "title": "Activity log",

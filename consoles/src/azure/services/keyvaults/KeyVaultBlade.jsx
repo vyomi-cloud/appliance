@@ -74,7 +74,7 @@ export default function KeyVaultBlade({ params, query }) {
       accessconfiguration: () => <AccessConfiguration a={a} reload={reload} />,
       networking: () => <Networking a={a} reload={reload} />,
       properties: () => <Properties a={a} />,
-      locks: () => <Locks />,
+      locks: () => <Locks a={a} />,
       activitylog: () => <ActivityLog />,
       exporttemplate: () => <ExportTemplate a={a} />,
     }[panel];
@@ -639,14 +639,96 @@ function SecretVersionDetail({ self, name, version }) {
   );
 }
 
-// ── Certificates (no backing core) ────────────────────────────────────────────────────
+// ── Certificates (Key Vault Certificates REST) ────────────────────────────────────────
 function Certificates() {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listCertificates(), []);
+  const [create, setCreate] = useState(false);
+  const [gap, setGap] = useState(null); // "Restore Backup" | "Manage deleted certificates" | "Certificate Contacts" | "Certificate Authorities"
+  const rows = (data || []).map((c) => ({ ...api.parseCertId(c.id), raw: c }));
   return (
     <>
       <div className="vy-panel-title">Certificates</div>
-      <NotSimulated feature="Certificates (Name, Thumbprint, Status and Expiration date)"
-        note={'Generate/Import, Restore Backup, Manage deleted certificates, Certificate Contacts and Certificate Authorities are not available, nor is the "Filter by name..." filter.'} />
+      <BrowseGrid
+        resourceName="certificate" rowKey={(r) => r.name} filterPlaceholder="Filter by name..."
+        items={rows} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<>
+          <ToolbarButton onClick={() => setCreate(true)}>Generate/Import</ToolbarButton>
+          <ToolbarButton onClick={() => setGap("Restore Backup")}>Restore Backup</ToolbarButton>
+          <ToolbarButton onClick={() => setGap("Manage deleted certificates")}>Manage deleted certificates</ToolbarButton>
+          <ToolbarButton onClick={() => setGap("Certificate Contacts")}>Certificate Contacts</ToolbarButton>
+          <ToolbarButton onClick={() => setGap("Certificate Authorities")}>Certificate Authorities</ToolbarButton>
+        </>}
+        onDelete={async (sel) => {
+          for (const r of sel) await api.deleteCertificate(r.name);
+          notify.success(`Deleted ${sel.length} certificate${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+          reload();
+        }}
+        csvName="certificates.csv"
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "thumbprint", label: "Thumbprint", value: (r) => api.thumbprintHex(r.raw.x5t) },
+          { key: "status", label: "Status", value: (r) => (r.raw.attributes?.enabled ? "Enabled" : "Disabled") },
+          { key: "expiration", label: "Expiration date", value: (r) => (r.raw.attributes?.exp ? fmtDate(r.raw.attributes.exp * 1000) : "--") },
+        ]}
+      />
+      <CreateCertificateDialog open={create} onClose={() => setCreate(false)} onCreated={reload} />
+      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
+        <DialogSurface aria-label={gap || "Not simulated"}>
+          <DialogBody>
+            <DialogTitle>{gap}</DialogTitle>
+            <DialogContent><NotSimulated feature={gap || ""} /></DialogContent>
+            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </>
+  );
+}
+
+function CreateCertificateDialog({ open, onClose, onCreated }) {
+  const notify = useNotify();
+  const [name, setName] = useState("");
+  const [subject, setSubject] = useState("CN=vyomi.local");
+  const [months, setMonths] = useState("12");
+  const [busy, setBusy] = useState(false);
+  const valid = /^[a-zA-Z0-9-]{1,127}$/.test(name);
+  const go = async () => {
+    setBusy(true);
+    try {
+      await api.createCertificate(name, {
+        policy: {
+          x509_certificate_properties: { subject, validity_in_months: Number(months) },
+          issuer_parameters: { name: "Self" },
+        },
+      });
+      notify.success(`Successfully created certificate '${name}'.`, "Certificate created");
+      setName(""); onClose(); onCreated();
+    } catch (e) { notify.error(e, "Failed to create certificate"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Create a certificate">
+        <DialogBody>
+          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Create a certificate</DialogTitle>
+          <DialogContent>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Field label="Method of Certificate Creation"><Select value="Generate" aria-label="Method of Certificate Creation"><option>Generate</option></Select></Field>
+              <Field label="Certificate Name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Certificate Name" /></Field>
+              <Field label="Type of Certificate Authority (CA)"><Select value="Self-signed certificate" aria-label="Type of Certificate Authority (CA)"><option>Self-signed certificate</option></Select></Field>
+              <Field label="Subject"><Input value={subject} onChange={(_, d) => setSubject(d.value)} aria-label="Subject" /></Field>
+              <Field label="Validity period (in months)"><Input type="number" value={months} onChange={(_, d) => setMonths(d.value)} aria-label="Validity period (in months)" /></Field>
+              <NotSimulated feature="Content type, lifetime action and advanced policy configuration on a new certificate" />
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={!valid || busy} onClick={go}>Create</Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
 }
 
@@ -754,14 +836,94 @@ function Properties({ a }) {
   );
 }
 
-// ── Locks (no backing resource type) ──────────────────────────────────────────────────
-function Locks() {
+// ── Locks (Microsoft.Authorization/locks, scoped to this vault) ───────────────────────
+function Locks({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listLocks(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const [add, setAdd] = useState(false);
+  const [gap, setGap] = useState(null); // "Subscription" | "Resource group" | "Feedback"
+  const rows = data || [];
   return (
     <>
       <div className="vy-panel-title">Locks</div>
-      <NotSimulated feature="Resource locks"
-        note={'The Lock name, Lock type, Scope and Notes columns, "Add lock" (Lock name, Lock type and Notes fields), and the Add, Subscription, Resource group and Feedback commands are not available, nor is the "Search to filter items..." filter.'} />
+      <BrowseGrid
+        resourceName="lock" rowKey={(r) => r.name} filterPlaceholder="Search to filter items..."
+        items={rows} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<>
+          <ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add</ToolbarButton>
+          <ToolbarButton onClick={() => setGap("Subscription")}>Subscription</ToolbarButton>
+          <ToolbarButton onClick={() => setGap("Resource group")}>Resource group</ToolbarButton>
+          <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
+        </>}
+        onDelete={async (sel) => {
+          for (const r of sel) await api.deleteLock(a.resourceGroup, a.name, r.name);
+          notify.success(`Deleted ${sel.length} lock${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+          reload();
+        }}
+        csvName="locks.csv"
+        columns={[
+          { key: "name", label: "Lock name" },
+          { key: "type", label: "Lock type", value: (r) => (r.properties?.level === "ReadOnly" ? "Read-only" : "Delete") },
+          { key: "scope", label: "Scope", value: () => a.name },
+          { key: "notes", label: "Notes", value: (r) => r.properties?.notes || "--" },
+        ]}
+      />
+      <AddLockDialog open={add} onClose={() => setAdd(false)}
+        onCreate={async (name, level, notes) => { await api.putLock(a.resourceGroup, a.name, name, { properties: { level, notes } }); reload(); }} />
+      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
+        <DialogSurface aria-label={gap || "Not simulated"}>
+          <DialogBody>
+            <DialogTitle>{gap}</DialogTitle>
+            <DialogContent>
+              <NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : `Locks scoped to the ${(gap || "").toLowerCase()}`} />
+            </DialogContent>
+            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </>
+  );
+}
+
+function AddLockDialog({ open, onClose, onCreate }) {
+  const notify = useNotify();
+  const [name, setName] = useState("");
+  const [type, setType] = useState("Delete");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const valid = /^[a-zA-Z0-9._-]{1,90}$/.test(name);
+  const go = async () => {
+    setBusy(true);
+    try {
+      await onCreate(name, type === "Read-only" ? "ReadOnly" : "CanNotDelete", notes);
+      notify.success(`Lock '${name}' was added.`, "Lock added");
+      setName(""); setNotes(""); setType("Delete"); onClose();
+    } catch (e) { notify.error(e, "Failed to add lock"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Add lock">
+        <DialogBody>
+          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Add lock</DialogTitle>
+          <DialogContent>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Field label="Lock name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Lock name" /></Field>
+              <Field label="Lock type" required>
+                <Select value={type} onChange={(_, d) => setType(d.value)} aria-label="Lock type">
+                  <option>Read-only</option><option>Delete</option>
+                </Select>
+              </Field>
+              <Field label="Notes"><Textarea value={notes} onChange={(_, d) => setNotes(d.value)} aria-label="Notes" /></Field>
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={!valid || busy} onClick={go}>OK</Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
 }
 

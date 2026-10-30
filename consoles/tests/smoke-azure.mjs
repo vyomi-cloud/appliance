@@ -194,10 +194,37 @@ try {
   check("wire-created key shown in Keys grid", true);
   await shot("21-keys");
 
-  // ── Unbacked panel is honest ────────────────────────────────────────────────────────────
+  // ── Certificate created in the UI → readable over the Key Vault Certificates REST wire ─
+  await openPanel("Certificates");
+  await page.getByRole("button", { name: "Generate/Import" }).click();
+  const CERT = `smoke-cert-${n}`;
+  await page.getByLabel("Certificate Name", { exact: true }).fill(CERT);
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByText(CERT, { exact: true }).waitFor({ timeout: 10000 });
+  const cGet = await kvWire(`/certificates/${CERT}`);
+  check("UI create certificate → readable over Key Vault Certificates wire", cGet.status === 200 && !!JSON.parse(cGet.text).x5t, `HTTP ${cGet.status}`);
+  await shot("21b-certificates");
+
+  // ── Lock created in the UI → visible over the native ARM wire (and the reverse) ────────
   await openPanel("Locks");
-  check("key vault Locks panel is an honest NotSimulated", await page.locator("[data-vyomi-not-simulated]").first().isVisible());
-  await shot("22-locks-not-simulated");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const LOCK = `smoke-lock-${n}`;
+  await page.getByLabel("Lock name", { exact: true }).fill(LOCK);
+  await page.getByLabel("Lock type", { exact: true }).selectOption("Read-only");
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByText(LOCK, { exact: true }).waitFor({ timeout: 10000 });
+  const lockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${KV}/providers/Microsoft.Authorization/locks/${LOCK}?api-version=2020-05-01`);
+  check("UI create lock → visible over native ARM", lockGet.status === 200 && JSON.parse(lockGet.text).properties.level === "ReadOnly", `HTTP ${lockGet.status}`);
+  await shot("22-locks");
+
+  const WIRELOCK = `wirelock${n}`;
+  const putLock = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${KV}/providers/Microsoft.Authorization/locks/${WIRELOCK}?api-version=2020-05-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties: { level: "CanNotDelete" } }) });
+  check("Microsoft.Authorization/locks PUT over wire", putLock.status === 200 || putLock.status === 201, `HTTP ${putLock.status}`);
+  await page.reload();
+  await page.getByText(WIRELOCK, { exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created lock shown in Locks grid", true);
+  await shot("23-locks-wire");
 
   // ── Shell: unbacked service is honest; dark mode ───────────────────────────────────────
   await page.goto(UI + "#/vms");

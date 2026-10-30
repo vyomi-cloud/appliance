@@ -195,6 +195,7 @@ class AzureArm:
     def __init__(self, base: str = ""):
         self.state: dict = {}
         self.operations: dict = {}
+        self.locks: dict = {}                   # Microsoft.Authorization/locks, keyed by lock id.lower()
         self._base = base                       # endpoint/LRO URL prefix (relative by default)
 
     # ── public entry ──────────────────────────────────────────────────────
@@ -248,6 +249,20 @@ class AzureArm:
             return _err(400, "BadRequest", f"Unrecognized ARM path: /subscriptions/{rest}")
         after = rest_segs[idx + 1:]
 
+        # Resource-scoped extension resources carry a SECOND "providers" segment:
+        # .../providers/<ns>/<type>/<name>/providers/Microsoft.Authorization/locks[/<lockName>]
+        # — any resource can be locked, so this is handled generically here rather
+        # than per resource type.
+        ext_i = next((n for n, s in enumerate(after) if s.lower() == "providers"), None)
+        if ext_i is not None:
+            parent_chain, parent_names = self._split_chain(after[:ext_i])
+            ext_chain, ext_names = self._split_chain(after[ext_i + 1:])
+            if (len(parent_names) == len(parent_chain) - 1 and ext_chain[:1] == ["Microsoft.Authorization"]
+                    and len(ext_chain) > 1 and ext_chain[1].lower() == "locks"):
+                scope_rid = _canonical_id(sub, rg, parent_chain, parent_names)
+                return self._locks(method, scope_rid, ext_names, payload)
+            return _err(404, "ResourceTypeNotSupported", "Only Microsoft.Authorization/locks is simulated as a resource-scoped extension resource.")
+
         # provider registration probes
         if len(after) == 0 and method == "GET":
             return _ok({"value": [self._provider_info(n) for n in sorted({c["namespace"] for c in CATALOG})]})
@@ -260,14 +275,7 @@ class AzureArm:
 
         namespace = after[0]
         chain = after[1:]
-        # ARM type path alternates type/name: providers/<ns>/<t1>/<n1>/<t2>/<n2>...
-        type_chain = [namespace]
-        names: list = []
-        for n, token in enumerate(chain):
-            if n % 2 == 0:
-                type_chain.append(token)
-            else:
-                names.append(token)
+        type_chain, names = self._split_chain(after)
         is_collection = (len(chain) % 2 == 1)
 
         # Microsoft.AppConfiguration: the substrate-free engine owns the store / key-value semantics;
@@ -335,6 +343,44 @@ class AzureArm:
             return resp
         if method == "DELETE":
             rec = self.state.pop(key, None)
+            for lk in [lk for lk, l in self.locks.items() if l.get("_scope") == key]:
+                del self.locks[lk]
+            return _ok(None, status=200 if rec is not None else 204)
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+    @staticmethod
+    def _split_chain(after):
+        """providers/<ns>/<t1>/<n1>/<t2>/<n2>… -> ([ns, t1, t2, …], [n1, n2, …])."""
+        type_chain = [after[0]]
+        names: list = []
+        for n, token in enumerate(after[1:]):
+            (type_chain if n % 2 == 0 else names).append(token)
+        return type_chain, names
+
+    # ── Microsoft.Authorization/locks (resource-scoped extension resource) ────
+    def _locks(self, method, scope_rid, names, payload):
+        scope_key = scope_rid.lower()
+        if not names:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+            return _ok({"value": [_view(l) for l in self.locks.values() if l.get("_scope") == scope_key]})
+        name = names[0]
+        lock_id = f"{scope_rid}/providers/Microsoft.Authorization/locks/{name}"
+        key = lock_id.lower()
+        if method == "GET":
+            rec = self.locks.get(key)
+            return _ok(_view(rec)) if rec else _err(404, "ResourceNotFound", f"Lock '{name}' not found.")
+        if method in ("PUT", "PATCH"):
+            level = _get_path(payload, "properties.level") or "CanNotDelete"
+            if level not in ("CanNotDelete", "ReadOnly"):
+                return _err(400, "BadRequest", "properties.level must be CanNotDelete or ReadOnly.")
+            existed = key in self.locks
+            self.locks[key] = {"id": lock_id, "name": name, "type": "Microsoft.Authorization/locks",
+                                "_scope": scope_key,
+                                "properties": {"level": level, "notes": _get_path(payload, "properties.notes") or ""}}
+            return _ok(_view(self.locks[key]), status=200 if existed else 201)
+        if method == "DELETE":
+            rec = self.locks.pop(key, None)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
