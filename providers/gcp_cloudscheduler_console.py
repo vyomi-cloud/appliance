@@ -51,6 +51,19 @@ async def _drain(pending, store):
             continue
         _, job_name, topic_name, data, attrs = item
         project, topic = topic_name.split("/")[1], topic_name.split("/")[3]
+        from core import wire_ingress as _wi
+        if _wi.is_unified("gcp_pubsub"):   # v4 C0g: publish into the shared Pub/Sub core
+            err = ""
+            try:
+                from routes import gcp_pubsub_unified as _gps
+                status = _gps.publish(project, topic, data, attrs)
+            except Exception as e:   # noqa: BLE001 — never fail the request over a delivery error
+                status, err = 500, str(e)
+            job = store.jobs.get(job_name)
+            if status != 200 and job is not None:
+                job["status"] = ({"code": 5, "message": f"Pub/Sub topic {topic_name} not found ({status})."}
+                                 if status == 404 else {"code": 13, "message": err or f"HTTP {status}"})
+            continue
         try:
             await gcp_services.api_gcp_pubsub_publish(
                 project, topic, _Shim({"messages": [{"data": data, "attributes": attrs}]}))

@@ -23,7 +23,12 @@ AVRO/JSON schema), pull (ack-deadline-based redelivery with exponential retry
 backoff, per-ordering-key in-order delivery, dead-letter forwarding past
 maxDeliveryAttempts, retention pruning), acknowledge, seek (to a snapshot OR,
 when the topic has message retention enabled, to a point in time), and
-snapshot / schema create+get+list+delete.
+snapshot / schema create+get+list+delete. Also modifyAckDeadline (nack / lease extension),
+modifyPushConfig, subscriptions:detach, topics/{t}/subscriptions + topics/{t}/snapshots,
+snapshot patch, schemas:validate / :validateMessage and get/set/testIamPermissions on all
+four resource kinds (v4 C0g — what the offline appliance's pre-v4 handlers or the native
+clients also use). Any other path under the four collections is a google.rpc NOT_FOUND /
+INVALID_ARGUMENT JSON error.
 
 DEPTH pass (this module): topic message retention now actually retains a
 replayable backlog (seek-by-time), AVRO/JSON schema messages are validated on
@@ -42,6 +47,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from core.messaging_store import MessagingStore
 
@@ -831,6 +837,164 @@ def _delete_schema(store, name: str) -> PubsubResponse:
     return _json(200, {})
 
 
+
+# ── subscription verbs the high-level clients use (modifyAckDeadline is how
+# google-cloud-pubsub's streaming / flow-controlled subscribers extend or nack a
+# lease; modifyPushConfig flips a subscription between push and pull; detach cuts a
+# subscription from its topic) ─────────────────────────────────────────────────────
+def _modify_ack_deadline(store, name: str, body: dict) -> PubsubResponse:
+    sub = _require_subscription(store, name)
+    try:
+        deadline = int(body.get("ackDeadlineSeconds", 0) or 0)
+    except (TypeError, ValueError):
+        raise PubsubError(400, "INVALID_ARGUMENT", "ackDeadlineSeconds must be an integer.")
+    if deadline < 0 or deadline > 600:
+        raise PubsubError(400, "INVALID_ARGUMENT",
+                          f"Invalid ack deadline: {deadline}. It must be between 0 and 600 seconds.")
+    ackids = sub.setdefault("ackids", {})
+    targets = {ackids[a] for a in (body.get("ackIds") or []) if a in ackids}
+    if targets:
+        now = store.now()
+        for m in sub.get("messages", []):
+            if m.get("_id") in targets and not m.get("_acked"):
+                if deadline == 0:            # a nack: redeliverable on the very next pull
+                    m["_pending"] = False
+                    m["_pending_until"] = now
+                else:                        # extend (or shorten) the lease from now
+                    m["_pending"] = True
+                    m["_pending_until"] = now + deadline
+        store.persist()
+    return _json(200, {})
+
+
+def _modify_push_config(store, name: str, body: dict) -> PubsubResponse:
+    sub = _require_subscription(store, name)
+    sub["pushConfig"] = dict(body.get("pushConfig") or {})
+    store.persist()
+    return _json(200, {})
+
+
+def _detach_subscription(store, name: str) -> PubsubResponse:
+    sub = _require_subscription(store, name)
+    topic = store.get_topic(sub.get("topic", ""))
+    if topic and name in topic.get("subscriptions", []):
+        topic["subscriptions"].remove(name)
+    sub["topic"] = "_deleted-topic_"
+    sub["detached"] = True
+    sub["messages"] = []
+    sub["ackids"] = {}
+    store.persist()
+    return _json(200, {})
+
+
+def _list_topic_subscriptions(store, topic_name: str) -> PubsubResponse:
+    topic = _require_topic(store, topic_name)
+    subs = [n for n in topic.get("subscriptions", []) if store.get_queue(n)]
+    out: dict = {}
+    if subs:
+        out["subscriptions"] = subs
+    return _json(200, out)
+
+
+def _list_topic_snapshots(store, topic_name: str) -> PubsubResponse:
+    _require_topic(store, topic_name)
+    snaps = sorted(n for n, s in _snap_store(store).items() if s.get("topic") == topic_name)
+    out: dict = {}
+    if snaps:
+        out["snapshots"] = snaps
+    return _json(200, out)
+
+
+def _patch_snapshot(store, name: str, body: dict) -> PubsubResponse:
+    snap = _snap_store(store).get(name)
+    if not snap:
+        raise PubsubError(404, "NOT_FOUND", f"Snapshot not found: {name}")
+    fields = body.get("snapshot") or body
+    mask = [f.strip() for f in str(body.get("updateMask", "")).split(",") if f.strip()]
+    for k in (mask or [k for k in fields if k in ("labels", "expireTime")]):
+        if k in ("labels", "expireTime"):
+            if k in fields:
+                snap[k] = fields[k]
+            elif k == "labels":
+                snap.pop(k, None)
+    store.persist()
+    return _json(200, _snapshot_view(snap))
+
+
+# ── schema validation (schemas:validate / schemas:validateMessage) ─────────────
+_SCHEMA_TYPES = ("AVRO", "PROTOCOL_BUFFER")
+
+
+def _check_schema_definition(schema: dict) -> None:
+    stype = str(schema.get("type") or "")
+    if stype not in _SCHEMA_TYPES:
+        raise PubsubError(400, "INVALID_ARGUMENT", f"Invalid schema type: {stype or 'TYPE_UNSPECIFIED'}.")
+    definition = str(schema.get("definition") or "")
+    if not definition.strip():
+        raise PubsubError(400, "INVALID_ARGUMENT", "Schema definition is empty.")
+    if stype == "AVRO":
+        try:
+            json.loads(definition)
+        except Exception:
+            raise PubsubError(400, "INVALID_ARGUMENT", "Invalid AVRO schema definition: not valid JSON.")
+
+
+def _validate_schema(store, project: str, body: dict) -> PubsubResponse:
+    _check_schema_definition(body.get("schema") or {})
+    return _json(200, {})
+
+
+def _validate_message(store, project: str, body: dict) -> PubsubResponse:
+    if body.get("name"):
+        name = str(body["name"])
+        if "/" not in name:
+            name = f"projects/{project}/schemas/{name}"
+        schema = _schema_store(store).get(name)
+        if not schema:
+            raise PubsubError(404, "NOT_FOUND", f"Schema not found: {name}")
+    elif body.get("schema"):
+        schema = body["schema"]
+        _check_schema_definition(schema)
+    else:
+        raise PubsubError(400, "INVALID_ARGUMENT", "Either name or schema must be set.")
+    encoding = str(body.get("encoding") or "JSON").upper()
+    record = {"data": body.get("message", "")}
+    one = SimpleNamespace(pubsub={"schemas": {"_v": schema}})   # reuse the publish-time validator verbatim
+    _validate_schema_message(one, {"schemaSettings": {"schema": "_v", "encoding": encoding}}, record)
+    return _json(200, {})
+
+
+# ── IAM on Pub/Sub resources (topics / subscriptions / snapshots / schemas) ────
+def _resource_for_iam(store, collection: str, name: str) -> dict:
+    if collection == "topics":
+        return _require_topic(store, name)
+    if collection == "subscriptions":
+        return _require_subscription(store, name)
+    holder = _snap_store(store) if collection == "snapshots" else _schema_store(store)
+    rec = holder.get(name)
+    if not rec:
+        raise PubsubError(404, "NOT_FOUND", f"Resource not found: {name}")
+    return rec
+
+
+def _iam(store, collection: str, name: str, verb: str, body: dict) -> PubsubResponse:
+    rec = _resource_for_iam(store, collection, name)
+    if verb == "getIamPolicy":
+        return _json(200, rec.get("_iamPolicy") or {"etag": "ACAB"})
+    if verb == "setIamPolicy":
+        policy = dict(body.get("policy") or {})
+        policy["etag"] = uuid.uuid4().hex[:8]
+        rec["_iamPolicy"] = policy
+        store.persist()
+        return _json(200, policy)
+    # testIamPermissions: the simulator's caller holds every permission it asks about
+    perms = [p for p in (body.get("permissions") or []) if isinstance(p, str)]
+    return _json(200, {"permissions": perms} if perms else {})
+
+
+_IAM_VERBS = ("getIamPolicy", "setIamPolicy", "testIamPermissions")
+
+
 # ── dispatch ──────────────────────────────────────────────────────────────
 def dispatch(store: MessagingStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
@@ -872,6 +1036,17 @@ def dispatch(store: MessagingStore, method: str, path: str,
                 if method == "GET":
                     return _list_topics(store, project)
                 return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on topics")
+            if len(segs) == 5 and segs[4] in ("subscriptions", "snapshots") and not verb:
+                topic_name = "/".join(segs[:4])
+                if method != "GET":
+                    return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on topic {segs[4]}")
+                if segs[4] == "subscriptions":
+                    return _list_topic_subscriptions(store, topic_name)
+                return _list_topic_snapshots(store, topic_name)
+            if len(segs) != 4:
+                return _err(404, "NOT_FOUND", f"Unknown path: {path}")
+            if verb in _IAM_VERBS:
+                return _iam(store, collection, resource, verb, payload)
             # specific topic
             if verb == "publish" and method == "POST":
                 return _publish(store, resource, payload)
@@ -890,6 +1065,16 @@ def dispatch(store: MessagingStore, method: str, path: str,
                 if method == "GET":
                     return _list_subscriptions(store, project)
                 return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on subscriptions")
+            if len(segs) != 4:
+                return _err(404, "NOT_FOUND", f"Unknown path: {path}")
+            if verb in _IAM_VERBS:
+                return _iam(store, collection, resource, verb, payload)
+            if verb == "modifyAckDeadline" and method == "POST":
+                return _modify_ack_deadline(store, resource, payload)
+            if verb == "modifyPushConfig" and method == "POST":
+                return _modify_push_config(store, resource, payload)
+            if verb == "detach" and method == "POST":
+                return _detach_subscription(store, resource)
             # specific subscription
             if verb == "pull" and method == "POST":
                 return _pull(store, resource, payload)
@@ -912,9 +1097,15 @@ def dispatch(store: MessagingStore, method: str, path: str,
                 if method == "GET":
                     return _list_snapshots(store, project)
                 return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on snapshots")
+            if len(segs) != 4:
+                return _err(404, "NOT_FOUND", f"Unknown path: {path}")
+            if verb in _IAM_VERBS:
+                return _iam(store, collection, resource, verb, payload)
             # specific snapshot
             if method == "PUT":
                 return _create_snapshot(store, resource, payload)
+            if method == "PATCH":
+                return _patch_snapshot(store, resource, payload)
             if method == "GET":
                 return _get_snapshot(store, resource)
             if method == "DELETE":
@@ -925,9 +1116,17 @@ def dispatch(store: MessagingStore, method: str, path: str,
             if len(segs) == 3:                       # collection
                 if method == "GET":
                     return _list_schemas(store, project, query)
-                if method == "POST":
+                if method == "POST" and verb == "validate":
+                    return _validate_schema(store, project, payload)
+                if method == "POST" and verb == "validateMessage":
+                    return _validate_message(store, project, payload)
+                if method == "POST" and not verb:
                     return _create_schema(store, project, query, payload)
                 return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on schemas")
+            if len(segs) != 4:
+                return _err(404, "NOT_FOUND", f"Unknown path: {path}")
+            if verb in _IAM_VERBS:
+                return _iam(store, collection, resource, verb, payload)
             # specific schema
             if method == "GET":
                 return _get_schema(store, resource, query)

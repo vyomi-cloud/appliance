@@ -1996,3 +1996,204 @@ def az_servicebus_store() -> AppStateServiceBusStore:
     if _AZSB is None:
         _AZSB = AppStateServiceBusStore()
     return _AZSB
+
+
+# ── v4 C0g: GCP Pub/Sub (topics / subscriptions / snapshots / schemas) ────────────────
+#
+#   Pub/Sub         topics / subscriptions (+ each subscription's message backlog) /
+#                   snapshots / schemas      -> service_states["gcp_gcp_pubsub"]
+#                                               {topics, subscriptions, snapshots, schemas, engine}
+#                   The core's records live IN the pre-v4 slot (`gcp_pubsub_state`), keyed by the
+#                   full resource name (projects/{p}/topics/{t}), so every v3 reader of that slot —
+#                   the space inventory / cost savings, the console summary counts, the tier
+#                   quantity cap, the CloudSim scan — counts exactly what the native wire wrote
+#                   (one dict, no sync). Pre-v4 records (keyed by the bare id, with `topicId` /
+#                   `subscriptionId` / `project`, plus the per-subscription `messages` backlog)
+#                   are converted in place on first use; once per space, the Pub/Sub emulator's
+#                   topics / subscriptions are adopted when PUBSUB_EMULATOR_HOST is configured.
+class AppStatePubsubStore(MessagingStore):
+    """gcp_pubsub_core store over the active space's `gcp_pubsub_state` slot."""
+
+    def __init__(self):
+        # NB: no super().__init__() — the dicts are the space's persisted slot.
+        self.account_id = ""
+        self._clock = None
+        self.sns: dict = {}
+
+    @staticmethod
+    def _slot() -> dict:
+        from core.app_context import gcp_pubsub_state
+        slot = gcp_pubsub_state._target()
+        for k in ("topics", "subscriptions", "snapshots", "schemas", "engine"):
+            if not isinstance(slot.get(k), dict):
+                slot[k] = {}
+        return slot
+
+    topics = property(lambda self: self._slot()["topics"])
+    queues = property(lambda self: self._slot()["subscriptions"])
+    pubsub = property(lambda self: self._slot())          # {snapshots, schemas} live beside them
+
+    # the message-id sequence persists with the slot (ids stay unique across restarts)
+    @property
+    def _pubsub_msg_seq(self) -> int:
+        return int(self._slot()["engine"].get("msg_seq") or 0)
+
+    @_pubsub_msg_seq.setter
+    def _pubsub_msg_seq(self, v: int) -> None:
+        self._slot()["engine"]["msg_seq"] = int(v)
+
+    def persist(self) -> None:
+        """No-op: the tier middleware persists the kernel state after every mutating
+        request (the slot lives inside it)."""
+
+    # ── upgrade path: pre-v4 records → the core shape ─────────────────────
+    def adopt(self) -> None:
+        slot = self._slot()
+        meta = slot["engine"]
+        if not meta.get("adopted"):
+            meta["adopted"] = _http_date()
+            try:
+                _adopt_pubsub_emulator(self)
+            except Exception as exc:
+                _log.warning("pubsub: emulator adoption skipped: %s", exc)
+        if any(not str(k).startswith("projects/") for coll in ("topics", "subscriptions", "schemas")
+               for k in slot[coll]):
+            n = adopt_legacy_pubsub(slot)
+            if n:
+                _log.info("pubsub: adopted %d pre-v4 records", n)
+
+
+def _ps_project(rec: dict, default: str = "") -> str:
+    from core.app_context import gcp_project_name
+    for f in ("name", "topic"):
+        v = str(rec.get(f) or "")
+        if v.startswith("projects/"):
+            return v.split("/")[1]
+    return gcp_project_name(rec.get("project") or default or None)
+
+
+def adopt_legacy_pubsub(slot: dict) -> int:
+    """Convert pre-v4 records (bare-id keys) IN PLACE into gcp_pubsub_core records keyed by
+    full resource name; the pre-v4 per-subscription `messages` backlog becomes the core
+    subscription's message list (unacked, deliverable)."""
+    n = 0
+    topics, subs, schemas = slot["topics"], slot["subscriptions"], slot["schemas"]
+    for key in [k for k in list(topics) if not str(k).startswith("projects/")]:
+        rec = topics.pop(key)
+        if not isinstance(rec, dict):
+            continue
+        project = _ps_project(rec)
+        tid = str(rec.get("topicId") or key).rsplit("/", 1)[-1]
+        name = f"projects/{project}/topics/{tid}"
+        if name in topics:
+            continue
+        t = {"name": name, "subscriptions": [], "created": _rfc3339(rec.get("createTime")),
+             "labels": dict(rec.get("labels") or {})}
+        for f in ("kmsKeyName", "messageRetentionDuration", "schemaSettings"):
+            if rec.get(f):
+                t[f] = rec[f]
+        topics[name] = t
+        n += 1
+    legacy_msgs = slot.get("messages") if isinstance(slot.get("messages"), dict) else {}
+    now = time.time()
+    for key in [k for k in list(subs) if not str(k).startswith("projects/")]:
+        rec = subs.pop(key)
+        if not isinstance(rec, dict):
+            continue
+        project = _ps_project(rec)
+        sid = str(rec.get("subscriptionId") or key).rsplit("/", 1)[-1]
+        name = f"projects/{project}/subscriptions/{sid}"
+        if name in subs:
+            continue
+        topic = str(rec.get("topic") or "")
+        if topic and not topic.startswith("projects/") and topic != "_deleted-topic_":
+            topic = f"projects/{project}/topics/{topic}"
+        backlog = []
+        for m in (legacy_msgs.get(key) or legacy_msgs.get(sid) or []):
+            if isinstance(m, dict):
+                rec_m = {"_id": uuid.uuid4().hex, "_publish_at": float(m.get("_publishedAt") or now),
+                         "data": m.get("data", ""), "attributes": dict(m.get("attributes") or {}),
+                         "messageId": str(m.get("messageId") or uuid.uuid4().hex),
+                         "publishTime": str(m.get("publishTime") or _rfc3339(""))}
+                if m.get("orderingKey"):
+                    rec_m["orderingKey"] = m["orderingKey"]
+                backlog.append(rec_m)
+        s = {"name": name, "topic": topic or "_deleted-topic_",
+             "ackDeadlineSeconds": int(rec.get("ackDeadlineSeconds") or 10),
+             "messages": backlog, "ackids": {}, "created": _rfc3339(rec.get("createTime")),
+             "labels": dict(rec.get("labels") or {}),
+             "messageRetentionDuration": str(rec.get("messageRetentionDuration") or "604800s"),
+             "retainAckedMessages": bool(rec.get("retainAckedMessages", False)),
+             "expirationPolicy": rec.get("expirationPolicy") or {"ttl": "2678400s"},
+             "enableMessageOrdering": bool(rec.get("enableMessageOrdering", False)),
+             "enableExactlyOnceDelivery": bool(rec.get("enableExactlyOnceDelivery", False)),
+             "pushConfig": rec.get("pushConfig") or {}}
+        for f in ("filter", "deadLetterPolicy", "retryPolicy"):
+            if rec.get(f):
+                s[f] = rec[f]
+        subs[name] = s
+        if s["topic"] in topics and name not in topics[s["topic"]]["subscriptions"]:
+            topics[s["topic"]]["subscriptions"].append(name)
+        n += 1
+    for key in [k for k in list(schemas) if not str(k).startswith("projects/")]:
+        rec = schemas.pop(key)
+        if not isinstance(rec, dict):
+            continue
+        name = f"projects/{_ps_project(rec)}/schemas/{str(rec.get('name') or key).rsplit('/', 1)[-1]}"
+        if name in schemas:
+            continue
+        schemas[name] = {"name": name, "type": str(rec.get("type") or "AVRO"),
+                         "definition": str(rec.get("definition") or ""),
+                         "revisionId": str(rec.get("revisionId") or uuid.uuid4().hex[:8]),
+                         "revisionCreateTime": _rfc3339(rec.get("createTime"))}
+        n += 1
+    if isinstance(slot.get("messages"), dict):
+        slot["messages"] = {}          # the backlogs now live on the subscriptions
+    return n
+
+
+def _adopt_pubsub_emulator(store: "AppStatePubsubStore") -> None:
+    """Once per space: topics / subscriptions the Pub/Sub emulator held (pre-v4 the
+    emulator was authoritative when PUBSUB_EMULATOR_HOST was set) → this state."""
+    from core import gcp_pubsub_emulator as emu
+    if not emu.available():
+        return
+    from core.app_context import gcp_project_name
+    projects = {gcp_project_name(None), "cloudlearn", "123456789012", "gcp-dev"}
+    for p in projects:
+        for t in emu.list_topics(p):
+            name = f"projects/{p}/topics/{t['name']}"
+            if name not in store.topics:
+                rec = {"name": name, "subscriptions": [], "created": _rfc3339(""),
+                       "labels": dict(t.get("labels") or {})}
+                for f in ("messageRetentionDuration", "kmsKeyName"):
+                    if t.get(f):
+                        rec[f] = t[f]
+                store.topics[name] = rec
+        for s in emu.list_subscriptions(p):
+            name = f"projects/{p}/subscriptions/{s['name']}"
+            topic = str(s.get("topic") or "")
+            if topic and not topic.startswith("projects/"):
+                topic = f"projects/{p}/topics/{topic}"
+            if name in store.queues:
+                continue
+            store.queues[name] = {"name": name, "topic": topic or "_deleted-topic_",
+                                  "ackDeadlineSeconds": int(s.get("ackDeadlineSeconds") or 10),
+                                  "messages": [], "ackids": {}, "created": _rfc3339(""),
+                                  "labels": dict(s.get("labels") or {}),
+                                  "messageRetentionDuration": str(s.get("messageRetentionDuration") or "604800s"),
+                                  "expirationPolicy": {"ttl": "2678400s"},
+                                  "enableMessageOrdering": bool(s.get("enableMessageOrdering", False)),
+                                  "pushConfig": {}}
+            if topic in store.topics and name not in store.topics[topic]["subscriptions"]:
+                store.topics[topic]["subscriptions"].append(name)
+
+
+_GPS = None
+
+
+def gcp_pubsub_store() -> AppStatePubsubStore:
+    global _GPS
+    if _GPS is None:
+        _GPS = AppStatePubsubStore()
+    return _GPS

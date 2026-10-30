@@ -126,7 +126,8 @@ def register(app: FastAPI) -> None:
         def _pubsub_count() -> int:
             try:
                 from core import gcp_pubsub_emulator as _pe
-                if _pe.available():
+                from core import wire_ingress as _wi_ps
+                if _pe.available() and not _wi_ps.is_unified("gcp_pubsub"):
                     return len(_pe.list_topics(target or _gcp_project_name("")))
             except Exception:
                 pass
@@ -146,6 +147,11 @@ def register(app: FastAPI) -> None:
         try:   # v4 C0d: Compute / VPC / Firestore counts come from the shared cores' state
             from routes import gcp_firestore_compute_unified as _gfc
             services.update(_gfc.summary_counts(target))
+        except Exception:
+            pass
+        try:   # v4 C0g: Pub/Sub topics come from the shared core's state (project-scoped)
+            from routes import gcp_pubsub_unified as _gps
+            services.update(_gps.summary_counts(target))
         except Exception:
             pass
         return {"project": target, "services": services}
