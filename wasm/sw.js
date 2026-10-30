@@ -670,6 +670,8 @@ async function route(method, path, body, query) {
     if (method === "GET")  return { tuple: ["aws", "ssm", "ListParameters", {}] };
     if (method === "POST") return { tuple: ["aws", "ssm", "PutParameter", body || {}] };
   }
+  m = path.match(/^\/api\/ssm\/parameters\/(.+)\/metadata$/);
+  if (m && method === "GET") return { tuple: ["aws", "ssm", "DescribeParameter", { name: dec(m[1]) }] };
   m = path.match(/^\/api\/ssm\/parameters\/(.+)\/history$/);
   if (m && method === "GET") return { tuple: ["aws", "ssm", "ParameterHistory", { name: dec(m[1]) }] };
   m = path.match(/^\/api\/ssm\/parameters\/(.+)$/);

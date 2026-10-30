@@ -371,6 +371,31 @@ const SECTIONS = {
     const st = (await call("GET", `/api/apigateway/apis/${aid}/detail/settings`)).json;
     check("apigateway Settings: API ID from the backend", st.rest_api_id === aid, JSON.stringify(st).slice(0, 200));
   },
+  async stepfunctions() {
+    const name = "rt-sm-" + Date.now().toString(36);
+    await call("POST", "/api/stepfunctions/machines", { name });
+    await openService("^step functions$");
+    await openRow(name);
+    const def = await tab("Definition");
+    check("stepfunctions Definition: the machine's states from its ASL", /States \(\d+\)/.test(def) && /Start state/.test(def), def);
+    const asl = JSON.stringify({ StartAt: "RtOnly", States: { RtOnly: { Type: "Pass", End: true } } });
+    await page.locator("#main [data-testid=sfn-definition]").fill(asl);
+    await page.locator("#main [data-testid=sfn-definition-save]").click();
+    await sleep(1500);
+    await tab("Executions");
+    const def2 = await tab("Definition");
+    check("stepfunctions Definition: an edited definition persists (UpdateStateMachine)", /RtOnly/.test(def2), def2);
+  },
+  async ssm() {
+    const name = "/rt/" + Date.now().toString(36);
+    await call("POST", "/api/ssm/parameters", { name, value: "rt-value-" + name.slice(4), type: "String" });
+    await openService("^systems manager$");
+    await openRow(name);
+    const v = await tab("Value");
+    check("ssm Value: GetParameter value + version of this parameter", v.includes("rt-value-" + name.slice(4)) && /VERSION\s*\n\s*1/i.test(v), v);
+    const props = (await call("GET", "/api/ssm/parameters/" + encodeURIComponent(name) + "/metadata")).json;
+    check("ssm Properties: DescribeParameters metadata without the value", props.name === name && props.value === undefined, JSON.stringify(props).slice(0, 200));
+  },
 };
 
 let server;

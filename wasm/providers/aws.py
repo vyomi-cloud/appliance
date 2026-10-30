@@ -179,6 +179,7 @@ class Aws(CloudProvider):
             ("ec2", "GetSerialConsoleAccess"):  lambda b, a, p: A.ec2_serial_access(p),
             ("ec2", "ModifySerialConsoleAccess"): lambda b, a, p: A.ec2_serial_access(p),
             ("iam", "ResourceAccess"):          lambda b, a, p: A.resource_access(p),
+            ("ssm", "DescribeParameter"):           lambda b, a, p: A.ssm_describe(p),
             ("apigateway", "GetRestApiSection"):    lambda b, a, p: A.apigw_section(p),
             ("apigateway", "UpdateRestApiSection"): lambda b, a, p: A.apigw_section(p),
             ("eventbridge", "GetConsoleRule"):      lambda b, a, p: A.eb_get_rule(p),

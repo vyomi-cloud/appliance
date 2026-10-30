@@ -487,7 +487,7 @@ _CLOUDWATCH_SUB = [
          "columns": [["key", "Setting"], ["value", "Value"]]},
         {"key": "history", "label": "History", "icon": "history", "type": "listtable", "field": "history",
          "columns": [["timestamp", "Date"], ["type", "Type"], ["summary", "Description"]]},
-        {"key": "actions", "label": "Actions", "icon": "bolt", "type": "listtable", "field": "action_list",
+        {"key": "actions", "label": "Actions", "icon": "bolt", "type": "cwActions", "field": "action_list",
          "columns": [["state", "State"], ["action", "Action"], ["enabled", "Enabled"]]},
     ]},
     {"group": "Settings", "items": [*_settings_props_locks()]},

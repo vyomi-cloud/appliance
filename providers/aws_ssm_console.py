@@ -59,6 +59,11 @@ def register(app, on_change=None):
     def parameter_history(name: str):
         return {"history": core.console_history(name, rec_or_404(name))}
 
+    @app.get("/api/ssm/parameters/{name:path}/metadata")
+    def parameter_metadata(name: str):
+        # DescribeParameters for one parameter: its metadata without the value.
+        return {k: v for k, v in core.console_view(name, rec_or_404(name)).items() if k != "value"}
+
     @app.get("/api/ssm/parameters/{name:path}")
     def get_parameter(name: str):
         return core.console_view(name, rec_or_404(name))

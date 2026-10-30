@@ -1241,3 +1241,10 @@ def apigw_section(p):
         out["deployments"] = sorted(out["deployments"] + [d for d in (api.get("deployment_history") or {}).values() if d["deployment_id"] not in seen],
                                     key=lambda d: d.get("created", ""), reverse=True)
     return {"ok": True, "section": section, **out}
+
+
+def ssm_describe(p):
+    """DescribeParameters for one parameter (the Properties tab): metadata, no value."""
+    from . import dataplane_adapter as _D
+    r = _D.ssm_get(p)
+    return {k: v for k, v in r.items() if k != "value"}

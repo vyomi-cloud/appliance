@@ -1654,7 +1654,7 @@ function renderStubPlaceholder(main, svc, label){
 // =====================================================================
 // DETAIL page (full-page; top tabs replace list)
 // =====================================================================
-async function renderDetail(main){
+async function renderDetail(main, opts){
   // Self-clear so any caller (router OR top-tab click) is safe.
   main.innerHTML = "";
   const svc = svcByKey(STATE.service);
@@ -1676,7 +1676,11 @@ async function renderDetail(main){
   }
   // Refetch
   const path = fillPath(svc.resource_path, {name});
-  const r = await api("GET", path);
+  // Switching tabs re-renders from the resource already read for this page (the
+  // header doesn't change); opening the page and the auto-refresh read it fresh.
+  const cached = opts && opts.reuse && STATE._detailRead && STATE._detailRead.path === path;
+  const r = cached ? STATE._detailRead.r : await api("GET", path);
+  STATE._detailRead = {path, r};
   const full = (r.ok && r.json) ? r.json : itemStub;
   // Sub-renderers address the resource as full.name; engines whose payload
   // keys it differently (table_name, queue_name) still get a usable name.
@@ -1706,7 +1710,7 @@ async function renderDetail(main){
   }
   const tabsEl = el("div",{class:"top-tabs"});
   tabs.forEach((t, i) => tabsEl.append(el("button",{class: i === STATE.detailTab ? "active" : "",
-    onclick:()=>{ STATE.detailTab = i; renderDetail(main); }}, t.label)));
+    onclick:()=>{ STATE.detailTab = i; renderDetail(main, {reuse: true}); }}, t.label)));
   main.append(tabsEl);
 
   // Tab content
@@ -2585,7 +2589,14 @@ SUB_RENDERERS.listtable = function(svc, full, host, tab){
   }))));
   host.append(tbl);
 };
+const _PROPS_SPECIAL = new Set(["ec2", "eventbridge", "kms", "secretsmanager", "dynamodb", "rds", "s3"]);
 SUB_RENDERERS.properties = async function(svc, full, host){
+  // Every other service: the resource's own Describe/Get response, read fresh.
+  if (!_PROPS_SPECIAL.has(svc.key) && svc.resource_path) {
+    // SSM: DescribeParameters (metadata, not the value); others: the resource Get.
+    const r = await api("GET", fillPath(svc.resource_path, {name: itemKey(svc, full)}) + (svc.key === "ssm" ? "/metadata" : ""));
+    if (r.ok && r.json && typeof r.json === "object") { const {ok, ...rest} = r.json; full = {...full, ...rest}; }
+  }
   // EC2: every property DescribeInstances returns for the instance, not just the grid row.
   if (svc.key === "ec2") { const r = await api("GET", _ec2p(full, "details")); if (r.ok && r.json) full = {...full, ...r.json}; }
   // EventBridge: DescribeRule.
@@ -3081,12 +3092,25 @@ SUB_RENDERERS.sfnlist = function(svc, full, host, tab){
   }).catch(e => host.append(el("div",{class:"alert err"}, "Failed to load: " + e.message)));
 };
 // Step Functions — the Amazon States Language definition, pretty-printed.
-SUB_RENDERERS.sfndefinition = function(svc, full, host){
-  let txt = full.definition || "";
+SUB_RENDERERS.sfndefinition = async function(svc, full, host){
+  // DescribeStateMachine, read when the tab opens; Save = UpdateStateMachine.
+  const m = await _dget(host, fillPath(svc.resource_path, {name: itemKey(svc, full)})); if (!m) return;
+  let txt = m.definition || full.definition || "";
   try { txt = JSON.stringify(JSON.parse(txt), null, 2); } catch (_) {}
+  host.append(_dkv("State machine", [["Type", m.type], ["ARN", m.arn || m.stateMachineArn, 1], ["IAM role ARN", m.role_arn || m.roleArn, 1], ["Status", m.status]]
+    .filter(([, v]) => v !== undefined)));
+  let asl = {}; try { asl = JSON.parse(txt); } catch (_) {}
+  const states = Object.entries(asl.States || {}).map(([n, st]) => ({name: n, type: st.Type, next: st.End ? "End" : (st.Next || ""), start: n === asl.StartAt ? "Yes" : ""}));
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "States (" + states.length + ")"),
+    _dtbl([["name","State"],["type","Type"],["next","Next"],[s => s.start || "No","Start state"]], states, "The definition has no states.")));
   const card = el("div",{class:"kv-card"});
   card.append(el("div",{class:"h"}, "Amazon States Language definition"));
-  card.append(el("pre",{class:"mono small", style:"white-space:pre-wrap;margin:0"}, txt || "none"));
+  const ta = el("textarea",{"data-testid":"sfn-definition",style:"width:100%;min-height:240px;font-family:Consolas,Menlo,monospace"}); ta.value = txt;
+  card.append(ta, el("button",{class:"btn primary",style:"margin-top:10px","data-testid":"sfn-definition-save",onclick:async()=>{
+    try { JSON.parse(ta.value); } catch (e) { toast("The definition is not valid JSON", "err"); return; }
+    const r = await api("PATCH", fillPath(svc.resource_path, {name: itemKey(svc, full)}), {definition: ta.value});
+    if (r.ok) { toast("State machine updated"); _rerender(); } else toast("Update failed: " + _derr(r), "err");
+  }}, icon("save"), "Save"));
   host.append(card);
 };
 
@@ -3123,10 +3147,14 @@ SUB_RENDERERS.apigw2list = function(svc, full, host, tab){
 };
 
 // Systems Manager — parameter value (SecureString decrypted via GET), editable → PUT = new version.
-SUB_RENDERERS.ssmvalue = function(svc, full, host){
+SUB_RENDERERS.ssmvalue = async function(svc, full, host){
   const name = itemKey(svc, full);
+  // GetParameter (WithDecryption) for this parameter, read when the tab opens.
+  const g = await _dget(host, fillPath(svc.resource_path, {name})); if (!g) return;
+  host.append(_dkv("Parameter details", [["Name", g.name || name], ["Type", g.type], ["Tier", g.tier], ["Data type", g.data_type],
+    ["Version", g.version], ["Last modified", g.last_modified], ["ARN", g.arn, 1]].filter(([, v]) => v !== undefined)));
   const panel = el("div",{class:"panel"}); host.append(panel);
-  let value = full.value != null ? String(full.value) : "", editing = false;
+  let value = g.value != null ? String(g.value) : (full.value != null ? String(full.value) : ""), editing = false;
   function render(){
     panel.innerHTML = "";
     panel.append(el("div",{class:"panel-h"}, icon("key"), "Parameter value"));
@@ -4561,6 +4589,24 @@ SUB_RENDERERS.apigwsettings = async function(svc, full, host){
   host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Edit API settings"), _field("Description", d), _field("API key source", k), _field("Binary media types", bm),
     _field("Minimum compression size (bytes, empty = off)", mc),
     el("button",{class:"btn primary","data-testid":"apigw-settings-save",onclick:()=>_apiput(full, "settings", {description:d.value, api_key_source:k.value, binary_media_types:_csv(bm.value), minimum_compression_size:mc.value}, "API settings saved")}, icon("save"), "Save")));
+};
+
+// ── CloudWatch alarm Actions: each alarm action with its target resolved
+//    (an SNS topic's existence and subscriptions, read from SNS). ──
+SUB_RENDERERS.cwactions = async function(svc, full, host){
+  const acts = full.action_list || [];
+  const t = await _dget(host, "/api/aws/sns/topics"); if (!t) return;
+  const topics = Object.fromEntries((t.topics || t.items || []).map(x => [x.arn, x]));
+  const rows = acts.map(a => {
+    const tp = topics[a.action];
+    const kind = /^arn:aws:sns:/.test(a.action) ? "Notification" : /^arn:aws:autoscaling:/.test(a.action) ? "Auto Scaling action"
+      : /^arn:aws:automate:.*:ec2:/.test(a.action) ? "EC2 action" : /^arn:aws:lambda:/.test(a.action) ? "Lambda action" : "Action";
+    const target = kind !== "Notification" ? "Not an SNS topic" : (tp ? "Topic " + tp.name + " (" + (tp.subscriptions || 0) + " confirmed subscriptions)" : "Topic does not exist in this account");
+    return {...a, kind, target};
+  });
+  host.append(el("div",{class:"kv-card"}, el("div",{class:"h"}, "Actions (" + rows.length + ")"),
+    _dtbl([["state","Alarm state trigger"],["kind","Type"],["action","Target ARN",1],["target","Target status"],["enabled","Enabled"]], rows,
+      "No actions: this alarm changes state without notifying anyone.")));
 };
 
 // ── Disk-health widget (vanilla JS — same data the SPA React widget uses) ──
