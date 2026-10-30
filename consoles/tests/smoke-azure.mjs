@@ -789,6 +789,35 @@ try {
   check("UI create namespace → visible over native ARM (properties.namespaces)",
     (nsCluster.properties?.namespaces || []).some((x) => x.name === NS), JSON.stringify(nsCluster.properties?.namespaces));
   await shot("28-aks-namespaces");
+  // ── Network security group created through the wizard → visible over native ARM ──────
+  const NSG = `vysmokensg${n}`;
+  const NSG2 = `vywirensg${n}`;
+  const RULE = `allow-smoke-${n}`;
+  const NSGLOCK = `vynsglock${n}`;
+  await page.goto(UI + "#/nsgs/create");
+  await page.getByLabel("Name", { exact: true }).fill(NSG);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await shot("23-nsg-create-basics");
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: NSG, exact: true }).waitFor({ timeout: 10000 });
+  const nsgGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}`);
+  check("UI create NSG → visible over native ARM", nsgGet.status === 200, `HTTP ${nsgGet.status}`);
+  await shot("24-nsg-overview");
+
+  // ── Inbound security rule added in the UI → visible as a native ARM child resource ────
+  await openPanel("Inbound security rules");
+  await page.getByRole("toolbar", { name: "Inbound security rules commands" }).getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(RULE);
+  await page.getByLabel("Priority", { exact: true }).fill("150");
+  await page.getByRole("dialog").getByRole("button", { name: "Add" }).click();
+  await page.getByRole("cell", { name: RULE, exact: true }).waitFor({ timeout: 10000 });
+  const ruleGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}/securityRules/${RULE}`);
+  check("UI add inbound rule → visible over native ARM (nested child resource)",
+    ruleGet.status === 200 && JSON.parse(ruleGet.text).properties?.direction === "Inbound", `HTTP ${ruleGet.status}`);
+  await shot("25-nsg-inbound-rules");
 
   // ── Lock created in the UI → visible over the native ARM wire ─────────────────────────
   await openPanel("Locks");
@@ -860,6 +889,107 @@ try {
   await page.getByRole("checkbox", { name: `Select /subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}` }).waitFor({ state: "detached", timeout: 10000 });
   const alertGone = await armMonitor("GET", `/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}`);
   check("UI delete alert rule → ARM GET 404", alertGone.status === 404, `HTTP ${alertGone.status}`);
+  // ── SQL: server + database created through the wizard → visible over native ARM ───────
+  const sqlArm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2023-08-01`,
+    { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const SRV = `vysmoke-sql-${n}`;
+  const DB = `vysmokedb${n}`;
+  await page.goto(UI + "#/sql/create");
+  await page.getByLabel("Database name", { exact: true }).fill(DB);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("New resource group name").fill(RG);
+  await page.getByRole("link", { name: "Create new" }).or(page.getByRole("button", { name: "Create new" })).first().click();
+  await page.getByLabel("Server name", { exact: true }).fill(SRV);
+  await page.getByRole("radio", { name: "Use SQL authentication" }).check();
+  await page.getByLabel("Server admin login", { exact: true }).fill("sqladmin");
+  await page.getByLabel("Password", { exact: true }).fill("Vy0mi#Passw0rd!");
+  await page.getByLabel("Confirm password", { exact: true }).fill("Vy0mi#Passw0rd!");
+  await shot("23-sql-create-server-dialog");
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog").waitFor({ state: "hidden", timeout: 10000 });
+  await page.waitForFunction((s) => document.querySelector('select[aria-label="Select a server"]')?.value === s, SRV, { timeout: 10000 });
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await shot("24-sql-create-review");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: DB, exact: true }).waitFor({ timeout: 10000 });
+  const gotDb = await sqlArm("GET", `/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SRV}/databases/${DB}`);
+  check("UI create SQL database → visible over native ARM", gotDb.status === 200, `HTTP ${gotDb.status}`);
+  await shot("25-sql-overview");
+
+  // ── Query editor: real SQL executed through the UI → readable over the azure-sql wire ──
+  await openPanel("Query editor (preview)");
+  await page.getByRole("button", { name: /Continue as/ }).click();
+  await page.getByLabel("SQL query", { exact: true }).fill("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT);");
+  await page.getByRole("button", { name: "Run" }).click();
+  await page.waitForTimeout(500);
+  await page.getByLabel("SQL query", { exact: true }).fill("INSERT INTO t (name) VALUES ('smoke');");
+  await page.getByRole("button", { name: "Run" }).click();
+  await page.waitForTimeout(500);
+  await shot("26-sql-query-editor");
+  const q = await wire(`/azure-sql/servers/${SRV}/databases/${DB}/query`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sql: "SELECT name FROM t" }) });
+  let qRows = [];
+  try { qRows = JSON.parse(q.text).rows; } catch {}
+  check("UI query editor INSERT → readable over the azure-sql data-plane wire", q.status === 200 && qRows?.[0]?.[0] === "smoke", `HTTP ${q.status}`);
+
+  // ── Firewall rule added on the server blade → visible over native ARM ──────────────────
+  await page.goto(UI + `#/sql/servers/${RG}/${SRV}/networking`);
+  await page.getByRole("button", { name: "Add a firewall rule" }).click();
+  const FW = `smoke-fw-${n}`;
+  await page.getByLabel("Rule name", { exact: true }).fill(FW);
+  await page.getByLabel("Start IPv4 address", { exact: true }).fill("10.1.2.3");
+  await page.getByLabel("End IPv4 address", { exact: true }).fill("10.1.2.3");
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByText(FW, { exact: true }).waitFor({ timeout: 10000 });
+  const fwGet = await sqlArm("GET", `/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SRV}/firewallRules/${FW}`);
+  check("UI add firewall rule → visible over native ARM", fwGet.status === 200 && JSON.parse(fwGet.text).properties.startIpAddress === "10.1.2.3", `HTTP ${fwGet.status}`);
+  await shot("27-sql-server-networking");
+
+  // ── Lock created on the database → visible over native ARM (and the reverse) ───────────
+  await page.goto(UI + `#/sql/${RG}/${SRV}/${DB}/locks`);
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const SQLLOCK = `smoke-sqllock-${n}`;
+  await page.getByLabel("Lock name", { exact: true }).fill(SQLLOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByText(SQLLOCK, { exact: true }).waitFor({ timeout: 10000 });
+  const sqlLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SRV}/databases/${DB}/providers/Microsoft.Authorization/locks/${SQLLOCK}?api-version=2020-05-01`);
+  check("UI create lock on SQL database → visible over native ARM", sqlLockGet.status === 200, `HTTP ${sqlLockGet.status}`);
+  await shot("28-sql-locks");
+
+  // ── Database deleted through the overview → gone over ARM ──────────────────────────────
+  await page.goto(UI + `#/sql/${RG}/${SRV}/${DB}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(DB);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "SQL databases", exact: true }).waitFor({ timeout: 10000 });
+  const dbGone = await sqlArm("GET", `/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SRV}/databases/${DB}`);
+  check("UI delete SQL database → ARM GET 404", dbGone.status === 404, `HTTP ${dbGone.status}`);
+  await page.getByLabel("Lock name", { exact: true }).fill(NSGLOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByText(NSGLOCK, { exact: true }).waitFor({ timeout: 10000 });
+  const nsgLockGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}/providers/Microsoft.Authorization/locks/${NSGLOCK}`);
+  check("UI create lock on NSG → visible over native ARM", nsgLockGet.status === 200, `HTTP ${nsgLockGet.status}`);
+  await shot("26-nsg-locks");
+
+  // ── NSG created over the wire → visible in the UI (CLI → UI), then deleted in the UI ──
+  const nsgPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG2}`, { location: "eastus" });
+  check("ARM PUT network security group over wire", nsgPut.status === 200 || nsgPut.status === 201, `HTTP ${nsgPut.status}`);
+  await page.goto(UI + "#/nsgs");
+  await page.getByRole("link", { name: NSG2, exact: true }).waitFor({ timeout: 10000 });
+  check("wire-created NSG shown in browse grid", true);
+  await shot("27-nsg-browse");
+  await page.getByRole("checkbox", { name: `Select /subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG2}` }).click();
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(NSG2);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("link", { name: NSG2, exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  let nsgGone = { status: 0 };
+  for (let i = 0; i < 20 && nsgGone.status !== 404; i++) {
+    nsgGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG2}`);
+    if (nsgGone.status !== 404) await page.waitForTimeout(500);
+  }
+  check("UI delete NSG → ARM GET 404", nsgGone.status === 404, `HTTP ${nsgGone.status}`);
 } catch (e) {
   check("smoke run", false, e.message.split("\n")[0]);
   await shot("99-failure").catch(() => {});

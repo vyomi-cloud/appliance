@@ -126,6 +126,88 @@ def run() -> int:
     names2 = sorted(i["name"] for i in _jbody(li2).get("items", []))
     _check("list excludes deleted instance", names2 == ["shopdb"])
 
+    # 8. PATCH instance settings -> merged, operation returned
+    pt = csql.dispatch(st, "PATCH", PROJ + "/shopdb", {}, {"content-type": "application/json"},
+                       json.dumps({"settings": {"tier": "db-custom-2-7680",
+                                                "ipConfiguration": {"ipv4Enabled": False}}}).encode())
+    _check("patch instance 200", pt.status == 200)
+    _check("patch instance op kind", _jbody(pt)["kind"] == "sql#operation")
+    shopdb = _jbody(csql.dispatch(st, "GET", PROJ + "/shopdb", {}, {}, b""))
+    _check("patch merged tier", shopdb["settings"]["tier"] == "db-custom-2-7680")
+    _check("patch merged ipv4Enabled", shopdb["settings"]["ipConfiguration"]["ipv4Enabled"] is False)
+
+    # 8b. stop via activationPolicy=NEVER, start again
+    csql.dispatch(st, "PATCH", PROJ + "/shopdb", {}, {"content-type": "application/json"},
+                  json.dumps({"settings": {"activationPolicy": "NEVER"}}).encode())
+    stopped = _jbody(csql.dispatch(st, "GET", PROJ + "/shopdb", {}, {}, b""))
+    _check("stop sets STOPPED", stopped["state"] == "STOPPED")
+    csql.dispatch(st, "PATCH", PROJ + "/shopdb", {}, {"content-type": "application/json"},
+                  json.dumps({"settings": {"activationPolicy": "ALWAYS"}}).encode())
+    started = _jbody(csql.dispatch(st, "GET", PROJ + "/shopdb", {}, {}, b""))
+    _check("start sets RUNNABLE", started["state"] == "RUNNABLE")
+
+    # 8c. restart (colon RPC)
+    rs = csql.dispatch(st, "POST", PROJ + "/shopdb:restart", {}, {}, b"")
+    _check("restart 200", rs.status == 200)
+    _check("restart op type", _jbody(rs)["operationType"] == "RESTART")
+
+    # 9. users: insert, list, update password, delete
+    uins = csql.dispatch(st, "POST", PROJ + "/shopdb/users", {}, {"content-type": "application/json"},
+                         json.dumps({"name": "appuser", "password": "s3cret", "host": "%"}).encode())
+    _check("insert user 200", uins.status == 200)
+    _check("insert user kind", _jbody(uins)["kind"] == "sql#user")
+    dup_u = csql.dispatch(st, "POST", PROJ + "/shopdb/users", {}, {"content-type": "application/json"},
+                         json.dumps({"name": "appuser", "host": "%"}).encode())
+    _check("duplicate user 409", dup_u.status == 409)
+    ulist = csql.dispatch(st, "GET", PROJ + "/shopdb/users", {}, {}, b"")
+    _check("list users has appuser", any(u["name"] == "appuser" for u in _jbody(ulist).get("items", [])))
+    uupd = csql.dispatch(st, "PUT", PROJ + "/shopdb/users", {"name": "appuser", "host": "%"}, {}, b"{}")
+    _check("update user 200", uupd.status == 200)
+    udel = csql.dispatch(st, "DELETE", PROJ + "/shopdb/users", {"name": "appuser", "host": "%"}, {}, b"")
+    _check("delete user 200", udel.status == 200)
+    ulist2 = csql.dispatch(st, "GET", PROJ + "/shopdb/users", {}, {}, b"")
+    _check("list users excludes deleted", not any(u["name"] == "appuser" for u in _jbody(ulist2).get("items", [])))
+    ndel = csql.dispatch(st, "DELETE", PROJ + "/shopdb/users", {"name": "ghost", "host": "%"}, {}, b"")
+    _check("delete missing user 404", ndel.status == 404)
+
+    # 10. backupRuns: insert, list, get, delete
+    bins = csql.dispatch(st, "POST", PROJ + "/shopdb/backupRuns", {}, {"content-type": "application/json"},
+                         json.dumps({"description": "manual"}).encode())
+    _check("insert backup 200", bins.status == 200)
+    backup = _jbody(bins)
+    _check("insert backup kind", backup["kind"] == "sql#backupRun")
+    blist = csql.dispatch(st, "GET", PROJ + "/shopdb/backupRuns", {}, {}, b"")
+    _check("list backups has one", len(_jbody(blist).get("items", [])) == 1)
+    bget = csql.dispatch(st, "GET", PROJ + f"/shopdb/backupRuns/{backup['id']}", {}, {}, b"")
+    _check("get backup 200", bget.status == 200)
+    bdel = csql.dispatch(st, "DELETE", PROJ + f"/shopdb/backupRuns/{backup['id']}", {}, {}, b"")
+    _check("delete backup 200", bdel.status == 200)
+    blist2 = csql.dispatch(st, "GET", PROJ + "/shopdb/backupRuns", {}, {}, b"")
+    _check("list backups now empty", not _jbody(blist2).get("items"))
+    bmiss = csql.dispatch(st, "GET", PROJ + f"/shopdb/backupRuns/{backup['id']}", {}, {}, b"")
+    _check("get deleted backup 404", bmiss.status == 404)
+
+    # 11. operations: project-wide log accumulates, filterable by instance
+    ops = csql.dispatch(st, "GET", "/sql/v1beta4/projects/demo-proj/operations", {"instance": "shopdb"}, {}, b"")
+    _check("list operations 200", ops.status == 200)
+    op_types = [o["operationType"] for o in _jbody(ops).get("items", [])]
+    _check("operations include patch/restart/user/backup ops",
+           {"UPDATE", "RESTART", "CREATE_USER", "DELETE_USER", "BACKUP_VOLUME", "DELETE_BACKUP"} <= set(op_types))
+    one_op = _jbody(ops)["items"][0]
+    opget = csql.dispatch(st, "GET", f"/sql/v1beta4/projects/demo-proj/operations/{one_op['name']}", {}, {}, b"")
+    _check("get single operation 200", opget.status == 200)
+
+    # 12. read replica: masterInstanceName creates a replica instance
+    rep = csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
+                        json.dumps({"name": "shopdb-replica", "masterInstanceName": "shopdb"}).encode())
+    _check("insert replica 200", rep.status == 200)
+    rep_body = _jbody(rep)
+    _check("replica instanceType", rep_body["instanceType"] == "READ_REPLICA_INSTANCE")
+    _check("replica masterInstanceName", rep_body["masterInstanceName"] == "shopdb")
+    rep_missing_master = csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
+                                       json.dumps({"name": "x", "masterInstanceName": "ghost"}).encode())
+    _check("replica of missing master 404", rep_missing_master.status == 404)
+
     print("\nRESULT: PASS — GCP Cloud SQL control-plane core conforms "
           "(native Cloud SQL Admin REST wire) on this substrate.")
     return 0

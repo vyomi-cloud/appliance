@@ -36,6 +36,7 @@ class MessagingStore:
         self.queues: dict[str, dict[str, Any]] = {}
         self.topics: dict[str, dict[str, Any]] = {}
         self.sns: dict[str, Any] = {}   # SNS-owned non-topic state (platform apps, SMS, delivery log)
+        self.pubsub: dict[str, Any] = {}   # GCP Pub/Sub-owned non-topic/queue state (snapshots, schemas)
         self.account_id = account_id
         self._clock: float | None = None  # None -> real wall clock
 

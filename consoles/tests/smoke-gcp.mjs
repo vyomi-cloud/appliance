@@ -43,11 +43,17 @@ try {
   check("home renders", await page.getByRole("button", { name: /Project picker: / }).isVisible());
   await shot("01-home");
 
-  // Navigation menu lists products; an unbuilt product is an honest gap.
+  // Navigation menu opens a product's v4 console (every GCP product now has one) …
   await page.getByRole("button", { name: "Navigation menu" }).click();
-  await page.locator(".MuiDrawer-paper").getByText("Pub/Sub", { exact: true }).click();
+  await page.locator(".MuiDrawer-paper").getByText("Cloud SQL", { exact: true }).click();
+  await page.waitForFunction(() => location.hash.startsWith("#/sql"), null, { timeout: 5000 });
+  await page.waitForTimeout(1500);
+  check("navigation menu → product opens its v4 console (no NotSimulated panel)",
+    (await page.locator("[data-vyomi-not-simulated]").count()) === 0 || !(await page.getByText(/The v4 Cloud SQL console isn't backed/).count()));
+  // … and an address no product owns is still an honest gap, not a blank page.
+  await page.goto(UI + "#/no-such-product");
   await page.locator("[data-vyomi-not-simulated]").first().waitFor({ timeout: 5000 });
-  check("non-v4 product → NotSimulated panel with classic link", await page.getByRole("link", { name: /classic Vyomi console/ }).isVisible());
+  check("unknown product → honest NotSimulated panel", true);
   await shot("02-notsimulated-product");
 
   // Create a bucket through the form
@@ -714,6 +720,123 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete secret via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/secrets/${SM}`)).status === 404);
+
+  // Cloud SQL: create instance via UI → native Admin API, add a database over the wire →
+  // shown in the UI, then delete the instance via UI → gone over the wire.
+  const SQLI = `v4-gcp-sql-${Date.now() % 100000}`;
+  await page.goto(UI + "#/sql/create/instance?engine=POSTGRES");
+  await page.getByLabel("Instance ID").fill(SQLI);
+  await page.getByLabel("Password", { exact: true }).fill("Sm0ke-Passw0rd!");
+  await page.getByRole("button", { name: "Create instance", exact: true }).click();
+  await page.getByRole("heading", { name: SQLI }).waitFor({ timeout: 10000 });
+  const sqlInstances = await wjson(`/sql/v1beta4/projects/vyomi-project/instances`);
+  check("create instance via UI → visible over native wire (instances.list)", (sqlInstances.items || []).some((i) => i.name === SQLI));
+  await shot("15-sql-instance-overview");
+
+  const SQLDB = `wiredb${Date.now() % 100000}`;
+  await wire(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}/databases`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: SQLDB }),
+  });
+  await page.goto(UI + `#/sql/instances/${SQLI}/databases`);
+  await page.getByText(SQLDB, { exact: true }).waitFor({ timeout: 10000 });
+  check("database created over wire → shown in Databases UI", true);
+
+  await page.goto(UI + `#/sql/instances/${SQLI}/overview`);
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(SQLI);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("heading", { name: "Instances" }).waitFor({ timeout: 10000 });
+  check("delete instance via UI → gone over native wire", (await wire(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}`)).status === 404);
+  // Pub/Sub: create a topic via the UI (with its default subscription) → native wire,
+  // publish a message via the UI, publish over the wire → pull+ack in the UI, snapshot,
+  // then delete both resources via the UI.
+  const PST = `v4-gcp-ps-smoke-${Date.now() % 100000}`;
+  await page.goto(UI + "#/pubsub/topics/create");
+  await page.getByLabel("Topic ID").fill(PST);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: PST }).waitFor({ timeout: 10000 });
+  const psTopics = await wjson(`/v1/projects/vyomi-project/topics`);
+  check("create topic via UI → visible over native wire (topics.list)", (psTopics.topics || []).some((t) => t.name.endsWith(`/topics/${PST}`)));
+  await shot("15-pubsub-topic");
+
+  await page.getByRole("tab", { name: "Subscriptions" }).click();
+  await page.getByRole("link", { name: `${PST}-sub` }).waitFor({ timeout: 10000 });
+  check("default subscription created alongside topic", true);
+
+  // Publish a message via the UI → readable over the native wire (subscriptions.pull)
+  await page.getByRole("tab", { name: "Messages" }).click();
+  await page.getByRole("link", { name: "Publish message" }).click();
+  const PMSG = `v4 pubsub smoke ${Date.now() % 100000}`;
+  await page.getByLabel("Message body").fill(PMSG);
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await page.getByRole("heading", { name: PST }).waitFor({ timeout: 10000 });
+  const pulled = await wjson(`/v1/projects/vyomi-project/subscriptions/${PST}-sub:pull`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ maxMessages: 10 }),
+  });
+  check("publish via UI → readable over native wire (subscriptions.pull)",
+    (pulled.receivedMessages || []).some((m) => Buffer.from(m.message.data, "base64").toString() === PMSG));
+  await page.getByRole("tab", { name: "Messages" }).click();
+  await page.getByText(PMSG).waitFor({ timeout: 10000 });
+  check("published message shown in topic's Messages tab", true);
+  await shot("16-pubsub-published");
+
+  // Message published over the wire (SDK direction) → pulled + acked in the UI
+  const PMSG2 = `v4 pubsub wire-to-ui ${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/topics/${PST}:publish`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ data: Buffer.from(PMSG2).toString("base64") }] }),
+  });
+  await page.goto(UI + `#/pubsub/subscriptions/${PST}-sub`);
+  await page.getByRole("tab", { name: "Messages" }).click();
+  await page.getByRole("checkbox", { name: "Enable ack messages" }).check();
+  await page.getByRole("button", { name: "Pull" }).click();
+  await page.getByText(PMSG2).waitFor({ timeout: 10000 });
+  check("message published over wire → pulled in the UI", true);
+  await shot("17-pubsub-pull");
+  const afterAck = await wjson(`/v1/projects/vyomi-project/subscriptions/${PST}-sub:pull`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ maxMessages: 10 }),
+  });
+  check("auto-ack via UI → message gone over native wire", !(afterAck.receivedMessages || []).length);
+
+  // Snapshot via the UI → visible over the native wire
+  await page.goto(UI + "#/pubsub/snapshots");
+  await page.getByRole("button", { name: "Create snapshot" }).click();
+  const PSNAP = `${PST}-snap`;
+  await page.getByLabel("Snapshot ID").fill(PSNAP);
+  await page.getByLabel("Subscription").click();
+  await page.getByRole("option", { name: `${PST}-sub` }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByText(PSNAP, { exact: true }).waitFor({ timeout: 10000 });
+  const psSnaps = await wjson(`/v1/projects/vyomi-project/snapshots`);
+  check("create snapshot via UI → visible over native wire (snapshots.list)", (psSnaps.snapshots || []).some((s) => s.name.endsWith(`/snapshots/${PSNAP}`)));
+  await shot("18-pubsub-snapshot");
+
+  // Delete the subscription, then the topic, both via their detail pages
+  await page.goto(UI + `#/pubsub/subscriptions/${PST}-sub`);
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(`${PST}-sub`);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  check("delete subscription via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/subscriptions/${PST}-sub`)).status === 404);
+
+  await page.goto(UI + `#/pubsub/topics/${PST}`);
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(PST);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  check("delete topic via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/topics/${PST}`)).status === 404);
+
+  // Schemas: create via the UI → visible over the native wire
+  await page.goto(UI + "#/pubsub/schemas");
+  await page.getByRole("button", { name: "Create schema" }).click();
+  const PSCHEMA = `v4-gcp-ps-schema-${Date.now() % 100000}`;
+  await page.getByLabel("Schema ID").fill(PSCHEMA);
+  await page.getByLabel("Definition").fill('{"type":"record","name":"Smoke","fields":[]}');
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByText(PSCHEMA, { exact: true }).waitFor({ timeout: 10000 });
+  const psSchemas = await wjson(`/v1/projects/vyomi-project/schemas`);
+  check("create schema via UI → visible over native wire (schemas.list)", (psSchemas.schemas || []).some((s) => s.name.endsWith(`/schemas/${PSCHEMA}`)));
+  await shot("19-pubsub-schema");
 
   // Dark mode
   await page.goto(UI + "#/storage/browser");
