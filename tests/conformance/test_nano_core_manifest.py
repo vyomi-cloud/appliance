@@ -12,7 +12,8 @@ OFFLINE_ONLY = {"__init__.py", "persistent_store.py"}   # sqlite-backed stores a
 
 bc = (ROOT / "wasm/build_cores.py").read_text()
 cores = dict.fromkeys(re.findall(r'"([a-z0-9_]+\.py)"', bc[bc.index("CORES"):]))
-boot = set(re.findall(r'"([a-z0-9_]+\.py)"', (ROOT / "wasm/nano-boot.js").read_text()))
+_boot_src = re.sub(r"//[^\n]*", "", (ROOT / "wasm/nano-boot.js").read_text())   # names in comments don't load
+boot = set(re.findall(r'"([a-z0-9_]+\.py)"', _boot_src))
 missing = [c for c in cores if c not in boot and c not in OFFLINE_ONLY]
 # Every core the native-wire router imports must be vendored too (else Nano can't import it).
 router = (ROOT / "core/aws_wire_router.py").read_text()
