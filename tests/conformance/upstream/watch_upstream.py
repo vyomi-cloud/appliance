@@ -39,6 +39,29 @@ TRACKED = json.load(open(os.path.join(HERE, "tracked.json")))
 OUT = os.environ.get("OUT", os.path.join(HERE, "out"))
 LIFECYCLE = re.compile(r"deprecat|retire|retirement|end of (life|support)|sunset|breaking|discontinu|no longer (be )?supported|will be removed|removal", re.I)
 ERRORS: list[str] = []
+ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
+_SRC: list[str] = []
+
+
+def simulated(cloud: str, op: str) -> bool:
+    """Whether the simulator implements this operation at all: its name (AWS:
+    the operation; GCP: the method's resource + verb, e.g. workloadCaptures)
+    appears in the offline or Nano engine/route code. A change to an operation
+    we don't serve has nothing to update, so it isn't filed."""
+    if not _SRC:
+        parts = []
+        for d in ("core", "providers", "routes", os.path.join("wasm", "core"), os.path.join("wasm", "providers")):
+            for dp, _, fs in os.walk(os.path.join(ROOT, d)):
+                for f in fs:
+                    if f.endswith(".py"):
+                        try:
+                            parts.append(open(os.path.join(dp, f), errors="ignore").read().lower())
+                        except OSError:
+                            pass
+        _SRC.append("\n".join(parts))
+    segs = op.split(".")
+    name = segs[-2] if cloud == "gcp" and len(segs) >= 3 else segs[-1]
+    return name.lower() in _SRC[0]
 
 
 def fetch(url: str, accept: str = "", timeout: int = 40) -> bytes:
@@ -196,7 +219,11 @@ def feeds() -> list[dict]:
 
 
 # ── Diff ────────────────────────────────────────────────────────────────────
-def diff_ops(cloud: str, svc: str, old: dict, new: dict) -> list[dict]:
+def diff_ops(cloud: str, svc: str, old: dict, new: dict, seen_sigs: dict) -> list[dict]:
+    """seen_sigs: op key → every shape signature seen for it (kept in state).
+    Some discovery documents alternate between two shapes run to run (GCP
+    sqladmin renamed WorkloadCaptures*Request back and forth hourly); a shape
+    seen before is a flap, recorded but not actioned."""
     ch = []
     o, n = (old or {}).get("ops", {}), (new or {}).get("ops", {})
     for op in sorted(set(n) - set(o)):
@@ -204,13 +231,19 @@ def diff_ops(cloud: str, svc: str, old: dict, new: dict) -> list[dict]:
                    "title": f"{cloud.upper()} {svc}: new operation {op}", "detail": n[op], "actionable": True})
     for op in sorted(set(o) - set(n)):
         ch.append({"cloud": cloud, "service": svc, "kind": "operation-removed", "key": f"{cloud}:{svc}:{op}:removed",
-                   "title": f"{cloud.upper()} {svc}: operation {op} removed", "detail": o[op], "actionable": True})
+                   "title": f"{cloud.upper()} {svc}: operation {op} removed", "detail": o[op], "actionable": simulated(cloud, op)})
     for op in sorted(set(o) & set(n)):
         if o[op] != n[op]:
             delta = {k: {"was": o[op].get(k), "now": n[op].get(k)} for k in n[op] if o[op].get(k) != n[op].get(k)}
             what = "deprecated" if n[op].get("deprecated") and not o[op].get("deprecated") else "changed"
-            ch.append({"cloud": cloud, "service": svc, "kind": f"operation-{what}", "key": f"{cloud}:{svc}:{op}:{sig(n[op])}",
-                       "title": f"{cloud.upper()} {svc}: operation {op} {what}", "detail": delta, "actionable": True})
+            opkey = f"{cloud}:{svc}:{op}"
+            sigs = seen_sigs.setdefault(opkey, [sig(o[op])])
+            flap = sig(n[op]) in sigs
+            if not flap:
+                sigs.append(sig(n[op]))
+            ch.append({"cloud": cloud, "service": svc, "kind": "operation-flapping" if flap else f"operation-{what}",
+                       "key": f"{opkey}:{sig(n[op])}", "title": f"{cloud.upper()} {svc}: operation {op} {what}",
+                       "detail": delta, "actionable": not flap and simulated(cloud, op)})
     return ch
 
 
@@ -230,6 +263,12 @@ def main() -> int:
     feed_items = feeds()
     seen = set(prev.get("seen_feed_ids", []))
     state["seen_feed_ids"] = sorted((seen | {i["id"] for i in feed_items}))[-3000:]
+    # file_issues.py's memory (keys already filed, issues waiting for a slot)
+    # lives in this same file: carry it over, or every recurring change is
+    # filed again (it was: filed_keys was always empty).
+    state["filed_keys"] = prev.get("filed_keys", [])
+    state["pending"] = prev.get("pending", [])
+    state["op_sigs"] = prev.get("op_sigs", {})
 
     changes: list[dict] = []
     if not baseline:
@@ -242,12 +281,12 @@ def main() -> int:
             if old.get("api_version") != cur.get("api_version"):
                 changes.append({"cloud": "aws", "service": svc, "kind": "api-version", "key": f"aws:{svc}:apiver:{cur['api_version']}",
                                 "title": f"AWS {svc}: new API version {cur['api_version']}", "actionable": True})
-            changes += diff_ops("aws", svc, old, cur)
+            changes += diff_ops("aws", svc, old, cur, state["op_sigs"])
         for api, cur in state["gcp"].items():
             old = prev.get("gcp", {}).get(api)
             if cur is None or old is None:
                 continue
-            changes += diff_ops("gcp", api, old, cur)
+            changes += diff_ops("gcp", api, old, cur, state["op_sigs"])
         for spec, commits in azure.items():
             for c in commits:
                 new_ver = bool(re.search(r"\b20\d\d-\d\d-\d\d(-preview)?\b", c["title"]))

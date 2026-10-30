@@ -2,7 +2,10 @@ name: Release checks report
 
 # After every appliance release: install → check → uninstall each Linux/macOS
 # package (DEB + RPM, both variants; Homebrew vyomi + vyomi-docker) and every
-# vyomi command (--version, help, doctor, status, logs, down, update), collect
+# vyomi command (--version, help, doctor, status, logs, down, update), run the
+# real aws / gcloud / az CLIs against the released images (every CLI suite on
+# its own, plus CLI ↔ console both ways on the same account / project /
+# subscription: tests/release/cli_crosscheck.py), collect
 # the MSI (Validate Windows MSI), startup (Validate release startup) and
 # Windows E2E (private vyomi-cloud/release-e2e) results, and commit one
 # RELEASE-CHECKS.md to the release/vX.Y.Z branch.
@@ -97,8 +100,53 @@ jobs:
         if: always()
         with: { name: checks-brew, path: out/ }
 
+  # The real aws / gcloud / az CLIs (preinstalled on ubuntu-latest) against
+  # the released images booted like `vyomi up`: identity (each CLI discovers
+  # the account / project / subscription its console uses), every CLI suite on
+  # its own, and both directions — CLI-created resources show in the console,
+  # console-created ones show in the CLI.
+  cli:
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}', VER: '${{ needs.resolve.outputs.ver }}', TAG: '${{ needs.resolve.outputs.tag }}' }
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ needs.resolve.outputs.tag }}' }
+      - name: Use main's checks (they test this release, so they can be newer than it)
+        run: |
+          git fetch -q origin main
+          git checkout -q origin/main -- tests/release tests/cli
+      - name: Boot the release like `vyomi up`
+        run: |
+          gh release download "$TAG" -p "vyomi-$VER.tar.gz" -D /tmp/rel
+          mkdir -p /tmp/bundle && tar -xzf "/tmp/rel/vyomi-$VER.tar.gz" -C /tmp/bundle --strip-components=1
+          cd /tmp/bundle
+          export VYOMI_SIMULATOR_IMAGE="vyomi/appliance:$VER" VYOMI_NO_TELEMETRY=1
+          if docker manifest inspect "vyomi/cloudsim:$VER" >/dev/null 2>&1; then export VYOMI_CLOUDSIM_IMAGE="vyomi/cloudsim:$VER"; fi
+          # Every service is in scope here, not just the Free tier's: lift the
+          # tier gate (CLOUDLEARN_TIER_ENFORCE=0, the documented test switch).
+          printf 'services:\n  simulator:\n    environment:\n      CLOUDLEARN_TIER_ENFORCE: "0"\n' > all-tiers.yml
+          C="-f docker-compose.cloudlite.yml -f all-tiers.yml -p vyomi"
+          docker compose $C pull --quiet
+          docker compose $C up -d
+          docker compose $C --profile full up -d
+      - name: CLI versions
+        run: aws --version; gcloud --version | head -1; az version -o tsv 2>/dev/null | head -1
+      - name: CLI conformance + CLI ↔ console both ways
+        env: { ENDPOINT: 'http://localhost:9000', OUT: out }   # waits for readiness and starts on-demand backends
+        run: python3 tests/release/cli_crosscheck.py
+      - name: Job summary
+        if: always()
+        run: |
+          [ -f out/summary.md ] && cat out/summary.md >> "$GITHUB_STEP_SUMMARY"
+          docker compose -f /tmp/bundle/docker-compose.cloudlite.yml -p vyomi logs --no-color --tail 300 > out/compose.log 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: checks-cli, path: out/ }
+
   report:
-    needs: [resolve, deb, rpm, brew]
+    needs: [resolve, deb, rpm, brew, cli]
     if: always() && needs.resolve.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -164,6 +212,7 @@ jobs:
             echo "| DEB: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | $(res "${{ needs.deb.result }}") |"
             echo "| RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | $(res "${{ needs.rpm.result }}") |"
             echo "| Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | $(res "${{ needs.brew.result }}") |"
+            echo "| CLI: aws / gcloud / az suites + CLI ↔ console both ways $( [ -f arts/checks-cli/summary.md ] && grep -oE '[0-9]+/[0-9]+ checks passed' arts/checks-cli/summary.md | head -1 | sed 's/^/(/;s/$/)/') | Linux, release images | $(res "${{ needs.cli.result }}") |"
             while IFS='|' read -r label wf id concl; do
               case "$label" in
                 msi) name="MSI: install, upgrade, uninstall (+ signing)"; plat="Windows (GitHub)"; link="${{ github.server_url }}/$R/actions/runs/$id" ;;
@@ -176,6 +225,7 @@ jobs:
             for k in deb rpm brew; do
               [ -f "arts/checks-$k/summary.md" ] && { echo "## ${k^^}"; echo; cat "arts/checks-$k/summary.md"; echo; }
             done
+            [ -f arts/checks-cli/summary.md ] && { echo "## CLI (aws / gcloud / az) and CLI ↔ console"; echo; cat arts/checks-cli/summary.md; echo; }
             [ -f ext/msi/summary.md ] && { echo "## MSI"; echo; cat ext/msi/summary.md; echo; }
             [ -f ext/startup/summary.md ] && { echo "## Startup (all services + UI)"; echo; cat ext/startup/summary.md; echo; }
             [ -f ext/windows-e2e/startup-check/summary.md ] && { echo "## Windows E2E"; echo; cat ext/windows-e2e/startup-check/summary.md; echo; }
