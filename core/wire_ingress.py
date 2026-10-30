@@ -78,7 +78,10 @@ v4 C0h adds "azure_graph" (Microsoft Graph /v1.0 + /beta — the Entra ID direct
 core/azure_graph_core.py) over core/appliance_stores.AppStateGraphStore (the space's
 `azure_graph` slot), mounted by routes/azure_graph_unified.py. Pre-v4 the appliance had no
 Graph wire at all: the v4 Entra console's user/group create fell through to the S3 catch-all
-(405 MethodNotAllowed).
+(405 MethodNotAllowed). Same for "azure_cosmos": the root Cosmos DB data plane (/dbs/… —
+core/azure_cosmos_core.py, the wire Nano and the v4 Cosmos console speak) over
+AppStateCosmosStore. The pre-v4 per-account /azure-data/cosmos/{account}/… handler
+(core/azure_dataplane.py, in-memory) is unchanged.
 """
 from __future__ import annotations
 
@@ -93,12 +96,12 @@ def _cfg(key: str, default: str) -> str:
 
 _DEFAULT_SERVICES = ("s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager,"
                      "gcp_firestore,gcp_compute,sqs,sns,events,scheduler,"
-                     "lambda,azure_keyvault,azure_acr,azure_servicebus,gcp_pubsub,azure_graph")
+                     "lambda,azure_keyvault,azure_acr,azure_servicebus,gcp_pubsub,azure_graph,azure_cosmos")
 _KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
                    "kms", "secretsmanager", "gcp_firestore", "gcp_compute",
                    "sqs", "sns", "events", "scheduler",
                    "lambda", "azure_keyvault", "azure_acr", "azure_servicebus", "gcp_pubsub",
-                   "azure_graph")
+                   "azure_graph", "azure_cosmos")
 
 
 def unified_services() -> frozenset:
@@ -134,7 +137,8 @@ def appliance_stores() -> dict:
             "lam": aps.lambda_store(), "az_kvsec": aps.az_kv_secrets_store(),
             "az_kvkeys": aps.az_kv_keys_store(), "az_kvcerts": aps.az_kv_certs_store(),
             "az_acr": aps.acr_store(), "az_sb": aps.az_servicebus_store(),
-            "gcp_msg": aps.gcp_pubsub_store(), "az_graph": aps.graph_store()}
+            "gcp_msg": aps.gcp_pubsub_store(), "az_graph": aps.graph_store(),
+            "az_cosmos": aps.cosmos_store()}
 
 
 # router store key -> unified service name (which stores a full-ingress router overrides)
@@ -145,7 +149,7 @@ STORE_SERVICE = {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb", "az_blob": "azure_
                  "msg": "sqs", "sched": "scheduler", "lam": "lambda",
                  "az_kvsec": "azure_keyvault", "az_kvkeys": "azure_keyvault",
                  "az_kvcerts": "azure_keyvault", "az_acr": "azure_acr", "az_sb": "azure_servicebus",
-                 "gcp_msg": "gcp_pubsub", "az_graph": "azure_graph"}
+                 "gcp_msg": "gcp_pubsub", "az_graph": "azure_graph", "az_cosmos": "azure_cosmos"}
 
 
 def appliance_router() -> AwsWireRouter:
@@ -297,12 +301,14 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         hdrs = dict(resp.headers or {})
         hdrs.setdefault("content-type", resp.media_type or "application/json")
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
-    if service == "azure_graph":
-        from core import azure_graph_core
+    if service in ("azure_graph", "azure_cosmos"):
+        from core import azure_graph_core, azure_cosmos_core
         from core import app_context as _ctx
-        tok = _ctx.REQUEST_PROVIDER.set("azure")   # the directory lives in the Azure space
+        core, st = ((azure_graph_core, r.az_graph) if service == "azure_graph"
+                    else (azure_cosmos_core, r.az_cosmos))
+        tok = _ctx.REQUEST_PROVIDER.set("azure")   # the state lives in the Azure space
         try:
-            resp = azure_graph_core.dispatch(r.az_graph, method, path, query or {}, headers or {}, body or b"")
+            resp = core.dispatch(st, method, path, query or {}, headers or {}, body or b"")
         finally:
             _ctx.REQUEST_PROVIDER.reset(tok)
         hdrs = dict(resp.headers or {})

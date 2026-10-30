@@ -2199,40 +2199,53 @@ def gcp_pubsub_store() -> AppStatePubsubStore:
     return _GPS
 
 
-# ── Microsoft Graph (Entra ID directory: users / groups / apps / SPs / …) ──────────────
+# ── Whole-store slots: Microsoft Graph (Entra ID) + Cosmos DB data plane ──────────────
 from core.azure_graph_core import GraphStore as _GraphStore   # noqa: E402
+from core.azure_cosmos_core import CosmosStore as _CosmosStore   # noqa: E402
 
 
-class AppStateGraphStore(_GraphStore):
-    """azure_graph_core store over the space's `azure_graph` slot. Every GraphStore
-    attribute resolves to that slot (seeded with the core's defaults — default domain,
-    organization, directory settings), so the directory persists with the kernel state."""
+class _AzureSlotStore:
+    """Mixin: every attribute of the core's store (`_BASE`) resolves to the Azure space's
+    `_SLOT` dict (seeded with the core's defaults), so the state persists with the kernel
+    state. Callers pin REQUEST_PROVIDER to "azure" (core/wire_ingress.dispatch_service)."""
 
-    _FIELDS = tuple(vars(_GraphStore()).keys())
+    _BASE: type = object
+    _SLOT = ""
+    _FIELDS: tuple = ()
 
-    def __init__(self):        # NB: no GraphStore.__init__ — the attributes are the slot's
+    def __init__(self):        # NB: no base __init__ — the attributes are the slot's
         pass
 
     def _dir(self) -> dict:
-        slot = _proxy("azure_graph", lambda: {"directory": {}}, "directory")._target()
+        slot = _proxy(self._SLOT, lambda: {"store": {}}, "store")._target()
         if len(slot) < len(self._FIELDS):
-            for k, v in vars(_GraphStore()).items():
+            for k, v in vars(self._BASE()).items():
                 slot.setdefault(k, v)
         return slot
 
     def __getattr__(self, name):
-        if name in AppStateGraphStore._FIELDS:
+        if name in type(self)._FIELDS:
             return self._dir()[name]
         raise AttributeError(name)
 
     def __setattr__(self, name, value):
-        if name in AppStateGraphStore._FIELDS:
+        if name in type(self)._FIELDS:
             self._dir()[name] = value
         else:
             object.__setattr__(self, name, value)
 
 
-_GRAPH = None
+class AppStateGraphStore(_AzureSlotStore, _GraphStore):
+    """azure_graph_core store: users / groups / apps / SPs / … in the `azure_graph` slot."""
+    _BASE, _SLOT, _FIELDS = _GraphStore, "azure_graph", tuple(vars(_GraphStore()).keys())
+
+
+class AppStateCosmosStore(_AzureSlotStore, _CosmosStore):
+    """azure_cosmos_core store: databases / containers / items in the `azure_cosmos_data` slot."""
+    _BASE, _SLOT, _FIELDS = _CosmosStore, "azure_cosmos_data", tuple(vars(_CosmosStore()).keys())
+
+
+_GRAPH = _COSMOS = None
 
 
 def graph_store() -> AppStateGraphStore:
@@ -2240,3 +2253,10 @@ def graph_store() -> AppStateGraphStore:
     if _GRAPH is None:
         _GRAPH = AppStateGraphStore()
     return _GRAPH
+
+
+def cosmos_store() -> AppStateCosmosStore:
+    global _COSMOS
+    if _COSMOS is None:
+        _COSMOS = AppStateCosmosStore()
+    return _COSMOS
