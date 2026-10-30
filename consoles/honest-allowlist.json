@@ -82,6 +82,11 @@
         "instance-types",
         "instance-type-detail"
       ]
+    },
+    "azure": {
+      "vms": [
+        "vm-size"
+      ]
     }
   },
   "azure": {
@@ -97,8 +102,8 @@
       "monitor-managed-prometheus",
       "monitor-diagnostic-settings"
     ],
-    "entra": [
-      "entra-sign-in-logs"
+    "vms": [
+      "vm-run-command"
     ]
   }
 }

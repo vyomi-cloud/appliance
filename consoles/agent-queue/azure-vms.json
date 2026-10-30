@@ -13,5 +13,6 @@
   "Capability feature ids MUST start with 'azure.' (e.g. 'azure.vms.<section>') — ids share one namespace with the AWS registry",
   "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
  ],
- "attempt": 1
+ "attempt": 2,
+ "note": "RESUME: first `git fetch origin v4/ui-azure-vms-41102108538 && git merge --no-edit origin/v4/ui-azure-vms-41102108538` (previous: 98.6% fidelity / 95.7% real). TWO fixes only: (1) The Size page reads a hard-coded api.SIZES list in the console — that is static data and is not allowed. Serve sizes from the backend over the native ARM API (GET .../virtualMachines/{vm}/vmSizes and/or GET /subscriptions/{s}/providers/Microsoft.Compute/locations/{loc}/vmSizes, backed by core/instance_catalog.py through the ARM engine — add the route to core/azure_arm_core.py and the offline providers/azure_services.py handle_arm path) and make the page fetch them; delete api.SIZES. The orchestrator has approved 'vm-size' as a reviewed REFERENCE page (no create-a-resource liveness needed once it reads the backend). (2) 'vm-run-command': mark honest_page: true in spec-map (approved on the allowlist; running commands in a guest OS is not simulated). Keep Capability.jsx as on base, list the service ONCE in registry.js, plain-text 'Vyomi', register NEW cores everywhere test_nano_core_manifest checks, commit your source, rebuild after merging."
 }
