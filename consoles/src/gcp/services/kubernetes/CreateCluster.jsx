@@ -1,9 +1,9 @@
 /* Create an Autopilot cluster — the console's numbered-step form. Every real setting goes
- * into ONE native clusters.create body; settings Vyomi doesn't model (fleet registration,
- * restricting access by DNS/IPv4) are declared gaps, not controls. */
+ * into ONE native clusters.create body; fleet registration is a separate product Vyomi
+ * doesn't model, so it's a declared gap, not a control. */
 import { useState } from "react";
 import {
-  Box, Button, Divider, FormControl, FormControlLabel, IconButton, InputLabel, MenuItem,
+  Box, Button, Checkbox, Divider, FormControl, FormControlLabel, IconButton, InputLabel, MenuItem,
   Radio, RadioGroup, Select, Stack, TextField, Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
@@ -34,18 +34,24 @@ export default function CreateCluster({ query = {} }) {
   const [network, setNetwork] = useState(query.network || "default");
   const [subnet, setSubnet] = useState(query.subnet || "default");
   const [channel, setChannel] = useState(query.channel || "REGULAR");
+  const [dnsAccess, setDnsAccess] = useState(true);
+  const [ipv4Access, setIpv4Access] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
   const nameErr = touched ? api.validClusterName(name) : null;
+  const noAccess = !dnsAccess && !ipv4Access;
 
   const submit = async (ev) => {
     ev.preventDefault();
     setTouched(true);
-    if (api.validClusterName(name)) return;
+    if (api.validClusterName(name) || noAccess) return;
     setBusy(true); setError(null);
     try {
-      await api.createCluster(region, { name, autopilot: { enabled: true }, network, subnetwork: subnet, releaseChannel: { channel } });
+      await api.createCluster(region, {
+        name, autopilot: { enabled: true }, network, subnetwork: subnet, releaseChannel: { channel },
+        controlPlaneEndpointsConfig: { dnsEndpointConfig: { allowExternalTraffic: dnsAccess }, ipEndpointsConfig: { enabled: ipv4Access } },
+      });
       notify.success(`Creating cluster "${name}"…`);
       location.hash = hashHref("kubernetes", "clusters", region, name).slice(1);
     } catch (e) { setError(e); }
@@ -88,7 +94,13 @@ export default function CreateCluster({ query = {} }) {
             <MenuItem value="default">default</MenuItem>
           </Select>
         </FormControl>
-        <CapabilityContainer id="gcp.kubernetes.cluster.private-networking" title="Access using DNS" description="Access using IPv4 addresses" />
+        <CapabilityContainer id="gcp.kubernetes.cluster.private-networking" title="Control plane access">
+          <Stack spacing={0.5}>
+            <FormControlLabel control={<Checkbox checked={dnsAccess} onChange={(e) => setDnsAccess(e.target.checked)} inputProps={{ "aria-label": "Access using DNS" }} />} label="Access using DNS" />
+            <FormControlLabel control={<Checkbox checked={ipv4Access} onChange={(e) => setIpv4Access(e.target.checked)} inputProps={{ "aria-label": "Access using IPv4 addresses" }} />} label="Access using IPv4 addresses" />
+            {noAccess && <Typography variant="body2" color="error">At least one access method must be enabled.</Typography>}
+          </Stack>
+        </CapabilityContainer>
       </Step>
       <Divider />
 
@@ -105,13 +117,14 @@ export default function CreateCluster({ query = {} }) {
           <Typography variant="body2"><b>Name:</b> {name || "—"}</Typography>
           <Typography variant="body2"><b>Region:</b> {region}</Typography>
           <Typography variant="body2"><b>Network:</b> {network} / {subnet}</Typography>
+          <Typography variant="body2"><b>Control plane access:</b> {[dnsAccess && "DNS", ipv4Access && "IPv4"].filter(Boolean).join(" + ") || "None"}</Typography>
           <Typography variant="body2"><b>Release channel:</b> {api.channelLabel(channel)}</Typography>
           <Typography variant="body2"><b>Project:</b> {getProject()}</Typography>
         </Stack>
       </Step>
 
       <Stack direction="row" spacing={1} sx={{ pt: 3 }}>
-        <Button type="submit" variant="contained" disabled={busy}>{busy ? "Creating…" : "Create"}</Button>
+        <Button type="submit" variant="contained" disabled={busy || noAccess}>{busy ? "Creating…" : "Create"}</Button>
         <Button href={hashHref("kubernetes", "clusters")}>Cancel</Button>
       </Stack>
     </Box>
