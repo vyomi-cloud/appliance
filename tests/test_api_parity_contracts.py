@@ -322,17 +322,19 @@ class ApiParityContractsTest(unittest.TestCase):
 
             status, created_net, _, _ = self.request_json("POST", f"/compute/v1/projects/{project}/global/networks", body={"name": network_name, "autoCreateSubnetworks": True})
             self.assertEqual(status, 200)
-            self.assertEqual(created_net["name"], network_name)
+            # v4 C0d: insert returns a (completed) Operation, as real Compute Engine does
+            self.assertTrue(created_net["targetLink"].endswith(f"/global/networks/{network_name}"))
             status, net_list, _, _ = self.request_json("GET", f"/compute/v1/projects/{project}/global/networks")
             self.assertEqual(status, 200)
             self.assertIn(network_name, [item["name"] for item in net_list["items"]])
 
             status, created_subnet, _, _ = self.request_json("POST", f"/compute/v1/projects/{project}/regions/us-central1/subnetworks", body={"name": f"{network_name}-subnet", "network": network_name, "ipCidrRange": "10.0.0.0/24"})
             self.assertEqual(status, 200)
-            self.assertEqual(created_subnet["kind"], "compute#subnetwork")
+            self.assertEqual(created_subnet["kind"], "compute#operation")
+            self.assertTrue(created_subnet["targetLink"].endswith(f"/subnetworks/{network_name}-subnet"))
             status, created_fw, _, _ = self.request_json("POST", f"/compute/v1/projects/{project}/global/firewalls", body={"name": f"{network_name}-fw", "network": network_name, "direction": "INGRESS", "allowed": [{"IPProtocol": "tcp", "ports": ["80"]}]})
             self.assertEqual(status, 200)
-            self.assertEqual(created_fw["name"], f"{network_name}-fw")
+            self.assertTrue(created_fw["targetLink"].endswith(f"/global/firewalls/{network_name}-fw"))
         finally:
             self.request_json("DELETE", f"/compute/v1/projects/{project}/global/firewalls/{network_name}-fw")
             self.request_json("DELETE", f"/compute/v1/projects/{project}/regions/us-central1/subnetworks/{network_name}-subnet")

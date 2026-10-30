@@ -628,9 +628,18 @@ def _get_operation(project: str, scope_kind: str, name: str) -> ComputeResponse:
 def dispatch(store: ComputeStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> ComputeResponse:
+    r = _dispatch(store, method.upper(), path, query, headers, body)
+    if method.upper() != "GET" and r.status < 300 and hasattr(store, "persist"):
+        store.persist()          # durable substrates save here (the in-memory store has no persist)
+    return r
+
+
+def _dispatch(store: ComputeStore, method: str, path: str,
+              query: dict | None = None, headers: dict | None = None,
+              body: bytes = b"") -> ComputeResponse:
     method = method.upper()
     p = path.split("?", 1)[0]
-    for pre in ("/compute/v1", "/v1"):
+    for pre in ("/compute/v1", "/compute/beta", "/v1"):
         if p.startswith(pre):
             p = p[len(pre):]
             break

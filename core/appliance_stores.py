@@ -30,6 +30,22 @@ space-scoped state (core.app_context `_SpaceScopedDictProxy`):
                      when Vault is reachable; `vault:v1:` ciphertext still decrypts through
                      `legacy_decrypt`)
 
+  v4 C0d adds (new slots — the pre-v4 handlers kept differently-shaped records, see below):
+    Firestore       documents + admin plane  -> service_states["gcp_gcp_firestore_engine"]
+                    {documents,databases,indexes,fields,backup_schedules,backups,operations,
+                     security_rules,meta}
+    Compute VPC     networks / subnets / firewalls / routes / addresses
+                                             -> service_states["gcp_gcp_compute_vpc"]
+    Compute Engine  instances / disks / images / snapshots / templates / groups / health checks
+                                             -> service_states["gcp_gcp_compute_vm"]
+                    (a Compute instance's REAL runtime — the Docker / LXD / Multipass guest the
+                     pre-v4 handler launched — is still the pre-v4 runtime record in
+                     service_states["gcp_gcp_compute"]["instances"], linked from the core record
+                     by `_runtimeId`; routes/gcp_firestore_compute_unified.py drives it)
+                    Once per space (marker in the slot's "meta"), the pre-v4 records are adopted:
+                    gcp_firestore_state databases / indexes + the FirestoreEngine SQLite documents
+                    (+ the Firestore emulator's, when configured), gcp_vpc_state, gcp_compute_state.
+
 The cores were extracted from the appliance handlers, so the shapes are identical.
 Consequences:
   * every v3 consumer of that state — the classic console REST (/api/s3/*,
@@ -575,8 +591,407 @@ class AppStateAwsKvStore(KvStore):
             _log.warning("aws secrets manager: Vault adoption skipped: %s", exc)
 
 
+# ── v4 C0d: Firestore + Compute Engine (VPC and VMs) ───────────────────────
+from core import gcp_compute_core as _gcc                 # noqa: E402
+from core import gcp_compute_instances_core as _gci       # noqa: E402
+from core.gcp_firestore_core import FirestoreStore        # noqa: E402
+
+
+class _SlotStore:
+    """Mixin: the store's state attributes resolve, on every access, to the active
+    space's slot (a plain dict inside the persisted kernel state), so a space switch
+    — or a restore that swaps the dict in — is followed without any sync."""
+
+    _KEYS: dict = {}
+
+    def _bind(self, proxy) -> None:
+        self._proxy = proxy
+
+    def _slot(self) -> dict:
+        slot = self._proxy._target()
+        for k, factory in self._KEYS.items():
+            if k not in slot:
+                slot[k] = factory()
+        slot.setdefault("meta", {})
+        return slot
+
+    def persist(self) -> None:
+        """No-op: the tier middleware persists the kernel state after every mutating
+        request (the slot lives inside it)."""
+
+    def _begin_adoption(self) -> bool:
+        """True exactly once per space (the marker persists with the slot), so a record
+        deleted after the upgrade is never resurrected from the pre-v4 state."""
+        meta = self._slot()["meta"]
+        if meta.get("adopted"):
+            return False
+        meta["adopted"] = _http_date()
+        return True
+
+
+def _slot_attr(name: str):
+    return property(lambda self: self._slot()[name])
+
+
+def _space_id_of(slot: dict) -> str:
+    """The id of the space whose service_states hold `slot` (the proxy may have pivoted
+    away from the globally active space to the request's provider)."""
+    try:
+        from core.app_context import STATE
+        for sid, sp in ((STATE.get("spaces") or {}).get("spaces") or {}).items():
+            if isinstance(sp, dict) and any(v is slot for v in (sp.get("service_states") or {}).values()):
+                return sid
+    except Exception:
+        pass
+    return _active_space_id()
+
+
+def _rfc3339(ts) -> str:
+    s = str(ts or "").strip()
+    return s if s else time.strftime("%Y-%m-%dT%H:%M:%S.000000Z", time.gmtime())
+
+
+class AppStateFirestoreStore(_SlotStore, FirestoreStore):
+    """gcp_firestore_core store over the appliance's space-scoped GCP state."""
+
+    _KEYS = {"documents": dict, "databases": dict, "indexes": dict, "fields": dict,
+             "backup_schedules": dict, "backups": dict, "operations": dict, "security_rules": dict}
+
+    def __init__(self, proxy):
+        self._bind(proxy)          # NB: no FirestoreStore.__init__ — the dicts are the slot's
+
+    documents = _slot_attr("documents")
+    databases = _slot_attr("databases")
+    indexes = _slot_attr("indexes")
+    fields = _slot_attr("fields")
+    backup_schedules = _slot_attr("backup_schedules")
+    backups = _slot_attr("backups")
+    operations = _slot_attr("operations")
+    security_rules = _slot_attr("security_rules")
+
+    def adopt(self, project: str) -> None:
+        """Import (once per space) what the pre-v4 handlers kept: the databases and
+        composite indexes in gcp_firestore_state, the documents in the FirestoreEngine
+        SQLite table (or the Firestore emulator, when one is configured)."""
+        if not self._begin_adoption():
+            return
+        try:
+            from core import gcp_firestore_core as fc
+            from core.app_context import gcp_firestore_state as legacy
+            slot = self._slot()
+            dbs = legacy.get("databases") if isinstance(legacy.get("databases"), dict) else {}
+            for dbid, rec in dbs.items():
+                if not isinstance(rec, dict) or dbid in self.databases:
+                    continue
+                db = fc._ensure_db(self, project, dbid)
+                for k in ("locationId", "type", "concurrencyMode", "appEngineIntegrationMode",
+                          "deleteProtectionState", "pointInTimeRecoveryEnablement", "createTime",
+                          "updateTime", "uid"):
+                    if rec.get(k):
+                        db[k] = rec[k]
+            for rec in (legacy.get("indexes") or {}).values():
+                if not isinstance(rec, dict) or not rec.get("collection"):
+                    continue
+                dbid = str(rec.get("database") or "(default)")
+                fc._ensure_db(self, project, dbid)
+                iid = str(rec.get("name") or "").rsplit("/", 1)[-1] or fc._auto_id()[:16]
+                self.indexes.setdefault(dbid, {}).setdefault(iid, {
+                    "name": f"projects/{project}/databases/{dbid}/collectionGroups/{rec['collection']}/indexes/{iid}",
+                    "collectionGroup": rec["collection"], "queryScope": rec.get("queryScope") or "COLLECTION",
+                    "fields": rec.get("fields") or [], "state": rec.get("state") or "READY"})
+            n = 0
+            for dbid, rel, fields, created, updated in self._legacy_documents(slot, project, list(dbs)):
+                key = f"{dbid}/{rel}"
+                if key in self.documents or rel.count("/") % 2 != 1:
+                    continue
+                fc._ensure_db(self, project, dbid)
+                self.documents[key] = {"fields": fields if isinstance(fields, dict) else {},
+                                       "createTime": _rfc3339(created), "updateTime": _rfc3339(updated or created)}
+                n += 1
+            if n or dbs:
+                _log.info("firestore: adopted %d pre-v4 documents, %d databases", n, len(dbs))
+        except Exception as exc:   # never break the data plane over a migration
+            _log.warning("firestore: pre-v4 adoption skipped: %s", exc)
+
+    @staticmethod
+    def _legacy_documents(slot, project, dbids):
+        """(database, rel, fields, createTime, updateTime) of every pre-v4 document."""
+        out = []
+        try:   # FirestoreEngine (core/vyomi_platform.py) — SQLite rows keyed by space id
+            from core.app_context import PLATFORM, STATE
+            eng = PLATFORM.firestore
+            sids = {_space_id_of(slot), str((STATE.get("spaces") or {}).get("active_space_id") or "global")}
+            try:
+                sids.add(eng._space_id())    # the space the pre-v4 engine itself keyed rows by
+            except Exception:
+                pass
+            with eng.lock:
+                with eng._connect() as conn:
+                    eng._ensure_schema(conn)
+                    marks = ",".join("?" * len(sids))
+                    for row in conn.execute(
+                            "SELECT database_id, collection_id, doc_id, fields_json, create_time, update_time "
+                            f"FROM gcp_firestore_documents WHERE space_id IN ({marks}) ORDER BY create_time",
+                            tuple(sids)).fetchall():
+                        import json as _json
+                        try:
+                            fields = _json.loads(row["fields_json"] or "{}")
+                        except Exception:
+                            fields = {}
+                        out.append((row["database_id"] or "(default)", f"{row['collection_id']}/{row['doc_id']}",
+                                    fields, row["create_time"], row["update_time"]))
+        except Exception as exc:
+            _log.warning("firestore: SQLite document adoption skipped: %s", exc)
+        try:   # the Firestore emulator (CLOUDLEARN_FIRESTORE_EMULATOR_HOST), when it held them
+            from core import gcp_firestore_emulator as emu
+            if emu.available():
+                for dbid in dict.fromkeys(list(dbids) + ["(default)"]):
+                    for d in emu.list_root(project, dbid) or []:
+                        name = str(d.get("name") or "")
+                        if "/documents/" in name:
+                            out.append((dbid, name.split("/documents/", 1)[1], d.get("fields") or {},
+                                        d.get("createTime"), d.get("updateTime")))
+        except Exception as exc:
+            _log.warning("firestore: emulator document adoption skipped: %s", exc)
+        return out
+
+
+class AppStateComputeVpcStore(_SlotStore, _gcc.ComputeStore):
+    """gcp_compute_core (VPC networks / subnets / firewalls / routes / addresses) store over
+    the appliance's space-scoped GCP state."""
+
+    _KEYS = {"networks": dict, "subnetworks": dict, "firewalls": dict, "routes": dict,
+             "addresses": dict, "seq": lambda: {"op": 0, "ip": 0}}
+
+    def __init__(self, proxy):
+        self._bind(proxy)
+
+    networks = _slot_attr("networks")
+    subnetworks = _slot_attr("subnetworks")
+    firewalls = _slot_attr("firewalls")
+    routes = _slot_attr("routes")
+    addresses = _slot_attr("addresses")
+    seq = _slot_attr("seq")
+
+    def adopt(self, project: str) -> None:
+        """Import (once per space) the pre-v4 gcp_vpc_state networks, subnetworks,
+        firewall rules and routes (keyed by bare name there; `project/…` here)."""
+        if not self._begin_adoption():
+            return
+        try:
+            from core.app_context import gcp_vpc_state as legacy
+
+            def items(kind):
+                d = legacy.get(kind)
+                return [r for r in (d.values() if isinstance(d, dict) else []) if isinstance(r, dict) and r.get("name")]
+
+            def net_name(ref):
+                return _gcc._resolve_network_name(project, ref or "default") or "default"
+
+            def ensure_net(proj, name, rec=None):
+                key = _gcc._net_key(proj, name)
+                if key not in self.networks:
+                    rec = rec or {}
+                    self.seq["ip"] += 1
+                    self.networks[key] = {
+                        "id": str(rec.get("id") or 10_000 + self.seq["ip"]), "project": proj, "name": name,
+                        "description": str(rec.get("description") or ""),
+                        "autoCreateSubnetworks": bool(rec.get("autoCreateSubnetworks", False)),
+                        "mtu": int(rec.get("mtu") or _gcc.DEFAULT_MTU),
+                        "routingMode": str(rec.get("routingMode") or "REGIONAL"),
+                        "creationTimestamp": _rfc3339(rec.get("createTime")), "_subnets": []}
+                return self.networks[key]
+
+            for rec in items("networks"):
+                ensure_net(str(rec.get("project") or project), rec["name"], rec)
+            for rec in items("subnetworks"):
+                proj, region = str(rec.get("project") or project), str(rec.get("region") or _gcc.DEFAULT_REGION)
+                key = _gcc._sub_key(proj, region, rec["name"])
+                if key in self.subnetworks:
+                    continue
+                net = ensure_net(proj, net_name(rec.get("network")))
+                cidr = str(rec.get("ipCidrRange") or "10.0.0.0/24")
+                gw = rec.get("gatewayAddress")
+                if not gw:
+                    import ipaddress
+                    try:
+                        gw = str(ipaddress.ip_network(cidr, strict=False).network_address + 1)
+                    except ValueError:
+                        gw = ""
+                self.seq["ip"] += 1
+                self.subnetworks[key] = {
+                    "id": str(rec.get("id") or 20_000 + self.seq["ip"]), "project": proj, "region": region,
+                    "name": rec["name"], "description": str(rec.get("description") or ""),
+                    "networkName": net["name"], "ipCidrRange": cidr, "gatewayAddress": gw,
+                    "privateIpGoogleAccess": bool(rec.get("privateIpGoogleAccess", False)),
+                    "stackType": str(rec.get("stackType") or "IPV4_ONLY"), "ipv6CidrRange": "",
+                    "flowLogs": False, "creationTimestamp": _rfc3339(rec.get("createTime"))}
+                net.setdefault("_subnets", []).append({"region": region, "name": rec["name"]})
+            for rec in items("firewalls"):
+                proj = str(rec.get("project") or project)
+                key = _gcc._fw_key(proj, rec["name"])
+                if key in self.firewalls:
+                    continue
+                net = ensure_net(proj, net_name(rec.get("network")))
+                self.seq["ip"] += 1
+                self.firewalls[key] = {
+                    "id": str(rec.get("id") or 30_000 + self.seq["ip"]), "project": proj, "name": rec["name"],
+                    "description": str(rec.get("description") or ""), "networkName": net["name"],
+                    "priority": int(rec.get("priority") or 1000), "direction": str(rec.get("direction") or "INGRESS"),
+                    "disabled": bool(rec.get("disabled", False)),
+                    "logEnable": bool((rec.get("logConfig") or {}).get("enable", False)),
+                    "sourceRanges": rec.get("sourceRanges") or [], "destinationRanges": rec.get("destinationRanges") or [],
+                    "targetTags": rec.get("targetTags") or [], "sourceTags": rec.get("sourceTags") or [],
+                    "allowed": rec.get("allowed") if rec.get("allowed") else None,
+                    "denied": rec.get("denied") if rec.get("denied") else None,
+                    "creationTimestamp": _rfc3339(rec.get("createTime"))}
+            for rec in items("routes"):
+                proj = str(rec.get("project") or project)
+                key = _gcc._route_key(proj, rec["name"])
+                if key in self.routes:
+                    continue
+                net = ensure_net(proj, net_name(rec.get("network")))
+                self.seq["ip"] += 1
+                self.routes[key] = {
+                    "id": str(rec.get("id") or 40_000 + self.seq["ip"]), "project": proj, "name": rec["name"],
+                    "description": str(rec.get("description") or ""), "networkName": net["name"],
+                    "destRange": str(rec.get("destRange") or "0.0.0.0/0"), "priority": int(rec.get("priority") or 1000),
+                    "tags": rec.get("tags") or [], "nextHop": _gcc._next_hop_fields(proj, rec),
+                    "creationTimestamp": _rfc3339(rec.get("createTime"))}
+        except Exception as exc:
+            _log.warning("compute vpc: pre-v4 adoption skipped: %s", exc)
+
+
+_LEGACY_VM_STATUS = {"running": _gci.RUNNING, "pending": _gci.RUNNING, "starting": _gci.RUNNING,
+                     "provisioning": _gci.RUNNING, "stopped": _gci.TERMINATED, "stopping": _gci.TERMINATED,
+                     "suspended": _gci.SUSPENDED}
+
+
+class AppStateComputeVmStore(_SlotStore, _gci.ComputeStore):
+    """gcp_compute_instances_core (instances, disks, images, snapshots, machine images,
+    instance templates, instance groups, health checks) store over the appliance's
+    space-scoped GCP state."""
+
+    _KEYS = {"instances": dict, "disks": dict, "images": dict, "snapshots": dict,
+             "machine_images": dict, "instance_templates": dict, "instance_groups": dict,
+             "health_checks": dict, "operations": dict, "project_metadata": dict,
+             "seq": lambda: {"op": 0, "id": 1000}}
+
+    def __init__(self, proxy):
+        self._bind(proxy)
+
+    instances = _slot_attr("instances")
+    disks = _slot_attr("disks")
+    images = _slot_attr("images")
+    snapshots = _slot_attr("snapshots")
+    machine_images = _slot_attr("machine_images")
+    instance_templates = _slot_attr("instance_templates")
+    instance_groups = _slot_attr("instance_groups")
+    health_checks = _slot_attr("health_checks")
+    operations = _slot_attr("operations")
+    project_metadata = _slot_attr("project_metadata")
+    seq = _slot_attr("seq")
+
+    def adopt(self, project: str) -> None:
+        """Import (once per space) the pre-v4 gcp_compute_state: disks, images, snapshots,
+        instance groups and instances. An adopted instance keeps its real runtime: the
+        core record links the pre-v4 runtime record (`_runtimeId`)."""
+        if not self._begin_adoption():
+            return
+        try:
+            from core.app_context import gcp_compute_state as legacy
+
+            def items(kind):
+                d = legacy.get(kind)
+                return [(k, r) for k, r in (d.items() if isinstance(d, dict) else []) if isinstance(r, dict)]
+
+            def zone_of(rec):
+                z = _gci._last(rec.get("zone") or rec.get("az") or "")
+                return z if z in _gci.ZONE_REGION else _gci.DEFAULT_ZONE
+
+            def name_ok(n):
+                return bool(n) and bool(_gci._NAME.match(n))
+
+            for _, d in items("disks"):
+                proj, zone, name = str(d.get("project") or project), zone_of(d), str(d.get("name") or "")
+                full = "projects/%s/zones/%s/disks/%s" % (proj, zone, name)
+                if not name_ok(name) or full in self.disks:
+                    continue
+                dtype = _gci._last(d.get("type") or "")
+                _, rec = _gci._insert_disk_record(self, proj, zone, name, {
+                    "sizeGb": d.get("sizeGb") or _gci.DEFAULT_DISK_GB,
+                    "type": dtype if dtype in _gci.DISK_TYPES else _gci.DEFAULT_DISK_TYPE,
+                    "sourceImage": d.get("sourceImage") or None, "sourceSnapshot": d.get("sourceSnapshot") or None,
+                    "labels": d.get("labels") or {}})
+                rec["creationTimestamp"] = _rfc3339(d.get("createTime") or d.get("creationTimestamp"))
+            for _, im in items("images"):
+                proj, name = str(im.get("project") or project), str(im.get("name") or "")
+                if name_ok(name) and "projects/%s/global/images/%s" % (proj, name) not in self.images:
+                    try:
+                        _gci.insert_image(self, proj, {"name": name, "description": im.get("description", ""),
+                                                       "labels": im.get("labels") or {}})
+                    except Exception:
+                        pass
+            for _, sn in items("snapshots"):
+                proj, name = str(sn.get("project") or project), str(sn.get("name") or "")
+                full = "projects/%s/global/snapshots/%s" % (proj, name)
+                if not name_ok(name) or full in self.snapshots:
+                    continue
+                self.snapshots[full] = {
+                    "id": _gci._next_id(self), "name": name, "kind": "compute#snapshot", "status": "READY",
+                    "sourceDisk": sn.get("sourceDisk") or "", "diskSizeGb": str(sn.get("diskSizeGb") or _gci.DEFAULT_DISK_GB),
+                    "storageBytes": str(sn.get("storageBytes") or 0), "snapshotType": "STANDARD",
+                    "creationTimestamp": _rfc3339(sn.get("createTime")), "labels": sn.get("labels") or {},
+                    "selfLink": _gci._selflink(full), "storageLocations": sn.get("storageLocations") or [_gci.DEFAULT_REGION]}
+            for iid, inst in items("instances"):
+                state = str(inst.get("state") or "").lower()
+                proj, zone, name = str(inst.get("project") or project), zone_of(inst), str(inst.get("name") or "")
+                full = "projects/%s/zones/%s/instances/%s" % (proj, zone, name)
+                if state not in _LEGACY_VM_STATUS or not name_ok(name) or full in self.instances:
+                    continue
+                disks = []
+                for dn in inst.get("attached_disk_names") or []:
+                    if "projects/%s/zones/%s/disks/%s" % (proj, zone, dn) in self.disks:
+                        disks.append({"source": "projects/%s/zones/%s/disks/%s" % (proj, zone, dn),
+                                      "boot": not disks, "autoDelete": True})
+                if not disks:
+                    disks = [{"boot": True, "autoDelete": True, "initializeParams": {
+                        "diskName": name, "diskSizeGb": str(inst.get("storage_gb") or _gci.DEFAULT_DISK_GB),
+                        "sourceImage": inst.get("ami") or None}}]
+                mt = _gci._last(inst.get("machine_type") or inst.get("machineType") or "")
+                tags = inst.get("tags")
+                md = inst.get("metadata_items") if isinstance(inst.get("metadata_items"), dict) else {}
+                _gci.insert_instance(self, proj, zone, {
+                    "name": name, "machineType": mt if mt in _gci.MACHINE_SHAPES else "e2-medium",
+                    "disks": disks, "labels": inst.get("labels") or {},
+                    "tags": {"items": list(tags) if isinstance(tags, list) else []},
+                    "metadata": {"items": [{"key": k, "value": v} for k, v in md.items()]},
+                    "networkInterfaces": [{"networkIP": inst.get("private_ip") or None,
+                                           **({"accessConfigs": [{"type": "ONE_TO_ONE_NAT", "name": "External NAT",
+                                                                 "natIP": inst["public_ip"]}]} if inst.get("public_ip") else {"accessConfigs": []})}],
+                })
+                rec = self.instances[full]
+                rec["status"] = _LEGACY_VM_STATUS[state]
+                rec["creationTimestamp"] = _rfc3339(inst.get("created"))
+                rec["_runtimeId"] = iid
+            for _, g in items("instance_groups"):
+                proj, zone, name = str(g.get("project") or project), zone_of(g), str(g.get("name") or "")
+                full = "projects/%s/zones/%s/instanceGroups/%s" % (proj, zone, name)
+                if not name_ok(name) or full in self.instance_groups:
+                    continue
+                _gci.insert_instance_group(self, proj, zone, {"name": name, "description": g.get("description", "")})
+                grp = self.instance_groups[full]
+                grp["members"] = [m for m in (g.get("instances") or [])
+                                  if "projects/%s/zones/%s/instances/%s" % (proj, zone, m) in self.instances]
+                grp["size"] = len(grp["members"])
+            self.operations.clear()   # the adoption's own bookkeeping operations
+        except Exception as exc:
+            _log.warning("compute engine: pre-v4 adoption skipped: %s", exc)
+
+
 # ── singletons ─────────────────────────────────────────────────────────────
 _S3 = _GCS = _DDB = _AZB = _GSEC = _GKMS = _AKMS = _ASEC = None
+_GFS = _GVPC = _GVM = None
 
 
 def s3_store() -> AppStateObjectStore:
@@ -706,3 +1121,24 @@ def aws_secrets_store() -> AppStateAwsKvStore:
         _ASEC = AppStateAwsKvStore(_proxy("secretsmanager", lambda: {"secrets": {}}, "secrets"),
                                    account_id=ctx.AWS_ACCOUNT_ID)
     return _ASEC
+
+
+def gcp_firestore_store() -> AppStateFirestoreStore:
+    global _GFS
+    if _GFS is None:
+        _GFS = AppStateFirestoreStore(_proxy("gcp_firestore_engine", dict, None))
+    return _GFS
+
+
+def gcp_compute_vpc_store() -> AppStateComputeVpcStore:
+    global _GVPC
+    if _GVPC is None:
+        _GVPC = AppStateComputeVpcStore(_proxy("gcp_compute_vpc", dict, None))
+    return _GVPC
+
+
+def gcp_compute_vm_store() -> AppStateComputeVmStore:
+    global _GVM
+    if _GVM is None:
+        _GVM = AppStateComputeVmStore(_proxy("gcp_compute_vm", dict, None))
+    return _GVM

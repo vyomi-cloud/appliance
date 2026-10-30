@@ -149,7 +149,8 @@ def _fingerprint(obj):
 
 def _synthetic_ip(prefix, name):
     h = hashlib.sha256(name.encode()).digest()
-    return "%s.%d.%d.%d" % (prefix, h[0] % 254 + 1, h[1] % 254 + 1, h[2] % 254 + 1)
+    need = 3 - prefix.count(".")           # fill the address out to four octets
+    return ".".join([prefix] + [str(h[i] % 254 + 1) for i in range(need)])
 
 
 # ── operations ───────────────────────────────────────────────────────────────
@@ -177,7 +178,9 @@ def _operation(store, project, scope, op_type, target_name, target_link, user="v
 # ── zones / regions / machine types ─────────────────────────────────────────
 def zone_view(project, zone, instance_count):
     return {
-        "id": _last(zone), "kind": "compute#zone", "name": zone, "description": zone,
+        # Zone.id is a uint64 (strict clients — gcloud's apitools — reject a name here)
+        "id": str(int(hashlib.sha1(zone.encode()).hexdigest()[:12], 16)), "kind": "compute#zone",
+        "name": zone, "description": zone,
         "status": "UP", "region": _selflink("projects/%s/regions/%s" % (project, ZONE_REGION[zone])),
         "region_name": ZONE_REGION[zone], "availableCpuPlatforms": list(CPU_PLATFORMS),
         "selfLink": _selflink("projects/%s/zones/%s" % (project, zone)),
@@ -194,7 +197,7 @@ def list_zones(store, project):
 
 
 def list_regions(project):
-    return [{"id": r, "kind": "compute#region", "name": r, "description": r, "status": "UP",
+    return [{"id": str(int(hashlib.sha1(r.encode()).hexdigest()[:12], 16)), "kind": "compute#region", "name": r, "description": r, "status": "UP",
               "zones": [_selflink("projects/%s/zones/%s" % (project, z)) for z, rr in ZONES if rr == r],
               "selfLink": _selflink("projects/%s/regions/%s" % (project, r))} for r in REGIONS]
 
@@ -205,7 +208,7 @@ def machine_type_view(project, zone, name):
         return None
     family = name.split("-")[0].upper()
     return {
-        "id": hashlib.sha1(name.encode()).hexdigest()[:6], "kind": "compute#machineType", "name": name,
+        "id": str(int(hashlib.sha1(name.encode()).hexdigest()[:6], 16)), "kind": "compute#machineType", "name": name,
         "description": "%s machine type with %d vCPUs and %s GB of memory" % (family, shape["vcpu"], round(shape["ram_mb"] / 1024, 2)),
         "guestCpus": shape["vcpu"], "memoryMb": shape["ram_mb"], "zone": zone, "isSharedCpu": shape["family"] == "burstable",
         "selfLink": _selflink("projects/%s/zones/%s/machineTypes/%s" % (project, zone, name)),
@@ -420,7 +423,7 @@ def set_instance_field(store, project, zone, name, verb, payload):
     elif verb == "setMetadata":
         inst["metadata"] = {"items": payload.get("items") or [], "fingerprint": _fingerprint(payload)}
     elif verb == "setDeletionProtection":
-        pass  # deletionProtection is a query param on the real API; handled by caller
+        inst["deletionProtection"] = bool(payload.get("deletionProtection", True))
     elif verb == "setMachineType":
         _require_state(inst, (TERMINATED,), "setMachineType")
         mt_name, mt_link = _mt_full(project, zone, (payload.get("machineType") or ""))
@@ -856,6 +859,11 @@ def list_all_operations(store, project):
 def get_operation(store, project, scope, name):
     loc = "zones/%s" % scope if scope in ZONE_REGION else ("regions/%s" % scope if scope else "global")
     full = "projects/%s/%s/operations/%s" % (project, loc, name)
+    if full not in store.operations and name.startswith("operation-"):
+        # every operation completes synchronously; the VPC core's (networks, subnetworks,
+        # firewalls, routes, addresses) are not kept here — report those DONE as well
+        return {"kind": "compute#operation", "id": "0", "name": name, "status": "DONE", "progress": 100,
+                "selfLink": _selflink(full)}
     return _get(store, store.operations, full, "operation")
 
 
@@ -868,7 +876,7 @@ def _proj(store, project):
 
 def get_project(store, project):
     meta = _proj(store, project)
-    return {"kind": "compute#project", "name": project, "id": hashlib.sha1(project.encode()).hexdigest()[:12],
+    return {"kind": "compute#project", "name": project, "id": str(int(hashlib.sha1(project.encode()).hexdigest()[:12], 16)),
             "commonInstanceMetadata": {"kind": "compute#metadata", "items": meta["items"], "fingerprint": meta["fingerprint"]},
             "defaultServiceAccount": "%s-compute@developer.gserviceaccount.com" % hashlib.sha1(project.encode()).hexdigest()[:12],
             "selfLink": _selflink("projects/%s" % project)}
@@ -884,9 +892,12 @@ def set_common_instance_metadata(store, project, payload):
 def dispatch(store, method, path, query=None, headers=None, body=b""):
     query, headers = query or {}, headers or {}
     try:
-        return _dispatch(store, method.upper(), path, query, headers, body)
+        r = _dispatch(store, method.upper(), path, query, headers, body)
     except _E as e:
         return _err(e.status, e.gcp_status, e.message)
+    if method.upper() != "GET" and r.status < 300 and hasattr(store, "persist"):
+        store.persist()          # durable substrates save here (the in-memory store has no persist)
+    return r
 
 
 def _body(body):
@@ -937,10 +948,22 @@ def _dispatch(store, method, path, query, headers, body):
             return _json(200, {"kind": "compute#operationAggregatedList", "items": {"global": {"operations": list_all_operations(store, project)}}})
         return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
 
+    if len(rest) >= 3 and rest[-1] == "wait" and rest[-3] == "operations" and method == "POST":
+        rest, method = rest[:-1], "GET"     # operations.wait — every operation is already DONE
+    if rest[0] == "regions" and len(rest) in (3, 4) and rest[2] == "operations" and method == "GET":
+        if len(rest) == 3:
+            return _json(200, {"kind": "compute#operationList", "items": list_operations(store, project, rest[1])})
+        return _json(200, get_operation(store, project, rest[1], rest[3]))
     if rest[0] == "global":
         return _global(store, method, project, rest[1:], verb, payload)
     if rest[0] == "zones" and len(rest) >= 2:
-        return _zonal(store, method, project, rest[1], rest[2:], verb, payload)
+        rest2 = rest[2:]
+        if not verb and len(rest2) == 3 and rest2[0] in ("instances", "disks", "instanceGroups"):
+            # The real Compute v1 REST spells custom methods as a trailing path segment
+            # (`instances/{i}/start`, `disks/{d}/createSnapshot`) — what google-cloud-compute
+            # and gcloud send; `instances/{i}:start` (the console's form) is accepted too.
+            rest2, verb = rest2[:2], rest2[2]
+        return _zonal(store, method, project, rest[1], rest2, verb, payload, query)
     return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
 
 
@@ -1009,7 +1032,7 @@ def _global(store, method, project, rest, verb, payload):
     return _err(404, "NOT_FOUND", "Unknown path or method %s." % method)
 
 
-def _zonal(store, method, project, zone, rest, verb, payload):
+def _zonal(store, method, project, zone, rest, verb, payload, query=None):
     if not rest:
         return _err(404, "NOT_FOUND", "Unknown path.")
     coll, rest2 = rest[0], rest[1:]
@@ -1043,6 +1066,9 @@ def _zonal(store, method, project, zone, rest, verb, payload):
             if verb in ("start", "stop", "suspend", "resume", "reset") and method == "POST":
                 return _json(200, set_instance_status(store, project, zone, name, verb))
             if verb in ("setLabels", "setMetadata", "setDeletionProtection", "setMachineType", "setTags") and method == "POST":
+                if verb == "setDeletionProtection":   # a query parameter on the real API (default true)
+                    flag = str((query or {}).get("deletionProtection", "true")).lower()
+                    payload = dict(payload, deletionProtection=flag not in ("false", "0"))
                 return _json(200, set_instance_field(store, project, zone, name, verb, payload))
     elif coll == "disks":
         if not rest2:

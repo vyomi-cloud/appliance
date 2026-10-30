@@ -32,6 +32,15 @@ v4 C0c adds "kms" (AWS KMS, X-Amz-Target TrentService.* — core/kms_core.py) an
 POST / (and /_wire/) by routes/aws_s3.aws_query_root over core/appliance_stores.py; the
 classic console REST (/api/aws/kms/keys*, /api/aws/secrets*) is re-implemented on the same
 stores (routes/aws_secrets_kms_unified.py). Pre-v4 they were Vault-only handlers.
+
+v4 C0d adds "gcp_firestore" (Firestore data + admin plane, /v1/projects/{p}/databases… —
+core/gcp_firestore_core.py) and "gcp_compute" (/compute/v1|beta/… routed by path exactly like
+AwsWireRouter: VPC networks / subnetworks / firewalls / routes / addresses →
+core/gcp_compute_core.py, everything else → core/gcp_compute_instances_core.py), each over
+core/appliance_stores.py. The classic console paths (/firestore/v1/…, /api/gcp/firestore/v1/…,
+/api/gcp/compute/v1/…, /api/gcp/vpc/*, /api/gcp/dynamodb/*) are aliases onto the same stores
+(routes/gcp_firestore_compute_unified.py, which also drives a Compute instance's real
+Docker / LXD / Multipass runtime exactly as the pre-v4 handler did).
 """
 from __future__ import annotations
 
@@ -44,9 +53,10 @@ def _cfg(key: str, default: str) -> str:
     return os.environ.get(key, default)
 
 
-_DEFAULT_SERVICES = "s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager"
+_DEFAULT_SERVICES = ("s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager,"
+                     "gcp_firestore,gcp_compute")
 _KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
-                   "kms", "secretsmanager")
+                   "kms", "secretsmanager", "gcp_firestore", "gcp_compute")
 
 
 def unified_services() -> frozenset:
@@ -69,19 +79,22 @@ _APPLIANCE_ROUTER: AwsWireRouter | None = None
 
 
 def appliance_stores() -> dict:
-    """The C0/C0b/C0c stores (S3 / GCS / DynamoDB / Azure Blob / GCP Secret Manager / Cloud
-    KMS / AWS KMS / AWS Secrets Manager over the appliance's own state)."""
+    """The C0/C0b/C0c/C0d stores (S3 / GCS / DynamoDB / Azure Blob / GCP Secret Manager /
+    Cloud KMS / AWS KMS / AWS Secrets Manager / Firestore / Compute Engine over the
+    appliance's own state)."""
     from core import appliance_stores as aps
     return {"s3": aps.s3_store(), "gcs": aps.gcs_store(), "ddb": aps.ddb_store(),
             "az_blob": aps.az_blob_store(), "gcp_sec": aps.gcp_secrets_store(),
             "gcp_kms": aps.gcp_kms_store(), "kms": aps.aws_kms_store(),
-            "sec": aps.aws_secrets_store()}
+            "sec": aps.aws_secrets_store(), "gcp_fs": aps.gcp_firestore_store(),
+            "gcp_compute": aps.gcp_compute_vpc_store(), "gcp_compute_vm": aps.gcp_compute_vm_store()}
 
 
 # router store key -> unified service name (which stores a full-ingress router overrides)
 STORE_SERVICE = {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb", "az_blob": "azure_blob",
                  "gcp_sec": "gcp_secrets", "gcp_kms": "gcp_kms", "kms": "kms",
-                 "sec": "secretsmanager"}
+                 "sec": "secretsmanager", "gcp_fs": "gcp_firestore",
+                 "gcp_compute": "gcp_compute", "gcp_compute_vm": "gcp_compute"}
 
 
 def appliance_router() -> AwsWireRouter:
@@ -184,7 +197,38 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         hdrs = {"x-amzn-requestid": str(_uuid.uuid4()), **dict(resp.headers or {})}
         hdrs.setdefault("content-type", "application/x-amz-json-1.1")
         return {"status": resp.status, "headers": hdrs, "body": _json.dumps(resp.body).encode()}
+    if service == "gcp_firestore":
+        from core import gcp_firestore_core
+        st = r.gcp_fs
+        project = _project_of(path)
+        if project and hasattr(st, "adopt"):
+            st.adopt(project)            # pre-v4 databases / indexes / documents → this state (once)
+        resp = gcp_firestore_core.dispatch(st, method, path, query, headers, body)
+        hdrs = dict(resp.headers or {})
+        hdrs.setdefault("content-type", resp.media_type or "application/json")
+        return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
+    if service == "gcp_compute":
+        from core import gcp_compute_core, gcp_compute_instances_core
+        from core.aws_wire_router import _gcp_service
+        project = compute_project_of(path)
+        for st in (r.gcp_compute, r.gcp_compute_vm):
+            if project and hasattr(st, "adopt"):
+                st.adopt(project)        # pre-v4 VPC / Compute Engine records → this state (once)
+        if _gcp_service(path) == "gcp-compute":
+            resp = gcp_compute_core.dispatch(r.gcp_compute, method, path, query, headers, body)
+        else:
+            resp = gcp_compute_instances_core.dispatch(r.gcp_compute_vm, method, path, query, headers, body)
+        hdrs = dict(resp.headers or {})
+        hdrs.setdefault("content-type", resp.media_type or "application/json")
+        return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
     raise ValueError(f"not a unified service: {service}")
+
+
+def compute_project_of(path: str) -> str:
+    """`/compute/v1/projects/{p}/…` → p."""
+    segs = [x for x in path.split("?", 1)[0].split("/") if x]
+    i = segs.index("projects") if "projects" in segs else -1
+    return segs[i + 1] if 0 <= i < len(segs) - 1 else ""
 
 
 async def serve_service(service: str, request, path: str | None = None, body: bytes | None = None,
@@ -314,7 +358,7 @@ def build_backed_router(overrides: dict | None = None) -> AwsWireRouter:
         "ddb": overrides.get("ddb") or PersistentNoSqlStore(
             SqliteStateBackend(_cfg("VYOMI_DDB_DB", "/tmp/vyomi-ddb.sqlite"))),
         # Firestore (v2.5.0) — durable documents via the file-backed substrate
-        "gcp_fs": PersistentFirestoreStore(
+        "gcp_fs": overrides.get("gcp_fs") or PersistentFirestoreStore(
             SqliteStateBackend(_cfg("VYOMI_FS_DB", "/tmp/vyomi-fs.sqlite"))),
         # Cosmos (v2.5.0) — durable via the file-backed substrate
         "az_cosmos": PersistentCosmosStore(
@@ -333,6 +377,9 @@ def build_backed_router(overrides: dict | None = None) -> AwsWireRouter:
         "msg": NatsBackedMessagingStore(servers=nats_servers, bucket="aws_msg"),
         "gcp_msg": NatsBackedMessagingStore(servers=nats_servers, bucket="gcp_msg"),
     }
+    for _k in ("gcp_compute", "gcp_compute_vm"):   # C0d: Compute Engine on the appliance state
+        if overrides.get(_k) is not None:
+            stores[_k] = overrides[_k]
     from core.apigatewayv2_core import shared_store
     stores["apigwv2"] = shared_store()   # shared with the console REST (/api/apigatewayv2)
     from core.stepfunctions_core import shared_store as _sfn_store
