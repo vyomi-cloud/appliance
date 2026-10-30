@@ -348,6 +348,65 @@ try {
   check("service account created over wire → shown in UI list", true);
   await shot("13-service-accounts");
 
+  // Privileged Access Manager: requesting a grant on an auto-approved entitlement via the
+  // UI activates it immediately and really adds the IAM binding (cross-checked over the
+  // native wire); an entitlement with an approver leaves the grant pending until the
+  // Approve grants tab approves it, and revoking removes the binding again.
+  const PAM_AUTO = `pam-auto-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/locations/global/entitlements?entitlementId=${PAM_AUTO}`, {
+    method: "POST", body: JSON.stringify({ maxRequestDuration: "3600s", privilegedAccess: { gcpIamAccess: { roleBindings: [{ role: "roles/viewer" }] } } }),
+  });
+  const PAM_REQUESTER = `user:pam-${Date.now() % 100000}@example.com`;
+  await page.goto(UI + "#/iam-admin/pam");
+  await page.getByRole("tab", { name: "Grants", exact: true }).click();
+  await page.getByRole("button", { name: "Request access" }).click();
+  await page.getByLabel("Entitlement").click();
+  await page.getByRole("option", { name: PAM_AUTO }).click();
+  await page.getByLabel("Requester").fill(PAM_REQUESTER);
+  await page.getByRole("button", { name: "Submit request" }).click();
+  await page.getByText(PAM_REQUESTER).first().waitFor({ timeout: 10000 });
+  const pamPolAfterGrant = await wjson("/v1/projects/vyomi-project:getIamPolicy", { method: "POST", body: "{}" });
+  check("PAM request access via UI (auto-approved) → native getIamPolicy shows binding",
+    (pamPolAfterGrant.bindings || []).some((b) => b.role === "roles/viewer" && b.members.includes(PAM_REQUESTER)));
+  await shot("14-pam-grants");
+
+  const PAM_APPROVAL = `pam-approval-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/locations/global/entitlements?entitlementId=${PAM_APPROVAL}`, {
+    method: "POST",
+    body: JSON.stringify({
+      maxRequestDuration: "3600s", privilegedAccess: { gcpIamAccess: { roleBindings: [{ role: "roles/editor" }] } },
+      approvalWorkflow: { manualApprovals: { steps: [{ approvers: [{ principals: ["user:boss@example.com"] }] }] } },
+    }),
+  });
+  const PAM_REQUESTER2 = `user:pam2-${Date.now() % 100000}@example.com`;
+  await page.goto(UI + "#/iam-admin/pam");
+  await page.getByRole("tab", { name: "Grants", exact: true }).click();
+  await page.getByRole("button", { name: "Request access" }).click();
+  await page.getByLabel("Entitlement").click();
+  await page.getByRole("option", { name: PAM_APPROVAL }).click();
+  await page.getByLabel("Requester").fill(PAM_REQUESTER2);
+  await page.getByRole("button", { name: "Submit request" }).click();
+  await page.getByText(PAM_REQUESTER2).first().waitFor({ timeout: 10000 });
+  const pamPolPending = await wjson("/v1/projects/vyomi-project:getIamPolicy", { method: "POST", body: "{}" });
+  check("PAM grant awaiting approval → no binding yet", !(pamPolPending.bindings || []).some((b) => b.role === "roles/editor" && b.members.includes(PAM_REQUESTER2)));
+
+  await page.getByRole("tab", { name: "Approve grants" }).click();
+  await page.getByText(PAM_REQUESTER2).first().waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Approve" }).click();
+  await page.getByText("No grants awaiting approval").waitFor({ timeout: 10000 });
+  const pamPolApproved = await wjson("/v1/projects/vyomi-project:getIamPolicy", { method: "POST", body: "{}" });
+  check("approve grant via UI → native getIamPolicy shows the binding",
+    (pamPolApproved.bindings || []).some((b) => b.role === "roles/editor" && b.members.includes(PAM_REQUESTER2)));
+
+  await page.getByRole("tab", { name: "Grants", exact: true }).click();
+  await page.getByRole("row", { name: new RegExp(PAM_REQUESTER2) }).getByRole("button", { name: "Revoke" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Revoke" }).click();
+  await page.waitForTimeout(500);
+  const pamPolRevoked = await wjson("/v1/projects/vyomi-project:getIamPolicy", { method: "POST", body: "{}" });
+  check("revoke grant via UI → native getIamPolicy drops the binding",
+    !(pamPolRevoked.bindings || []).some((b) => b.role === "roles/editor" && b.members.includes(PAM_REQUESTER2)));
+  await shot("15-pam-approve-grants");
+
   // Kubernetes Engine: create an Autopilot cluster through the UI, cross-check over the
   // native Kubernetes Engine REST API, add a node pool over the wire and see it in the UI.
   const K = `v4-gcp-smoke-k8s-${Date.now() % 100000}`;

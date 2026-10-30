@@ -114,6 +114,21 @@ export const createEntitlement = (entitlementId, body) =>
   restJson("POST", `/v1/projects/${getProject()}/locations/global/entitlements`, { query: { entitlementId }, body });
 export const deleteEntitlement = (name) => restJson("DELETE", `/v1/${name}`);
 
+export async function listGrants(entitlementName) {
+  const r = await restJson("GET", `/v1/${entitlementName}/grants`);
+  return r.grants || [];
+}
+export async function listAllGrants() {
+  const ents = await listEntitlements();
+  const lists = await Promise.all(ents.map((e) => listGrants(e.name)));
+  return lists.flat().sort((a, b) => (a.createTime < b.createTime ? 1 : -1));
+}
+export const createGrant = (entitlementName, body) => restJson("POST", `/v1/${entitlementName}/grants`, { body });
+export const approveGrant = (name, body = {}) => restJson("POST", `/v1/${name}:approve`, { body });
+export const denyGrant = (name, body = {}) => restJson("POST", `/v1/${name}:deny`, { body });
+export const revokeGrant = (name, body = {}) => restJson("POST", `/v1/${name}:revoke`, { body });
+export const grantEntitlementId = (grantName) => grantName.split("/grants/")[0].split("/").pop();
+
 // ── display helpers ───────────────────────────────────────────────────────────
 export const PREDEFINED_ROLE_TITLES = {
   "roles/owner": "Owner", "roles/editor": "Editor", "roles/viewer": "Viewer",

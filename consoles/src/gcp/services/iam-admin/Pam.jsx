@@ -1,15 +1,17 @@
-/* Privileged Access Manager — Entitlements tab is real (native PAM v1 entitlements
- * CRUD); Grants / Approve grants / Audit Logs / Settings aren't modeled (requesting,
- * approving and time-boxed activation of a grant). */
+/* Privileged Access Manager: Entitlements, Grants and Approve grants are real (native
+ * PAM v1 — requesting a grant, approving/denying it and its time-boxed activation
+ * really add/remove the requester's IAM binding on the project, with lazy expiry).
+ * Audit Logs renders the grant lifecycle Vyomi actually recorded (not the full Cloud
+ * Audit Log trail). Settings (notification channels) isn't modeled. */
 import { useState } from "react";
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Tab, Tabs, TextField, ToggleButton, ToggleButtonGroup } from "@mui/material";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, Tab, Tabs, TextField, ToggleButton, ToggleButtonGroup } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { ErrorAlert, PageHeader } from "../../kit/common.jsx";
+import { ErrorAlert, PageHeader, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
@@ -24,10 +26,10 @@ export default function Pam() {
         {TABS.map(([id, label]) => <Tab key={id} value={id} label={label} />)}
       </Tabs>
       {tab === "entitlements" && <Entitlements />}
-      {tab === "grants" && <CapabilityContainer id="gcp.iam-admin.pam-workflow" title="Grants" />}
-      {tab === "approve" && <CapabilityContainer id="gcp.iam-admin.pam-workflow" title="Approve grants" />}
-      {tab === "audit" && <CapabilityContainer id="gcp.iam-admin.pam-workflow" title="Audit Logs" />}
-      {tab === "settings" && <CapabilityContainer id="gcp.iam-admin.pam-workflow" title="Settings" />}
+      {tab === "grants" && <Grants />}
+      {tab === "approve" && <ApproveGrants />}
+      {tab === "audit" && <AuditLogs />}
+      {tab === "settings" && <CapabilityContainer id="gcp.iam-admin.pam-settings" title="Settings" />}
     </>
   );
 }
@@ -105,5 +107,127 @@ function CreateEntitlementDialog({ onClose, onCreated }) {
         }}>{busy ? "Creating…" : "Create"}</Button>
       </DialogActions>
     </Dialog>
+  );
+}
+
+const grantRole = (g) => (g.privilegedAccess?.gcpIamAccess?.roleBindings || []).map((r) => r.role).join(", ") || "—";
+const grantEntitlement = (g) => api.grantEntitlementId(g.name);
+
+function Grants() {
+  const notify = useNotify();
+  const entitlements = useAsync(() => api.listEntitlements(), []);
+  const list = useAsync(() => api.listAllGrants(), []);
+  const [request, setRequest] = useState(false);
+  const [revoke, setRevoke] = useState(false);
+
+  return (
+    <>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+        <Button variant="contained" startIcon={<AddIcon />} disabled={!entitlements.data?.length} onClick={async () => { await entitlements.reload(); setRequest(true); }}>Request access</Button>
+        <Button startIcon={<RefreshIcon />} onClick={() => { list.reload(); entitlements.reload(); }}>Refresh</Button>
+      </Stack>
+      <ErrorAlert error={list.error} title="Failed to load grants" />
+      <ResourceTable resourceName="grants" items={list.data || []} rowKey={(g) => g.name} loading={list.loading} onRetry={list.reload}
+        filterPlaceholder="Filter" empty="No grants"
+        columns={[
+          { id: "entitlement", header: "Entitlement", cell: grantEntitlement },
+          { id: "role", header: "Role(s)", cell: grantRole },
+          { id: "requester", header: "Requester", cell: (g) => g.requester },
+          { id: "state", header: "Status", cell: (g) => g.state },
+          { id: "expires", header: "Expires", cell: (g) => (g.state === "ACTIVATED" ? fmtDate(g.scheduledExpireTime) : "—") },
+          { id: "actions", header: "", cell: (g) => g.state === "ACTIVATED" ? <Button size="small" color="error" onClick={() => setRevoke(g.name)}>Revoke</Button> : null },
+        ]} />
+      {request && <RequestGrantDialog entitlements={entitlements.data || []} onClose={() => setRequest(false)}
+        onCreated={() => { notify.success("Requested access"); list.reload(); }} />}
+      <DeleteDialog open={!!revoke} onClose={() => setRevoke(false)} title="Revoke this grant?" actionLabel="Revoke"
+        onConfirm={async () => { await api.revokeGrant(revoke); notify.success("Revoked grant"); list.reload(); }} />
+    </>
+  );
+}
+
+function RequestGrantDialog({ entitlements, onClose, onCreated }) {
+  const [entitlement, setEntitlement] = useState(entitlements[0]?.name || "");
+  const [requester, setRequester] = useState("user:me@example.com");
+  const [justification, setJustification] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Request access</DialogTitle>
+      <DialogContent>
+        <ErrorAlert error={error} />
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <TextField select label="Entitlement" value={entitlement} onChange={(e) => setEntitlement(e.target.value)}
+            SelectProps={{ inputProps: { "aria-label": "Entitlement" } }}>
+            {entitlements.map((e) => <MenuItem key={e.name} value={e.name}>{e.name.split("/").pop()}</MenuItem>)}
+          </TextField>
+          <TextField label="Requester" value={requester} onChange={(e) => setRequester(e.target.value)} helperText="e.g. user:me@example.com" />
+          <TextField label="Justification" value={justification} onChange={(e) => setJustification(e.target.value)} multiline minRows={2} />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" disabled={!entitlement || busy} onClick={async () => {
+          setBusy(true); setError(null);
+          try {
+            await api.createGrant(entitlement, { requester, justification: { unstructuredJustification: justification } });
+            onCreated(); onClose();
+          } catch (e) { setError(e); } finally { setBusy(false); }
+        }}>{busy ? "Requesting…" : "Submit request"}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function ApproveGrants() {
+  const notify = useNotify();
+  const list = useAsync(() => api.listAllGrants(), []);
+  const pending = (list.data || []).filter((g) => g.state === "APPROVAL_AWAITED");
+
+  return (
+    <>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+        <Button startIcon={<RefreshIcon />} onClick={list.reload}>Refresh</Button>
+      </Stack>
+      <ErrorAlert error={list.error} title="Failed to load grants" />
+      <ResourceTable resourceName="grant requests" items={pending} rowKey={(g) => g.name} loading={list.loading} onRetry={list.reload}
+        filterPlaceholder="Filter" empty="No grants awaiting approval"
+        columns={[
+          { id: "entitlement", header: "Entitlement", cell: grantEntitlement },
+          { id: "role", header: "Role(s)", cell: grantRole },
+          { id: "requester", header: "Requester", cell: (g) => g.requester },
+          { id: "justification", header: "Justification", cell: (g) => g.justification?.unstructuredJustification || "—" },
+          { id: "requested", header: "Requested", cell: (g) => fmtDate(g.createTime) },
+          {
+            id: "actions", header: "", cell: (g) => (
+              <Stack direction="row" spacing={1}>
+                <Button size="small" variant="contained" onClick={async () => { await api.approveGrant(g.name); notify.success("Approved grant"); list.reload(); }}>Approve</Button>
+                <Button size="small" color="error" onClick={async () => { await api.denyGrant(g.name); notify.success("Denied grant"); list.reload(); }}>Deny</Button>
+              </Stack>
+            ),
+          },
+        ]} />
+    </>
+  );
+}
+
+function AuditLogs() {
+  const list = useAsync(() => api.listAllGrants(), []);
+  const events = (list.data || []).flatMap((g) => (g.timeline?.events || []).map((ev, i) => ({ ...ev, grant: g.name, _key: `${g.name}#${i}` })))
+    .sort((a, b) => (a.eventTime < b.eventTime ? 1 : -1));
+
+  return (
+    <CapabilityContainer id="gcp.iam-admin.pam-audit-logs" title="Audit Logs">
+      <ErrorAlert error={list.error} title="Failed to load audit logs" />
+      <ResourceTable resourceName="log entries" items={events} rowKey={(ev) => ev._key} loading={list.loading} onRetry={list.reload}
+        filterPlaceholder="Filter" empty="No PAM activity yet"
+        columns={[
+          { id: "time", header: "Time", cell: (ev) => fmtDate(ev.eventTime) },
+          { id: "event", header: "Event", cell: (ev) => ev.event },
+          { id: "entitlement", header: "Entitlement", cell: (ev) => api.grantEntitlementId(ev.grant) },
+          { id: "grant", header: "Grant", cell: (ev) => ev.grant.split("/").pop() },
+          { id: "actor", header: "Actor", cell: (ev) => ev.actor },
+        ]} />
+    </CapabilityContainer>
   );
 }

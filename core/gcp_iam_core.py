@@ -386,6 +386,48 @@ def _set_iam_policy(store, resource, body) -> GcpIamResponse:
     return _json(200, out)
 
 
+def grant_member(store, resource: str, role: str, member: str) -> None:
+    """Merge `member` into `role`'s bindings on `resource`. Lets Privileged Access
+    Manager grant activation (core/gcp_pam_core.py) make a time-boxed grant a real
+    policy change — logged the same way a console-driven setIamPolicy is."""
+    pol = _policy_ns(store).get(resource) or {"version": 1, "bindings": []}
+    old = [dict(b) for b in pol.get("bindings", [])]
+    bindings = [dict(b) for b in old]
+    for b in bindings:
+        if b.get("role") == role:
+            if member not in b.get("members", []):
+                b["members"] = [*b.get("members", []), member]
+            break
+    else:
+        bindings.append({"role": role, "members": [member]})
+    _record_activity(store, resource, old, bindings)
+    stored = dict(pol)
+    stored["bindings"], stored["etag"] = bindings, _etag()
+    _policy_ns(store)[resource] = stored
+    store.persist()
+
+
+def revoke_member(store, resource: str, role: str, member: str) -> None:
+    """Undo grant_member: drop `member` from `role`'s bindings on `resource`."""
+    pol = _policy_ns(store).get(resource)
+    if not pol:
+        return
+    old = [dict(b) for b in pol.get("bindings", [])]
+    bindings = []
+    for b in old:
+        if b.get("role") == role:
+            members = [m for m in b.get("members", []) if m != member]
+            if members:
+                bindings.append({**b, "members": members})
+        else:
+            bindings.append(b)
+    _record_activity(store, resource, old, bindings)
+    stored = dict(pol)
+    stored["bindings"], stored["etag"] = bindings, _etag()
+    _policy_ns(store)[resource] = stored
+    store.persist()
+
+
 # ── custom IAM roles ─────────────────────────────────────────────────────────
 def _role_view(role: dict) -> dict:
     return {k: v for k, v in role.items() if k != "_project"}
