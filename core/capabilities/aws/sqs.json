@@ -69,12 +69,10 @@
  "sqs.queue.redrive-allow-policy": {
   "title": "Redrive allow policy",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "full",
+   "offline": "full"
   },
-  "limitations": [
-   "The redrive allow policy document is stored and returned exactly as written, but Vyomi does not enforce it — any queue can be set as another queue's dead-letter target regardless of this policy."
-  ],
+  "limitations": [],
   "tests": [
    "tests/conformance/test_sqs_console_v4_core.py"
   ]
@@ -82,11 +80,14 @@
  "sqs.dlq.redrive-task": {
   "title": "Dead-letter queue redrive tasks (StartMessageMoveTask)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Moving messages back from a DLQ to a source queue with a tracked, resumable redrive task isn't modeled. Receive and re-send the messages directly, or delete the DLQ's messages, from Send and receive messages."
+   "A redrive task runs to completion immediately (moving every available message) instead of a real, rate-limited background task — Status is always COMPLETED, so there is no RUNNING task to track progress on or cancel with CancelMessageMoveTask, and MaxNumberOfMessagesPerSecond is accepted but has no effect."
+  ],
+  "tests": [
+   "tests/conformance/test_sqs_dlq_redrive_task_core.py"
   ]
  },
  "sqs.sns-subscriptions": {

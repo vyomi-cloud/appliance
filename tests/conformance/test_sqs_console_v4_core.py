@@ -5,6 +5,8 @@ with Protocol=sqs really fans a Publish out into the subscribed queue).
 Run on host:    PYTHONPATH=. python3 tests/conformance/test_sqs_console_v4_core.py
 Run in Pyodide: loaded by the wasm/ harness (same file).
 """
+import json
+
 try:
     from core.messaging_store import InMemoryMessagingStore
     from core import sqs_core as sqs
@@ -50,6 +52,35 @@ def run() -> int:
     attrs = call("GetQueueAttributes", {"QueueUrl": url})["Attributes"]
     _check("RedriveAllowPolicy round-trips", attrs["RedriveAllowPolicy"] == '{"redrivePermission":"allowAll"}')
     _check("CreatedTimestamp is a real epoch", int(attrs["CreatedTimestamp"]) == 1000)
+
+    # ── redrive allow policy is ENFORCED, not just stored (sqs.queue.redrive-allow-policy) ──
+    dlq_deny_url = call("CreateQueue", {"QueueName": "dlq-deny-all"})["QueueUrl"]
+    dlq_deny_arn = call("GetQueueAttributes", {"QueueUrl": dlq_deny_url})["Attributes"]["QueueArn"]
+    call("SetQueueAttributes", {"QueueUrl": dlq_deny_url, "Attributes": {
+        "RedriveAllowPolicy": '{"redrivePermission":"denyAll"}'}})
+    src_url = call("CreateQueue", {"QueueName": "console-q-src"})["QueueUrl"]
+    denied = sqs.dispatch(s, SQS_T + "SetQueueAttributes", {"QueueUrl": src_url, "Attributes": {
+        "RedrivePolicy": json.dumps({"deadLetterTargetArn": dlq_deny_arn, "maxReceiveCount": 5})}})
+    _check("denyAll redrive allow policy rejects a new source queue", denied.status == 400
+           and "RedrivePolicy" in denied.body.get("message", ""))
+
+    dlq_byq_url = call("CreateQueue", {"QueueName": "dlq-by-queue"})["QueueUrl"]
+    dlq_byq_arn = call("GetQueueAttributes", {"QueueUrl": dlq_byq_url})["Attributes"]["QueueArn"]
+    src_arn = call("GetQueueAttributes", {"QueueUrl": src_url})["Attributes"]["QueueArn"]
+    call("SetQueueAttributes", {"QueueUrl": dlq_byq_url, "Attributes": {
+        "RedriveAllowPolicy": json.dumps({"redrivePermission": "byQueue", "sourceQueueArns": [src_arn]})}})
+    allowed = sqs.dispatch(s, SQS_T + "SetQueueAttributes", {"QueueUrl": src_url, "Attributes": {
+        "RedrivePolicy": json.dumps({"deadLetterTargetArn": dlq_byq_arn, "maxReceiveCount": 5})}})
+    _check("byQueue redrive allow policy allows a listed source queue", allowed.status == 200)
+
+    other_src_url = call("CreateQueue", {"QueueName": "console-q-other-src"})["QueueUrl"]
+    not_listed = sqs.dispatch(s, SQS_T + "SetQueueAttributes", {"QueueUrl": other_src_url, "Attributes": {
+        "RedrivePolicy": json.dumps({"deadLetterTargetArn": dlq_byq_arn, "maxReceiveCount": 5})}})
+    _check("byQueue redrive allow policy rejects an unlisted source queue", not_listed.status == 400)
+
+    allow_create = sqs.dispatch(s, SQS_T + "CreateQueue", {"QueueName": "console-q-created-denied", "Attributes": {
+        "RedrivePolicy": json.dumps({"deadLetterTargetArn": dlq_deny_arn, "maxReceiveCount": 5})}})
+    _check("denyAll redrive allow policy is also enforced at CreateQueue", allow_create.status == 400)
 
     # ── real SNS -> SQS fan-out via the console's "Subscribe to Amazon SNS
     #    topic" action (sns:Subscribe, Protocol=sqs, Endpoint=queue ARN) ────
