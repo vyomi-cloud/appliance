@@ -14,7 +14,8 @@ import { follow, match, useRoute } from "../common/router.js";
 import { useNotify } from "../common/notify.jsx";
 import { setRegion } from "../common/wire.js";
 import { SERVICES, byId, classicHref } from "./services/registry.js";
-import Home from "./pages/Home.jsx";
+import Home, { AllServices, recordVisit } from "./pages/Home.jsx";
+import { LOGO } from "./pages/logo.js";
 import ServicesMenu from "./pages/ServicesMenu.jsx";
 import { NotSimulated } from "./kit/common.jsx";
 
@@ -50,6 +51,8 @@ export default function App() {
   useEffect(() => { applyMode(mode === "dark" ? Mode.Dark : Mode.Light); savePref("mode", mode); }, [mode]);
   useEffect(() => { applyDensity(density === "compact" ? Density.Compact : Density.Comfortable); savePref("density", density); }, [density]);
   useEffect(() => { setMenuOpen(false); }, [route.path]);
+  // Recently visited services (Console Home widget) — recorded as the user navigates.
+  useEffect(() => { if (route.parts[0] && byId[route.parts[0]]) recordVisit(route.parts[0]); }, [route.parts[0]]);
 
   const svcId = route.parts[0];
   const svc = byId[svcId];
@@ -62,6 +65,7 @@ export default function App() {
 
   let content, nav, crumbs = [], help;
   if (!svcId) { content = <Home />; }
+  else if (svcId === "services") { content = <AllServices />; }
   else if (!svc) { content = <NotSimulated feature={`The service "${svcId}"`} />; }
   else if (!svc.load) {
     content = <NotSimulated feature={`The v4 ${svc.title} console`} note={<a href={classicHref(svc.classic)}>Open {svc.title} in the classic Vyomi console</a>} />;
@@ -74,7 +78,7 @@ export default function App() {
     <>
       <div id="vyomi-top" style={{ position: "sticky", top: 0, zIndex: 1002 }}>
         <TopNavigation
-          identity={{ href: "#/", title: "Vyomi", logo: undefined, onFollow: follow }}
+          identity={{ href: "#/", logo: { src: LOGO, alt: "Vyomi — Console Home" }, onFollow: follow }}
           search={<ServicesMenu.Search />}
           utilities={[
             { type: "button", text: "Services", iconName: "grid-view", onClick: () => setMenuOpen((v) => !v), ariaLabel: "Services" },
@@ -101,6 +105,7 @@ export default function App() {
       </div>
       <AppLayout
         headerSelector="#vyomi-top"
+        footerSelector="#vyomi-footer"
         navigationHide={!nav}
         navigationOpen={navOpen}
         onNavigationChange={({ detail }) => setNavOpen(detail.open)}
@@ -113,7 +118,7 @@ export default function App() {
           />
         )}
         breadcrumbs={svcId && (
-          <BreadcrumbGroup items={[{ text: svc?.title || svcId, href: `#/${svcId}` }, ...crumbs]} onFollow={follow} ariaLabel="Breadcrumbs" />
+          <BreadcrumbGroup items={[{ text: "Console Home", href: "#/" }, { text: svc?.title || (svcId === "services" ? "All services" : svcId), href: `#/${svcId}` }, ...crumbs]} onFollow={follow} ariaLabel="Breadcrumbs" />
         )}
         notifications={<Flashbar items={notify.items} stackItems />}
         tools={<HelpPanel header={<h2>{help?.title || svc?.title || "Vyomi"}</h2>}>{help?.body || <p>Vyomi simulates this console against local backends. Everything you do here is real in the simulator and visible to your SDKs and CLI.</p>}</HelpPanel>}
@@ -121,6 +126,12 @@ export default function App() {
         onToolsChange={({ detail }) => setToolsOpen(detail.open)}
         content={<Suspense fallback={<Spinner />}>{content}</Suspense>}
       />
+      <footer id="vyomi-footer" style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 32, zIndex: 1001, display: "flex", alignItems: "center", gap: 20, padding: "0 16px", background: "#0f141a", color: "#d1d5db", fontSize: 12, fontFamily: '"Open Sans", "Helvetica Neue", Roboto, Arial, sans-serif' }}>
+        <a href="#/" style={{ color: "inherit", textDecoration: "none" }}>Console Home</a>
+        <a href={classicHref("")} style={{ color: "inherit", textDecoration: "none" }}>Classic console</a>
+        <a href="https://github.com/vyomi-cloud/appliance/issues" target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "none" }}>Feedback</a>
+        <span style={{ marginLeft: "auto" }}>Vyomi — local cloud simulator · not affiliated with Amazon Web Services</span>
+      </footer>
     </>
   );
 }
