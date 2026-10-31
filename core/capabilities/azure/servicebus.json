@@ -14,9 +14,9 @@
   },
   "azure.servicebus.namespace.scale": {
     "title": "Scale (pricing tier)",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "The pricing tier (Basic/Standard/Premium) and Premium's messaging units/partitions round-trip through ARM exactly as written, but Vyomi never enforces tier-specific throughput, size or partition limits."
+      "Vyomi enforces the headline tier gates — a Basic namespace rejects topic creation and queues with sessions or duplicate detection enabled, and messaging units / premiumMessagingPartitions require a Premium namespace — but per-tier throughput, entity size and partition-COUNT limits are not otherwise modelled."
     ],
     "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
@@ -30,9 +30,9 @@
   },
   "azure.servicebus.namespace.locks": {
     "title": "Resource locks (Microsoft.Authorization/locks), scoped to this namespace",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "full", "offline": "full" },
     "limitations": [
-      "Vyomi stores and returns locks exactly as configured (CanNotDelete / ReadOnly, notes) but never enforces them — writes and deletes on a locked resource are not blocked.",
+      "Enforcement is scoped to the exact locked resource (the namespace, or a queue/topic locked directly over the ARM API) — a lock does not cascade to block writes/deletes on a namespace's queues or topics the way a resource-group-scoped lock would in real ARM.",
       "Locks are only simulated at the resource scope (this namespace); subscription- and resource-group-scoped lock lists are an honest 'Not simulated' gap, same as the real Subscription/Resource group scope-switch buttons."
     ],
     "tests": ["tests/conformance/test_azure_arm_core.py"]
@@ -46,9 +46,12 @@
     "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.servicebus.namespace.listactions": {
-    "title": "Secondary toolbar actions on the namespace's Activity log and Locks panels (Edit columns, Export, Insights, Pin/reset filters, Feedback)",
+    "title": "Toolbar actions needing a separate Azure product or a per-row detail flyout: Activity log's Activity/Export Activity Logs/Insights/Feedback/Pin current filters, and Locks' Subscription/Resource group scope + Feedback",
     "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Column customization, log export/insights, filter pinning and portal feedback are not modeled."]
+    "limitations": [
+      "The per-event Activity detail flyout, continuous Export Activity Logs (to Storage/Event Hub/Log Analytics), the Insights workbook, dashboard filter-pinning and portal Feedback are not modeled.",
+      "Column customization, one-time CSV export, filtering and 'Reset to default' on both the Activity log and Locks panels ARE real (consoles/src/azure/kit/BrowseGrid.jsx, client-side over the real rows) — this entry covers only the actions listed above."
+    ]
   },
   "azure.servicebus.namespace.properties": {
     "title": "Properties (read-only resource summary)",
@@ -91,14 +94,14 @@
     "title": "Queues — create, list, get, update, delete (ARM sub-resource of the namespace)",
     "level": { "nano": "full", "offline": "full" },
     "limitations": [
-      "maxDeliveryCount, requiresDuplicateDetection, enablePartitioning, requiresSession and the auto-delete-on-idle/forwarding toggles round-trip through ARM exactly as configured, but only defaultMessageTimeToLive, lockDuration and dead-lettering-on-expiration are enforced by the data plane (see azure.servicebus.queue.explorer)."
+      "maxDeliveryCount, enablePartitioning and the auto-delete-on-idle/forwarding toggles round-trip through ARM exactly as configured, but only defaultMessageTimeToLive, lockDuration and dead-lettering-on-expiration are enforced by the data plane (see azure.servicebus.queue.explorer). requiresSession and requiresDuplicateDetection round-trip too, except Vyomi now rejects setting either one true on a Basic-tier namespace's queue (see azure.servicebus.namespace.scale)."
     ],
     "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.servicebus.topic.crud": {
     "title": "Topics — create, list, get, update, delete (ARM sub-resource of the namespace)",
     "level": { "nano": "full", "offline": "full" },
-    "limitations": ["Topic subscriptions and their SQL filter rules are not modeled in this console — only the topic resource itself round-trips."],
+    "limitations": ["Topic subscriptions and their SQL filter rules are not modeled in this console — only the topic resource itself round-trips. Vyomi rejects creating a topic on a Basic-tier namespace (see azure.servicebus.namespace.scale), matching real Service Bus."],
     "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.servicebus.queue.explorer": {

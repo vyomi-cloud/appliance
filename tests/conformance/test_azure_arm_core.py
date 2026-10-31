@@ -580,6 +580,40 @@ def run() -> int:
     r = arm.handle("GET", f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Insights/privateLinkScopes", {"api-version": "2021-07-01-preview"})
     _check("private link scopes list has it", "uicpls" in [x["name"] for x in r["body"]["value"]])
 
+    # 29. Microsoft.Authorization/locks ENFORCEMENT — scoped to Microsoft.ServiceBus only
+    # (every other resource type keeps locks config_only: stored, not enforced — see
+    # core/capabilities/azure/*.json). A CanNotDelete lock blocks DELETE; a ReadOnly lock
+    # blocks DELETE and PUT/PATCH; removing the lock restores normal behaviour.
+    sbns = _p(RG, "Microsoft.ServiceBus", "namespaces", "uic-locked-sbns")
+    arm.handle("PUT", sbns, {"api-version": "2022-10-01-preview"}, {"location": "eastus", "sku": {"name": "Standard", "tier": "Standard"}})
+    sblock = sbns + "/providers/Microsoft.Authorization/locks/dont-delete-sbns"
+    r = arm.handle("PUT", sblock, {"api-version": "2020-05-01"}, {"properties": {"level": "CanNotDelete"}})
+    _check("servicebus namespace lock put 201", r["status"] == 201)
+    r = arm.handle("PATCH", sbns, {"api-version": "2022-10-01-preview"}, {"tags": {"env": "prod"}})
+    _check("CanNotDelete lock still allows PATCH", r["status"] == 200 and r["body"]["tags"]["env"] == "prod")
+    r = arm.handle("DELETE", sbns, {"api-version": "2022-10-01-preview"})
+    _check("CanNotDelete lock blocks DELETE (409 ScopeLocked)", r["status"] == 409 and r["body"]["error"]["code"] == "ScopeLocked")
+    r = arm.handle("GET", sbns, {"api-version": "2022-10-01-preview"})
+    _check("namespace survives the blocked delete", r["status"] == 200)
+
+    r = arm.handle("PUT", sblock, {"api-version": "2020-05-01"}, {"properties": {"level": "ReadOnly"}})
+    _check("lock level changed to ReadOnly", r["status"] == 200 and r["body"]["properties"]["level"] == "ReadOnly")
+    r = arm.handle("PATCH", sbns, {"api-version": "2022-10-01-preview"}, {"tags": {"env": "blocked"}})
+    _check("ReadOnly lock blocks PATCH (409 ScopeLocked)", r["status"] == 409 and r["body"]["error"]["code"] == "ScopeLocked")
+    r = arm.handle("GET", sbns, {"api-version": "2022-10-01-preview"})
+    _check("tags unchanged by the blocked PATCH", r["body"]["tags"]["env"] == "prod")
+
+    r = arm.handle("DELETE", sblock, {"api-version": "2020-05-01"})
+    _check("lock delete 200", r["status"] == 200)
+    r = arm.handle("DELETE", sbns, {"api-version": "2022-10-01-preview"})
+    _check("delete succeeds once the lock is removed", r["status"] == 200)
+    r = arm.handle("GET", sbns, {"api-version": "2022-10-01-preview"})
+    _check("namespace gone after unlocked delete", r["status"] == 404)
+
+    # (a lock on a KeyVault vault — a different resource type — stays config_only, not
+    # enforced: proven above at "locks cascade-deleted with resource", where DELETE
+    # succeeded on `kv` despite its ReadOnly lock.)
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 
