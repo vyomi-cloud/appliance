@@ -1794,6 +1794,30 @@ def _reboot_instances(store, params):
     return _envelope("RebootInstances", "<return>true</return>")
 
 
+def apply_alarm_action(store, instance_id: str, action: str) -> bool:
+    """Called by cloudwatch_core when a CloudWatch alarm fires an EC2 action ARN
+    (arn:aws:automate:<region>:ec2:stop|terminate|reboot — see
+    aws.cloudwatch.alarms.actions.ec2). Reuses the same state-change path RunInstances'
+    StopInstances/TerminateInstances/RebootInstances go through, so stop/termination
+    protection is honoured exactly as it is for a direct API call: a protected instance's
+    action fails, which the alarm records as a failed action, same as real AWS."""
+    m = _model(store)
+    if instance_id not in m["instances"]:
+        return False
+    try:
+        if action == "stop":
+            _instance_state_change(store, {"InstanceId.1": instance_id}, "stop", "stopped")
+        elif action == "terminate":
+            _instance_state_change(store, {"InstanceId.1": instance_id}, "terminate", "terminated")
+        elif action == "reboot":
+            _reboot_instances(store, {"InstanceId.1": instance_id})
+        else:
+            return False
+    except VpcError:
+        return False
+    return True
+
+
 def _modify_instance_attribute(store, params):
     m = _model(store)
     inst = _find_instance(m, params.get("InstanceId"))

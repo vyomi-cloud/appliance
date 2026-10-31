@@ -156,13 +156,45 @@ def test_alarm_actions_really_deliver_to_sns_and_lambda():
     assert len(recv) == 1 and "act1" in recv[0]["Body"]
     assert len(r.lam._lambda_functions["cw-fn"]["invocations"]) == 1
 
-    # An action ARN Vyomi doesn't back (no Auto Scaling/EC2 action core) is honestly recorded as failed.
+    # An EC2 action ARN whose alarm has no InstanceId dimension to act on (and an Auto
+    # Scaling ARN, which has no backing core at all) are both honestly recorded as failed.
     cbor(r, "PutMetricAlarm", AlarmName="act2", Namespace="App", MetricName="Err", Statistic="Sum", Period=60,
          EvaluationPeriods=1, Threshold=1.0, ComparisonOperator="GreaterThanThreshold",
          AlarmActions=["arn:aws:automate:us-east-1:ec2:stop"])
     cbor(r, "PutMetricData", Namespace="App", MetricData=[{"MetricName": "Err", "Value": 5.0}])
     hist2 = [h for h in cbor(r, "DescribeAlarmHistory", AlarmName="act2")[1]["AlarmHistoryItems"] if h["HistoryItemType"] == "Action"]
     assert hist2 and "Failed to execute action" in hist2[0]["HistorySummary"]
+
+
+def test_alarm_ec2_action_really_changes_instance_state():
+    from core import vpc_core as vpc
+
+    r = AwsWireRouter()
+    run_body = vpc.dispatch(r.vpc, {"Action": "RunInstances", "InstanceType": "t3.micro", "MaxCount": "1"}).body
+    iid = re.search(r"<instanceId>([^<]+)</instanceId>", run_body).group(1)
+
+    cbor(r, "PutMetricAlarm", AlarmName="ec2act", Namespace="App", MetricName="Err",
+         Dimensions=[{"Name": "InstanceId", "Value": iid}], Statistic="Sum", Period=60,
+         EvaluationPeriods=1, Threshold=1.0, ComparisonOperator="GreaterThanThreshold",
+         AlarmActions=[f"arn:aws:automate:{r.cw.region}:ec2:stop"])
+    cbor(r, "PutMetricData", Namespace="App", MetricData=[{"MetricName": "Err", "Dimensions": [{"Name": "InstanceId", "Value": iid}], "Value": 5.0}])
+
+    hist = [h for h in cbor(r, "DescribeAlarmHistory", AlarmName="ec2act")[1]["AlarmHistoryItems"] if h["HistoryItemType"] == "Action"]
+    assert hist and "Successfully executed" in hist[0]["HistorySummary"]
+    desc = vpc.dispatch(r.vpc, {"Action": "DescribeInstances", "InstanceId.1": iid}).body
+    assert "<name>stopped</name>" in desc
+
+    # Termination protection is honoured the same way a direct TerminateInstances call is.
+    vpc.dispatch(r.vpc, {"Action": "StartInstances", "InstanceId.1": iid})
+    vpc.dispatch(r.vpc, {"Action": "ModifyInstanceAttribute", "InstanceId": iid, "DisableApiTermination.Value": "true"})
+    cbor(r, "PutMetricAlarm", AlarmName="ec2act2", Namespace="App", MetricName="Err",
+         Dimensions=[{"Name": "InstanceId", "Value": iid}], Statistic="Sum", Period=60,
+         EvaluationPeriods=1, Threshold=1.0, ComparisonOperator="GreaterThanThreshold",
+         AlarmActions=[f"arn:aws:automate:{r.cw.region}:ec2:terminate"])
+    cbor(r, "PutMetricData", Namespace="App", MetricData=[{"MetricName": "Err", "Dimensions": [{"Name": "InstanceId", "Value": iid}], "Value": 5.0}])
+    hist2 = [h for h in cbor(r, "DescribeAlarmHistory", AlarmName="ec2act2")[1]["AlarmHistoryItems"] if h["HistoryItemType"] == "Action"]
+    assert hist2 and "Failed to execute action" in hist2[0]["HistorySummary"]
+    assert "<name>running</name>" in vpc.dispatch(r.vpc, {"Action": "DescribeInstances", "InstanceId.1": iid}).body
 
 
 def _band_alarm(name, metric):

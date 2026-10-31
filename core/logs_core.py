@@ -247,6 +247,10 @@ _DATA_IDENTIFIERS = {
     "CreditCardNumber": re.compile(r"\b(?:\d[ -]?){13,16}\b"),
     "Ssn-US": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
     "AwsSecretKey": re.compile(r"\b[A-Za-z0-9/+=]{40}\b"),
+    "AwsAccessKey": re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
+    "PhoneNumber-US": re.compile(r"\b\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b"),
+    "IpAddress": re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d{1,2})\.){3}(?:25[0-5]|2[0-4]\d|1?\d{1,2})\b"),
+    "Url": re.compile(r"\bhttps?://[^\s\"']+"),
 }
 
 

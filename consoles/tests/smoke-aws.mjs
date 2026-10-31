@@ -804,6 +804,30 @@ try {
   check("CloudWatch create alarm (UI wizard) → visible over native wire", alarmsOut.MetricAlarms?.[0]?.AlarmName === CWA, JSON.stringify(alarmsOut.MetricAlarms?.[0]));
   await shot("18-cloudwatch-alarm-detail");
 
+  // CloudWatch: an EC2 alarm action, configured through the UI wizard, really stops the
+  // instance named by the alarm's own InstanceId dimension (DEPTH — aws.cloudwatch.alarms.actions.ec2).
+  const CWE = `v4-smoke-alarm-ec2-${Date.now() % 100000}`;
+  const ec2ActRun = await ec2("RunInstances", { InstanceType: "t3.micro", MaxCount: "1" });
+  const ec2ActInstanceId = xtag(ec2ActRun, "instanceId");
+  await cw("PutMetricData", { Namespace: "VyomiSmoke/EC2Action", MetricData: [{ MetricName: "Errors", Dimensions: [{ Name: "InstanceId", Value: ec2ActInstanceId }], Value: 5 }] });
+  await page.goto(UI + "#/cloudwatch/alarms/create");
+  await page.getByRole("tab", { name: "Specify metric and conditions" }).click();
+  await page.getByRole("button", { name: "Namespace" }).click();
+  await page.getByRole("option", { name: "VyomiSmoke/EC2Action" }).click();
+  await page.getByRole("button", { name: "Metric name" }).click();
+  await page.getByRole("option", { name: "Errors" }).click();
+  await page.getByLabel("Threshold value").fill("1");
+  await page.getByRole("tab", { name: "Configure actions" }).click();
+  await page.getByRole("radio", { name: "Stop this instance" }).check();
+  await page.getByRole("tab", { name: "Add alarm details" }).click();
+  await page.getByLabel("Alarm name").fill(CWE);
+  await page.getByRole("button", { name: "Create alarm", exact: true }).click();
+  await page.getByRole("heading", { name: CWE }).waitFor({ timeout: 10000 });
+  await cw("PutMetricData", { Namespace: "VyomiSmoke/EC2Action", MetricData: [{ MetricName: "Errors", Dimensions: [{ Name: "InstanceId", Value: ec2ActInstanceId }], Value: 5 }] });
+  const ec2ActStopped = await ec2("DescribeInstances", { "InstanceId.1": ec2ActInstanceId });
+  check("CloudWatch EC2 alarm action (UI) → really stops the instance over native wire", ec2ActStopped.includes("<name>stopped</name>"), ec2ActStopped.slice(0, 200));
+  await ec2("TerminateInstances", { "InstanceId.1": ec2ActInstanceId });
+
   // CloudWatch Logs: create a log group over the wire, verify it shows in the UI (CLI → UI direction)
   const CWG = `v4-smoke-logs-${Date.now() % 100000}`;
   await cwlogs("CreateLogGroup", { logGroupName: CWG });

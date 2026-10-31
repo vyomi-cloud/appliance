@@ -45,23 +45,44 @@ const MISSING_DATA = [
   { label: "Treat missing data as not breaching threshold", value: "notBreaching" }, { label: "Ignore missing data", value: "ignore" },
 ];
 
-function MetricPicker({ namespace, setNamespace, metricName, setMetricName }) {
+const dimKey = (dims) => JSON.stringify([...(dims || [])].sort((a, b) => a.Name.localeCompare(b.Name)));
+const dimLabel = (dims) => (dims || []).map((d) => `${d.Name}=${d.Value}`).join(", ") || "(no dimensions)";
+
+function MetricPicker({ namespace, setNamespace, metricName, setMetricName, dimensions, setDimensions }) {
   const [open, setOpen] = useState(!namespace);
   const metrics = useAsync(() => api.listMetrics({}), []);
   const namespaces = useMemo(() => [...new Set((metrics.data || []).map((m) => m.Namespace))].sort(), [metrics.data]);
   const names = useMemo(() => [...new Set((metrics.data || []).filter((m) => m.Namespace === namespace).map((m) => m.MetricName))].sort(), [metrics.data, namespace]);
+  const dimensionSets = useMemo(() => {
+    const seen = new Map();
+    for (const m of metrics.data || []) {
+      if (m.Namespace !== namespace || m.MetricName !== metricName) continue;
+      const key = dimKey(m.Dimensions);
+      if (!seen.has(key)) seen.set(key, m.Dimensions || []);
+    }
+    return [...seen.entries()];
+  }, [metrics.data, namespace, metricName]);
+  useEffect(() => {
+    if (metricName && dimensionSets.length === 1) { setDimensions(dimensionSets[0][1]); setOpen(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metricName, dimensionSets]);
   return (
     <SpaceBetween size="s">
       {!open && namespace && metricName ? (
-        <Box>Metric: <b>{namespace} / {metricName}</b> <Button variant="inline-link" onClick={() => setOpen(true)}>Change</Button></Box>
+        <Box>Metric: <b>{namespace} / {metricName}</b>{dimensions?.length > 0 ? ` (${dimLabel(dimensions)})` : ""} <Button variant="inline-link" onClick={() => setOpen(true)}>Change</Button></Box>
       ) : (
         <SpaceBetween direction="horizontal" size="s">
           <Select placeholder="Select a namespace" selectedOption={namespace ? { label: namespace, value: namespace } : null}
-            onChange={({ detail }) => { setNamespace(detail.selectedOption.value); setMetricName(null); }}
+            onChange={({ detail }) => { setNamespace(detail.selectedOption.value); setMetricName(null); setDimensions([]); }}
             options={namespaces.map((n) => ({ label: n, value: n }))} ariaLabel="Namespace" />
           <Select placeholder="Select a metric" disabled={!namespace} selectedOption={metricName ? { label: metricName, value: metricName } : null}
-            onChange={({ detail }) => { setMetricName(detail.selectedOption.value); setOpen(false); }}
+            onChange={({ detail }) => { setMetricName(detail.selectedOption.value); setDimensions([]); }}
             options={names.map((n) => ({ label: n, value: n }))} ariaLabel="Metric name" />
+          {metricName && dimensionSets.length > 1 && (
+            <Select placeholder="Select dimensions" selectedOption={dimensions?.length || dimKey(dimensions) === "[]" ? { label: dimLabel(dimensions), value: dimKey(dimensions) } : null}
+              onChange={({ detail }) => { setDimensions(dimensionSets.find(([k]) => k === detail.selectedOption.value)?.[1] || []); setOpen(false); }}
+              options={dimensionSets.map(([key, dims]) => ({ label: dimLabel(dims), value: key }))} ariaLabel="Dimensions" />
+          )}
         </SpaceBetween>
       )}
     </SpaceBetween>
@@ -76,6 +97,7 @@ export default function CreateAlarm({ query }) {
   const [type, setType] = useState("Classic");
   const [namespace, setNamespace] = useState(null);
   const [metricName, setMetricName] = useState(null);
+  const [dimensions, setDimensions] = useState([]);
   const [statistic, setStatistic] = useState("Average");
   const [period, setPeriod] = useState("300");
   const [thresholdType, setThresholdType] = useState("Static");
@@ -94,6 +116,7 @@ export default function CreateAlarm({ query }) {
   const [stateTrigger, setStateTrigger] = useState("In alarm");
   const [snsArn, setSnsArn] = useState("");
   const [lambdaArn, setLambdaArn] = useState("");
+  const [ec2Action, setEc2Action] = useState("none");
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -120,11 +143,12 @@ export default function CreateAlarm({ query }) {
         if (band && bandMetric?.MetricStat) {
           setThresholdType("Anomaly detection");
           setNamespace(bandMetric.MetricStat.Metric.Namespace); setMetricName(bandMetric.MetricStat.Metric.MetricName);
+          setDimensions(bandMetric.MetricStat.Metric.Dimensions || []);
           setStatistic(bandMetric.MetricStat.Stat); setPeriod(String(bandMetric.MetricStat.Period));
           setAnomalyComparison(rec.ComparisonOperator);
           setAnomalyStdDevs(String((band.Expression.match(/,\s*([\d.]+)\s*\)/) || [, "2"])[1]));
         } else {
-          setNamespace(rec.Namespace); setMetricName(rec.MetricName);
+          setNamespace(rec.Namespace); setMetricName(rec.MetricName); setDimensions(rec.Dimensions || []);
           setStatistic(rec.Statistic || rec.ExtendedStatistic); setPeriod(String(rec.Period));
           setComparison(rec.ComparisonOperator); setThreshold(String(rec.Threshold));
         }
@@ -133,8 +157,10 @@ export default function CreateAlarm({ query }) {
         const actions = [...(rec.AlarmActions || []), ...(rec.OKActions || []), ...(rec.InsufficientDataActions || [])];
         const sns = actions.find((a) => a.includes(":sns:"));
         const lambda = actions.find((a) => a.includes(":lambda:"));
+        const ec2 = actions.find((a) => a.includes(":automate:"));
         if (sns) setSnsArn(sns);
         if (lambda) setLambdaArn(lambda);
+        if (ec2) setEc2Action(ec2.split(":").pop());
         if (actions.length) setStateTrigger(rec.AlarmActions?.length ? "In alarm" : rec.OKActions?.length ? "OK" : "Insufficient data");
       }
       const t = await api.listTagsForResource(rec.AlarmArn);
@@ -159,7 +185,8 @@ export default function CreateAlarm({ query }) {
         const rule = compositeAlarms.map((n) => `ALARM("${n}")`).join(` ${compositeOp} `);
         await api.putCompositeAlarm({ AlarmName: name, AlarmDescription: description || undefined, AlarmRule: rule, Tags: tagList });
       } else {
-        const actionArns = [snsArn, lambdaArn].filter(Boolean);
+        const ec2Arn = ec2Action !== "none" ? `arn:aws:automate:${api.REGION}:ec2:${ec2Action}` : "";
+        const actionArns = [snsArn, lambdaArn, ec2Arn].filter(Boolean);
         const common = {
           AlarmName: name, AlarmDescription: description || undefined,
           EvaluationPeriods: Number(evalPeriods), DatapointsToAlarm: Number(datapointsToAlarm), TreatMissingData: missingData,
@@ -169,17 +196,17 @@ export default function CreateAlarm({ query }) {
           Tags: tagList,
         };
         if (thresholdType === "Anomaly detection") {
-          await api.putAnomalyDetector({ Namespace: namespace, MetricName: metricName, Stat: statistic });
+          await api.putAnomalyDetector({ Namespace: namespace, MetricName: metricName, Dimensions: dimensions, Stat: statistic });
           await api.putMetricAlarm({
             ...common, ComparisonOperator: anomalyComparison, ThresholdMetricId: "ad1",
             Metrics: [
-              { Id: "m1", MetricStat: { Metric: { Namespace: namespace, MetricName: metricName }, Period: Number(period), Stat: statistic }, ReturnData: false },
+              { Id: "m1", MetricStat: { Metric: { Namespace: namespace, MetricName: metricName, Dimensions: dimensions }, Period: Number(period), Stat: statistic }, ReturnData: false },
               { Id: "ad1", Expression: `ANOMALY_DETECTION_BAND(m1, ${Number(anomalyStdDevs)})`, ReturnData: true },
             ],
           });
         } else {
           await api.putMetricAlarm({
-            ...common, Namespace: namespace, MetricName: metricName, Statistic: statistic,
+            ...common, Namespace: namespace, MetricName: metricName, Dimensions: dimensions, Statistic: statistic,
             Period: Number(period), ComparisonOperator: comparison, Threshold: thresholdNum,
           });
         }
@@ -221,7 +248,7 @@ export default function CreateAlarm({ query }) {
                   <>
                     <Container header={<Header variant="h2">Metric</Header>}>
                       {dataSource === "Logs" && <Box padding={{ bottom: "s" }} color="text-body-secondary">Pick the metric namespace a log group's metric filter publishes to.</Box>}
-                      <MetricPicker namespace={namespace} setNamespace={setNamespace} metricName={metricName} setMetricName={setMetricName} />
+                      <MetricPicker namespace={namespace} setNamespace={setNamespace} metricName={metricName} setMetricName={setMetricName} dimensions={dimensions} setDimensions={setDimensions} />
                     </Container>
                     <Container header={<Header variant="h2">Conditions</Header>}>
                       <SpaceBetween size="l">
@@ -302,7 +329,17 @@ export default function CreateAlarm({ query }) {
                   </FormField>
                 </CapabilityContainer>
                 <CapabilityContainer id="aws.cloudwatch.alarms.actions.compute" title="Auto Scaling action" />
-                <CapabilityContainer id="aws.cloudwatch.alarms.actions.compute" title="EC2 action" />
+                <CapabilityContainer id="aws.cloudwatch.alarms.actions.ec2" title="EC2 action">
+                  <FormField label="Take the following action" description="Vyomi really changes the instance's state when the alarm transitions, as long as its metric carries an InstanceId dimension (pick a dimensioned AWS/EC2 metric above).">
+                    <RadioGroup value={ec2Action} onChange={({ detail }) => setEc2Action(detail.value)} ariaLabel="EC2 action" items={[
+                      { value: "none", label: "None" },
+                      { value: "stop", label: "Stop this instance" },
+                      { value: "terminate", label: "Terminate this instance" },
+                      { value: "reboot", label: "Reboot this instance" },
+                      { value: "recover", label: "Recover this instance", disabled: true, description: "Not simulated in Vyomi." },
+                    ]} />
+                  </FormField>
+                </CapabilityContainer>
               </SpaceBetween>
             ),
           },

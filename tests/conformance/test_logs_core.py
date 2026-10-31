@@ -114,9 +114,11 @@ def run(store=None):
     _check("bin() buckets by time", len(br) == 1 and br[0]["count(*)"] == "4" and br[0]["bin(60s)"])
 
     _check("no data protection policy yet", err("GetDataProtectionPolicy", {"logGroupName": "/app/web"}, "ResourceNotFoundException"))
+    identifiers = ["EmailAddress", "AwsAccessKey", "PhoneNumber-US", "IpAddress", "Url"]
+    arns = [f"arn:aws:dataprotection::aws:data-identifier/{i}" for i in identifiers]
     policy = json.dumps({"Name": "p", "Version": "2021-06-01", "Statement": [
-        {"Sid": "audit", "DataIdentifier": ["arn:aws:dataprotection::aws:data-identifier/EmailAddress"], "Operation": {"Audit": {"FindingsDestination": {}}}},
-        {"Sid": "redact", "DataIdentifier": ["arn:aws:dataprotection::aws:data-identifier/EmailAddress"], "Operation": {"Deidentify": {"MaskConfig": {}}}},
+        {"Sid": "audit", "DataIdentifier": arns, "Operation": {"Audit": {"FindingsDestination": {}}}},
+        {"Sid": "redact", "DataIdentifier": arns, "Operation": {"Deidentify": {"MaskConfig": {}}}},
     ]})
     _check("put data protection policy", call("PutDataProtectionPolicy", {"logGroupIdentifier": "/app/web", "policyDocument": policy}).status == 200
            and call("GetDataProtectionPolicy", {"logGroupName": "/app/web"}).body["policyDocument"] == policy)
@@ -125,7 +127,14 @@ def run(store=None):
                           "logEvents": [{"timestamp": now, "message": "contact alice@example.com for access"}]})
     masked = call("GetLogEvents", {"logGroupName": "/app/web", "logStreamName": "k"}).body["events"][0]["message"]
     _check("email masked at ingestion", masked == "contact ***************** for access")
-    _check("findings counted on the log group", call("DescribeLogGroups", {"logGroupNamePrefix": "/app/web"}).body["logGroups"][0]["dataProtectionFindings"] == 1)
+    call("PutLogEvents", {"logGroupName": "/app/web", "logStreamName": "k",
+                          "logEvents": [{"timestamp": now, "message": "key AKIAABCDEFGHIJKLMNOP call 555-867-5309 from 10.0.0.1 see https://example.com/x"}]})
+    masked2 = call("GetLogEvents", {"logGroupName": "/app/web", "logStreamName": "k"}).body["events"][1]["message"]
+    _check("AWS access key masked", "AKIA" not in masked2 and "*" * 20 in masked2)
+    _check("US phone number masked", "555-867-5309" not in masked2)
+    _check("IP address masked", "10.0.0.1" not in masked2)
+    _check("URL masked", "https://example.com/x" not in masked2)
+    _check("findings counted on the log group", call("DescribeLogGroups", {"logGroupNamePrefix": "/app/web"}).body["logGroups"][0]["dataProtectionFindings"] == 5)
     _check("delete data protection policy", call("DeleteDataProtectionPolicy", {"logGroupName": "/app/web"}).status == 200
            and err("GetDataProtectionPolicy", {"logGroupName": "/app/web"}, "ResourceNotFoundException"))
     call("DeleteLogStream", {"logGroupName": "/app/web", "logStreamName": "k"})

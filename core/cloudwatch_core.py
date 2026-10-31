@@ -146,6 +146,7 @@ class CloudWatchStore:
         self.msg_store = None                     # the shared SNS/SQS store (set by the wire router) — real SNS alarm notifications
         self.lam_store = None                     # the shared Lambda function registry (set by the wire router) — real Lambda alarm actions
         self.logs_store = None                    # the shared CloudWatch Logs store (set by the wire router) — real Contributor Insights log rules
+        self.vpc_store = None                      # the shared EC2/VPC instance model (set by the wire router) — real EC2 alarm actions (stop/terminate/reboot)
 
     def persist(self) -> None:
         """Flush hook (no-op in memory)."""
@@ -930,13 +931,29 @@ def _trigger_doc(rec: dict) -> dict:
             "TreatMissingData": rec.get("TreatMissingData")}
 
 
+_EC2_AUTOMATE_ARN = re.compile(r"^arn:aws:automate:[^:]*:ec2:(stop|terminate|reboot|recover)$")
+
+
 def _deliver_action(store, arn: str, rec: dict, new_state: str, reason: str, now: float) -> bool:
-    """Real delivery for the two ARN kinds Vyomi backs end-to-end: an SNS topic really
+    """Real delivery for the three ARN kinds Vyomi backs end-to-end: an SNS topic really
     receives the alarm notification (sns_core.publish_arn); a Lambda function is really
-    invoked with the alarm event (lambda_core.invoke_by_arn). EC2 / Auto Scaling / SSM
-    action ARNs aren't modeled — see aws.cloudwatch.alarms.actions.compute — and fall
-    through to False (recorded as a failed action, same as a real misconfigured action)."""
+    invoked with the alarm event (lambda_core.invoke_by_arn); an EC2 action ARN
+    (arn:aws:automate:<region>:ec2:stop|terminate|reboot) really changes the state of the
+    instance named by the alarm's own InstanceId dimension (vpc_core.apply_alarm_action) —
+    see aws.cloudwatch.alarms.actions.ec2. Auto Scaling / SSM action ARNs aren't modeled —
+    see aws.cloudwatch.alarms.actions.compute — and fall through to False (recorded as a
+    failed action, same as a real misconfigured action); "recover" is also not modeled
+    (AWS's hardware-recovery automation has no equivalent here)."""
     arn = str(arn)
+    m = _EC2_AUTOMATE_ARN.match(arn)
+    if m:
+        if store.vpc_store is None or m.group(1) == "recover":
+            return False
+        instance_id = next((d.get("Value") for d in (rec.get("Dimensions") or []) if d.get("Name") == "InstanceId"), None)
+        if not instance_id:
+            return False
+        from core import vpc_core as _vpc_mod
+        return bool(_vpc_mod.apply_alarm_action(store.vpc_store, instance_id, m.group(1)))
     if ":sns:" in arn:
         if store.msg_store is None:
             return False
