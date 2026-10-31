@@ -161,12 +161,29 @@
       name.textContent = s.label || s.name || '';
       row.appendChild(name);
       if (!onDark) row.appendChild(metricCell(s));    // live CPU/Mem bar (body card)
-      var tag = document.createElement('span');
       var failed = s.status === 'error';
-      tag.style.cssText = 'font-size:11px; text-transform:uppercase; letter-spacing:.4px;' +
-        (onDark ? ' margin-left:auto; opacity:.65;' : ' color:' + (up ? '#16a34a' : failed ? '#ef4444' : '#a1a1aa') + ';');
-      tag.textContent = up ? 'ready' : failed ? 'error' : s.status === 'idle' ? 'not running' : 'loading…';
+      var said = up ? 'Running' : failed ? 'Error' : s.status === 'idle' ? 'Not running' : 'Starting…';
       if (failed && s.error) row.title = s.error;
+      if (!onDark) {
+        // Status card: a bordered tick (running) or cross (not running / error); the word is the
+        // tooltip + accessible name, so the state never rests on colour alone.
+        var col = up ? '#22c55e' : (failed || s.status === 'idle') ? '#ef4444' : '#a1a1aa';
+        var ic = document.createElement('span');
+        ic.setAttribute('role', 'img'); ic.setAttribute('aria-label', said); ic.title = failed && s.error ? said + ': ' + s.error : said;
+        ic.style.cssText = 'flex:none; width:18px; height:18px; box-sizing:border-box; border-radius:50%; border:1.5px solid ' + col +
+          '; color:' + col + '; display:inline-flex; align-items:center; justify-content:center;';
+        if (up || failed || s.status === 'idle') {
+          var g = document.createElement('span');
+          g.className = 'material-icons'; g.style.cssText = 'font-size:12px; font-weight:700; line-height:1;';
+          g.textContent = up ? 'check' : 'close';
+          ic.appendChild(g);
+        }
+        row.appendChild(ic);
+        return row;
+      }
+      var tag = document.createElement('span');
+      tag.style.cssText = 'font-size:11px; text-transform:uppercase; letter-spacing:.4px; margin-left:auto; opacity:.65;';
+      tag.textContent = said;
       row.appendChild(tag);
       return row;
     }
@@ -213,7 +230,8 @@
       bodyMount.innerHTML = '';
       bodyMount.appendChild(buildMetricToggle());
       var grid = document.createElement('div');
-      grid.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px;';
+      // Two tiles per row (one on narrow screens, where half the width is under 240px).
+      grid.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fit, minmax(max(240px, calc(50% - 8px)), 1fr)); gap:16px;';
       cats.forEach(function (cat) {
         var svcs = groups[cat];
         var byc = (j.by_category || {})[cat] || {};
@@ -236,7 +254,7 @@
         var hcount = document.createElement('span');
         var allUp = rc === tc;
         hcount.style.cssText = 'font-size:12px; font-weight:600; color:' + (allUp ? '#16a34a' : '#a1a1aa') + ';';
-        hcount.textContent = rc + '/' + tc + ' ready';
+        hcount.textContent = rc + '/' + tc + ' running';
         head.appendChild(htitle); head.appendChild(hcount);
         tile.appendChild(head);
         var rows = document.createElement('div');
