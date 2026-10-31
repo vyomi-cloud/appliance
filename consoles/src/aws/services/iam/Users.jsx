@@ -15,10 +15,12 @@ import * as api from "./api.js";
 
 export default function Users() {
   const notify = useNotify();
-  const u = useAsync(() => api.listUsers(), []);
+  const u = useAsync(() => Promise.all([api.listUsers(), api.listVirtualMfaDevices("Assigned")]), []);
   const [sel, setSel] = useState([]);
   const [del, setDel] = useState(false);
-  const items = u.data || [];
+  const [userList, mfaDevices] = u.data || [[], []];
+  const items = userList;
+  const mfaUsers = new Set(mfaDevices.map((d) => d.User?.UserName).filter(Boolean));
 
   return (
     <>
@@ -45,7 +47,7 @@ export default function Users() {
           { id: "path", header: "Path", cell: (x) => x.Path || "/" },
           { id: "groups", header: "Groups", cell: (x) => x._groups ?? "-" },
           { id: "last", header: "Last activity", cell: () => "-" },
-          { id: "mfa", header: "MFA", cell: () => "Not enabled" },
+          { id: "mfa", header: "MFA", cell: (x) => (mfaUsers.has(x.UserName) ? "Virtual" : "Not enabled") },
           { id: "pwage", header: "Password age", cell: () => "-" },
           { id: "lastsignin", header: "Console last sign-in", cell: () => "-" },
           { id: "akid", header: "Access key ID", cell: () => "-" },

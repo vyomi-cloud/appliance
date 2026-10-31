@@ -1,9 +1,12 @@
 /* Policy simulator — real SimulatePrincipalPolicy. Principal picker (user or role),
  * editable action/resource lists, results table colored by EvalDecision. Global request
- * conditions aren't wired through (we don't fake a context builder we don't use). */
+ * conditions: aws:MultiFactorAuthPresent is wired to a real ContextEntries override
+ * (core/iam_core.py _context_entries) — other condition keys (aws:SourceIp, aws:CurrentTime,
+ * …) aren't, since nothing in Vyomi produces them. */
 import { useState } from "react";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
+import Checkbox from "@cloudscape-design/components/checkbox";
 import Container from "@cloudscape-design/components/container";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import Header from "@cloudscape-design/components/header";
@@ -29,6 +32,7 @@ export default function PolicySimulator() {
   const [newAction, setNewAction] = useState("");
   const [resources, setResources] = useState(["*"]);
   const [newResource, setNewResource] = useState("");
+  const [mfaPresent, setMfaPresent] = useState(false);
   const [results, setResults] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -41,14 +45,18 @@ export default function PolicySimulator() {
 
   const simulate = async () => {
     setBusy(true);
-    try { setResults(await api.simulatePrincipalPolicy(principal.value, actions, resources)); }
+    try {
+      const contextEntries = [{ key: "aws:MultiFactorAuthPresent", value: mfaPresent ? "true" : "false" }];
+      const evaluations = await api.simulatePrincipalPolicy(principal.value, actions, resources, contextEntries);
+      setResults(evaluations.map((r) => ({ ...r, _mfaPresent: mfaPresent })));
+    }
     catch (e) { notify.error(e); } finally { setBusy(false); }
   };
 
   return (
     <ContentLayout header={<Header variant="h1" actions={
       <SpaceBetween direction="horizontal" size="xs">
-        <Button onClick={() => { setActions([]); setResources(["*"]); setResults(null); }}>Clear conditions</Button>
+        <Button onClick={() => { setActions([]); setResources(["*"]); setMfaPresent(false); setResults(null); }}>Clear conditions</Button>
         <Button variant="primary" disabled={!principal || !actions.length} loading={busy} onClick={simulate}>Simulate</Button>
       </SpaceBetween>
     }>Policy simulator</Header>}>
@@ -64,7 +72,12 @@ export default function PolicySimulator() {
           </SpaceBetween>
         </Container>
         <ExpandableSection headerText="Global request conditions">
-          <NotSimulated feature="Global request conditions" note="Per-request condition keys (aws:SourceIp, aws:MultiFactorAuthPresent, etc.) aren't wired into the simulator; only the action/resource pair is evaluated." />
+          <SpaceBetween size="m">
+            <Checkbox checked={mfaPresent} onChange={({ detail }) => setMfaPresent(detail.checked)}>
+              aws:MultiFactorAuthPresent
+            </Checkbox>
+            <NotSimulated feature="Other global condition keys" note="aws:SourceIp, aws:CurrentTime and the rest of the per-request condition keys aren't wired in — nothing in Vyomi produces them. aws:MultiFactorAuthPresent above is real: it is sent as a SimulatePrincipalPolicy ContextEntries override and evaluated against the policy's Condition block." />
+          </SpaceBetween>
         </ExpandableSection>
         <Container header={<Header variant="h2" counter={`(${(results || []).length})`} actions={
           <SpaceBetween direction="horizontal" size="xs">
@@ -79,7 +92,7 @@ export default function PolicySimulator() {
               <Button onClick={() => { if (newResource) { setResources([...new Set([...resources, newResource])]); setNewResource(""); } }}>Add resource</Button>
             </SpaceBetween>
             <Table variant="embedded"
-              items={(results || []).map((r, i) => ({ id: i, service: (r.EvalActionName || "").split(":")[0], action: r.EvalActionName, resourceType: "-", resource: r.EvalResourceName, conditions: "-", result: r.EvalDecision }))}
+              items={(results || []).map((r, i) => ({ id: i, service: (r.EvalActionName || "").split(":")[0], action: r.EvalActionName, resourceType: "-", resource: r.EvalResourceName, conditions: `aws:MultiFactorAuthPresent=${r._mfaPresent}`, result: r.EvalDecision }))}
               columnDefinitions={[
                 { id: "service", header: "Service", cell: (r) => r.service },
                 { id: "action", header: "Action", cell: (r) => r.action },

@@ -35,6 +35,7 @@ State shapes (record shapes owned by iam_core):
     credential_report : {"generated": iso8601, "content": csv-str} | None
     org_policies : { policy_id -> SCP/RCP }   (Vyomi-only — see iam_core's CreateOrgPolicy)
     access_requests : { request_id -> account-access request }  (Vyomi-only — see RequestAccountAccess)
+    virtual_mfa_devices : { serial_number(arn) -> virtual MFA device, assigned or not }
 """
 from __future__ import annotations
 
@@ -92,6 +93,10 @@ class NativeIamEvaluator(AuthzEngine):
                         return False
                 elif op in {"stringlike", "arnlike"}:
                     if not NativeIamEvaluator._value_matches(expected, actual):
+                        return False
+                elif op == "bool":
+                    wanted = [str(v).lower() for v in expected] if isinstance(expected, list) else [str(expected).lower()]
+                    if str(actual).lower() not in wanted:
                         return False
                 else:
                     return False
@@ -162,6 +167,7 @@ class IamStore:
         self.credential_report: dict[str, Any] | None = None
         self.org_policies: dict[str, dict[str, Any]] = {}       # keyed by PolicyId (SCP/RCP, Vyomi-only)
         self.access_requests: dict[str, dict[str, Any]] = {}    # keyed by RequestId (Vyomi-only)
+        self.virtual_mfa_devices: dict[str, dict[str, Any]] = {}   # keyed by SerialNumber (ARN)
         self.engine: AuthzEngine = engine or NativeIamEvaluator()
         self.account_id = account_id
 

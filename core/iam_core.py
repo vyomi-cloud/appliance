@@ -18,8 +18,10 @@ pure-Python NativeIamEvaluator; cedar-wasm can swap in behind the seam in-browse
 Scope (v1 slice): users (Create/Get/List/Delete), roles (Create/Get/List/Delete),
 managed policies (Create/Get/List/Delete), groups (Create/AddUserToGroup),
 attach/detach + ListAttachedUserPolicies, inline Put/Get UserPolicy, access keys
-(Create/List), and SimulatePrincipalPolicy. MFA / SAML / instance profiles /
-policy versions reuse the same helpers and slot in next.
+(Create/List), virtual MFA devices (Create/Enable/Deactivate/Delete/List), and
+SimulatePrincipalPolicy — which factors a user's real MFA-device state into the
+`aws:MultiFactorAuthPresent` condition key. SAML / instance profiles / policy
+versions reuse the same helpers and slot in next.
 """
 from __future__ import annotations
 
@@ -68,6 +70,15 @@ def _user_arn(store, name): return f"arn:aws:iam::{store.account_id}:user/{name}
 def _role_arn(store, name): return f"arn:aws:iam::{store.account_id}:role/{name}"
 def _group_arn(store, name): return f"arn:aws:iam::{store.account_id}:group/{name}"
 def _policy_arn(store, name): return f"arn:aws:iam::{store.account_id}:policy/{name}"
+def _mfa_arn(store, name): return f"arn:aws:iam::{store.account_id}:mfa/{name}"
+
+
+def _has_mfa(store, user_name: str) -> bool:
+    """True if `user_name` has an ENABLED virtual MFA device — the real signal behind
+    the `aws:MultiFactorAuthPresent` condition key (see _simulate_principal_policy /
+    is_authorized). There is no console sign-in flow to actually challenge for the
+    code, so this reflects device assignment, not an authenticated session."""
+    return any(d.get("user_name") == user_name for d in store.virtual_mfa_devices.values())
 
 
 # ── form-encoded param helpers (Query protocol) ────────────────────────────
@@ -79,6 +90,22 @@ def _members(params: dict, base: str) -> list[str]:
         if key not in params:
             break
         out.append(params[key])
+        i += 1
+    return out
+
+
+def _context_entries(params: dict) -> list[dict]:
+    """SimulatePrincipalPolicy's ContextEntries.member.N.{ContextKeyName,ContextKeyValues} —
+    the real AWS mechanism for supplying per-request condition keys (aws:MultiFactorAuthPresent,
+    aws:SourceIp, …) that the simulator has no live request to read them from. Only the first
+    value of a multi-valued entry is honored (the evaluator's context is single-valued)."""
+    out, i = [], 1
+    while True:
+        key = params.get(f"ContextEntries.member.{i}.ContextKeyName")
+        if key is None:
+            break
+        values = _members(params, f"ContextEntries.member.{i}.ContextKeyValues")
+        out.append({"key": key, "value": values[0] if values else ""})
         i += 1
     return out
 
@@ -674,6 +701,108 @@ def _delete_access_key(store, params):
     return _envelope("DeleteAccessKey")
 
 
+# ── multi-factor authentication (virtual MFA devices) — limited: assignment is real,
+# there is no console sign-in flow to challenge the code against (see console-password) ──
+def _check_mfa_codes(code1, code2):
+    c1, c2 = str(code1 or "").strip(), str(code2 or "").strip()
+    if not (len(c1) == 6 and c1.isdigit()) or not (len(c2) == 6 and c2.isdigit()):
+        raise IamError("InvalidAuthenticationCode", "Authentication codes must be two consecutive 6-digit codes.", 403)
+    if c1 == c2:
+        raise IamError("InvalidAuthenticationCode", "The two authentication codes must be different (consecutive codes).", 403)
+
+
+def _virtual_mfa_device_xml(d: dict, with_seed: bool = False) -> str:
+    inner = _el("SerialNumber", d["serial_number"])
+    if with_seed:
+        inner += _el("Base32StringSeed", d["base32_seed"]) + "<QRCodePNG></QRCodePNG>"
+    if d.get("user_name"):
+        inner += "<User>" + _el("UserName", d["user_name"]) + "</User>" + _el("EnableDate", d["enable_date"])
+    return f"<VirtualMFADevice>{inner}</VirtualMFADevice>"
+
+
+def _create_virtual_mfa_device(store, params):
+    name = str(params.get("VirtualMFADeviceName", "")).strip()
+    if not name:
+        raise IamError("ValidationError", "VirtualMFADeviceName is required.", 400)
+    arn = _mfa_arn(store, name)
+    if arn in store.virtual_mfa_devices:
+        raise IamError("EntityAlreadyExists", f"MFA device {name} already exists.", 409)
+    seed = base64.b32encode((uuid.uuid4().hex + uuid.uuid4().hex).encode())[:32].decode()
+    d = {"serial_number": arn, "device_name": name, "path": params.get("Path", "/"),
+         "base32_seed": seed, "created": _now(), "user_name": None, "enable_date": None}
+    store.virtual_mfa_devices[arn] = d
+    store.persist()
+    return _envelope("CreateVirtualMFADevice", _virtual_mfa_device_xml(d, with_seed=True))
+
+
+def _require_virtual_mfa_device(store, serial):
+    d = store.virtual_mfa_devices.get(str(serial or "").strip())
+    if not d:
+        raise IamError("NoSuchEntity", f"MFA device {serial} not found.", 404)
+    return d
+
+
+def _delete_virtual_mfa_device(store, params):
+    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
+    if d.get("user_name"):
+        raise IamError("DeleteConflict", "Cannot delete an MFA device that is still assigned to a user.", 409)
+    del store.virtual_mfa_devices[d["serial_number"]]
+    store.persist()
+    return _envelope("DeleteVirtualMFADevice")
+
+
+def _enable_mfa_device(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
+    if d.get("user_name"):
+        raise IamError("EntityAlreadyExists", "MFA device is already assigned to a user.", 409)
+    _check_mfa_codes(params.get("AuthenticationCode1"), params.get("AuthenticationCode2"))
+    d["user_name"] = u["user_name"]
+    d["enable_date"] = _now()
+    store.persist()
+    return _envelope("EnableMFADevice")
+
+
+def _deactivate_mfa_device(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
+    if d.get("user_name") != u["user_name"]:
+        raise IamError("NoSuchEntity", "MFA device is not assigned to this user.", 404)
+    d["user_name"] = None
+    d["enable_date"] = None
+    store.persist()
+    return _envelope("DeactivateMFADevice")
+
+
+def _resync_mfa_device(store, params):
+    u = _require_user(store, str(params.get("UserName", "")).strip())
+    d = _require_virtual_mfa_device(store, params.get("SerialNumber"))
+    if d.get("user_name") != u["user_name"]:
+        raise IamError("NoSuchEntity", "MFA device is not assigned to this user.", 404)
+    _check_mfa_codes(params.get("AuthenticationCode1"), params.get("AuthenticationCode2"))
+    return _envelope("ResyncMFADevice")
+
+
+def _list_mfa_devices(store, params):
+    name = str(params.get("UserName", "")).strip()
+    _require_user(store, name)
+    items = [("<member>" + _el("UserName", name) + _el("SerialNumber", d["serial_number"])
+              + _el("EnableDate", d["enable_date"]) + "</member>")
+             for d in store.virtual_mfa_devices.values() if d.get("user_name") == name]
+    return _envelope("ListMFADevices", f"<MFADevices>{''.join(items)}</MFADevices>")
+
+
+def _list_virtual_mfa_devices(store, params):
+    status = str(params.get("AssignmentStatus", "Any")).strip() or "Any"
+    devices = list(store.virtual_mfa_devices.values())
+    if status == "Assigned":
+        devices = [d for d in devices if d.get("user_name")]
+    elif status == "Unassigned":
+        devices = [d for d in devices if not d.get("user_name")]
+    items = "".join(_virtual_mfa_device_xml(d) for d in sorted(devices, key=lambda d: d["created"]))
+    return _envelope("ListVirtualMFADevices", f"<VirtualMFADevices>{items}</VirtualMFADevices>")
+
+
 # ── roles: trust policy, session duration, tags, inline/attached policies ──────
 def _update_role(store, params):
     r = _require_role(store, str(params.get("RoleName", "")).strip())
@@ -1098,8 +1227,12 @@ def _simulate_principal_policy(store, params):
     actions = _members(params, "ActionNames")
     resources = _members(params, "ResourceArns") or ["*"]
     identity, docs, boundary = _resolve_policy_docs(store, source)
+    mfa_present = identity["type"] == "user" and _has_mfa(store, identity["name"])
     ctx = {"aws:PrincipalArn": identity["arn"], "aws:PrincipalType": identity["type"],
-           "aws:username": identity["name"], "aws:RequestedRegion": "us-east-1"}
+           "aws:username": identity["name"], "aws:RequestedRegion": "us-east-1",
+           "aws:MultiFactorAuthPresent": str(mfa_present).lower()}
+    for entry in _context_entries(params):
+        ctx[entry["key"]] = entry["value"]
     results = []
     for action in actions:
         for resource in resources:
@@ -1241,6 +1374,10 @@ _OPS = {
     "ListGroupPolicies": _list_group_policies, "DeleteGroupPolicy": _delete_group_policy,
     "CreateAccessKey": _create_access_key, "ListAccessKeys": _list_access_keys,
     "UpdateAccessKey": _update_access_key, "DeleteAccessKey": _delete_access_key,
+    "CreateVirtualMFADevice": _create_virtual_mfa_device, "DeleteVirtualMFADevice": _delete_virtual_mfa_device,
+    "EnableMFADevice": _enable_mfa_device, "DeactivateMFADevice": _deactivate_mfa_device,
+    "ResyncMFADevice": _resync_mfa_device, "ListMFADevices": _list_mfa_devices,
+    "ListVirtualMFADevices": _list_virtual_mfa_devices,
     "CreateSAMLProvider": _create_saml_provider, "GetSAMLProvider": _get_saml_provider,
     "ListSAMLProviders": _list_saml_providers, "DeleteSAMLProvider": _delete_saml_provider,
     "CreateOpenIDConnectProvider": _create_open_id_connect_provider,
@@ -1285,9 +1422,10 @@ def is_authorized(store: IamStore, principal: str, action: str, resource: str,
     """Convenience authorization probe used by in-tab enforcement / the console —
     the analogue of server.py's _iam_authorize. Returns {allowed, decision, reason}."""
     identity, docs, boundary = _resolve_policy_docs(store, principal)
+    mfa_present = identity["type"] == "user" and _has_mfa(store, identity["name"])
     ctx = {"aws:PrincipalArn": identity["arn"], "aws:PrincipalType": identity["type"],
            "aws:username": identity["name"], "aws:RequestedRegion": "us-east-1",
-           "aws:ResourceArn": resource}
+           "aws:ResourceArn": resource, "aws:MultiFactorAuthPresent": str(mfa_present).lower()}
     if context:
         ctx.update({k: str(v) for k, v in context.items()})
     decision, reason = store.engine.evaluate(docs, action, resource, ctx)
