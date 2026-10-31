@@ -42,6 +42,28 @@ export const listLocks = async (rg, name) => (await restJson("GET", lockPath(rg,
 export const putLock = (rg, name, lockName, body) => restJson("PUT", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION }, body });
 export const deleteLock = (rg, name, lockName) => restJson("DELETE", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION } });
 
+// ── Access control (IAM): role assignments scoped to THIS registry (plus its subscription/
+// resource-group ancestors, real Azure's "inherited access" view) read over the same generic
+// Microsoft.Authorization/roleAssignments extension-resource engine the VM/NSG/Cosmos blades
+// use — GET-only; assignments are still created at the subscription scope. ─────────────────
+const AUTHZ_API_VERSION = "2022-04-01";
+export const listRoleAssignments = async (rg, name) =>
+  (await restJson("GET", `${ARM.path(rg, name)}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": AUTHZ_API_VERSION } })).value || [];
+export const listRoleDefinitions = async () =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": AUTHZ_API_VERSION } })).value || [];
+
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension resource
+// scoped to this registry's own id — same generic mechanism core/azure_arm_core.py's
+// AzureArm._diagnostic_settings exposes for every lens resource). Logs/metrics are stored and
+// validated exactly as the real resource requires, but never delivered anywhere. ────────────
+const ARM_WORKSPACES = armType("Microsoft.OperationalInsights", "workspaces", "2022-10-01");
+const DIAG_API_VERSION = "2021-05-01-preview";
+const diagPath = (regId, setting) => `${regId}/providers/Microsoft.Insights/diagnosticSettings${setting ? `/${encodeURIComponent(setting)}` : ""}`;
+export const listDiagnosticSettings = async (regId) => (await restJson("GET", diagPath(regId), { query: { "api-version": DIAG_API_VERSION } })).value || [];
+export const putDiagnosticSetting = (regId, setting, body) => restJson("PUT", diagPath(regId, setting), { query: { "api-version": DIAG_API_VERSION }, body });
+export const deleteDiagnosticSetting = (regId, setting) => restJson("DELETE", diagPath(regId, setting), { query: { "api-version": DIAG_API_VERSION } });
+export const listWorkspaces = async () => (await ARM_WORKSPACES.list()).map((w) => ({ id: w.id, name: w.name }));
+
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, filtered to this registry) ──
 export const listActivityLog = async (rg, name) => {
   const rid = ARM.path(rg, name);

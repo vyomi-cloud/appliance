@@ -457,6 +457,32 @@ def run() -> int:
            [w["name"] for w in r["body"]["value"]] == ["wh1"])
     r = arm.handle("GET", acr2 + "/webhooks", {"api-version": AV_ACR})
     _check("sibling registry's webhooks don't leak in", [w["name"] for w in r["body"]["value"]] == ["wh2"])
+
+    # azure.acr.iam: Microsoft.Authorization/roleAssignments read scoped to the registry
+    # itself (the console's Access control (IAM) > Role assignments tab) — same generic
+    # extension-resource engine the NSG/Cosmos/VM blades use.
+    ra_acr = f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleAssignments/ra-acr-scoped"
+    r = arm.handle("PUT", ra_acr, {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "acr-owner", "roleName": "Owner", "scope": acr}})
+    _check("role assignment scoped to the registry itself created", r["status"] == 201)
+    r = arm.handle("GET", acr + "/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    _check("registry-scoped IAM list includes the registry-scoped assignment", any(x["name"] == "ra-acr-scoped" for x in r["body"]["value"]))
+    r = arm.handle("GET", acr2 + "/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    _check("a sibling registry's IAM list excludes the other registry's assignment", all(x["name"] != "ra-acr-scoped" for x in r["body"]["value"]))
+
+    # azure.acr.monitoring: Microsoft.Insights/diagnosticSettings, a real ARM extension
+    # resource scoped to this registry (the console's Diagnostic settings panel) — same
+    # generic engine the Key Vault/NSG lenses use.
+    diag_acr = acr + "/providers/Microsoft.Insights/diagnosticSettings/toLogAnalytics"
+    r = arm.handle("PUT", diag_acr, {"api-version": "2021-05-01-preview"},
+                   {"properties": {"workspaceId": "/subscriptions/x/resourcegroups/y/providers/microsoft.operationalinsights/workspaces/uicws",
+                                    "logs": [{"categoryGroup": "allLogs", "enabled": True}]}})
+    _check("registry diagnostic setting put 201", r["status"] == 201 and r["body"]["name"] == "toLogAnalytics")
+    r = arm.handle("GET", acr + "/providers/Microsoft.Insights/diagnosticSettings", {"api-version": "2021-05-01-preview"})
+    _check("registry diagnostic settings list has item", [x["name"] for x in r["body"]["value"]] == ["toLogAnalytics"])
+    r = arm.handle("GET", acr2 + "/providers/Microsoft.Insights/diagnosticSettings", {"api-version": "2021-05-01-preview"})
+    _check("a sibling registry's diagnostic settings stay empty", r["body"]["value"] == [])
+
     r = arm.handle("DELETE", acr, {"api-version": AV_ACR})
     _check("registry delete 200", r["status"] == 200)
     # 21. Network security groups + security rules — a nested, same-namespace child

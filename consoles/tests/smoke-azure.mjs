@@ -903,6 +903,48 @@ try {
   check("Access keys: admin user enable + regenerate rotates the password", !!pwBefore && pwBefore !== pwAfter, `${pwBefore} -> ${pwAfter}`);
   await shot("25-acr-access-keys");
 
+  // ── Access control (IAM): a role assignment created over the wire (subscription-wide, same
+  // honest scoping as the VM/NSG/Cosmos DB blades) is read back on the registry's own IAM tab ──
+  const ACRROLE = `00000000-0000-4000-b000-${String(n).padStart(12, "0")}`;
+  const acrRoleRes = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments/${ACRROLE}?api-version=2022-04-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties: { principalId: "vyomi-acr-smoke-principal", roleDefinitionId: `/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions/owner`, principalType: "User" } }) });
+  check("ARM PUT role assignment over wire", acrRoleRes.status === 200 || acrRoleRes.status === 201, `HTTP ${acrRoleRes.status}`);
+  await page.goto(UI + `#/acr/${RG}/${ACR}/iam`);
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByText("vyomi-acr-smoke-principal").first().waitFor({ timeout: 10000 });
+  check("UI Access control (IAM) → Role assignments shows the wire-created assignment", true);
+  await shot("25b-acr-iam-role-assignments");
+
+  // ── Diagnostic settings: added through the UI (real Microsoft.Insights/diagnosticSettings
+  // extension resource scoped to this registry) → visible over native ARM (azure.acr.monitoring) ──
+  const ACRWS = `vyacrws${n}`;
+  const acrWsPut = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.OperationalInsights/workspaces/${ACRWS}?api-version=2022-10-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ location: "eastus", properties: {} }) });
+  check("ARM PUT Log Analytics workspace for registry diagnostic settings over wire", acrWsPut.status === 200 || acrWsPut.status === 201, `HTTP ${acrWsPut.status}`);
+  const ACRDIAG = `vyacrdiag${n}`;
+  await openPanel("Diagnostic settings");
+  await page.getByRole("button", { name: "Add diagnostic setting" }).click();
+  await page.getByLabel("Diagnostic setting name", { exact: true }).fill(ACRDIAG);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText(ACRDIAG, { exact: true }).first().waitFor({ timeout: 10000 });
+  const acrDiagGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR}/providers/Microsoft.Insights/diagnosticSettings/${ACRDIAG}?api-version=2021-05-01-preview`);
+  check("UI add diagnostic setting on registry → visible over native ARM extension resource", acrDiagGet.status === 200, `HTTP ${acrDiagGet.status}`);
+  await shot("25c-acr-diagnostic-settings");
+
+  // ── Export template: ARM, Bicep and Terraform all reflect this registry's own live resource ──
+  await page.goto(UI + `#/acr/${RG}/${ACR}/exporttemplate`);
+  const acrArmText = await page.getByRole("textbox").first().inputValue();
+  check("UI Export template (ARM) reflects the real resource",
+    acrArmText.includes("Microsoft.ContainerRegistry/registries") && acrArmText.includes(ACR), acrArmText.slice(0, 200));
+  await page.getByRole("tab", { name: "Bicep" }).click();
+  const acrBicepText = await page.getByRole("textbox").first().inputValue();
+  check("UI Export template (Bicep) reflects the real resource",
+    acrBicepText.includes("Microsoft.ContainerRegistry/registries") && acrBicepText.includes(ACR), acrBicepText.slice(0, 200));
+  await page.getByRole("tab", { name: "Terraform" }).click();
+  const acrTfText = await page.getByRole("textbox").first().inputValue();
+  check("UI Export template (Terraform) reflects the real resource",
+    acrTfText.includes("azurerm_container_registry") && acrTfText.includes(ACR), acrTfText.slice(0, 200));
+
   // ── A repository pushed over the real OCI v2 wire (CLI → UI) ───────────────────────────
   const REPO = `smokerepo${n}`;
   const push = await wire(`/v2/${REPO}/manifests/latest`, { method: "PUT", headers: { "content-type": "application/vnd.docker.distribution.manifest.v2+json" }, body: '{"schemaVersion":2}' });
