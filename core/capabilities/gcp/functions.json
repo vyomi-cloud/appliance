@@ -72,9 +72,12 @@
    "offline": "limited"
   },
   "limitations": [
-   "Vyomi stores the entry point, runtime and source text on the service and returns them from the API exactly as configured, but does not build a container image or run the code; invocation is not simulated."
+   "\"Save and redeploy\" is enforced, not just stored: a source/runtime/entry-point edit changes the revision's image fingerprint, so the same revision-diff logic the Admin API uses for any template change cuts a real new revision (visible on the Revisions tab, traffic following it) exactly as a redeploy would.",
+   "For Python sources, Vyomi parses the code on create/update and rejects it the way a real build would fail: a syntax error or an entry point the source doesn't define returns a 400 instead of saving. Other runtimes are stored and returned as configured but not parsed.",
+   "Vyomi does not build a container image or run the code; there is no invocation (see Observability for the metrics/logs gap)."
   ],
   "api": [
+   "projects.locations.services.create",
    "projects.locations.services.patch"
   ],
   "tests": [

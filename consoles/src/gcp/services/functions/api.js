@@ -125,8 +125,32 @@ export const functionAnnotations = (runtime, entryPoint, source) => ({
   [ANN.runtime]: runtime, [ANN.entry]: entryPoint || "handler", [ANN.source]: source || "",
 });
 
+/** FNV-1a over the deployed source so the pseudo-image tag changes whenever the function's
+ * runtime, entry point or code does — this is what makes a source edit trigger a real new
+ * revision (the native API diffs revisions by their container image, among other fields). */
+function fnv1a(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
 /** Deterministic pseudo-image for an inline-source "function" deploy (no real build). */
-export const functionImage = (runtime) => `vyomi.dev/function-source/${encodeURIComponent((runtime || "node").toLowerCase().replace(/[^a-z0-9.]+/g, "-"))}:latest`;
+export const functionImage = (runtime, entryPoint, source) =>
+  `vyomi.dev/function-source/${encodeURIComponent((runtime || "node").toLowerCase().replace(/[^a-z0-9.]+/g, "-"))}:${fnv1a(`${entryPoint || ""} ${source || ""}`)}`;
+
+/** Save source/runtime/entry-point edits AND actually redeploy: the native API only cuts a new
+ * revision when the template (here, the container image) changes, so the pseudo-image tag is
+ * refreshed from the new source in the same patch that updates the annotations. */
+export function redeploySource(region, name, service, runtime, entryPoint, source) {
+  const template = JSON.parse(JSON.stringify(service.template));
+  template.containers[0].image = functionImage(runtime, entryPoint, source);
+  return patchService(region, name, {
+    annotations: { ...service.annotations, ...functionAnnotations(runtime, entryPoint, source) },
+    template,
+  }, "annotations,template");
+}
 
 export const DEFAULT_FUNCTION_SOURCE = {
   "Node.js 22": "exports.handler = (event) => {\n  return { message: \"hello from Cloud Run functions\" };\n};\n",

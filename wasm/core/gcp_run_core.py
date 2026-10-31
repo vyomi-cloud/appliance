@@ -306,6 +306,34 @@ def _revision_template(project, spec, is_job):
     return spec
 
 
+# ── inline function source (Cloud Run functions: the "Function" deploy source) ─────────────
+# Annotation keys the console's inline-editor deploy path uses to carry entry point, runtime
+# and source text on the Service resource (see consoles/src/gcp/services/functions/api.js).
+# A real deploy builds and runs this; Vyomi validates it parses and the entry point exists
+# (same bar as a build failing on bad code) but does not build a container or execute it.
+_FN_ANN_RUNTIME = "vyomi.dev/function-runtime"
+_FN_ANN_ENTRY = "vyomi.dev/function-entry-point"
+_FN_ANN_SOURCE = "vyomi.dev/function-source"
+
+
+def _validate_function_source(annotations):
+    runtime = str((annotations or {}).get(_FN_ANN_RUNTIME) or "")
+    if not runtime.lower().startswith("python"):
+        return   # only Python source is parsed server-side; other runtimes are stored as-is
+    source = (annotations or {}).get(_FN_ANN_SOURCE) or ""
+    if not source.strip():
+        return
+    import ast
+    entry = (annotations or {}).get(_FN_ANN_ENTRY) or "handler"
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as e:
+        raise _E(400, "INVALID_ARGUMENT", "Function source has a syntax error: %s" % e)
+    defs = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    if entry not in defs:
+        raise _E(400, "INVALID_ARGUMENT", "Function entry point %r not found in source." % entry)
+
+
 def _rev_suffix(svc_full, n):
     return "%s-%05d-%s" % (svc_full.rsplit("/", 1)[-1], n, "".join(
         "abcdefghijklmnopqrstuvwxyz"[int(c, 16) % 26] for c in _h("rev", svc_full, n)[:3]))
@@ -403,6 +431,7 @@ def create_service(store, project, location, query, payload):
     for k in ("labels", "annotations"):
         if spec.get(k) is not None:
             _check_map(spec[k], k)
+    _validate_function_source(spec.get("annotations"))
     template = _revision_template(project, spec["template"], False)
     traffic = spec.get("traffic") or [{"type": LATEST, "percent": 100}]
     now = _ts()
@@ -486,6 +515,8 @@ def update_service(store, project, location, sid, query, payload):
         _traffic_check(store, full, new.get("traffic", []))
         if not new.get("traffic"):
             new["traffic"] = [{"type": LATEST, "percent": 100}]
+    if "annotations" in fields:
+        _validate_function_source(new.get("annotations"))
     if query.get("validateOnly") in ("true", "True", True):
         return _operation(store, project, location, "service", new)
     svc.update({k: new[k] for k in fields if k in new})
