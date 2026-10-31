@@ -751,7 +751,7 @@ class AwsWireRouter:
         if svc == "azure-sql":   # Azure SQL data plane (shares the SqlStore, `/azure-sql` prefix)
             sql_path = path[len("/azure-sql"):] or "/"
             r = az_sql.dispatch(self.rds, method, sql_path, query or {}, headers or {}, bytes(body),
-                                arm_state=self.az_arm.state)
+                                arm_state=self.az_arm.state, kv_store=self.az_kvkeys)
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type

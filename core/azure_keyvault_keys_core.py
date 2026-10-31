@@ -165,6 +165,17 @@ def _latest(store: KeyStore, name: str) -> dict | None:
     return vs[-1] if vs else None
 
 
+def key_enabled(store: KeyStore, name: str, version: str | None = None) -> bool | None:
+    """True/False if (name[, version]) exists and is enabled/disabled (latest version when
+    `version` is omitted); None if no such key exists. Lets OTHER cores — azure_sql_core's
+    customer-managed-key TDE protector — gate on Key Vault's own enabled/disabled state
+    instead of re-implementing it."""
+    meta = store.get_key(_kid_key(name, version)) if version else _latest(store, name)
+    if not meta:
+        return None
+    return bool(meta.get("enabled", True))
+
+
 def _next_seq(store: KeyStore) -> int:
     best = 0
     for kid in store.key_ids():

@@ -53,20 +53,20 @@
   "tests": ["tests/conformance/test_azure_sql_core.py", "tests/conformance/test_azure_arm_core.py"]
  },
  "azure.sql.transparent_data_encryption": {
-  "title": "Transparent data encryption on/off",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "title": "Transparent data encryption on/off, with a customer-managed Key Vault protector",
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "properties.transparentDataEncryption.state round-trips through ARM, but data at rest is never actually encrypted or decrypted based on it."
+   "properties.transparentDataEncryption.state round-trips through ARM, but data at rest is never actually encrypted or decrypted based on it. A customer-managed key (keyVaultKeyUri) IS enforced for real: the query data plane requires the database's system-assigned managed identity AND a real, enabled Key Vault key — disabling the key or removing the identity makes the database inaccessible (TdeProtectorUnavailable) until the key is re-enabled or the protector is switched back to service-managed. There is no Microsoft Entra permission check on top of that (Vyomi has no Key Vault access-policy/RBAC model) — only the key's own enabled state and the identity's presence are checked."
   ],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "tests": ["tests/conformance/test_azure_sql_core.py", "tests/conformance/test_azure_arm_core.py"]
  },
  "azure.sql.identity": {
   "title": "System-assigned managed identity",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "The identity block (including a generated principalId) round-trips through ARM, but it is never actually usable for Microsoft Entra authentication to other Vyomi services."
+   "The identity block (including a generated principalId) round-trips through ARM and is now a real precondition for one feature: a customer-managed-key TDE protector is only honored while the database carries a system-assigned identity (azure.sql.transparent_data_encryption). It is still not usable for genuine Microsoft Entra authorization (RBAC role-assignment checks) to any other Vyomi service."
   ],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "tests": ["tests/conformance/test_azure_sql_core.py", "tests/conformance/test_azure_arm_core.py"]
  },
  "azure.sql.automatic_tuning": {
   "title": "Automatic tuning options (FORCE_LAST_GOOD_PLAN, CREATE_INDEX, DROP_INDEX) and Performance recommendations",

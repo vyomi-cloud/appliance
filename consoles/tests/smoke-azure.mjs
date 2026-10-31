@@ -92,12 +92,9 @@ const browser = await pw.chromium.launch();
 page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
-// Native 404s (e.g. a deleted resource's GET) and 409s (e.g. a locked resource's blocked
-// write/delete) are expected answers, not page errors.
 // Native 404s (e.g. a deleted resource's GET), 403s (e.g. a query against a server with public
-// network access disabled) and 409s (e.g. deleting a locked resource) are expected answers,
-// not page errors. ONE handler: two handlers with different allow-lists each record the
-// other's expected codes.
+// network access disabled, or a database whose TDE protector is unavailable) and 409s (e.g.
+// deleting a locked resource) are expected answers, not page errors.
 page.on("console", (m) => m.type() === "error" && !/status of (403|404|409)/.test(m.text()) && errors.push(m.text()));
 const shot = (name) => page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
 const openPanel = async (label) => { await page.getByRole("navigation", { name: "Resource menu" }).getByRole("link", { name: label, exact: true }).click(); await page.waitForTimeout(500); };
@@ -1477,6 +1474,68 @@ try {
   const sqlLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SRV}/databases/${DB}/providers/Microsoft.Authorization/locks/${SQLLOCK}?api-version=2020-05-01`);
   check("UI create lock on SQL database → visible over native ARM", sqlLockGet.status === 200, `HTTP ${sqlLockGet.status}`);
   await shot("28-sql-locks");
+
+  // ── Transparent data encryption: customer-managed Key Vault key (BYOK) depth pass ──────
+  // A Key Vault key created over the wire becomes the database's TDE protector, requiring
+  // the database's OWN system-assigned identity before it's honored — real Azure SQL's BYOK
+  // precondition — and then real-enforces the key's enabled state on the query data plane.
+  const kvWireKey = (path, method = "GET", body) => wire(`${path}${path.includes("?") ? "&" : "?"}api-version=7.4`,
+    { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const TDEKEY = `vysmoketdekey${n}`;
+  const putTdeKey = await kvWireKey(`/keys/${TDEKEY}/create`, "POST", { kty: "RSA", key_size: 2048 });
+  check("Key Vault key created over wire for the TDE protector", putTdeKey.status === 200, `HTTP ${putTdeKey.status}`);
+
+  await page.goto(UI + `#/sql/${RG}/${SRV}/${DB}/tde`);
+  await page.getByText("Transparent data encryption", { exact: true }).first().waitFor({ timeout: 10000 });
+  await page.waitForTimeout(300);
+  await page.getByRole("radio", { name: "Customer-managed key" }).click();
+  await page.getByLabel("Key Vault key name", { exact: true }).fill(TDEKEY);
+  check("UI blocks saving a customer-managed TDE key with no managed identity configured",
+    await page.getByRole("toolbar", { name: "Transparent data encryption commands" }).getByRole("button", { name: "Save" }).isDisabled());
+  await shot("28b-sql-tde-cmk-needs-identity");
+
+  await page.goto(UI + `#/sql/${RG}/${SRV}/${DB}/identity`);
+  await page.getByText("Identity", { exact: true }).first().waitFor({ timeout: 10000 });
+  await page.waitForTimeout(300);
+  await page.getByRole("radio", { name: "On" }).click();
+  await page.getByRole("toolbar", { name: "Identity commands" }).getByRole("button", { name: "Save" }).click();
+  await page.getByText("Object (principal) ID").waitFor({ timeout: 10000 });
+
+  await page.goto(UI + `#/sql/${RG}/${SRV}/${DB}/tde`);
+  await page.getByText("Transparent data encryption", { exact: true }).first().waitFor({ timeout: 10000 });
+  await page.waitForTimeout(300);
+  await page.getByRole("radio", { name: "Customer-managed key" }).click();
+  await page.getByLabel("Key Vault key name", { exact: true }).fill(TDEKEY);
+  await page.getByRole("toolbar", { name: "Transparent data encryption commands" }).getByRole("button", { name: "Save" }).click();
+  await page.waitForTimeout(500);
+  await shot("28c-sql-tde-cmk-configured");
+  const tdeOkQuery = await wire(`/azure-sql/servers/${SRV}/databases/${DB}/query`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sql: "SELECT 1" }) });
+  check("UI configure customer-managed TDE key (with identity) → query data plane still allows connections",
+    tdeOkQuery.status === 200, `HTTP ${tdeOkQuery.status}`);
+
+  const disableTdeKey = await kvWireKey(`/keys/${TDEKEY}`, "PATCH", { attributes: { enabled: false } });
+  check("disable the Key Vault key over wire", disableTdeKey.status === 200, `HTTP ${disableTdeKey.status}`);
+  const tdeBlockedQuery = await wire(`/azure-sql/servers/${SRV}/databases/${DB}/query`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sql: "SELECT 1" }) });
+  check("disabling the Key Vault TDE protector key → query data plane now rejects connections",
+    tdeBlockedQuery.status === 403, `HTTP ${tdeBlockedQuery.status}`);
+
+  const enableTdeKey = await kvWireKey(`/keys/${TDEKEY}`, "PATCH", { attributes: { enabled: true } });
+  check("re-enable the Key Vault key over wire", enableTdeKey.status === 200, `HTTP ${enableTdeKey.status}`);
+  const tdeRestoredQuery = await wire(`/azure-sql/servers/${SRV}/databases/${DB}/query`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sql: "SELECT 1" }) });
+  check("re-enabling the Key Vault TDE protector key → query data plane allows connections again",
+    tdeRestoredQuery.status === 200, `HTTP ${tdeRestoredQuery.status}`);
+
+  // Back to service-managed so the delete-database flow right below isn't left depending on
+  // a customer-managed protector.
+  await page.goto(UI + `#/sql/${RG}/${SRV}/${DB}/tde`);
+  await page.getByText("Transparent data encryption", { exact: true }).first().waitFor({ timeout: 10000 });
+  await page.waitForTimeout(300);
+  await page.getByRole("radio", { name: "Service-managed key" }).click();
+  await page.getByRole("toolbar", { name: "Transparent data encryption commands" }).getByRole("button", { name: "Save" }).click();
+  await page.waitForTimeout(500);
 
   // ── Database deleted through the overview → gone over ARM ──────────────────────────────
   await page.goto(UI + `#/sql/${RG}/${SRV}/${DB}`);

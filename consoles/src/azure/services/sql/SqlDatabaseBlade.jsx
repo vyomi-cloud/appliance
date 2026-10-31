@@ -470,15 +470,21 @@ function ActivityLog({ a }) {
 // ── Transparent data encryption ──────────────────────────────────────────────────────
 function Tde({ a, reload }) {
   const notify = useNotify();
-  const enabled = a.properties?.transparentDataEncryption?.state !== "Disabled";
-  const [value, setValue] = useState(enabled ? "ON" : "OFF");
+  const tde = a.properties?.transparentDataEncryption || {};
+  const enabled = tde.state !== "Disabled";
+  const hasIdentity = a.identity?.type === "SystemAssigned" && !!a.identity?.principalId;
+  const init = () => ({ value: enabled ? "ON" : "OFF", keyType: tde.keyVaultKeyUri ? "cmk" : "smk", keyName: tde.keyVaultKeyUri ? tde.keyVaultKeyUri.split("/keys/")[1]?.split("/")[0] || "" : "" });
+  const [f, setF] = useState(init);
   const [busy, setBusy] = useState(false);
-  useEffect(() => setValue(enabled ? "ON" : "OFF"), [enabled]);
-  const dirty = value !== (enabled ? "ON" : "OFF");
+  useEffect(() => setF(init()), [a]);
+  const dirty = JSON.stringify(f) !== JSON.stringify(init());
+  const invalid = f.keyType === "cmk" && (!hasIdentity || !f.keyName);
   const save = async () => {
     setBusy(true);
     try {
-      await api.updateDatabase(a.resourceGroup, a.server, a.name, { properties: { transparentDataEncryption: { state: value === "ON" ? "Enabled" : "Disabled" } } });
+      const transparentDataEncryption = { state: f.value === "ON" ? "Enabled" : "Disabled" };
+      if (f.keyType === "cmk" && f.keyName) transparentDataEncryption.keyVaultKeyUri = `https://vault.vault.azure.net/keys/${f.keyName}`;
+      await api.updateDatabase(a.resourceGroup, a.server, a.name, { properties: { transparentDataEncryption } });
       notify.success(`Transparent data encryption for '${a.name}' was saved.`, "Saved");
       reload();
     } catch (e) { notify.error(e, "Saving failed"); }
@@ -488,13 +494,28 @@ function Tde({ a, reload }) {
     <>
       <div className="vy-panel-title">Transparent data encryption</div>
       <div className="vy-cmdbar" role="toolbar" aria-label="Transparent data encryption commands">
-        <ToolbarButton icon={<Save20Regular />} disabled={!dirty || busy} onClick={save}>Save</ToolbarButton>
-        <ToolbarButton disabled={!dirty} onClick={() => setValue(enabled ? "ON" : "OFF")}>Discard</ToolbarButton>
+        <ToolbarButton icon={<Save20Regular />} disabled={!dirty || busy || invalid} onClick={save}>Save</ToolbarButton>
+        <ToolbarButton disabled={!dirty} onClick={() => setF(init())}>Discard</ToolbarButton>
       </div>
       <CapabilityContainer id="azure.sql.transparent_data_encryption" title="Data encryption">
-        <RadioGroup layout="horizontal" value={value} onChange={(_, d) => setValue(d.value)} aria-label="Data encryption">
+        <RadioGroup layout="horizontal" value={f.value} onChange={(_, d) => setF((x) => ({ ...x, value: d.value }))} aria-label="Data encryption">
           <Radio value="ON" label="ON" /><Radio value="OFF" label="OFF" />
         </RadioGroup>
+        <div style={{ marginTop: 16 }}>
+          <div className="vy-muted" style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Key management</div>
+          <RadioGroup layout="horizontal" value={f.keyType} onChange={(_, d) => setF((x) => ({ ...x, keyType: d.value }))} aria-label="Key management">
+            <Radio value="smk" label="Service-managed key" />
+            <Radio value="cmk" label="Customer-managed key" />
+          </RadioGroup>
+          {f.keyType === "cmk" && (
+            <>
+              <Field label="Key Vault key name" required style={{ maxWidth: 360, marginTop: 8 }}>
+                <Input value={f.keyName} onChange={(_, d) => setF((x) => ({ ...x, keyName: d.value }))} aria-label="Key Vault key name" />
+              </Field>
+              {!hasIdentity && <div style={{ color: "var(--colorPaletteRedForeground1)", fontSize: 12, marginTop: 4 }}>Requires a system-assigned managed identity — turn it on under Identity first.</div>}
+            </>
+          )}
+        </div>
       </CapabilityContainer>
     </>
   );
