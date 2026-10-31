@@ -83,6 +83,11 @@ export const routeNextHop = (r) => {
   return "—";
 };
 
+// ── peerings ─────────────────────────────────────────────────────────────
+export const addPeering = (name, peering) => restJson("POST", `${base()}/global/networks/${e(name)}/addPeering`, { body: { networkPeering: peering } });
+export const removePeering = (name, peeringName) => restJson("POST", `${base()}/global/networks/${e(name)}/removePeering`, { body: { name: peeringName } });
+export const peerStatus = (p) => (p.state === "ACTIVE" ? "Active" : "Inactive");
+
 export const validName = (n, what = "Name") => {
   if (!n) return `${what} is required.`;
   if (!/^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$/.test(n)) return `${what} must start with a lowercase letter and contain only lowercase letters, numbers and hyphens.`;

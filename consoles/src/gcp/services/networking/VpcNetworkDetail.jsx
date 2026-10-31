@@ -33,14 +33,36 @@ export default function VpcNetworkDetail({ params }) {
   const [edit, setEdit] = useState({ description: "", mtu: "1460", routingMode: "REGIONAL" });
   const [subSel, setSubSel] = useState([]);
   const [draft, setDraft] = useState({ name: "", description: "", region: api.REGIONS[0], stack: "v4", range: "", pga: "Off", flowLogs: "Off" });
+  const [peerSel, setPeerSel] = useState([]);
+  const [peerOpen, setPeerOpen] = useState(false);
+  const [peerDraft, setPeerDraft] = useState({ name: "", peerNetwork: "", exchange: true });
   const { data, loading, error, reload } = useAsync(async () => {
-    const [network, allSubnets, firewalls, routes, addresses] = await Promise.all([
-      api.getNetwork(name), api.listAllSubnets(), api.listFirewalls(), api.listRoutes(), api.listAllAddresses(),
+    const [network, allSubnets, firewalls, routes, addresses, networks] = await Promise.all([
+      api.getNetwork(name), api.listAllSubnets(), api.listFirewalls(), api.listRoutes(), api.listAllAddresses(), api.listNetworks(),
     ]);
     return { network, subnets: api.subnetsOf(allSubnets, name), firewalls: firewalls.filter((f) => f.network.endsWith(`/networks/${name}`)),
-      routes: routes.filter((r) => r.network.endsWith(`/networks/${name}`)), addresses: addresses.filter((a) => a.addressType === "INTERNAL") };
+      routes: routes.filter((r) => r.network.endsWith(`/networks/${name}`)), addresses: addresses.filter((a) => a.addressType === "INTERNAL"),
+      peerCandidates: networks.filter((n) => n.name !== name) };
   }, [name]);
   const net = data?.network;
+
+  const createPeering = async () => {
+    const err = api.validName(peerDraft.name, "Name") || (!peerDraft.peerNetwork && "Peered network is required.");
+    if (err) { notify.error({ message: err }); return; }
+    try {
+      await api.addPeering(name, { name: peerDraft.name, network: peerDraft.peerNetwork, exchangeSubnetRoutes: peerDraft.exchange });
+      notify.success(`Created peering "${peerDraft.name}"`);
+      setPeerOpen(false);
+      setPeerDraft({ name: "", peerNetwork: "", exchange: true });
+      reload();
+    } catch (e) { notify.error(e); }
+  };
+  const deletePeerings = async () => {
+    for (const pname of peerSel) await api.removePeering(name, pname);
+    notify.success(`Deleted ${peerSel.length} peering connection(s)`);
+    setPeerSel([]);
+    reload();
+  };
 
   const addSubnet = async () => {
     const err = api.validName(draft.name, "Subnet name") || (!draft.range && "IPv4 range is required.");
@@ -166,7 +188,33 @@ export default function VpcNetworkDetail({ params }) {
         </CapabilityContainer>
       )}
 
-      {tab === "peering" && <CapabilityContainer id="gcp.networking.peering" title="VPC network peering" />}
+      {tab === "peering" && (
+        <CapabilityContainer id="gcp.networking.peering" title="VPC network peering"
+          description="Non-transitive connections between this network and other VPC networks."
+          actions={<>
+            <Button startIcon={<AddIcon />} onClick={() => setPeerOpen(true)}>Create peering connection</Button>
+            <Button startIcon={<DeleteIcon />} disabled={!peerSel.length} onClick={deletePeerings}>Delete</Button>
+          </>}
+        >
+          <ResourceTable
+            resourceName="peering connections"
+            items={net?.peerings || []}
+            rowKey={(p) => p.name}
+            loading={loading}
+            selectable
+            selected={peerSel}
+            onSelectedChange={setPeerSel}
+            filterPlaceholder="Filter"
+            columns={[
+              { id: "name", header: "Name", cell: (p) => p.name },
+              { id: "yournet", header: "Your network", cell: () => name },
+              { id: "peernet", header: "Peered VPC network", cell: (p) => api.nameOf(p.network) },
+              { id: "exchange", header: "Exchange custom routes", cell: (p) => (p.exchangeSubnetRoutes ? "On" : "Off") },
+              { id: "status", header: "Status", cell: (p) => api.peerStatus(p) },
+            ]}
+          />
+        </CapabilityContainer>
+      )}
       {tab === "psc" && <CapabilityContainer id="gcp.networking.private-service-connection" title="Private service connection" />}
 
       <DeleteDialog open={del} onClose={() => setDel(false)} title="Delete VPC network?" confirmText={name}
@@ -232,6 +280,27 @@ export default function VpcNetworkDetail({ params }) {
         <DialogActions>
           <Button onClick={() => setAddOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={addSubnet}>Done</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={peerOpen} onClose={() => setPeerOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Create peering connection</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ mt: 1 }}>
+            <TextField label="Name" required value={peerDraft.name} onChange={(e) => setPeerDraft({ ...peerDraft, name: e.target.value.trim() })} />
+            <TextField label="Your network" value={name} disabled />
+            <FormControl required>
+              <InputLabel id="p-peer">Peered VPC network</InputLabel>
+              <Select labelId="p-peer" label="Peered VPC network" value={peerDraft.peerNetwork} onChange={(e) => setPeerDraft({ ...peerDraft, peerNetwork: e.target.value })}>
+                {(data?.peerCandidates || []).map((n) => <MenuItem key={n.name} value={n.name}>{n.name}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <FormControlLabel control={<Checkbox checked={peerDraft.exchange} onChange={(e) => setPeerDraft({ ...peerDraft, exchange: e.target.checked })} />} label="Exchange custom routes" />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPeerOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={createPeering}>Create</Button>
         </DialogActions>
       </Dialog>
     </>
