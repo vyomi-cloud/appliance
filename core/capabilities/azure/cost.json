@@ -140,8 +140,7 @@
       "offline": "limited"
     },
     "limitations": [
-      "Rules split cost by resource group only — real Cost allocation can also key off tags; that finer dimension isn't modelled.",
-      "Only \"Fixed\" (explicit percentage) rules are modelled; there is no \"Proportional\"/\"Even split by percentage\" allocation type."
+      "Rules split cost by resource group only — real Cost allocation can also key off tags; that finer dimension isn't modelled."
     ],
     "api": [
       "CostAllocationRule.CreateOrUpdate",
