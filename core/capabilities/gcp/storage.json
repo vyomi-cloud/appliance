@@ -26,11 +26,11 @@
   },
   "gcp.storage.permissions": {
     "title": "Bucket IAM policy (getIamPolicy / setIamPolicy), uniform/fine-grained access control, public access prevention",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Policies, the access-control mode and public access prevention round-trip through getIamPolicy/setIamPolicy/buckets.patch exactly as a client sets them, but Vyomi never checks them on a request — every object read/write it allows is unconditional."
+      "Public access prevention is ENFORCED: setIamPolicy really rejects a binding that grants allUsers/allAuthenticatedUsers while the bucket's publicAccessPrevention is 'enforced'. Beyond that one write-time check, Vyomi has no per-request authorization layer — a policy set before PAP was enforced, or object ACLs under fine-grained access, never block an actual read/write."
     ],
-    "tests": ["tests/conformance/test_gcs_bucket_config_core.py"]
+    "tests": ["tests/conformance/test_gcs_bucket_config_core.py", "tests/conformance/test_gcp_storage_depth2_core.py"]
   },
   "gcp.storage.retention": {
     "title": "Bucket retention policy",
@@ -66,11 +66,11 @@
   },
   "gcp.storage.cors": {
     "title": "Cross-origin resource sharing (CORS) configuration",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "The cors list round-trips through buckets.patch exactly as a client sets it, but Vyomi's wire layer never adds Access-Control-* response headers or blocks a cross-origin browser request — the configuration is not enforced."
+      "ENFORCED for real: an OPTIONS preflight and a matching GET (object or bucket) now carry the configured Access-Control-Allow-Origin/Methods/Expose-Headers/Max-Age response headers when the request's Origin matches a cors rule, and carry none when it doesn't — same as the real API, which also leaves the actual cross-origin block to the browser rather than the server."
     ],
-    "tests": ["tests/conformance/test_gcp_storage_config_sections_core.py"]
+    "tests": ["tests/conformance/test_gcp_storage_config_sections_core.py", "tests/conformance/test_gcp_storage_depth2_core.py"]
   },
   "gcp.storage.static-website": {
     "title": "Static website configuration (main page suffix / 404 page)",
@@ -104,10 +104,11 @@
   },
   "gcp.storage.encryption": {
     "title": "Data encryption with customer-managed encryption keys (CMEK)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi always stores object data under Google-managed encryption; selecting a Cloud KMS key is not modeled since the GCS core does not delegate envelope encryption to Cloud KMS on object writes."
-    ]
+      "Setting a bucket's default Cloud KMS key validates the CryptoKey resource-name shape and really stamps that kmsKeyName onto every object written to the bucket afterward, but Vyomi never calls Cloud KMS to confirm the key exists or is enabled, and object bytes are still stored under Google-managed encryption underneath — no real envelope encryption with that key ever happens."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_depth2_core.py"]
   },
   "gcp.storage.hierarchical-namespace": {
     "title": "Hierarchical namespace (HNS buckets with true folders)",
@@ -139,10 +140,11 @@
   },
   "gcp.storage.operations": {
     "title": "Long-running bucket operations (rename/relocate bucket, Turbo replication switch)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi's bucket operations complete synchronously (see gcp.storage.buckets); it keeps no separate long-running-operation resource to list or poll."
-    ]
+      "The Turbo replication switch now records a real, listable /b/{bucket}/operations resource. Every operation Vyomi records is already DONE at creation, though — bucket operations complete synchronously (see gcp.storage.buckets), so there is no RUNNING state to poll, and bucket rename/relocate is not modeled."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_depth2_core.py"]
   },
   "gcp.storage.inventory-reports": {
     "title": "Inventory reports (per-bucket Storage Insights object inventory, CSV/Parquet to a destination bucket)",
@@ -166,9 +168,10 @@
   },
   "gcp.storage.interoperability": {
     "title": "Interoperable access (HMAC keys for service/user accounts)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "HMAC key issuance is a separate Cloud Storage Interoperability / IAM credentials flow; Vyomi's GCS core has no HMAC keystore or signature verification for the S3-compatible XML API that these keys authenticate against."
-    ]
+      "HMAC key issuance, listing, the ACTIVE/INACTIVE state toggle and delete-when-INACTIVE round-trip for real under projects/{project}/hmacKeys, but Vyomi's wire layer never verifies an HMAC-signed request against the issued secret — the separate S3-compatible XML endpoint these keys authenticate against is not implemented."
+    ],
+    "tests": ["tests/conformance/test_gcp_storage_depth2_core.py"]
   }
 }
