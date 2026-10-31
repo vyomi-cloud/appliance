@@ -159,6 +159,68 @@ function ResizeDialog({ group, onClose, onResized }) {
   );
 }
 
+function UpdateTemplateDialog({ group, onClose, onUpdated }) {
+  const notify = useNotify();
+  const [templates, setTemplates] = useState([]);
+  const [template, setTemplate] = useState("");
+  const [rollout, setRollout] = useState("new-only");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!group) return;
+    setRollout("new-only"); setError(null);
+    api.listInstanceTemplates().then((ts) => { setTemplates(ts); setTemplate(api.last(group.instanceTemplate)); }).catch(() => setTemplates([]));
+  }, [group]);
+
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try {
+      const body = { instanceTemplate: template };
+      if (rollout === "all-now") body.updatePolicy = { type: "PROACTIVE", minimalAction: "REPLACE", maxSurge: { fixed: 1 }, maxUnavailable: { fixed: 0 } };
+      await api.patchInstanceGroupManager(group._zoneScope, group.name, body);
+      notify.success(rollout === "all-now"
+        ? `Rolling-replaced every instance in "${group.name}" onto "${template}"`
+        : `Updated the instance template for "${group.name}" — new instances only`);
+      onUpdated();
+      onClose();
+    } catch (e) { setError(e); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Dialog open={!!group} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Change instance template</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 0.5 }}>
+          {error && <Alert severity="error"><b>{error.code || "Error"}</b>: {error.message}</Alert>}
+          <FormControl fullWidth>
+            <InputLabel id="ig-ut-tpl-l">Instance template</InputLabel>
+            <Select labelId="ig-ut-tpl-l" label="Instance template" value={template} onChange={(e) => setTemplate(e.target.value)}>
+              {templates.map((t) => <MenuItem key={t.name} value={t.name}>{t.name}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <FormControl>
+            <RadioGroup value={rollout} onChange={(e) => setRollout(e.target.value)} aria-label="Apply to">
+              <FormControlLabel value="new-only" control={<Radio size="small" />} label="New VM instances only" />
+              <FormControlLabel value="all-now" control={<Radio size="small" />} label="All VM instances now (rolling replace)" />
+            </RadioGroup>
+          </FormControl>
+          {rollout === "all-now" && (
+            <Typography variant="body2" color="text.secondary">
+              Every instance in the group is recreated from the new template, one at a time (max surge 1, max unavailable 0).
+            </Typography>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" disabled={busy || !template} onClick={submit}>{busy ? "Updating…" : "Update"}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export default function InstanceGroups() {
   const notify = useNotify();
   const project = useProject();
@@ -166,6 +228,7 @@ export default function InstanceGroups() {
   const [del, setDel] = useState(false);
   const [create, setCreate] = useState(false);
   const [resize, setResize] = useState(null);
+  const [updateTpl, setUpdateTpl] = useState(null);
   const [menu, setMenu] = useState(null);
   const { data = [], loading, error, reload } = useAsync(async () => {
     const [unmanaged, managed] = await Promise.all([api.listInstanceGroupsAllZones(), api.listInstanceGroupManagersAllZones()]);
@@ -222,9 +285,11 @@ export default function InstanceGroups() {
       <CreateDialog open={create} onClose={() => setCreate(false)} onCreated={reload} />
       <Menu anchorEl={menu?.el} open={!!menu} onClose={() => setMenu(null)}>
         <MenuItem onClick={() => { setResize(menu.group); setMenu(null); }}>Edit group size</MenuItem>
+        <MenuItem onClick={() => { setUpdateTpl(menu.group); setMenu(null); }}>Change instance template</MenuItem>
         <MenuItem onClick={() => { setSel([`${menu.group._zoneScope}/${menu.group.name}`]); setMenu(null); setDel(true); }}>Delete</MenuItem>
       </Menu>
       <ResizeDialog group={resize} onClose={() => setResize(null)} onResized={reload} />
+      <UpdateTemplateDialog group={updateTpl} onClose={() => setUpdateTpl(null)} onUpdated={reload} />
       <DeleteDialog
         open={del}
         onClose={() => setDel(false)}

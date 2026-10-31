@@ -23,9 +23,11 @@ Resources (v1 discovery doc, subset the v4 console needs):
 Methods: insert/get/list/delete/aggregatedList per collection, instances.start/stop/suspend/
 resume/reset/setLabels/setMetadata/setDeletionProtection/setMachineType, disks.createSnapshot,
 instanceGroups.addInstances/removeInstances/listInstances, instanceGroupManagers.resize/
-listManagedInstances (member instances are really created/deleted from the instance template;
-autoscaling policies and rolling updates are not modeled — resize is the only lever),
-projects.setCommonInstanceMetadata.
+listManagedInstances/patch (member instances are really created/deleted from the instance
+template; resize always uses it, and patch(updatePolicy.type=PROACTIVE) rolling-replaces
+every existing member honoring maxSurge/maxUnavailable — the OPPORTUNISTIC default only
+changes the template for members created afterwards, like the real API. Autoscaling policies
+are not modeled — there's no real load for one to react to), projects.setCommonInstanceMetadata.
 Every mutation returns a completed `Operation` (status DONE) like a very fast real cloud;
 errors use the Google JSON shape `{"error":{"code","message","status"}}` (the same
 simplification gcp_cloudsql_core and gcp_container_core use for these older-style APIs).
@@ -800,9 +802,10 @@ def delete_instance_group(store, project, zone, name):
 
 # ── instance groups (managed) ─────────────────────────────────────────────────
 # A managed instance group holds a fixed-size pool of instances stamped out of an instance
-# template; resize() creates/deletes real instances to match targetSize. Autoscaling policies
-# and rolling-update (max-surge/max-unavailable) orchestration are not modeled — resize is the
-# only way the member count changes, exactly like gcp.compute.instance_groups.crud declares.
+# template; resize() creates/deletes real instances to match targetSize, and patch() can
+# rolling-replace every member onto a new template (see _rolling_replace_members). Autoscaling
+# policies are not modeled — there's no real load for one to react to, exactly like
+# gcp.compute.instance_groups.crud declares.
 def _mig(store, project, zone, name):
     full = "projects/%s/zones/%s/instanceGroupManagers/%s" % (project, zone, name)
     return full, _get(store, store.instance_group_managers, full, "instanceGroupManager")
@@ -810,6 +813,17 @@ def _mig(store, project, zone, name):
 
 def _mig_view(mgr):
     return {k: x for k, x in mgr.items() if not k.startswith("_")}
+
+
+def _resolve_mig_template(store, project, tpl_ref):
+    tpl_name = _last(tpl_ref or "")
+    tpl_full = "projects/%s/global/instanceTemplates/%s" % (project, tpl_name)
+    tpl = store.instance_templates.get(tpl_full)
+    if not tpl:
+        raise _E(400, "INVALID_ARGUMENT", "The instance template '%s' was not found." % tpl_name)
+    if not any(d.get("initializeParams") or d.get("source") for d in (tpl["properties"].get("disks") or [])):
+        raise _E(400, "INVALID_ARGUMENT", "Instance template '%s' has no boot disk configured." % tpl_name)
+    return tpl_full
 
 
 def insert_instance_group_manager(store, project, zone, payload):
@@ -822,13 +836,7 @@ def insert_instance_group_manager(store, project, zone, payload):
         raise _E(409, "ALREADY_EXISTS", "The resource '%s' already exists." % full)
     base_name = payload.get("baseInstanceName") or name
     _check_name(base_name, "baseInstanceName")
-    tpl_name = _last(payload.get("instanceTemplate") or "")
-    tpl_full = "projects/%s/global/instanceTemplates/%s" % (project, tpl_name)
-    tpl = store.instance_templates.get(tpl_full)
-    if not tpl:
-        raise _E(400, "INVALID_ARGUMENT", "The instance template '%s' was not found." % tpl_name)
-    if not any(d.get("initializeParams") or d.get("source") for d in (tpl["properties"].get("disks") or [])):
-        raise _E(400, "INVALID_ARGUMENT", "Instance template '%s' has no boot disk configured." % tpl_name)
+    tpl_full = _resolve_mig_template(store, project, payload.get("instanceTemplate"))
     now = _ts()
     grp_full = "projects/%s/zones/%s/instanceGroups/%s" % (project, zone, name)
     members: list = []
@@ -840,6 +848,7 @@ def insert_instance_group_manager(store, project, zone, payload):
         "description": payload.get("description", ""), "creationTimestamp": now, "selfLink": _selflink(full),
         "currentActions": {"none": 0, "creating": 0, "deleting": 0, "recreating": 0, "restarting": 0, "refreshing": 0, "abandoning": 0, "creatingWithoutRetries": 0, "verifying": 0},
         "status": {"isStable": True}, "members": members, "_zone": zone, "_seq": 0,
+        "updatePolicy": payload.get("updatePolicy") or {"type": "OPPORTUNISTIC", "minimalAction": "REPLACE", "maxSurge": {"fixed": 1}, "maxUnavailable": {"fixed": 0}},
     }
     store.instance_group_managers[full] = mgr
     store.instance_groups[grp_full] = {
@@ -892,6 +901,50 @@ def resize_instance_group_manager(store, project, zone, name, new_size):
     if grp:
         grp["size"] = len(mgr["members"])
     return _operation(store, project, zone, "resize", name, _selflink(full))
+
+
+def _rolling_replace_members(store, project, zone, mgr):
+    """Replace every current member with a fresh instance stamped from the manager's
+    CURRENT instance template, batching the create-then-retire sequence by
+    updatePolicy.maxSurge/maxUnavailable — what instanceGroupManagers.patch(updatePolicy.
+    type=PROACTIVE) drives on the real API (gcloud's `rolling-action start-update` /
+    the console's "Apply to all instances now"). OPPORTUNISTIC patches never call this —
+    only new members (created by a later resize) pick up the new template, exactly like
+    the real default."""
+    policy = mgr.get("updatePolicy") or {}
+    surge = int((policy.get("maxSurge") or {}).get("fixed", 1) or 0)
+    unavailable = int((policy.get("maxUnavailable") or {}).get("fixed", 0) or 0)
+    batch_size = max(surge, unavailable, 1)
+    stale = list(mgr["members"])
+    i = 0
+    while i < len(stale):
+        batch = stale[i:i + batch_size]
+        for _ in range(min(surge, len(batch))):
+            _create_mig_instance(store, project, zone, mgr)
+        for old_name in batch:
+            if old_name in mgr["members"]:
+                mgr["members"].remove(old_name)
+                ifull = "projects/%s/zones/%s/instances/%s" % (project, zone, old_name)
+                if ifull in store.instances:
+                    delete_instance(store, project, zone, old_name)
+            if not surge:
+                _create_mig_instance(store, project, zone, mgr)
+        i += len(batch)
+    mgr["targetSize"] = len(mgr["members"])
+    grp = store.instance_groups.get("projects/%s/zones/%s/instanceGroups/%s" % (project, zone, mgr["name"]))
+    if grp:
+        grp["size"] = len(mgr["members"])
+
+
+def patch_instance_group_manager(store, project, zone, name, payload):
+    full, mgr = _mig(store, project, zone, name)
+    if "instanceTemplate" in payload:
+        mgr["instanceTemplate"] = _selflink(_resolve_mig_template(store, project, payload["instanceTemplate"]))
+    if "updatePolicy" in payload:
+        mgr["updatePolicy"] = payload["updatePolicy"]
+    if (mgr.get("updatePolicy") or {}).get("type") == "PROACTIVE":
+        _rolling_replace_members(store, project, zone, mgr)
+    return _operation(store, project, zone, "patch", name, _selflink(full))
 
 
 def delete_instance_group_manager(store, project, zone, name):
@@ -1260,6 +1313,8 @@ def _zonal(store, method, project, zone, rest, verb, payload, query=None):
                 return _json(200, _mig_view(mgr))
             if method == "DELETE":
                 return _json(200, delete_instance_group_manager(store, project, zone, name))
+            if method == "PATCH":
+                return _json(200, patch_instance_group_manager(store, project, zone, name, payload))
         elif len(rest2) == 1 and verb:
             name = rest2[0]
             if verb == "resize" and method == "POST":

@@ -129,6 +129,8 @@ export const insertInstanceGroupManager = (zone, body) => restJson("POST", `${ba
 export const deleteInstanceGroupManager = (zone, name) => restJson("DELETE", `${base()}/zones/${e(zone)}/instanceGroupManagers/${e(name)}`);
 export const resizeInstanceGroupManager = (zone, name, size) =>
   restJson("POST", `${base()}/zones/${e(zone)}/instanceGroupManagers/${e(name)}:resize`, { query: { size } });
+export const patchInstanceGroupManager = (zone, name, body) =>
+  restJson("PATCH", `${base()}/zones/${e(zone)}/instanceGroupManagers/${e(name)}`, { body });
 
 // ── health checks ─────────────────────────────────────────────────────────────
 export const listHealthChecks = async () => (await restJson("GET", `${base()}/global/healthChecks`)).items || [];

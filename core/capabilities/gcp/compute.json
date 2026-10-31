@@ -53,11 +53,12 @@
  "gcp.compute.instance_groups.crud": {
   "title": "Instance groups (unmanaged and managed)",
   "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["Managed instance groups support a fixed target size stamped out of an instance template (resize really creates/deletes member instances); autoscaling policies and rolling-update (max-surge/max-unavailable) orchestration aren't simulated."],
+  "limitations": ["Autoscaling policies aren't simulated — there's no real request load for a policy to react to, so resize (manual, or a rolling update's own batch of creates/deletes) is the only way the member count changes."],
   "api": ["instanceGroups.insert", "instanceGroups.get", "instanceGroups.list", "instanceGroups.aggregatedList",
           "instanceGroups.delete", "instanceGroups.addInstances", "instanceGroups.removeInstances", "instanceGroups.listInstances",
           "instanceGroupManagers.insert", "instanceGroupManagers.get", "instanceGroupManagers.list", "instanceGroupManagers.aggregatedList",
-          "instanceGroupManagers.delete", "instanceGroupManagers.resize", "instanceGroupManagers.listManagedInstances"],
+          "instanceGroupManagers.delete", "instanceGroupManagers.resize", "instanceGroupManagers.listManagedInstances",
+          "instanceGroupManagers.patch"],
   "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.health_checks.crud": {
@@ -84,6 +85,10 @@
  "gcp.compute.observability": {
   "title": "Observability, recommendations and VM Manager",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Monitoring/Logging tabs, Recommender suggestions and VM Manager (Patch, OS policies, VM Extension Manager) aren't modeled."]
+  "limitations": [
+   "Vyomi's monitoring/logging core only charts metrics explicitly written to it — there's no request-metering engine tying a VM's real CPU/disk/network state to time series, so the Monitoring/Logging tabs would have nothing real to plot (the same boundary as gcp.storage.observability).",
+   "Recommender suggestions are AI-generated insights Vyomi does not generate.",
+   "VM Manager (Patch, OS policies, VM Extension Manager) is a separate product with no backend in Vyomi."
+  ]
  }
 }
