@@ -75,6 +75,18 @@ export const addLock = (rg, name, lockName, level, notes) =>
   restJson("PUT", `${locksPath(rg, name)}/${encodeURIComponent(lockName)}`, { query: q, body: { properties: { level, notes } } });
 export const removeLock = (rg, name, lockName) => restJson("DELETE", `${locksPath(rg, name)}/${encodeURIComponent(lockName)}`, { query: q });
 
+// Access control (IAM): Role assignments are a real ARM extension resource read scoped to
+// THIS Web App (plus its subscription/resource-group ancestors, real Azure's inherited-access
+// view) over the same generic Microsoft.Authorization/roleAssignments engine the Cosmos DB
+// account and VM blades use (core/azure_arm_core.py) — not every assignment in the
+// subscription. Roles stays subscription-wide, matching real Azure (built-in role definitions
+// are listed tenant-wide too).
+const AUTHZ_API_VERSION = "2022-04-01";
+export const listRoleAssignments = async (rg, name) =>
+  (await restJson("GET", `${SITES.path(rg, name)}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": AUTHZ_API_VERSION } })).value || [];
+export const listRoleDefinitions = async () =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": AUTHZ_API_VERSION } })).value || [];
+
 // Diagnostic settings: Microsoft.Insights/diagnosticSettings is a real ARM extension resource
 // scoped to ANY other resource's own id (core/azure_monitor_core.py), reached by re-entering
 // "providers" under the site's own path — the same shape Microsoft.Authorization/locks uses.

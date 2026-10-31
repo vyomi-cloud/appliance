@@ -12,17 +12,15 @@ import { ArrowClockwise20Regular, Delete20Regular, Save20Regular, ArrowSwap20Reg
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
-import { armType, locationLabel } from "../../kit/arm.js";
+import { locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { ErrorBar, Essentials, Glyph, KV, Loading, NotSimulatedContainer } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
-
-const ROLE_ASSIGNMENTS = armType("Microsoft.Authorization", "roleAssignments", "2022-04-01");
-const ROLE_DEFINITIONS = armType("Microsoft.Authorization", "roleDefinitions", "2022-04-01");
 
 /** Resource menu: [id, label] | {group, items}. Matches the real Web App blade's nav exactly
  * (labels double as the "{name} | Label" page titles the captured spec records). */
@@ -274,12 +272,17 @@ function ActivityLog({ rg, name }) {
 }
 
 // ── Access control (IAM) ─────────────────────────────────────────────────────────────────
-// Role assignments/definitions are the generic subscription-scoped Microsoft.Authorization
-// store (core/azure_iam_core.py) shared by every Azure resource — not filtered to this Web App.
+// Role assignments are a real ARM extension resource (Microsoft.Authorization/roleAssignments)
+// read scoped to THIS Web App (plus its subscription/resource-group ancestors, real Azure's
+// inherited-access view) over the same generic engine the Cosmos DB account and VM blades use
+// (core/azure_arm_core.py) — not every assignment in the subscription (azure.appservices.webapp.iam).
+// Roles stays subscription-wide, matching real Azure (built-in role definitions are listed
+// tenant-wide too). Check access / My access / Deny assignments / Classic administrators stay
+// honest gaps — Vyomi never evaluates or denies a console action based on a role assignment.
 function AccessControl({ a }) {
   const [tab, setTab] = useState("checkaccess");
-  const assignments = useAsync(() => ROLE_ASSIGNMENTS.list(), [a.id]);
-  const definitions = useAsync(() => ROLE_DEFINITIONS.list(), [a.id]);
+  const assignments = useAsync(() => api.listRoleAssignments(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const definitions = useAsync(() => api.listRoleDefinitions(), []);
   return (
     <>
       <div className="vy-panel-title">{a.name} | Access control (IAM)</div>
@@ -305,36 +308,38 @@ function AccessControl({ a }) {
         </div>
       )}
       {tab === "roleassignments" && (
-        <section className="vy-section">
-          <h3>Role assignments</h3>
-          <Input size="small" style={{ margin: "8px 0", width: 260 }} placeholder="Search by name or email" aria-label="Search by name or email" />
-          <table className="vy-grid"><thead><tr><th>Name</th><th>Type</th><th>Role</th><th>Scope</th><th>Condition</th></tr></thead>
-            <tbody>
-              {assignments.loading ? <tr><td colSpan={5}><Spinner size="tiny" /></td></tr> : (assignments.data || []).map((r) => (
-                <tr key={r.name}><td>{r.properties?.principalId}</td><td>{r.properties?.principalType}</td><td>{r.properties?.roleDefinitionId?.split("/").pop()}</td><td>{r.properties?.scope}</td><td>None</td></tr>
-              ))}
-              {!assignments.loading && !(assignments.data || []).length && <tr><td colSpan={5} className="vy-muted">No role assignments found for this scope.</td></tr>}
-            </tbody>
-          </table>
-        </section>
+        <div style={{ marginTop: 12 }}>
+          <CapabilityContainer id="azure.appservices.webapp.iam" title="Role assignments">
+            <Input size="small" style={{ margin: "8px 0", width: 260 }} placeholder="Search by name or email" aria-label="Search by name or email" />
+            <table className="vy-grid"><thead><tr><th>Name</th><th>Type</th><th>Role</th><th>Scope</th><th>Condition</th></tr></thead>
+              <tbody>
+                {assignments.loading ? <tr><td colSpan={5}><Spinner size="tiny" /></td></tr> : (assignments.data || []).map((r) => (
+                  <tr key={r.name}><td>{r.properties?.principalId}</td><td>{r.properties?.principalType}</td><td>{r.properties?.roleDefinitionId?.split("/").pop()}</td><td>{r.properties?.scope}</td><td>None</td></tr>
+                ))}
+                {!assignments.loading && !(assignments.data || []).length && <tr><td colSpan={5} className="vy-muted">No role assignments found for this scope.</td></tr>}
+              </tbody>
+            </table>
+          </CapabilityContainer>
+        </div>
       )}
       {tab === "roles" && (
-        <section className="vy-section">
-          <h3>Roles</h3>
-          <table className="vy-grid"><thead><tr><th>Role</th><th>Type</th><th>Description</th><th>Assignments</th></tr></thead>
-            <tbody>
-              {definitions.loading ? <tr><td colSpan={4}><Spinner size="tiny" /></td></tr> : (definitions.data || []).map((r) => (
-                <tr key={r.name}><td>{r.properties?.roleName}</td><td>{r.properties?.type}</td><td>{r.properties?.description}</td><td>{r.assignmentCount}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+        <div style={{ marginTop: 12 }}>
+          <CapabilityContainer id="azure.appservices.webapp.iam" title="Roles">
+            <table className="vy-grid"><thead><tr><th>Role</th><th>Type</th><th>Description</th><th>Assignments</th></tr></thead>
+              <tbody>
+                {definitions.loading ? <tr><td colSpan={4}><Spinner size="tiny" /></td></tr> : (definitions.data || []).map((r) => (
+                  <tr key={r.name}><td>{r.properties?.roleName}</td><td>{r.properties?.type}</td><td>{r.properties?.description}</td><td>{r.assignmentCount}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </CapabilityContainer>
+        </div>
       )}
       {tab === "denyassignments" && (
-        <section className="vy-section"><h3>Deny assignments</h3><p className="vy-muted">No deny assignments found for this scope.</p></section>
+        <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>
       )}
       {tab === "classicadministrators" && (
-        <section className="vy-section"><h3>Classic administrators</h3><p className="vy-muted">No classic administrators found.</p></section>
+        <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators" /></div>
       )}
     </>
   );
