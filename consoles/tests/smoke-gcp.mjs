@@ -691,6 +691,24 @@ try {
   check("Allow public access → setIamPolicy grants allUsers run.invoker", (runSvcPolicy.bindings || []).some((b) => b.role === "roles/run.invoker" && b.members?.includes("allUsers")));
   await shot("14-run-service-created");
 
+  // Cloud Run depth: editing a function-source service's Source tab and clicking "Save and
+  // redeploy" must actually redeploy — the native API cuts a real new revision — not just
+  // store the edited text on the service.
+  const RUNFN = `v4-gcp-run-fn-${Date.now() % 100000}`;
+  await page.goto(UI + "#/run/create");
+  await page.getByRole("radio", { name: "Use an inline editor to create a function" }).check();
+  await page.getByLabel("Service name").fill(RUNFN);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: RUNFN, exact: true }).waitFor({ timeout: 10000 });
+  await page.goto(UI + `#/run/detail/us-central1/${RUNFN}?tab=source`);
+  await page.getByRole("button", { name: "Edit source" }).click();
+  await page.getByLabel("Source files").fill("exports.handler = (event) => ({ redeployed: true });\n");
+  await page.getByRole("button", { name: "Save and redeploy" }).click();
+  await page.getByRole("button", { name: "Edit source" }).waitFor({ timeout: 10000 });
+  const runFnRevs = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${RUNFN}/revisions`);
+  check("editing Cloud Run function source redeploys a real new revision", (runFnRevs.revisions || []).length === 2, JSON.stringify(runFnRevs).slice(0, 200));
+  await shot("14b-run-source-redeployed");
+
   const RUNJOB = `v4-gcp-run-job-${Date.now() % 100000}`;
   await wire(`/v2/projects/vyomi-project/locations/us-central1/jobs?jobId=${RUNJOB}`, {
     method: "POST", headers: { "content-type": "application/json" },
@@ -700,6 +718,18 @@ try {
   await page.getByRole("cell", { name: RUNJOB, exact: true }).waitFor({ timeout: 10000 });
   check("job created over wire → shown in Cloud Run Jobs UI", true);
   await shot("14-run-jobs");
+
+  // Cloud Run depth: a Cloud Scheduler trigger added from the Job detail's Triggers tab
+  // really fires the job — "Run now" starts a real execution, not just a stored binding.
+  await page.goto(UI + `#/run/jobs/details/us-central1/${RUNJOB}?tab=triggers`);
+  await page.getByRole("button", { name: "Add trigger" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Run now" }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Run now" }).click();
+  await page.getByRole("cell", { name: "Succeeded" }).waitFor({ timeout: 10000 });
+  const runJobAfterTrigger = await wjson(`/v2/projects/vyomi-project/locations/us-central1/jobs/${RUNJOB}`);
+  check("Cloud Scheduler trigger really starts a Cloud Run job execution", runJobAfterTrigger.executionCount === 1, JSON.stringify(runJobAfterTrigger).slice(0, 200));
+  await shot("14c-run-job-trigger-fired");
 
   await page.goto(UI + "#/run/services");
   await page.getByRole("checkbox", { name: `Select ${RUNSVC}` }).check();

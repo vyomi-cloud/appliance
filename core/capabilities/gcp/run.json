@@ -72,9 +72,12 @@
    "offline": "limited"
   },
   "limitations": [
-   "Vyomi stores the entry point, runtime and source text on the service and returns them from the API exactly as configured, but does not build a container image or run the code; invocation is not simulated."
+   "\"Save and redeploy\" is enforced, not just stored: a source/runtime/entry-point edit changes the revision's image fingerprint, so the same revision-diff logic the Admin API uses for any template change cuts a real new revision (visible on the Revisions tab, traffic following it) exactly as a redeploy would.",
+   "For Python sources, Vyomi parses the code on create/update and rejects it the way a real build would fail: a syntax error or an entry point the source doesn't define returns a 400 instead of saving. Other runtimes are stored and returned as configured but not parsed.",
+   "Vyomi does not build a container image or run the code; there is no invocation (see Observability for the metrics/logs gap)."
   ],
   "api": [
+   "projects.locations.services.create",
    "projects.locations.services.patch"
   ],
   "tests": [
@@ -174,11 +177,20 @@
  "gcp.run.jobs.triggers": {
   "title": "Job triggers (Eventarc, Cloud Scheduler bindings shown on the job)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi has no Eventarc backend; jobs are started by jobs.run only."
+   "A Cloud Scheduler trigger is ENFORCED, not just displayed: \"Add trigger\" creates a Cloud Scheduler job whose httpTarget names this job's own Admin API v2 :run endpoint, and when that scheduler job fires (on its cron schedule, or via \"Run now\") the appliance's httpTarget delivery really calls jobs.run — a new execution starts, exactly like a real OIDC-authenticated Cloud Scheduler → Cloud Run Jobs binding.",
+   "Vyomi has no Eventarc backend, so event-based triggers (Pub/Sub, Storage, Audit Log events) are not modelled — only the Cloud Scheduler binding shown here."
+  ],
+  "api": [
+   "projects.locations.jobs.run"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_run_core.py",
+   "tests/conformance/test_gcp_cloudscheduler_core.py",
+   "tests/conformance/test_aws_wire_router.py"
   ]
  },
  "gcp.run.workerpools.crud": {

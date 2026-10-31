@@ -2,7 +2,7 @@
  * the `google-cloud-run` SDKs and the real console speak. Domain mappings use the v1
  * Knative-style facade (`apis/domains.cloudrun.com/v1/...`) because that resource has no v2
  * Admin API equivalent. */
-import { restJson } from "../../../common/wire.js";
+import { restJson, WIRE_BASE } from "../../../common/wire.js";
 import { getProject } from "../../project.js";
 
 const e = encodeURIComponent;
@@ -109,6 +109,29 @@ export const executionStatus = (ex) => {
   return "Running";
 };
 
+// ── job triggers (Cloud Scheduler bindings on this job's own :run endpoint) ───────────────
+// A trigger is a Cloud Scheduler job, in the same region, whose httpTarget names this job's
+// Admin API v2 :run endpoint. The appliance's httpTarget delivery (core/aws_wire_router.py
+// _sched_invoke) really calls it when the scheduler job fires, so "Add trigger" creates a
+// binding that genuinely starts an execution on schedule — not just a stored record.
+const schedulerBase = (region) => `/v1/projects/${e(getProject())}/locations/${e(region)}/jobs`;
+export const jobRunUri = (region, name) => `${location.origin}${WIRE_BASE}${base(region)}/jobs/${e(name)}:run`;
+export async function listJobTriggers(region, name) {
+  const uri = jobRunUri(region, name);
+  const r = await restJson("GET", schedulerBase(region));
+  return (r.jobs || []).filter((j) => j.httpTarget?.uri === uri);
+}
+export const createJobTrigger = (region, name, triggerId, schedule) => restJson("POST", schedulerBase(region), {
+  body: {
+    name: `projects/${getProject()}/locations/${region}/jobs/${triggerId}`,
+    schedule, timeZone: "Etc/UTC",
+    httpTarget: { uri: jobRunUri(region, name), httpMethod: "POST", oidcToken: { serviceAccountEmail: "default-compute@developer.gserviceaccount.com" } },
+  },
+});
+export const runJobTriggerNow = (region, triggerId) => restJson("POST", `${schedulerBase(region)}/${e(triggerId)}:run`);
+export const deleteJobTrigger = (region, triggerId) => restJson("DELETE", `${schedulerBase(region)}/${e(triggerId)}`);
+export const triggerId = (schedJob) => schedJob.name.split("/").pop();
+
 // ── worker pools ───────────────────────────────────────────────────────────────────────
 export async function listWorkerPools(region) {
   const r = await restJson("GET", `${base(region)}/workerPools`);
@@ -142,8 +165,31 @@ export const functionAnnotations = (runtime, entryPoint, source) => ({
   [ANN.runtime]: runtime, [ANN.entry]: entryPoint || "handler", [ANN.source]: source || "",
 });
 
-/** Deterministic pseudo-image for an inline-source "function" deploy (no real build). */
-export const functionImage = (runtime) => `vyomi.dev/function-source/${encodeURIComponent((runtime || "node").toLowerCase().replace(/[^a-z0-9.]+/g, "-"))}:latest`;
+function fnv1a(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+/** Deterministic pseudo-image for an inline-source "function" deploy (no real build). The tag
+ * is a fingerprint of entry point + source, so editing either changes the image and the Admin
+ * API's own revision-diff logic cuts a real new revision. */
+export const functionImage = (runtime, entryPoint, source) =>
+  `vyomi.dev/function-source/${encodeURIComponent((runtime || "node").toLowerCase().replace(/[^a-z0-9.]+/g, "-"))}:${fnv1a(`${entryPoint || ""} ${source || ""}`)}`;
+
+/** Save source/runtime/entry-point edits AND actually redeploy: the native API only cuts a new
+ * revision when the template (here, the container image) changes, so the pseudo-image tag is
+ * refreshed from the new source in the same patch that updates the annotations. */
+export function redeploySource(region, name, service, runtime, entryPoint, source) {
+  const template = JSON.parse(JSON.stringify(service.template));
+  template.containers[0].image = functionImage(runtime, entryPoint, source);
+  return patchService(region, name, {
+    annotations: { ...service.annotations, ...functionAnnotations(runtime, entryPoint, source) },
+    template,
+  }, "annotations,template");
+}
 
 export const DEFAULT_FUNCTION_SOURCE = {
   "Node.js 22": "exports.handler = (event) => {\n  return { message: \"hello from Cloud Run\" };\n};\n",

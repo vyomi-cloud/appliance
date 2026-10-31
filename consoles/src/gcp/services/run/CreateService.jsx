@@ -60,7 +60,7 @@ export default function CreateService({ query }) {
     setBusy(true); setError(null);
     try {
       const container = {
-        image: source === "function" ? api.functionImage(runtime) : image,
+        image: source === "function" ? api.functionImage(runtime, "handler", api.DEFAULT_FUNCTION_SOURCE[runtime] || "") : image,
         ports: [{ containerPort: Number(port) || 8080 }],
         resources: { limits: { cpu, memory }, cpuIdle: billing === "request", startupCpuBoost: cpuBoost },
       };
