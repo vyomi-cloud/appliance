@@ -734,7 +734,7 @@ class AwsWireRouter:
 
         if svc == "scheduler":   # native EventBridge Scheduler REST (/schedules, /schedule-groups)
             r = sched.dispatch(self.sched, method, path, query or {}, headers or {}, bytes(body),
-                                msg_store=self.msg, lam_store=self.lam)
+                                msg_store=self.msg, lam_store=self.lam, kinesis_store=self.kinesis, sfn_store=self.sfn)
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
@@ -845,7 +845,7 @@ class AwsWireRouter:
             elif svc == "secretsmanager":
                 r = secrets.dispatch(self.sec, target, payload)
             elif svc == "events":
-                r = events.dispatch(self.events, target, payload, lam_store=self.lam)
+                r = events.dispatch(self.events, target, payload, lam_store=self.lam, kinesis_store=self.kinesis, sfn_store=self.sfn)
             elif svc == "kinesis":
                 r = kinesis.dispatch(self.kinesis, target, payload)
             elif svc == "logs":

@@ -8,8 +8,9 @@ works. NO fastapi / boto3 / socket imports → loads under Pyodide.
 Vyomi has no background timer, so a schedule does not fire itself while nothing
 is looking. Instead — the same trick `gcp_cloudscheduler_core` uses for Cloud
 Scheduler — every dispatch call first ADVANCES: any ENABLED schedule whose
-computed next occurrence has passed gets delivered to its target (SQS/SNS/Lambda,
-via `eventbridge_core.deliver`) and its next occurrence recomputed. So a schedule
+computed next occurrence has passed gets delivered to its target (SQS/SNS/Lambda/
+Step Functions/Kinesis, via `eventbridge_core.deliver`) and its next occurrence
+recomputed. So a schedule
 really fires, exactly on time, as long as the console/API is polled after that
 time; it does not fire while the tab is closed. That limitation is documented in
 `core/capabilities/aws/eventbridge.json`.
@@ -193,7 +194,8 @@ def _epoch(dt: datetime | None) -> float | None:
     return dt.timestamp() if dt is not None else None
 
 
-def _advance(store: SchedulerStore, msg_store=None, lam_store=None, now: datetime | None = None):
+def _advance(store: SchedulerStore, msg_store=None, lam_store=None, now: datetime | None = None,
+             kinesis_store=None, sfn_store=None):
     """Fire every ENABLED schedule whose computed next run has passed."""
     now = now or _now_dt()
     for sched in store.schedules.values():
@@ -208,7 +210,8 @@ def _advance(store: SchedulerStore, msg_store=None, lam_store=None, now: datetim
         except Exception:
             payload = {"raw": tgt.get("Input")}
         if msg_store is not None:
-            eb.deliver(msg_store, lam_store, tgt.get("Arn", ""), json.dumps(payload), payload if isinstance(payload, dict) else {})
+            eb.deliver(msg_store, lam_store, tgt.get("Arn", ""), json.dumps(payload), payload if isinstance(payload, dict) else {},
+                       kinesis_store=kinesis_store, sfn_store=sfn_store)
         sched["last_run"] = _now_iso()
         one_time = sched["expr"].strip().startswith("at(")
         if one_time and sched.get("action_after_completion") == "DELETE":
@@ -321,11 +324,12 @@ _SCHEDULE_GROUP_ITEM = re.compile(r"^/schedule-groups/([^/]+)$")
 
 
 def dispatch(store: SchedulerStore, method: str, path: str, query: dict | None = None,
-             headers: dict | None = None, body: bytes = b"", msg_store=None, lam_store=None) -> SchedulerResponse:
+             headers: dict | None = None, body: bytes = b"", msg_store=None, lam_store=None,
+             kinesis_store=None, sfn_store=None) -> SchedulerResponse:
     query = query or {}
     method = (method or "GET").upper()
     try:
-        _advance(store, msg_store, lam_store)
+        _advance(store, msg_store, lam_store, kinesis_store=kinesis_store, sfn_store=sfn_store)
         payload = {}
         if body:
             try:

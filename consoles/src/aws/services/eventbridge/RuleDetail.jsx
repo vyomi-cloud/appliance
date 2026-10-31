@@ -69,7 +69,7 @@ function TargetsTab({ rule, reload }) {
         items={targets} selectionType="multi" selectedItems={sel} onSelectionChange={({ detail }) => setSel(detail.selectedItems)} trackBy="Id"
         columnDefinitions={[
           { id: "name", header: "Target Name", cell: (t) => t.Id },
-          { id: "type", header: "Type", cell: (t) => (t.Arn.includes(":sqs:") ? "SQS queue" : t.Arn.includes(":sns:") ? "SNS topic" : t.Arn.includes(":lambda:") ? "Lambda function" : "Other") },
+          { id: "type", header: "Type", cell: (t) => (t.Arn.includes(":sqs:") ? "SQS queue" : t.Arn.includes(":sns:") ? "SNS topic" : t.Arn.includes(":lambda:") ? "Lambda function" : t.Arn.includes(":states:") ? "Step Functions state machine" : t.Arn.includes(":kinesis:") ? "Kinesis stream" : "Other") },
           { id: "arn", header: "Arn", cell: (t) => t.Arn },
           { id: "input", header: "Input", cell: (t) => t.Input || "Matched event" },
         ]}

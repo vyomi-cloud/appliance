@@ -5,20 +5,22 @@ Speaks the native **EventBridge JSON protocol** (X-Amz-Target `AWSEvents.<Op>`,
 JSON body) so an unmodified boto3 `events` client works. NO fastapi / boto3 / socket
 imports → loads under Pyodide. Reuses the SAME MessagingStore seam as SQS/SNS
 (rules live in `store.event_rules`; delivery uses `sqs_core.enqueue` /
-`sns_core.publish_arn` / `lambda_core.invoke_by_arn`), so an event routed to a
-queue/topic/function is a real, receivable delivery, not a log line.
+`sns_core.publish_arn` / `lambda_core.invoke_by_arn` / `stepfunctions_core.op_start_execution` /
+`kinesis_core.put_record`), so an event routed to a queue/topic/function/state
+machine/stream is a real, receivable delivery, not a log line.
 
 Scope: event buses (default + custom), rules with event patterns + targets
-(enable/disable), PutEvents (pattern match → SQS/SNS/Lambda fan-out), archives +
-replay (a bounded per-bus event log stands in for AWS's unlimited archive
-retention — RetentionDays IS enforced within that bounded window, excluding
-events older than it from DescribeArchive/StartReplay; see the
+(enable/disable), PutEvents (pattern match → SQS/SNS/Lambda/Step Functions/Kinesis
+fan-out), archives + replay (a bounded per-bus event log stands in for AWS's
+unlimited archive retention — RetentionDays IS enforced within that bounded
+window, excluding events older than it from DescribeArchive/StartReplay; see the
 `eventbridge.archives` capability entry for the honest limitation on the window
 itself), tags. Event-pattern operators: exact value lists + {"prefix"},
 {"anything-but"}, {"exists"} — mirroring SNS filter policies.
 """
 from __future__ import annotations
 
+import base64
 import json
 import uuid
 from dataclasses import dataclass, field
@@ -28,6 +30,8 @@ from core.messaging_store import MessagingStore, REGION
 from core import sqs_core
 from core import sns_core as sns_mod
 from core import lambda_core as lam_mod
+from core import kinesis_core as kinesis_mod
+from core import stepfunctions_core as sfn_mod
 
 EVENT_LOG_MAX = 500  # per bus — bounds the archive/replay window (documented limitation)
 
@@ -151,8 +155,10 @@ def _match_pattern(pattern: dict, event: dict) -> bool:
     return True
 
 
-# ── delivery (SQS / SNS / Lambda — the three target types Vyomi backs) ─────
-def deliver(store, lam_store, arn: str, body_str: str, event_obj: dict, group_id=None) -> bool:
+# ── delivery (SQS / SNS / Lambda / Step Functions / Kinesis — the target
+#    types Vyomi backs; see eventbridge.rule.targets for the rest) ─────────
+def deliver(store, lam_store, arn: str, body_str: str, event_obj: dict, group_id=None,
+            kinesis_store=None, sfn_store=None, partition_key=None) -> bool:
     """Deliver one event to a target ARN. A substrate may own the SQS queues or the
     Lambda functions elsewhere (the offline appliance's opted-out handlers / its
     function registry): it then exposes `store.deliver_sqs(arn, body, attrs, group, dedup)`
@@ -181,6 +187,22 @@ def deliver(store, lam_store, arn: str, body_str: str, event_obj: dict, group_id
                 pass
         if lam_store is not None:
             return lam_mod.invoke_by_arn(lam_store, arn, event_obj)
+        return False
+    if ":states:" in arn and sfn_store is not None:
+        try:
+            sfn_mod.op_start_execution(sfn_store, {"stateMachineArn": arn, "input": body_str})
+            return True
+        except Exception:
+            return False
+    if ":kinesis:" in arn and kinesis_store is not None:
+        try:
+            kinesis_mod.put_record(kinesis_store, {
+                "StreamARN": arn, "PartitionKey": str(partition_key or "eventbridge")[:256],
+                "Data": base64.b64encode(body_str.encode()).decode(),
+            })
+            return True
+        except Exception:
+            return False
     return False  # target type Vyomi doesn't deliver to (stored, never invoked — see capability doc)
 
 
@@ -254,7 +276,8 @@ def _notify(store, *args) -> None:
             pass
 
 
-def _deliver_to_bus(store, lam_store, bus: str, envelope: dict, event_obj: dict) -> int:
+def _deliver_to_bus(store, lam_store, bus: str, envelope: dict, event_obj: dict,
+                     kinesis_store=None, sfn_store=None) -> int:
     """Match `envelope` against every ENABLED rule on `bus` and deliver to targets.
     Returns the count of (rule, target) deliveries attempted."""
     n = 0
@@ -266,7 +289,11 @@ def _deliver_to_bus(store, lam_store, bus: str, envelope: dict, event_obj: dict)
         for tgt in list(rule["targets"].values()):
             body_str = target_payload(dict(tgt, _rule_arn=rule.get("arn", "")), envelope)
             group = (tgt.get("SqsParameters") or {}).get("MessageGroupId")
-            deliver(store, lam_store, tgt["Arn"], body_str, event_obj, group_id=group)
+            pk_path = (tgt.get("KinesisParameters") or {}).get("PartitionKeyPath")
+            partition_key = _json_path(envelope, pk_path) if pk_path else None
+            deliver(store, lam_store, tgt["Arn"], body_str, event_obj, group_id=group,
+                    kinesis_store=kinesis_store, sfn_store=sfn_store,
+                    partition_key=partition_key or envelope.get("id"))
             _notify(store, "target", rule.get("name", ""), tgt.get("Id", ""), envelope)
             n += 1
     return n
@@ -446,7 +473,7 @@ def _list_rule_names_by_target(store, body):
 
 
 # ── operations: events ──────────────────────────────────────────────────────
-def _put_events(store, body, lam_store=None):
+def _put_events(store, body, lam_store=None, kinesis_store=None, sfn_store=None):
     entries_out = []
     for entry in body.get("Entries") or []:
         bus = str(entry.get("EventBusName", "default") or "default")
@@ -473,7 +500,7 @@ def _put_events(store, body, lam_store=None):
         log.append(envelope)
         del log[:-EVENT_LOG_MAX]
         _notify(store, "put", bus, envelope)
-        _deliver_to_bus(store, lam_store, bus, envelope, event_obj)
+        _deliver_to_bus(store, lam_store, bus, envelope, event_obj, kinesis_store=kinesis_store, sfn_store=sfn_store)
         entries_out.append({"EventId": event_id})
     store.persist()
     failed = sum(1 for e in entries_out if "ErrorCode" in e)
@@ -571,7 +598,7 @@ def _update_archive(store, body):
     return EventsResponse(body={"ArchiveArn": archive["arn"], "State": archive["state"], "CreationTime": archive["created"]})
 
 
-def _start_replay(store, body, lam_store=None):
+def _start_replay(store, body, lam_store=None, kinesis_store=None, sfn_store=None):
     name = str(body.get("ReplayName", "")).strip()
     if not name:
         raise _E("ValidationException", "ReplayName is required.")
@@ -593,7 +620,7 @@ def _start_replay(store, body, lam_store=None):
         event_obj = {"source": envelope.get("source"), "detail-type": envelope.get("detail-type"),
                      "detail": envelope.get("detail"), "account": store.account_id, "region": REGION}
         replay_envelope = dict(envelope, id=uuid.uuid4().hex, **{"replay-name": name})
-        _deliver_to_bus(store, lam_store, dest_bus, replay_envelope, event_obj)
+        _deliver_to_bus(store, lam_store, dest_bus, replay_envelope, event_obj, kinesis_store=kinesis_store, sfn_store=sfn_store)
         replayed += 1
     replay = {"name": name, "arn": f"arn:aws:events:{REGION}:{store.account_id}:replay/{name}",
               "source_arn": source_arn, "destination_arn": dest_arn, "state": "COMPLETED",
@@ -684,17 +711,19 @@ _OPS = {
 _NEEDS_LAMBDA = {"PutEvents", "StartReplay"}
 
 
-def dispatch(store: MessagingStore, target: str, payload: dict | None = None, lam_store=None) -> EventsResponse:
+def dispatch(store: MessagingStore, target: str, payload: dict | None = None, lam_store=None,
+              kinesis_store=None, sfn_store=None) -> EventsResponse:
     """Native EventBridge JSON router. `target` is the X-Amz-Target header,
-    e.g. "AWSEvents.PutEvents". `lam_store` (optional) is the Lambda function
-    registry, needed only to deliver to Lambda targets."""
+    e.g. "AWSEvents.PutEvents". `lam_store` / `kinesis_store` / `sfn_store` (all optional)
+    are the Lambda / Kinesis / Step Functions registries, needed only to deliver to
+    those target types."""
     body = payload if isinstance(payload, dict) else {}
     action = target.rsplit(".", 1)[-1] if target else ""
     try:
         if action == "PutEvents":
-            return _put_events(store, body, lam_store)
+            return _put_events(store, body, lam_store, kinesis_store, sfn_store)
         if action == "StartReplay":
-            return _start_replay(store, body, lam_store)
+            return _start_replay(store, body, lam_store, kinesis_store, sfn_store)
         op = _OPS.get(action)
         if op is None:
             return EventsResponse(status=400, body={"__type": "UnknownOperationException",
