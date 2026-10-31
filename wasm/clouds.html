@@ -2742,7 +2742,14 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       for (var i = 0; i < items.length; i++)
         items[i].classList.toggle('active', items[i].getAttribute('data-view') === view);
       try { localStorage.setItem('vyomi.appview', view); } catch (_) {}
+      // Keep the URL on the current view, so a refresh lands right back here (the
+      // boot code below restores the hash first). replaceState adds no history entries.
+      if (location.hash !== '#' + view) try { history.replaceState(history.state, '', location.pathname + location.search + '#' + view); } catch (_) {}
     }
+    window.addEventListener('hashchange', function () {   // a #view link on the page itself
+      var hv = (location.hash || '').replace('#', '');
+      if (APP_VIEWS[hv]) showAppView(hv);
+    });
     var _sideMQ = window.matchMedia('(max-width: 768px)');
     // The drawer (and its backdrop) start right below the sticky logo bar, so neither covers the other.
     function _placeSideDrawer() {
