@@ -25,6 +25,7 @@ GCP errors use the Google JSON API shape `{"error":{"code","message","status"}}`
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -470,8 +471,10 @@ def _insert_backup(store: SqlStore, project: str, instance: str, body: dict) -> 
     if not rec:
         return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
     backup_id = str(uuid.uuid4().int % 10_000_000_000)
+    now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
     b = {"id": backup_id, "project": project, "instance": instance, "type": "ON_DEMAND",
          "description": str(body.get("description", "")),
+         "enqueuedTime": now, "startTime": now, "endTime": now, "windowStartTime": now,
          # Point-in-time snapshot of the control-plane metadata this core manages, restored
          # by instances.restoreBackup. Row-level SQL data lives in the separate SQL data
          # plane (see module docstring) and isn't captured here.
@@ -593,6 +596,12 @@ def dispatch(store: SqlStore, method: str, path: str,
     # Colon-suffixed RPCs (instances.restart) arrive as "{instance}:restart" in one segment.
     instance_seg = segs[3]
     instance, verb = (instance_seg.split(":", 1) + [None])[:2] if ":" in instance_seg else (instance_seg, None)
+
+    # Native Admin API RPCs are path segments: POST .../instances/{i}/restart|restoreBackup
+    # (what gcloud / the client libraries send; the colon form is kept for older callers).
+    if len(segs) == 5 and verb is None and method == "POST" and segs[4] in ("restart", "restoreBackup"):
+        verb = segs[4]
+        segs = segs[:4]
 
     # /projects/{p}/instances/{i}  → single instance (+ colon RPCs)
     if len(segs) == 4:

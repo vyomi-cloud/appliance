@@ -12,7 +12,7 @@ export const getInstance = (name) => restJson("GET", `${base()}/${e(name)}`);
 export const insertInstance = (body) => restJson("POST", base(), { body });
 export const patchInstance = (name, body) => restJson("PATCH", `${base()}/${e(name)}`, { body });
 export const deleteInstance = (name) => restJson("DELETE", `${base()}/${e(name)}`);
-export const restartInstance = (name) => restJson("POST", `${base()}/${e(name)}:restart`);
+export const restartInstance = (name) => restJson("POST", `${base()}/${e(name)}/restart`);
 export const stopInstance = (name) => patchInstance(name, { settings: { activationPolicy: "NEVER" } });
 export const startInstance = (name) => patchInstance(name, { settings: { activationPolicy: "ALWAYS" } });
 
@@ -29,7 +29,7 @@ export const listBackups = async (instance) => (await restJson("GET", `${base()}
 export const insertBackup = (instance, body = {}) => restJson("POST", `${base()}/${e(instance)}/backupRuns`, { body });
 export const deleteBackup = (instance, id) => restJson("DELETE", `${base()}/${e(instance)}/backupRuns/${e(id)}`);
 export const restoreBackup = (instance, backupId) =>
-  restJson("POST", `${base()}/${e(instance)}:restoreBackup`, { body: { restoreBackupContext: { backupRunId: backupId } } });
+  restJson("POST", `${base()}/${e(instance)}/restoreBackup`, { body: { restoreBackupContext: { backupRunId: backupId } } });
 
 export const listOperations = async (instance) => (await restJson("GET", `/sql/v1beta4/projects/${e(getProject())}/operations`, { query: { instance } })).items || [];
 

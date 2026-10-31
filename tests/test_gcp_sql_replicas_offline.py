@@ -46,3 +46,22 @@ def test_read_replica_offline(client):
     assert client.post(f"{B}/{p}-rep/databases", json={"name": "nope"}).status_code == 400
     assert client.post(B, json={"name": f"{p}-rep2", "masterInstanceName": f"{p}-rep"}).status_code == 400
     assert client.post(B, json={"name": f"{p}-orphan", "masterInstanceName": "does-not-exist"}).status_code == 404
+
+
+def test_backup_and_restore_offline(client):
+    p = f"bk{uuid.uuid4().hex[:6]}"
+    client.post(B, json={"name": p, "databaseVersion": "POSTGRES_15", "region": "us-central1"})
+    client.post(f"{B}/{p}/databases", json={"name": "keepme"})
+    assert client.post(f"{B}/{p}/backupRuns", json={"description": "before"}).json()["operationType"] == "BACKUP_VOLUME"
+    runs = client.get(f"{B}/{p}/backupRuns").json()["items"]
+    assert len(runs) == 1 and runs[0]["status"] == "SUCCESSFUL"
+    bid = runs[0]["id"]
+    assert client.get(f"{B}/{p}/backupRuns/{bid}").json()["description"] == "before"
+    client.delete(f"{B}/{p}/databases/keepme")
+    assert client.get(f"{B}/{p}/databases").json()["items"] == []
+    r = client.post(f"{B}/{p}/restoreBackup", json={"restoreBackupContext": {"backupRunId": bid}})
+    assert r.json()["operationType"] == "RESTORE_VOLUME"
+    assert [d["name"] for d in client.get(f"{B}/{p}/databases").json()["items"]] == ["keepme"]
+    assert client.post(f"{B}/{p}/restoreBackup", json={"restoreBackupContext": {"backupRunId": "nope"}}).status_code == 404
+    client.delete(f"{B}/{p}/backupRuns/{bid}")
+    assert "items" not in client.get(f"{B}/{p}/backupRuns").json()

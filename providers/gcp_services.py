@@ -70,6 +70,11 @@ TARGETS = [
     "api_gcp_sql_get_database",
     "api_gcp_sql_create_database",
     "api_gcp_sql_delete_database",
+    "api_gcp_sql_insert_backup_run",
+    "api_gcp_sql_list_backup_runs",
+    "api_gcp_sql_get_backup_run",
+    "api_gcp_sql_delete_backup_run",
+    "api_gcp_sql_restore_backup",
     "api_gcp_pubsub_list_topics",
     "api_gcp_pubsub_create_topic",
     "api_gcp_pubsub_get_topic",
@@ -558,6 +563,88 @@ def api_gcp_sql_delete_database(project: str, instance: str, database: str):
     rec = _sql_instance_or_404(s, project, instance)
     rec["databases"] = [d for d in rec.get("databases", []) if d.get("name") != database]
     return s._gcp_sql_make_operation(project, instance, "DELETE_DATABASE")
+
+
+# ── Cloud SQL backup runs (gcp.sql.backups — same semantics as core/gcp_cloudsql_core on Nano):
+# an on-demand backupRun snapshots the instance's databases + users metadata; restoreBackup puts
+# that snapshot back (and onto the instance's read replicas). Row-level data on the backing
+# engine is not captured — the same honest limit the core documents.
+def _backup_view(project: str, instance: str, b: dict) -> dict:
+    s = _server()
+    return {"kind": "sql#backupRun", "id": b["id"], "project": project, "instance": instance,
+            "status": "SUCCESSFUL", "type": b.get("type", "ON_DEMAND"), "description": b.get("description", ""),
+            "enqueuedTime": b["time"], "startTime": b["time"], "endTime": b["time"], "location": "us",
+            "windowStartTime": b["time"],
+            "selfLink": f"{s._gcp_sql_root()}/projects/{project}/instances/{instance}/backupRuns/{b['id']}"}
+
+
+async def api_gcp_sql_insert_backup_run(project: str, instance: str, request: Request):
+    import uuid as _uuid
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    payload = payload if isinstance(payload, dict) else {}
+    b = {"id": str(_uuid.uuid4().int % 10_000_000_000), "type": "ON_DEMAND", "time": s._now(),
+         "description": str(payload.get("description") or ""),
+         "snapshot": {"databases": [dict(d) for d in rec.get("databases") or []],
+                      "users": [dict(u) for u in rec.get("users") or []]}}
+    rec.setdefault("_backup_runs", []).append(b)
+    return s._gcp_sql_make_operation(project, instance, "BACKUP_VOLUME")
+
+
+def api_gcp_sql_list_backup_runs(project: str, instance: str):
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    items = [_backup_view(project, instance, b) for b in reversed(rec.get("_backup_runs") or [])]
+    return {"kind": "sql#backupRunsList", **({"items": items} if items else {})}
+
+
+def _backup_or_404(rec: dict, backup_id: str) -> dict:
+    b = next((x for x in rec.get("_backup_runs") or [] if str(x["id"]) == str(backup_id)), None)
+    if b is None:
+        raise HTTPException(404, detail=f"The backupRun does not exist. BackupRun: {backup_id}")
+    return b
+
+
+def api_gcp_sql_get_backup_run(project: str, instance: str, backup_id: str):
+    s = _server()
+    project = _gcp_project_name(project)
+    return _backup_view(project, instance, _backup_or_404(_sql_instance_or_404(s, project, instance), backup_id))
+
+
+def api_gcp_sql_delete_backup_run(project: str, instance: str, backup_id: str):
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    b = _backup_or_404(rec, backup_id)
+    rec["_backup_runs"] = [x for x in rec["_backup_runs"] if x is not b]
+    return s._gcp_sql_make_operation(project, instance, "DELETE_BACKUP")
+
+
+async def api_gcp_sql_restore_backup(project: str, instance: str, request: Request):
+    s = _server()
+    project = _gcp_project_name(project)
+    rec = _sql_instance_or_404(s, project, instance)
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    ctx = (payload or {}).get("restoreBackupContext") or {}
+    source = str(ctx.get("instanceId") or instance).strip()
+    b = _backup_or_404(_sql_instance_or_404(s, project, source), str(ctx.get("backupRunId", "")).strip())
+    snap = b.get("snapshot") or {}
+    rec["databases"] = [dict(d) for d in snap.get("databases") or []]
+    rec["users"] = [dict(u) for u in snap.get("users") or []]
+    for r in rec.get("replicaNames") or []:                    # replicas mirror the primary
+        rep = gcp_sql_state.get("instances", {}).get(r)
+        if rep is not None:
+            rep["databases"] = [dict(d) for d in rec["databases"]]
+    return s._gcp_sql_make_operation(project, instance, "RESTORE_VOLUME")
 
 
 def _pubsub_mirror(s, kind: str, project: str, rid: str, payload: dict | None = None, delete: bool = False) -> None:

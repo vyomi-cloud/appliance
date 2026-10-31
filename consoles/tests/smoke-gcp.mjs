@@ -1065,8 +1065,10 @@ try {
   // Backup via UI → delete the database over the wire → Restore via UI brings it back
   // (gcp.sql.backups: backupRun snapshot + instances.restoreBackup).
   await page.goto(UI + `#/sql/instances/${SQLI}/backups`);
+  const backupPost = page.waitForResponse((r) => r.request().method() === "POST" && /\/backupRuns$/.test(r.url().split("?")[0]), { timeout: 15000 });
   await page.getByRole("button", { name: "Create backup" }).click();
-  await page.getByText("Just now").waitFor({ timeout: 10000 });
+  await backupPost;
+  await page.getByRole("button", { name: "Restore", exact: true }).first().waitFor({ timeout: 10000 });
   await wire(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}/databases/${SQLDB}`, { method: "DELETE" });
   await page.getByRole("button", { name: "Restore", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Restore", exact: true }).click();

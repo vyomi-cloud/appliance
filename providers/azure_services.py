@@ -800,7 +800,8 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             or (len(low0) >= 3 and low0[0] == "providers"
                 and ((low0[1] == "microsoft.subscription" and low0[2] == "rename")
                      or (low0[1] == "microsoft.resources" and low0[2] == "tags")
-                     or (low0[1] == "microsoft.authorization" and low0[2] == "locks")))):
+                     or (low0[1] == "microsoft.authorization"
+                         and low0[2] in ("locks", "roleassignments", "roledefinitions", "checkaccess"))))):
         return await _handle_core_arm(request, method, rest, base)
 
     # v4 C0f — resource groups themselves (collection / item with real tags + cascade
