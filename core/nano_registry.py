@@ -128,4 +128,5 @@ def get() -> dict:
         _REG["cw"].msg_store, _REG["cw"].lam_store = _REG["msg"], _REG["compute"]   # real SNS / Lambda alarm actions
         _REG["logs"].lam_store, _REG["logs"].kinesis_store = _REG["compute"], _REG["kinesis"]   # real subscription-filter delivery
         _REG["cw"].logs_store = _REG["logs"]   # real log-based Contributor Insights rules
+        _REG["msg"].logs_store = _REG["logs"]   # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
     return _REG
