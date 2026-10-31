@@ -224,6 +224,38 @@ def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
+def _tz_offset_minutes(tz_label: str) -> int:
+    """Parse the UTC offset embedded in an Azure-style display string, e.g.
+    '(UTC-08:00) Pacific Time (US & Canada)' -> -480. Bare 'UTC' / '(UTC) ...' -> 0
+    (no IANA/Windows tz database in stdlib, but every offset Azure shows is spelled
+    out in the label itself, so no database is needed)."""
+    m = re.match(r"\(UTC([+-]\d{2}):(\d{2})\)", tz_label or "")
+    if not m:
+        return 0
+    sign = 1 if m.group(1)[0] == "+" else -1
+    return sign * (int(m.group(1)[1:]) * 60 + int(m.group(2)))
+
+
+def _apply_auto_shutdown(rec: dict) -> None:
+    """azure.vms.auto_shutdown, ENFORCED: if the stored schedule's local time has already
+    passed today, flip the virtual machine's own logical power state to stopped — lazily, on
+    read, since there is no real background scheduler. `_autoShutdownFiredDate` is a
+    once-per-calendar-day guard: without it, a manual Start after the scheduled time would get
+    immediately re-stopped by the very next GET."""
+    sched = ((rec.get("properties") or {}).get("autoShutdown")) or {}
+    if not sched.get("enabled"):
+        return
+    try:
+        hh, mm = (int(x) for x in str(sched.get("time", "")).split(":")[:2])
+    except ValueError:
+        return
+    now_local = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=_tz_offset_minutes(sched.get("timeZone")))
+    today = now_local.date().isoformat()
+    if now_local.time() >= datetime.time(hh, mm) and rec.get("_autoShutdownFiredDate") != today:
+        rec.setdefault("properties", {})["powerState"] = "PowerState/stopped"
+        rec["_autoShutdownFiredDate"] = today
+
+
 # ── pure helpers (ported verbatim from azure_services) ─────────────────────
 def _set_path(obj: dict, dotted: str, value):
     parts = dotted.split(".")
@@ -395,6 +427,8 @@ def _parse_kv_secret_identifier(secret_id: str):
 
 
 def _view(rec: dict) -> dict:
+    if rec.get("_type", "").lower() == "microsoft.compute/virtualmachines":
+        _apply_auto_shutdown(rec)
     return {k: v for k, v in rec.items() if not k.startswith("_")}
 
 

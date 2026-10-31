@@ -1,10 +1,12 @@
 /* Virtual machine resource blade: left resource menu + panels. Overview, Tags, Locks, Activity
- * log (with an ENFORCED timespan picker), Size, Disks, Identity, Auto-shutdown, Connect, Network
- * settings (network interface +, when attached, its network security group's inbound/outbound
- * rules — the same engine the Network security groups console uses), Properties, Export template
- * (ARM/Bicep/Terraform, all generated client-side) and Access control (IAM)'s Role
- * assignments/Roles tabs (scoped to this VM over the same generic engine the Cosmos DB account
- * blade uses) are backed by real ARM calls; the remaining menu items are honest
+ * log (with an ENFORCED timespan picker), Size, Disks, Identity, Auto-shutdown (ENFORCED lazily
+ * on read — core/azure_arm_core.py flips the VM's own power state once the scheduled local time
+ * has passed, no real scheduler), Connect, Network settings (network interface + public IP, when
+ * one was requested at create time, +, when attached, its network security group's
+ * inbound/outbound rules — the same engine the Network security groups console uses), Properties,
+ * Export template (ARM/Bicep/Terraform, all generated client-side) and Access control (IAM)'s
+ * Role assignments/Roles tabs (scoped to this VM over the same generic engine the Cosmos DB
+ * account blade uses) are backed by real ARM calls; the remaining menu items are honest
  * CapabilityContainer gaps (core/capabilities/azure/vms.json is the single source of truth for
  * which). */
 import { useEffect, useState } from "react";
@@ -125,6 +127,13 @@ export default function VmBlade({ params }) {
 const osType = (a) => a.properties?.storageProfile?.osDisk?.osType || "Linux";
 const statusOf = (a) => (a.properties?.powerState || "PowerState/running").replace("PowerState/", "").replace(/^./, (c) => c.toUpperCase());
 const nicIdOf = (a) => a.properties?.networkProfile?.networkInterfaces?.[0]?.id;
+const publicIpIdOf = (nic) => nic?.properties?.ipConfigurations?.[0]?.properties?.publicIPAddress?.id;
+/** Fetches the public IP (Microsoft.Network/publicIPAddresses) the NIC's IP configuration
+ *  references, when one was requested at create time (azure.vms.networking) — null otherwise. */
+function usePublicIp(nic) {
+  const pipId = publicIpIdOf(nic);
+  return useAsync(() => (pipId ? api.getPublicIp(parseId(pipId).resourceGroup, parseId(pipId).name) : Promise.resolve(null)), [pipId]);
+}
 
 // ── Overview ───────────────────────────────────────────────────────────────────────────
 function Overview({ a, reload, self }) {
@@ -135,6 +144,7 @@ function Overview({ a, reload, self }) {
   const [gap, setGap] = useState(null);
   const [tab, setTab] = useState("properties");
   const nic = useAsync(() => (nicIdOf(a) ? api.getNic(parseId(nicIdOf(a)).resourceGroup, parseId(nicIdOf(a)).name) : Promise.resolve(null)), [nicIdOf(a)]);
+  const pip = usePublicIp(nic.data);
   const tags = Object.entries(a.tags || {});
   const ipc = nic.data?.properties?.ipConfigurations?.[0]?.properties;
   const subnetId = ipc?.subnet?.id;
@@ -174,7 +184,7 @@ function Overview({ a, reload, self }) {
         ]}
         right={[
           ["Size", a.properties?.hardwareProfile?.vmSize],
-          ["Public IP address", "--"],
+          ["Public IP address", pip.data?.properties?.ipAddress || "--"],
           ["Virtual network/subnet", subnetId ? `${parseId(subnetId).name ? subnetId.split("/").slice(-3, -2)[0] : "--"}/${parseId(subnetId).name}` : "--"],
           ["DNS name", "--"],
           ["Health state", "Healthy"],
@@ -189,7 +199,7 @@ function Overview({ a, reload, self }) {
         <Tab value="recommendations">Recommendations</Tab>
         <Tab value="tutorials">Tutorials</Tab>
       </TabList>
-      {tab === "properties" && <PropertiesTabPanel a={a} nic={nic.data} />}
+      {tab === "properties" && <PropertiesTabPanel a={a} nic={nic.data} pip={pip.data} />}
       {tab === "monitoring" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vms.monitoring" title="Monitoring" /></div>}
       {tab === "capabilities" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vms.tools" title="Capabilities" /></div>}
       {tab === "recommendations" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vms.tools" title="Recommendations" /></div>}
@@ -213,7 +223,7 @@ function Overview({ a, reload, self }) {
   );
 }
 
-function PropertiesTabPanel({ a, nic }) {
+function PropertiesTabPanel({ a, nic, pip }) {
   const ipc = nic?.properties?.ipConfigurations?.[0]?.properties;
   const sp = a.properties?.storageProfile || {};
   const vmSize = a.properties?.hardwareProfile?.vmSize;
@@ -238,7 +248,7 @@ function PropertiesTabPanel({ a, nic }) {
       </section>
       <section className="vy-section"><h3>Networking</h3>
         <div className="vy-props">
-          <KV label="Public IP address" value="--" />
+          <KV label="Public IP address" value={pip?.properties?.ipAddress || "--"} />
           <KV label="Private IP address" value={ipc?.privateIPAddress} />
           <KV label="Virtual network/subnet" value={ipc?.subnet?.id ? parseId(ipc.subnet.id).name : "--"} />
           <KV label="DNS name" value="--" />
@@ -755,9 +765,11 @@ function Connect({ a }) {
   const [gap, setGap] = useState(null);
   const nicId = nicIdOf(a);
   const nic = useAsync(() => (nicId ? api.getNic(parseId(nicId).resourceGroup, parseId(nicId).name) : Promise.resolve(null)), [nicId]);
+  const pip = usePublicIp(nic.data);
   const privateIp = nic.data?.properties?.ipConfigurations?.[0]?.properties?.privateIPAddress;
+  const publicIp = pip.data?.properties?.ipAddress;
   const user = a.properties?.osProfile?.adminUsername;
-  const cmd = `ssh ${user}@${privateIp || "<no private ip>"}`;
+  const cmd = `ssh ${user}@${publicIp || privateIp || "<no public ip>"}`;
   const cap = capability("azure.vms.connect");
   return (
     <>
@@ -765,7 +777,7 @@ function Connect({ a }) {
       <section className="vy-section">
         <div className="vy-props">
           <KV label="Admin username" value={user} />
-          <KV label="Public IP address" value="--" />
+          <KV label="Public IP address" value={publicIp || "--"} />
           <KV label="Port" value="22" />
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -886,6 +898,7 @@ function NetworkSettings({ a }) {
   const [tab, setTab] = useState("inbound");
   const nicId = nicIdOf(a);
   const nic = useAsync(() => (nicId ? api.getNic(parseId(nicId).resourceGroup, parseId(nicId).name) : Promise.resolve(null)), [nicId]);
+  const pip = usePublicIp(nic.data);
   const ipc = nic.data?.properties?.ipConfigurations?.[0]?.properties;
   const nsgId = nic.data?.properties?.networkSecurityGroup?.id;
   const nsgName = nsgId ? parseId(nsgId).name : null;
@@ -896,7 +909,7 @@ function NetworkSettings({ a }) {
           <KV label="Network interface" value={nic.data?.name} />
           <KV label="IP configuration" value="ipconfig1" />
           <KV label="Virtual network/subnet" value={ipc?.subnet?.id ? parseId(ipc.subnet.id).name : "--"} />
-          <KV label="Public IP" value="--" />
+          <KV label="Public IP" value={pip.data?.properties?.ipAddress || "--"} />
           <KV label="Private IP" value={ipc?.privateIPAddress} />
           <KV label="Accelerated networking" value={nic.data?.properties?.enableAcceleratedNetworking ? "Enabled" : "Disabled"} />
         </div>

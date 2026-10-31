@@ -2222,6 +2222,8 @@ try {
   await page.getByLabel("Virtual machine name", { exact: true }).fill(VM);
   await page.getByLabel("Username", { exact: true }).fill("azureuser");
   await page.getByLabel("Size", { exact: true }).selectOption("Standard_B1s");   // within the offline Free tier's size cap
+  await page.getByRole("tab", { name: "Networking" }).click();
+  await page.getByLabel("Public IP", { exact: true }).selectOption({ label: `(new) ${VM}-ip` });
   await page.getByRole("button", { name: "Review + create" }).click();
   await page.getByText("Validation passed").waitFor({ timeout: 5000 });
   await shot("29-vm-create-review");
@@ -2231,6 +2233,21 @@ try {
   check("UI create virtual machine → visible over native ARM", vmGet.status === 200, `HTTP ${vmGet.status}`);
   await shot("30-vm-overview");
 
+  // ── Public IP requested in the create wizard → real Microsoft.Network/publicIPAddresses
+  // resource, referenced from the NIC and shown in the UI (azure.vms.networking) ───────────
+  const pipGet = await arm("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Network/publicIPAddresses/${VM}-ip`);
+  const pipIp = pipGet.status === 200 ? JSON.parse(pipGet.text).properties?.ipAddress : null;
+  check("UI-requested public IP is a real ARM resource with a real address", pipGet.status === 200 && /^\d+\.\d+\.\d+\.\d+$/.test(pipIp || ""), pipGet.text.slice(0, 160));
+  await page.getByText(pipIp || "no-pip").first().waitFor({ timeout: 10000 });
+  check("Overview shows the real public IP address (not '--')", true);
+  await page.goto(UI + `#/vms/${DEFAULT_RG}/${VM}/connect`);
+  await page.getByText(pipIp || "no-pip").first().waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Native SSH", exact: true }).click();
+  const sshCmdText = (await page.locator("p").filter({ hasText: "ssh azureuser@" }).first().innerText());
+  check("Connect's SSH command uses the real public IP", sshCmdText.includes(pipIp || "\0"), sshCmdText);
+  await page.getByRole("button", { name: "Close" }).click();
+  await page.goto(UI + `#/vms/${DEFAULT_RG}/${VM}`);
+
   // ── Start / Stop from the Overview command bar → power state over native ARM ──────────
   await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Stop", exact: true }).click();
   await page.getByText("Stop succeeded").waitFor({ timeout: 10000 });
@@ -2239,6 +2256,20 @@ try {
   await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Start", exact: true }).click();
   await page.getByText("Start succeeded").waitFor({ timeout: 10000 });
   await shot("31-vm-power");
+
+  // ── Auto-shutdown schedule saved from the Auto-shutdown settings page is ENFORCED lazily on
+  // read (core/azure_arm_core.py): a schedule a few minutes in the past flips the VM's own
+  // power state to stopped with no real scheduler (azure.vms.auto_shutdown) ─────────────────
+  await page.goto(UI + `#/vms/${DEFAULT_RG}/${VM}/autoshutdown`);
+  const pastLocal = new Date(Date.now() - 5 * 60000);
+  await page.getByRole("radiogroup", { name: "Enabled" }).getByRole("radio", { name: "On" }).check();
+  await page.getByLabel("Scheduled shutdown", { exact: true }).fill(`${String(pastLocal.getUTCHours()).padStart(2, "0")}:${String(pastLocal.getUTCMinutes()).padStart(2, "0")}`);
+  await page.getByLabel("Time zone", { exact: true }).selectOption("UTC");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText("Save succeeded").waitFor({ timeout: 10000 });
+  await page.goto(UI + `#/vms/${DEFAULT_RG}/${VM}`);
+  await page.getByText("Stopped", { exact: true }).first().waitFor({ timeout: 10000 });
+  check("auto-shutdown schedule already past today is ENFORCED on the Overview's own status", true);
 
   // ── Access control (IAM): a role assignment created over the wire (subscription-wide, same
   // honest scoping as the Cosmos DB account blade) is read back on the VM's own IAM tab ──────

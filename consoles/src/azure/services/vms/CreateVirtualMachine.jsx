@@ -1,7 +1,8 @@
 /* Create a virtual machine: Basics, Disks, Networking, Management, Monitoring, Advanced, Tags,
- * Review + create. One native ARM PUT for the virtual machine, plus the network interface (and,
- * when a network security group is requested, the security group + its inbound rule) it
- * references — see api.js's toVmBody/toNicBody/toNsgBody and core/capabilities/azure/vms.json. */
+ * Review + create. One native ARM PUT for the virtual machine, plus the network interface it
+ * references (and, when requested, a real Microsoft.Network/publicIPAddresses resource the NIC's
+ * IP configuration points at, and/or a network security group + its inbound rule) — see api.js's
+ * toVmBody/toNicBody/toPublicIpBody/toNsgBody and core/capabilities/azure/vms.json. */
 import { useState } from "react";
 import { Checkbox, Input, Link, Radio, RadioGroup, Select, Textarea } from "@fluentui/react-components";
 import { useNotify } from "../../../common/notify.jsx";
@@ -238,6 +239,9 @@ export default function CreateVirtualMachine() {
       const ff = { ...f, resourceGroup: rg };
       const nicName = api.nicNameFor(f.name);
       const nicBody = api.toNicBody(ff);
+      if (f.publicIp !== "None") {
+        await api.putPublicIp(rg, api.publicIpNameFor(f.name), api.toPublicIpBody(ff));
+      }
       if (f.nicNsg !== "None") {
         const nsgName = api.nsgNameFor(f.name);
         await api.putNsg(rg, nsgName, api.toNsgBody(f));
