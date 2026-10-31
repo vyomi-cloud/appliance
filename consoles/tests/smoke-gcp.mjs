@@ -776,6 +776,40 @@ try {
   check("SLO error budget computed for real from written time series (not a '—' stub)", sloBudgetCells[2]?.trim() === "1", JSON.stringify(sloBudgetCells));
   await shot("13d-monitoring-slo-budget");
 
+  // Cloud Monitoring depth: the alert-evaluation engine (gcp.monitoring.incidents) opens a
+  // real incident when a policy's condition breaches stored time series — create the policy
+  // and write the breaching point over the wire, then the Alerts page (UI) must show it open;
+  // acknowledging it from the UI (the reverse direction) must round-trip back over the wire.
+  const ALERT_POLICY = `v4-gcp-smoke-alertpol-${Date.now() % 100000}`;
+  const ALERT_METRIC = `custom.googleapis.com/smoke-alert/${Date.now() % 100000}`;
+  const alertPolicyWire = await wjson(`/v3/projects/vyomi-project/alertPolicies`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ displayName: ALERT_POLICY, combiner: "OR", conditions: [{
+      displayName: "smoke breach", conditionThreshold: {
+        filter: `metric.type = "${ALERT_METRIC}" AND resource.type = "global"`, comparison: "COMPARISON_GT", thresholdValue: 10,
+      },
+    }] }),
+  });
+  await wjson(`/v3/projects/vyomi-project/timeSeries`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ timeSeries: [{
+      metric: { type: ALERT_METRIC }, resource: { type: "global", labels: { project_id: "vyomi-project" } },
+      points: [{ interval: { endTime: new Date().toISOString() }, value: { doubleValue: 99 } }],
+    }] }),
+  });
+  await page.goto(UI + "#/monitoring/alerting/alerts");
+  const alertRow = page.getByRole("row", { name: new RegExp(ALERT_POLICY) });
+  await alertRow.waitFor({ timeout: 10000 });
+  const alertCells = await alertRow.getByRole("cell").allTextContents();
+  check("breaching metric written over wire → open alert shown in UI", alertCells[0]?.trim() === "Open", JSON.stringify(alertCells));
+  await shot("13e-monitoring-alert-open");
+  await alertRow.getByRole("button", { name: /^Actions for/ }).click();
+  await page.getByRole("menuitem", { name: "Acknowledge" }).click();
+  await page.getByText("Open (acknowledged)").waitFor({ timeout: 10000 });
+  const incidentsFilter = encodeURIComponent(`policy_name = "${alertPolicyWire.name}"`);
+  const incidentsWire = await wjson(`/v3/projects/vyomi-project/incidents?filter=${incidentsFilter}`);
+  check("acknowledge via UI → native wire shows acknowledged", incidentsWire.incidents?.[0]?.acknowledged === true, JSON.stringify(incidentsWire));
+
   // Cloud Run functions: create a service via the UI → visible over the native Cloud Run
   // Admin API v2 wire, then the reverse (a job created over the wire shows up in the UI).
   const FN = `v4-gcp-fn-${Date.now() % 100000}`;

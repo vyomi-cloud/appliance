@@ -49,13 +49,21 @@ export default {
     } });
     return msg;
   },
+  // Creates a real alert policy AND writes a breaching custom-metric point, so the Alerts
+  // page's real incidents table (the alert-evaluation engine — see gcp.monitoring.incidents)
+  // shows this policy's name for real, not just the policy list.
   "mon-alertpolicy": async (wire, uniq) => {
     const name = `vy-policy-${uniq}`;
+    const metric = `custom.googleapis.com/vy/${uniq}`;
     await wire("POST", `/v3/projects/${PROJECT}/alertPolicies`, { svc: null, body: {
       displayName: name, conditions: [{ displayName: "cond", conditionThreshold: {
-        filter: 'metric.type="compute.googleapis.com/instance/cpu/utilization"', comparison: "COMPARISON_GT", thresholdValue: 0.8,
+        filter: `metric.type="${metric}" AND resource.type="global"`, comparison: "COMPARISON_GT", thresholdValue: 0.8,
       } }], combiner: "OR",
     } });
+    await wire("POST", `/v3/projects/${PROJECT}/timeSeries`, { svc: null, body: { timeSeries: [{
+      metric: { type: metric }, resource: { type: "global", labels: { project_id: PROJECT } },
+      points: [{ interval: { endTime: new Date().toISOString() }, value: { doubleValue: 0.95 } }],
+    }] } });
     return name;
   },
 };

@@ -54,6 +54,7 @@ class MonitoringStore:
         self.snoozes: dict = {}                 # full name -> Snooze (v1 API)
         self.services: dict = {}                # full name -> Service
         self.slos: dict = {}                    # full name -> ServiceLevelObjective (nested under a service)
+        self.incidents: dict = {}               # full name -> Incident (see evaluate_incidents)
 
 
 _SHARED: MonitoringStore | None = None
@@ -1163,11 +1164,15 @@ def delete_slo(store, project, sid, oid):
 _SLO_FILTER_RE = re.compile(r'^select_slo_(compliance|budget_fraction|health)\(\s*"([^"]+)"\s*\)$')
 
 
+def _ts_filter_allowed(l):
+    return l in ("metric.type", "resource.type", "project") or bool(re.match(
+        r"^(metric|resource)\.labels?\.", l)) or l.startswith("metadata.")
+
+
 def _sum_filtered_value(store, project, filt, start, end):
     if not str(filt or "").strip():
         return None
-    pred = compile_filter(filt, _ts_getter, lambda l: l in ("metric.type", "resource.type", "project") or re.match(
-        r"^(metric|resource)\.labels?\.", l) or l.startswith("metadata."))
+    pred = compile_filter(filt, _ts_getter, _ts_filter_allowed)
     total, seen = 0.0, False
     prefix = project + "|"
     for key, s in store.time_series.items():
@@ -1524,8 +1529,7 @@ def list_time_series(store, project, query):
     if view not in ("FULL", "HEADERS", "1"):
         raise _bad("Field view has an invalid value '%s'." % view)
     headers_only = view in ("HEADERS", "1")
-    pred = compile_filter(filt, _ts_getter, lambda l: l in ("metric.type", "resource.type", "project") or re.match(
-        r"^(metric|resource)\.labels?\.", l) or l.startswith("metadata."))
+    pred = compile_filter(filt, _ts_getter, _ts_filter_allowed)
     aligner = query.get("aggregation.perSeriesAligner") or "ALIGN_NONE"
     reducer = query.get("aggregation.crossSeriesReducer") or "REDUCE_NONE"
     aligner = _ENUM_NAMES["perSeriesAligner"].get(int(aligner), aligner) if str(aligner).isdigit() else aligner
@@ -1651,6 +1655,227 @@ def group_members(store, project, filt):
     return sorted(members, key=lambda x: (x["type"], sorted(x["labels"].items())))
 
 
+# ── incidents: the alert-policy rule-evaluation engine ──────────────────────
+# There is no public `incidents.list` method in the Monitoring v3 Discovery doc — incidents
+# only ever reach the outside world as the JSON payload Google documents for notification
+# channels (incident_id / state / started_at / ended_at / policy_name / condition_name / …,
+# see cloud.google.com/monitoring/support/notification-options#webhooks). We expose that same
+# documented shape as a project-scoped collection (`projects/{p}/incidents`), evaluated here
+# instead of delivered to a channel, so the console's Alerts page has real content instead of
+# an always-empty stub. Evaluated lazily (pull, on every incidents read) against the stored
+# time series — equivalent, for a synchronous wire API with no background clock, to a rule
+# engine that runs continuously.
+_COMPARATORS = {"COMPARISON_GT": lambda v, t: v > t, "COMPARISON_GE": lambda v, t: v >= t,
+                "COMPARISON_LT": lambda v, t: v < t, "COMPARISON_LE": lambda v, t: v <= t,
+                "COMPARISON_EQ": lambda v, t: v == t, "COMPARISON_NE": lambda v, t: v != t}
+_MIN_EVAL_WINDOW = 60.0   # seconds; a condition is evaluated against at least this much history
+
+
+def _threshold_breach_map(store, project, cond, now):
+    """-> {series_key: (breaching, series, value)} for a conditionThreshold condition, one
+    entry per matching time series (≈ one incident per breaching resource, like the real
+    engine). `breaching` requires every point inside the condition's `duration` window to
+    cross the threshold, not just the latest one — a sustained breach, like the real API."""
+    body = cond["conditionThreshold"]
+    cmp_fn = _COMPARATORS.get(body.get("comparison"))
+    if cmp_fn is None:
+        return {}
+    threshold = body.get("thresholdValue", 0)
+    duration = parse_duration(body.get("duration") or "0s")
+    aggs = body.get("aggregations") or []
+    aligner = (aggs[0].get("perSeriesAligner") if aggs else None) or "ALIGN_NONE"
+    period = parse_duration(aggs[0]["alignmentPeriod"]) if aggs and aggs[0].get("alignmentPeriod") else 60.0
+    window = max(duration, period, _MIN_EVAL_WINDOW)
+    start = now - timedelta(seconds=window)
+    try:
+        pred = compile_filter(body.get("filter") or "", _ts_getter, _ts_filter_allowed)
+    except _E:
+        return {}
+    out, prefix = {}, project + "|"
+    for key, s in store.time_series.items():
+        if not key.startswith(prefix) or not pred(s):
+            continue
+        pts = [p for p in s["points"] if start <= parse_ts(p["interval"]["endTime"]) <= now]
+        vals = [(p, _num(p["value"])) for p in pts]
+        vals = [(p, v) for p, v in vals if v is not None]
+        if not vals:
+            continue
+        value = _reduce(aligner, [v for _, v in vals]) if aligner != "ALIGN_NONE" else vals[-1][1]
+        breaching = cmp_fn(value, threshold) and (duration <= 0 or all(cmp_fn(v, threshold) for _, v in vals))
+        out[key] = (bool(breaching), s, value)
+    return out
+
+
+def _absent_breach_map(store, project, cond, now):
+    """-> {series_key: (breaching, series, None)} for a conditionAbsent condition. Only
+    series that have reported at least one point are considered — a metric Vyomi never wrote
+    any data for has no resource to say is silent, so it never opens an incident (unlike,
+    say, an uptime check that was configured but never probed going "absent" forever)."""
+    body = cond["conditionAbsent"]
+    duration = parse_duration(body.get("duration") or "0s")
+    try:
+        pred = compile_filter(body.get("filter") or "", _ts_getter, _ts_filter_allowed)
+    except _E:
+        return {}
+    out, prefix = {}, project + "|"
+    for key, s in store.time_series.items():
+        if not key.startswith(prefix) or not pred(s) or not s["points"]:
+            continue
+        last = parse_ts(s["points"][-1]["interval"]["endTime"])
+        out[key] = ((now - last).total_seconds() >= duration, s, None)
+    return out
+
+
+def _condition_breach_map(store, project, cond, now):
+    if "conditionThreshold" in cond:
+        return _threshold_breach_map(store, project, cond, now)
+    if "conditionAbsent" in cond:
+        return _absent_breach_map(store, project, cond, now)
+    return {}   # conditionMatchedLog / MQL / PromQL conditions are never evaluated (no log
+                # ingestion or query-language engine) — see gcp.monitoring.incidents limitations
+
+
+def _policy_breach_map(store, project, p, now):
+    """Single-condition policies (the common case — every policy the console wizard builds
+    has exactly one) are tracked per matching resource. Multi-condition policies are combined
+    at the whole-policy level (AND/OR across each condition's "any resource breaching") into
+    one synthetic "__policy__" incident — Vyomi doesn't cross-match resources between
+    conditions the way AND_WITH_MATCHING_RESOURCE does on the real API."""
+    conds = p.get("conditions") or []
+    if len(conds) == 1:
+        return _condition_breach_map(store, project, conds[0], now)
+    maps = [_condition_breach_map(store, project, c, now) for c in conds]
+    any_breach = [any(v[0] for v in m.values()) for m in maps]
+    overall = all(any_breach) if (p.get("combiner") or "OR") in ("AND", "AND_WITH_MATCHING_RESOURCE") else any(any_breach)
+    sample = next((v for m in maps for v in m.values() if v[0]), (False, None, None))
+    return {"__policy__": (overall, sample[1], sample[2])}
+
+
+def _policy_snoozed(store, project, policy_name, now):
+    prefix = "projects/%s/snoozes/" % project
+    return any(policy_name in (s.get("criteria") or {}).get("policies", []) and _snooze_active(s, now)
+               for n, s in store.snoozes.items() if n.startswith(prefix))
+
+
+def _fmt_num(v):
+    if v is None:
+        return "no data"
+    return ("%.4g" % v) if isinstance(v, float) else str(v)
+
+
+def _incident_summary(p, cond, kind, value, threshold):
+    body = cond.get(kind) or {}
+    metric = _metric_of(body.get("filter")) or p.get("displayName", "")
+    if kind == "conditionThreshold":
+        word = {"COMPARISON_GT": "above", "COMPARISON_GE": "at or above", "COMPARISON_LT": "below",
+                "COMPARISON_LE": "at or below", "COMPARISON_EQ": "equal to", "COMPARISON_NE": "not equal to"
+                }.get(body.get("comparison"), "")
+        return "%s is %s the threshold (%s vs %s)" % (metric, word, _fmt_num(value), _fmt_num(threshold))
+    if kind == "conditionAbsent":
+        return "%s has not reported in at least %s" % (metric, body.get("duration") or "0s")
+    return cond.get("displayName") or p.get("displayName", "")
+
+
+def _incident_name(project, iid):
+    return "projects/%s/incidents/%s" % (project, iid)
+
+
+def _open_incident(store, project, p, cond, kind, rkey, series, value, now):
+    iid = _rand_id()
+    inc = {"name": _incident_name(project, iid), "incidentId": iid, "state": "OPEN", "acknowledged": False,
+           "policyName": p["name"], "policyDisplayName": p.get("displayName", ""),
+           "conditionName": cond.get("name", ""), "severity": p.get("severity") or "",
+           "summary": _incident_summary(p, cond, kind, value, (cond.get(kind) or {}).get("thresholdValue")),
+           "resource": _copy(series["resource"]) if series else {}, "metric": _copy(series["metric"]) if series else {},
+           "observedValue": value, "thresholdValue": (cond.get(kind) or {}).get("thresholdValue"),
+           "startedAt": _ts(now), "endedAt": None, "userLabels": _copy(p.get("userLabels") or {}),
+           "_resourceKey": rkey}
+    store.incidents[inc["name"]] = inc
+    return inc
+
+
+def _close_incident(inc, now):
+    inc["state"] = "CLOSED"
+    inc["endedAt"] = _ts(now)
+
+
+def evaluate_incidents(store, project, now=None):
+    """Sweep every alert policy in `project`, opening/closing incidents against the real
+    stored time series exactly as `_condition_breach_map` sees them right now. Idempotent and
+    cheap enough (bounded by MAX_POLICIES) to call on every incidents read."""
+    now = now or _now_dt()
+    prefix = "projects/%s/" % project
+    for name, p in list(store.alert_policies.items()):
+        if not name.startswith(prefix):
+            continue
+        open_by_key = {inc["_resourceKey"]: inc for inc in store.incidents.values()
+                       if inc["policyName"] == name and inc["state"] == "OPEN"}
+        conds = p.get("conditions") or []
+        if not p.get("enabled", True) or not conds:
+            for inc in open_by_key.values():
+                _close_incident(inc, now)
+            continue
+        bmap = _policy_breach_map(store, project, p, now)
+        snoozed = _policy_snoozed(store, project, name, now)
+        cond0 = conds[0]
+        kind0 = next((k for k in _CONDITION_KINDS if k in cond0), None)
+        seen = set()
+        for rkey, (breaching, series, value) in bmap.items():
+            seen.add(rkey)
+            existing = open_by_key.get(rkey)
+            if breaching and not existing and not snoozed:
+                _open_incident(store, project, p, cond0, kind0, rkey, series, value, now)
+            elif not breaching and existing:
+                _close_incident(existing, now)
+        for rkey, existing in open_by_key.items():
+            if rkey not in seen:
+                _close_incident(existing, now)
+
+
+def list_incidents(store, project, query):
+    prefix = "projects/%s/incidents/" % project
+    items = [_copy({k: v for k, v in i.items() if k != "_resourceKey"})
+             for n, i in store.incidents.items() if n.startswith(prefix)]
+    if query.get("filter"):
+        def getter(i, lhs):
+            return i.get(_snake_to_camel(lhs))
+        pred = compile_filter(query["filter"], getter, lambda l: _snake_to_camel(l) in ("state", "policyName", "severity"))
+        items = [i for i in items if pred(i)]
+    items.sort(key=lambda i: i["startedAt"], reverse=True)
+    return _paginate(items, query, "incidents", {"totalSize": len(items)})
+
+
+def _get_incident(store, project, iid):
+    i = store.incidents.get(_incident_name(project, iid))
+    if not i:
+        raise _E(404, "NOT_FOUND", "Incident %s does not exist." % _incident_name(project, iid))
+    return i
+
+
+def _incident_view(i):
+    return {k: v for k, v in i.items() if k != "_resourceKey"}
+
+
+def acknowledge_incident(store, project, iid):
+    i = _get_incident(store, project, iid)
+    i["acknowledged"] = True
+    return _incident_view(_copy(i))
+
+
+def _incidents(store, method, project, rest, verb, query):
+    evaluate_incidents(store, project)
+    if not rest:
+        if method == "GET":
+            return _json(200, list_incidents(store, project, query))
+        raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on incidents." % method)
+    if len(rest) == 1:
+        if verb == "acknowledge" and method == "POST":
+            return _json(200, acknowledge_incident(store, project, rest[0]))
+        if method == "GET" and not verb:
+            return _json(200, _copy(_incident_view(_get_incident(store, project, rest[0]))))
+    raise _E(404, "NOT_FOUND", "Unknown incident path.")
+
+
 # ── console views ──────────────────────────────────────────────────────────
 def _condition_summary(c):
     kind = next((k for k in _CONDITION_KINDS if k in c), None)
@@ -1706,10 +1931,15 @@ def policy_console_view(store, p):
         "last_modified": (p.get("mutationRecord") or {}).get("mutateTime", ""),
         "created": (p.get("creationRecord") or {}).get("mutateTime", ""),
         "created_by": (p.get("creationRecord") or {}).get("mutatedBy", ""),
-        "incidents": "0 open incidents",
+        "incidents": _incidents_text(store, p["name"]),
         "labels_text": ", ".join("%s=%s" % kv for kv in sorted((p.get("userLabels") or {}).items())) or "None",
     })
     return v
+
+
+def _incidents_text(store, policy_name):
+    n = sum(1 for i in store.incidents.values() if i.get("policyName") == policy_name and i.get("state") == "OPEN")
+    return "%d open incident%s" % (n, "" if n == 1 else "s")
 
 
 def console_view(store, p):
@@ -1717,6 +1947,11 @@ def console_view(store, p):
 
 
 def list_all(store, project=None):
+    """Console view of every policy, with `incidents` reflecting the real evaluation engine
+    (see evaluate_incidents) — swept fresh for every project represented, not left stale."""
+    now = _now_dt()
+    for pr in ({project} if project else {n.split("/")[1] for n in store.alert_policies}):
+        evaluate_incidents(store, pr, now)
     return [policy_console_view(store, p) for n, p in sorted(store.alert_policies.items())
             if project is None or n.startswith("projects/%s/" % project)]
 
@@ -1829,6 +2064,8 @@ def _dispatch(store, method, path, query, headers, body):
                 if not d:
                     raise _E(404, "NOT_FOUND", "Notification channel descriptor %s not found." % rest[0])
                 return _json(200, _with_project(d, project))
+        elif coll == "incidents":
+            return _incidents(store, method, project, rest, verb, query)
         elif coll == "services":
             return _services(store, method, project, rest, payload, query)
         elif coll == "groups":
