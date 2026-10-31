@@ -35,6 +35,7 @@ class SpaceLoggingStore(lg.LoggingStore):
     def __init__(self) -> None:           # no super().__init__: the state attrs are properties
         self._fallback = {k: t() for k, t in _KEYS.items()}
         self._clock = None
+        self.mon_store = None
 
     def _s(self) -> dict:
         return _slot() or self._fallback
@@ -51,6 +52,8 @@ class SpaceLoggingStore(lg.LoggingStore):
 
 
 _STORE = SpaceLoggingStore()
+from core import gcp_monitoring_core as _gmon   # noqa: E402
+_STORE.mon_store = _gmon.shared_store()   # Logs Storage "Create usage alert" mirrors live byte/entry counts into Monitoring
 
 
 def register(app: FastAPI) -> None:

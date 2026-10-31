@@ -129,6 +129,34 @@ export const SYSTEM_METRICS = [
   ["byte_count", "Count of bytes of logs ingested", "global"],
 ];
 
+// ── usage alerts (Logs Storage "Create usage alert" / "View usage data") ───
+// Hands off to Cloud Monitoring exactly like the real console: every entries:write mirrors
+// this project's live month-to-date byte/entry counts into Monitoring as the real system
+// metric logging.googleapis.com/byte_count (core/gcp_logging_core._sync_usage_metrics), so
+// these calls create a REAL AlertPolicy / read REAL timeSeries on core/gcp_monitoring_core.py.
+const USAGE_METRIC = "logging.googleapis.com/byte_count";
+const usageFilter = () => `metric.type = "${USAGE_METRIC}" AND resource.type = "global"`;
+
+export const createUsageAlert = (displayName, thresholdBytes) =>
+  restJson("POST", `/v3/projects/${e(proj())}/alertPolicies`, { body: {
+    displayName, combiner: "OR",
+    conditions: [{ displayName: `${displayName} condition`, conditionThreshold: {
+      filter: usageFilter(), comparison: "COMPARISON_GT", thresholdValue: Number(thresholdBytes), duration: "0s",
+    } }],
+  } });
+
+export const listUsageAlerts = async () =>
+  ((await restJson("GET", `/v3/projects/${e(proj())}/alertPolicies`, { query: { pageSize: 500 } })).alertPolicies || [])
+    .filter((p) => (p.conditions || []).some((c) => c.conditionThreshold?.filter === usageFilter()));
+
+export async function usageTimeSeries(days = 30) {
+  const end = new Date(), start = new Date(end.getTime() - days * 86400000);
+  const r = await restJson("GET", `/v3/projects/${e(proj())}/timeSeries`, { query: {
+    filter: usageFilter(), "interval.startTime": start.toISOString(), "interval.endTime": end.toISOString(),
+  } });
+  return r.timeSeries?.[0]?.points || [];
+}
+
 // ── log buckets + views (Logs Storage) ──────────────────────────────────────
 export const BUCKET_LOCATION = LOCATION;
 export const listBuckets = (location = LOCATION) =>
