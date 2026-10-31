@@ -44,11 +44,13 @@ async function blob(account, method, path, { query, headers = {}, body } = {}) {
 }
 const xml = (text) => (text ? xmlToObj(new DOMParser().parseFromString(text, "application/xml").documentElement) : {});
 
+const PUBLIC_ACCESS_LABEL = { blob: "Blob", container: "Container" };
 export async function listContainers(account) {
   const { text } = await blob(account, "GET", "", { query: { comp: "list" } });
-  return asList(xml(text).Containers?.Container).map((c) => ({ name: c.Name, modified: c.Properties?.["Last-Modified"], lease: c.Properties?.LeaseState, publicAccess: c.Properties?.PublicAccess || "Private" }));
+  return asList(xml(text).Containers?.Container).map((c) => ({ name: c.Name, modified: c.Properties?.["Last-Modified"], lease: c.Properties?.LeaseState, publicAccess: PUBLIC_ACCESS_LABEL[c.Properties?.PublicAccess] || "Private" }));
 }
-export const createContainer = (account, name) => blob(account, "PUT", `/${encodeURIComponent(name)}`, { query: { restype: "container" } });
+export const createContainer = (account, name, publicAccess = "private") =>
+  blob(account, "PUT", `/${encodeURIComponent(name)}`, { query: { restype: "container" }, headers: publicAccess !== "private" ? { "x-ms-blob-public-access": publicAccess } : {} });
 export const deleteContainer = (account, name) => blob(account, "DELETE", `/${encodeURIComponent(name)}`, { query: { restype: "container" } });
 
 export async function listBlobs(account, container, prefix = "") {
