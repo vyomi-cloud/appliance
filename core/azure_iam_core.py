@@ -186,10 +186,15 @@ def _delete_role_definition(store, name: str) -> AzureIamResponse:
     return _json(200, {})
 
 
+def _assignment_id(a: dict) -> str:
+    return f"{(a.get('scope') or '/').rstrip('/')}/providers/Microsoft.Authorization/roleAssignments/{a['name']}"
+
+
 def _list_role_assignments(store) -> AzureIamResponse:
-    value = [{"name": a["name"],
-             "properties": {"principalId": a["principalId"], "roleDefinitionId": a["roleDefinition"],
-                            "scope": a["scope"], "kind": a["kind"]}}
+    value = [{"name": a["name"], "id": _assignment_id(a),
+             "properties": {"principalId": a["principalId"], "principalType": a.get("principalType", "User"),
+                            "roleDefinitionId": a["roleDefinition"],
+                            "scope": a["scope"], "kind": a["kind"], "denyActions": a.get("denyActions") or []}}
             for a in _assignments(store).values()]
     return _json(200, {"value": value})
 
@@ -199,15 +204,18 @@ def _put_role_assignment(store, name: str, body: dict) -> AzureIamResponse:
     assignment = {
         "name": name,
         "principalId": props.get("principalId", ""),
+        "principalType": props.get("principalType") or "User",
         "roleDefinition": props.get("roleName") or props.get("roleDefinitionId", ""),
         "scope": props.get("scope", "/"),
         "kind": str(props.get("kind", "allow")).lower(),   # "allow" | "deny"
         "denyActions": props.get("denyActions") or [],
     }
     _assignments(store)[name] = assignment
-    return _json(201, {"name": name, "properties": {"principalId": assignment["principalId"],
-                                                    "roleDefinitionId": assignment["roleDefinition"],
-                                                    "scope": assignment["scope"]}})
+    return _json(201, {"name": name, "id": _assignment_id(assignment),
+                       "properties": {"principalId": assignment["principalId"],
+                                     "principalType": assignment["principalType"],
+                                     "roleDefinitionId": assignment["roleDefinition"],
+                                     "scope": assignment["scope"]}})
 
 
 def _delete_role_assignment(store, name: str) -> AzureIamResponse:

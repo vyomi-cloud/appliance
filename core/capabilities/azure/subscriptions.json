@@ -41,16 +41,17 @@
   ]
  },
  "azure.subscriptions.access_control_iam": {
-  "title": "Access control (IAM) — role assignments and definitions",
+  "title": "Access control (IAM) — role assignments, roles and checkAccess",
   "level": {
    "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Role assignments/definitions are the generic ARM catalog store (Microsoft.Authorization/roleAssignments, roleDefinitions) and no access decisions are evaluated — every data-plane call succeeds regardless of what is assigned. Deny assignments and classic administrators are always empty."
+   "Role assignments/definitions and Check access/My access run on the real RBAC decision engine (core/azure_iam_core.py, shared with Entra ID's Roles and administrators): built-in Owner/Contributor/Reader plus custom roles, create/delete role (and deny) assignments scoped to this subscription, and a checkAccess evaluator with wildcard, notActions and explicit-deny-wins semantics. What's not modeled: the decision is never enforced against this console's OTHER ARM/data-plane calls (every one of those still succeeds regardless of what's assigned) — checkAccess is advisory only here. Classic administrators is always empty, and conditions / PIM eligible assignments aren't modeled."
   ],
   "tests": [
-   "tests/conformance/test_azure_arm_core.py"
+   "tests/conformance/test_azure_arm_core.py",
+   "tests/conformance/test_azure_rbac_core.py"
   ]
  },
  "azure.subscriptions.resource_groups": {

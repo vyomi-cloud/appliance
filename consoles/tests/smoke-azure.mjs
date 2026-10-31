@@ -48,6 +48,7 @@ const SUBLOCK = `vysublock${n}`;   // subscription-scoped lock created through t
 const SUBRG = `vysubrg${n}`;       // resource group created over the wire (shown in the Subscription's Resource groups panel)
 const SUBSA = `vysubsa${n}`;       // storage account created over the wire, inside SUBRG (shown in the Subscription's Resources panel)
 const SUBDEP = `vysubdep${n}`;     // subscription-scoped deployment created over the wire
+const SUBPRINCIPAL = `vysmokeprincipal${n}`;  // RBAC role assignment principal, added through the UI
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -1419,6 +1420,41 @@ try {
   await page.waitForTimeout(500);
   const registered = await arm("GET", "/providers/Microsoft.Storage");
   check("UI register provider → ARM reflects Registered", JSON.parse(registered.text).registrationState === "Registered", registered.text);
+
+  // ── Access control (IAM): the real RBAC decision engine (core/azure_iam_core.py) — a Reader
+  // role assignment added through the UI really blocks a write in checkAccess, and Remove
+  // really deletes it ────────────────────────────────────────────────────────────────────────
+  await openPanel("Access control (IAM)");
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByRole("toolbar", { name: "Access control commands" }).getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Principal ID", { exact: true }).fill(SUBPRINCIPAL);
+  await page.getByLabel("Role", { exact: true }).selectOption("Reader");
+  await page.getByRole("dialog").getByRole("button", { name: "Review + assign" }).click();
+  await page.getByText(SUBPRINCIPAL, { exact: true }).first().waitFor({ timeout: 10000 });
+  const roleAssignmentsGot = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01`);
+  check("UI add role assignment → visible over native ARM (real RBAC engine)",
+    JSON.parse(roleAssignmentsGot.text).value.some((a) => a.properties?.principalId === SUBPRINCIPAL && a.properties?.roleDefinitionId === "Reader"), roleAssignmentsGot.text);
+  await shot("34-subscription-iam-role-assignments");
+
+  await page.getByRole("tab", { name: "Check access", exact: true }).click();
+  await page.getByRole("button", { name: "Check access", exact: true }).click();
+  await page.getByLabel("Find", { exact: true }).fill(SUBPRINCIPAL);
+  await page.getByLabel("Action", { exact: true }).fill("Microsoft.Storage/storageAccounts/read");
+  await page.getByRole("dialog").getByRole("button", { name: "Check access", exact: true }).click();
+  await page.getByText("Allowed — granted by: Reader.").waitFor({ timeout: 10000 });
+  await page.getByLabel("Action", { exact: true }).fill("Microsoft.Storage/storageAccounts/write");
+  await page.getByRole("dialog").getByRole("button", { name: "Check access", exact: true }).click();
+  await page.getByText("Not allowed — no assigned role grants this action at this scope.").waitFor({ timeout: 10000 });
+  check("checkAccess really evaluates the Reader role (read allowed, write denied)", true);
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByRole("checkbox", { name: `Select ${SUBPRINCIPAL}` }).click();
+  await page.getByRole("toolbar", { name: "Access control commands" }).getByRole("button", { name: "Remove" }).click();
+  await page.getByText(SUBPRINCIPAL, { exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  const roleAssignmentsAfterRemove = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01`);
+  check("UI remove role assignment → gone over native ARM",
+    !JSON.parse(roleAssignmentsAfterRemove.text).value.some((a) => a.properties?.principalId === SUBPRINCIPAL), roleAssignmentsAfterRemove.text);
 
   // ── Create a subscription (renames the one simulated subscription, the honest Vyomi gap) ──
   await page.goto(UI + "#/subscriptions/create");

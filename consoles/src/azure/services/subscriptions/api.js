@@ -52,10 +52,27 @@ export const listLocks = async (s) => (await restJson("GET", lockPath(s), { quer
 export const putLock = (s, name, body) => restJson("PUT", lockPath(s, name), { query: { "api-version": LOCK_API_VERSION }, body });
 export const deleteLock = (s, name) => restJson("DELETE", lockPath(s, name), { query: { "api-version": LOCK_API_VERSION } });
 
-// ── Access control (IAM): generic ARM catalog store, subscription scope ────────────────
+// ── Access control (IAM): the real RBAC decision engine (core/azure_iam_core.py — the same
+// checkAccess, built-in roles and explicit-deny-wins semantics Entra ID's "Roles and
+// administrators" uses), scoped to this subscription ───────────────────────────────────────
 const IAM_API_VERSION = "2022-04-01";
-export const listRoleAssignments = async (s) => (await restJson("GET", `${sub(s)}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": IAM_API_VERSION } })).value || [];
-export const listRoleDefinitions = async (s) => (await restJson("GET", `${sub(s)}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": IAM_API_VERSION } })).value || [];
+const authPath = (s, tail) => `${sub(s)}/providers/Microsoft.Authorization/${tail}`;
+// Vyomi has no multi-user sign-in; this is the one identity its "My access" means "you".
+export const ME_PRINCIPAL_ID = "you";
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `ra${Date.now()}${Math.random().toString(16).slice(2)}`);
+
+export const listRoleAssignments = async (s) => (await restJson("GET", authPath(s, "roleAssignments"), { query: { "api-version": IAM_API_VERSION } })).value || [];
+export const listRoleDefinitions = async (s) => (await restJson("GET", authPath(s, "roleDefinitions"), { query: { "api-version": IAM_API_VERSION } })).value || [];
+export const assignRole = (s, { principalId, principalType, roleName, kind, denyActions }) =>
+  restJson("PUT", authPath(s, `roleAssignments/${uid()}`), {
+    query: { "api-version": IAM_API_VERSION },
+    body: { properties: { principalId, principalType, roleName, scope: sub(s), kind, denyActions } },
+  });
+export const deleteRoleAssignment = (s, name) => restJson("DELETE", authPath(s, `roleAssignments/${encodeURIComponent(name)}`), { query: { "api-version": IAM_API_VERSION } });
+export const checkAccess = async (s, principalId, action) => {
+  const r = await restJson("POST", authPath(s, "checkAccess"), { query: { "api-version": IAM_API_VERSION }, body: { principalId, action, scope: sub(s) } });
+  return r.value?.[0] || { accessDecision: "NotAllowed", roles: [] };
+};
 
 // ── Activity log (subscription-wide — no $filter) ───────────────────────────────────────
 export const listActivityLog = async (s) => {

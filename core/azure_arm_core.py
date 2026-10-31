@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import base64
 import datetime
+import json
 import re
+import types
 import uuid
 
 try:                                              # host: package import
@@ -80,6 +82,11 @@ try:                                              # Management locks (Microsoft.
     from core import azure_locks_core as locks_engine
 except ImportError:
     import azure_locks_core as locks_engine        # type: ignore
+
+try:                                              # Azure RBAC checkAccess decision engine (Microsoft.Authorization/
+    from core import azure_iam_core as iam_engine  # roleAssignments|roleDefinitions|checkAccess), shared with Entra ID
+except ImportError:
+    import azure_iam_core as iam_engine            # type: ignore
 
 try:                                              # VM size catalog (vcpu/ram/family per real Azure size name)
     from core import instance_catalog
@@ -311,6 +318,7 @@ class AzureArm:
         self.sub_names: dict = {}               # subscription id (lower) -> displayName (Microsoft.Subscription/rename)
         self.sub_tags: dict = {}                # subscription id (lower) -> tags (Microsoft.Resources/tags/default)
         self.providers: dict = {}               # namespace (lower) -> "Registered" | "NotRegistered"
+        self._iam_store = types.SimpleNamespace()   # Azure RBAC store (core/azure_iam_core.py attaches its own attrs)
 
     # ── per-resource ARM activity entries (Microsoft.Insights/eventtypes rows) ──
     # Kept IN self.state (so they persist with the rest of ARM, offline and Nano alike) by the one
@@ -486,6 +494,17 @@ class AzureArm:
         if namespace.lower() == "microsoft.authorization" and chain and chain[0].lower() == "locks":
             scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else f"/subscriptions/{sub}"
             return self._locks_crud(method, scope_rid, chain[1:], payload, rg or sub)
+
+        # Microsoft.Authorization/roleAssignments|roleDefinitions|checkAccess at the same
+        # RESOURCE GROUP (or, with none, SUBSCRIPTION) scope as the locks branch just above —
+        # the real Azure RBAC decision engine (core/azure_iam_core.py: built-in Owner/
+        # Contributor/Reader + custom roles, wildcard + notActions + explicit-deny-wins
+        # checkAccess), replacing the dead generic-catalog entries (CATALOG's 'rbac' /
+        # 'role_definition', which stored PUTs but never evaluated anything).
+        if namespace.lower() == "microsoft.authorization" and chain and chain[0].lower() in (
+                "roleassignments", "roledefinitions", "checkaccess"):
+            scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else f"/subscriptions/{sub}"
+            return self._rbac(method, scope_rid, chain, payload, rg or sub)
 
         # Microsoft.Authorization/locks: a real ARM extension resource scoped to ANY other
         # resource's own id (the chain re-enters "providers", like Event Grid's event
@@ -707,6 +726,17 @@ class AzureArm:
             else:
                 return _err(405, "MethodNotAllowed", f"{method} not allowed.")
         return {"status": r["status"], "headers": {}, "body": r["body"]}
+
+    def _rbac(self, method, scope_rid, chain, payload, activity_name):
+        path = f"{scope_rid}/providers/Microsoft.Authorization/{'/'.join(chain)}"
+        r = iam_engine.dispatch(self._iam_store, method, path, {}, {}, json.dumps(payload or {}).encode())
+        try:
+            body = json.loads(r.body.decode()) if r.body else None
+        except Exception:
+            body = None
+        if r.status in (200, 201) and chain[0].lower() == "roleassignments" and method in ("PUT", "DELETE") and len(chain) >= 2:
+            _record_activity(activity_name, "Create role assignment" if method == "PUT" else "Delete role assignment", chain[1])
+        return {"status": r.status, "headers": {}, "body": body}
 
     def _diagnostic_settings(self, method, sub, rg, namespace, chain, marker, payload):
         # Replay the SAME type/name alternation the main dispatcher uses (see `_arm` above)

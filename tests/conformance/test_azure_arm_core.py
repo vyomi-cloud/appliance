@@ -614,6 +614,38 @@ def run() -> int:
     # enforced: proven above at "locks cascade-deleted with resource", where DELETE
     # succeeded on `kv` despite its ReadOnly lock.)
 
+    # 30. Access control (IAM), subscription scope — roleAssignments/roleDefinitions/checkAccess
+    # now resolve through the REAL Azure RBAC decision engine (core/azure_iam_core.py, shared
+    # with Entra ID's "Roles and administrators"), not the dead generic-catalog CRUD: built-in
+    # roles are seeded, assignment counts are live, and checkAccess actually evaluates wildcard
+    # + notActions + explicit-deny-wins — see tests/conformance/test_azure_rbac_core.py for the
+    # engine's own conformance. This just proves the ARM subscription-scope wiring.
+    authpath = f"/subscriptions/{SUB}/providers/Microsoft.Authorization"
+    r = arm.handle("GET", f"{authpath}/roleDefinitions", {"api-version": "2022-04-01"})
+    defnames = {d["properties"]["roleName"] for d in r["body"]["value"]}
+    _check("built-in roles are seeded (Owner/Contributor/Reader)", {"Owner", "Contributor", "Reader"} <= defnames)
+
+    r = arm.handle("PUT", f"{authpath}/roleAssignments/ra-alice", {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "alice", "roleName": "Reader", "scope": f"/subscriptions/{SUB}"}})
+    _check("role assignment put 201", r["status"] == 201)
+    r = arm.handle("GET", f"{authpath}/roleAssignments", {"api-version": "2022-04-01"})
+    _check("role assignment listed under this subscription", any(a["name"] == "ra-alice" for a in r["body"]["value"]))
+
+    r = arm.handle("POST", f"{authpath}/checkAccess", {"api-version": "2022-04-01"},
+                   {"principalId": "alice", "action": "Microsoft.Storage/storageAccounts/read", "scope": f"/subscriptions/{SUB}"})
+    _check("Reader checkAccess read allowed", r["body"]["value"][0]["accessDecision"] == "Allowed")
+    r = arm.handle("POST", f"{authpath}/checkAccess", {"api-version": "2022-04-01"},
+                   {"principalId": "alice", "action": "Microsoft.Storage/storageAccounts/write", "scope": f"/subscriptions/{SUB}"})
+    _check("Reader checkAccess write denied", r["body"]["value"][0]["accessDecision"] == "NotAllowed")
+    r = arm.handle("POST", f"{authpath}/checkAccess", {"api-version": "2022-04-01"},
+                   {"principalId": "nobody", "action": "Microsoft.Storage/storageAccounts/read", "scope": f"/subscriptions/{SUB}"})
+    _check("unassigned principal checkAccess denied", r["body"]["value"][0]["accessDecision"] == "NotAllowed")
+
+    r = arm.handle("DELETE", f"{authpath}/roleAssignments/ra-alice", {"api-version": "2022-04-01"})
+    _check("role assignment delete 200", r["status"] == 200)
+    r = arm.handle("GET", f"{authpath}/roleAssignments", {"api-version": "2022-04-01"})
+    _check("role assignment gone after delete", not any(a["name"] == "ra-alice" for a in r["body"]["value"]))
+
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
 
