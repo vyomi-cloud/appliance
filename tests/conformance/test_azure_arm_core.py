@@ -701,6 +701,31 @@ def run() -> int:
     _check("checkAccess resource-scoped: no access on a sibling NSG the assignment doesn't cover",
            r["body"]["value"][0]["accessDecision"] == "NotAllowed")
 
+    # 22d. azure.vnets.iam: the same Microsoft.Authorization/roleAssignments + checkAccess
+    # resource-scoping, this time to a virtual network — the console's VNet "Access control
+    # (IAM) > Role assignments / Check access" tabs.
+    vnet2 = _p(RG, "Microsoft.Network", "virtualNetworks", "vnet2")
+    arm.handle("PUT", vnet2, {"api-version": "2023-11-01"}, {"location": "eastus"})
+    ra_vnet = f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleAssignments/ra-vnet1"
+    r = arm.handle("PUT", ra_vnet, {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "vnet-owner", "roleName": "Owner", "scope": vnet}})
+    _check("role assignment scoped to the vnet itself created", r["status"] == 201)
+    r = arm.handle("GET", vnet + "/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    _check("vnet-scoped IAM list includes the vnet-scoped assignment", any(x["name"] == "ra-vnet1" for x in r["body"]["value"]))
+    r = arm.handle("GET", vnet2 + "/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    _check("a sibling vnet's IAM list excludes the other vnet's assignment", all(x["name"] != "ra-vnet1" for x in r["body"]["value"]))
+    r = arm.handle("POST", vnet + "/providers/Microsoft.Authorization/checkAccess", {"api-version": "2022-04-01"},
+                   {"principalId": "vnet-owner", "action": "Microsoft.Network/virtualNetworks/write"})
+    _check("checkAccess resource-scoped to the vnet: Owner can write",
+           r["body"]["value"][0]["accessDecision"] == "Allowed")
+    r = arm.handle("POST", vnet2 + "/providers/Microsoft.Authorization/checkAccess", {"api-version": "2022-04-01"},
+                   {"principalId": "vnet-owner", "action": "Microsoft.Network/virtualNetworks/write"})
+    _check("checkAccess resource-scoped: no access on a sibling vnet the assignment doesn't cover",
+           r["body"]["value"][0]["accessDecision"] == "NotAllowed")
+    r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleDefinitions", {"api-version": "2022-04-01"})
+    _check("Roles (role definitions) listing used by the VNet IAM 'Roles' tab is subscription-wide",
+           any(x["name"] == "Owner" for x in r["body"]["value"]))
+
     # 23. Microsoft.DocumentDB/databaseAccounts listKeys / listReadOnlyKeys /
     # listConnectionStrings / regenerateKey — the real Cosmos shape (not the generic
     # storage-style {"keys": [...]}), and a round-trip for the account itself.

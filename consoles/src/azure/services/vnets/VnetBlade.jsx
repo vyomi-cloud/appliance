@@ -1,9 +1,10 @@
 /* Virtual network resource blade: left resource menu + panels. Overview, Tags, Address
  * space, DNS servers, Subnets (incl. NAT gateway / route table association), Peerings,
- * Service endpoints, Locks, Activity log, Topology, Properties and Export template (ARM,
- * Bicep, Terraform) are backed by real ARM calls; Access control (IAM) and the remaining
- * menu items are honest CapabilityContainer gaps (core/capabilities/azure/vnets.json is the
- * single source of truth for which). */
+ * Service endpoints, Locks, Activity log, Topology, Properties, Export template (ARM, Bicep,
+ * Terraform) and Access control (IAM)'s Role assignments/Roles/Check access (real ARM reads +
+ * decision, resource-scoped to this vnet) are backed by real ARM calls; the remaining menu
+ * items are honest CapabilityContainer gaps (core/capabilities/azure/vnets.json is the single
+ * source of truth for which). */
 import { useEffect, useState } from "react";
 import {
   Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -18,12 +19,12 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
-import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
+import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { SubnetsPanel, PeeringsPanel, ServiceEndpointsPanel, ConnectedDevicesPanel, TopologyPanel } from "./Networking.jsx";
-import NetworkWatcherTools from "./NetworkWatcher.jsx";
+import NetworkWatcherTools, { ConnectionTroubleshootPanel } from "./NetworkWatcher.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -51,7 +52,7 @@ export const MENU = [
 ];
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 const GAP_CAP = {
-  resourcevisualizer: "azure.vnets.tools", connectiontroubleshoot: "azure.vnets.tools",
+  resourcevisualizer: "azure.vnets.tools",
   tasks: "azure.vnets.tools", support: "azure.vnets.tools",
   alerts: "azure.vnets.monitoring", metrics: "azure.vnets.monitoring", diagnosticsettings: "azure.vnets.monitoring", logs: "azure.vnets.monitoring",
   bastion: "azure.vnets.network_appliances", ddosprotection: "azure.vnets.network_appliances", firewall: "azure.vnets.network_appliances",
@@ -87,6 +88,7 @@ export default function VnetBlade({ params }) {
       exporttemplate: () => <ExportTemplate a={a} />,
       topology: () => <TopologyPanel a={a} />,
       diagnose: () => <Diagnose />,
+      connectiontroubleshoot: () => <ConnectionTroubleshootPanel />,
     }[panel];
     body = P ? P() : (
       <CapabilityContainer id={GAP_CAP[panel] || "azure.vnets.tools"} title={`${name} | ${LABEL[panel] || panel}`} />
@@ -167,20 +169,26 @@ function Diagnose() {
       <div className="vy-panel-title">Diagnose and solve problems</div>
       <NetworkWatcherTools />
       <div style={{ marginTop: 16 }}>
-        <NotSimulatedContainer title="Other diagnostic tools" feature="Resource visualizer, Connection troubleshoot, Tasks, Support + Troubleshooting and the remaining Diagnose and solve problems tiles" />
+        <NotSimulatedContainer title="Other diagnostic tools" feature="Resource visualizer, Tasks, Support + Troubleshooting and the remaining Diagnose and solve problems tiles" />
       </div>
     </>
   );
 }
 
-// ── Access control (IAM) — honest in every panel here, same as every other Azure lens
-// service: Microsoft.Authorization/roleAssignments is only simulated at subscription scope ──
+// ── Access control (IAM): Role assignments / Roles / Check access are real ARM reads and a
+// real decision call scoped to this virtual network (plus its subscription/resource-group
+// ancestors); Deny assignments and Classic administrators stay honest —
+// core/capabilities/azure/vnets.json azure.vnets.iam. ─────────────────────────────────────
 function AccessControlIam({ a }) {
   const [tab, setTab] = useState("check");
   const [dlg, setDlg] = useState(null);
+  const [principal, setPrincipal] = useState("");
+  const [action, setAction] = useState("Microsoft.Network/virtualNetworks/write");
+  const [decision, setDecision] = useState(null);
+  const roleAssignments = useAsync(() => api.listRoleAssignments(a.id), [a.id]);
+  const roleDefinitions = useAsync(() => api.listRoleDefinitions(), []);
   return (
-    <>
-      <div className="vy-panel-title">Access control (IAM)</div>
+    <CapabilityContainer id="azure.vnets.iam" title="Access control (IAM)">
       <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control (IAM) tabs">
         <Tab value="check">Check access</Tab>
         <Tab value="assignments">Role assignments</Tab>
@@ -191,23 +199,70 @@ function AccessControlIam({ a }) {
       {tab === "check" && (
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 16 }}>
           <section className="vy-section"><h3>My access</h3><Button onClick={() => setDlg("mine")}>View my access</Button></section>
-          <section className="vy-section"><h3>Check access</h3><Button onClick={() => setDlg("check")}>Check access</Button></section>
+          <section className="vy-section"><h3>Check access</h3><Button onClick={() => { setDecision(null); setDlg("check"); }}>Check access</Button></section>
         </div>
       )}
-      {tab === "assignments" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vnets.iam" title="Role assignments" /></div>}
-      {tab === "roles" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vnets.iam" title="Roles" /></div>}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vnets.iam" title="Deny assignments" /></div>}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vnets.iam" title="Classic administrators" /></div>}
       <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
         <DialogSurface aria-label="Access check">
           <DialogBody>
             <DialogTitle>{dlg === "mine" ? "My access" : "Check access"}</DialogTitle>
-            <DialogContent><NotSimulatedContainer feature="Per-identity role-assignment resolution for this resource" note={`The virtual network's resource id is ${a.id}.`} /></DialogContent>
+            <DialogContent>
+              {dlg === "mine" ? (
+                <NotSimulated feature="Per-identity 'my access' resolution" note="Vyomi has no signed-in identity to resolve — use Check access with a principal id instead." />
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 360 }}>
+                  <Field label="Find">
+                    <Input value={principal} onChange={(_, d) => setPrincipal(d.value)} placeholder="Principal (object) id" aria-label="Principal ID" />
+                  </Field>
+                  <Field label="Action"><Input value={action} onChange={(_, d) => setAction(d.value)} aria-label="Action" /></Field>
+                  <Button appearance="primary" disabled={!principal} onClick={async () => {
+                    const [r] = await api.checkAccess(a.id, principal, action);
+                    setDecision(r);
+                  }}>Check access</Button>
+                  {decision && (
+                    <section className="vy-section">
+                      <b>{decision.accessDecision}</b>
+                      {decision.roles?.length > 0 && <div>Granted by: {decision.roles.join(", ")}</div>}
+                    </section>
+                  )}
+                </div>
+              )}
+            </DialogContent>
             <DialogActions><Button onClick={() => setDlg(null)}>Close</Button></DialogActions>
           </DialogBody>
         </DialogSurface>
       </Dialog>
-    </>
+      {tab === "assignments" && (
+        <section className="vy-section" style={{ marginTop: 12 }}>
+          <BrowseGrid resourceName="role assignment" rowKey={(r) => r.id} filterPlaceholder="Search by name or email"
+            items={roleAssignments.data || []} loading={roleAssignments.loading} error={roleAssignments.error} onRefresh={roleAssignments.reload}
+            columns={[
+              { key: "name", label: "Name", value: (r) => r.properties?.principalId },
+              { key: "type", label: "Type", value: (r) => r.properties?.principalType || "--" },
+              { key: "role", label: "Role", value: (r) => r.properties?.roleName || (r.properties?.roleDefinitionId || "").split("/").pop() },
+              { key: "scope", label: "Scope", value: (r) => r.properties?.scope || "/" },
+              { key: "condition", label: "Condition", value: () => "None" },
+            ]}
+          />
+        </section>
+      )}
+      {tab === "roles" && (
+        <section className="vy-section" style={{ marginTop: 12 }}>
+          <BrowseGrid resourceName="role" rowKey={(r) => r.id} filterPlaceholder="Search by role name, description, permission, or ID"
+            items={roleDefinitions.data || []} loading={roleDefinitions.loading} error={roleDefinitions.error} onRefresh={roleDefinitions.reload}
+            columns={[
+              { key: "name", label: "Name", value: (r) => r.properties?.roleName || r.name },
+              { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
+              { key: "type", label: "Type", value: (r) => r.properties?.type || "BuiltInRole" },
+              { key: "category", label: "Category", value: () => "General" },
+              { key: "details", label: "Details", value: () => "View" },
+            ]}
+          />
+        </section>
+      )}
+      {tab === "deny" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>}
+      {tab === "classic" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators" /></div>}
+    </CapabilityContainer>
   );
 }
 

@@ -115,6 +115,23 @@ def run():
            r["nextHopType"] == "VirtualAppliance" and r["nextHopIpAddress"] == "10.80.1.100" and r["routeTableId"].endswith("/routeTables/rt1"))
     miss = arm.handle("POST", f"{NET}/networkWatchers/nope/ipFlowVerify", Q, {"targetResourceId": vm_id})
     _check("unknown network watcher → 404", miss["status"] == 404)
+
+    def cc(**kw):
+        return call("POST", "networkWatchers/NetworkWatcher_eastus/connectivityCheck", {"source": {"resourceId": vm_id}, **kw})
+
+    r = cc(destination={"address": "10.80.2.10", "port": 80}, protocol="TCP")
+    _check("connectivityCheck inside the vnet (by address) → Reachable",
+           r["connectionStatus"] == "Reachable" and r["probesFailed"] == 0)
+    r = cc(destination={"resourceId": n2["id"], "port": 5432}, protocol="TCP")
+    _check("connectivityCheck to an NSG-denied port (by resourceId) → Unreachable",
+           r["connectionStatus"] == "Unreachable" and r["probesFailed"] == 100)
+    _check("connectivityCheck records the blocking NSG hop", any(h["type"] == "nsg" and h["issues"] for h in r["hops"]))
+    bad = arm.handle("POST", f"{NET}/networkWatchers/NetworkWatcher_eastus/connectivityCheck", Q,
+                     {"source": {"resourceId": vm_id}, "destination": {}})
+    _check("connectivityCheck missing destination → 400", bad["status"] == 400)
+    bad = arm.handle("POST", f"{NET}/networkWatchers/NetworkWatcher_eastus/connectivityCheck", Q,
+                     {"source": {"resourceId": "nope"}, "destination": {"address": "10.80.2.10", "port": 80}})
+    _check("connectivityCheck unresolvable source → 400", bad["status"] == 400)
     print("\nAzure netsim types + Network Watcher conformance: ALL GREEN")
 
 

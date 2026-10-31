@@ -68,6 +68,8 @@ const FLOWNIC = `vyflownic${n}`;   // NIC in that subnet, created over the wire
 const FLOWVM = `vyflowvm${n}`;     // VM pointed at that NIC — the target IP flow verify/Next hop diagnose
 const DENYRULE = `deny-smoke-${n}`;  // inbound Deny rule the Diagnose and solve problems IP flow verify check must name
 const VNETVM = `vysmokevnetvm${n}`;  // VM pointed at the vnet's own NIC, for the vnet's Diagnose and solve problems Next hop check
+const VNETROLE = `00000000-0000-4000-c000-${String(n).padStart(12, "0")}`;  // role assignment GUID created over the wire, EXPLICITLY scoped to the vnet resource
+const VNETPRINCIPAL = `vyvnetprincipal${n}`;  // principal of the vnet-scoped role assignment above
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -2134,6 +2136,41 @@ try {
   await page.getByText("Next hop type: Internet").waitFor({ timeout: 10000 });
   check("UI Next hop (Diagnose and solve problems) → answers from this vnet's real route topology", true);
   await shot("32b-vnet-diagnose-nexthop");
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+
+  // ── Connection troubleshoot (azure.vnets.network_watcher): same netsim evaluator, reached
+  // from the vnet's own Monitoring menu item instead of Diagnose and solve problems ─────────
+  await openPanel("Connection troubleshoot");
+  await page.getByRole("button", { name: "Check connectivity" }).click();
+  await page.getByLabel("Source virtual machine", { exact: true }).selectOption({ label: VNETVM });
+  await page.getByRole("radio", { name: "Manual", exact: true }).click();
+  await page.getByLabel("Destination IP address", { exact: true }).fill("8.8.8.8");
+  await page.getByLabel("Destination port", { exact: true }).fill("443");
+  await page.getByRole("dialog").getByRole("button", { name: "Check", exact: true }).click();
+  await page.getByText("Reachable", { exact: true }).waitFor({ timeout: 10000 });
+  check("UI Connection troubleshoot → real connectivity check over this vnet's route topology", true);
+  await shot("32c-vnet-connection-troubleshoot");
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+
+  // ── Access control (IAM): a role assignment created over the wire, EXPLICITLY scoped to
+  // this virtual network (not just the subscription/resource group) → read back on the Role
+  // assignments tab, and a real Check access decision reflects it (azure.vnets.iam) ────────
+  const vnetId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}`;
+  const vnetRoleRes = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments/${VNETROLE}?api-version=2022-04-01`,
+    { method: "PUT", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ properties: { principalId: VNETPRINCIPAL, roleName: "Owner", scope: vnetId } }) });
+  check("ARM PUT role assignment scoped to the vnet over wire", vnetRoleRes.status === 200 || vnetRoleRes.status === 201, `HTTP ${vnetRoleRes.status}`);
+  await openPanel("Access control (IAM)");
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByText(VNETPRINCIPAL).first().waitFor({ timeout: 10000 });
+  check("UI Access control (IAM) → Role assignments shows the vnet-scoped wire-created assignment", true);
+  await shot("32d-vnet-iam-role-assignments");
+  await page.getByRole("tab", { name: "Check access" }).click();
+  await page.getByRole("button", { name: "Check access", exact: true }).click();
+  await page.getByLabel("Principal ID", { exact: true }).fill(VNETPRINCIPAL);
+  await page.getByRole("dialog").getByRole("button", { name: "Check access", exact: true }).click();
+  await page.getByText("Allowed").waitFor({ timeout: 10000 });
+  check("UI Check access on the vnet → real decision reflects the vnet-scoped role assignment", true);
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
 
   // ── Virtual network created over the wire → visible in the UI (CLI → UI), then deleted in the UI ──
