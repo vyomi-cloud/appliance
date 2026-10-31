@@ -18812,9 +18812,20 @@ def _rds_runtime_delete(db: dict) -> None:
 
 
 def _rds_vpc_id() -> str:
-    for vpc_id in sorted(vpc_state.get("vpcs", {})):
-        return vpc_id
-    return ""
+    # Like RDS: a DB instance with no explicit group goes in the default VPC; a custom
+    # VPC without subnets can't host it. Create the default VPC when nothing usable exists.
+    vpcs = vpc_state.get("vpcs", {})
+    for vpc_id in sorted(vpcs):
+        if vpcs[vpc_id].get("is_default") and _rds_default_subnet_ids(vpc_id):
+            return vpc_id
+    for vpc_id in sorted(vpcs):
+        if _rds_default_subnet_ids(vpc_id):
+            return vpc_id
+    try:
+        from core.aws_console_detail import OfflineNet
+        return OfflineNet(vpc_state, None, None).default_vpc()["vpc_id"]
+    except Exception:
+        return next(iter(sorted(vpcs)), "")
 
 
 def _rds_default_subnet_ids(vpc_id: str) -> list[str]:
