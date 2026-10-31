@@ -180,7 +180,7 @@ from core import azure_queue_core as az_queue
 from core.azure_queue_core import AzureQueueStore
 from core import azure_table_core as az_table
 from core.azure_table_core import AzureTableStore
-from core.azure_arm_core import AzureArm
+from core.azure_arm_core import AzureArm, keyvault_network_denied
 from core import azure_servicebus_core as az_sb
 from core import eventbridge_core as events
 from core import scheduler_core as sched
@@ -811,7 +811,20 @@ class AwsWireRouter:
                 "az-graph": (az_graph, self.az_graph),
             }[svc]
             mod, store = _az_core
-            if svc == "az-blob":   # CORS preflight, lifecycle tiering/expiry and static-website
+            if svc in ("az-kv-secrets", "az-kv-keys", "az-kv-certs"):
+                # Key Vault's own wire carries no vault identity (real Key Vault routes by the
+                # vault's hostname, which this one-relay-for-every-vault simulation doesn't have);
+                # the console sends the vault it's showing as `x-vyomi-vault` (azure/services/
+                # keyvaults/api.js setActiveVault) so the Networking blade's publicNetworkAccess /
+                # networkAcls can actually be enforced (azure.keyvaults.networking).
+                vault = lheaders.get("x-vyomi-vault", "")
+                if vault and keyvault_network_denied(self.az_arm.state, vault):
+                    body_json = json.dumps({"error": {"code": "Forbidden",
+                        "message": f"Client address is not authorized and caller is not a trusted "
+                                   f"service. Client address not allowed to access vault '{vault}'."}}).encode()
+                    return {"status": 403, "headers": {"content-type": "application/json"}, "body": body_json}
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
+            elif svc == "az-blob":   # CORS preflight, lifecycle tiering/expiry and static-website
                 # serving read the storage account's ARM-stored config (blobServices/default,
                 # managementPolicies/default) — the single source of truth the Configuration/
                 # CORS/Lifecycle/Static website panels already write through ARM.
