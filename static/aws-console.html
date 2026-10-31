@@ -316,6 +316,14 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .alert.err{background:#fde7e9;color:var(--err);border:1px solid #f5b8be}
 
   /* Service cards on Console Home: same layout as the GCP and Azure dashboards. */
+  /* Resources widget (EC2 Dashboard style): bordered boxes — icon, blue service link, bold count. */
+  .res-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-top:14px}
+  .res-box{display:flex;align-items:center;gap:10px;border:1px solid #e9ebed;border-radius:8px;padding:10px 14px;min-width:0}
+  .res-ic{width:24px;height:24px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:4px}
+  .res-ic svg{width:24px;height:24px;display:block}
+  .res-l{flex:1;min-width:0;font-size:14px;line-height:20px;color:#0972d3;font-weight:700;cursor:pointer;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .res-l:hover{text-decoration:underline;color:#033160}
+  .res-n{font-size:18px;line-height:22px;font-weight:700;color:#000716;font-variant-numeric:tabular-nums}
   .svc-cards-h{font-size:13px;color:var(--sub);margin:18px 0 12px}
   .svc-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
   .svc-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px;cursor:pointer;transition:box-shadow .12s,transform .12s}
@@ -1170,16 +1178,25 @@ function renderHome(main){
 
   main.append(grid);
 
-  // Service cards: the same layout as the GCP and Azure dashboards. Each card shows
-  // the live resource count from the service's own list endpoint.
-  main.append(el("div",{class:"svc-cards-h"}, "Services — click to manage resources."));
-  const cards = el("div",{class:"svc-cards"});
+  // Resources: the AWS console's Resources widget (as on the EC2 Dashboard) — one container,
+  // "You are using the following AWS resources…", and a grid of boxes, each the service as a
+  // blue link (with its AWS icon) and its live resource count in bold on the right.
+  const res = el("div",{class:"widget col-12"});
+  res.append(el("div",{class:"wh"}, "Resources",
+    el("a",{class:"info",onclick:()=>toast("Live resource counts from each service's own list API in this space.","ok")}, "Info")));
+  const rb = el("div",{class:"wb"});
+  rb.append(el("div",{class:"desc"}, `You are using the following AWS resources in the ${friendlyRegion(REGION)} (${REGION}) Region:`));
+  const cards = el("div",{class:"res-grid"});
   for (const s of (CATALOG.services||[])) {
-    const n = el("div",{class:"n"}, "—");
-    cards.append(el("div",{class:"svc-card",onclick:()=>{recordRecentVisit(s.key); navigate({view:"list", service:s.key, item:null});}},
-      el("div",{class:"t"}, el("div",{class:"ic"}, icon(s.icon)), s.label),
-      n,
-      el("div",{class:"s"}, s.namespace || ("AWS/"+s.label))));
+    const n = el("span",{class:"res-n"}, "—");
+    const ic = el("span",{class:"res-ic"});
+    const lib = window.VyomiServiceIcons;
+    if (lib) ic.innerHTML = '<svg viewBox="0 0 24 24">' + lib.aws(({apigatewayv2:"apigateway", logs:"cloudwatch"})[s.key] || s.key,
+      (typeof SVC_MENU_INFO !== "undefined" && SVC_MENU_INFO[s.key]) ? SVC_MENU_INFO[s.key][0] : "") + '</svg>';
+    else ic.append(icon(s.icon));
+    const go = () => { recordRecentVisit(s.key); navigate({view:"list", service:s.key, item:null}); };
+    cards.append(el("div",{class:"res-box"}, ic,
+      el("a",{class:"res-l",onclick:go,title:s.namespace || ("AWS/"+s.label)}, s.label), n));
     if (!s.collection_path) { n.textContent = "0"; continue; }
     api("GET", s.collection_path).then(r => {
       if (!r.ok) { n.textContent = r.status === 403 ? "🔒" : "—"; if (r.status === 403) n.title = "Not included in your tier"; return; }
@@ -1188,7 +1205,9 @@ function renderHome(main){
       n.textContent = String(list ? list.length : 0);
     }).catch(() => {});
   }
-  main.append(cards);
+  rb.append(cards);
+  res.append(rb);
+  grid.append(res);
 }
 
 // =====================================================================
