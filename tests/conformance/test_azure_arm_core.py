@@ -170,6 +170,19 @@ def run() -> int:
     r = arm.handle("GET", pol, {"api-version": "2023-05-01-preview"})
     _check("apim saved policy persists", r["body"]["properties"]["value"] == "<policies><inbound /></policies>")
 
+    # 17a0. APIM APIs: WebSocket / GraphQL / gRPC round-trip properties.apiType exactly like
+    # real APIM (azure.apim.apis.createflows) — no backend-specific code, the same generic
+    # nested-resource mechanism as every other apis/{id} PUT.
+    for apitype, suffix in (("websocket", "ws"), ("graphql", "gql"), ("grpc", "grpcsvc")):
+        a_id = apim + f"/apis/{suffix}-api"
+        r = arm.handle("PUT", a_id, {"api-version": "2023-05-01-preview"},
+                       {"properties": {"displayName": f"{suffix} api", "apiType": apitype,
+                                        "serviceUrl": "wss://backend.example.com", "path": suffix,
+                                        "protocols": ["wss"] if apitype == "websocket" else ["https"]}})
+        _check(f"apim {apitype} API put 201", r["status"] == 201 and r["body"]["properties"]["apiType"] == apitype)
+        r = arm.handle("GET", a_id, {"api-version": "2023-05-01-preview"})
+        _check(f"apim {apitype} API GET reflects apiType", r["body"]["properties"]["apiType"] == apitype)
+
     # 17a. APIM API Tags (Microsoft.ApiManagement/service/tags) — generic nested ARM
     # sub-resource, the SAME mechanism as named values/backends (AzureArm._upsert): no
     # service-specific backend code, just the type/name alternation one level deeper.
@@ -194,14 +207,67 @@ def run() -> int:
     r = arm.handle("DELETE", frag, {"api-version": "2023-05-01-preview"})
     _check("apim policy fragment delete 200", r["status"] == 200)
 
+    # 17b2. Named values (Microsoft.ApiManagement/service/namedValues) + listValue — the real
+    # action behind the grid's "Show value" icon. A plain value round-trips as stored; a Key
+    # Vault reference resolves against THIS space's own Key Vault secrets store, wired the same
+    # way aws_wire_router.AwsWireRouter.__init__ wires the real router (azure.apim.namedvalues.keyvaultref).
+    from core.kv_store import InMemoryKvStore
+    arm.kv_secrets_store = InMemoryKvStore()
+    arm.kv_secrets_store.put_secret("db-password", {
+        "name": "db-password", "deleted": False, "deletedDate": None,
+        "current": "v1", "versions": {"v1": {"value": "s3cr3t", "attributes": {}}},
+    })
+    nv_plain = apim + "/namedValues/plain-value"
+    r = arm.handle("PUT", nv_plain, {"api-version": "2023-05-01-preview"},
+                   {"properties": {"displayName": "plain-value", "value": "hello"}})
+    _check("apim named value put 201", r["status"] == 201)
+    r = arm.handle("POST", nv_plain + "/listValue", {"api-version": "2023-05-01-preview"}, {})
+    _check("apim named value listValue returns the plain value", r["status"] == 200 and r["body"]["value"] == "hello")
+
+    nv_kv = apim + "/namedValues/kv-value"
+    r = arm.handle("PUT", nv_kv, {"api-version": "2023-05-01-preview"},
+                   {"properties": {"displayName": "kv-value", "secret": True,
+                                    "keyVault": {"secretIdentifier": "https://uic-vault.vault.azure.net/secrets/db-password"}}})
+    _check("apim named value (Key Vault) put 201", r["status"] == 201)
+    r = arm.handle("POST", nv_kv + "/listValue", {"api-version": "2023-05-01-preview"}, {})
+    _check("apim named value listValue resolves a real Key Vault secret",
+           r["status"] == 200 and r["body"]["value"] == "s3cr3t")
+
+    nv_missing = apim + "/namedValues/missing-kv-value"
+    arm.handle("PUT", nv_missing, {"api-version": "2023-05-01-preview"},
+               {"properties": {"displayName": "missing-kv-value", "secret": True,
+                                "keyVault": {"secretIdentifier": "https://uic-vault.vault.azure.net/secrets/does-not-exist"}}})
+    r = arm.handle("POST", nv_missing + "/listValue", {"api-version": "2023-05-01-preview"}, {})
+    _check("apim named value listValue 400s on an unresolved Key Vault reference", r["status"] == 400)
+
     # 17c. Scale out and up / Pricing tier (post-creation): sku.capacity and sku.name PATCH
     # generically (any catalog resource type), reflected back on GET — real for APIM's
-    # Overview "Tier" field and every other blade that reads a.sku.
+    # Overview "Tier" field and every other blade that reads a.sku. The service was created
+    # Developer (catalog default) — move off it first, since Developer's unit count is fixed.
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"name": "Standard"}})
+    _check("apim tier patch off Developer", r["status"] == 200 and r["body"]["sku"]["name"] == "Standard")
     r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"capacity": 3}})
     _check("apim scale-out patch", r["status"] == 200 and r["body"]["sku"]["capacity"] == 3)
     r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"name": "Premium"}})
     _check("apim pricing tier patch keeps capacity",
            r["body"]["sku"]["name"] == "Premium" and r["body"]["sku"]["capacity"] == 3)
+
+    # 17c2. Consumption has no scale units and Developer is capped at exactly 1 — ENFORCED
+    # (azure.apim.scaletier), not just round-tripped.
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"name": "Consumption", "capacity": 3}})
+    _check("apim Consumption tier rejects a nonzero capacity", r["status"] == 400)
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"name": "Consumption", "capacity": 0}})
+    _check("apim Consumption tier accepts capacity 0", r["status"] == 200)
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"name": "Developer", "capacity": 2}})
+    _check("apim Developer tier rejects more than 1 unit", r["status"] == 400)
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"name": "Developer", "capacity": 1}})
+    _check("apim Developer tier accepts exactly 1 unit", r["status"] == 200)
+    # Tier-only PATCH is validated against the EXISTING (now stale) capacity too.
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"name": "Consumption"}})
+    _check("apim tier-only switch to Consumption rejected while capacity is still 1 (stale)", r["status"] == 400)
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"capacity": 2}})
+    _check("apim Developer tier still rejects a capacity-only PATCH to 2", r["status"] == 400)
+    arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"name": "Standard", "capacity": 2}})
 
     # 17d. Activity log Timespan picker: eventTimestamp ge/le $filter predicates actually
     # narrow the feed (core/azure_arm_core._filter_by_timespan + azure_monitor_core's own copy).

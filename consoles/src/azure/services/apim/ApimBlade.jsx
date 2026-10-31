@@ -1,5 +1,5 @@
 /* API Management service resource blade: left resource menu + panels. Overview, Activity
- * log, Access control (IAM) (subscription-wide, see capabilities.json), Tags, APIs, Products,
+ * log, Access control (IAM) (service-scoped, see capabilities.json), Tags, APIs, Products,
  * Subscriptions, Named values, Backends, API Tags, Policy fragments, Diagnostic settings,
  * Scale out and up, Pricing tier, Properties, Locks and Export template (ARM Template tab)
  * are backed by native ARM calls; everything else in the menu — Diagnose and solve problems,
@@ -233,13 +233,14 @@ function Properties({ a }) {
   return <><div className="vy-panel-title">{a.name} | Properties</div><PropertyList a={a} /></>;
 }
 
-// ── Access control (IAM): Role assignments / Roles are real ARM resources
-// (Microsoft.Authorization/roleAssignments, roleDefinitions), subscription-wide rather than
-// scoped to this one service — see capabilities.json azure.apim.iam. ──────────────────────
+// ── Access control (IAM): Role assignments (Microsoft.Authorization/roleAssignments) are
+// real ARM resources scoped to THIS service (plus its subscription/resource-group
+// ancestors); Roles (roleDefinitions) are the flat built-in + custom catalog — see
+// capabilities.json azure.apim.iam. ─────────────────────────────────────────────────────
 function AccessControlIam({ a }) {
   const [tab, setTab] = useState("checkaccess");
   const [gap, setGap] = useState(null);
-  const roleAssignments = useAsync(() => api.listRoleAssignments(), []);
+  const roleAssignments = useAsync(() => api.listRoleAssignments(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
   const roleDefinitions = useAsync(() => api.listRoleDefinitions(), []);
   return (
     <CapabilityContainer id="azure.apim.iam" title={`${a.name} | Access control (IAM)`}>
@@ -508,10 +509,40 @@ function ExportTemplate({ a }) {
     resources: [{ type: "Microsoft.ApiManagement/service", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('serviceName')]" : a.name, location: a.location, sku: a.sku, properties: a.properties }],
   };
   const text = JSON.stringify(template, null, 2);
+  // Bicep / Terraform: the SAME live resource, mechanically rendered into each format's
+  // syntax (not a general ARM decompiler — just this one resource's known shape).
+  const nameExpr = params ? "serviceName" : `'${a.name}'`;
+  const bicepText = [
+    ...(params ? [`param serviceName string = '${a.name}'`, ""] : []),
+    `resource apimService 'Microsoft.ApiManagement/service@${api.ARM.apiVersion}' = {`,
+    `  name: ${nameExpr}`,
+    `  location: '${a.location}'`,
+    `  sku: {`,
+    `    name: '${a.sku?.name || "Developer"}'`,
+    `    capacity: ${a.sku?.capacity ?? 0}`,
+    `  }`,
+    `  properties: {`,
+    `    publisherEmail: '${a.properties?.publisherEmail || ""}'`,
+    `    publisherName: '${a.properties?.publisherName || ""}'`,
+    `  }`,
+    `}`,
+  ].join("\n");
+  const terraformText = [
+    `resource "azurerm_api_management" "this" {`,
+    `  name                = "${a.name}"`,
+    `  location            = "${a.location}"`,
+    `  resource_group_name = "${a.resourceGroup}"`,
+    `  publisher_name      = "${a.properties?.publisherName || ""}"`,
+    `  publisher_email     = "${a.properties?.publisherEmail || ""}"`,
+    `  sku_name            = "${a.sku?.name || "Developer"}_${a.sku?.capacity ?? 0}"`,
+    `}`,
+  ].join("\n");
+  const shown = tab === "arm" ? text : tab === "bicep" ? bicepText : terraformText;
   const download = () => {
+    const ext = { arm: "json", bicep: "bicep", terraform: "tf" }[tab];
     const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    el.download = `${a.name}.json`;
+    el.href = URL.createObjectURL(new Blob([shown], { type: "text/plain" }));
+    el.download = `${a.name}.${ext}`;
     document.body.appendChild(el); el.click(); el.remove();
   };
   return (
@@ -529,8 +560,7 @@ function ExportTemplate({ a }) {
       </TabList>
       <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
         <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
-        {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
+        <Textarea readOnly value={shown} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
       </section>
     </CapabilityContainer>
   );
@@ -544,14 +574,18 @@ function ScaleOutAndUp({ a, reload }) {
   const notify = useNotify();
   const [units, setUnits] = useState(a.sku?.capacity ?? 1);
   const [busy, setBusy] = useState(false);
+  // Consumption has no scale units; Developer is capped at exactly 1 — ENFORCED on the ARM
+  // PATCH too (azure_arm_core._apim_tier_block, azure.apim.scaletier), this just mirrors it.
+  const fixed = a.sku?.name === "Consumption" ? 0 : a.sku?.name === "Developer" ? 1 : null;
   return (
     <CapabilityContainer id="azure.apim.scaletier" title={`${a.name} | Scale out and up`}>
       <p style={{ fontSize: 13 }}>Current tier: <b>{a.sku?.name || "--"}</b>. Units: <b>{a.sku?.capacity ?? 0}</b>.</p>
-      <Field label="Units" style={{ maxWidth: 240 }}>
-        <Input type="number" min={0} max={12} value={String(units)} onChange={(_, d) => setUnits(Number(d.value) || 0)} aria-label="Units" />
+      <Field label="Units" style={{ maxWidth: 240 }} hint={fixed !== null ? `The ${a.sku?.name} tier has a fixed unit count.` : undefined}>
+        <Input type="number" min={0} max={12} value={String(fixed ?? units)} disabled={fixed !== null}
+          onChange={(_, d) => setUnits(Number(d.value) || 0)} aria-label="Units" />
       </Field>
       <div style={{ marginTop: 12 }}>
-        <Button appearance="primary" disabled={busy} onClick={async () => {
+        <Button appearance="primary" disabled={busy || fixed !== null} onClick={async () => {
           setBusy(true);
           try {
             await api.updateService(a.resourceGroup, a.name, { sku: { capacity: units } });
@@ -580,7 +614,11 @@ function PricingTier({ a, reload }) {
         <Button appearance="primary" disabled={busy} onClick={async () => {
           setBusy(true);
           try {
-            await api.updateService(a.resourceGroup, a.name, { sku: { name: tier } });
+            // Consumption/Developer carry a fixed unit count — set it in the SAME PATCH so a
+            // tier switch never leaves a stale capacity the new tier doesn't allow (ENFORCED:
+            // azure_arm_core._apim_tier_block, azure.apim.scaletier).
+            const fixedCapacity = tier === "Consumption" ? 0 : tier === "Developer" ? 1 : undefined;
+            await api.updateService(a.resourceGroup, a.name, { sku: { name: tier, ...(fixedCapacity !== undefined ? { capacity: fixedCapacity } : {}) } });
             notify.success(`'${a.name}' tier changed to ${tier}.`, "Pricing tier updated");
             reload();
           } catch (e) { notify.error(e, "Changing tier failed"); }

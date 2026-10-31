@@ -26,6 +26,7 @@ import base64
 import datetime
 import re
 import uuid
+from urllib.parse import urlsplit
 
 try:                                              # host: package import
     from core.azure_arm_data import CATALOG, ROLES
@@ -347,6 +348,20 @@ def _check_access_marker(chain):
     return None
 
 
+def _parse_kv_secret_identifier(secret_id: str):
+    """`https://{vault}.vault.azure.net/secrets/{name}[/{version}]` -> (name, version|None),
+    the same shape the azure-keyvault-secrets SDK parses a secret `id` back out of
+    (core/azure_keyvault_secrets_core.py) — used in reverse here to resolve an APIM named
+    value's `keyVault.secretIdentifier` against this space's own KV secrets store."""
+    try:
+        segs = [s for s in urlsplit(secret_id).path.split("/") if s]
+    except Exception:
+        return None, None
+    if len(segs) < 2 or segs[0] != "secrets":
+        return None, None
+    return segs[1], (segs[2] if len(segs) > 2 else None)
+
+
 def _view(rec: dict) -> dict:
     return {k: v for k, v in rec.items() if not k.startswith("_")}
 
@@ -414,6 +429,7 @@ class AzureArm:
         self.sub_names: dict = {}               # subscription id (lower) -> displayName (Microsoft.Subscription/rename)
         self.sub_tags: dict = {}                # subscription id (lower) -> tags (Microsoft.Resources/tags/default)
         self.providers: dict = {}               # namespace (lower) -> "Registered" | "NotRegistered"
+        self.kv_secrets_store = None             # set by aws_wire_router.py: this space's Key Vault secrets store (APIM named-value listValue)
 
     # ── per-resource ARM activity entries (Microsoft.Insights/eventtypes rows) ──
     # Kept IN self.state (so they persist with the rest of ARM, offline and Nano alike) by the one
@@ -811,6 +827,9 @@ class AzureArm:
             blocked = self._cosmos_validate_block(type_chain, names, payload, sub, rg)
             if blocked:
                 return blocked
+            blocked = self._apim_tier_block(type_chain, names, payload, sub, rg)
+            if blocked:
+                return blocked
             if full_type.lower() == "microsoft.authorization/roleassignments":
                 # Real ARM derives a role assignment's scope from the resource ID it was PUT
                 # under — not from a client-supplied properties.scope — so checkAccess and the
@@ -922,6 +941,27 @@ class AzureArm:
             if props.get("requiresDuplicateDetection"):
                 return _err(400, "BadRequest",
                             "Duplicate detection is not supported on a Basic-tier Service Bus namespace.")
+        return None
+
+    def _apim_tier_block(self, type_chain, names, payload, sub, rg):
+        """Microsoft.ApiManagement/service sku.capacity — real APIM rejects a scale unit count
+        the tier doesn't allow: Consumption is serverless (no scale units at all) and Developer
+        is capped at exactly 1 (no scale-out, no SLA) — Vyomi now ENFORCES both instead of
+        storing whatever sku the caller sends (azure.apim.scaletier). Checked against the
+        EFFECTIVE sku (payload over existing), so a tier-only PATCH that would leave a stale,
+        now-invalid capacity in place is rejected too, not just a capacity-only PATCH."""
+        if type_chain[0].lower() != "microsoft.apimanagement" or type_chain[1].lower() != "service" or len(type_chain) != 2:
+            return None
+        sku = (payload or {}).get("sku")
+        if not isinstance(sku, dict):
+            return None
+        existing_sku = (self.state.get(_canonical_id(sub, rg, type_chain, names).lower()) or {}).get("sku") or {}
+        tier = sku.get("name", existing_sku.get("name"))
+        capacity = sku.get("capacity", existing_sku.get("capacity"))
+        if tier == "Consumption" and capacity not in (None, 0):
+            return _err(400, "BadRequest", "The Consumption tier has no scale units — sku.capacity must be 0.")
+        if tier == "Developer" and capacity not in (None, 1):
+            return _err(400, "BadRequest", "The Developer tier is capped at exactly 1 unit (no scale-out, no SLA).")
         return None
 
     def _aks_stopped_block(self, type_chain, names, sub, rg):
@@ -1537,6 +1577,8 @@ class AzureArm:
             return self._cosmos_keys_action(action, resource_name, parent_rid, payload or {})
         if ns == "microsoft.documentdb" and typ == "databaseaccounts" and action == "failoverprioritychange":
             return self._cosmos_failover_action(resource_name, parent_rid, payload or {})
+        if ns == "microsoft.apimanagement" and typ == "service" and len(type_chain) > 2 and type_chain[2].lower() == "namedvalues" and action == "listvalue":
+            return self._apim_namedvalue_listvalue(resource_name, parent_rid)
         if action in ("start", "poweroff", "restart", "deallocate"):
             if ns != "microsoft.compute" or typ != "virtualmachines":
                 return _err(400, "ActionNotSupported",
@@ -1634,6 +1676,34 @@ class AzureArm:
         rec["properties"]["readLocations"] = [{"locationName": l["locationName"], "failoverPriority": l["failoverPriority"]} for l in new_locations]
         _record_activity(account_name, "Failover", f"Microsoft.DocumentDB/databaseAccounts '{account_name}' promoted '{primary}' to the write region")
         return _ok(None, status=202)
+
+    def _apim_namedvalue_listvalue(self, nv_name, parent_rid):
+        """Microsoft.ApiManagement/service/namedValues/{name}/listValue — the real action behind
+        a named value's "Show value" eye icon. For a plain/secret named value this is just
+        `properties.value`; for a Key Vault reference (`properties.keyVault.secretIdentifier`)
+        the real portal resolves it against the live vault — ENFORCED here for real against
+        THIS space's OWN Key Vault secrets store (azure_keyvault_secrets_core's KvStore, shared
+        via aws_wire_router.AwsWireRouter.__init__), since a Key Vault reference pointing at a
+        vault/secret that was never created (or has been deleted) is a genuine 400 in Azure too
+        (azure.apim.namedvalues.keyvaultref)."""
+        rec = self.state.get(parent_rid.lower()) if parent_rid else None
+        if not rec:
+            return _err(404, "ResourceNotFound", f"Named value '{nv_name}' not found.")
+        props = rec.get("properties") or {}
+        secret_id = (props.get("keyVault") or {}).get("secretIdentifier")
+        if not secret_id:
+            return _ok({"value": props.get("value") or ""})
+        secret_name, version = _parse_kv_secret_identifier(secret_id)
+        store = self.kv_secrets_store
+        secret_rec = store.get_secret(secret_name) if store and secret_name else None
+        if not secret_rec or secret_rec.get("deleted") or not secret_rec.get("versions"):
+            return _err(400, "KeyVaultErrorSecretNotFound",
+                        f"Named value '{nv_name}' references Key Vault secret '{secret_name}', which was not found.")
+        ver = secret_rec["versions"].get(version or secret_rec["current"])
+        if not ver:
+            return _err(400, "KeyVaultErrorSecretNotFound",
+                        f"Named value '{nv_name}' references a version of '{secret_name}' that was not found.")
+        return _ok({"value": ver.get("value") or ""})
 
     def _aks_action(self, action, cluster_name, parent_rid, payload):
         """POST actions on Microsoft.ContainerService/managedClusters/{name}/<action> — start/stop

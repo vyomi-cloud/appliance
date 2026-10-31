@@ -1,6 +1,8 @@
-/* Named values panel: real ARM sub-resource of the service. "Key vault" named values store
- * the reference exactly as configured (config_only) — Vyomi never resolves the live secret,
- * matching the real portal's own grid, which also never shows the resolved value. */
+/* Named values panel: real ARM sub-resource of the service. The grid's "Show value" button
+ * calls the real listValue action (core/azure_arm_core.AzureArm._apim_namedvalue_listvalue);
+ * for a Key Vault reference that resolves against this space's own Key Vault secret
+ * (azure.apim.namedvalues.keyvaultref) — a reference to a vault/secret that was never created
+ * here fails exactly like it would against a real, empty vault. */
 import { useState } from "react";
 import {
   Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Radio, RadioGroup,
@@ -34,13 +36,35 @@ export default function NamedValues({ rg, svc }) {
         columns={[
           { key: "name", label: "Name", value: (r) => r.properties?.displayName || r.name },
           { key: "type", label: "Type", value: (r) => (r.properties?.keyVault ? "Key Vault" : r.properties?.secret ? "Secret" : "Plain") },
-          { key: "value", label: "Value", value: (r) => r.properties?.keyVault ? "(from Key Vault)" : r.properties?.secret ? "••••••••" : r.properties?.value },
+          {
+            key: "value", label: "Value",
+            value: (r) => r.properties?.keyVault ? "(from Key Vault)" : r.properties?.secret ? "••••••••" : r.properties?.value,
+            render: (r) => <ShowValue rg={rg} svc={svc} nv={r} />,
+          },
           { key: "tags", label: "Tags", value: (r) => (r.properties?.tags || []).join(", ") || "--" },
         ]}
       />
       <AddNamedValueDialog open={add} onClose={() => setAdd(false)} existing={data || []}
         onCreate={async (id, body) => { await api.NamedValues.put(rg, svc, id, body); reload(); }} />
     </>
+  );
+}
+
+function ShowValue({ rg, svc, nv }) {
+  const notify = useNotify();
+  const [value, setValue] = useState(null);
+  const [busy, setBusy] = useState(false);
+  if (value !== null) return <code>{value}</code>;
+  return (
+    <Button size="small" appearance="transparent" disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try { setValue((await api.listNamedValueValue(rg, svc, nv.name)).value ?? ""); }
+        catch (e) { notify.error(e, "Show value failed"); }
+        finally { setBusy(false); }
+      }}>
+      Show value
+    </Button>
   );
 }
 

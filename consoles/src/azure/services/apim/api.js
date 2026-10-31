@@ -41,6 +41,12 @@ export const Apis = subResource("apis");
 export const Products = subResource("products");
 export const Subscriptions = subResource("subscriptions");
 export const NamedValues = subResource("namedValues");
+// Microsoft.ApiManagement/service/namedValues/{id}/listValue — the real action behind the
+// grid's "Show value" eye icon. For a Key Vault-type named value this resolves against the
+// live secret (core/azure_arm_core.AzureArm._apim_namedvalue_listvalue); plain/secret types
+// just return the stored value through the same native call.
+export const listNamedValueValue = async (rg, svc, id) =>
+  restJson("POST", `${NamedValues.path(rg, svc, id)}/listValue`, { query: { "api-version": ARM.apiVersion } });
 export const Backends = subResource("backends");
 export const ApiTags = subResource("tags");
 export const PolicyFragments = subResource("policyFragments");
@@ -72,10 +78,15 @@ export const listActivityLog = async (rg, name, timespan) => {
   return (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/eventtypes/management/values`, { query })).value || [];
 };
 
-// ── Access control (IAM): real ARM resources, subscription-wide (see capabilities.json) ────
+// ── Access control (IAM): real ARM resources ────────────────────────────────────────────
+// Role assignments are scoped to THIS service (plus its subscription/resource-group
+// ancestors — real Azure's "inherited" access), the same re-entrant extension-resource shape
+// as locks/diagnostic settings (core/azure_arm_core.AzureArm._arm, `_role_assignment_marker`).
+// Role definitions (the built-in Owner/Contributor/Reader + any custom roles) are a flat
+// subscription-wide catalog in real Azure too — there's no per-resource "Roles" list.
 const AUTHZ_API = "2022-04-01";
-export const listRoleAssignments = async () =>
-  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": AUTHZ_API } })).value || [];
+export const listRoleAssignments = async (rg, name) =>
+  (await restJson("GET", `${ARM.path(rg, name)}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": AUTHZ_API } })).value || [];
 export const listRoleDefinitions = async () =>
   (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": AUTHZ_API } })).value || [];
 
