@@ -713,6 +713,11 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     if is_unified("lambda"):   # C0f: API Gateway / Step Functions / Scheduler reach the appliance's functions
         from core import appliance_stores as _aps
         _ns["lam"] = _aps.lambda_store()
+    try:   # the Azure SQL data plane enforces the server's ARM settings (publicNetworkAccess, …):
+        from providers.azure_services import core_arm as _core_arm   # read the appliance's OWN ARM state
+        _ns["az_arm"] = _core_arm()
+    except Exception:
+        pass
     r = router or AwsWireRouter(stores=_ns)
     _sfn_lambda(r.lam)   # Step Functions Task states invoke the Lambdas this router serves
     global _NEW_SERVICES_ROUTER
@@ -720,8 +725,15 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
 
     async def _proxy(request: Request):
         body = await request.body()
-        out = await r.ahandle(request.method, request.url.path,
-                              dict(request.query_params), dict(request.headers), body)
+        from core import app_context as _ctx
+        # /azure-sql reads the Azure space's ARM records (space-scoped by provider)
+        tok = _ctx.REQUEST_PROVIDER.set("azure") if request.url.path.startswith("/azure-sql") else None
+        try:
+            out = await r.ahandle(request.method, request.url.path,
+                                  dict(request.query_params), dict(request.headers), body)
+        finally:
+            if tok is not None:
+                _ctx.REQUEST_PROVIDER.reset(tok)
         return Response(content=out["body"], status_code=out["status"],
                         headers={k: v for k, v in (out["headers"] or {}).items()})
 

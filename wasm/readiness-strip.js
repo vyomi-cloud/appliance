@@ -158,7 +158,10 @@
       var mark = logos && logos[s.category];
       var dot = document.createElement('span');
       if (mark) {
-        dot.innerHTML = mark;
+        // unique gradient ids per copy: url(#id) resolves to the FIRST element with that id, and
+        // a copy inside a hidden view (display:none) would blank the space cards' own logo
+        var uid = 'm' + (window.__vyMarkSeq = (window.__vyMarkSeq || 0) + 1) + '-';
+        dot.innerHTML = mark.replace(/id="([^"]+)"/g, 'id="' + uid + '$1"').replace(/url\(#([^)]+)\)/g, 'url(#' + uid + '$1)');
         dot.title = ({ aws: 'AWS', gcp: 'Google Cloud', azure: 'Microsoft Azure' })[s.category] + ' — ' +
           (up ? 'ready' : s.status === 'error' ? 'error' : 'not running');
         dot.style.cssText = 'width:22px; height:16px; flex:none; display:inline-flex; align-items:center; justify-content:center;' +

@@ -84,10 +84,11 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 // Native 404s (e.g. a deleted resource's GET) and 409s (e.g. a locked resource's blocked
 // write/delete) are expected answers, not page errors.
-page.on("console", (m) => m.type() === "error" && !/status of (404|409)/.test(m.text()) && errors.push(m.text()));
-// Native 404s (e.g. a deleted resource's GET) and 403s (e.g. a query against a server with
-// public network access disabled) are expected answers, not page errors.
-page.on("console", (m) => m.type() === "error" && !/status of (404|403)/.test(m.text()) && errors.push(m.text()));
+// Native 404s (e.g. a deleted resource's GET), 403s (e.g. a query against a server with public
+// network access disabled) and 409s (e.g. deleting a locked resource) are expected answers,
+// not page errors. ONE handler: two handlers with different allow-lists each record the
+// other's expected codes.
+page.on("console", (m) => m.type() === "error" && !/status of (403|404|409)/.test(m.text()) && errors.push(m.text()));
 const shot = (name) => page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
 const openPanel = async (label) => { await page.getByRole("navigation", { name: "Resource menu" }).getByRole("link", { name: label, exact: true }).click(); await page.waitForTimeout(500); };
 
@@ -655,12 +656,12 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Check access", exact: true }).click();
   await page.getByText("Allowed").waitFor({ timeout: 10000 });
   check("UI Check access → real decision reflects the role just assigned", true);
-  await page.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).last().click();   // the dialog's own Close (not the X)
 
   await page.getByRole("tab", { name: "Role assignments" }).click();
   await page.getByLabel(`Select ${RGPRINCIPAL}`, { exact: true }).check();
   await page.getByRole("button", { name: "Remove", exact: true }).click();
-  await page.getByText(RGPRINCIPAL).waitFor({ state: "detached", timeout: 10000 });
+  await page.getByRole("row", { name: new RegExp(RGPRINCIPAL.replace(/[.@]/g, "\\$&")) }).waitFor({ state: "detached", timeout: 10000 });
   const raGone = await arm("GET", `/resourceGroups/${RGUI}/providers/Microsoft.Authorization/roleAssignments`);
   check("UI Remove role assignment → gone over native ARM",
     !(JSON.parse(raGone.text).value || []).some((r) => r.properties?.principalId === RGPRINCIPAL), raGone.text);
@@ -742,8 +743,10 @@ try {
   await page.getByLabel("Web service URL", { exact: true }).fill("https://example.com");
   await page.getByRole("button", { name: "Review + create" }).click();
   await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  const apiPut = page.waitForResponse((r) => r.request().method() === "PUT" && /\/apis\/smoke-api\?/.test(r.url()), { timeout: 15000 });
   await page.getByRole("button", { name: "Create", exact: true }).click();
-  await page.getByText("smoke-api", { exact: true }).waitFor({ timeout: 10000 });
+  await apiPut;   // the review step already shows "smoke-api", so wait for the real PUT
+  await page.getByText("smoke-api", { exact: true }).first().waitFor({ timeout: 10000 });
   const apiGot = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/apis/smoke-api`);
   check("UI create API → visible over native ARM (nested sub-resource)", apiGot.status === 200, `HTTP ${apiGot.status}`);
   await shot("26-apim-apis");
@@ -1428,8 +1431,13 @@ try {
   await shot("24-entra-group-blocked");
 
   await graph("PATCH", "/settings/directory", { usersCanCreateSecurityGroups: true });
-  await page.getByRole("button", { name: "Create", exact: true }).click();
-  await page.getByText(EGRP, { exact: true }).waitFor({ timeout: 10000 });
+  const createBtn = page.getByRole("button", { name: "Create", exact: true });
+  await createBtn.waitFor({ state: "visible", timeout: 10000 });
+  await page.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Create" && !b.disabled), null, { timeout: 10000 });
+  const groupPost = page.waitForResponse((r) => r.request().method() === "POST" && /\/v1\.0\/groups(\?|$)/.test(r.url()), { timeout: 15000 });
+  await createBtn.click();
+  await groupPost;   // the review step already shows the name: wait for the real create
+  await page.getByText(EGRP, { exact: true }).first().waitFor({ timeout: 10000 });
   const allowedGroups = await graph("GET", "/groups");
   const allowedCreated = (allowedGroups.status === 200 ? JSON.parse(allowedGroups.text).value : []).some((g) => g.displayName === EGRP);
   check("setting back to Yes allows the same group creation over native Microsoft Graph wire", allowedCreated);

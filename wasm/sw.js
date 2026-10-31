@@ -147,8 +147,12 @@ async function nanoBackends() {
 }
 
 function json(obj, status, extraHeaders) {
-  return new Response(obj === null ? "" : JSON.stringify(obj),
-    { status: status || 200, headers: { "content-type": "application/json", ...(extraHeaders || {}) } });
+  // 101/204/205/304 must not carry a body — even "" — or the Response constructor throws
+  // (e.g. an ARM DELETE of an already-absent resource answering 204 became a 500).
+  const st = status || 200;
+  const noBody = [101, 204, 205, 304].includes(st);
+  return new Response(noBody ? null : (obj === null ? "" : JSON.stringify(obj)),
+    { status: st, headers: { "content-type": "application/json", ...(extraHeaders || {}) } });
 }
 
 // Decode a JWT's payload (no signature check — the token comes straight from the

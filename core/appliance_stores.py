@@ -888,6 +888,7 @@ class AppStateComputeVmStore(_SlotStore, _gci.ComputeStore):
 
     _KEYS = {"instances": dict, "disks": dict, "images": dict, "snapshots": dict,
              "machine_images": dict, "instance_templates": dict, "instance_groups": dict,
+             "instance_group_managers": dict,
              "health_checks": dict, "operations": dict, "project_metadata": dict,
              "seq": lambda: {"op": 0, "id": 1000}}
 
@@ -901,6 +902,7 @@ class AppStateComputeVmStore(_SlotStore, _gci.ComputeStore):
     machine_images = _slot_attr("machine_images")
     instance_templates = _slot_attr("instance_templates")
     instance_groups = _slot_attr("instance_groups")
+    instance_group_managers = _slot_attr("instance_group_managers")
     health_checks = _slot_attr("health_checks")
     operations = _slot_attr("operations")
     project_metadata = _slot_attr("project_metadata")

@@ -812,7 +812,8 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     if low[0] == "resourcegroups" and (
             len(low) <= 2
             or (len(low) == 3 and low[2] == "resources")
-            or (len(low) >= 5 and low[2] == "providers" and low[3] == "microsoft.authorization" and low[4] == "locks")):
+            or (len(low) >= 5 and low[2] == "providers" and low[3] == "microsoft.authorization"
+                and low[4] in ("locks", "roleassignments", "roledefinitions", "checkaccess"))):
         if method == "DELETE" and len(low) == 2:
             for rec in [r for r in list(_state.values())
                         if isinstance(r, dict) and r.get("_sub") == sub and (r.get("_rg") or "").lower() == low[1]]:
@@ -938,6 +939,15 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         # Compute the parent resource's canonical id (drop the action segment)
         # so action handlers can locate the record they're operating on.
         parent_rid = _canonical_id(sub, rg, type_chain[:-1], names)
+        # Cosmos DB (keys, failoverPriorityChange), ACR credentials and deployment
+        # cancel/redeploy are the shared core engine's (what Nano serves); VM power actions
+        # stay here (they drive the real runtime).
+        if type_chain[0].lower() in ("microsoft.documentdb", "microsoft.containerregistry", "microsoft.resources"):
+            payload = await _safe_json(request)
+            out = core_arm()._arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid,
+                                         payload, sub=sub, rg=rg)
+            return JSONResponse(status_code=out.get("status", 200), content=out.get("body"),
+                                headers=out.get("headers") or None)
         return _arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid)
 
     full_type = "/".join(type_chain)

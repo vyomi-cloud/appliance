@@ -26,6 +26,7 @@ import copy
 import json
 
 _B64 = "__b64__"
+_SET = "__vyomi_set__"
 
 # Every store the AwsWireRouter owns (AWS + GCP + Azure). Keyed names match the
 # router attrs AND the shared-registry keys (nano_registry), so one snapshot maps
@@ -67,6 +68,13 @@ def _enc(v):
         return {k: _enc(x) for k, x in v.items()}
     if isinstance(v, (list, tuple)):
         return [_enc(x) for x in v]
+    if isinstance(v, (set, frozenset)):   # e.g. Microsoft Graph group memberships
+        items = [_enc(x) for x in v]
+        try:
+            items.sort()
+        except TypeError:
+            pass
+        return {_SET: items}
     return v
 
 
@@ -74,6 +82,8 @@ def _dec(v):
     if isinstance(v, dict):
         if set(v.keys()) == {_B64}:
             return base64.b64decode(v[_B64])
+        if set(v.keys()) == {_SET}:
+            return {_dec(x) for x in v[_SET]}
         return {k: _dec(x) for k, x in v.items()}
     if isinstance(v, list):
         return [_dec(x) for x in v]

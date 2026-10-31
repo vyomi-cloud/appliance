@@ -300,7 +300,9 @@ try {
     Principal: { AWS: "arn:aws:iam::123456789012:root" }, Action: "secretsmanager:GetSecretValue", Resource: "*" }] });
   await page.getByRole("button", { name: "Edit permissions" }).click();
   await page.getByLabel("Resource policy", { exact: true }).fill(policyText);
+  const putPolicyResp = page.waitForResponse((r) => /PutResourcePolicy$/.test(r.request().headers()["x-amz-target"] || ""), { timeout: 15000 });
   await page.getByRole("button", { name: "Save changes" }).click();
+  await putPolicyResp;
   await page.getByRole("button", { name: "Edit permissions" }).waitFor({ timeout: 10000 });
   const putPolicy = await sm("GetResourcePolicy", { SecretId: S3 });
   check("Secrets Manager: detail page Resource permissions editor → PutResourcePolicy over native wire",
