@@ -50,7 +50,8 @@
     "route": "#/kubernetes/object-browser"
   },
   "backup-for-gke": {
-    "route": "#/kubernetes/backup"
+    "route": "#/kubernetes/backup",
+    "live": "live-backup-plan"
   },
   "config": {
     "route": "#/kubernetes/config"

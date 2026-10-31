@@ -81,6 +81,31 @@ check("flipping DNS off while IPv4 stays off -> 400 (no access method left)", s 
 s, _ = call(st, "PUT", L + "/clusters/cpe-dns-only", {"update": {"desiredControlPlaneEndpointsConfig": {"ipEndpointsConfig": {"enabled": True}}}})
 c = call(st, "GET", L + "/clusters/cpe-dns-only")[1]
 check("re-enabling IPv4 access restores the public endpoint", s == 200 and bool(c["endpoint"]), c)
+
+# Backup for GKE (gkebackup shape: backupPlans + backups, served from this core).
+s, _ = call(st, "POST", L + "/clusters", {"cluster": {"name": "bc1", "initialNodeCount": 2}})
+s, body = call(st, "POST", L + "/backupPlans", {"cluster": "projects/p1/locations/us-central1/clusters/bc1", "description": "nightly"}, query={"backupPlanId": "bp1"})
+check("create backup plan: READY, references cluster", s == 200 and body["state"] == "READY" and body["cluster"].endswith("/clusters/bc1"), body)
+check("create backup plan for missing cluster -> 400", call(st, "POST", L + "/backupPlans", {"cluster": "projects/p1/locations/us-central1/clusters/nope"}, query={"backupPlanId": "bp2"})[0] == 400)
+check("duplicate backup plan id -> 409", call(st, "POST", L + "/backupPlans", {"cluster": "projects/p1/locations/us-central1/clusters/bc1"}, query={"backupPlanId": "bp1"})[0] == 409)
+check("get backup plan", call(st, "GET", L + "/backupPlans/bp1")[1]["name"].endswith("/backupPlans/bp1"))
+check("list backup plans", [p["name"].rsplit("/", 1)[-1] for p in call(st, "GET", L + "/backupPlans")[1]["backupPlans"]] == ["bp1"])
+s, backup = call(st, "POST", L + "/backupPlans/bp1/backups", {}, query={"backupId": "b1"})
+check("create backup: SUCCEEDED, sizes derived from the cluster", s == 200 and backup["state"] == "SUCCEEDED"
+      and int(backup["sizeBytes"]) > 0 and backup["clusterMetadata"]["cluster"].endswith("/clusters/bc1"), backup)
+check("backup plan protectedPodCount updated after a backup", call(st, "GET", L + "/backupPlans/bp1")[1]["protectedPodCount"] == backup["podCount"])
+check("list backups under the plan", [b["name"].rsplit("/", 1)[-1] for b in call(st, "GET", L + "/backupPlans/bp1/backups")[1]["backups"]] == ["b1"])
+check("get backup", call(st, "GET", L + "/backupPlans/bp1/backups/b1")[1]["state"] == "SUCCEEDED")
+check("duplicate backup id -> 409", call(st, "POST", L + "/backupPlans/bp1/backups", {}, query={"backupId": "b1"})[0] == 409)
+check("delete backup plan with backups, no force -> 400 FAILED_PRECONDITION",
+      call(st, "DELETE", L + "/backupPlans/bp1")[1]["error"]["status"] == "FAILED_PRECONDITION")
+check("delete backup plan with force=true cascades", call(st, "DELETE", L + "/backupPlans/bp1", query={"force": "true"})[0] == 200
+      and call(st, "GET", L + "/backupPlans/bp1")[0] == 404 and call(st, "GET", L + "/backupPlans/bp1/backups/b1")[0] == 404)
+s, _ = call(st, "POST", L + "/backupPlans", {"cluster": "projects/p1/locations/us-central1/clusters/bc1"}, query={"backupPlanId": "bp3"})
+check("create second backup plan on bc1", s == 200)
+check("delete cluster bc1", call(st, "DELETE", L + "/clusters/bc1")[0] == 200)
+s, body = call(st, "POST", L + "/backupPlans/bp3/backups", {}, query={"backupId": "b2"})
+check("backup run against a now-deleted cluster -> 400 FAILED_PRECONDITION", s == 400 and body["error"]["status"] == "FAILED_PRECONDITION", body)
 print(f"RESULT pass={PASS} fail={FAIL}")
 
 

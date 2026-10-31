@@ -31,6 +31,28 @@ export const setNodePoolAutoscaling = (location, cluster, pool, autoscaling) =>
 
 export const serverConfig = (location) => restJson("GET", `${base(location)}/serverConfig`);
 
+export async function listOperations(location = "-") {
+  const r = await restJson("GET", `${base(location)}/operations`);
+  return r.operations || [];
+}
+
+/* Backup for GKE (gkebackup.googleapis.com shape) — real create/list/get/delete over the
+ * native REST API; see core/gcp_container_core.py's "Backup for GKE" section. */
+export async function listBackupPlans(location = "-") {
+  const r = await restJson("GET", `${base(location)}/backupPlans`);
+  return r.backupPlans || [];
+}
+export const getBackupPlan = (location, id) => restJson("GET", `${base(location)}/backupPlans/${e(id)}`);
+export const createBackupPlan = (location, id, plan) => restJson("POST", `${base(location)}/backupPlans`, { query: { backupPlanId: id }, body: plan });
+export const deleteBackupPlan = (location, id, force) => restJson("DELETE", `${base(location)}/backupPlans/${e(id)}`, { query: force ? { force: "true" } : undefined });
+export async function listBackups(location, planId) {
+  const r = await restJson("GET", `${base(location)}/backupPlans/${e(planId)}/backups`);
+  return r.backups || [];
+}
+export const createBackup = (location, planId, id) => restJson("POST", `${base(location)}/backupPlans/${e(planId)}/backups`, { query: { backupId: id }, body: {} });
+export const deleteBackup = (location, planId, id) => restJson("DELETE", `${base(location)}/backupPlans/${e(planId)}/backups/${e(id)}`);
+export const backupPlanId = (fullName) => fullName.split("/").pop();
+
 export const REGIONS = [
   ["us-central1", "us-central1 (Iowa)"], ["us-east1", "us-east1 (South Carolina)"], ["us-east4", "us-east4 (Northern Virginia)"],
   ["us-west1", "us-west1 (Oregon)"], ["europe-west1", "europe-west1 (Belgium)"], ["europe-west4", "europe-west4 (Netherlands)"],

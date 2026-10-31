@@ -79,8 +79,13 @@
  },
  "gcp.kubernetes.backup": {
   "title": "Backup for GKE",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Backup for GKE is a separate control plane (gkebackup.googleapis.com) that Vyomi does not implement."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Backup plans and on-demand backups are real create/list/get/delete resources (gkebackup.googleapis.com's projects.locations.backupPlans and .backups) that snapshot a cluster's GKE control-plane configuration (node pool shapes, version) at backup time. Not modeled: scheduled/automatic backups (backupSchedule is stored but never fires), actual pod volume data capture, and restore (RestorePlan/Restore) — only on-demand backups of cluster config."
+  ],
+  "api": ["projects.locations.backupPlans.create", "projects.locations.backupPlans.list", "projects.locations.backupPlans.get", "projects.locations.backupPlans.delete",
+          "projects.locations.backupPlans.backups.create", "projects.locations.backupPlans.backups.list", "projects.locations.backupPlans.backups.get", "projects.locations.backupPlans.backups.delete"],
+  "tests": ["tests/conformance/test_gcp_container_core.py"]
  },
  "gcp.kubernetes.config": {
   "title": "Config (Config Sync / Policy Controller / fleet configuration)",
@@ -104,7 +109,11 @@
  },
  "gcp.kubernetes.logs": {
   "title": "Logs",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Cloud Logging entries for cluster/workload events are not generated."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Shows the cluster's real GKE control-plane operations (projects.locations.operations: create/delete cluster, create/delete/resize node pool, upgrades) — genuine history, not placeholder rows. Cloud Logging entries (audit logs, container/workload logs) are not generated, since there is no Kubernetes API server or log-ingestion pipeline behind a simulated cluster."
+  ],
+  "api": ["projects.locations.operations.list"],
+  "tests": ["tests/conformance/test_gcp_container_core.py"]
  }
 }

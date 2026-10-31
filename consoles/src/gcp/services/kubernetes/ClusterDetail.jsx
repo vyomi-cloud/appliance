@@ -64,7 +64,7 @@ export default function ClusterDetail({ params, query }) {
       {tab === "nodes" && c.data && <Nodes cluster={c.data} location={location} reload={c.reload} />}
       {tab === "storage" && <CapabilityContainer id="gcp.kubernetes.storage" title="Storage" />}
       {tab === "observability" && <CapabilityContainer id="gcp.kubernetes.observability" title="Observability" />}
-      {tab === "logs" && <CapabilityContainer id="gcp.kubernetes.logs" title="Logs" />}
+      {tab === "logs" && c.data && <Logs location={location} name={name} />}
       {c.data && <EditDialog open={edit} onClose={() => setEdit(false)} cluster={c.data} location={location} reload={c.reload} />}
       <DeployDialog open={deploy} onClose={() => setDeploy(false)} />
       <ConnectDialog open={connect} onClose={() => setConnect(false)} cluster={c.data && { ...c.data, location_name: location }} />
@@ -105,6 +105,33 @@ function Details({ cluster: cl }) {
         ]} />
       </Section>
     </Stack>
+  );
+}
+
+// ── Logs (real GKE control-plane operations for this cluster — see the capability's
+// limitations for what this doesn't cover) ────────────────────────────────────────────────
+function Logs({ location, name }) {
+  const ops = useAsync(() => api.listOperations(location), [location, name]);
+  const rows = (ops.data || []).filter((o) => (o.targetLink || "").includes(`/clusters/${name}`))
+    .sort((a, b) => (b.startTime || "").localeCompare(a.startTime || ""));
+  return (
+    <CapabilityContainer id="gcp.kubernetes.logs" title="Logs">
+      <ErrorAlert error={ops.error} title="Failed to load operations" />
+      <ResourceTable
+        resourceName="operations"
+        items={rows}
+        rowKey={(o) => o.name}
+        loading={ops.loading}
+        dense
+        columns={[
+          { id: "type", header: "Operation", cell: (o) => o.operationType },
+          { id: "target", header: "Target", cell: (o) => o.targetLink?.split("/v1/")[1] },
+          { id: "status", header: "Status", cell: (o) => <Chip size="small" label={o.status} color={o.status === "DONE" ? "success" : "default"} /> },
+          { id: "time", header: "Time", cell: (o) => o.startTime },
+        ]}
+        empty={<Typography variant="body2" color="text.secondary">No control-plane operations recorded for this cluster yet.</Typography>}
+      />
+    </CapabilityContainer>
   );
 }
 
