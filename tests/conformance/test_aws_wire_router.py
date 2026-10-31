@@ -240,6 +240,9 @@ def run() -> int:
     R.handle("POST", "/jobs/messages", {}, XMS, b"<QueueMessage><MessageText>hello</MessageText></QueueMessage>")
     qget = R.handle("GET", "/jobs/messages", {"numofmessages": "1"}, XMS, b"")
     _check("azure queue publish→get delivers", b"hello" in qget["body"])
+    # A root ?comp=list is ambiguous on a shared endpoint; the queue address makes it queues
+    ql = R.handle("GET", "/azure-data/queue/devstoreaccount1", {"comp": "list"}, XMS, b"")
+    _check("azure queue list via /azure-data/queue lists queues", b"<Queues>" in ql["body"] and b"jobs" in ql["body"])
     # Cosmos: /dbs path
     cdb = R.handle("POST", "/dbs", {}, {**XMS, "x-ms-documentdb-version": "2018"}, _j.dumps({"id": "appdb"}).encode())
     _check("azure cosmos create db routes", cdb["status"] in (200, 201) and "appdb" in _body(cdb))

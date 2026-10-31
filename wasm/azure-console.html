@@ -1014,6 +1014,14 @@ function vyCodeTabs(o){
 
 // The snippets for each cloud (the same commands the release CLI checks run).
 // c: {cloud, ep, region, project, sub, nano}
+// The address the CLIs / SDKs reach this tab at: the tunnel's own address once it has connected,
+// else the default — the local tunnel on localhost, the hosted relay on vyomi.cloud.
+function nanoTunnelEp(){
+  var ls = function(k){ try{ return localStorage.getItem(k); }catch(_){ return null; } };
+  if(ls("nano_relay_external")) return ls("nano_relay_external");
+  if(/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(location.origin)) return "http://127.0.0.1:8090";
+  return "https://relay.vyomi.cloud/" + encodeURIComponent(ls("nano_session") || "nano");
+}
 function vyConnectTabs(c){
   const ep = c.ep;
   const pre = "", pyPre = "";
@@ -1122,7 +1130,7 @@ function buildSavingsCard(provider, cloud, accent){
 function buildConnectCard(){
   var card = el("div",{class:"card",style:"cursor:default;display:flex;flex-direction:column;margin-bottom:0"});
   card.append(el("div",{style:"display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px"}, icon("terminal"), "Connect your SDK or CLI"));
-  card.append(vyCodeTabs({note:"Nano: start the tunnel first (Start tunnel in the bottom bar), or run vyomi-tunnel; then these reach this browser tab.", accent:"#0078d4", tabs: vyConnectTabs({cloud:"azure", ep:"http://127.0.0.1:8090", sub: SUB, nano:true})}));
+  card.append(vyCodeTabs({note:"Nano: start the tunnel first (Start tunnel in the bottom bar), or run vyomi-tunnel; then these reach this browser tab.", accent:"#0078d4", tabs: vyConnectTabs({cloud:"azure", ep: nanoTunnelEp(), sub: SUB, nano:true})}));
   return card;
 }
 

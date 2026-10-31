@@ -790,6 +790,14 @@ function vyCodeTabs(o){
 
 // The snippets for each cloud (the same commands the release CLI checks run).
 // c: {cloud, ep, region, project, sub, nano}
+// The address the CLIs / SDKs reach this tab at: the tunnel's own address once it has connected,
+// else the default — the local tunnel on localhost, the hosted relay on vyomi.cloud.
+function nanoTunnelEp(){
+  var ls = function(k){ try{ return localStorage.getItem(k); }catch(_){ return null; } };
+  if(ls("nano_relay_external")) return ls("nano_relay_external");
+  if(/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(location.origin)) return "http://127.0.0.1:8090";
+  return "https://relay.vyomi.cloud/" + encodeURIComponent(ls("nano_session") || "nano");
+}
 function vyConnectTabs(c){
   const ep = c.ep;
   const pre = "", pyPre = "";
@@ -898,7 +906,7 @@ function buildSavingsCard(provider, cloud, accent){
 function buildConnectCard(){
   var card = el("div",{class:"card",style:"margin-bottom:0;display:flex;flex-direction:column"});
   card.append(el("div",{class:"h"}, icon("terminal"), "Connect your SDK or CLI"));
-  card.append(el("div",{class:"b"}, vyCodeTabs({note:"Nano: start the tunnel first (Start tunnel in the bottom bar), or run vyomi-tunnel; then these reach this browser tab.", accent:"var(--blue)", tabs: vyConnectTabs({cloud:"gcp", ep:"http://127.0.0.1:8090", project: PROJECT, nano:true})})));
+  card.append(el("div",{class:"b"}, vyCodeTabs({note:"Nano: start the tunnel first (Start tunnel in the bottom bar), or run vyomi-tunnel; then these reach this browser tab.", accent:"var(--blue)", tabs: vyConnectTabs({cloud:"gcp", ep: nanoTunnelEp(), project: PROJECT, nano:true})})));
   return card;
 }
 
