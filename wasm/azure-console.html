@@ -86,6 +86,26 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;background:#dff6dd;color:#107c10}
   .badge.warn{background:#fff4ce;color:#797673}
   .empty{padding:40px;text-align:center;color:var(--sub);background:#fff;border:1px dashed var(--line);border-radius:4px}
+  /* Azure portal Home: service icon row, Resources table, Navigate links. */
+  .az-h{font-size:20px;font-weight:600;margin:26px 0 14px;color:var(--ink)}
+  .az-svc-row{display:flex;flex-wrap:wrap;gap:4px 8px}
+  .az-svc{width:104px;display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 4px 10px;border-radius:4px;cursor:pointer;text-decoration:none;color:var(--ink)}
+  .az-svc:hover{background:#f3f2f1}
+  .az-svc-ic{width:36px;height:36px;display:flex;align-items:center;justify-content:center}
+  .az-svc-ic svg{width:36px;height:36px;display:block}
+  .az-svc-ic.sm,.az-svc-ic.sm svg{width:18px;height:18px}
+  .az-svc-ic.sm .material-symbols-outlined{font-size:18px!important}
+  .az-svc-l{font-size:13px;line-height:17px;text-align:center;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .az-res table{width:100%}
+  .az-more{display:inline-block;margin-top:10px;color:#0078d4;font-size:13px;cursor:pointer}
+  .az-more:hover{text-decoration:underline}
+  .az-empty{font-size:13px;color:var(--sub);padding:18px 0;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+  .az-btn{border:1px solid #8a8886;background:#fff;border-radius:2px;padding:5px 14px;font:inherit;font-size:13px;cursor:pointer}
+  .az-btn:hover{background:#f3f2f1}
+  .az-nav{display:flex;flex-wrap:wrap;gap:8px 36px}
+  .az-nav a{display:flex;align-items:center;gap:10px;font-size:14px;color:#0078d4;cursor:pointer}
+  .az-nav a .material-symbols-outlined{font-size:22px;color:#0078d4}
+  .az-nav a:hover{text-decoration:underline}
   .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
   .card{background:#fff;border:1px solid var(--line);border-radius:6px;padding:16px;cursor:pointer;transition:box-shadow .12s,transform .12s}
   .card:hover{box-shadow:0 3px 12px rgba(0,0,0,.10);transform:translateY(-2px)}
@@ -441,6 +461,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 #disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
 </style>
   <script type="module" src="./nano-boot.js?v=4"></script>
+<script src="./service-icons.js"></script>
 </head>
 <body>
 <script src="./nano-kernel.js"></script>
@@ -1143,25 +1164,68 @@ async function selectHome(){
   const wrap=el("div",{class:"wrap"});
   wrap.append(el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:14px;margin-bottom:16px;align-items:stretch"},   /* both cards share the row height */
     buildSavingsCard("azure", "Azure", "#0078d4"), buildConnectCard()));
-  const grid=el("div",{class:"cards"}); wrap.append(el("div",{style:"font-size:13px;color:var(--sub);margin-bottom:12px"},"Services — click to manage resources."), grid);
   main.append(wrap);
-  for(const s of CATALOG.services){
-    const card=el("div",{class:"card",onclick:()=>selectService(s.key)});
-    const t=el("div",{class:"t"}, el("div",{class:"ic"},icon(s.icon)), s.label);
-    const n=el("div",{class:"n"},"—"); const sub=el("div",{class:"s"},s.namespace+"/"+s.type);
-    card.append(t,n,sub); grid.append(card);
-    if(s.dataPlane){
-      // Data-plane services have no ARM namespace/type; count them the way
-      // selectService lists them (in-WASM cores via /api/azure/{key}).
-      fetch(ORIGIN+"/api/azure/"+s.key).then(r=>r.json()).then(j=>{
-        n.textContent = Array.isArray(j.items)? j.items.length : "0";
-      }).catch(()=>{ n.textContent="0"; });
-      continue;
+  // Azure portal Home: "Azure services" (a row of service icons with names, More services to
+  // show the rest), "Resources" (your resources: name / type / resource group) and "Navigate".
+  const AZ_IC = { vm:"vms", storage:"storage", sql:"sql", servicebus:"servicebus", cosmos:"cosmos", functionapp:"functionapp",
+    apim:"apim", vnet:"vnets", nsg:"nsgs", eventgrid:"eventgrid", keyvault:"keyvaults", monitor:"monitor",
+    operationalinsights:"monitor", role_definition:"entra", rbac:"entra" };
+  const svcIcon = (s) => {
+    const lib = window.VyomiServiceIcons, box = el("span",{class:"az-svc-ic"});
+    if (lib && AZ_IC[s.key]) box.innerHTML = '<svg viewBox="0 0 24 24">' + lib.azure(AZ_IC[s.key]) + '</svg>';
+    else box.append(el("span",{class:"material-symbols-outlined",style:"color:#0078d4;font-size:30px"}, s.icon || "apps"));
+    return box;
+  };
+  const svcs = CATALOG.services;
+  const row = el("div",{class:"az-svc-row"});
+  const drawRow = (all) => {
+    row.innerHTML = "";
+    // One line, as in the portal: as many tiles as fit, the last slot for More services.
+    const SHOWN = Math.max(3, Math.floor(((row.clientWidth || wrap.clientWidth || 1000) + 8) / 112) - 1);
+    (all ? svcs : svcs.slice(0, SHOWN)).forEach(s => row.append(el("a",{class:"az-svc",title:s.label,onclick:()=>selectService(s.key)}, svcIcon(s), el("span",{class:"az-svc-l"}, s.label))));
+    if (svcs.length > SHOWN) row.append(el("a",{class:"az-svc",onclick:()=>drawRow(!all)},
+      el("span",{class:"az-svc-ic"}, el("span",{class:"material-symbols-outlined",style:"color:#0078d4;font-size:30px"}, all ? "arrow_back" : "arrow_forward")),
+      el("span",{class:"az-svc-l"}, all ? "Fewer services" : "More services")));
+  };
+  wrap.prepend(el("h2",{class:"az-h",style:"margin-top:0"}, "Azure services"), row);   // first on the page, as in the portal
+  row.style.marginBottom = "24px";
+  drawRow(false);   // after it's on the page, so it can measure its width
+
+  // Resources: every resource in the space, from each service's own list call.
+  const resHolder = el("div",{class:"az-res"}, el("div",{class:"az-empty"}, "Loading resources…"));
+  wrap.append(el("h2",{class:"az-h"}, "Resources"), resHolder);
+  const rgOf = (id) => { const m = /\/resourceGroups\/([^/]+)/i.exec(id || ""); return m ? m[1] : RG; };
+  const found = [];
+  await Promise.all(svcs.map(s => {
+    if (s.dataPlane) {
+      const base = (typeof ORIGIN !== "undefined") ? ORIGIN : "";
+      return fetch(base + "/api/azure/" + s.key).then(r => r.json()).then(j => {
+        (Array.isArray(j.items) ? j.items : []).forEach(it => found.push({ name: it.name || it.id || "—", svc: s, rg: RG }));
+      }).catch(() => {});
     }
-    arm("GET", collPath(s), undefined, s.apiVersion).then(res=>{
-      n.textContent = res.json&&Array.isArray(res.json.value)? res.json.value.length : "0";
-    });
+    return arm("GET", collPath(s), undefined, s.apiVersion).then(res => {
+      ((res.json && Array.isArray(res.json.value)) ? res.json.value : []).forEach(it => found.push({ name: it.name || "—", svc: s, rg: rgOf(it.id) }));
+    }).catch(() => {});
+  }));
+  if (CURRENT !== "__home__") return;
+  resHolder.innerHTML = "";
+  if (!found.length) {
+    resHolder.append(el("div",{class:"az-empty"}, "No resources yet. Create one from a service above.",
+      el("div",{}, el("button",{class:"az-btn",onclick:()=>openRG(RG)}, "View all resources"))));
+  } else {
+    const t = el("table");
+    t.append(el("tr",{}, el("th",{}, "Name"), el("th",{}, "Type"), el("th",{}, "Resource group")));
+    found.slice(0, 10).forEach(r => t.append(el("tr",{class:"row"},
+      el("td",{}, el("span",{style:"display:inline-flex;align-items:center;gap:8px"}, (() => { const i = svcIcon(r.svc); i.classList.add("sm"); return i; })(),
+        el("a",{class:"reslink",onclick:()=>selectService(r.svc.key)}, r.name))),
+      el("td",{}, r.svc.label), el("td",{}, r.rg))));
+    resHolder.append(t, el("a",{class:"az-more",onclick:()=>openRG(RG)}, "See all (" + found.length + ")"));
   }
+
+  wrap.append(el("h2",{class:"az-h"}, "Navigate"));
+  wrap.append(el("div",{class:"az-nav"},
+    el("a",{onclick:()=>selectRG()}, icon("folder"), "Resource groups"),
+    el("a",{onclick:()=>openRG(RG)}, icon("apps"), "All resources")));
 }
 async function selectRG(){
   markActive("__rg__");
