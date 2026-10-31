@@ -1437,8 +1437,33 @@ class AzureArm:
                 if not existed:
                     self.state.pop(key, None)
                 return bad
+        if full_type.lower() == "microsoft.network/virtualnetworks":
+            self._sync_inline_subnets(rid, rec)
         self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)
+
+    def _sync_inline_subnets(self, vnet_rid, vnet_rec):
+        """A virtualNetwork PUT/PATCH may define its subnets inline (properties.subnets) —
+        real Azure's much more common pattern than the dedicated .../subnets/{name} PUT, and
+        treats both the same: one shared subnet collection, individually gettable and listable
+        either way. Mirror each inline subnet into its own flat state entry (the same shape
+        the dedicated PUT creates) so GET/LIST on the nested subnets path — and anything built
+        on it, e.g. the NSG blade's Subnets/Effective security rules association scan — sees it too."""
+        for s in (vnet_rec.get("properties") or {}).get("subnets") or []:
+            name = s.get("name")
+            if not name:
+                continue
+            sid = f"{vnet_rid}/subnets/{name}"
+            key = sid.lower()
+            rec = self.state.get(key) or {
+                "id": sid, "name": name, "type": "Microsoft.Network/virtualNetworks/subnets",
+                "_type": "microsoft.network/virtualnetworks/subnets",
+                "_sub": vnet_rec.get("_sub"), "_rg": vnet_rec.get("_rg"), "_created": _now(),
+            }
+            rec["properties"] = dict(s.get("properties") or {})
+            rec["properties"].setdefault("provisioningState", "Succeeded")
+            rec["systemData"] = {"createdAt": rec.get("_created", _now()), "lastModifiedAt": _now()}
+            self.state[key] = rec
 
     # ── netsim: NIC private-IP allocation + Network Watcher (IP flow verify / next hop) ──
     def _subnet_prefix(self, subnet_id: str):

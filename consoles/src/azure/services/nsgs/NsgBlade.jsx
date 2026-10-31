@@ -1,10 +1,10 @@
 /* Network security group resource blade: left resource menu + panels. Overview, Tags,
  * Inbound/Outbound security rules, Locks, Activity log, Properties, Export template,
  * Diagnostic settings, Access control (IAM) (Role assignments/Roles/Check access real; Deny
- * assignments/Classic administrators honest) and the Network interfaces / Subnets
- * association + Associate picker are backed by real ARM calls; the remaining menu items are
- * honest CapabilityContainer gaps (core/capabilities/azure/nsgs.json is the single source of
- * truth for which). */
+ * assignments/Classic administrators honest), Effective security rules and the Network
+ * interfaces / Subnets association + Associate picker are backed by real ARM calls; the
+ * remaining menu items are honest CapabilityContainer gaps (core/capabilities/azure/nsgs.json
+ * is the single source of truth for which). */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -23,6 +23,7 @@ import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedCon
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import EffectiveSecurityRules from "./EffectiveSecurityRules.jsx";
 import NetworkWatcherTools from "./NetworkWatcher.jsx";
 
 export const MENU = [
@@ -44,9 +45,7 @@ export const MENU = [
   { group: "Help", items: [{ id: "effectivesecurityrules", label: "Effective security rules" }, { id: "support", label: "Support + Troubleshooting" }] },
 ];
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
-const GAP_CAP = {
-  tasks: "azure.nsgs.tools", support: "azure.nsgs.tools", effectivesecurityrules: "azure.nsgs.tools",
-};
+const GAP_CAP = { tasks: "azure.nsgs.tools", support: "azure.nsgs.tools" };
 
 export default function NsgBlade({ params }) {
   const { rg, name } = params;
@@ -74,6 +73,7 @@ export default function NsgBlade({ params }) {
       exporttemplate: () => <ExportTemplate a={a} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} />,
       diagnose: () => <Diagnose />,
+      effectivesecurityrules: () => <EffectiveSecurityRules a={a} />,
       alerts: () => <NotSimulatedContainer title={`${name} | Alerts`} feature="Alerts" />,
       logs: () => <NotSimulatedContainer title={`${name} | Logs`} feature="Logs" />,
       flowlogs: () => <NotSimulatedContainer title={`${name} | NSG flow logs`} feature="NSG flow logs" />,
@@ -142,7 +142,7 @@ function Diagnose() {
       <div className="vy-panel-title">Diagnose and solve problems</div>
       <NetworkWatcherTools />
       <div style={{ marginTop: 16 }}>
-        <NotSimulatedContainer title="Other diagnostic tools" feature="Tasks, Effective security rules, Support + Troubleshooting and the remaining Diagnose and solve problems tiles" />
+        <NotSimulatedContainer title="Other diagnostic tools" feature="Tasks, Support + Troubleshooting and the remaining Diagnose and solve problems tiles" />
       </div>
     </>
   );

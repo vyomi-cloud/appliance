@@ -1744,6 +1744,16 @@ try {
   await shot("26d-nsg-diagnose-ipflowverify");
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
 
+  // ── Effective security rules (azure.nsgs.effective_rules): the NIC sits in the subnet that
+  // carries this NSG (no NSG of its own), so its effective Inbound rules must show the
+  // subnet-level Deny rule added above, tagged "Subnet: <this NSG>" ────────────────────────
+  await openPanel("Effective security rules");
+  await page.getByLabel("Network interface", { exact: true }).selectOption({ label: FLOWNIC });
+  await page.getByRole("tab", { name: "Inbound rules" }).click();
+  await page.getByRole("cell", { name: DENYRULE, exact: true }).waitFor({ timeout: 10000 });
+  check("UI Effective security rules → shows the subnet-level Deny rule merged for this NIC", true);
+  await shot("26e-nsg-effective-rules");
+
   // ── NSG created over the wire → visible in the UI (CLI → UI), then deleted in the UI ──
   const nsgPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG2}`, { location: "eastus" });
   check("ARM PUT network security group over wire", nsgPut.status === 200 || nsgPut.status === 201, `HTTP ${nsgPut.status}`);

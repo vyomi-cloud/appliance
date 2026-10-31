@@ -54,11 +54,19 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.nsgs.tools": {
-  "title": "Diagnose and solve problems (remaining tiles), Tasks, Effective security rules, Support + Troubleshooting",
+  "title": "Diagnose and solve problems (remaining tiles), Tasks, Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "Tasks, Effective security rules and Support + Troubleshooting are not built, and Diagnose and solve problems' other diagnostic tiles (VM connectivity issue, Network configuration diagnostics, …) remain an honest gap. Its IP flow verify and Next hop tiles ARE built — see azure.nsgs.network_watcher."
+   "Tasks and Support + Troubleshooting are not built, and Diagnose and solve problems' other diagnostic tiles (VM connectivity issue, Network configuration diagnostics, …) remain an honest gap — Tasks is a cross-resource Azure Resource Graph/tagging feature and Support + Troubleshooting opens a Microsoft support request, neither specific to network security groups. Its IP flow verify and Next hop tiles ARE built (azure.nsgs.network_watcher), and Effective security rules is now built (azure.nsgs.effective_rules)."
   ]
+ },
+ "azure.nsgs.effective_rules": {
+  "title": "Effective security rules",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Lists the merged custom + default inbound/outbound rule sets from both the picked network interface's own network security group and its subnet's network security group, in priority order — the same two-NSG picture `az network nic show-effective-nsg` and the real portal's page show. It lists the rule set; it does not simulate a packet (that's IP flow verify, azure.nsgs.network_watcher). Scoped to network interfaces associated with this network security group directly or through their subnet."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.nsgs.network_watcher": {
   "title": "Diagnose and solve problems: IP flow verify, Next hop (Network Watcher)",
