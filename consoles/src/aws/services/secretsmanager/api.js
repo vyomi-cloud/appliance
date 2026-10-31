@@ -1,5 +1,5 @@
 /* Secrets Manager over the native JSON wire (X-Amz-Target secretsmanager.*). */
-import { awsJson } from "../../../common/wire.js";
+import { awsJson, awsQuery, asList } from "../../../common/wire.js";
 
 const call = (op, body) => awsJson("secretsmanager", `secretsmanager.${op}`, body, { version: "1.1" });
 
@@ -33,6 +33,15 @@ export const deleteResourcePolicy = (secretId) => call("DeleteResourcePolicy", {
 /** KMS key aliases, for the Encryption key picker — a real cross-service read (same
  * TrentService wire the KMS console speaks), not a canned list. */
 export const listKmsAliases = () => awsJson("kms", "TrentService.ListAliases", {}, { version: "1.1" }).then((r) => (r.Aliases || []).map((a) => a.AliasName.replace(/^alias\//, "")));
+
+/** RDS DB instances, for the "Credentials for Amazon RDS database" wizard step's
+ * Database picker — a real cross-service read (the same DescribeDBInstances the RDS
+ * console speaks) of the account's actual instances; DocumentDB/Redshift have no core
+ * yet (core/capabilities/aws/secretsmanager.json: secretsmanager.secret.database-picker). */
+export const listDbInstances = async () => {
+  const r = await awsQuery("rds", "DescribeDBInstances", {});
+  return asList(r.DescribeDBInstancesResponse?.DescribeDBInstancesResult?.DBInstances?.DBInstance);
+};
 
 export const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
 export const unb64 = (s) => decodeURIComponent(escape(atob(s)));

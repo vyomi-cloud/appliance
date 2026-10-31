@@ -1,9 +1,10 @@
 /* Store a new secret — 4-step wizard matching the native console. Secret type / credentials
  * / key-value-or-plaintext value / secret name & description / tags / resource policy /
- * rotation schedule are all real; the database-instance picker, the "Managed external
- * secret" type and cross-Region replication are declared gaps (core/capabilities/aws/
- * secretsmanager.json), and automatic rotation never fires on its own (no Lambda runtime,
- * no scheduler — the same honesty posture as kms.key.rotation). */
+ * rotation schedule are all real, including a live RDS database picker (DescribeDBInstances);
+ * the "Managed external secret" type, the DocumentDB/Redshift instance picker and
+ * cross-Region replication are declared gaps (core/capabilities/aws/secretsmanager.json).
+ * Rotation really fires on its schedule (lazy, on access) but — with no Lambda runtime wired
+ * to Secrets Manager — carries the current value forward rather than generating a new one. */
 import { useEffect, useState } from "react";
 import Wizard from "@cloudscape-design/components/wizard";
 import Container from "@cloudscape-design/components/container";
@@ -21,9 +22,11 @@ import Tabs from "@cloudscape-design/components/tabs";
 import TagEditor from "@cloudscape-design/components/tag-editor";
 import Modal from "@cloudscape-design/components/modal";
 import Button from "@cloudscape-design/components/button";
+import Table from "@cloudscape-design/components/table";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
-import { ErrorAlert, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import KeyValueOrPlaintext from "./KeyValueOrPlaintext.jsx";
 import * as api from "./api.js";
 
@@ -44,9 +47,10 @@ const SAMPLE = (name) => ({
   Rust: `let resp = client.get_secret_value().secret_id("${name}").send().await?;`,
 });
 
-function SecretTypeStep({ s, set, dbAliases }) {
+function SecretTypeStep({ s, set, dbAliases, dbInstances, dbInstancesLoading }) {
   const isDb = DB_TYPES.includes(s.secretType);
   const isOtherDb = s.secretType === "Credentials for other database";
+  const isRds = s.secretType === "Credentials for Amazon RDS database";
   const isManaged = s.secretType === "Managed external secret";
   const isOther = s.secretType === "Other type of secret";
   return (
@@ -89,17 +93,33 @@ function SecretTypeStep({ s, set, dbAliases }) {
           </SpaceBetween>
         </Container>
       )}
-      {isDb && !isOtherDb && (
-        <NotSimulatedContainer title="Database" feature="Database instance picker"
-          note="Browsing and selecting an existing RDS/DocumentDB/Redshift database instance isn't modeled — enter the connecting credentials above and connect to your database manually." />
+      {isRds && (
+        <CapabilityContainer id="secretsmanager.secret.database-picker" title="Database">
+          <Table variant="embedded" loading={dbInstancesLoading} loadingText="Loading databases"
+            selectionType="single" selectedItems={s.selectedDb ? [s.selectedDb] : []}
+            onSelectionChange={({ detail }) => set({ selectedDb: detail.selectedItems[0] || null })}
+            items={dbInstances}
+            trackBy="DBInstanceIdentifier"
+            columnDefinitions={[
+              { id: "id", header: "DB instance", cell: (r) => r.DBInstanceIdentifier },
+              { id: "engine", header: "DB engine", cell: (r) => r.Engine },
+              { id: "status", header: "Status", cell: (r) => r.DBInstanceStatus },
+              { id: "created", header: "Creation date (UTC)", cell: (r) => fmtDate(r.InstanceCreateTime) },
+            ]}
+            empty={<Box textAlign="center" color="inherit"><b>No databases</b></Box>} />
+        </CapabilityContainer>
       )}
-      <Container header={<Header variant="h2">Encryption key</Header>}>
+      {isDb && !isOtherDb && !isRds && (
+        <NotSimulatedContainer title="Database" feature="DocumentDB/Redshift instance picker"
+          note="Vyomi has no DocumentDB or Redshift core, so browsing and selecting an existing instance of either isn't modeled — enter the connecting credentials above and connect manually. Amazon RDS database instances ARE modeled; pick 'Credentials for Amazon RDS database' to browse real DB instances." />
+      )}
+      <CapabilityContainer id="secretsmanager.secret.encryption" title="Encryption key">
         <FormField label="Encryption key" description="KMS key Vyomi creates, or a customer managed KMS key.">
           <Select selectedOption={{ label: s.kmsKeyId, value: s.kmsKeyId }}
             onChange={({ detail }) => set({ kmsKeyId: detail.selectedOption.value })}
             options={[{ label: "aws/secretsmanager", value: "aws/secretsmanager" }, ...dbAliases.map((a) => ({ label: a, value: a }))]} />
         </FormField>
-      </Container>
+      </CapabilityContainer>
     </SpaceBetween>
   );
 }
@@ -120,9 +140,10 @@ function ConfigureSecretStep({ s, set, nameErr }) {
       <Container header={<Header variant="h2">Tags - optional</Header>}>
         <FormField label="Tags"><TagEditor tags={s.tags} onChange={({ detail }) => set({ tags: detail.tags })} /></FormField>
       </Container>
-      <Container header={<Header variant="h2" actions={<Button onClick={() => set({ editPolicy: true })}>Edit permissions</Button>}>Resource permissions - optional</Header>}>
+      <CapabilityContainer id="secretsmanager.secret.resource-policy" title="Resource permissions - optional"
+        actions={<Button onClick={() => set({ editPolicy: true })}>Edit permissions</Button>}>
         {s.resourcePolicy ? <Box variant="code"><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{s.resourcePolicy}</pre></Box> : <Box color="text-body-secondary">No resource policy attached.</Box>}
-      </Container>
+      </CapabilityContainer>
       <NotSimulatedContainer title="Replicate secret - optional"
         note="Creating read-only replicas of this secret in another AWS Region isn't modeled — there's no second Region's store to replicate into. Encryption key selection for a replica isn't applicable." />
       <Modal visible={!!s.editPolicy} onDismiss={() => set({ editPolicy: false })} size="large" header="Edit resource permissions"
@@ -130,7 +151,7 @@ function ConfigureSecretStep({ s, set, nameErr }) {
           <Button variant="link" onClick={() => set({ editPolicy: false })}>Cancel</Button>
           <Button variant="primary" onClick={() => set({ editPolicy: false })}>Save changes</Button>
         </SpaceBetween></Box>}>
-        <FormField label="Resource policy" description="JSON policy editor — stored and returned exactly as written; Vyomi doesn't evaluate it.">
+        <FormField label="Resource policy" description="JSON policy document.">
           <Textarea rows={14} value={s.resourcePolicy} onChange={({ detail }) => set({ resourcePolicy: detail.value })} spellcheck={false} />
         </FormField>
       </Modal>
@@ -141,7 +162,7 @@ function ConfigureSecretStep({ s, set, nameErr }) {
 function ConfigureRotationStep({ s, set }) {
   return (
     <SpaceBetween size="l">
-      <Container header={<Header variant="h2">Configure automatic rotation</Header>}>
+      <CapabilityContainer id="secretsmanager.secret.rotation" title="Configure automatic rotation">
         <SpaceBetween size="m">
           <Toggle checked={s.rotation} onChange={({ detail }) => set({ rotation: detail.checked })}>Automatic rotation</Toggle>
           {s.rotation && (
@@ -166,10 +187,10 @@ function ConfigureRotationStep({ s, set }) {
             </>
           )}
         </SpaceBetween>
-      </Container>
+      </CapabilityContainer>
       {s.rotation && (
         <NotSimulatedContainer title="Rotation function" feature="Lambda rotation function"
-          note="Rotation normally invokes a Lambda rotation function to generate the new secret value. Vyomi has no Lambda runtime wired to Secrets Manager, so 'Rotate immediately' carries the current value forward into a fresh version — the same AWSCURRENT/AWSPREVIOUS transition a real rotation performs — without a Lambda step. Create function isn't available." />
+          note="Rotation normally invokes a Lambda rotation function to generate the new secret value. Vyomi has no Lambda runtime wired to Secrets Manager, so both the schedule firing on its own and 'Rotate immediately' carry the current value forward into a fresh version — the same AWSCURRENT/AWSPREVIOUS transition a real rotation performs — without a Lambda step. Create function isn't available." />
       )}
     </SpaceBetween>
   );
@@ -203,10 +224,12 @@ export default function StoreSecret() {
   const [error, setError] = useState(null);
   const [touched, setTouched] = useState(false);
   const [dbAliases, setDbAliases] = useState([]);
+  const [dbInstances, setDbInstances] = useState([]);
+  const [dbInstancesLoading, setDbInstancesLoading] = useState(true);
   const [s, setS] = useState({
     secretType: "Credentials for Amazon RDS database",
     username: "", password: "", showPassword: false,
-    dbEngine: "MySQL", serverAddress: "", dbName: "", port: "",
+    dbEngine: "MySQL", serverAddress: "", dbName: "", port: "", selectedDb: null,
     valueTab: "keyvalue", kvPairs: [{ key: "", value: "" }], plaintext: "",
     kmsKeyId: "aws/secretsmanager",
     name: "", description: "", tags: [], resourcePolicy: "", editPolicy: false,
@@ -217,6 +240,7 @@ export default function StoreSecret() {
 
   useEffect(() => {
     api.listKmsAliases().then((aliases) => setDbAliases(aliases.filter((a) => a !== "aws/secretsmanager"))).catch(() => {});
+    api.listDbInstances().then(setDbInstances).catch(() => {}).finally(() => setDbInstancesLoading(false));
   }, []);
 
   const secretValue = () => {
@@ -225,6 +249,10 @@ export default function StoreSecret() {
     if (isDb) {
       const v = { username: s.username, password: s.password };
       if (isOtherDb) Object.assign(v, { engine: s.dbEngine, host: s.serverAddress, dbname: s.dbName, port: s.port });
+      else if (s.selectedDb) Object.assign(v, {
+        engine: s.selectedDb.Engine, host: s.selectedDb.Endpoint?.Address,
+        port: s.selectedDb.Endpoint?.Port, dbInstanceIdentifier: s.selectedDb.DBInstanceIdentifier,
+      });
       return JSON.stringify(v);
     }
     if (s.secretType === "Other type of secret") {
@@ -257,7 +285,7 @@ export default function StoreSecret() {
   };
 
   const steps = [
-    { title: "Choose secret type", content: <SecretTypeStep s={s} set={set} dbAliases={dbAliases} /> },
+    { title: "Choose secret type", content: <SecretTypeStep s={s} set={set} dbAliases={dbAliases} dbInstances={dbInstances} dbInstancesLoading={dbInstancesLoading} /> },
     { title: "Configure secret", content: <ConfigureSecretStep s={s} set={set} nameErr={nameErr} /> },
     { title: "Configure rotation", content: <ConfigureRotationStep s={s} set={set} /> },
     { title: "Review", content: <ReviewStep s={s} goto={setIdx} name={s.name} /> },

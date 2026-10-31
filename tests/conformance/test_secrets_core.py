@@ -163,13 +163,51 @@ def run() -> int:
     # 20. Resource policy: Get (none) -> Put -> Get (round-trips) -> Delete -> Get (gone)
     rp0 = sm.dispatch(st, T + "GetResourcePolicy", {"SecretId": "tagged"})
     _check("no resource policy initially", "ResourcePolicy" not in rp0.body)
-    policy = '{"Version":"2012-10-17","Statement":[]}'
+    policy = ('{"Version":"2012-10-17","Statement":[{"Effect":"Allow",'
+              '"Principal":{"AWS":"arn:aws:iam::123456789012:root"},'
+              '"Action":"secretsmanager:GetSecretValue","Resource":"*"}]}')
     sm.dispatch(st, T + "PutResourcePolicy", {"SecretId": "tagged", "ResourcePolicy": policy})
     rp1 = sm.dispatch(st, T + "GetResourcePolicy", {"SecretId": "tagged"})
     _check("resource policy round-trips", rp1.body["ResourcePolicy"] == policy)
     sm.dispatch(st, T + "DeleteResourcePolicy", {"SecretId": "tagged"})
     rp2 = sm.dispatch(st, T + "GetResourcePolicy", {"SecretId": "tagged"})
     _check("resource policy deleted", "ResourcePolicy" not in rp2.body)
+
+    # 21. PutResourcePolicy validates shape (v4 depth pass)
+    bad_json = sm.dispatch(st, T + "PutResourcePolicy", {"SecretId": "tagged", "ResourcePolicy": "not json"})
+    _check("malformed JSON rejected", bad_json.body["__type"] == "MalformedPolicyDocumentException")
+    no_statement = sm.dispatch(st, T + "PutResourcePolicy",
+                               {"SecretId": "tagged", "ResourcePolicy": '{"Version":"2012-10-17","Statement":[]}'})
+    _check("empty Statement rejected", no_statement.body["__type"] == "MalformedPolicyDocumentException")
+
+    # 22. PutResourcePolicy blocks a public policy by default, allows it with BlockPublicPolicy=false
+    public_policy = '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"secretsmanager:GetSecretValue","Resource":"*"}]}'
+    blocked = sm.dispatch(st, T + "PutResourcePolicy", {"SecretId": "tagged", "ResourcePolicy": public_policy})
+    _check("public policy blocked by default", blocked.body["__type"] == "PublicPolicyException")
+    allowed = sm.dispatch(st, T + "PutResourcePolicy",
+                          {"SecretId": "tagged", "ResourcePolicy": public_policy, "BlockPublicPolicy": False})
+    _check("public policy allowed with BlockPublicPolicy=false", allowed.status == 200)
+    sm.dispatch(st, T + "DeleteResourcePolicy", {"SecretId": "tagged"})
+
+    # 23. Automatic rotation really fires on its own schedule (lazy, on access — no Lambda,
+    # so the "new" version carries the same value forward, same as RotateImmediately).
+    sm.dispatch(st, T + "CreateSecret", {"Name": "not-due-yet", "SecretString": "v1"})
+    nv1 = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "not-due-yet"}).body["VersionId"]
+    sm.dispatch(st, T + "RotateSecret", {"SecretId": "not-due-yet",
+               "RotationRules": {"AutomaticallyAfterDays": 30}, "RotateImmediately": False})
+    still_v1 = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "not-due-yet"}).body["VersionId"]
+    _check("a 30-day schedule does not fire immediately", still_v1 == nv1)
+
+    sm.dispatch(st, T + "CreateSecret", {"Name": "auto-rotated", "SecretString": "v1"})
+    v1 = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "auto-rotated"}).body["VersionId"]
+    sm.dispatch(st, T + "RotateSecret", {"SecretId": "auto-rotated",
+               "RotationRules": {"AutomaticallyAfterDays": 0}, "RotateImmediately": False})
+    before = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "auto-rotated"}).body
+    _check("rotation scheduled with a NextRotationDate", "NextRotationDate" in before)
+    v2 = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "auto-rotated"}).body["VersionId"]  # AutomaticallyAfterDays=0 → already due
+    _check("GetSecretValue lazily auto-rotates when due", v2 != v1)
+    after = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "auto-rotated"}).body
+    _check("auto-rotation reschedules NextRotationDate forward", after["NextRotationDate"] > before["NextRotationDate"])
 
     print("\nRESULT: PASS — Secrets Manager core conforms (native wire semantics) on this substrate.")
     return 0
