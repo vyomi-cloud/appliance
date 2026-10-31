@@ -764,6 +764,28 @@ try {
   await shot("22-cloudformation-drift");
   await page.getByRole("button", { name: "Close" }).click();
 
+  // CloudFormation IaC generator: an IAM role provisioned by a stack (CLI direction) is
+  // really scanned, then a template generated from it in the UI shows the role's real
+  // live properties back over the native wire (UI → CLI direction).
+  const CFN4 = `v4-smoke-stack4-${Date.now() % 100000}`;
+  const ROLE4 = `v4-smoke-iacrole-${Date.now() % 100000}`;
+  const TPL4 = `v4-smoke-iactpl-${Date.now() % 100000}`;
+  await cfn("CreateStack", { StackName: CFN4, "Capabilities.member.1": "CAPABILITY_NAMED_IAM",
+    TemplateBody: JSON.stringify({ Resources: { R: { Type: "AWS::IAM::Role", Properties: { RoleName: ROLE4 } } } }) });
+  await page.goto(UI + "#/cloudformation/iac-generator");
+  await page.getByRole("button", { name: "Start a new scan" }).first().click();
+  await page.getByText("COMPLETE", { exact: true }).first().waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Create template" }).first().click();
+  const iacDialog = page.getByRole("dialog");
+  await iacDialog.getByLabel("Template name", { exact: true }).fill(TPL4);
+  await iacDialog.getByRole("row", { name: new RegExp(ROLE4) }).getByRole("checkbox").check();
+  await iacDialog.getByRole("button", { name: "Create template", exact: true }).click();
+  await page.getByText(`Template "${TPL4}" generated.`).waitFor({ timeout: 10000 });
+  const genTplXml = await cfn("GetGeneratedTemplate", { GeneratedTemplateName: TPL4 });
+  check("IaC generator create template (UI) → real live role properties over native wire",
+        genTplXml.includes(ROLE4) && genTplXml.includes("AWS::IAM::Role"), genTplXml.slice(0, 300));
+  await shot("23-cloudformation-iac-generator");
+
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));
   await page.reload();

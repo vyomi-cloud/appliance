@@ -32,7 +32,8 @@
     "live": "live-export"
   },
   "iac-generator": {
-    "route": "#/cloudformation/iac-generator"
+    "route": "#/cloudformation/iac-generator",
+    "live": "live-iac-generator"
   },
   "template-studio": {
     "route": "#/cloudformation/template-studio"

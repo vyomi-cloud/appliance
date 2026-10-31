@@ -155,12 +155,17 @@
  "aws.cloudformation.iac-generator": {
   "title": "IaC generator (scan an account's existing resources into a template)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Scanning existing account resources into a generated template is out of Vyomi's scope."
-  ]
+   "StartResourceScan really scans the live S3/DynamoDB/SNS/SQS/IAM/Logs stores — the same six resource types CreateStack/UpdateStack provision — and CreateGeneratedTemplate builds a real template from each selected resource's live properties (re-read through the owning service's own store, the same way drift detection does), so GetGeneratedTemplate's output imports cleanly through CreateStack.",
+   "Real AWS scans the whole account through Resource Explorer across every resource type; Vyomi's scan only covers the six resource types the CloudFormation simulation provisions."
+  ],
+  "api": ["StartResourceScan", "DescribeResourceScan", "ListResourceScans", "ListResourceScanResources",
+          "CreateGeneratedTemplate", "DescribeGeneratedTemplate", "GetGeneratedTemplate",
+          "ListGeneratedTemplates", "DeleteGeneratedTemplate"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
  },
  "aws.cloudformation.template-studio": {
   "title": "Template studio editor (YAML/JSON, Validate)",
