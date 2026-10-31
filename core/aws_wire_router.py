@@ -596,12 +596,17 @@ class AwsWireRouter:
     def handle(self, method, path, query, headers, body):
         """Route ONE native-wire request. Returns {status, headers, body(bytes)}.
         SYNC services only — the RDS Data API goes through ahandle()."""
+        # /azure-data/queue/{acct} says "queue storage" outright — the one thing a shared
+        # endpoint can't otherwise tell (a root ?comp=list is containers or queues).
+        queue_alias = (path or "").startswith("/azure-data/queue/")
         path = _azure_data_alias(path)
         lheaders = _lower_headers(headers)
         body = body if isinstance(body, (bytes, bytearray)) else (body or b"")
         if isinstance(body, str):
             body = body.encode("utf-8")
         svc = self.service_of(method, path, lheaders, body, query)
+        if queue_alias and svc == "az-blob":
+            svc = "az-queue"
 
         if svc == "rds-data":  # async-only — guard the sync path
             return {"status": 400, "headers": {"x-amzn-errortype": "BadRequestException"},

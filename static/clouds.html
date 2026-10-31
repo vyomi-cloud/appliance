@@ -1840,80 +1840,78 @@
       { id:'aws', name:'AWS', icon:'cloud', color:'#ff9900',
         setup:'Dummy creds + any region, and disable the CLI pager: export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=""' },
       { id:'gcp', name:'Google Cloud', icon:'cloud_queue', color:'#4285f4',
-        setup:'First: gcloud config set auth/disable_credentials true && gcloud config set core/project {PROJECT}',
-        nanoNote:'On Nano, GCP runs inside the in-browser console — it is NOT exposed over the AWS relay tunnel. These external examples apply to the appliance (Lite/Pro/Max).' },
+        setup:'No gcloud login needed: each snippet sets CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true and points the service at your endpoint with a CLOUDSDK_API_ENDPOINT_OVERRIDES_* variable.' },
       { id:'azure', name:'Azure', icon:'cloud_circle', color:'#38b6ff',
-        setup:'Data plane uses the Azurite dev account devstoreaccount1; control plane after: az cloud register --endpoint-resource-manager {EP}',
-        nanoNote:'On Nano, Azure runs inside the in-browser console — it is NOT exposed over the AWS relay tunnel. These external examples apply to the appliance (Lite/Pro/Max).' }
+        setup:'No az login needed: Storage uses the Azurite dev account (devstoreaccount1) through its connection string; ARM, Cosmos and Key Vault calls go through az rest.' }
     ];
     var SERVICES = [
       // ── AWS (endpoint via --endpoint-url) ─────────────────────────────
       { cloud:'aws', key:'aws-s3', name:'S3', icon:'inventory_2', color:'#ff9900', desc:'Object storage — buckets & objects.',
-        cli:'aws --endpoint-url {EP} s3 mb s3://demo\naws --endpoint-url {EP} s3 ls',
-        sdk:'import boto3\ns3 = boto3.client("s3", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\ns3.create_bucket(Bucket="demo")\nprint(s3.list_buckets())',
+        cli:"aws --endpoint-url {EP} s3 mb s3://demo\naws --endpoint-url {EP} s3 ls",
+        sdk:"import boto3\ns3 = boto3.client(\"s3\", endpoint_url=\"{EP}\",\n    aws_access_key_id=\"test\", aws_secret_access_key=\"test\",\n    region_name=\"us-east-1\")\ns3.create_bucket(Bucket=\"demo-py\")\nprint([b[\"Name\"] for b in s3.list_buckets()[\"Buckets\"]])",
         curl:'curl {EP}/            # ListBuckets' },
       { cloud:'aws', key:'aws-dynamodb', name:'DynamoDB', icon:'table_chart', color:'#4d8cf3', desc:'Serverless NoSQL key-value & document store.',
-        cli:'aws --endpoint-url {EP} dynamodb list-tables',
+        cli:"aws --endpoint-url {EP} dynamodb list-tables",
         sdk:'import boto3\nddb = boto3.client("dynamodb", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nprint(ddb.list_tables())',
         curl:'curl -X POST {EP}/ \\\n  -H "X-Amz-Target: DynamoDB_20120810.ListTables" \\\n  -H "Content-Type: application/x-amz-json-1.0" -d "{}"' },
       { cloud:'aws', key:'aws-kms', name:'KMS', icon:'vpn_key', color:'#16a34a', desc:'Managed encryption keys.',
-        cli:'aws --endpoint-url {EP} kms list-keys',
+        cli:"aws --endpoint-url {EP} kms list-keys",
         sdk:'import boto3\nkms = boto3.client("kms", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nprint(kms.list_keys())',
         curl:'curl -X POST {EP}/ \\\n  -H "X-Amz-Target: TrentService.ListKeys" \\\n  -H "Content-Type: application/x-amz-json-1.1" -d "{}"' },
       { cloud:'aws', key:'aws-secrets', name:'Secrets Manager', icon:'lock', color:'#eab308', desc:'Store, version & retrieve secrets.',
-        cli:'aws --endpoint-url {EP} secretsmanager list-secrets',
+        cli:"aws --endpoint-url {EP} secretsmanager list-secrets",
         sdk:'import boto3\nsm = boto3.client("secretsmanager", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nprint(sm.list_secrets())',
         curl:'curl -X POST {EP}/ \\\n  -H "X-Amz-Target: secretsmanager.ListSecrets" \\\n  -H "Content-Type: application/x-amz-json-1.1" -d "{}"' },
       { cloud:'aws', key:'aws-sqs', name:'SQS', icon:'forum', color:'#d97757', desc:'Managed message queues.',
-        cli:'aws --endpoint-url {EP} sqs create-queue --queue-name jobs\naws --endpoint-url {EP} sqs list-queues',
-        sdk:'import boto3\nsqs = boto3.client("sqs", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nsqs.create_queue(QueueName="jobs")\nprint(sqs.list_queues())',
+        cli:"aws --endpoint-url {EP} sqs create-queue --queue-name jobs\naws --endpoint-url {EP} sqs list-queues",
+        sdk:"import boto3\nsqs = boto3.client(\"sqs\", endpoint_url=\"{EP}\",\n    aws_access_key_id=\"test\", aws_secret_access_key=\"test\",\n    region_name=\"us-east-1\")\nsqs.create_queue(QueueName=\"jobs-py\")\nprint(sqs.list_queues())",
         curl:'curl "{EP}/?Action=ListQueues"' },
       { cloud:'aws', key:'aws-sns', name:'SNS', icon:'campaign', color:'#7c3aed', desc:'Pub/sub topics with fan-out to queues.',
-        cli:'aws --endpoint-url {EP} sns create-topic --name alerts\naws --endpoint-url {EP} sns list-topics',
-        sdk:'import boto3\nsns = boto3.client("sns", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nsns.create_topic(Name="alerts")\nprint(sns.list_topics())',
+        cli:"aws --endpoint-url {EP} sns create-topic --name alerts\naws --endpoint-url {EP} sns list-topics",
+        sdk:"import boto3\nsns = boto3.client(\"sns\", endpoint_url=\"{EP}\",\n    aws_access_key_id=\"test\", aws_secret_access_key=\"test\",\n    region_name=\"us-east-1\")\nsns.create_topic(Name=\"alerts-py\")\nprint(sns.list_topics())",
         curl:'curl "{EP}/?Action=ListTopics"' },
       { cloud:'aws', key:'aws-iam', name:'IAM', icon:'admin_panel_settings', color:'#ef4444', desc:'Users, roles, groups & policies.',
-        cli:'aws --endpoint-url {EP} iam list-users\naws --endpoint-url {EP} iam list-roles',
+        cli:"aws --endpoint-url {EP} iam list-users\naws --endpoint-url {EP} iam list-roles",
         sdk:'import boto3\niam = boto3.client("iam", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nprint(iam.list_users())',
         curl:'curl "{EP}/?Action=ListUsers&Version=2010-05-08"' },
       { cloud:'aws', key:'aws-rds', name:'RDS', icon:'storage', color:'#2563eb', desc:'Managed relational databases (Postgres).',
-        cli:'aws --endpoint-url {EP} rds describe-db-instances',
+        cli:"aws --endpoint-url {EP} rds describe-db-instances",
         sdk:'import boto3\nrds = boto3.client("rds", endpoint_url="{EP}",\n    aws_access_key_id="test", aws_secret_access_key="test",\n    region_name="us-east-1")\nprint(rds.describe_db_instances())',
         curl:'curl "{EP}/?Action=DescribeDBInstances&Version=2014-10-31"' },
       // ── Google Cloud (endpoint via *_EMULATOR_HOST / API-endpoint override) ──
       { cloud:'gcp', key:'gcp-gcs', name:'Cloud Storage', icon:'inventory_2', color:'#4285f4', desc:'Object storage (GCS) — buckets & objects.',
-        cli:'export STORAGE_EMULATOR_HOST="{EPHOST}"\ngcloud storage buckets create gs://demo\ngcloud storage ls gs://demo',
-        sdk:'import os\nos.environ["STORAGE_EMULATOR_HOST"] = "{EP}"\nfrom google.cloud import storage\nclient = storage.Client(project="{PROJECT}")\nclient.create_bucket("demo")\nprint([b.name for b in client.list_buckets()])',
+        cli:"export CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true\nexport CLOUDSDK_API_ENDPOINT_OVERRIDES_STORAGE={EP}/storage/v1/\ngcloud storage buckets create gs://demo --project={PROJECT}\ngcloud storage ls --project={PROJECT}",
+        sdk:"import os\nos.environ[\"STORAGE_EMULATOR_HOST\"] = \"{EP}\"\nfrom google.cloud import storage\nclient = storage.Client(project=\"{PROJECT}\")\nclient.create_bucket(\"demo-py\")\nprint([b.name for b in client.list_buckets()])",
         curl:'curl "{EP}/storage/v1/b?project={PROJECT}"' },
       { cloud:'gcp', key:'gcp-firestore', name:'Firestore', icon:'table_chart', color:'#ffa000', desc:'Serverless document database.',
-        cli:'export FIRESTORE_EMULATOR_HOST="{EPHOST}"\n# data CRUD is via the SDK (gcloud has no document ops)',
-        sdk:'import os\nos.environ["FIRESTORE_EMULATOR_HOST"] = "{EPHOST}"\nfrom google.cloud import firestore\ndb = firestore.Client(project="{PROJECT}")\ndb.collection("users").document("u1").set({"name": "Ada"})\nprint(db.collection("users").document("u1").get().to_dict())',
+        cli:"# gcloud has no document commands: the Firestore REST API, with curl\ncurl -s -X PATCH \"{EP}/v1/projects/{PROJECT}/databases/(default)/documents/users/u1\" \\\n  -H 'content-type: application/json' -d '{\"fields\":{\"name\":{\"stringValue\":\"Ada\"}}}'\ncurl -s \"{EP}/v1/projects/{PROJECT}/databases/(default)/documents/users\"",
+        sdk:"from googleapiclient.discovery import build\nfrom google.auth.credentials import AnonymousCredentials\n# Google's REST client (the gRPC client can't cross an HTTP tunnel)\nfs = build(\"firestore\", \"v1\", credentials=AnonymousCredentials(),\n           client_options={\"api_endpoint\": \"{EP}\"}, static_discovery=True)\ndoc = \"projects/{PROJECT}/databases/(default)/documents/users/u1\"\nfs.projects().databases().documents().patch(\n    name=doc, body={\"fields\": {\"name\": {\"stringValue\": \"Ada\"}}}).execute()\nprint(fs.projects().databases().documents().get(name=doc).execute())",
         curl:'curl "{EP}/v1/projects/{PROJECT}/databases/(default)/documents/users"' },
       { cloud:'gcp', key:'gcp-pubsub', name:'Pub/Sub', icon:'campaign', color:'#34a853', desc:'Messaging — topics & subscriptions.',
-        cli:'export PUBSUB_EMULATOR_HOST="{EPHOST}"\ngcloud pubsub topics create orders\ngcloud pubsub topics list',
-        sdk:'import os\nos.environ["PUBSUB_EMULATOR_HOST"] = "{EPHOST}"\nfrom google.cloud import pubsub_v1\npub = pubsub_v1.PublisherClient()\npub.create_topic(name="projects/{PROJECT}/topics/orders")',
-        curl:'curl -X PUT "{EP}/v1/projects/{PROJECT}/topics/orders"' },
+        cli:"export CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true\nexport CLOUDSDK_API_ENDPOINT_OVERRIDES_PUBSUB={EP}/\ngcloud pubsub topics create orders --project={PROJECT}\ngcloud pubsub topics list --project={PROJECT}",
+        sdk:"from googleapiclient.discovery import build\nfrom google.auth.credentials import AnonymousCredentials\n# Google's REST client (the gRPC client can't cross an HTTP tunnel)\nps = build(\"pubsub\", \"v1\", credentials=AnonymousCredentials(),\n           client_options={\"api_endpoint\": \"{EP}\"}, static_discovery=True)\nps.projects().topics().create(name=\"projects/{PROJECT}/topics/orders-py\", body={}).execute()\nprint(ps.projects().topics().list(project=\"projects/{PROJECT}\").execute())",
+        curl:"curl -X PUT \"{EP}/v1/projects/{PROJECT}/topics/orders-curl\"\ncurl \"{EP}/v1/projects/{PROJECT}/topics\"" },
       { cloud:'gcp', key:'gcp-secrets', name:'Secret Manager', icon:'lock', color:'#ea4335', desc:'Store & retrieve secrets.',
-        cli:'export CLOUDSDK_API_ENDPOINT_OVERRIDES_SECRETMANAGER="{EP}/"\ngcloud secrets create db-pass --replication-policy=automatic\ngcloud secrets list',
-        sdk:'from google.cloud import secretmanager\nc = secretmanager.SecretManagerServiceClient(\n    client_options={"api_endpoint": "{EPHOST}"})\nprint(list(c.list_secrets(request={"parent": "projects/{PROJECT}"})))',
+        cli:"export CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true\nexport CLOUDSDK_API_ENDPOINT_OVERRIDES_SECRETMANAGER={EP}/\ngcloud secrets create db-pass --replication-policy=automatic --project={PROJECT}\ngcloud secrets list --project={PROJECT}",
+        sdk:"from google.auth.credentials import AnonymousCredentials\nfrom google.cloud import secretmanager\nc = secretmanager.SecretManagerServiceClient(credentials=AnonymousCredentials(), transport=\"rest\",\n    client_options={\"api_endpoint\": \"{EP}\"})\nprint([s.name for s in c.list_secrets(request={\"parent\": \"projects/{PROJECT}\"})])",
         curl:'curl "{EP}/v1/projects/{PROJECT}/secrets"' },
       // ── Azure (data plane via Azurite; control plane via ARM) ──────────
       { cloud:'azure', key:'az-blob', name:'Blob Storage', icon:'inventory_2', color:'#0078d4', desc:'Object storage — containers & blobs.',
-        cli:'export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=<azurite-key>;BlobEndpoint={EP}/devstoreaccount1;"\naz storage container create -n demo\naz storage container list',
-        sdk:'from azure.storage.blob import BlobServiceClient\nsvc = BlobServiceClient(\n    account_url="{EP}/devstoreaccount1",\n    credential={"account_name": "devstoreaccount1", "account_key": "<azurite-key>"})\nsvc.create_container("demo")\nprint([c.name for c in svc.list_containers()])',
-        curl:'curl "{EP}/devstoreaccount1/demo?restype=container&comp=list"' },
+        cli:"export AZURE_STORAGE_CONNECTION_STRING=\"DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint={EP}/devstoreaccount1;QueueEndpoint={EP}/azure-data/queue/devstoreaccount1;\"\naz storage container create -n demo\naz storage container list -o table",
+        sdk:"from azure.storage.blob import BlobServiceClient\nsvc = BlobServiceClient(\"{EP}/devstoreaccount1\",\n    credential={\"account_name\": \"devstoreaccount1\", \"account_key\": \"Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==\"})\nsvc.create_container(\"demo-py\")\nprint([c.name for c in svc.list_containers()])",
+        curl:"curl -H \"x-ms-version: 2021-12-02\" \"{EP}/devstoreaccount1/demo?restype=container&comp=list\"" },
       { cloud:'azure', key:'az-queue', name:'Queue Storage', icon:'forum', color:'#50e6ff', desc:'Message queues.',
-        cli:'az storage queue create -n jobs \\\n  --connection-string "$AZURE_STORAGE_CONNECTION_STRING"\naz storage queue list \\\n  --connection-string "$AZURE_STORAGE_CONNECTION_STRING"',
-        sdk:'from azure.storage.queue import QueueServiceClient\nsvc = QueueServiceClient(\n    account_url="{EP}/devstoreaccount1",\n    credential={"account_name": "devstoreaccount1", "account_key": "<azurite-key>"})\nsvc.create_queue("jobs")\nprint([q.name for q in svc.list_queues()])',
-        curl:'curl -X PUT "{EP}/devstoreaccount1/jobs"' },
+        cli:"export AZURE_STORAGE_CONNECTION_STRING=\"DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint={EP}/devstoreaccount1;QueueEndpoint={EP}/azure-data/queue/devstoreaccount1;\"\naz storage queue create -n jobs\naz storage queue list -o table",
+        sdk:"from azure.storage.queue import QueueServiceClient\nsvc = QueueServiceClient(\"{EP}/azure-data/queue/devstoreaccount1\",\n    credential={\"account_name\": \"devstoreaccount1\", \"account_key\": \"Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==\"})\nsvc.create_queue(\"jobs-py\")\nprint([q.name for q in svc.list_queues()])",
+        curl:"curl -X PUT -H \"x-ms-version: 2021-12-02\" \"{EP}/azure-data/queue/devstoreaccount1/jobs\"\ncurl -H \"x-ms-version: 2021-12-02\" \"{EP}/azure-data/queue/devstoreaccount1?comp=list\"" },
       { cloud:'azure', key:'az-cosmos', name:'Cosmos DB', icon:'table_chart', color:'#3999c6', desc:'Globally-distributed NoSQL.',
-        cli:'# control plane via ARM (after az cloud register):\naz cosmosdb list',
-        sdk:'from azure.cosmos import CosmosClient\nclient = CosmosClient("{EP}", credential="<cosmos-key>")\ndb = client.create_database_if_not_exists("appdb")\nprint([d["id"] for d in client.list_databases()])',
-        curl:'curl "{EP}/dbs"    # needs the Cosmos auth header' },
+        cli:"az rest --skip-authorization-header --method get \\\n  --url \"{EP}/subscriptions/{SUB}/providers/Microsoft.DocumentDB/databaseAccounts?api-version=2024-05-15\"",
+        sdk:"from azure.cosmos import CosmosClient\nclient = CosmosClient(\"{EP}\", credential=\"C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==\")\nclient.create_database_if_not_exists(\"appdb\")\nprint([d[\"id\"] for d in client.list_databases()])",
+        curl:"curl \"{EP}/dbs\"" },
       { cloud:'azure', key:'az-keyvault', name:'Key Vault', icon:'vpn_key', color:'#ffb900', desc:'Secrets, keys & certificates.',
-        cli:'az keyvault secret set --vault-name kv \\\n  --name db-pass --value s3cret\naz keyvault secret list --vault-name kv',
-        sdk:'from azure.keyvault.secrets import SecretClient\nc = SecretClient(vault_url="{EP}/kv", credential=cred)\nc.set_secret("db-pass", "s3cret")\nprint([s.name for s in c.list_properties_of_secrets()])',
-        curl:'curl "{EP}/secrets/db-pass?api-version=7.4"' }
+        cli:"# any bearer token: the simulator accepts it (real Key Vault would need az login)\naz rest --skip-authorization-header --headers \"Authorization=Bearer dev\" --method put \\\n  --url \"{EP}/secrets/db-pass?api-version=7.4\" --body '{\"value\": \"s3cret\"}'\naz rest --skip-authorization-header --headers \"Authorization=Bearer dev\" --method get \\\n  --url \"{EP}/secrets?api-version=7.4\"",
+        sdk:"# The Key Vault SDK only connects over https: use the https tunnel URL (vyomi.cloud);\n# on a local http tunnel use the CLI or curl tab.\nfrom azure.core.credentials import AccessToken\nfrom azure.keyvault.secrets import SecretClient\nclass Dev:   # the simulator takes any token\n    def get_token(self, *a, **k): return AccessToken(\"dev\", 2**31)\nc = SecretClient(\"{EP}\", Dev(), verify_challenge_resource=False)\nc.set_secret(\"db-pass\", \"s3cret\")\nprint([s.name for s in c.list_properties_of_secrets()])",
+        curl:"curl -H \"Authorization: Bearer dev\" \"{EP}/secrets/db-pass?api-version=7.4\"" }
     ];
     var TRANSPORTS = [
       { k:'cli',  label:'CLI',  icon:'terminal' },
@@ -1939,7 +1937,10 @@
       var gcpProject = isNano ? 'nano-project' : 'vyomi-project';
       fetch('/api/gcp/catalog').then(function(r){ return r.json(); })
         .then(function(c){ if(c && c.project) gcpProject = c.project; }).catch(function(){});
-      function sub(str){ return String(str).replace(/\{EPHOST\}/g, endpoint.replace(/^https?:\/\//,'')).replace(/\{EP\}/g, endpoint).replace(/\{PROJECT\}/g, gcpProject); }
+      var azSub = '00000000-0000-0000-0000-cloudlearn01';
+      fetch('/subscriptions?api-version=2022-12-01').then(function(r){ return r.json(); })
+        .then(function(j){ var v = j && j.value && j.value[0]; if(v && v.subscriptionId) azSub = v.subscriptionId; }).catch(function(){});
+      function sub(str){ return String(str).replace(/\{EPHOST\}/g, endpoint.replace(/^https?:\/\//,'')).replace(/\{EP\}/g, endpoint).replace(/\{PROJECT\}/g, gcpProject).replace(/\{SUB\}/g, azSub); }
       // AWS CLI snippets must be paste-and-run: the CLI refuses to sign without
       // creds + region, and CLI v2's pager can swallow short output (LESS=-F
       // without -X), which looked like "rds describe-db-instances prints nothing".
@@ -2039,7 +2040,6 @@
             // icons on the cloud header; clicking one shows its note as a tooltip.
             var icons = '';
             if(c.setup) icons += '<button class="u-ibtn" type="button" data-tt="Setup" data-tip="'+escAttr(sub(c.setup))+'" title="Setup" aria-label="Setup"><span class="material-icons">terminal</span></button>';
-            if(isNano && c.nanoNote) icons += '<button class="u-ibtn info" type="button" data-tt="Nano" data-tip="'+escAttr(c.nanoNote)+'" title="Nano note" aria-label="Nano note"><span class="material-icons">info</span></button>';
             return '<section class="u-panel"><div class="sc-head"><div class="sc-title"><h2>'+cloudLogo(c.id)+c.name+'</h2></div>'
               + (icons ? '<span class="u-info">'+icons+'</span>' : '') + '</div>'
               + '<p class="sc-desc">'+svcs.length+' services · pick CLI, SDK or curl on each card and copy the snippet.</p>'

@@ -950,6 +950,14 @@ function vyCodeTabs(o){
 
 // The snippets for each cloud (the same commands the release CLI checks run).
 // c: {cloud, ep, region, project, sub, nano}
+// The address the CLIs / SDKs reach this tab at: the tunnel's own address once it has connected,
+// else the default — the local tunnel on localhost, the hosted relay on vyomi.cloud.
+function nanoTunnelEp(){
+  var ls = function(k){ try{ return localStorage.getItem(k); }catch(_){ return null; } };
+  if(ls("nano_relay_external")) return ls("nano_relay_external");
+  if(/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(location.origin)) return "http://127.0.0.1:8090";
+  return "https://relay.vyomi.cloud/" + encodeURIComponent(ls("nano_session") || "nano");
+}
 function vyConnectTabs(c){
   const ep = c.ep;
   const pre = "", pyPre = "";
@@ -1077,7 +1085,7 @@ function renderHome(main){
   conn.append(el("div",{class:"wh"}, icon("terminal"), "Connect your SDK or CLI",
     el("a",{class:"info",onclick:()=>toast("The real AWS CLI and SDKs reach this in-browser cloud through the Nano tunnel, with only the endpoint changed.","ok")}, "Info")));
   conn.append(el("div",{class:"wb"}, vyCodeTabs({note:"Nano: start the tunnel first (Start tunnel in the bottom bar), or run vyomi-tunnel; then these reach this browser tab.", accent:"var(--link)",
-    tabs: vyConnectTabs({cloud:"aws", ep:"http://127.0.0.1:8090", region: REGION, nano:true})})));
+    tabs: vyConnectTabs({cloud:"aws", ep: nanoTunnelEp(), region: REGION, nano:true})})));
   grid.append(conn);
 
 
