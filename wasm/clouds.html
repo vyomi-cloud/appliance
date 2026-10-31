@@ -1285,7 +1285,11 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
        Tokens: page #f4f5f7 · surface #fff · tile #f8fafc · border #e4e7ec ·
        text #101828 / #475467 / #667085 · accent #2563eb. ═══════════ */
     html, body { background: #f4f5f7 !important; color: #101828 !important; }
-    #app-body, #app-main { background: transparent !important; }
+    #app-body { background: transparent !important; }
+    /* the view next to the side menu: a white rounded sheet, no border, with the gray page
+       showing on all four sides (Nano adds room below for the tunnel bar) */
+    #app-main { background: #fff !important; border: 0 !important; border-radius: 14px; margin: 16px; box-sizing: border-box; }
+    body:has(#nano-foot) #app-main { margin-bottom: 50px; }
 
     /* top bar + logo */
     #app-topbar, #app-topbar .top-bar { background: #fff !important; border-bottom: 1px solid #e4e7ec !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
@@ -4144,7 +4148,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   var phase = "off", lastSeen = 0, mode = null, external = null, noteText = null, _prevServed = 0, _prevPhase = null;
   // Never cover page content: the space for the bar is reserved inside the main column, so
   // the side menu still runs to the bottom of the window and the bar starts at its edge.
-  (document.getElementById("app-main") || document.body).style.paddingBottom = "40px";
+  // (#app-main keeps a 50px bottom margin for it — see the light theme)
 
   function render(state, served){
     phase = state || "off";
