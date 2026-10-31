@@ -24,16 +24,16 @@ AzureArm.state (ARM)      ─┘        (read-only)                             
 
 ```
 PYTHONPATH=. python3 tests/netsim/test_aws.py              # 14 — gotchas via the real EC2 Query API
-PYTHONPATH=. python3 tests/netsim/test_gcp.py              # 8  — via the Compute REST cores
+PYTHONPATH=. python3 tests/netsim/test_gcp.py              # 10 — via the Compute REST cores (routers, peering)
 PYTHONPATH=. python3 tests/netsim/test_azure.py            # 10 — via the ARM engine
 PYTHONPATH=. python3 tests/netsim/test_enforce_compile.py  # 7  — compiler + flow-log format (no Docker)
-PYTHONPATH=. python3 tests/netsim/test_docker_e2e.py       # REAL packets: evaluator verdict == kernel outcome
+PYTHONPATH=. python3 -m pytest -q tests/netsim/test_offline_wiring.py      # real server.py, no Docker
+PYTHONPATH=. python3 tests/netsim/test_docker_e2e.py                        # REAL packets (core API → enforcer)
+PYTHONPATH=. python3 -m pytest -q -s tests/netsim/test_docker_offline_e2e.py  # REAL packets (appliance API → wiring)
 ```
-The e2e test (skipped without Docker / nft-in-host-netns) creates only `netsim-test-*`
-containers/networks/images and the table `inet vyomi_netsimtest|netsimgcp|netsimaz`, and removes them.
-Last run (Docker 29.4.3, Docker Desktop LinuxKit 6.12): 16/16 AWS cases + 7 GCP + 7 Azure cases,
-evaluator == packets on every one; every AWS BLOCK is proven to be OUR drop (tuple present in the
-`rejects` set), every ALLOW is in `flows`.
+The Docker tests (skipped without Docker / nft-in-host-netns) create only `netsim-test-*`
+containers/networks/images and `inet vyomi_netsim…` tables, and remove them. Every AWS BLOCK in the
+core e2e is proven to be OUR drop (tuple present in the `rejects` set), every ALLOW is in `flows`.
 
 ## How enforcement works (offline)
 
@@ -60,79 +60,75 @@ evaluator == packets on every one; every AWS BLOCK is proven to be OUR drop (tup
   across re-applies, since the atomic redefine recreates the sets); `FlowLogCollector` turns
   deltas into AWS v2 records (implemented + tested), GCP VPC flow records and Azure NSG v2 tuples.
 
-## Integration plan (NOT wired yet — deliberate)
+## Integration status (phase N1 — wired)
 
-1. **One topology per space.** Add `netsim_topology(space)` in the appliance that merges
-   `from_aws(vpc store) + from_gcp(net store, inst store, project) + from_azure(arm.state)`
-   for that space (a space is one cloud today, so usually just one translator).
-2. **Analyzers → `evaluate.reach`** (Nano and offline, same code):
-   * `vpc_core.analyze_reachability` / `_analyze_reachability_action` → call `from_aws(store)` +
-     `reach()`, map `Verdict.hops` to Reachability Analyzer `explanations` / `forwardPathComponents`.
-   * GCP Connectivity Tests (`networkmanagement`), Azure Network Watcher `ipFlowVerify` / `nextHop`
-     → same, mapping `code` → GCP `drop cause` / Azure `access`+`ruleName`, `route_lookup()` → nextHop.
-   * Nano = evaluator only: no packets, but every analyzer/console answer comes from `reach()`.
-3. **Offline enforcement hook.** After any mutating networking call (CreateRoute,
-   Authorize/RevokeSecurityGroup*, CreateNetworkAclEntry, Associate*, firewall insert/patch/delete,
-   ARM PUT/DELETE on Microsoft.Network/*) and after instance launch/terminate, debounce ~200 ms and
-   `DockerEnforcer(space).apply(netsim_topology(space))`.
-4. **DockerComputeBackend gets network + ip** (`core/compute/backend.py` already has
-   `Instance.network` / `Instance.ip_address`). In `server.py` EC2 launch (`_DOCKER_COMPUTE`,
-   ~line 7780) and the GCP/Azure VM launch paths: `apply()` first, then
-   `Instance(network=…, ip_address=…)` from `DockerEnforcer.run_args(topo, iface_id)`.
-   The appliance container needs only the docker socket (the netd does the privileged part).
-   Management access (console SSH/exec bridge) is passed as `mgmt_cidrs` — a documented exception.
-5. **Core gaps to fix before enforcing** (found while building the translators):
-   * vpc_core: instance `private_ip` is a pseudo IP (`10.0.1.x`) **outside its subnet** → allocate from
-     the subnet (.4+) and honour `PrivateIpAddress`; `public_ip` is set on every instance → set only
-     with `MapPublicIpOnLaunch` / `AssociatePublicIpAddress` / EIP (the translator already applies the
-     real rule); no `ModifySubnetAttribute(MapPublicIpOnLaunch)`, no `ModifyInstanceAttribute
-     SourceDestCheck`, `CreateRoute` lacks `InstanceId` / `NetworkInterfaceId` targets; custom route
-     tables are created without the `local` route (translator adds it); no flow-log resources.
-   * gcp_compute_core: the auto-created `default-route` (0/0 → default-internet-gateway) is not
-     materialised (translator adds it unless `_defaultRouteDeleted`); no Cloud Router / Cloud NAT,
-     no VPC peering resources (translator takes `cloud_nats=` / `peerings=` until they exist);
-     firewall `targetServiceAccounts` / `sourceServiceAccounts` are not stored by `_insert_firewall`.
-   * gcp_compute_instances_core: default nic subnetwork path uses the **zone** where the region belongs.
-   * azure_arm_data catalog: `routeTables`, `natGateways`, `publicIPAddresses`,
-     `applicationSecurityGroups` are `ResourceTypeNotSupported` → add them (translator already reads
-     them in ARM shape); peering `peeringState` should flip to Connected only when both links exist
-     (translator already enforces that).
-6. **Capability levels** (do not change until 1–4 are wired + e2e green in CI):
-   * can honestly be `full` offline once wired: `aws.vpc.security-groups`, `aws.vpc.network-acls`,
-     `aws.vpc.route-tables`, `aws.vpc.internet-gateways`, `aws.vpc.nat-gateways` (now limited),
-     `aws.vpc.peering-connections` (now limited), `aws.vpc.flow-logs` (now not_simulated → limited:
-     AWS format only, no S3/CloudWatch delivery yet), `gcp.networking.firewall.crud` / `route.crud`
-     (behaviour, not just CRUD), `gcp.networking.peering` (not_simulated → limited until the core
-     has peering resources), `azure.nsgs.security_rules`, `azure.nsgs.associations` (limited → full),
-     `azure.vnets.peerings`.
-   * Nano: same entries become "evaluated" behaviour (analyzer answers), not packets — keep the
-     Nano level honest about that (no real traffic between in-browser VMs).
-   * NOTE: several of these already read `full` today while nothing is enforced — they describe
-     stored config. Re-label or wire; don't leave both.
+**One evaluator behind every analyzer** (offline and Nano run the same cores; `core/netsim` is vendored
+to `wasm/core/netsim` via `CORE_PKGS` in `wasm/build_cores.py` and every Pyodide loader):
 
-## Honest limits (as of this commit)
+| cloud | API | where |
+|---|---|---|
+| AWS | `AnalyzeReachability` (simulator verb, console) + native Reachability Analyzer: `Create/Describe/DeleteNetworkInsightsPath`, `Start/Describe/DeleteNetworkInsightsAnalysis` (networkPathFound, forwardPathComponentSet, explanationSet) | `core/vpc_core.py` |
+| GCP | networkmanagement v1 `projects/*/locations/global/connectivityTests` (create LRO, get, list, patch, delete, `:rerun`; steps + drop causes) | `core/gcp_compute_core.py` (routed as `gcp-compute`; offline route in `routes/gcp_firestore_compute_unified.py`) |
+| Azure | `Microsoft.Network/networkWatchers/{nw}/ipFlowVerify` (access + ruleName) and `/nextHop` (type, IP, routeTableId) | `core/azure_arm_core.py` |
 
-* **Overlapping CIDRs across spaces/VPCs** can't coexist on one Docker host (Docker refuses
-  overlapping pools; one host routing table). Two spaces both using `10.0.0.0/16` need a per-space
-  network namespace (netd per netns, or a router container per space) — design, not built.
-  The AWS default VPC `172.31.0.0/16` sits inside Docker's default address pool: bridges are created
-  only for subnets with interfaces, and `ensure_networks` fails loudly on a pool overlap.
-* **Inbound from the internet to a public IP** is evaluated (`reach("198.51.100.7", eni)`) but not
-  enforced: there is no DNAT from a host-side "public IP" yet, so the enforcer drops all new inbound
-  from outside the space (correct for private instances, too strict for public ones).
-* **Appliance routes** (AWS instance/ENI target, GCP nextHopInstance/Ip, Azure VirtualAppliance) are
-  evaluated (incl. source/dest check) but enforced as drop (needs policy routing into the container).
-* IGW/NAT source address is the host's masquerade address on the egress interface, not the EIP /
-  NAT public IP (the internet sees "a NATed address", which is the behaviour that matters).
-* NAT gateway ephemeral range: real NAT GW uses 1024-65535 toward the internet; we keep the client's
-  port (Linux 32768-60999), so a NAT-subnet NACL that only allows 1024-32767 back would behave
-  differently. Evaluator and enforcer agree with each other (both use the client port).
-* Stateless ACLs are assumed to be AWS NACLs (boundary-only). Azure subnet NSGs are stateful and
-  apply inside the subnet (handled).
-* No IPv6, no ICMP flow-log records (tcp/udp only in the flow sets), no TGW / VPN / VPC endpoints /
-  PrivateLink / egress-only IGW behaviour (route targets become `unsupported` → drop + warning).
-* Latency / AZ / packet loss via `tc netem` per bridge: not attempted. Hook point would be the
-  netd (`tc qdisc add dev vn<hash> root netem delay …`) keyed by subnet zone pairs.
-* Docker Desktop specifics verified: host netns == init netns (nft `log` reaches dmesg),
-  `bridge-nf-call-iptables=1`, iptables-nft backend, DOCKER-USER evaluated first. A native Linux
-  Docker host should behave the same but must have `br_netfilter` loaded for intra-subnet rules.
+**Core gaps closed** (conformance: `tests/conformance/test_{vpc,gcp,azure}_netsim_core.py`): in-subnet
+IP allocation (EC2 + Azure NICs), EC2 public-IP rules, ModifySubnetAttribute, SourceDestCheck,
+CreateRoute Instance/ENI targets, `local` route on custom tables; GCP default route, firewall service
+accounts, Cloud Router/NAT, network peering, default-subnetwork region; Azure routeTables / natGateways /
+publicIPAddresses / applicationSecurityGroups / networkWatchers.
+
+**Offline enforcement** (`core/netsim/wiring.py`, default OFF):
+
+* `VYOMI_NETSIM_ENFORCE=1` (or `auto`: on when the Docker daemon is a Linux engine). Needs the netd
+  image: `docker build -t vyomi/netd:1 docker/netd` (override with `VYOMI_NETD_IMAGE`). The appliance only
+  needs the docker socket; DockerEnforcer starts `vyomi-netd` (`--network host --cap-add NET_ADMIN`).
+* Knobs: `VYOMI_NETSIM_PREFIX` (network names, default `vyomi-net-`), `VYOMI_NETD_NAME`,
+  `VYOMI_NETSIM_DEBOUNCE_MS` (250), `VYOMI_NETSIM_MGMT_CIDRS` (extra management sources; the appliance
+  container's own IPs are always management), `VYOMI_NETSIM_INBOUND_DNAT=1` (1:1 DNAT to public IPs —
+  opt-in because simulated public IPs sit in real cloud ranges and the rule would capture host traffic to
+  that exact address), `VYOMI_NETSIM_SPACE_PREFIX` (table/network namespace, used by tests).
+* `netsim_topology(space)` = vpc_core slot + the legacy EC2 instance records (offline RunInstances) +
+  the GCP VPC/VM core stores + Azure ARM state. `schedule_apply()` runs after EC2 Query VPC mutations,
+  EC2 launch/start/terminate and GCP compute mutations; `server._docker_instance_obj` takes the subnet
+  bridge + model IP from `docker_attach()` (EC2, GCE). Every path is wrapped: a failure is recorded in
+  `wiring.status()` and the instance falls back to the legacy network — launch never breaks.
+* **Offline AWS VPC is now ONE engine:** the EC2 Query VPC actions (`CreateVpc`, `CreateSubnet`, SGs,
+  route tables, IGWs, `DescribeSecurityGroups` …) are served by `core/vpc_core` instead of the pre-v4
+  `vpc_state` handlers (which only covered half the actions, so NACLs/NAT/peering lived in a different
+  store than their VPC). Pre-v4 readers of `vpc_state` get a mirror (`_engine: vpc_core`).
+  `VYOMI_VPC_ENGINE=legacy` restores the old routing. VPCs created before this change in `vpc_state`
+  are not migrated into the core.
+* Docker published ports (the console's SSH port-publish path) are DNAT'd by Docker and pass as
+  management traffic (`ct status dnat`), like a cloud console's own connect path.
+
+Real-packet proof: `tests/netsim/test_docker_e2e.py` (core API → enforcer, 18 AWS + 7 GCP + 7 Azure
+cases incl. inbound DNAT) and `tests/netsim/test_docker_offline_e2e.py` (the appliance's own HTTP API →
+vpc_core → wiring → packets; the appliance's AnalyzeReachability answer == kernel outcome).
+
+## Honest limits (as of phase N1)
+
+* **Azure VMs are not packet-enforced offline**: the offline Azure VM runtime is LXD/Multipass, not the
+  Docker compute backend. NSGs/UDRs are evaluated (Network Watcher) on both substrates.
+* **Nano has no packets**: there, netsim is the behaviour (analyzer answers), not enforcement.
+* **Overlapping CIDRs across spaces/VPCs** still can't coexist on one Docker host (one routing table,
+  Docker refuses overlapping pools). Needs a network namespace per space (netd per netns / router
+  container) — designed, not built. `ensure_networks` fails loudly; attach then falls back.
+* **Inbound DNAT** is opt-in (see above) and only for interfaces whose egress is via an IGW with a public
+  IP; egress still masquerades to the host address (the real internet would not route replies to a
+  simulated EIP), so outbound flows show the host address, inbound flows see the real client.
+* **Appliance routes** (instance/ENI/VirtualAppliance next hops) are evaluated (incl. source/dest check)
+  but enforced as drop.
+* NAT gateway ephemeral range: real NAT GW uses 1024-65535; we keep the client port (evaluator and
+  enforcer agree with each other).
+* Stateless ACLs are assumed to be AWS NACLs (boundary-only); Azure subnet NSGs are stateful and apply
+  inside the subnet (handled).
+* Flow logs: per-flow counters + AWS/GCP/Azure record rendering exist (`flowlogs.py`), but no
+  `CreateFlowLogs` API / delivery to CloudWatch Logs, Cloud Logging or storage yet.
+* No IPv6, no ICMP flow records, no TGW / VPN / VPC endpoints / PrivateLink / egress-only IGW behaviour
+  (route targets become `unsupported` → drop + warning). Latency/AZ via `tc netem`: not attempted.
+* Consoles: the Azure VNet subnet blade still shows its old "NAT gateway / Route table not modelled"
+  placeholders and there is no console blade yet for Network Insights, Connectivity Tests or Network
+  Watcher — the APIs are real, the UI pickers are a follow-up.
+* Docker Desktop specifics verified: host netns == init netns, `bridge-nf-call-iptables=1`,
+  iptables-nft backend, DOCKER-USER evaluated first. A native Linux host must have `br_netfilter`
+  loaded for intra-subnet rules.

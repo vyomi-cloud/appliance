@@ -55,6 +55,7 @@ except ImportError:
                        ip_in, prefix_len)
 
 FLOW_KEY = "ip saddr . ip daddr . meta l4proto . th sport . th dport"
+PUBLIC_MARK = "0x00007653"      # conntrack mark: connection entered through an interface's public IP
 
 
 def table_name(space: str) -> str:
@@ -94,8 +95,9 @@ class Plan:
 
 
 class _Compiler:
-    def __init__(self, topo: Topology, space: str, mgmt_cidrs=()):
+    def __init__(self, topo: Topology, space: str, mgmt_cidrs=(), inbound_dnat: bool = False):
         self.t = topo
+        self.inbound_dnat = inbound_dnat
         self.space = space
         self.mgmt = list(mgmt_cidrs)
         self.chains: dict = {}         # name -> [rule lines]
@@ -287,7 +289,7 @@ class _Compiler:
         fwd = ["ip saddr != @space ip daddr != @space accept",
                # Docker published ports (the console's SSH port-publish path) arrive DNAT'd by Docker:
                # management access, like the cloud consoles' own connect paths — not tenant traffic
-               "ct status dnat accept comment \"docker published port (management)\""]
+               f"ct mark != {PUBLIC_MARK} ct status dnat accept comment \"docker published port (management)\""]
         if self.mgmt:
             fwd += ["ip saddr @mgmt accept comment \"management (console/ssh bridge)\"",
                     "ip daddr @mgmt accept comment \"management replies\""]
@@ -299,11 +301,13 @@ class _Compiler:
             if i:
                 fwd.append(f"ip daddr {s.cidr} ip saddr != {s.cidr} jump {i}")
         # NAT gateway subnet ACLs for flows NATed through it (AWS)
-        masq = []
+        masq, dnat = [], []
         for iface in self.ifaces:
             path, nsub = ev.internet_egress_mode(t, iface)
             if path:
                 masq.append(iface.ip)
+            if self.inbound_dnat and path == "internet-via-igw" and iface.public_ip:
+                dnat.append((iface.public_ip, iface.ip, iface.id))
             if nsub is not None:
                 gi, go = self._acl_chain(nsub, INGRESS), self._acl_chain(nsub, EGRESS)
                 for ch in (gi, go):
@@ -312,7 +316,7 @@ class _Compiler:
                         fwd.append(f"ip daddr {iface.ip} ip saddr != @model jump {ch} comment {_q('reply via NAT subnet ' + nsub.id)}")
         fwd += ["ct state established,related goto pass",
                 "ct state invalid counter drop",
-                "ip saddr != @space counter goto deny comment \"inbound from outside the space (no public-IP DNAT)\"",
+                f"ip saddr != @space ct mark != {PUBLIC_MARK} counter goto deny comment \"inbound from outside the space, not to a public IP\"",
                 "ip daddr @model ip daddr != @space counter goto deny comment \"internal address with no interface\""]
         for iface in self.ifaces:
             fwd.append(f"ip saddr {iface.ip} jump {self._route_chain(iface)} comment {_q(iface.id + ' routes')}")
@@ -341,6 +345,10 @@ class _Compiler:
             out.append(f"  chain {name} {{")
             out += [f"    {line}" for line in lines]
             out.append("  }")
+        out.append("  chain prerouting {\n    type nat hook prerouting priority dstnat - 10; policy accept;")
+        for pub, priv, iid in dnat:   # 1:1 public IP → interface (IGW semantics); marked so ingress rules apply
+            out.append(f"    ip daddr {pub} ip saddr != @model ct mark set {PUBLIC_MARK} dnat ip to {priv} comment {_q(iid + ' public IP')}")
+        out.append("  }")
         out.append("  chain postrouting {\n    type nat hook postrouting priority srcnat - 10; policy accept;")
         for ip in masq:
             out.append(f"    ip saddr {ip} ip daddr != @model masquerade comment \"internet egress\"")
@@ -351,8 +359,8 @@ class _Compiler:
         return plan
 
 
-def compile_nft(topo: Topology, space: str, mgmt_cidrs=()) -> Plan:
-    return _Compiler(topo, space, mgmt_cidrs).compile()
+def compile_nft(topo: Topology, space: str, mgmt_cidrs=(), inbound_dnat: bool = False) -> Plan:
+    return _Compiler(topo, space, mgmt_cidrs, inbound_dnat).compile()
 
 
 def network_plan(topo: Topology, space: str, prefix: str = "vyomi-net-") -> list:
@@ -371,8 +379,8 @@ def network_plan(topo: Topology, space: str, prefix: str = "vyomi-net-") -> list
     return out
 
 
-def compile_plan(topo: Topology, space: str, prefix: str = "vyomi-net-", mgmt_cidrs=()) -> Plan:
-    plan = compile_nft(topo, space, mgmt_cidrs)
+def compile_plan(topo: Topology, space: str, prefix: str = "vyomi-net-", mgmt_cidrs=(), inbound_dnat: bool = False) -> Plan:
+    plan = compile_nft(topo, space, mgmt_cidrs, inbound_dnat)
     plan.networks = network_plan(topo, space, prefix)
     for i in topo.interfaces.values():
         s = topo.subnet_of(i)
@@ -389,8 +397,10 @@ class DockerEnforcer:
     appliance container only needs the docker socket (same as DockerComputeBackend)."""
 
     def __init__(self, space: str, *, prefix: str = "vyomi-net-", netd_name: str = "vyomi-netd",
-                 netd_image: str = "vyomi/netd:1", docker: str = "docker", mgmt_cidrs=()):
+                 netd_image: str = "vyomi/netd:1", docker: str = "docker", mgmt_cidrs=(),
+                 inbound_dnat: bool = False):
         self.space = space
+        self.inbound_dnat = inbound_dnat
         self.prefix = prefix
         self.netd_name = netd_name
         self.netd_image = netd_image
@@ -446,7 +456,7 @@ class DockerEnforcer:
                 self.netd("iptables", *line.replace("-A ", "-D ", 1).split(), check=False)
 
     def apply(self, topo: Topology) -> Plan:
-        plan = compile_plan(topo, self.space, self.prefix, self.mgmt)
+        plan = compile_plan(topo, self.space, self.prefix, self.mgmt, self.inbound_dnat)
         self.ensure_netd()
         self.ensure_networks(plan)
         if self.last_plan is not None:

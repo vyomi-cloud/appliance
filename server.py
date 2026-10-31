@@ -14209,9 +14209,10 @@ async def api_ec2_query(request: Request):
     from core import vpc_core as _vpc_core
     if action in _vpc_core._OPS:
         r = _vpc_core.dispatch(_Ec2CoreSpaceStore(), dict(params))
-        if r.status < 300 and not action.startswith(("Describe", "Get", "List")):
+        if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
             _persist_state()
-            _netsim_kick(f"ec2 {action}")
+            if "NetworkInsights" not in action:
+                _netsim_kick(f"ec2 {action}")
         return Response(content=r.body, status_code=r.status, media_type=r.media_type, headers=r.headers or None)
     return _ec2_error_response("InvalidAction", f"The action '{action}' is not implemented by the simulator.", 400)
 
@@ -14263,7 +14264,7 @@ def api_vpc_core_query(params: dict) -> Response:
     from core import vpc_core as _vpc_core
     action = str(params.get("Action", "")).strip()
     r = _vpc_core.dispatch(_Ec2CoreSpaceStore(), dict(params))
-    if r.status < 300 and not action.startswith(("Describe", "Get", "List")):
+    if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
         try:
             _vpc_mirror_from_core()
         except Exception:

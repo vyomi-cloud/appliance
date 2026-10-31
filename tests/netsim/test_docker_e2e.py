@@ -104,7 +104,7 @@ class DockerE2E(unittest.TestCase):
         x["other"] = a.sg(x["vpc"], "other")
         a.allow_in(x["other"], "tcp", 22, 22, cidr="10.213.0.0/16")
         x["d"] = a.instance(x["pub"], [x["other"]], "10.213.1.12")
-        cls.enf = DockerEnforcer(SPACE, prefix=PFX, netd_name=NETD, netd_image=NETD_IMAGE)
+        cls.enf = DockerEnforcer(SPACE, prefix=PFX, netd_name=NETD, netd_image=NETD_IMAGE, inbound_dnat=True)
         plan = cls.enf.apply(from_aws(a.store))
         assert not [w for w in plan.warnings if "outside its subnet" in w], plan.warnings
         cls.nodes = {}
@@ -115,7 +115,7 @@ class DockerE2E(unittest.TestCase):
             sh("docker", "run", "-d", "--name", name, *cls.enf.run_args(topo, eni), "--label", "netsim-test=1",
                NODE_IMAGE, "python3", "-c", SERVER)
             cls.nodes[key] = name
-        sh("docker", "network", "create", "--subnet", INET_CIDR, "--label", "netsim-test=1", INET_NET)
+        sh("docker", "network", "create", "--subnet", INET_CIDR, "-o", "com.docker.network.bridge.enable_ip_masquerade=false", "--label", "netsim-test=1", INET_NET)
         sh("docker", "run", "-d", "--name", f"{PFX}inet", "--network", INET_NET, "--ip", INET_IP,
            "--label", "netsim-test=1", NODE_IMAGE, "python3", "-c", SERVER)
         cls.nodes["inet"] = f"{PFX}inet"
@@ -145,7 +145,7 @@ class DockerE2E(unittest.TestCase):
         out = sh("docker", "exec", self.nodes[src_key], "python3", "-c", CLIENT, dst_ip, str(port), str(sport)).stdout.strip()
         return out.startswith("OK"), out
 
-    def case(self, label, src_key, dst, port, sport=None, expect=None):
+    def case(self, label, src_key, dst, port, sport=None, expect=None, public=False):
         sport = sport or 40001 + len(type(self).results)      # unique 5-tuple per case → precise evidence
         topo = from_aws(self.a.store)
         self.enf.apply(topo)
@@ -155,12 +155,13 @@ class DockerE2E(unittest.TestCase):
             dst_ip, dst_ref = INET_IP, INET_IP
         else:
             dst_ref = primary_eni(x[dst])
-            dst_ip = topo.interfaces[dst_ref].ip
+            dst_ip = topo.interfaces[dst_ref].public_ip if public else topo.interfaces[dst_ref].ip
         v = reach(topo, src, dst_ref if src_key != "inet" else dst_ip, "tcp", port, src_port=sport)
         ok, raw = self.probe(src_key, dst_ip, port, sport)
         row = {"case": label, "flow": f"{src_key}->{dst}:{port}", "evaluator": "ALLOW" if v.reachable else f"BLOCK {v.code}",
                "packets": "ALLOW" if ok else "BLOCK", "seen": raw, "match": v.reachable == ok,
-               "src_ip": INET_IP if src_key == "inet" else topo.interfaces[src].ip, "dst_ip": dst_ip,
+               "src_ip": INET_IP if src_key == "inet" else topo.interfaces[src].ip,
+               "dst_ip": dst_ip if dst == "inet" else topo.interfaces[dst_ref].ip,   # nft sees post-DNAT addresses
                "sport": sport, "dport": port}
         type(self).results.append(row)
         self.assertEqual(v.reachable, ok, f"{label}: evaluator={v.explain()}\nprobe={raw}")
@@ -216,6 +217,11 @@ class DockerE2E(unittest.TestCase):
         a.call("DeleteRoute", RouteTableId=x["pub_rt"], DestinationCidrBlock="0.0.0.0/0")
         self.case("no route to 0.0.0.0/0", "a", "inet", 443, expect=False)
         a.route(x["pub_rt"], "0.0.0.0/0", GatewayId=x["igw"])
+        # 4b inbound to the public IP (1:1 DNAT like an IGW) — ingress rules still decide
+        self.case("internet → EIP:22, SG allows 22 only from the VPC", "inet", "a", 22, expect=False, public=True)
+        a.allow_in(x["web"], "tcp", 22, 22, cidr="0.0.0.0/0")
+        _, seen = self.case("internet → EIP:22 after SG allows 0.0.0.0/0", "inet", "a", 22, expect=True, public=True)
+        self.assertIn(INET_IP, seen, "instance should see the real internet source address")
         # 5 private subnet: no NAT → blocked; NAT → allowed (egress only)
         self.case("private subnet without NAT → internet", "b", "inet", 443, expect=False)
         nat = a.nat(x["pub"])

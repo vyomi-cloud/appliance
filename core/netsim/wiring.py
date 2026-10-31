@@ -163,7 +163,10 @@ def _enforcer(space: str) -> _enf.DockerEnforcer:
     return _enf.DockerEnforcer(space, prefix=os.environ.get("VYOMI_NETSIM_PREFIX", "vyomi-net-"),
                                netd_name=os.environ.get("VYOMI_NETD_NAME", "vyomi-netd"),
                                netd_image=os.environ.get("VYOMI_NETD_IMAGE", "vyomi/netd:1"),
-                               mgmt_cidrs=mgmt_cidrs())
+                               mgmt_cidrs=mgmt_cidrs(),
+                               # 1:1 DNAT to public IPs: opt-in — the simulated public addresses live in
+                               # real cloud ranges, so a DNAT rule would capture host traffic to that address
+                               inbound_dnat=_env("VYOMI_NETSIM_INBOUND_DNAT", "0") in ("1", "true", "on", "yes"))
 
 
 _ENFORCERS: dict = {}

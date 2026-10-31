@@ -24,9 +24,10 @@
   "title": "Subnets (Microsoft.Network/virtualNetworks/subnets)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "Name, address range, the private-subnet (no default outbound access) flag and the Network security group association are real. NAT gateway and Route table are an honest gap — Vyomi does not model Microsoft.Network/natGateways or routeTables as resource types, so there is nothing to associate. Subnet delegation is not modelled."
+   "Name, address range, the private-subnet (defaultOutboundAccess) flag, NSG, route table and NAT gateway associations are real and drive behaviour (system routes incl. None for RFC1918 outside the vnet, UDRs, NAT/default outbound egress). NIC private IPs are allocated from the subnet (.0-.3 and the last address reserved). Subnet delegation is not modelled. The console's NAT gateway / Route table pickers still show the earlier honest-gap message until they are rebuilt.",
+   "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
   ],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_netsim_core.py", "tests/netsim/test_azure.py"]
  },
  "azure.vnets.dns_servers": {
   "title": "DNS servers (default vs. custom)",
@@ -38,9 +39,10 @@
   "title": "Virtual network peerings (Microsoft.Network/virtualNetworks/virtualNetworkPeerings)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "Adding a peering creates the real ARM peering object on both virtual networks (same as the portal's Add blade), with peeringState fixed at 'Connected' and peeringSyncLevel fixed at 'FullyInSync' — Vyomi has no asynchronous sync process to model, so 'Sync' is a no-op refresh."
+   "Adding a peering creates the real ARM peering object on both virtual networks (same as the portal's Add blade), with peeringState fixed at 'Connected' and peeringSyncLevel fixed at 'FullyInSync' — Vyomi has no asynchronous sync process to model, so 'Sync' is a no-op refresh.",
+   "Traffic only crosses a peering once BOTH virtual networks hold a Connected link (one-sided links carry nothing), and it is non-transitive."
   ],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/netsim/test_azure.py"]
  },
  "azure.vnets.service_endpoints": {
   "title": "Service endpoints (subnet properties.serviceEndpoints)",
@@ -84,12 +86,16 @@
  "azure.vnets.tools": {
   "title": "Diagnose and solve problems, Resource visualizer, Connection troubleshoot, Topology, Tasks, Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["These console tools require live network topology / traffic simulation Vyomi doesn't model."]
+  "limitations": [
+   "These console tools require live network topology / traffic simulation Vyomi doesn't model."
+  ]
  },
  "azure.vnets.monitoring": {
   "title": "Alerts, Metrics, Diagnostic settings, Logs",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Azure Monitor alert rules/diagnostic settings/metrics for virtual networks are not modelled."]
+  "limitations": [
+   "Azure Monitor alert rules/diagnostic settings/metrics for virtual networks are not modelled."
+  ]
  },
  "azure.vnets.network_appliances": {
   "title": "Azure Bastion, DDoS protection, Azure Firewall, Microsoft Defender for Cloud, Network Manager, Private endpoints",
@@ -109,6 +115,8 @@
  "azure.vnets.ip_address_management": {
   "title": "IP address pools (Allocate using IP address pools) and advertised address prefixes (BGP)",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Azure IPAM pool allocation and custom BGP route advertisement are advanced features Vyomi doesn't model."]
+  "limitations": [
+   "Azure IPAM pool allocation and custom BGP route advertisement are advanced features Vyomi doesn't model."
+  ]
  }
 }
