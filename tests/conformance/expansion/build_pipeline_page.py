@@ -374,6 +374,26 @@ def main() -> int:
         md += [f"| {r['name']} | {r['priority']} | {r['link'] or 'not filed'} | {r['real']} |" for r in d["queued"]]
         md += ["", "</details>", ""]
 
+    # Platform features: cross-cutting work, highest priority (label platform-feature).
+    feats_ = gh_json("issue", "list", "-R", REPO, "--label", "platform-feature", "--state", "all", "--limit", "50",
+                     "--json", "number,title,state,labels,body")
+    if feats_:
+        md += ["## Platform features (highest priority)", "",
+               "Built by the agent ahead of everything else, then **reviewed and merged by a person**.", "",
+               "| Feature | Stage | Review PR |", "|---|---|---|"]
+        for it in sorted(feats_, key=lambda x: x["number"]):
+            m = re.search(r"<!-- feature: slug=([a-z0-9-]+)", it.get("body") or "")
+            if not m:
+                continue
+            labels = {l["name"] for l in it.get("labels", [])}
+            pr = prs.get(f"expansion/feature-{m.group(1)}")
+            stage = ("✅ Merged" if pr and pr["state"] == "MERGED" else "👀 In review" if pr and pr["state"] == "OPEN"
+                     else "⛔ Blocked" if "blocked" in labels else "🛠 Building" if "in-progress" in labels
+                     else "✅ Done" if it["state"] == "CLOSED" else "📋 Queued")
+            review = f"[PR #{pr['number']}]({pr['url']})" if pr else "—"
+            md.append(f"| {it['title'].replace('[feature] ', '')} [#{it['number']}]({GH}/issues/{it['number']}) | {stage} | {review} |")
+        md.append("")
+
     # Backend upgrades: stacks of existing PRs rebuilt onto main (label backend-upgrade).
     ups = gh_json("issue", "list", "-R", REPO, "--label", "backend-upgrade", "--state", "all", "--limit", "50",
                   "--json", "number,title,state,labels,body")

@@ -225,7 +225,7 @@ func (c *Config) invokeDockerSubstrate(action string, dcArgs []string) error {
 		if err := run("docker", append(append([]string{}, base...), "up", "-d")...); err != nil {
 			return err
 		}
-		progress("==> Vyomi (Docker) console starting - open http://localhost:9000 in ~30s")
+		progress(fmt.Sprintf("==> Vyomi (Docker) console starting - open http://localhost:%d in ~30s", c.simulatorPort()))
 		wave2()
 		return nil
 	case "down", "stop":

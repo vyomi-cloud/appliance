@@ -8,6 +8,8 @@
 host-sizing-report.json
 .cloudlearn_admin_key
 .vyomi_servicebus_sas_key
+.vyomi_apps.sqlite3
+*.vyomi.bak
 
 # Python
 __pycache__/
@@ -33,6 +35,8 @@ venv/
 
 # Go
 **/vendor/
+cmd/vyomi/vyomi
+cmd/vyomi/vyomi.exe
 
 # Node / Playwright
 node_modules/

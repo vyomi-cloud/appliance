@@ -39,7 +39,7 @@ jobs:
        (startsWith(github.event.pull_request.head.ref, 'expansion/') &&
         contains(github.event.pull_request.labels.*.name, 'new-service-release')))
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       GH_TOKEN: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
       PR: ${{ github.event.pull_request.number }}
@@ -56,6 +56,43 @@ jobs:
           ref: main
           fetch-depth: 0
           token: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+
+      # Release notes = every change that ships, not the PR's truncated commit headlines:
+      # commits pushed straight to main since the last tag + the PR's commits that weren't
+      # already released (scripts/release_notes.py). Claude writes the user-facing
+      # highlights from that list; the notes still go out without them if it fails.
+      - name: Collect this release's changes
+        id: changes
+        run: |
+          git fetch -q origin "refs/pull/$PR/head:refs/remotes/pr/$PR"
+          PREV="v$(tr -d '[:space:]' < VERSION)"
+          echo "prev=$PREV" >> "$GITHUB_OUTPUT"
+          python3 scripts/release_notes.py --version next --prev "$PREV" --pr-head "refs/remotes/pr/$PR" \
+            --kind "$KIND" --commits-out /tmp/release-commits.txt --out /tmp/release-draft.md
+          wc -l < /tmp/release-commits.txt
+
+      - name: Write the release highlights (Claude)
+        continue-on-error: true
+        timeout-minutes: 10
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.CONFORMANCE_BOT_TOKEN }}
+          allowed_bots: 'github-actions,vyomi-conformance-bot'
+          prompt: |
+            Write the "Highlights" for this Vyomi appliance release, for users (developers who run
+            the simulator offline or use Nano in the browser at vyomi.cloud).
+            Input: /tmp/release-commits.txt (one change per line: group<TAB>cloud<TAB>text; text is
+            tagged [Nano], [offline] or [Nano + offline]) and the draft /tmp/release-draft.md.
+            Write ONLY /tmp/release-highlights.md: 3 to 7 markdown bullets, most user-visible first.
+            Each bullet starts with a short bold claim, then one plain sentence on what changed for the
+            user. Group many small conformance fixes into one bullet with a count and the main services.
+            Name new services. No internal jargon (no test ids, finding codes, file paths, commit
+            hashes), no pipeline/CI changes unless users notice them, no emoji, nothing not in the input.
+          claude_args: >-
+            --max-turns 6
+            --allowedTools "Read,Write"
 
       - name: Bump to the next patch version on main
         id: v
@@ -74,11 +111,8 @@ jobs:
           for f in packaging/rpm/cloud-learn.spec; do
             [ -f "$f" ] && sed -i "s/$(echo "$OLD" | sed 's/\./\\./g')/$NEW/g" "$f"
           done
-          # Changelog lines = the commits that came in with this PR.
-          gh pr view "$PR" --json commits -q '.commits[].messageHeadline' \
-            | grep -v '^Merge ' | sed 's/^/- /' > /tmp/changes.md || true
           python3 - "$NEW" <<'PY'
-          import sys, datetime, json, os
+          import sys, json, os
           new = sys.argv[1]
           # Services that passed the gate go live with this release.
           added = []
@@ -87,20 +121,16 @@ jobs:
               for s in reg["services"]:
                   if s.get("status") == "pending-release":
                       s["status"], s["released_in"] = "released", new
-                      added.append(f"- New service: {s['cloud'].upper()} {s['name']}")
+                      added.append(f"- **{s['cloud'].upper()} {s['name']}**")
               json.dump(reg, open("services/registry.json", "w", encoding="utf-8"), indent=1)
               open("services/registry.json", "a").write("\n")
-          log = open("/tmp/changes.md", encoding="utf-8").read().strip() or "- Conformance fixes"
-          log = "\n".join(added + [log]) if added else log
-          today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-          entry = f"## [{new}] — {today}\n\n{os.environ['KIND']}.\n\n{log}\n\n"
-          old = open("CHANGELOG.md", encoding="utf-8").read()
-          # Insert above the first existing release heading.
-          i = old.find("\n## ")
-          new_txt = old[: i + 1] + entry + old[i + 1:] if i >= 0 else entry + old
-          open("CHANGELOG.md", "w", encoding="utf-8").write(new_txt)
+          open("/tmp/new-services.md", "w").write("\n".join(added) + ("\n" if added else ""))
           PY
-          git add -A VERSION CHANGELOG.md packaging services
+          HL=(); [ -s /tmp/release-highlights.md ] && HL=(--highlights /tmp/release-highlights.md)
+          python3 scripts/release_notes.py --version "$NEW" --prev "${{ steps.changes.outputs.prev }}" \
+            --pr-head "refs/remotes/pr/$PR" --kind "$KIND" "${HL[@]}" --new-services /tmp/new-services.md \
+            --write-changelog --write-readme
+          git add -A VERSION CHANGELOG.md README.md packaging services
           git commit -q -m "release(v$NEW): ${KIND,,} (#$PR)"
           git push -q origin HEAD:main
 

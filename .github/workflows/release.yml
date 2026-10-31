@@ -45,6 +45,7 @@ on:
 
 permissions:
   contents: write     # github-release needs to write the Release page
+  issues: write       # close the issues this release fixed, with a 'Shipped in' note
   packages: write     # if any job ever needs to push to GHCR
 
 env:
@@ -305,6 +306,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # tags + history: the issues this release fixed
       - uses: actions/download-artifact@v4
         with: {name: release-artifacts, path: dist}
       - uses: actions/download-artifact@v4
@@ -349,6 +351,19 @@ jobs:
           # don't update :latest or appear as the "Latest" release on
           # the GitHub repo home page.
           prerelease: ${{ contains(needs.build.outputs.version, '-rc') || contains(needs.build.outputs.version, '-beta') || contains(needs.build.outputs.version, '-alpha') }}
+
+      # Shipped: every issue this release fixed ("Fixes #N" in its commits) gets a
+      # "Shipped in vX.Y.Z" comment (reporter thanked by name when it was filed under a
+      # person's account) and is closed. Skipped for pre-releases.
+      - name: Close the issues this release shipped
+        if: ${{ !contains(needs.build.outputs.version, '-') }}
+        continue-on-error: true
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: |
+          VER="${{ needs.build.outputs.version }}"
+          PREV=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "v$VER" | head -1)
+          [ -n "$PREV" ] || { echo "No previous release tag."; exit 0; }
+          python3 scripts/close_shipped_issues.py --version "$VER" --prev "$PREV" --repo "${{ github.repository }}"
 
   # ── Brew tap auto-bump ──────────────────────────────────────────────────
   # Bumps cloud-learn.rb in the vyomi-cloud/homebrew-tap repo with the

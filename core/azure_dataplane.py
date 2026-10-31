@@ -71,6 +71,16 @@ def _xml_escape(s: str) -> str:
     return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
+def _error_xml_response(code: str, message: str, status: int = 404) -> Response:
+    body = (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        f"<Error><Code>{_xml_escape(code)}</Code>"
+        f"<Message>{_xml_escape(message)}</Message></Error>"
+    )
+    headers = _blob_headers({"x-ms-error-code": code})
+    return Response(content=body, status_code=status, media_type="application/xml", headers=headers)
+
+
 async def _blob_handle(account: str, rest: str, request: Request) -> Response:
     # Storage goes through the backend-aware helpers below (put_blob_bytes /
     # get_blob_rec / list_blobs / ...), which use Azurite when configured and
@@ -101,13 +111,26 @@ async def _blob_handle(account: str, rest: str, request: Request) -> Response:
     # ----- container level -----
     if blob is None or blob == "":
         if method == "GET" and qp.get("comp") == "list":  # list blobs (restype=container present)
+            if not container_exists(account, container):
+                return _error_xml_response("ContainerNotFound", "The specified container does not exist.", 404)
             prefix = qp.get("prefix", "")
             rows = ""
             for o in list_blobs(account, container, prefix):
+                p = o.get("props") or {}
+                extra_props = ""
+                if p.get("cache_control"):
+                    extra_props += f"<Cache-Control>{_xml_escape(p['cache_control'])}</Cache-Control>"
+                if p.get("content_disposition"):
+                    extra_props += f"<Content-Disposition>{_xml_escape(p['content_disposition'])}</Content-Disposition>"
+                if p.get("content_encoding"):
+                    extra_props += f"<Content-Encoding>{_xml_escape(p['content_encoding'])}</Content-Encoding>"
+                if p.get("content_language"):
+                    extra_props += f"<Content-Language>{_xml_escape(p['content_language'])}</Content-Language>"
                 rows += (f"<Blob><Name>{_xml_escape(o['name'])}</Name><Properties>"
                          f"<Last-Modified>{o['lastModified']}</Last-Modified><Etag>{o['etag']}</Etag>"
                          f"<Content-Length>{o['size']}</Content-Length>"
                          f"<Content-Type>{_xml_escape(o['contentType'])}</Content-Type>"
+                         f"{extra_props}"
                          f"<BlobType>BlockBlob</BlobType>"
                          f"<LeaseStatus>unlocked</LeaseStatus><LeaseState>available</LeaseState>"
                          f"</Properties></Blob>")
@@ -118,28 +141,35 @@ async def _blob_handle(account: str, rest: str, request: Request) -> Response:
         if qp.get("restype") == "container":
             if method == "PUT":
                 if container_exists(account, container):
-                    return Response(status_code=409, content="", headers=_blob_headers(
-                        {"x-ms-error-code": "ContainerAlreadyExists"}))
-                create_container(account, container)
+                    return _error_xml_response("ContainerAlreadyExists", "The specified container already exists.", 409)
+                public_access = request.headers.get("x-ms-blob-public-access")
+                create_container(account, container, public_access=public_access)
                 return Response(status_code=201, content="", headers=_blob_headers(
                     {"ETag": _etag(), "Last-Modified": _http_date()}))
             if method == "DELETE":
+                if not container_exists(account, container):
+                    return _error_xml_response("ContainerNotFound", "The specified container does not exist.", 404)
                 delete_container(account, container)
                 return Response(status_code=202, content="", headers=_blob_headers())
             if method in ("GET", "HEAD"):  # get container properties
                 if not container_exists(account, container):
-                    return Response(status_code=404, content="", headers=_blob_headers(
-                        {"x-ms-error-code": "ContainerNotFound"}))
-                return Response(status_code=200, content="", headers=_blob_headers(
-                    {"ETag": _etag(), "Last-Modified": _http_date()}))
+                    return _error_xml_response("ContainerNotFound", "The specified container does not exist.", 404)
+                props = get_container_props(account, container)
+                hdrs = {"ETag": _etag(), "Last-Modified": props.get("created", _http_date())}
+                if props.get("public_access"):
+                    hdrs["x-ms-blob-public-access"] = props["public_access"]
+                return Response(status_code=200, content="", headers=_blob_headers(hdrs))
         return Response(status_code=400, content="", headers=_blob_headers())
 
     # ----- blob level -----
     if method == "PUT":
+        if not container_exists(account, container):
+            return _error_xml_response("ContainerNotFound", "The specified container does not exist.", 404)
         body = await request.body()
-        ct = request.headers.get("content-type") or request.headers.get("x-ms-blob-content-type") or "application/octet-stream"
+        from core.azure_blob_core import blob_content_headers
+        props = blob_content_headers(request.headers)
         meta = {k[len("x-ms-meta-"):]: v for k, v in request.headers.items() if k.lower().startswith("x-ms-meta-")}
-        rec = put_blob_bytes(account, container, blob, body, ct, meta)
+        rec = put_blob_bytes(account, container, blob, body, props=props, meta=meta)
         md5 = hashlib.md5(body).digest()
         import base64
         return Response(status_code=201, content="", headers=_blob_headers({
@@ -147,32 +177,71 @@ async def _blob_handle(account: str, rest: str, request: Request) -> Response:
             "Content-MD5": base64.b64encode(md5).decode(),
             "x-ms-request-server-encrypted": "true"}))
     if method in ("GET", "HEAD"):
+        if not container_exists(account, container):
+            return _error_xml_response("ContainerNotFound", "The specified container does not exist.", 404)
         if method == "HEAD":
             p = blob_props_rec(account, container, blob)
             if not p:
-                return Response(status_code=404, content="", headers=_blob_headers(
-                    {"x-ms-error-code": "BlobNotFound"}))
+                return _error_xml_response("BlobNotFound", "The specified blob does not exist.", 404)
             hdrs = _blob_headers({
                 "ETag": p["etag"], "Last-Modified": p["mtime"],
                 "Content-Length": str(p["size"]), "Accept-Ranges": "bytes",
                 "x-ms-blob-type": "BlockBlob", "x-ms-creation-time": p["mtime"]})
+            props = p.get("props") or {}
+            if props.get("cache_control"):
+                hdrs["Cache-Control"] = props["cache_control"]
+            if props.get("content_disposition"):
+                hdrs["Content-Disposition"] = props["content_disposition"]
+            if props.get("content_encoding"):
+                hdrs["Content-Encoding"] = props["content_encoding"]
+            if props.get("content_language"):
+                hdrs["Content-Language"] = props["content_language"]
             for mk, mv in (p.get("meta") or {}).items():
                 hdrs["x-ms-meta-" + mk] = mv
             return Response(status_code=200, content=b"", media_type=p["ct"], headers=hdrs)
         g = get_blob_rec(account, container, blob)
         if not g:
-            return Response(status_code=404, content="", headers=_blob_headers(
-                {"x-ms-error-code": "BlobNotFound"}))
+            return _error_xml_response("BlobNotFound", "The specified blob does not exist.", 404)
         hdrs = _blob_headers({
             "ETag": g["etag"], "Last-Modified": g["mtime"],
             "Content-Length": str(len(g["data"])), "Accept-Ranges": "bytes",
             "x-ms-blob-type": "BlockBlob", "x-ms-creation-time": g["mtime"]})
+        props = g.get("props") or {}
+        if props.get("cache_control"):
+            hdrs["Cache-Control"] = props["cache_control"]
+        if props.get("content_disposition"):
+            hdrs["Content-Disposition"] = props["content_disposition"]
+        if props.get("content_encoding"):
+            hdrs["Content-Encoding"] = props["content_encoding"]
+        if props.get("content_language"):
+            hdrs["Content-Language"] = props["content_language"]
         for mk, mv in (g.get("meta") or {}).items():
             hdrs["x-ms-meta-" + mk] = mv
-        return Response(content=g["data"], media_type=g["ct"], headers=hdrs)
+
+        data = g["data"]
+        rng = request.headers.get("x-ms-range") or request.headers.get("range") or ""
+        from core.azure_blob_core import parse_byte_range
+        try:
+            rr = parse_byte_range(rng, len(data))
+        except ValueError:
+            err_hdrs = _blob_headers({"x-ms-error-code": "InvalidRange", "Content-Range": f"bytes */{len(data)}"})
+            return Response(status_code=416, headers=err_hdrs, media_type="application/xml",
+                            content='<?xml version="1.0" encoding="utf-8"?>\n<Error><Code>InvalidRange</Code><Message>The range specified is invalid.</Message></Error>')
+        if rr:
+            start, end = rr
+            sl = data[start:end + 1]
+            hdrs["Content-Length"] = str(len(sl))
+            hdrs["Content-Range"] = f"bytes {start}-{end}/{len(data)}"
+            return Response(status_code=206, content=sl, media_type=g["ct"], headers=hdrs)
+
+        return Response(content=data, media_type=g["ct"], headers=hdrs)
     if method == "DELETE":
+        if not container_exists(account, container):
+            return _error_xml_response("ContainerNotFound", "The specified container does not exist.", 404)
         existed = delete_blob(account, container, blob)
-        return Response(status_code=202 if existed else 404, content="", headers=_blob_headers())
+        if not existed:
+            return _error_xml_response("BlobNotFound", "The specified blob does not exist.", 404)
+        return Response(status_code=202, content="", headers=_blob_headers())
     return Response(status_code=405, content="", headers=_blob_headers())
 
 
@@ -840,23 +909,28 @@ def _store():
 
 
 def put_blob_bytes(account: str, container: str, blob: str, data: bytes,
-                   content_type: str | None = None, meta: dict | None = None) -> dict:
+                   content_type: str | None = None, meta: dict | None = None,
+                   props: dict | None = None) -> dict:
+    from core.azure_blob_core import blob_content_headers
+    if props is None:
+        props = blob_content_headers({"content-type": content_type} if content_type else {})
+
     st = _store()
     if st:
         try:
-            return st.put_blob(_sid(), account, container, blob, data, content_type, meta)
+            return st.put_blob(_sid(), account, container, blob, data, props, meta)
         except Exception:
             pass  # fall through to in-process on transient backend errors
     acct = _account(_sid(), account)
     acct["containers"].setdefault(container, {"created": _http_date()})
-    rec = {"data": data, "ct": content_type or "application/octet-stream",
-           "etag": _etag(), "mtime": _http_date(), "meta": meta or {}}
+    rec = {"data": data, "ct": props.get("content_type", "application/octet-stream"),
+           "props": props, "etag": _etag(), "mtime": _http_date(), "meta": meta or {}}
     acct["blobs"][(container, blob)] = rec
     return rec
 
 
 def get_blob_rec(account: str, container: str, blob: str) -> dict | None:
-    """Full record {data, ct, etag, mtime, meta} or None."""
+    """Full record {data, ct, etag, mtime, meta, props} or None."""
     st = _store()
     if st:
         return st.get_blob(_sid(), account, container, blob)
@@ -864,15 +938,15 @@ def get_blob_rec(account: str, container: str, blob: str) -> dict | None:
 
 
 def blob_props_rec(account: str, container: str, blob: str) -> dict | None:
-    """Metadata only {size, ct, etag, mtime, meta} or None (for HEAD)."""
+    """Metadata only {size, ct, etag, mtime, meta, props} or None (for HEAD)."""
     st = _store()
     if st:
         return st.blob_props(_sid(), account, container, blob)
     rec = _account(_sid(), account)["blobs"].get((container, blob))
     if not rec:
         return None
-    return {"size": len(rec["data"]), "ct": rec["ct"], "etag": rec["etag"],
-            "mtime": rec["mtime"], "meta": rec.get("meta", {})}
+    return {"size": len(rec["data"]), "ct": rec["ct"], "props": rec.get("props", {}),
+            "etag": rec["etag"], "mtime": rec["mtime"], "meta": rec.get("meta", {})}
 
 
 def list_blobs(account: str, container: str, prefix: str = "") -> list[dict]:
@@ -885,6 +959,7 @@ def list_blobs(account: str, container: str, prefix: str = "") -> list[dict]:
         if c != container or not b.startswith(prefix):
             continue
         out.append({"name": b, "size": len(rec["data"]), "contentType": rec["ct"],
+                    "props": rec.get("props", {}),
                     "etag": rec["etag"], "lastModified": rec["mtime"]})
     return sorted(out, key=lambda o: o["name"])
 
@@ -916,14 +991,24 @@ def container_exists(account: str, container: str) -> bool:
     return container in _account(_sid(), account)["containers"]
 
 
-def create_container(account: str, container: str) -> dict:
+def create_container(account: str, container: str, public_access: str | None = None) -> dict:
     st = _store()
     if st:
-        st.create_container(_sid(), account, container)
-        return {"name": container, "created": _http_date()}
+        st.create_container(_sid(), account, container, public_access=public_access)
+        return {"name": container, "created": _http_date(), "public_access": public_access}
     acct = _account(_sid(), account)
     rec = acct["containers"].setdefault(container, {"created": _http_date()})
-    return {"name": container, "created": rec["created"]}
+    if public_access:
+        rec["public_access"] = public_access
+    return {"name": container, "created": rec["created"], "public_access": rec.get("public_access")}
+
+
+def get_container_props(account: str, container: str) -> dict:
+    st = _store()
+    if st and hasattr(st, "get_container_props"):
+        return st.get_container_props(_sid(), account, container)
+    acct = _account(_sid(), account)
+    return acct["containers"].get(container) or {"created": _http_date()}
 
 
 def delete_blob(account: str, container: str, blob: str) -> bool:
