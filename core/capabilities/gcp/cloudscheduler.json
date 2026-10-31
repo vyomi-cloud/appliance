@@ -26,8 +26,8 @@
    "offline": "full"
   },
   "limitations": [
-   "Schedules are advanced lazily on read/run, not by a background timer: a due job fires the first time any request touches its project (list, get or run), not at the exact wall-clock instant.",
-   "A missed tick is never replayed — only the single next occurrence is computed."
+   "On Nano (and the dev server) schedules are advanced lazily on read/run, not by a background timer: a due job fires the first time any request touches its project (list, get or run), not at the exact wall-clock instant. The offline appliance runs a 15 s background ticker, so a due job fires on its own within 15 s — no SDK/console call needed — though still not at the exact wall-clock instant.",
+   "A missed tick is never replayed on either substrate — only the single next occurrence is computed."
   ],
   "api": [
    "jobs.pause",
@@ -45,9 +45,10 @@
    "offline": "limited"
   },
   "limitations": [
-   "A Pub/Sub target is delivered into Vyomi's Pub/Sub core for real — a subscriber receives an actual message.",
-   "HTTP and App Engine HTTP targets are recorded as attempted (lastAttemptTime/status are stamped); Vyomi makes no outbound network call, so the target URL is never actually invoked.",
-   "OAuth and OIDC auth headers are stored and returned to the SDK exactly as configured but are not verified or used to sign an outbound request."
+   "A Pub/Sub target is delivered into Vyomi's Pub/Sub core for real on every substrate — a subscriber receives an actual message.",
+   "On Nano (and the dev server) there is no outbound network path, so an HTTP target is recorded as attempted only (lastAttemptTime/status are stamped; the target URL is never actually invoked). The offline appliance really sends the request (method, headers, body), retries it per retryConfig, and maps the real response code onto the job's status.",
+   "App Engine HTTP targets are recorded as attempted (lastAttemptTime/status stamped) on every substrate; Vyomi doesn't model App Engine, so the relative URL is never dispatched anywhere.",
+   "OAuth and OIDC auth headers are stored and returned to the SDK exactly as configured; the offline appliance sends a placeholder bearer token rather than minting or verifying a real one for the configured service account."
   ],
   "api": [
    "jobs.create",
