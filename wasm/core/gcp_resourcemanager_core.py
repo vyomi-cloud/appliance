@@ -281,7 +281,9 @@ def dispatch(store: ResourceManagerStore, method: str, path: str,
             if method == "GET":
                 return _list_org_policies(store, parent)
             return _err(400, f"Unsupported method {method} on policies", "INVALID_ARGUMENT")
-        name = f"{parent}/policies/{segs[3]}"
+        # The constraint id itself may carry a slash (predefined constraints are named
+        # "constraints/iam.xxx"), so the policy name is everything after ".../policies/".
+        name = f"{parent}/policies/{'/'.join(segs[3:])}"
         if method == "GET":
             return _get_org_policy(store, name)
         if method == "DELETE":

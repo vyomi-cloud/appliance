@@ -15541,6 +15541,19 @@ def _gcp_iam_set_policy(project: str, payload: dict[str, Any]) -> dict:
         "etag": str(payload.get("etag") or ""),
         "bindings": payload.get("bindings", []) if isinstance(payload.get("bindings"), list) else [],
     }
+    # Data Access audit log config (auditConfigs) — round-tripped verbatim, same
+    # shape as core/gcp_iam_core._set_iam_policy, so the Audit logs page's toggles
+    # survive on the offline substrate too (they used to be dropped here).
+    if isinstance(payload.get("auditConfigs"), list):
+        policy["auditConfigs"] = [
+            {"service": a.get("service", ""),
+             "auditLogConfigs": [dict(c) for c in a.get("auditLogConfigs", []) if isinstance(c, dict)]}
+            for a in payload["auditConfigs"] if isinstance(a, dict)
+        ]
+    else:
+        prev = gcp_iam_state.get("policies", {}).get(project) or {}
+        if prev.get("auditConfigs"):
+            policy["auditConfigs"] = prev["auditConfigs"]
     gcp_iam_state.setdefault("policies", {})[project] = policy
     return policy
 
@@ -17658,11 +17671,14 @@ def _gcp_apigateway_gateway_view(project: str, location: str, gw: dict) -> dict:
 
 def _gcp_iam_policy_view(project: str) -> dict:
     policy = gcp_iam_state.setdefault("policies", {}).setdefault(project, {"bindings": [], "etag": "", "version": 1})
-    return {
+    out = {
         "version": policy.get("version", 1),
         "etag": policy.get("etag", ""),
         "bindings": policy.get("bindings", []),
     }
+    if policy.get("auditConfigs"):
+        out["auditConfigs"] = policy["auditConfigs"]
+    return out
 
 
 def api_vpc_list_vpcs():
