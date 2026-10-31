@@ -1,7 +1,7 @@
 {
  "cloud": "azure",
  "service": "cosmos",
- "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "goal": "DEPTH: sub-sections / config sections in real integration with the backend — raise real coverage and capability levels",
  "must_build": [
   "Every page in ui-spec/azure/cosmos.json (40 pages; nav: Overview, Activity log, Access control (IAM), Tags, Diagnose and solve problems, Cost Management, Quick start, Notifications, Data Explorer, Settings, Containers, Integrations, Monitoring, Automation)",
   "Backend: ARM databaseAccounts + Cosmos data plane (test_azure_cosmos_core.py): accounts, Data Explorer (databases, containers, items, query), keys",
@@ -13,6 +13,57 @@
   "Capability feature ids MUST start with 'azure.' (e.g. 'azure.cosmos.<section>') — ids share one namespace with the AWS registry",
   "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
  ],
- "attempt": 2,
- "note": "Your previous run built the console but never committed the source (the PR had only bundles), so start fresh on the base branch. Keep consoles/src/azure/kit/Capability.jsx as on base (just add your capability JSON), list your service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py, write 'Vyomi' as plain text, and COMMIT your source (the runner now commits leftovers, but commit anyway). Rebuild after merging."
+ "attempt": 3,
+ "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source.",
+ "phase": "depth",
+ "depth_targets": [
+  {
+   "id": "azure.cosmos.query",
+   "title": "SQL query (SELECT) over the Cosmos data plane",
+   "level": "limited",
+   "limitations": [
+    "Covers a pragmatic SELECT subset (projection, a single WHERE comparison/IN predicate, ORDER BY); joins, subqueries, aggregate/system functions and stored procedures are not implemented."
+   ]
+  },
+  {
+   "id": "azure.cosmos.default_consistency",
+   "title": "Default consistency level",
+   "level": "config_only",
+   "limitations": [
+    "properties.consistencyPolicy.defaultConsistencyLevel round-trips through ARM, but every data-plane read in Vyomi is already strongly consistent regardless of the configured level."
+   ]
+  },
+  {
+   "id": "azure.cosmos.replicate_data_globally",
+   "title": "Replicate data globally (region list, failover)",
+   "level": "config_only",
+   "limitations": [
+    "properties.locations round-trips through ARM, but Vyomi has one logical region: added regions are not separately provisioned, and Manual/Service-Managed Failover do not move the data plane anywhere."
+   ]
+  },
+  {
+   "id": "azure.cosmos.backup_restore",
+   "title": "Backup & Restore policy",
+   "level": "config_only",
+   "limitations": [
+    "properties.backupPolicy round-trips through ARM exactly as configured at create time, but Vyomi never takes or restores a backup."
+   ]
+  },
+  {
+   "id": "azure.cosmos.activity_log",
+   "title": "Activity log",
+   "level": "limited",
+   "limitations": [
+    "Only console/SDK-triggered ARM mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+   ]
+  },
+  {
+   "id": "azure.cosmos.iam",
+   "title": "Access control (IAM): role assignments and built-in role definitions over ARM",
+   "level": "limited",
+   "limitations": [
+    "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), but the generic ARM list is subscription-wide (not scoped to this one account), and 'Check access' / 'My access' evaluation is not modelled — Vyomi never denies a console action based on a role assignment."
+   ]
+  }
+ ]
 }

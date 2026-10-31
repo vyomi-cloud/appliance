@@ -1,7 +1,7 @@
 {
  "cloud": "azure",
  "service": "functionapp",
- "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "goal": "DEPTH: sub-sections / config sections in real integration with the backend — raise real coverage and capability levels",
  "must_build": [
   "Every page in ui-spec/azure/functionapp.json (42 pages; nav: Overview, Activity log, Access control (IAM), Tags, Diagnose and solve problems, Microsoft Defender for Cloud, Events (preview), Log stream, Resource visualizer, Functions, Deployment, Settings, Development Tools, API)",
   "Backend: ARM Microsoft.Web sites kind=functionapp + core (test_azure_app_core.py): function apps, functions, configuration, keys",
@@ -13,6 +13,67 @@
   "Capability feature ids MUST start with 'azure.' (e.g. 'azure.functionapp.<section>') — ids share one namespace with the AWS registry",
   "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
  ],
- "attempt": 2,
- "note": "RESUME: first `git fetch origin v4/ui-azure-functionapp-41039778476 && git merge --no-edit origin/v4/ui-azure-functionapp-41039778476` — your previous attempt (already high fidelity). Then fix ONLY what the gate rejected: - list/detail pages without a liveness check (add \"live\" to spec-map + a fixture): functionapp-activity-log Liveness = add \"live\" to spec-map.json + a fixture in fixtures.mjs that creates a uniquely named resource over the native wire, and make the page really list/show it from the backend. Keep consoles/src/<cloud>/kit/Capability.jsx as on the base branch (just add your capability JSON; never re-create the file), list your service ONCE in registry.js, and register any NEW core in wasm/build_cores.py, wasm/nano-boot.js, core/nano_registry.py and core/nano_persist.py (tests/conformance/test_nano_core_manifest.py checks this). Rebuild bundles after merging (node build.mjs)."
+ "attempt": 3,
+ "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source.",
+ "phase": "depth",
+ "depth_targets": [
+  {
+   "id": "azure.functionapp.function.invoke",
+   "title": "Function Test/Run (real sandboxed execution)",
+   "level": "limited",
+   "limitations": [
+    "Only the Python programming model (a `main(req)` entry point) runs.",
+    "The sandbox is restricted (no filesystem, network or process access, a curated stdlib subset) — the same technique as the Lambda console's Invoke."
+   ]
+  },
+  {
+   "id": "azure.functionapp.scale",
+   "title": "Scale and concurrency (Flex Consumption)",
+   "level": "config_only",
+   "limitations": [
+    "Instance memory, maximum instance count and per-instance concurrency are stored on the site and returned from the API exactly as configured, but Vyomi does not run multiple instances or enforce these limits."
+   ]
+  },
+  {
+   "id": "azure.functionapp.locks",
+   "title": "Resource locks",
+   "level": "limited",
+   "limitations": [
+    "Modelled as a function-app sub-resource (create/list/delete round-trip) rather than the real Microsoft.Authorization/locks extension resource path, and not enforced — Vyomi does not block delete/write operations on a locked site."
+   ]
+  },
+  {
+   "id": "azure.functionapp.publishprofile",
+   "title": "Download / reset publish profile",
+   "level": "limited",
+   "limitations": [
+    "The profile is a simulator-generated credential; it does not grant real deployment access and Vyomi has no Web Deploy / Kudu endpoint behind it."
+   ]
+  },
+  {
+   "id": "azure.functionapp.rbac",
+   "title": "Access control (IAM) — role assignments and role definitions",
+   "level": "limited",
+   "limitations": [
+    "Role assignments and role definitions are the generic subscription-scoped Microsoft.Authorization store (shared with every other Azure resource), not filtered to assignments scoped exactly to this function app.",
+    "Deny assignments and classic administrators are always empty (Vyomi models neither)."
+   ]
+  },
+  {
+   "id": "azure.functionapp.activitylog",
+   "title": "Activity log",
+   "level": "limited",
+   "limitations": [
+    "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+   ]
+  },
+  {
+   "id": "azure.functionapp.diagnostics",
+   "title": "Diagnose and solve problems, Microsoft Defender for Cloud, Events, Log stream, Resource visualizer, App files, Deployment Center, Authentication, Application Insights, Identity, Custom domains, Certificates, Networking, Service Connector, Advanced Tools, Extensions, API Management, CORS, Alerts, Metrics, Logs, Advisor recommendations, Health check, Diagnostic settings, Tasks, Resource health, New support request",
+   "level": "not_simulated",
+   "limitations": [
+    "These panels need a managed diagnostics/telemetry/identity backend Vyomi does not run; each renders only its title and an honest not-simulated note."
+   ]
+  }
+ ]
 }
