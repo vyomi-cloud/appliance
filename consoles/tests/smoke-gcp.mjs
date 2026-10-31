@@ -264,6 +264,27 @@ try {
     virtNames.some((n) => n.startsWith("from-std1")) && virtNames.some((n) => n.startsWith("from-std2")), JSON.stringify(virtNames));
   await shot("13c-virtual-repository");
 
+  // Permissions is a real, ENFORCED per-repository IAM policy (config_only no longer):
+  // setIamPolicy over the wire, then prove an update is denied for an ungranted principal
+  // and allowed for the one the policy actually grants the repoAdmin role to.
+  const PR = `v4-gcp-ar-iam-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories?repositoryId=${PR}`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ format: "DOCKER" }) });
+  await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories/${PR}:setIamPolicy`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ policy: { bindings: [{ role: "roles/artifactregistry.repoAdmin", members: ["user:ar-smoke@example.com"] }] } }),
+  });
+  const arDenied = await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories/${PR}?updateMask=description`, {
+    method: "PATCH", headers: { "content-type": "application/json", "X-Cloudlearn-Principal": "someone-else@example.com" },
+    body: JSON.stringify({ description: "nope" }),
+  });
+  const arAllowed = await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories/${PR}?updateMask=description`, {
+    method: "PATCH", headers: { "content-type": "application/json", "X-Cloudlearn-Principal": "ar-smoke@example.com" },
+    body: JSON.stringify({ description: "granted" }),
+  });
+  check("setIamPolicy over native wire → denies an ungranted principal's update", arDenied.status === 403);
+  check("setIamPolicy over native wire → allows the granted principal's update", arAllowed.status === 200);
+
   // Settings: toggle redirection → native projectSettings round-trip
   await page.goto(UI + "#/artifacts/settings");
   // State persists across runs on a real appliance — start from "disabled".

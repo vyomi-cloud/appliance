@@ -12,8 +12,8 @@ B = "/v1/projects/p/locations/us-central1/repositories"
 R = "projects/p/locations/us-central1/repositories/r1"
 
 
-def call(st, method, path, query=None, body=None):
-    r = ar.dispatch(st, method, path, query or {}, {}, json.dumps(body).encode() if body is not None else b"")
+def call(st, method, path, query=None, body=None, headers=None):
+    r = ar.dispatch(st, method, path, query or {}, headers or {}, json.dumps(body).encode() if body is not None else b"")
     return r.status, json.loads(r.body)
 
 
@@ -53,11 +53,55 @@ def test_packages_tags_images_and_iam():
     assert call(st, "GET", B + "/r1")[1]["sizeBytes"] == "5242880"
     pol = call(st, "POST", B + "/r1:setIamPolicy", None, {"policy": {"bindings": [{"role": "roles/artifactregistry.reader", "members": ["allUsers"]}]}})[1]
     assert call(st, "POST", B + "/r1:getIamPolicy")[1]["etag"] == pol["etag"]
-    assert call(st, "POST", B + "/r1:testIamPermissions", None, {"permissions": ["a.b"]})[1] == {"permissions": ["a.b"]}
+    # testIamPermissions narrows the request to what the policy actually grants: "allUsers"
+    # holds the reader role (get/list/downloadArtifacts), not an arbitrary made-up permission —
+    # from a non-owner caller's perspective (the owner/no-header caller always sees everything).
+    perms = call(st, "POST", B + "/r1:testIamPermissions", None,
+                {"permissions": ["artifactregistry.repositories.get", "a.b"]},
+                headers={"X-Cloudlearn-Principal": "someone@example.com"})[1]
+    assert perms == {"permissions": ["artifactregistry.repositories.get"]}, perms
     call(st, "DELETE", B + "/r1/packages/app/versions/" + digest)
     # Deleting a package's last version drops the (now-empty) package too.
     assert call(st, "GET", B + "/r1/packages/app/tags")[0] == 404
     assert call(st, "GET", B + "/r1/packages")[1]["packages"] == []
+
+
+def test_iam_policy_enforced_on_mutations():
+    st = ar.ArtifactRegistryStore()
+    call(st, "POST", B, {"repositoryId": "r1"}, {"format": "DOCKER"})
+    ar.ingest_image(st, R, "app", "v1")
+    OWNER = {}   # no X-Cloudlearn-Principal header: owner bypass, used to set the policy up
+    call(st, "POST", B + "/r1:setIamPolicy", None,
+        {"policy": {"bindings": [{"role": "roles/artifactregistry.repoAdmin", "members": ["user:admin@example.com"]},
+                                 {"role": "roles/artifactregistry.reader", "members": ["user:viewer@example.com"]}]}},
+        headers=OWNER)
+    DENIED = {"X-Cloudlearn-Principal": "someone-else@example.com"}
+    READER = {"X-Cloudlearn-Principal": "viewer@example.com"}
+    ADMIN = {"X-Cloudlearn-Principal": "admin@example.com"}
+
+    # Update: denied for an ungranted principal and a reader, allowed for the repoAdmin.
+    assert call(st, "PATCH", B + "/r1", {"updateMask": "description"}, {"description": "x"}, DENIED)[0] == 403
+    assert call(st, "PATCH", B + "/r1", {"updateMask": "description"}, {"description": "x"}, READER)[0] == 403
+    code, repo = call(st, "PATCH", B + "/r1", {"updateMask": "description"}, {"description": "x"}, ADMIN)
+    assert code == 200 and repo["description"] == "x"
+
+    # pushSample (upload) and tag creation: denied for the reader, allowed for the repoAdmin.
+    assert call(st, "POST", B + "/r1:pushSample", None, {"image": "app", "tag": "v2"}, READER)[0] == 403
+    code, out = call(st, "POST", B + "/r1:pushSample", None, {"image": "app", "tag": "v2"}, ADMIN)
+    assert code == 200, out
+    ver = call(st, "GET", B + "/r1/packages/app/versions")[1]["versions"][0]["name"]
+    assert call(st, "POST", B + "/r1/packages/app/tags", {"tagId": "t1"}, {"version": ver}, READER)[0] == 403
+    assert call(st, "POST", B + "/r1/packages/app/tags", {"tagId": "t1"}, {"version": ver}, ADMIN)[0] == 200
+
+    # Version/tag/package deletion: denied for the reader, allowed for the repoAdmin.
+    assert call(st, "DELETE", B + "/r1/packages/app/tags/t1", None, None, READER)[0] == 403
+    assert call(st, "DELETE", B + "/r1/packages/app/tags/t1", None, None, ADMIN)[0] == 200
+    assert call(st, "DELETE", B + "/r1/packages/app", None, None, READER)[0] == 403
+    assert call(st, "DELETE", B + "/r1/packages/app", None, None, ADMIN)[0] == 200
+
+    # Repository delete: denied for the reader, allowed for the repoAdmin.
+    assert call(st, "DELETE", B + "/r1", None, None, READER)[0] == 403
+    assert call(st, "DELETE", B + "/r1", None, None, ADMIN)[0] == 200
 
 
 def test_pagination():
