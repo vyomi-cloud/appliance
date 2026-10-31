@@ -42,6 +42,14 @@
       "timeout": 120
     },
     {
+      "id": "offline-sdk-python-azure-vm-runcommand",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "sdk-python",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_azure_vm_runcommand_sdk.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-api-azure-console-data-planes",
       "target": "offline",
       "cloud": "azure",
