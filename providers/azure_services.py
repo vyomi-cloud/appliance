@@ -869,6 +869,15 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             names.append(token)
     is_collection = (len(chain) % 2 == 1)  # ends on a type → LIST
 
+    # Microsoft.Authorization extension resources scoped to ANY resource
+    # (.../{type}/{name}/providers/Microsoft.Authorization/roleAssignments|roleDefinitions|
+    # checkAccess|locks): the shared core ARM engine's one RBAC/lock engine (a resource's Access
+    # control (IAM) blade lists the assignments at its own scope plus inherited ones).
+    lowc = [c.lower() for c in chain]
+    for i in range(1, len(lowc) - 1):
+        if lowc[i] == "providers" and lowc[i + 1] == "microsoft.authorization" and i % 2 == 0:
+            return await _handle_core_arm(request, method, rest, base)
+
     # Microsoft.Compute/.../vmSizes (azure.vms.size): a derived read (location- or VM-scoped),
     # not a RESOURCE_CATALOG-stored resource — served by the shared core ARM engine, same as
     # the Microsoft.ContainerRegistry/AKS "core knows it, this catalog doesn't" path below.
