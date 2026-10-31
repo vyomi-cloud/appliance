@@ -49,6 +49,10 @@
     {
       "label": "VPC Flow Logs",
       "page_id": "vpc-flow-logs"
+    },
+    {
+      "label": "Connectivity Tests",
+      "page_id": "connectivity-tests"
     }
   ],
   "pages": [
@@ -764,6 +768,150 @@
       ],
       "provenance": "capture",
       "confidence": "high"
+    },
+    {
+      "id": "connectivity-tests",
+      "kind": "list",
+      "title": "Connectivity Tests",
+      "route": "/networking/connectivity-tests/list",
+      "breadcrumbs": [
+        "Network Intelligence",
+        "Connectivity Tests"
+      ],
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Create Connectivity Test",
+        "Refresh"
+      ],
+      "table": {
+        "filter_placeholder": "Filter",
+        "empty_state": "No rows to display",
+        "columns": [
+          "Name",
+          "Protocol",
+          "Source",
+          "Destination",
+          "Result",
+          "Last run"
+        ]
+      }
+    },
+    {
+      "id": "create-connectivity-test",
+      "kind": "create",
+      "title": "Create Connectivity Test",
+      "route": "/networking/connectivity-tests/add",
+      "provenance": "reference",
+      "confidence": "medium",
+      "submit": "Create",
+      "sections": [
+        {
+          "title": "Test details",
+          "fields": [
+            {
+              "label": "Name",
+              "type": "text",
+              "required": true
+            },
+            {
+              "label": "Description",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "title": "Source",
+          "fields": [
+            {
+              "label": "Source endpoint",
+              "type": "radio",
+              "options": [
+                "Instance",
+                "IP address"
+              ]
+            },
+            {
+              "label": "Source instance",
+              "type": "select"
+            }
+          ]
+        },
+        {
+          "title": "Destination",
+          "fields": [
+            {
+              "label": "Destination endpoint",
+              "type": "radio",
+              "options": [
+                "Instance",
+                "IP address"
+              ]
+            },
+            {
+              "label": "Destination IP address",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "title": "Protocol",
+          "fields": [
+            {
+              "label": "Protocol",
+              "type": "select",
+              "default": "TCP"
+            },
+            {
+              "label": "Port",
+              "type": "text"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "connectivity-test-details",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/networking/connectivity-tests/details/{resource-name}",
+      "provenance": "reference",
+      "confidence": "medium",
+      "header_actions": [
+        "Rerun",
+        "Delete"
+      ],
+      "sections": [
+        {
+          "title": "Test configuration",
+          "fields": [
+            {
+              "label": "Description",
+              "type": "readonly"
+            },
+            {
+              "label": "Protocol",
+              "type": "readonly"
+            },
+            {
+              "label": "Source",
+              "type": "readonly"
+            },
+            {
+              "label": "Destination",
+              "type": "readonly"
+            },
+            {
+              "label": "Destination port",
+              "type": "readonly"
+            }
+          ]
+        },
+        {
+          "title": "Reachability analysis",
+          "fields": []
+        }
+      ]
     }
   ],
   "gaps_note": "Nav, VPC networks/IP addresses/routes lists and the Cloud NGFW firewall page are from capture. Create VPC network, create firewall rule, reserve address, create route and network details are reference (billing-gated / not reached)."

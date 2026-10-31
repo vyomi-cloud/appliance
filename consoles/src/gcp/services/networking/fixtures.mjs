@@ -9,6 +9,15 @@ async function ensureNetwork(wire, name = "uic-network") {
   return name;
 }
 
+const ctBase = `/v1/projects/${PROJECT}/locations/global/connectivityTests`;
+
+async function ensureConnectivityTest(wire, tid = "uic-ct") {
+  await wire("POST", `${ctBase}?testId=${tid}`, {
+    svc: null, body: { source: { ipAddress: "203.0.113.9" }, destination: { ipAddress: "203.0.113.10", port: 443 }, protocol: "TCP" },
+  }).catch(() => {});
+  return tid;
+}
+
 export default {
   "gcp-network": async (wire) => ensureNetwork(wire),
 
@@ -43,6 +52,21 @@ export default {
 
   "live-address": async (wire, uniq) => {
     await wire("POST", `${base}/regions/us-central1/addresses`, { svc: null, body: { name: uniq, addressType: "INTERNAL" } });
+    return uniq;
+  },
+
+  "gcp-connectivity-test": async (wire) => ensureConnectivityTest(wire),
+
+  "live-connectivity-test": async (wire, uniq) => {
+    await wire("POST", `${ctBase}?testId=${uniq}`, {
+      svc: null, body: { source: { ipAddress: "203.0.113.9" }, destination: { ipAddress: "203.0.113.10", port: 443 }, protocol: "TCP" },
+    });
+    return uniq;
+  },
+
+  "live-connectivity-test-detail": async (wire, uniq) => {
+    await ensureConnectivityTest(wire);
+    await wire("PATCH", `${ctBase}/uic-ct`, { svc: null, body: { description: uniq } });
     return uniq;
   },
 };

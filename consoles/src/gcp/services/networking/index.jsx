@@ -20,6 +20,10 @@ import ReserveAddress from "./ReserveAddress.jsx";
 import Routes from "./Routes.jsx";
 import CreateRoute from "./CreateRoute.jsx";
 import VpcFlowLogs from "./VpcFlowLogs.jsx";
+import ConnectivityTests from "./ConnectivityTests.jsx";
+import CreateConnectivityTest from "./CreateConnectivityTest.jsx";
+import ConnectivityTestDetail from "./ConnectivityTestDetail.jsx";
+import NetworkCheckIcon from "@mui/icons-material/esm/NetworkCheckOutlined.js";
 import { NotSimulatedContainer } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 
@@ -56,6 +60,7 @@ export default {
     link("serverless-vpc-access"),
     link("packet-mirroring"),
     { text: "VPC Flow Logs", href: "#/networking/vpc-flow-logs", icon: SettingsEthernetIcon },
+    { text: "Connectivity Tests", href: "#/networking/connectivity-tests/list", icon: NetworkCheckIcon, match: ["#/networking/connectivity-tests/add", "#/networking/connectivity-tests/details"] },
   ],
   routes: [
     { pattern: "/networking", component: VpcNetworks },
@@ -69,6 +74,9 @@ export default {
     { pattern: "/networking/routes/list", component: Routes },
     { pattern: "/networking/routes/add", component: CreateRoute },
     { pattern: "/networking/vpc-flow-logs", component: VpcFlowLogs },
+    { pattern: "/networking/connectivity-tests/list", component: ConnectivityTests },
+    { pattern: "/networking/connectivity-tests/add", component: CreateConnectivityTest },
+    { pattern: "/networking/connectivity-tests/details/:name", component: ConnectivityTestDetail },
     ...GAPS.map(([p, t, , capId]) => ({ pattern: `/networking/${p}`, component: ns(t, capId) })),
   ],
 };
