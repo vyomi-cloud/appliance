@@ -28,7 +28,7 @@ export default {
 
   "live-blob": async (wire, uniq) => {
     await ensureAccount(wire);
-    await wire("PUT", `/${ACCOUNT}/uiccontainer?restype=container`, { svc: null, headers: blobAuth(ACCOUNT) });
+    await wire("PUT", `/${ACCOUNT}/uiccontainer?restype=container`, { svc: null, headers: blobAuth(ACCOUNT) }).catch(() => {});
     await wire("PUT", `/${ACCOUNT}/uiccontainer/${uniq}`, { svc: null, headers: { ...blobAuth(ACCOUNT), "x-ms-blob-type": "BlockBlob" }, body: "uic blob contents" });
     return uniq;
   },

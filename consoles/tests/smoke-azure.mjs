@@ -1184,12 +1184,17 @@ try {
   check("UI delete alert rule → ARM GET 404", alertGone.status === 404, `HTTP ${alertGone.status}`);
 
   // ── Monitor depth: Data Collection Endpoint created through the wizard → visible over ARM ──
+  // The Review + create tab renders a <span>{name}</span> summary BEFORE the resource actually
+  // exists, so waiting on that same text right after the Create click can false-positive on the
+  // still-mounted summary instead of the post-create list — wait for the real navigation away
+  // from the wizard route first, then assert the name is on the (now actual) list page.
   const DCE = `vysmokedce${n}`;
   await page.goto(UI + "#/monitor/createdatacollectionendpoint");
   await page.getByLabel("Endpoint name", { exact: true }).fill(DCE);
   await page.getByRole("button", { name: "Review + create" }).click();
   await page.getByText("Validation passed").waitFor({ timeout: 5000 });
   await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.waitForURL((u) => u.hash === "#/monitor/datacollectionendpoints", { timeout: 15000 });
   await page.getByText(DCE, { exact: true }).first().waitFor({ timeout: 10000 });
   const dceGet = await armMonitor("GET", `/resourceGroups/${MON_RG}/providers/Microsoft.Insights/dataCollectionEndpoints/${DCE}`);
   check("UI create data collection endpoint → visible over native ARM", dceGet.status === 200, `HTTP ${dceGet.status}`);
@@ -1197,6 +1202,8 @@ try {
   check("DCE generated a logs ingestion endpoint", !!dceBody.properties?.logsIngestion?.endpoint, JSON.stringify(dceBody.properties));
 
   // ── Monitor depth: Private Link Scope created through the wizard → visible over ARM ────────
+  // Same false-positive hazard as the DCE wizard above (Review tab pre-renders the name) — wait
+  // for the real navigation away from the wizard before asserting the name is visible.
   const PLS = `vysmokepls${n}`;
   await page.goto(UI + "#/monitor/createprivatelinkscope");
   await page.getByLabel("Name", { exact: true }).fill(PLS);
@@ -1204,6 +1211,7 @@ try {
   await page.getByRole("button", { name: "Review + create" }).click();
   await page.getByText("Validation passed").waitFor({ timeout: 5000 });
   await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.waitForURL((u) => u.hash === "#/monitor/privatelinkscopes", { timeout: 15000 });
   await page.getByText(PLS, { exact: true }).first().waitFor({ timeout: 10000 });
   const plsGet = await armMonitor("GET", `/resourceGroups/${MON_RG}/providers/Microsoft.Insights/privateLinkScopes/${PLS}`);
   check("UI create private link scope → visible over native ARM", plsGet.status === 200, `HTTP ${plsGet.status}`);
