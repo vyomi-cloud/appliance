@@ -1,9 +1,12 @@
 /* Virtual machine resource blade: left resource menu + panels. Overview, Tags, Locks, Activity
- * log, Size, Disks, Identity, Auto-shutdown, Connect, Network settings (network interface +,
- * when attached, its network security group's inbound/outbound rules — the same engine the
- * Network security groups console uses), Properties and Export template are backed by real ARM
- * calls; the remaining menu items are honest CapabilityContainer gaps
- * (core/capabilities/azure/vms.json is the single source of truth for which). */
+ * log (with an ENFORCED timespan picker), Size, Disks, Identity, Auto-shutdown, Connect, Network
+ * settings (network interface +, when attached, its network security group's inbound/outbound
+ * rules — the same engine the Network security groups console uses), Properties, Export template
+ * (ARM/Bicep/Terraform, all generated client-side) and Access control (IAM)'s Role
+ * assignments/Roles tabs (scoped to this VM over the same generic engine the Cosmos DB account
+ * blade uses) are backed by real ARM calls; the remaining menu items are honest
+ * CapabilityContainer gaps (core/capabilities/azure/vms.json is the single source of truth for
+ * which). */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -18,7 +21,7 @@ import { capability, CapabilityContainer } from "../../kit/Capability.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
-import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, fmtDate } from "../../kit/common.jsx";
+import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
@@ -270,11 +273,16 @@ function PropertiesTabPanel({ a, nic }) {
   );
 }
 
-// ── Access control (IAM) — honest in every tab, same as every other Azure lens service here:
-// Microsoft.Authorization/roleAssignments is only simulated at subscription scope ──────────
+// ── Access control (IAM) — Role assignments and Roles are real, scoped to this VM (plus its
+// subscription/resource-group ancestors, real Azure's "inherited access" view) over the same
+// generic Microsoft.Authorization/roleAssignments extension-resource engine the Cosmos DB
+// account blade uses (azure.vms.iam); assignments are still created at the subscription scope.
+// Check access / My access / Deny assignments / Classic administrators stay honest gaps. ──────
 function AccessControlIam({ a }) {
   const [tab, setTab] = useState("check");
   const [dlg, setDlg] = useState(null);
+  const assignments = useAsync(() => api.listRoleAssignments(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const roles = useAsync(() => api.listRoleDefinitions(), []);
   return (
     <>
       <div className="vy-panel-title">Access control (IAM)</div>
@@ -291,10 +299,39 @@ function AccessControlIam({ a }) {
           <section className="vy-section"><h3>Check access</h3><Button onClick={() => setDlg("check")}>Check access</Button></section>
         </div>
       )}
-      {tab === "assignments" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vms.iam" title="Role assignments" /></div>}
-      {tab === "roles" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vms.iam" title="Roles" /></div>}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vms.iam" title="Deny assignments" /></div>}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.vms.iam" title="Classic administrators" /></div>}
+      {tab === "assignments" && (
+        <div style={{ marginTop: 12 }}>
+          <CapabilityContainer id="azure.vms.iam" title="Role assignments">
+            <BrowseGrid resourceName="role assignment" rowKey={(r) => r.id} filterPlaceholder="Search by name or email"
+              items={assignments.data || []} loading={assignments.loading} error={assignments.error} onRefresh={assignments.reload}
+              columns={[
+                { key: "name", label: "Name", value: (r) => r.properties?.principalId },
+                { key: "type", label: "Type", value: (r) => r.properties?.principalType || "--" },
+                { key: "role", label: "Role", value: (r) => r.properties?.roleDefinitionId?.split("/").pop() || r.properties?.roleName },
+                { key: "scope", label: "Scope", value: (r) => r.properties?.scope || "/" },
+                { key: "condition", label: "Condition", value: () => "None" },
+              ]}
+            />
+          </CapabilityContainer>
+        </div>
+      )}
+      {tab === "roles" && (
+        <div style={{ marginTop: 12 }}>
+          <CapabilityContainer id="azure.vms.iam" title="Roles">
+            <BrowseGrid resourceName="role" rowKey={(r) => r.id || r.name} filterPlaceholder="Search by role name, description, permission, or ID"
+              items={roles.data || []} loading={roles.loading} error={roles.error} onRefresh={roles.reload}
+              columns={[
+                { key: "name", label: "Name", value: (r) => r.properties?.roleName || r.name },
+                { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
+                { key: "type", label: "Type", value: (r) => r.properties?.type || "BuiltInRole" },
+                { key: "category", label: "Category", value: () => "General" },
+              ]}
+            />
+          </CapabilityContainer>
+        </div>
+      )}
+      {tab === "deny" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>}
+      {tab === "classic" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators" /></div>}
       <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
         <DialogSurface aria-label="Access check">
           <DialogBody>
@@ -455,8 +492,12 @@ function AddLockDialog({ open, onClose, onCreate }) {
 }
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this VM) ──
+const TIMESPANS = { "1h": 1, "6h": 6, "24h": 24, "7d": 24 * 7, "30d": 24 * 30 };
+
 function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
+  const [timespan, setTimespan] = useState("24h");
+  const since = () => new Date(Date.now() - TIMESPANS[timespan] * 3600 * 1000).toISOString();
+  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name, since()), [a.id, timespan]);
   const [gap, setGap] = useState(null);
   const rows = data || [];
   return (
@@ -466,6 +507,13 @@ function ActivityLog({ a }) {
         {["Activity", "Edit columns", "Export Activity Logs", "Download as CSV", "Insights", "Feedback", "Pin current filters", "Reset filters"].map((l) => (
           <ToolbarButton key={l} onClick={() => setGap(l)}>{l}</ToolbarButton>
         ))}
+        <Select size="small" value={timespan} onChange={(_, d) => setTimespan(d.value)} aria-label="Timespan" style={{ marginLeft: "auto", width: 160 }}>
+          <option value="1h">Last hour</option>
+          <option value="6h">Last 6 hours</option>
+          <option value="24h">Last 24 hours</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+        </Select>
       </div>
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
         <DialogSurface aria-label={gap || "Not simulated"}>
@@ -877,7 +925,8 @@ function RunCommand() {
   return <CapabilityContainer id="azure.vms.run_command" title="Run command" />;
 }
 
-// ── Export template ────────────────────────────────────────────────────────────────────
+// ── Export template (ARM/Bicep/Terraform all generated client-side from this VM's own live
+// resource — same approach as the Storage account blade's Export template) ────────────────
 function ExportTemplate({ a }) {
   const [tab, setTab] = useState("arm");
   const [params, setParams] = useState(true);
@@ -887,11 +936,19 @@ function ExportTemplate({ a }) {
     ...(params ? { parameters: { vmName: { type: "string", defaultValue: a.name } } } : {}),
     resources: [{ type: "Microsoft.Compute/virtualMachines", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('vmName')]" : a.name, location: a.location, properties: a.properties }],
   };
-  const text = JSON.stringify(template, null, 2);
+  const vmSize = a.properties?.hardwareProfile?.vmSize;
+  const osDisk = a.properties?.storageProfile?.osDisk || {};
+  const img = a.properties?.storageProfile?.imageReference || {};
+  const adminUsername = a.properties?.osProfile?.adminUsername;
+  const bicepName = a.name.replace(/[^a-zA-Z0-9]/g, "");
+  const bicep = `resource ${bicepName} 'Microsoft.Compute/virtualMachines@${api.ARM.apiVersion}' = {\n  name: '${a.name}'\n  location: '${a.location}'\n  properties: {\n    hardwareProfile: {\n      vmSize: '${vmSize}'\n    }\n    osProfile: {\n      computerName: '${a.name}'\n      adminUsername: '${adminUsername}'\n    }\n    storageProfile: {\n      imageReference: {\n        publisher: '${img.publisher}'\n        offer: '${img.offer}'\n        sku: '${img.sku}'\n        version: '${img.version}'\n      }\n      osDisk: {\n        osType: '${osDisk.osType}'\n        managedDisk: {\n          storageAccountType: '${osDisk.managedDisk?.storageAccountType}'\n        }\n      }\n    }\n  }\n}\n`;
+  const terraform = `resource "azurerm_linux_virtual_machine" "${a.name.replace(/[^a-zA-Z0-9]/g, "_")}" {\n  name                = "${a.name}"\n  location            = "${a.location}"\n  resource_group_name = "${a.resourceGroup}"\n  size                = "${vmSize}"\n  admin_username      = "${adminUsername}"\n\n  os_disk {\n    storage_account_type = "${osDisk.managedDisk?.storageAccountType}"\n  }\n\n  source_image_reference {\n    publisher = "${img.publisher}"\n    offer     = "${img.offer}"\n    sku       = "${img.sku}"\n    version   = "${img.version}"\n  }\n}\n`;
+  const text = tab === "arm" ? JSON.stringify(template, null, 2) : tab === "bicep" ? bicep : terraform;
+  const ext = tab === "arm" ? "json" : tab === "bicep" ? "bicep" : "tf";
   const download = () => {
     const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    el.download = `${a.name}.json`;
+    el.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    el.download = `${a.name}.${ext}`;
     document.body.appendChild(el); el.click(); el.remove();
   };
   return (
@@ -909,9 +966,8 @@ function ExportTemplate({ a }) {
         <Tab value="terraform">Terraform</Tab>
       </TabList>
       <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
-        {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <CapabilityContainer id="azure.vms.export_template" title={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
+        {tab === "arm" && <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />}
+        <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
       </section>
     </>
   );

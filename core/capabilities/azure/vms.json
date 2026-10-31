@@ -80,24 +80,25 @@
   "title": "Activity log",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill). The timespan picker is ENFORCED (narrowing it to e.g. 'Last hour' really drops older events via eventTimestamp ge on the query), but severity/category filtering is not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.vms.export_template": {
-  "title": "Export template",
-  "level": { "nano": "limited", "offline": "limited" },
+  "title": "Export template (ARM/Bicep/Terraform generated client-side from this resource)",
+  "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "Only the ARM Template tab is generated from the live resource; Bicep and Terraform export are not modelled."
+   "Download, Add to library, Deploy and Visualize template are honest 'Not simulated' actions — only template generation from the virtual machine's current ARM properties is real."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.vms.iam": {
-  "title": "Access control (IAM)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "title": "Access control (IAM): role assignments and built-in role definitions over ARM",
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Microsoft.Authorization/roleAssignments is only simulated at subscription scope, so role assignments/roles/deny assignments/classic administrators scoped to a single virtual machine are an honest gap."
-  ]
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions). The Role assignments list is ENFORCED scoped to this virtual machine (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view) instead of the whole subscription — the same engine the Cosmos DB account blade uses; Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too). Assignments are still created at the subscription scope (az role assignment create), and 'Check access' / 'My access' evaluation and Deny assignments / Classic administrators remain an honest gap."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.vms.run_command": {
   "title": "Run command",

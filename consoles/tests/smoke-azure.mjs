@@ -1735,6 +1735,40 @@ try {
   await page.getByText("Start succeeded").waitFor({ timeout: 10000 });
   await shot("31-vm-power");
 
+  // ── Access control (IAM): a role assignment created over the wire (subscription-wide, same
+  // honest scoping as the Cosmos DB account blade) is read back on the VM's own IAM tab ──────
+  const VMROLE = `00000000-0000-4000-7000-${String(n).padStart(12, "0")}`;
+  const vmRoleRes = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments/${VMROLE}?api-version=2022-04-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties: { principalId: "vyomi-vm-smoke-principal", roleDefinitionId: `/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions/owner`, principalType: "User" } }) });
+  check("ARM PUT role assignment over wire", vmRoleRes.status === 200 || vmRoleRes.status === 201, `HTTP ${vmRoleRes.status}`);
+  await page.goto(UI + `#/vms/${DEFAULT_RG}/${VM}/iam`);
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByText("vyomi-vm-smoke-principal").first().waitFor({ timeout: 10000 });
+  check("UI Access control (IAM) → Role assignments shows the wire-created assignment", true);
+  await shot("31b-vm-iam-role-assignments");
+
+  // ── Export template: ARM, Bicep and Terraform all reflect this VM's own live resource ──────
+  await page.goto(UI + `#/vms/${DEFAULT_RG}/${VM}/exporttemplate`);
+  const vmArmText = await page.getByRole("textbox").first().inputValue();
+  check("UI Export template (ARM) reflects the real resource",
+    vmArmText.includes("Microsoft.Compute/virtualMachines") && vmArmText.includes(VM), vmArmText.slice(0, 200));
+  await page.getByRole("tab", { name: "Bicep" }).click();
+  const vmBicepText = await page.getByRole("textbox").first().inputValue();
+  check("UI Export template (Bicep) reflects the real resource",
+    vmBicepText.includes("Microsoft.Compute/virtualMachines") && vmBicepText.includes(VM), vmBicepText.slice(0, 200));
+  await page.getByRole("tab", { name: "Terraform" }).click();
+  const vmTfText = await page.getByRole("textbox").first().inputValue();
+  check("UI Export template (Terraform) reflects the real resource",
+    vmTfText.includes("azurerm_linux_virtual_machine") && vmTfText.includes(VM), vmTfText.slice(0, 200));
+
+  // ── Activity log: the ENFORCED timespan picker narrows the query without losing this VM's
+  // own very-recent events ───────────────────────────────────────────────────────────────────
+  await page.goto(UI + `#/vms/${DEFAULT_RG}/${VM}/activitylog`);
+  await page.getByText("Microsoft.Compute/virtualMachines/write").first().waitFor({ timeout: 10000 });
+  await page.getByLabel("Timespan", { exact: true }).selectOption("1h");
+  await page.getByText("Microsoft.Compute/virtualMachines/write").first().waitFor({ timeout: 10000 });
+  check("UI Activity log timespan picker narrows the query without losing this VM's own recent events", true);
+
   // ── Virtual machine created over the wire → visible in the UI (CLI → UI) ──────────────
   const vmPut = await arm("PUT", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM2}`,
     { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_B1s" }, osProfile: { computerName: VM2, adminUsername: "azureuser" }, storageProfile: { osDisk: { osType: "Linux" } } } });
