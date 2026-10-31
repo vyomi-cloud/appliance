@@ -1073,6 +1073,25 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     }
     /* The header's baseline runs edge to edge (to the panel border); its content keeps the inset. */
     #spaces-card > .sc-head { margin-left: -22px; margin-right: -22px; padding-left: 22px; padding-right: 22px; }
+    /* Health view (Appliance at a glance): the same panel and tile design as Active spaces —
+       each section a rounded, shadowed panel; its tiles the Create Space fill, no border. */
+    #stats-card, #host-util-card, #svc-status-card {
+      background: rgba(255,255,255,0.02) !important;
+      border: 1px solid rgba(255,255,255,0.10) !important;
+      border-radius: 16px !important;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.30), 0 14px 36px rgba(0,0,0,0.38) !important;
+      padding: 20px 22px 22px !important;
+    }
+    #stats-card > .sc-head, #host-util-card > .sc-head, #svc-status-card > .sc-head {
+      margin-left: -22px; margin-right: -22px; padding-left: 22px; padding-right: 22px;
+    }
+    /* Distribution tiles, host stat tiles, and the per-cloud service tiles (readiness-strip.js
+       draws those with inline styles: the second child of the mount; the first is the CPU/Mem toggle). */
+    #stats-card .pie-card, #host-util-card .stat-card, #vyomi-services-mount > div:nth-child(2) > div {
+      background: #1f2937 !important; border: none !important; box-shadow: none !important;
+    }
+    /* Tile titles: a light-theme rule painted them #1f2937 (the tile colour) — readable grey here. */
+    #stats-card .pie-card .pie-label, #host-util-card .stat-card .stat-label { color: #a1a1aa !important; }
     /* Inner tiles use the portal tile gradient (surface → bg-3). */
     .pie-card, .stat-card, .kct, .space-card {
       background: linear-gradient(180deg, #14172e 0%, #0d1228 100%) !important;
