@@ -737,10 +737,20 @@ def handles(chain):
 def _activity_log_list(state, sub, query):
     flt = (query or {}).get("$filter") or ""
     m = re.search(r"resourceUri\s+eq\s+'([^']+)'", flt, re.I)
-    want = m.group(1).lower() if m else None
+    want = m.group(1).rstrip("/").lower() if m else None
+    # A resourceUri that IS a bare resource group id (no further segments after
+    # ".../resourceGroups/{rg}") scopes to every resource inside that group too — the real
+    # Activity Log behaviour a resource group's own blade relies on — not just an exact
+    # resourceId match (which would only ever hit the group's own lifecycle events).
+    want_rg = None
+    if want:
+        wsegs = want.split("/")
+        if len(wsegs) >= 2 and wsegs[-2] == "resourcegroups":
+            want_rg = wsegs[-1]
     rows = [r for r in state.values()
             if str(r.get("_type", "")).lower() == "microsoft.insights/eventtypes" and r.get("_sub") == sub
-            and (want is None or str(r.get("resourceId", "")).lower() == want)]
+            and (want is None or str(r.get("resourceId", "")).lower() == want
+                 or (want_rg is not None and str(r.get("resourceGroupName", "")).lower() == want_rg))]
     # Timespan picker: real ARM eventTimestamp ge/le OData predicates. ISO-8601 UTC strings
     # sort lexicographically, so plain string comparison is correct.
     ge = re.search(r"eventTimestamp\s+ge\s+'([^']*)'", flt, re.I)
