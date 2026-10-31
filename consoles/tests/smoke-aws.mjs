@@ -674,6 +674,42 @@ try {
   check("VPC create route table over wire → visible in UI", true, rtId || RTN);
   await shot("19-vpc-route-tables");
 
+  // VPC: flow log created over the wire for a VPC, verify it shows on the VPC detail page's
+  // Flow logs tab (CLI → UI direction).
+  const FLVPC = await ec2("CreateVpc", { CidrBlock: "10.95.0.0/16" });
+  const FLVPCID = xtag(FLVPC, "vpcId");
+  const flCreated = await ec2("CreateFlowLogs", { ResourceType: "VPC", "ResourceId.1": FLVPCID, LogGroupName: "v4-smoke-flowlogs" });
+  const FLID = (flCreated.match(/<flowLogIdSet><item>(.*?)<\/item>/) || [])[1];
+  await page.goto(UI + `#/vpc/vpcs/${FLVPCID}`);
+  await page.getByRole("tab", { name: "Flow logs" }).click();
+  await page.getByText(FLID).first().waitFor({ timeout: 10000 });
+  check("VPC flow log created over wire → shown on VPC detail Flow logs tab", true, FLID);
+  await shot("19b-vpc-flow-logs");
+  if (FLID) await ec2("DeleteFlowLogs", { "FlowLogId.1": FLID });
+  await ec2("DeleteVpc", { VpcId: FLVPCID });
+
+  // VPC: Reachability Analyzer — create and analyze a path through the UI wizard, verify
+  // both the path and its analysis over the native wire (UI → CLI direction).
+  const nipIgw = await ec2("CreateInternetGateway", {});
+  const NIPSRC = xtag(nipIgw, "internetGatewayId");
+  await page.goto(UI + "#/vpc/reachability-analyzer");
+  await page.getByRole("button", { name: "Create and analyze path" }).click();
+  const nipDialog = page.getByRole("dialog");
+  await nipDialog.getByPlaceholder("i-0123456789abcdef0").first().fill(NIPSRC);
+  await nipDialog.getByPlaceholder("i-0123456789abcdef0").nth(1).fill("203.0.113.9");
+  await nipDialog.getByPlaceholder("443").fill("443");
+  await nipDialog.getByRole("button", { name: "Create and analyze path" }).click();
+  await page.getByRole("heading", { name: /^nip-/ }).waitFor({ timeout: 10000 });
+  const nipXml = await ec2("DescribeNetworkInsightsPaths", {});
+  check("Reachability Analyzer create path (UI) → visible over native wire", nipXml.includes(NIPSRC), nipXml.slice(0, 200));
+  const niaXml = await ec2("DescribeNetworkInsightsAnalyses", {});
+  check("Reachability Analyzer run analysis (UI) → networkPathFound recorded over native wire", niaXml.includes("<networkPathFound>"), niaXml.slice(0, 200));
+  await shot("19c-vpc-reachability-analyzer");
+  const NIPID = (nipXml.match(/<networkInsightsPathId>(.*?)<\/networkInsightsPathId>/) || [])[1];
+  for (const aid of [...niaXml.matchAll(/<networkInsightsAnalysisId>(.*?)<\/networkInsightsAnalysisId>/g)].map((m) => m[1]))
+    await ec2("DeleteNetworkInsightsAnalysis", { NetworkInsightsAnalysisId: aid });
+  if (NIPID) await ec2("DeleteNetworkInsightsPath", { NetworkInsightsPathId: NIPID });
+
   // VPC: clean up over the wire.
   if (rtId) await ec2("DeleteRouteTable", { RouteTableId: rtId });
   if (vpcId) await ec2("DeleteVpc", { VpcId: vpcId });

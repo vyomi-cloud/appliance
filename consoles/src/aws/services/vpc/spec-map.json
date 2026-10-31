@@ -1,5 +1,5 @@
 {
-  "_doc": "ui-spec page id -> v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap — NOT on consoles/honest-allowlist.json yet (aws.vpc isn't listed); these 36 pages are each a separate, large AWS service (PrivateLink/Lattice, DNS firewall, Network Firewall, Site-to-Site VPN, Verified Access, Transit Gateway, Traffic Mirroring) surfaced under the VPC nav but out of scope for vpc_core.py's VPC/subnet/route-table/SG/NACL model — flagged here for orchestrator allowlist review, per AGENT-UI.md. Unlisted spec pages count as missing.",
+  "_doc": "ui-spec page id -> v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap — NOT on consoles/honest-allowlist.json yet (aws.vpc isn't listed); these 37 pages are each a separate, large AWS service (PrivateLink/Lattice, DNS firewall, Network Firewall, Site-to-Site VPN, Verified Access, Transit Gateway, Traffic Mirroring, Network Access Analyzer) surfaced under the VPC nav but out of scope for vpc_core.py's VPC/subnet/route-table/SG/NACL model — flagged here for orchestrator allowlist review, per AGENT-UI.md. Unlisted spec pages count as missing.",
 
   "dashboard": { "route": "#/vpc/dashboard" },
 
@@ -38,6 +38,10 @@
   "managed-prefix-lists": { "route": "#/vpc/managed-prefix-lists", "live": "live-prefix-list" },
   "peering-connections": { "route": "#/vpc/peering-connections", "live": "live-peering-connection" },
   "route-servers": { "route": "#/vpc/route-servers", "live": "live-route-server" },
+
+  "reachability-analyzer": { "route": "#/vpc/reachability-analyzer", "live": "live-insights-path" },
+  "reachability-analyzer-detail": { "route": "#/vpc/reachability-analyzer/{live}", "live": "live-insights-path" },
+  "network-access-analyzer": { "route": "#/vpc/network-access-analyzer", "honest_page": true },
 
   "privatelink-getting-started": { "route": "#/vpc/privatelink-getting-started", "honest_page": true },
   "endpoints": { "route": "#/vpc/endpoints", "honest_page": true },

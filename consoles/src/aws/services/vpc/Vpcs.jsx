@@ -25,6 +25,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue, NotSimulated } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { CreateFlowLogModal, FlowLogsTab } from "./FlowLogs.jsx";
 import GapButton from "./GapButton.jsx";
 import { TAG_I18N } from "./tagI18n.js";
 import * as api from "./api.js";
@@ -35,6 +36,7 @@ export function Vpcs() {
   const [del, setDel] = useState(false);
   const [tags, setTags] = useState(null);
   const [gap, setGap] = useState(null);
+  const [flowLog, setFlowLog] = useState(null);
   const t = useAsync(() => api.describeVpcs(), []);
   const rows = t.data || [];
 
@@ -84,7 +86,7 @@ export function Vpcs() {
               else if (detail.id === "edit") navigate("vpc", "vpcs", sel[0].VpcId, "edit-settings");
               else if (detail.id === "tags") setTags(sel[0]);
               else if (detail.id === "delete") setDel(true);
-              else if (detail.id === "flow") setGap({ text: "Create flow log", feature: "VPC Flow Logs" });
+              else if (detail.id === "flow") setFlowLog(sel[0].VpcId);
               else if (detail.id === "cidr") setGap({ text: "Edit CIDRs", feature: "Secondary/IPAM-allocated CIDR blocks" });
               else if (detail.id === "middlebox") setGap({ text: "Manage middlebox routes", feature: "Gateway Load Balancer middlebox routing" });
             }}>Actions</ButtonDropdown>
@@ -97,6 +99,7 @@ export function Vpcs() {
       <DeleteModal visible={del} resourceType="VPC" names={sel.map((v) => v.VpcId)} confirmText="delete" onDismiss={() => setDel(false)}
         onConfirm={async () => { for (const v of sel) await api.deleteVpc(v.VpcId); notify.success(`${sel.length} VPC(s) deleted.`); setSel([]); t.reload(); }} />
       {tags && <TagsModal resource={tags} onDismiss={() => setTags(null)} onSaved={() => { setTags(null); t.reload(); }} />}
+      {flowLog && <CreateFlowLogModal resourceId={flowLog} resourceType="VPC" onDismiss={() => setFlowLog(null)} onCreated={() => setFlowLog(null)} />}
       {gap && (
         <Modal visible onDismiss={() => setGap(null)} header={gap.text} footer={<Box float="right"><Button onClick={() => setGap(null)}>Close</Button></Box>}>
           <NotSimulated feature={gap.feature} />
@@ -168,7 +171,7 @@ export function VpcDetail({ params }) {
                 empty={<Box textAlign="center" color="inherit">No IPv6 CIDRs</Box>} />
             </SpaceBetween>
           ) },
-          { id: "flow", label: "Flow logs", content: <CapabilityContainer id="aws.vpc.flow-logs" title="Flow logs" actions={<GapButton text="Create flow log" feature="VPC Flow Logs" />} /> },
+          { id: "flow", label: "Flow logs", content: <FlowLogsTab resourceId={v.VpcId} resourceType="VPC" /> },
           { id: "tags", label: "Tags", content: (
             <Table variant="container" items={Object.entries(v.Tags || {}).map(([k, val]) => ({ k, val }))}
               header={<Header variant="h2" counter={`(${Object.keys(v.Tags || {}).length})`} actions={<Button onClick={() => setTags(true)}>Manage tags</Button>}>Tags</Header>}

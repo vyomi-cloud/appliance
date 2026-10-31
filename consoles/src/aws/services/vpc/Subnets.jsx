@@ -22,6 +22,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { FlowLogsTab } from "./FlowLogs.jsx";
 import { TagsModal } from "./Vpcs.jsx";
 import GapButton from "./GapButton.jsx";
 import { TAG_I18N } from "./tagI18n.js";
@@ -113,7 +114,7 @@ export function SubnetDetail({ params }) {
           ["Hostname type", "IP name"], ["Owner", "123456789012"],
         ]} />
         <Tabs tabs={[
-          { id: "flow", label: "Flow logs", content: <CapabilityContainer id="aws.vpc.flow-logs" title="Flow logs" /> },
+          { id: "flow", label: "Flow logs", content: <FlowLogsTab resourceId={s.SubnetId} resourceType="Subnet" /> },
           { id: "rt", label: "Route table", content: (
             <Table variant="container" items={rt.data?.Routes || []} header={<Header variant="h2" actions={<Button href={href("vpc", "route-tables")} onFollow={follow}>Edit route table association</Button>}>Route table</Header>}
               columnDefinitions={[{ id: "d", header: "Destination", cell: (r) => r.DestinationCidrBlock }, { id: "t", header: "Target", cell: (r) => r.GatewayId }]} empty={<Box textAlign="center" color="inherit">No explicit route table association</Box>} />

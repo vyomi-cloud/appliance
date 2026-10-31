@@ -247,3 +247,56 @@ export async function analyzeReachability(source, destination, port, protocol = 
   const r = await call("AnalyzeReachability", params);
   return { reachable: r.reachable === "true", reason: r.reason, path: asList(r.path?.item) };
 }
+
+// ── VPC/subnet flow logs ───────────────────────────────────────────────
+const flowLogFromXml = (x) => ({
+  FlowLogId: x.flowLogId, FlowLogStatus: x.flowLogStatus, CreationTime: x.creationTime, ResourceId: x.resourceId,
+  TrafficType: x.trafficType, LogDestinationType: x.logDestinationType, LogGroupName: x.logGroupName || "",
+  LogDestination: x.logDestination || "", LogFormat: x.logFormat, DeliverLogsStatus: x.deliverLogsStatus,
+  DeliverLogsPermissionArn: x.deliverLogsPermissionArn || "", MaxAggregationInterval: Number(x.maxAggregationInterval),
+  Tags: tagsFromXml(x.tagSet),
+});
+export async function describeFlowLogs() {
+  const r = await call("DescribeFlowLogs");
+  return asList(r.flowLogSet?.item).map(flowLogFromXml);
+}
+export async function createFlowLog(resourceId, resourceType, opts = {}) {
+  const r = await call("CreateFlowLogs", {
+    ResourceId: [resourceId], ResourceType: resourceType, TrafficType: opts.trafficType || "ALL",
+    LogDestinationType: opts.logDestinationType || "cloud-watch-logs", LogGroupName: opts.logGroupName,
+    LogDestination: opts.logDestination, DeliverLogsPermissionArn: opts.deliverLogsPermissionArn,
+    MaxAggregationInterval: opts.maxAggregationInterval || 600, TagSpecification: tagSpec("vpc-flow-log", opts.tags),
+  });
+  return asList(r.flowLogIdSet?.item)[0];
+}
+export const deleteFlowLogs = (ids) => call("DeleteFlowLogs", { FlowLogId: ids });
+
+// ── Reachability Analyzer (Network Insights paths + analyses) ─────────────
+const nipFromXml = (x) => ({
+  NetworkInsightsPathId: x.networkInsightsPathId, CreatedDate: x.createdDate, Source: x.source,
+  Destination: x.destination || "", SourceIp: x.sourceIp || "", DestinationIp: x.destinationIp || "",
+  Protocol: x.protocol, DestinationPort: x.destinationPort ? Number(x.destinationPort) : null, Tags: tagsFromXml(x.tagSet),
+});
+export const createNetworkInsightsPath = (source, destination, protocol, destinationPort, tags) => call("CreateNetworkInsightsPath", {
+  Source: source, Destination: destination || undefined, Protocol: protocol, DestinationPort: destinationPort || undefined,
+  TagSpecification: tagSpec("network-insights-path", tags),
+}).then((r) => nipFromXml(r.networkInsightsPath));
+export async function describeNetworkInsightsPaths() {
+  const r = await call("DescribeNetworkInsightsPaths");
+  return asList(r.networkInsightsPathSet?.item).map(nipFromXml);
+}
+export const describeNetworkInsightsPath = (id) => describeNetworkInsightsPaths().then((xs) => xs.find((p) => p.NetworkInsightsPathId === id));
+export const deleteNetworkInsightsPath = (id) => call("DeleteNetworkInsightsPath", { NetworkInsightsPathId: id });
+
+const niaFromXml = (x) => ({
+  NetworkInsightsAnalysisId: x.networkInsightsAnalysisId, NetworkInsightsPathId: x.networkInsightsPathId,
+  StartDate: x.startDate, Status: x.status, NetworkPathFound: x.networkPathFound === "true",
+  ForwardPathComponents: asList(x.forwardPathComponentSet?.item).map((c) => ({ SequenceNumber: Number(c.sequenceNumber), Component: { Id: c.component?.id, Name: c.component?.name } })),
+  Explanations: asList(x.explanationSet?.item).map((e) => ({ ExplanationCode: e.explanationCode, ComponentId: e.component?.id, Direction: e.direction, State: e.state, Explanation: e.explanation })),
+});
+export const startNetworkInsightsAnalysis = (pathId) => call("StartNetworkInsightsAnalysis", { NetworkInsightsPathId: pathId }).then((r) => niaFromXml(r.networkInsightsAnalysis));
+export async function describeNetworkInsightsAnalyses(pathId) {
+  const r = await call("DescribeNetworkInsightsAnalyses", { NetworkInsightsPathId: pathId });
+  return asList(r.networkInsightsAnalysisSet?.item).map(niaFromXml);
+}
+export const deleteNetworkInsightsAnalysis = (id) => call("DeleteNetworkInsightsAnalysis", { NetworkInsightsAnalysisId: id });
