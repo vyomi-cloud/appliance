@@ -1,7 +1,7 @@
 {
  "nano": {
   "target": "nano",
-  "at": "2026-10-31T17:00:20.026Z",
+  "at": "2026-10-31T18:47:24.667Z",
   "services": [
    {
     "target": "nano",
@@ -32,18 +32,7 @@
      "AWS CLI",
      "Python (boto3)"
     ],
-    "findings": [
-     {
-      "type": "STATIC_TAB",
-      "tab": "AWS CLI",
-      "detail": "tab 'AWS CLI' shows no backend data and nothing about this resource"
-     },
-     {
-      "type": "STATIC_TAB",
-      "tab": "Python (boto3)",
-      "detail": "tab 'Python (boto3)' shows no backend data and nothing about this resource"
-     }
-    ],
+    "findings": [],
     "surfaces": [
      {
       "kind": "page",
@@ -55,16 +44,18 @@
       "kind": "tab",
       "name": "AWS CLI",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Python (boto3)",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      }
     ],
-    "status": "broken"
+    "status": "ok"
    },
    {
     "target": "nano",
@@ -74,39 +65,30 @@
      "AWS CLI",
      "Python (boto3)"
     ],
-    "findings": [
-     {
-      "type": "STATIC_TAB",
-      "tab": "AWS CLI",
-      "detail": "tab 'AWS CLI' shows no backend data and nothing about this resource"
-     },
-     {
-      "type": "STATIC_TAB",
-      "tab": "Python (boto3)",
-      "detail": "tab 'Python (boto3)' shows no backend data and nothing about this resource"
-     }
-    ],
+    "findings": [],
     "surfaces": [
      {
       "kind": "page",
       "name": "close",
-      "state": "live",
-      "calls": 1
+      "state": "static",
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "AWS CLI",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Python (boto3)",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      }
     ],
-    "status": "broken"
+    "status": "ok"
    },
    {
     "target": "nano",
@@ -723,7 +705,7 @@
       "kind": "page",
       "name": "Compute Engine",
       "state": "live",
-      "calls": 99
+      "calls": 77
      },
      {
       "kind": "create",
@@ -741,91 +723,106 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Labels",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Disks",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Machine size",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metadata",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Startup script",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Connect",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Scheduling",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Snapshots",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Logs",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -993,49 +990,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Details",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Nodes",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Observability",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -1294,85 +1299,99 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Labels",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Databases",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Users",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Backups",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Replicas",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Connectivity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Flags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Logging",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 5
+      "calls": 5,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Query Insights",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -1399,7 +1418,7 @@
       "kind": "page",
       "name": "Firestore",
       "state": "live",
-      "calls": 2
+      "calls": 1
      },
      {
       "kind": "create",
@@ -1417,61 +1436,71 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Data",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Query builder",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Indexes",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Security rules",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Import / Export",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Usage",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -1514,49 +1543,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Details",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Connection",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Replication",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Configuration",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -1692,7 +1729,7 @@
       "kind": "page",
       "name": "Pub/Sub",
       "state": "live",
-      "calls": 2
+      "calls": 3
      },
      {
       "kind": "create",
@@ -1710,61 +1747,71 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Labels",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Subscriptions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Schema",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Messages",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Encryption",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 3
+      "calls": 3,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -1808,64 +1855,55 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 3,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Labels",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Configs",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Routes",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Logs",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 0
      }
     ],
     "status": "ok"
@@ -1909,55 +1947,64 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Labels",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Event matching",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Destination",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Logs",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -1982,7 +2029,7 @@
       "kind": "page",
       "name": "Cloud Scheduler",
       "state": "live",
-      "calls": 1
+      "calls": 2
      },
      {
       "kind": "create",
@@ -2000,49 +2047,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Last execution",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Target",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Retry policy",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Schedule",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -2069,7 +2124,7 @@
       "kind": "page",
       "name": "Secret Manager",
       "state": "live",
-      "calls": 1
+      "calls": 2
      },
      {
       "kind": "create",
@@ -2178,7 +2233,7 @@
       "kind": "page",
       "name": "Cloud KMS",
       "state": "live",
-      "calls": 1
+      "calls": 2
      },
      {
       "kind": "create",
@@ -2295,49 +2350,43 @@
       "kind": "detail",
       "name": "resource detail",
       "state": "live",
-      "calls": 1
+      "calls": 3
      },
      {
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 3,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Members",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Keys",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -2380,49 +2429,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Credential",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Lifetime",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Delegation",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Signing",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -2465,57 +2522,49 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Conditions",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Notifications",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Documentation",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "History",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -2531,13 +2580,13 @@
       "kind": "page",
       "name": "Resource groups",
       "state": "live",
-      "calls": 81
+      "calls": 97
      },
      {
       "kind": "detail",
       "name": "resource detail",
       "state": "live",
-      "calls": 4
+      "calls": 0
      }
     ],
     "status": "ok"
@@ -2572,8 +2621,8 @@
      {
       "kind": "page",
       "name": "Virtual Machines",
-      "state": "live",
-      "calls": 1
+      "state": "static",
+      "calls": 0
      },
      {
       "kind": "create",
@@ -2591,115 +2640,134 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 3
+      "calls": 3,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Connect",
       "state": "live",
-      "calls": 4
+      "calls": 4,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Disks",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Size",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Auto-shutdown",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Backup",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Extensions + applications",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Run command",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Insights",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Alerts",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -2729,13 +2797,19 @@
      "Insights",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metrics",
+      "detail": "tab 'Metrics' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
       "name": "Storage accounts",
       "state": "live",
-      "calls": 90
+      "calls": 114
      },
      {
       "kind": "create",
@@ -2753,137 +2827,118 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 4,
-      "carried": true
+      "calls": 4
      },
      {
       "kind": "tab",
       "name": "Containers",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "File shares",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Queues",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tables",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Encryption",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access keys",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Shared access signature",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Lifecycle management",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Geo-replication",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Insights",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
-      "state": "live",
-      "calls": 1,
-      "carried": true
+      "state": "static",
+      "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "nano",
@@ -2934,134 +2989,115 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 4,
-      "carried": true
+      "calls": 4
      },
      {
       "kind": "tab",
       "name": "Databases",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Pricing tier",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Deleted databases",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Failover groups",
       "state": "live",
-      "calls": 3,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Backups",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Transparent data encryption",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Auditing",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Microsoft Defender for Cloud",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Connection strings",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 3,
-      "carried": true
+      "calls": 3
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -3110,136 +3146,6 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
-     },
-     {
-      "kind": "tab",
-      "name": "Activity log",
-      "state": "live",
-      "calls": 1
-     },
-     {
-      "kind": "tab",
-      "name": "Access control (IAM)",
-      "state": "live",
-      "calls": 1
-     },
-     {
-      "kind": "tab",
-      "name": "Tags",
-      "state": "live",
-      "calls": 1
-     },
-     {
-      "kind": "tab",
-      "name": "Diagnose and solve problems",
-      "state": "live",
-      "calls": 2
-     },
-     {
-      "kind": "tab",
-      "name": "Queues",
-      "state": "live",
-      "calls": 3
-     },
-     {
-      "kind": "tab",
-      "name": "Topics",
-      "state": "live",
-      "calls": 1
-     },
-     {
-      "kind": "tab",
-      "name": "Shared access policies",
-      "state": "live",
-      "calls": 2
-     },
-     {
-      "kind": "tab",
-      "name": "Geo-recovery",
-      "state": "live",
-      "calls": 2
-     },
-     {
-      "kind": "tab",
-      "name": "Networking",
-      "state": "live",
-      "calls": 1
-     },
-     {
-      "kind": "tab",
-      "name": "Identity",
-      "state": "live",
-      "calls": 1
-     },
-     {
-      "kind": "tab",
-      "name": "Properties",
-      "state": "live",
-      "calls": 0
-     },
-     {
-      "kind": "tab",
-      "name": "Locks",
-      "state": "live",
-      "calls": 1
-     },
-     {
-      "kind": "tab",
-      "name": "Metrics",
-      "state": "live",
-      "calls": 1
-     }
-    ],
-    "status": "ok"
-   },
-   {
-    "target": "nano",
-    "cloud": "azure",
-    "service": "Cosmos DB",
-    "tabs": [
-     "Overview",
-     "Activity log",
-     "Access control (IAM)",
-     "Tags",
-     "Diagnose and solve problems",
-     "Data Explorer",
-     "Throughput (RU/s)",
-     "Replicate data globally",
-     "Default consistency",
-     "Backup & Restore",
-     "Networking",
-     "Identity",
-     "Properties",
-     "Locks",
-     "Microsoft Defender",
-     "Insights",
-     "Metrics"
-    ],
-    "findings": [],
-    "surfaces": [
-     {
-      "kind": "page",
-      "name": "Cosmos DB",
-      "state": "live",
-      "calls": 114
-     },
-     {
-      "kind": "create",
-      "name": "create with defaults",
-      "state": "live",
-      "calls": 1
-     },
-     {
-      "kind": "detail",
-      "name": "resource detail",
-      "state": "live",
-      "calls": 1
-     },
-     {
-      "kind": "tab",
-      "name": "Overview",
-      "state": "live",
       "calls": 0,
       "carried": true
      },
@@ -3273,37 +3179,30 @@
      },
      {
       "kind": "tab",
-      "name": "Data Explorer",
+      "name": "Queues",
       "state": "live",
       "calls": 3,
       "carried": true
      },
      {
       "kind": "tab",
-      "name": "Throughput (RU/s)",
+      "name": "Topics",
       "state": "live",
       "calls": 1,
       "carried": true
      },
      {
       "kind": "tab",
-      "name": "Replicate data globally",
+      "name": "Shared access policies",
       "state": "live",
-      "calls": 1,
+      "calls": 2,
       "carried": true
      },
      {
       "kind": "tab",
-      "name": "Default consistency",
+      "name": "Geo-recovery",
       "state": "live",
-      "calls": 1,
-      "carried": true
-     },
-     {
-      "kind": "tab",
-      "name": "Backup & Restore",
-      "state": "live",
-      "calls": 1,
+      "calls": 2,
       "carried": true
      },
      {
@@ -3336,23 +3235,9 @@
      },
      {
       "kind": "tab",
-      "name": "Microsoft Defender",
-      "state": "live",
-      "calls": 1,
-      "carried": true
-     },
-     {
-      "kind": "tab",
-      "name": "Insights",
-      "state": "live",
-      "calls": 1,
-      "carried": true
-     },
-     {
-      "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 3,
+      "calls": 1,
       "carried": true
      }
     ],
@@ -3361,34 +3246,37 @@
    {
     "target": "nano",
     "cloud": "azure",
-    "service": "Function apps",
+    "service": "Cosmos DB",
     "tabs": [
      "Overview",
      "Activity log",
      "Access control (IAM)",
      "Tags",
      "Diagnose and solve problems",
-     "Functions",
-     "App keys",
-     "Environment variables",
-     "Authentication",
-     "Identity",
+     "Data Explorer",
+     "Throughput (RU/s)",
+     "Replicate data globally",
+     "Default consistency",
+     "Backup & Restore",
      "Networking",
-     "TLS/SSL settings",
-     "Scale up (App Service plan)",
+     "Identity",
      "Properties",
      "Locks",
-     "Deployment slots",
-     "Deployment Center",
-     "Application Insights",
-     "Log stream",
+     "Microsoft Defender",
+     "Insights",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metrics",
+      "detail": "tab 'Metrics' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
-      "name": "Function apps",
+      "name": "Cosmos DB",
       "state": "live",
       "calls": 114
      },
@@ -3436,31 +3324,31 @@
      },
      {
       "kind": "tab",
-      "name": "Functions",
+      "name": "Data Explorer",
       "state": "live",
       "calls": 1
      },
      {
       "kind": "tab",
-      "name": "App keys",
+      "name": "Throughput (RU/s)",
+      "state": "live",
+      "calls": 0
+     },
+     {
+      "kind": "tab",
+      "name": "Replicate data globally",
       "state": "live",
       "calls": 1
      },
      {
       "kind": "tab",
-      "name": "Environment variables",
+      "name": "Default consistency",
       "state": "live",
       "calls": 1
      },
      {
       "kind": "tab",
-      "name": "Authentication",
-      "state": "live",
-      "calls": 1
-     },
-     {
-      "kind": "tab",
-      "name": "Identity",
+      "name": "Backup & Restore",
       "state": "live",
       "calls": 1
      },
@@ -3472,13 +3360,7 @@
      },
      {
       "kind": "tab",
-      "name": "TLS/SSL settings",
-      "state": "live",
-      "calls": 1
-     },
-     {
-      "kind": "tab",
-      "name": "Scale up (App Service plan)",
+      "name": "Identity",
       "state": "live",
       "calls": 1
      },
@@ -3492,37 +3374,214 @@
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 3
-     },
-     {
-      "kind": "tab",
-      "name": "Deployment slots",
-      "state": "live",
       "calls": 1
      },
      {
       "kind": "tab",
-      "name": "Deployment Center",
+      "name": "Microsoft Defender",
       "state": "live",
       "calls": 2
      },
      {
       "kind": "tab",
-      "name": "Application Insights",
+      "name": "Insights",
+      "state": "live",
+      "calls": 2
+     },
+     {
+      "kind": "tab",
+      "name": "Metrics",
+      "state": "static",
+      "calls": 0
+     }
+    ],
+    "status": "broken"
+   },
+   {
+    "target": "nano",
+    "cloud": "azure",
+    "service": "Function apps",
+    "tabs": [
+     "Overview",
+     "Activity log",
+     "Access control (IAM)",
+     "Tags",
+     "Diagnose and solve problems",
+     "Functions",
+     "App keys",
+     "Environment variables",
+     "Authentication",
+     "Identity",
+     "Networking",
+     "TLS/SSL settings",
+     "Scale up (App Service plan)",
+     "Properties",
+     "Locks",
+     "Deployment slots",
+     "Deployment Center",
+     "Application Insights",
+     "Log stream",
+     "Metrics"
+    ],
+    "findings": [],
+    "surfaces": [
+     {
+      "kind": "page",
+      "name": "Function apps",
+      "state": "live",
+      "calls": 112
+     },
+     {
+      "kind": "create",
+      "name": "create with defaults",
       "state": "live",
       "calls": 1
+     },
+     {
+      "kind": "detail",
+      "name": "resource detail",
+      "state": "live",
+      "calls": 1
+     },
+     {
+      "kind": "tab",
+      "name": "Overview",
+      "state": "live",
+      "calls": 0,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Activity log",
+      "state": "live",
+      "calls": 1,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Access control (IAM)",
+      "state": "live",
+      "calls": 1,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Tags",
+      "state": "live",
+      "calls": 1,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Diagnose and solve problems",
+      "state": "live",
+      "calls": 4,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Functions",
+      "state": "live",
+      "calls": 1,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "App keys",
+      "state": "live",
+      "calls": 1,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Environment variables",
+      "state": "live",
+      "calls": 1,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Authentication",
+      "state": "live",
+      "calls": 1,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Identity",
+      "state": "live",
+      "calls": 1,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Networking",
+      "state": "live",
+      "calls": 1,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "TLS/SSL settings",
+      "state": "live",
+      "calls": 1,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Scale up (App Service plan)",
+      "state": "live",
+      "calls": 1,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Properties",
+      "state": "live",
+      "calls": 0,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Locks",
+      "state": "live",
+      "calls": 3,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Deployment slots",
+      "state": "live",
+      "calls": 1,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Deployment Center",
+      "state": "live",
+      "calls": 2,
+      "carried": true
+     },
+     {
+      "kind": "tab",
+      "name": "Application Insights",
+      "state": "live",
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Log stream",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -3718,7 +3777,7 @@
       "kind": "page",
       "name": "Virtual networks",
       "state": "live",
-      "calls": 114
+      "calls": 91
      },
      {
       "kind": "create",
@@ -3736,99 +3795,85 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Address space",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Subnets",
       "state": "live",
-      "calls": 4,
-      "carried": true
+      "calls": 4
      },
      {
       "kind": "tab",
       "name": "Connected devices",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Peerings",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "DNS servers",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "DDoS protection",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnostic settings",
       "state": "live",
-      "calls": 3,
-      "carried": true
+      "calls": 3
      }
     ],
     "status": "ok"
@@ -3853,7 +3898,7 @@
       "kind": "page",
       "name": "Network Security Group",
       "state": "live",
-      "calls": 90
+      "calls": 112
      },
      {
       "kind": "create",
@@ -3969,92 +4014,79 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Event subscriptions",
       "state": "live",
-      "calls": 3,
-      "carried": true
+      "calls": 3
      },
      {
       "kind": "tab",
       "name": "Topic types",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Access keys",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -4085,7 +4117,7 @@
       "kind": "page",
       "name": "Key vaults",
       "state": "live",
-      "calls": 114
+      "calls": 91
      },
      {
       "kind": "create",
@@ -4103,99 +4135,85 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 3,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Secrets",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Keys",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 3
      },
      {
       "kind": "tab",
       "name": "Certificates",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access policies",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access configuration",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -4244,85 +4262,99 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Revisions and replicas",
       "state": "live",
-      "calls": 3
+      "calls": 3,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Containers",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Scale",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Ingress",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Secrets",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -4370,92 +4402,79 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Configuration explorer",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Geo-replication",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 3
      },
      {
       "kind": "tab",
       "name": "Access settings",
       "state": "live",
-      "calls": 3,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -4501,67 +4520,78 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Recordsets",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Name servers",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Test query",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -4608,85 +4638,73 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Condition",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Action groups",
       "state": "live",
-      "calls": 3,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Activity log alerts",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Autoscale settings",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -4734,79 +4752,92 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Saved searches",
       "state": "live",
-      "calls": 3
+      "calls": 3,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tables",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Data sources",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Agents (keys)",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Usage and quota",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -4854,92 +4885,79 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Keys and Endpoint",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Model deployments",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 3
      },
      {
       "kind": "tab",
       "name": "Quotas",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -4959,7 +4977,7 @@
       "kind": "page",
       "name": "Role Definition",
       "state": "live",
-      "calls": 90
+      "calls": 114
      },
      {
       "kind": "create",
@@ -4977,22 +4995,19 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "JSON view",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      }
     ],
     "status": "ok"
@@ -5030,19 +5045,22 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "JSON view",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Conditions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -5191,7 +5209,7 @@
  },
  "offline": {
   "target": "offline",
-  "at": "2026-10-31T16:57:52.090Z",
+  "at": "2026-10-31T18:45:12.028Z",
   "services": [
    {
     "target": "offline",
@@ -5222,18 +5240,7 @@
      "AWS CLI",
      "Python (boto3)"
     ],
-    "findings": [
-     {
-      "type": "STATIC_TAB",
-      "tab": "AWS CLI",
-      "detail": "tab 'AWS CLI' shows no backend data and nothing about this resource"
-     },
-     {
-      "type": "STATIC_TAB",
-      "tab": "Python (boto3)",
-      "detail": "tab 'Python (boto3)' shows no backend data and nothing about this resource"
-     }
-    ],
+    "findings": [],
     "surfaces": [
      {
       "kind": "page",
@@ -5245,16 +5252,18 @@
       "kind": "tab",
       "name": "AWS CLI",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Python (boto3)",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      }
     ],
-    "status": "broken"
+    "status": "ok"
    },
    {
     "target": "offline",
@@ -5264,18 +5273,7 @@
      "AWS CLI",
      "Python (boto3)"
     ],
-    "findings": [
-     {
-      "type": "STATIC_TAB",
-      "tab": "AWS CLI",
-      "detail": "tab 'AWS CLI' shows no backend data and nothing about this resource"
-     },
-     {
-      "type": "STATIC_TAB",
-      "tab": "Python (boto3)",
-      "detail": "tab 'Python (boto3)' shows no backend data and nothing about this resource"
-     }
-    ],
+    "findings": [],
     "surfaces": [
      {
       "kind": "page",
@@ -5287,16 +5285,18 @@
       "kind": "tab",
       "name": "AWS CLI",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Python (boto3)",
       "state": "static",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      }
     ],
-    "status": "broken"
+    "status": "ok"
    },
    {
     "target": "offline",
@@ -5913,7 +5913,7 @@
       "kind": "page",
       "name": "Compute Engine",
       "state": "live",
-      "calls": 5
+      "calls": 7
      },
      {
       "kind": "create",
@@ -5931,91 +5931,106 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Labels",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Disks",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Machine size",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metadata",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Startup script",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Connect",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Scheduling",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Snapshots",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Logs",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -6183,49 +6198,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Details",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Nodes",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Observability",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -6484,85 +6507,99 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Labels",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Databases",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Users",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Backups",
       "state": "live",
-      "calls": 3
+      "calls": 3,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Replicas",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Connectivity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Flags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Logging",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Query Insights",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -6607,61 +6644,71 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Data",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Query builder",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Indexes",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Security rules",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Import / Export",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Usage",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -6704,49 +6751,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Details",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Connection",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Replication",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Configuration",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -6900,61 +6955,71 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Labels",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Subscriptions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Schema",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Messages",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Encryption",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -6974,7 +7039,13 @@
      "Metrics",
      "Logs"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metrics",
+      "detail": "tab 'Metrics' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
@@ -6998,67 +7069,58 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Labels",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Configs",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Routes",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
-      "state": "live",
-      "calls": 1,
-      "carried": true
+      "state": "static",
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Logs",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -7099,55 +7161,64 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Labels",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Event matching",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Destination",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Logs",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -7190,49 +7261,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Last execution",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Target",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Retry policy",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Schedule",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -7491,43 +7570,37 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Members",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Permissions",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Keys",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -7570,49 +7643,57 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Credential",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Lifetime",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Delegation",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Signing",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -7649,63 +7730,55 @@
       "kind": "detail",
       "name": "resource detail",
       "state": "live",
-      "calls": 2
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Conditions",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Notifications",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Documentation",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "History",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "JSON",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -7727,7 +7800,7 @@
       "kind": "detail",
       "name": "resource detail",
       "state": "live",
-      "calls": 2
+      "calls": 0
      }
     ],
     "status": "ok"
@@ -7781,115 +7854,134 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 3
+      "calls": 3,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 3
+      "calls": 3,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Connect",
       "state": "live",
-      "calls": 4
+      "calls": 4,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Disks",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Size",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Auto-shutdown",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Backup",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Extensions + applications",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Run command",
       "state": "live",
-      "calls": 3
+      "calls": 3,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Insights",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Alerts",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -7919,13 +8011,19 @@
      "Insights",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metrics",
+      "detail": "tab 'Metrics' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
       "name": "Storage accounts",
       "state": "live",
-      "calls": 25
+      "calls": 24
      },
      {
       "kind": "create",
@@ -7943,137 +8041,118 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Containers",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "File shares",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Queues",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tables",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Encryption",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access keys",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Shared access signature",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Lifecycle management",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Geo-replication",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Insights",
       "state": "live",
-      "calls": 3,
-      "carried": true
+      "calls": 3
      },
      {
       "kind": "tab",
       "name": "Metrics",
-      "state": "live",
-      "calls": 1,
-      "carried": true
+      "state": "static",
+      "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -8106,7 +8185,7 @@
       "kind": "page",
       "name": "SQL servers",
       "state": "live",
-      "calls": 25
+      "calls": 23
      },
      {
       "kind": "create",
@@ -8124,134 +8203,115 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Databases",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Pricing tier",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Deleted databases",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Failover groups",
       "state": "live",
-      "calls": 3,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Backups",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Transparent data encryption",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Auditing",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Microsoft Defender for Cloud",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Connection strings",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 3,
-      "carried": true
+      "calls": 3
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -8282,7 +8342,7 @@
       "kind": "page",
       "name": "Service Bus",
       "state": "live",
-      "calls": 25
+      "calls": 23
      },
      {
       "kind": "create",
@@ -8300,85 +8360,99 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Queues",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Topics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Shared access policies",
       "state": "live",
-      "calls": 3
+      "calls": 3,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Geo-recovery",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -8406,13 +8480,19 @@
      "Insights",
      "Metrics"
     ],
-    "findings": [],
+    "findings": [
+     {
+      "type": "STATIC_TAB",
+      "tab": "Metrics",
+      "detail": "tab 'Metrics' shows no backend data and nothing about this resource"
+     }
+    ],
     "surfaces": [
      {
       "kind": "page",
       "name": "Cosmos DB",
       "state": "live",
-      "calls": 25
+      "calls": 24
      },
      {
       "kind": "create",
@@ -8430,123 +8510,106 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Data Explorer",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Throughput (RU/s)",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Replicate data globally",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Default consistency",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Backup & Restore",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Microsoft Defender",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Insights",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
-      "state": "live",
-      "calls": 1,
-      "carried": true
+      "state": "static",
+      "calls": 0
      }
     ],
-    "status": "ok"
+    "status": "broken"
    },
    {
     "target": "offline",
@@ -8598,121 +8661,141 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Functions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "App keys",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Environment variables",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Authentication",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "TLS/SSL settings",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Scale up (App Service plan)",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Deployment slots",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Deployment Center",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Application Insights",
       "state": "live",
-      "calls": 3
+      "calls": 3,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Log stream",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -8746,7 +8829,7 @@
       "kind": "page",
       "name": "API Management",
       "state": "live",
-      "calls": 25
+      "calls": 24
      },
      {
       "kind": "create",
@@ -8908,7 +8991,7 @@
       "kind": "page",
       "name": "Virtual networks",
       "state": "live",
-      "calls": 25
+      "calls": 24
      },
      {
       "kind": "create",
@@ -8926,99 +9009,85 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Address space",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Subnets",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Connected devices",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Peerings",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "DNS servers",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "DDoS protection",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnostic settings",
       "state": "live",
-      "calls": 3,
-      "carried": true
+      "calls": 3
      }
     ],
     "status": "ok"
@@ -9043,7 +9112,7 @@
       "kind": "page",
       "name": "Network Security Group",
       "state": "live",
-      "calls": 25
+      "calls": 23
      },
      {
       "kind": "create",
@@ -9141,7 +9210,7 @@
       "kind": "page",
       "name": "Event Grid topics",
       "state": "live",
-      "calls": 25
+      "calls": 23
      },
      {
       "kind": "create",
@@ -9159,92 +9228,79 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Event subscriptions",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Topic types",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Access keys",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -9293,99 +9349,85 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Secrets",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Keys",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Certificates",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Access policies",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access configuration",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -9434,85 +9476,99 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Revisions and replicas",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Containers",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Scale",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Ingress",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Secrets",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -9542,7 +9598,7 @@
       "kind": "page",
       "name": "App Configuration",
       "state": "live",
-      "calls": 25
+      "calls": 23
      },
      {
       "kind": "create",
@@ -9560,92 +9616,79 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Configuration explorer",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Geo-replication",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access settings",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -9691,67 +9734,78 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Recordsets",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Name servers",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Test query",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -9780,7 +9834,7 @@
       "kind": "page",
       "name": "Monitor alerts",
       "state": "live",
-      "calls": 25
+      "calls": 23
      },
      {
       "kind": "create",
@@ -9798,85 +9852,73 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Condition",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Action groups",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Activity log alerts",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Autoscale settings",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -9924,79 +9966,92 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Saved searches",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Tables",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Data sources",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Agents (keys)",
       "state": "live",
-      "calls": 2
+      "calls": 2,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Usage and quota",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
@@ -10026,7 +10081,7 @@
       "kind": "page",
       "name": "Azure AI services",
       "state": "live",
-      "calls": 25
+      "calls": 23
      },
      {
       "kind": "create",
@@ -10044,92 +10099,79 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Activity log",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Access control (IAM)",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Tags",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Diagnose and solve problems",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Keys and Endpoint",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Model deployments",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Quotas",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Identity",
       "state": "live",
-      "calls": 2,
-      "carried": true
+      "calls": 2
      },
      {
       "kind": "tab",
       "name": "Networking",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Locks",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      },
      {
       "kind": "tab",
       "name": "Metrics",
       "state": "live",
-      "calls": 1,
-      "carried": true
+      "calls": 1
      }
     ],
     "status": "ok"
@@ -10167,22 +10209,19 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "Properties",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      },
      {
       "kind": "tab",
       "name": "JSON view",
       "state": "live",
-      "calls": 0,
-      "carried": true
+      "calls": 0
      }
     ],
     "status": "ok"
@@ -10220,19 +10259,22 @@
       "kind": "tab",
       "name": "Overview",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "JSON view",
       "state": "live",
-      "calls": 0
+      "calls": 0,
+      "carried": true
      },
      {
       "kind": "tab",
       "name": "Conditions",
       "state": "live",
-      "calls": 1
+      "calls": 1,
+      "carried": true
      }
     ],
     "status": "ok"
