@@ -532,6 +532,17 @@ try {
   check("Allow public access → setIamPolicy grants allUsers run.invoker", (fnPolicy.bindings || []).some((b) => b.role === "roles/run.invoker" && b.members?.includes("allUsers")));
   await shot("12-function-created");
 
+  // Editing a function's source and clicking "Save and redeploy" must actually redeploy: the
+  // native API cuts a real new revision (not just store the edited text on the service).
+  await page.goto(UI + `#/functions/detail/us-central1/${FN}?tab=source`);
+  await page.getByRole("button", { name: "Edit source" }).click();
+  await page.getByLabel("Source files").fill("exports.handler = (event) => ({ redeployed: true });\n");
+  await page.getByRole("button", { name: "Save and redeploy" }).click();
+  await page.getByRole("button", { name: "Edit source" }).waitFor({ timeout: 10000 });
+  const fnRevs = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${FN}/revisions`);
+  check("editing function source redeploys a real new revision", (fnRevs.revisions || []).length === 2, JSON.stringify(fnRevs).slice(0, 200));
+  await shot("12b-function-source-redeployed");
+
   const JOB = `v4-gcp-job-${Date.now() % 100000}`;
   await wire("/v2/projects/vyomi-project/locations/us-central1/jobs?jobId=" + JOB, {
     method: "POST", headers: { "content-type": "application/json" },

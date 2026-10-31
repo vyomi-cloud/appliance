@@ -163,5 +163,32 @@ check("apex domain gets A records, not CNAME", json.loads(r.body)["response"]["s
 r = rn.dispatch(st4, "DELETE", kn_dm + "/www.example.com", {}, host, b"")
 check("delete domain mapping", r.status == 200 and rn.dispatch(st4, "GET", kn_dm + "/www.example.com", {}, host, b"").status == 404)
 
+# inline function source (Cloud Run functions "Save and redeploy"): a real redeploy — a new
+# revision — and a build-style rejection of broken Python source (consoles/gcp/functions)
+st5 = rn.RunStore()
+fn_ann = {"vyomi.dev/function-runtime": "Python 3.13", "vyomi.dev/function-entry-point": "handler",
+          "vyomi.dev/function-source": "def handler(event):\n    return event\n"}
+fn_body = {"template": {"containers": [{"image": "vyomi.dev/function-source/python-3-13:aaaa"}]}, "annotations": dict(fn_ann)}
+s, op = call(st5, "POST", L + "/services", fn_body, {"serviceId": "fn1"})
+check("create function service", s == 200 and op["response"]["annotations"]["vyomi.dev/function-runtime"] == "Python 3.13", op)
+check("deploy rejects a missing entry point", call(st5, "POST", L + "/services",
+      {**fn_body, "annotations": {**fn_ann, "vyomi.dev/function-entry-point": "missing"}}, {"serviceId": "fnbad"})[1]["error"]["status"] == "INVALID_ARGUMENT")
+check("deploy rejects a syntax error", call(st5, "POST", L + "/services",
+      {**fn_body, "annotations": {**fn_ann, "vyomi.dev/function-source": "def ("}}, {"serviceId": "fnbad2"})[1]["error"]["status"] == "INVALID_ARGUMENT")
+check("non-python runtime source is stored unparsed", call(st5, "POST", L + "/services",
+      {**fn_body, "annotations": {**fn_ann, "vyomi.dev/function-runtime": "Node.js 22", "vyomi.dev/function-source": "not valid js((("}},
+      {"serviceId": "fnnode"})[0] == 200)
+s, op = call(st5, "PATCH", L + "/services/fn1", {
+    "annotations": {**fn_ann, "vyomi.dev/function-source": "def handler(event):\n    return {'ok': True}\n"},
+    "template": {"containers": [{"image": "vyomi.dev/function-source/python-3-13:bbbb"}]},
+}, {"updateMask": "annotations,template"})
+check("saving a source edit redeploys: a real new revision", s == 200
+      and len(call(st5, "GET", L + "/services/fn1/revisions")[1]["revisions"]) == 2
+      and call(st5, "GET", L + "/services/fn1")[1]["template"]["containers"][0]["image"].endswith(":bbbb"))
+check("patch rejects an entry point the saved source doesn't define", call(st5, "PATCH", L + "/services/fn1",
+      {"annotations": {**fn_ann, "vyomi.dev/function-entry-point": "nope"}}, {"updateMask": "annotations"})[1]["error"]["status"] == "INVALID_ARGUMENT")
+check("rejected patch left the service and its revisions untouched", len(call(st5, "GET", L + "/services/fn1/revisions")[1]["revisions"]) == 2
+      and call(st5, "GET", L + "/services/fn1")[1]["annotations"]["vyomi.dev/function-entry-point"] == "handler")
+
 print(f"RESULT pass={PASS} fail={FAIL}")
 sys.exit(1 if FAIL else 0)
