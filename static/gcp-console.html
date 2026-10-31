@@ -810,7 +810,7 @@ function vyConnectTabs(c){
 // Savings: what real GCP would charge each month for the services you've spun up
 // (active_space.cost_savings.by_service from core/cost_model; the simulator costs $0).
 function buildSavingsCard(provider, cloud, accent){
-  const card = el("div",{class:"card",style:"margin-bottom:0"});
+  const card = el("div",{class:"card",style:"margin-bottom:0;display:flex;flex-direction:column"});
   card.append(el("div",{class:"h"}, icon("savings"), "Cost savings"));
   const body = vySavingsBody({cloud, accent,
     empty:`Spin up ${cloud} services (Compute Engine, Cloud Storage, Cloud SQL…) and your monthly savings vs real ${cloud} appear here, service by service.`,
@@ -827,7 +827,7 @@ function buildSavingsCard(provider, cloud, accent){
 }
 
 function buildConnectCard(){
-  const card = el("div",{class:"card",style:"margin-bottom:0"});
+  const card = el("div",{class:"card",style:"margin-bottom:0;display:flex;flex-direction:column"});
   card.append(el("div",{class:"h"}, icon("terminal"), "Connect your SDK or CLI"));
   card.append(el("div",{class:"b"}, vyCodeTabs({accent:"var(--blue)",
     tabs: vyConnectTabs({cloud:"gcp", ep: location.origin, project: PROJECT})})));
@@ -842,7 +842,7 @@ function renderHome(main){
     el("h1",{}, "Dashboard")));
   wrap.append(el("div",{class:"sub",style:"margin-bottom:16px"},
     `Project: ${PROJECT}  ·  Region: ${REGION}  ·  Zone: ${ZONE}`));
-  wrap.append(el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:14px;margin-bottom:16px;align-items:start"},
+  wrap.append(el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:14px;margin-bottom:16px;align-items:stretch"},   /* both cards share the row height */
     buildSavingsCard("gcp", "GCP", "var(--blue)"), buildConnectCard()));
   const grid = el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px"});
   CATALOG.services.forEach(s => {

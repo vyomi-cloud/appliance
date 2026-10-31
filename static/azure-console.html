@@ -1034,7 +1034,7 @@ function vyConnectTabs(c){
 // Savings: what real Azure would charge each month for the services you've spun up
 // (active_space.cost_savings.by_service from core/cost_model; the simulator costs $0).
 function buildSavingsCard(provider, cloud, accent){
-  const card = el("div",{class:"card",style:"cursor:default;display:block;margin-bottom:0"});
+  const card = el("div",{class:"card",style:"cursor:default;display:flex;flex-direction:column;margin-bottom:0"});
   card.append(el("div",{style:"display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px"}, icon("savings"), "Cost savings"));
   const body = vySavingsBody({cloud, accent,
     empty:`Spin up ${cloud} services (Virtual Machines, Storage, SQL…) and your monthly savings vs real ${cloud} appear here, service by service.`,
@@ -1051,7 +1051,7 @@ function buildSavingsCard(provider, cloud, accent){
 }
 
 function buildConnectCard(){
-  const card = el("div",{class:"card",style:"cursor:default;display:block;margin-bottom:0"});
+  const card = el("div",{class:"card",style:"cursor:default;display:flex;flex-direction:column;margin-bottom:0"});
   card.append(el("div",{style:"display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px"}, icon("terminal"), "Connect your SDK or CLI"));
   card.append(vyCodeTabs({accent:"#0078d4", tabs: vyConnectTabs({cloud:"azure", ep: location.origin, sub: SUB})}));
   return card;
@@ -1064,7 +1064,7 @@ async function selectHome(){
   main.innerHTML="";
   main.append(crumb(["Home"]), pageHead("dashboard","Azure (CloudLearn simulator)","All resources in resource group "+RG));
   const wrap=el("div",{class:"wrap"});
-  wrap.append(el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:14px;margin-bottom:16px;align-items:start"},
+  wrap.append(el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:14px;margin-bottom:16px;align-items:stretch"},   /* both cards share the row height */
     buildSavingsCard("azure", "Azure", "#0078d4"), buildConnectCard()));
   const grid=el("div",{class:"cards"}); wrap.append(el("div",{style:"font-size:13px;color:var(--sub);margin-bottom:12px"},"Services — click to manage resources."), grid);
   main.append(wrap);
