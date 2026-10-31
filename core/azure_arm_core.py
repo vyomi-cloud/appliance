@@ -779,7 +779,7 @@ class AzureArm:
 
         # Network Watcher diagnostics → the shared netsim evaluator (same engine as Nano + enforcement)
         if (method == "POST" and namespace.lower() == "microsoft.network" and len(chain) == 3
-                and chain[0].lower() == "networkwatchers" and chain[2].lower() in ("ipflowverify", "nexthop")):
+                and chain[0].lower() == "networkwatchers" and chain[2].lower() in ("ipflowverify", "nexthop", "connectivitycheck")):
             if self.state.get(_canonical_id(sub, rg, type_chain[:2], names[:1]).lower()) is None:
                 return _err(404, "ResourceNotFound", f"Network watcher '{names[0]}' not found.")
             return self._network_watcher(chain[2].lower(), payload or {})
@@ -1508,12 +1508,43 @@ class AzureArm:
                 return topo.interfaces[nid]
         return None
 
+    def _nw_connectivity_check(self, topo, ev, payload: dict):
+        """Microsoft.Network/networkWatchers/{nw}/connectivityCheck — real Azure's
+        source/destination shape ({source: {resourceId}, destination: {resourceId|address, port},
+        protocol}), answered by the SAME netsim `reach()` the AWS Reachability Analyzer / GCP
+        Connectivity Tests analyzers use. `hops[].type` carries this evaluator's own component
+        names (route-table / nsg / peering / ...), not real Network Watcher's hop-type enum —
+        see the azure.vnets.network_watcher limitation."""
+        source = payload.get("source") or {}
+        src_iface = self._nw_target_iface(topo, {"targetResourceId": source.get("resourceId"),
+                                                 "targetNicResourceId": source.get("networkInterfaceId")})
+        if src_iface is None:
+            return _err(400, "InvalidSourceResource", "source.resourceId must be a virtual machine (or NIC) "
+                                                      "with a network interface in a simulated subnet.")
+        destination = payload.get("destination") or {}
+        dst_iface = self._nw_target_iface(topo, {"targetResourceId": destination.get("resourceId")}) if destination.get("resourceId") else None
+        dst = dst_iface if dst_iface is not None else str(destination.get("address") or "")
+        if not dst:
+            return _err(400, "InvalidDestination", "destination.resourceId or destination.address is required.")
+        port = destination.get("port")
+        protocol = str(payload.get("protocol", "TCP")).lower()
+        v = ev.reach(topo, src_iface, dst, protocol, int(port) if str(port).isdigit() else None)
+        hops = [{"type": h.component, "id": h.id, "address": "", "issues": [] if h.decision != "deny" else
+                [{"origin": "Outbound", "severity": "Error", "type": h.decision, "context": [{"key": "detail", "value": h.detail}]}]}
+                for h in v.hops]
+        reachable = v.reachable
+        return _ok({"hops": hops, "connectionStatus": "Reachable" if reachable else "Unreachable",
+                    "avgLatencyInMs": 1 if reachable else 0, "minLatencyInMs": 1 if reachable else 0,
+                    "maxLatencyInMs": 1 if reachable else 0, "probesSent": 100, "probesFailed": 0 if reachable else 100})
+
     def _network_watcher(self, verb: str, payload: dict):
         try:
             from core.netsim import evaluate as ev, from_azure as fz, model as nm
         except ImportError:                              # pragma: no cover - flat layout
             from netsim import evaluate as ev, from_azure as fz, model as nm   # type: ignore
         topo = fz.from_azure(self.state)
+        if verb == "connectivitycheck":
+            return self._nw_connectivity_check(topo, ev, payload or {})
         iface = self._nw_target_iface(topo, payload or {})
         if iface is None:
             return _err(400, "InvalidTargetResource", "targetResourceId must be a virtual machine (or targetNicResourceId a NIC) "

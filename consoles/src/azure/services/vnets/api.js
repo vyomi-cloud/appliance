@@ -82,6 +82,17 @@ export const listLocks = async (rg, name) => (await restJson("GET", lockPath(rg,
 export const putLock = (rg, name, lockName, body) => restJson("PUT", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION }, body });
 export const deleteLock = (rg, name, lockName) => restJson("DELETE", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION } });
 
+// ── Access control (IAM): Microsoft.Authorization/roleAssignments + roleDefinitions +
+// checkAccess, all real ARM resources/actions resource-scoped to this vnet (plus its
+// subscription/resource-group ancestors — real Azure's inherited-access view) ────────────────
+const AUTHZ_API = "2022-04-01";
+export const listRoleAssignments = async (vnetId) =>
+  (await restJson("GET", `${vnetId}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": AUTHZ_API } })).value || [];
+export const listRoleDefinitions = async () =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": AUTHZ_API } })).value || [];
+export const checkAccess = async (vnetId, principalId, action) =>
+  (await restJson("POST", `${vnetId}/providers/Microsoft.Authorization/checkAccess`, { query: { "api-version": AUTHZ_API }, body: { principalId, action } })).value || [];
+
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, filtered to this vnet) ──
 export const listActivityLog = async (rg, name) => {
   const rid = ARM.path(rg, name);
@@ -110,11 +121,13 @@ export const listConnectedDevices = async (rg, name) => {
   return nics.filter((n) => (n.properties?.ipConfigurations || []).some((c) => (c.properties?.subnet?.id || "").toLowerCase().startsWith(prefix)));
 };
 
-// ── Network Watcher: IP flow verify / Next hop (Microsoft.Network/networkWatchers/{nw}/
-// ipFlowVerify|nextHop, answered by the shared netsim evaluator — core/azure_arm_core.py
-// _network_watcher). Reached from this vnet's "Diagnose and solve problems" blade, same as
-// the real portal; the tool itself is a subscription/region-wide Network Watcher action, not
-// scoped to this vnet, so it lists every VM in the subscription like the real picker does. ──
+// ── Network Watcher: IP flow verify / Next hop / Connection troubleshoot
+// (Microsoft.Network/networkWatchers/{nw}/ipFlowVerify|nextHop|connectivityCheck, answered by
+// the shared netsim evaluator — core/azure_arm_core.py _network_watcher). IP flow verify and
+// Next hop are reached from this vnet's "Diagnose and solve problems" blade, Connection
+// troubleshoot from its own Monitoring menu item, same as the real portal; the tools
+// themselves are a subscription/region-wide Network Watcher action, not scoped to this vnet,
+// so they list every VM in the subscription like the real picker does. ──────────────────────
 const NETWORK_WATCHER_RG = "NetworkWatcherRG";
 const networkWatcherName = (location) => `NetworkWatcher_${String(location || "eastus").toLowerCase()}`;
 
@@ -131,6 +144,7 @@ async function ensureNetworkWatcher(location) {
 }
 export const ipFlowVerify = async (location, body) => NW_ARM.action(NETWORK_WATCHER_RG, await ensureNetworkWatcher(location), "ipFlowVerify", body);
 export const nextHop = async (location, body) => NW_ARM.action(NETWORK_WATCHER_RG, await ensureNetworkWatcher(location), "nextHop", body);
+export const connectivityCheck = async (location, body) => NW_ARM.action(NETWORK_WATCHER_RG, await ensureNetworkWatcher(location), "connectivityCheck", body);
 
 // ── create-vnet form model → ARM body ───────────────────────────────────────────────────
 export function toArmBody(f) {

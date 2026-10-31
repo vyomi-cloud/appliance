@@ -1,10 +1,11 @@
 /* Network Watcher diagnostics reached from this virtual network's "Diagnose and solve
- * problems" blade (the real portal's layout): IP flow verify and Next hop, answered by the
- * shared netsim evaluator (core/azure_arm_core.py _network_watcher) through the real ARM
- * actions Microsoft.Network/networkWatchers/{nw}/ipFlowVerify|nextHop —
- * core/capabilities/azure/vnets.json azure.vnets.network_watcher. Both tools pick from every
- * VM in the subscription, same as the real Network Watcher picker (it isn't scoped to this
- * one virtual network). */
+ * problems" blade (the real portal's layout) and its own "Connection troubleshoot" menu item:
+ * IP flow verify, Next hop and Connection troubleshoot, all answered by the shared netsim
+ * evaluator (core/azure_arm_core.py _network_watcher) through the real ARM actions
+ * Microsoft.Network/networkWatchers/{nw}/ipFlowVerify|nextHop|connectivityCheck —
+ * core/capabilities/azure/vnets.json azure.vnets.network_watcher. All three tools pick from
+ * every VM in the subscription, same as the real Network Watcher picker (it isn't scoped to
+ * this one virtual network). */
 import { useState } from "react";
 import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Radio, RadioGroup, Select, Spinner } from "@fluentui/react-components";
 import { useNotify } from "../../../common/notify.jsx";
@@ -160,6 +161,101 @@ function NextHopDialog({ open, onClose, vms, nics }) {
         </DialogBody>
       </DialogSurface>
     </Dialog>
+  );
+}
+
+/* Connection troubleshoot: real Azure's source/destination connectivity check, answered by the
+ * same netsim `reach()` evaluator the AWS Reachability Analyzer / GCP Connectivity Tests
+ * analyzers use — see core/azure_arm_core.py _nw_connectivity_check. */
+function ConnectionTroubleshootDialog({ open, onClose, vms }) {
+  const notify = useNotify();
+  const [srcVmId, setSrcVmId] = useState("");
+  const [destMode, setDestMode] = useState("resource");
+  const [destVmId, setDestVmId] = useState("");
+  const [address, setAddress] = useState("");
+  const [port, setPort] = useState("80");
+  const [protocol, setProtocol] = useState("TCP");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const srcVm = (vms || []).find((v) => v.id === srcVmId);
+  const valid = srcVmId && port && (destMode === "resource" ? destVmId : address);
+  const run = async () => {
+    setBusy(true); setResult(null);
+    try {
+      const destination = destMode === "resource" ? { resourceId: destVmId, port: Number(port) } : { address, port: Number(port) };
+      const r = await api.connectivityCheck(srcVm.location, { source: { resourceId: srcVmId }, destination, protocol });
+      setResult(r);
+    } catch (e) { notify.error(e, "Connection troubleshoot failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Connection troubleshoot">
+        <DialogBody>
+          <DialogTitle>Connection troubleshoot</DialogTitle>
+          <DialogContent>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 420 }}>
+              <Field label="Source" required>
+                <Select value={srcVmId} onChange={(_, d) => setSrcVmId(d.value)} aria-label="Source virtual machine">
+                  <option value="">Select a virtual machine</option>
+                  {(vms || []).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Destination"><RadioGroup layout="horizontal" value={destMode} onChange={(_, d) => setDestMode(d.value)} aria-label="Destination">
+                <Radio value="resource" label="Resource" /><Radio value="manual" label="Manual" />
+              </RadioGroup></Field>
+              {destMode === "resource" ? (
+                <Field label="Destination resource" required>
+                  <Select value={destVmId} onChange={(_, d) => setDestVmId(d.value)} aria-label="Destination virtual machine">
+                    <option value="">Select a virtual machine</option>
+                    {(vms || []).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                  </Select>
+                </Field>
+              ) : (
+                <Field label="Destination IP address" required><Input value={address} onChange={(_, d) => setAddress(d.value)} aria-label="Destination IP address" /></Field>
+              )}
+              <Field label="Destination port" required><Input value={port} onChange={(_, d) => setPort(d.value)} aria-label="Destination port" /></Field>
+              <Field label="Protocol"><RadioGroup layout="horizontal" value={protocol} onChange={(_, d) => setProtocol(d.value)} aria-label="Protocol">
+                <Radio value="TCP" label="TCP" /><Radio value="UDP" label="UDP" />
+              </RadioGroup></Field>
+              {busy && <Spinner size="tiny" label="Checking…" />}
+              {result && (
+                <section className="vy-section">
+                  <b>{result.connectionStatus}</b>
+                  <div>Probes sent: {result.probesSent}, failed: {result.probesFailed}</div>
+                  {result.hops?.length > 0 && (
+                    <ul>{result.hops.map((h, i) => (
+                      <li key={i}>{h.type}: {h.id}{h.issues?.length ? ` — ${h.issues[0].context?.[0]?.value}` : ""}</li>
+                    ))}</ul>
+                  )}
+                </section>
+              )}
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={!valid || busy} onClick={run}>Check</Button>
+            <Button onClick={onClose}>Close</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  );
+}
+
+/** Standalone "Connection troubleshoot" menu item (real Azure lists it both under Diagnose
+ *  and solve problems and under its own Monitoring menu entry; Vyomi only renders the latter
+ *  to avoid a duplicate control — see azure.vnets.network_watcher). */
+export function ConnectionTroubleshootPanel() {
+  const vms = useAsync(() => api.listVmsForDiagnostics(), []);
+  const [open, setOpen] = useState(false);
+  return (
+    <CapabilityContainer id="azure.vnets.network_watcher" title="Connection troubleshoot">
+      <p style={{ fontSize: 13, marginTop: 0 }}>Check connectivity between a source virtual machine and a destination against this subscription's live network configuration.</p>
+      {vms.loading ? <Spinner size="tiny" /> : !vms.data?.length ? (
+        <p>No virtual machines found. Create a virtual machine first to use Connection troubleshoot.</p>
+      ) : <Button onClick={() => setOpen(true)}>Check connectivity</Button>}
+      <ConnectionTroubleshootDialog open={open} onClose={() => setOpen(false)} vms={vms.data} />
+    </CapabilityContainer>
   );
 }
 

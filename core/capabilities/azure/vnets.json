@@ -78,23 +78,24 @@
  },
  "azure.vnets.iam": {
   "title": "Access control (IAM)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Microsoft.Authorization/roleAssignments is only simulated at subscription scope, so role assignments/roles/deny assignments/classic administrators scoped to a single virtual network are an honest gap."
-  ]
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), and Check access / My access run the real wildcard + scope-inheritance + notActions + explicit-deny decision — all ENFORCED scoped to this virtual network (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view); Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too). Deny assignments and Classic administrators remain an honest gap — Microsoft Entra Privileged Identity Management and the legacy Azure Service Management administrator list are not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.vnets.tools": {
-  "title": "Diagnose and solve problems (remaining tiles), Resource visualizer, Connection troubleshoot, Tasks, Support + Troubleshooting",
+  "title": "Diagnose and solve problems (remaining tiles), Resource visualizer, Tasks, Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "Resource visualizer, Connection troubleshoot, Tasks and Support + Troubleshooting are not built, and Diagnose and solve problems' other diagnostic tiles remain an honest gap. Its IP flow verify and Next hop tiles ARE built — see azure.vnets.network_watcher."
+   "Resource visualizer, Tasks and Support + Troubleshooting are not built, and Diagnose and solve problems' other diagnostic tiles remain an honest gap. Its IP flow verify, Next hop and Connection troubleshoot tiles ARE built — see azure.vnets.network_watcher."
   ]
  },
  "azure.vnets.network_watcher": {
-  "title": "Diagnose and solve problems: IP flow verify, Next hop (Network Watcher)",
+  "title": "Diagnose and solve problems / Monitoring: IP flow verify, Next hop, Connection troubleshoot (Network Watcher)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "IP flow verify and Next hop answer from the shared netsim evaluator (core/netsim) — the same engine behind AWS Reachability Analyzer and GCP Connectivity Tests — scoped to a virtual machine's network interface in this virtual network's subnets. Vyomi auto-provisions the regional NetworkWatcher_<location> resource the first time either tool runs in a location, same as the real portal's 'Enable Network Watcher' behaviour. There is no standalone Network Watcher service console yet, only these two diagnostic tools reached from the NSG and Virtual network blades."
+   "IP flow verify, Next hop and Connection troubleshoot all answer from the shared netsim evaluator (core/netsim) — the same engine behind AWS Reachability Analyzer and GCP Connectivity Tests — scoped to a virtual machine's network interface in this virtual network's subnets. Vyomi auto-provisions the regional NetworkWatcher_<location> resource the first time any of the three tools runs in a location, same as the real portal's 'Enable Network Watcher' behaviour. Connection troubleshoot's hop-by-hop trace uses Vyomi's own component labels (route-table/nsg/peering/...), not real Network Watcher's hop-type enum, and offers TCP/UDP (this evaluator's protocols) rather than real Azure's TCP/ICMP. There is no standalone Network Watcher service console yet, only these diagnostic tools reached from the NSG and Virtual network blades."
   ],
   "tests": ["tests/conformance/test_azure_netsim_core.py"]
  },
