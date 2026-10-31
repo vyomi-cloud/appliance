@@ -188,6 +188,14 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .card{background:#fff;border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
   .card .h{padding:16px 20px;display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;font-family:'Google Sans',sans-serif;border-bottom:1px solid var(--line)}
   .card .b{padding:16px 20px}
+  /* Dashboard → Resources card (Google Cloud's): product icon, name as a link, what it holds. */
+  .res-card .res-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));column-gap:32px}
+  .res-card .res-row{display:flex;align-items:center;gap:14px;padding:9px 0;min-width:0}
+  .res-card .res-ic{display:flex;color:#5f6368}
+  .res-card .res-ic .material-symbols-outlined{font-size:22px}
+  .res-card .res-l{flex:1;min-width:0;color:var(--blue);font-size:14px;cursor:pointer;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .res-card .res-l:hover{text-decoration:underline}
+  .res-card .res-n{font-size:13px;color:var(--sub);white-space:nowrap}
 
   /* Tables */
   .table-wrap{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -926,17 +934,33 @@ function renderHome(main){
     `Project: ${PROJECT}  ·  Region: ${REGION}  ·  Zone: ${ZONE}`));
   wrap.append(el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:14px;margin-bottom:16px;align-items:stretch"},   /* both cards share the row height */
     buildSavingsCard("gcp", "GCP", "var(--blue)"), buildConnectCard()));
-  const grid = el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px"});
+  // Resources: the Google Cloud Dashboard's Resources card — one card listing each product
+  // with its icon, its name as a link and what it holds ("2 instances", "3 buckets"),
+  // counted live from the product's own list API (the same call its list page makes).
+  const UNIT = { compute:"instance", storage:"bucket", cloudsql:"instance", pubsub:"topic", firestore:"database",
+    functions:"function", apigateway:"API", vpc:"network", iam:"service account", eventarc:"trigger",
+    secretmanager:"secret", artifactregistry:"repository", kms:"key", cloudscheduler:"job", container:"cluster",
+    iamcredentials:"credential", monitoring:"alerting policy", redis:"instance" };
+  const plural = (n, u) => n + " " + (n === 1 ? u : u === "repository" ? "repositories" : u === "alerting policy" ? "alerting policies" : u + "s");
+  const res = el("div",{class:"card res-card"});
+  res.append(el("div",{class:"h"}, icon("dns"), "Resources"));
+  const rows = el("div",{class:"res-list"});
   CATALOG.services.forEach(s => {
-    const card = el("div",{class:"card",style:"cursor:pointer",
-      onclick:()=>navigate({view:"list", service:s.key, item:null})});
-    card.append(el("div",{class:"h"}, icon(s.icon), s.label,
-      el("span",{style:"margin-left:auto;color:var(--blue);font-size:12px"}, "›")));
-    card.append(el("div",{class:"b",style:"font-size:12px;color:var(--sub)"},
-      s.namespace + "  ·  " + (s.api_paths ? Object.keys(s.api_paths).length : 0) + " actions"));
-    grid.append(card);
+    const n = el("span",{class:"res-n"}, "…");
+    rows.append(el("div",{class:"res-row"}, el("span",{class:"res-ic"}, icon(s.icon)),
+      el("a",{class:"res-l",onclick:()=>navigate({view:"list", service:s.key, item:null})}, s.label), n));
+    if (!s.collection_path) { n.textContent = ""; return; }
+    api("GET", fillCommon(s.collection_path)).then(r => {
+      if (!r.ok) { n.textContent = r.status === 403 ? "Not in your tier" : ""; return; }
+      const d = r.json || {};
+      const items = d.items || d.instances || d.topics || d.subscriptions || d.databases || d.functions || d.apis
+        || d.networks || d.accounts || d.serviceAccounts || d.value || d.results
+        || (Array.isArray(d) ? d : Object.values(d).find(v => Array.isArray(v))) || [];
+      n.textContent = plural(items.length, UNIT[s.key] || "resource");
+    }).catch(() => { n.textContent = ""; });
   });
-  wrap.append(grid);
+  res.append(el("div",{class:"b"}, rows));
+  wrap.append(res);
   main.append(wrap);
 }
 
