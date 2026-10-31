@@ -199,7 +199,8 @@ const SECTIONS = {
     await page.locator("#main [data-testid=idp-add]").click();
     await sleep(1500);
     await tab("Password policy");
-    const idp = await tab("Identity providers");
+    let idp = await tab("Identity providers");
+    for (let i = 0; i < 4 && !idp.includes(":oidc-provider/" + host); i++) { await sleep(1500); await tab("Password policy"); idp = await tab("Identity providers"); }
     check("iam Identity providers: provider added in the tab is listed with its ARN", idp.includes(":oidc-provider/" + host), idp);
     const aa = await tab("Access Analyzer");
     if (await page.locator("#main [data-testid=analyzer-create]").count()) {
