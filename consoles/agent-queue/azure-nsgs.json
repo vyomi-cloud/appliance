@@ -1,7 +1,7 @@
 {
  "cloud": "azure",
  "service": "nsgs",
- "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "goal": "DEPTH: sub-sections / config sections in real integration with the backend — raise real coverage and capability levels",
  "must_build": [
   "Every page in ui-spec/azure/nsgs.json (21 pages; nav: Overview, Activity log, Access control (IAM), Tags, Diagnose and solve problems, Settings, Monitoring, Automation, Help)",
   "Backend: ARM networkSecurityGroups + security rules (test_azure_subresource_core.py)",
@@ -13,6 +13,57 @@
   "Capability feature ids MUST start with 'azure.' (e.g. 'azure.nsgs.<section>') — ids share one namespace with the AWS registry",
   "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
  ],
- "attempt": 2,
- "note": "RESUME: first `git fetch origin v4/ui-azure-nsgs-41076515994 && git merge --no-edit origin/v4/ui-azure-nsgs-41076515994` (previous: 99.4% fidelity / 90.9% real). Fix ONLY the gate failure: 'nsg-network-interfaces' and 'nsg-subnets' need a \"live\" check + fixture — create a uniquely named subnet (or NIC) over ARM with networkSecurityGroup.id set to the NSG, then the page must list it from the ARM state. Keep consoles/src/azure/kit/Capability.jsx as on base (just add your capability JSON), list your service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py, write 'Vyomi' as plain text, and COMMIT your source (the runner now commits leftovers, but commit anyway). Rebuild after merging."
+ "attempt": 3,
+ "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source.\n\nNETWORKING (orchestrator): the shared network engine core/netsim/ is merged (read core/netsim/README.md first). It is THE engine for reachability: AWS Reachability Analyzer (vpc_core AnalyzeReachability + native Network Insights paths/analyses), GCP Connectivity Tests (networkmanagement v1), Azure Network Watcher ipFlowVerify/nextHop already answer from netsim.reach() on the core side. Build the CONSOLE screens for them (native look: AWS VPC > Reachability Analyzer; GCP Network Intelligence > Connectivity Tests; Azure Network Watcher > IP flow verify / Next hop) with UI<->wire smoke round-trips, and wire the Azure subnet blade's NAT gateway / route table pickers to the now-real routeTables / natGateways / publicIPAddresses / applicationSecurityGroups ARM types. Never add a second evaluator; packet enforcement stays offline-only behind VYOMI_NETSIM_ENFORCE (don't change capability entries' offline wording about it). Capability entries must describe 'evaluated on Nano and offline; packet-enforced offline when enabled' exactly as netsim does today.",
+ "phase": "depth",
+ "depth_targets": [
+  {
+   "id": "azure.nsgs.activity_log",
+   "title": "Activity log",
+   "level": "limited",
+   "limitations": [
+    "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+   ]
+  },
+  {
+   "id": "azure.nsgs.export_template",
+   "title": "Export template",
+   "level": "limited",
+   "limitations": [
+    "Only the ARM Template tab is generated from the live resource; Bicep and Terraform export are not modelled."
+   ]
+  },
+  {
+   "id": "azure.nsgs.iam",
+   "title": "Access control (IAM)",
+   "level": "not_simulated",
+   "limitations": [
+    "Microsoft.Authorization/roleAssignments is only simulated at subscription scope, so role assignments/roles/deny assignments/classic administrators scoped to a single network security group are an honest gap."
+   ]
+  },
+  {
+   "id": "azure.nsgs.tools",
+   "title": "Diagnose and solve problems, Tasks, Effective security rules, Support + Troubleshooting",
+   "level": "not_simulated",
+   "limitations": [
+    "Diagnose and solve problems, Tasks, Effective security rules and Support blades are not built. Network Watcher's IP flow verify and Next hop ARE simulated as ARM actions (Microsoft.Network/networkWatchers/*/ipFlowVerify|nextHop) — no console blade for them yet."
+   ]
+  },
+  {
+   "id": "azure.nsgs.monitoring",
+   "title": "Alerts, Diagnostic settings, Logs, NSG flow logs",
+   "level": "not_simulated",
+   "limitations": [
+    "Azure Monitor alert rules/diagnostic settings/flow logs for network security groups are not modelled."
+   ]
+  },
+  {
+   "id": "azure.nsgs.associations",
+   "title": "Network interfaces, Subnets (NSG associations)",
+   "level": "limited",
+   "limitations": [
+    "The Network interfaces and Subnets lists are real ARM reads (every Microsoft.Network/networkInterfaces and virtualNetworks/subnets resource in the subscription whose properties.networkSecurityGroup.id matches this network security group), so an association made via ARM/the CLI/another tool shows up here. The 'Associate' button itself is an honest gap: this lens does not yet build a standalone Network interfaces or Virtual networks console to pick an existing resource from."
+   ]
+  }
+ ]
 }

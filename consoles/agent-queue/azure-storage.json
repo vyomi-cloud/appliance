@@ -3,9 +3,282 @@
  "service": "storage",
  "phase": "depth",
  "goal": "DEPTH: sub-sections / config sections in real integration with the backend — raise real coverage and capability levels",
- "attempt": 4,
- "depth_targets": "NO capability registry yet — first create core/capabilities/azure/storage.json (one entry per console section, ids 'azure.storage.<section>', honest levels + tests), then work through every not_simulated / config_only / limited entry as below",
- "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source.",
+ "attempt": 5,
+ "depth_targets": [
+  {
+   "id": "azure.storage.accesskeys",
+   "title": "Access keys (the ARM listKeys action)",
+   "level": "limited",
+   "limitations": [
+    "Keys are fixed simulator values, not real random key material, and Vyomi does not verify SharedKey request signatures against them."
+   ]
+  },
+  {
+   "id": "azure.storage.configuration",
+   "title": "Configuration (performance, secure transfer, TLS, access tier, replication SKU, …)",
+   "level": "config_only",
+   "limitations": [
+    "Every field round-trips through ARM exactly as written, but nothing is enforced by the Blob data plane: HTTPS-only, TLS version, Entra-only auth and shared-key-access toggles do not change what a request can do."
+   ]
+  },
+  {
+   "id": "azure.storage.redundancy",
+   "title": "Redundancy (replication SKU)",
+   "level": "config_only",
+   "limitations": [
+    "The SKU name round-trips through ARM; Vyomi stores data once, locally — there is no secondary region, no geo-replication and no customer-managed failover."
+   ]
+  },
+  {
+   "id": "azure.storage.networking",
+   "title": "Networking (public network access / firewall default action / routing preference)",
+   "level": "config_only",
+   "limitations": [
+    "publicNetworkAccess, networkAcls and routingPreference round-trip through ARM, but the Blob data plane never enforces them — a request from a 'denied' network still succeeds. Virtual network rules, IP firewall rules and private endpoints are not simulated."
+   ]
+  },
+  {
+   "id": "azure.storage.encryption",
+   "title": "Encryption (key source)",
+   "level": "config_only",
+   "limitations": [
+    "The encryption.keySource flag round-trips through ARM for display only; every account is encrypted the same way underneath. Customer-managed keys, encryption scopes and infrastructure (double) encryption are not simulated."
+   ]
+  },
+  {
+   "id": "azure.storage.dataprotection",
+   "title": "Data protection (soft delete, point-in-time restore, versioning, change feed) over the blobServices/default ARM sub-resource",
+   "level": "config_only",
+   "limitations": [
+    "deleteRetentionPolicy, containerDeleteRetentionPolicy, restorePolicy, isVersioningEnabled and changeFeed round-trip through ARM exactly as configured, but core/azure_blob_core.py does not enforce any of them: deleted blobs/containers are not recoverable, there are no blob versions, and there is no change feed to read. Operational backup, permanent-delete and file-share soft delete are not simulated."
+   ]
+  },
+  {
+   "id": "azure.storage.activitylog",
+   "title": "Activity log",
+   "level": "limited",
+   "limitations": [
+    "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 6-hours/30/90-day timespan picker are not modelled, and 'caller' is a fixed placeholder identity rather than the real signed-in principal."
+   ]
+  },
+  {
+   "id": "azure.storage.queues",
+   "title": "Queues (create, list, delete) and messages (send, receive, peek, delete) over the Azure Storage Queue REST data plane",
+   "level": "limited",
+   "limitations": [
+    "core/azure_queue_core.py keeps one global queue namespace per Nano instance (the same simplification the Key Vault keys/secrets stores make) — queues are not isolated per storage account, so two accounts share the same queue list."
+   ]
+  },
+  {
+   "id": "azure.storage.diagnose",
+   "title": "Diagnose and solve problems",
+   "level": "not_simulated",
+   "limitations": [
+    "A guided troubleshooting wizard backed by Azure's own telemetry and knowledge base — there is no equivalent diagnostic corpus in Vyomi."
+   ]
+  },
+  {
+   "id": "azure.storage.iam",
+   "title": "Access control (IAM) scoped to a storage account",
+   "level": "not_simulated",
+   "limitations": [
+    "Vyomi's RBAC simulation (core/azure_iam_core.py) is not wired to a per-resource scope check from this console; role assignments, deny assignments and the 'Check access' simulator are not rendered here."
+   ]
+  },
+  {
+   "id": "azure.storage.datamigration",
+   "title": "Data migration (AzCopy / Data Box / migration tooling)",
+   "level": "not_simulated",
+   "limitations": [
+    "A separate migration toolchain and, for Data Box, physical hardware shipped by Microsoft — outside what a local simulator can run."
+   ]
+  },
+  {
+   "id": "azure.storage.events",
+   "title": "Events (Event Grid subscriptions on storage events)",
+   "level": "not_simulated",
+   "limitations": [
+    "Storage-account-sourced Event Grid event subscriptions are not wired from this console; core/azure_eventgrid_core.py models Event Grid topics, not storage-account system events."
+   ]
+  },
+  {
+   "id": "azure.storage.storagemover",
+   "title": "Storage Mover",
+   "level": "not_simulated",
+   "limitations": [
+    "A separate Azure product (Microsoft.StorageMover) for migrating file shares from on-premises servers — not modelled by any Vyomi core."
+   ]
+  },
+  {
+   "id": "azure.storage.partnersolutions",
+   "title": "Partner solutions",
+   "level": "not_simulated",
+   "limitations": [
+    "Third-party marketplace integrations (e.g. Cloudian, DataDynamics) — third-party identity and billing Vyomi cannot run."
+   ]
+  },
+  {
+   "id": "azure.storage.fileshares",
+   "title": "File shares (Azure Files)",
+   "level": "not_simulated",
+   "limitations": [
+    "Azure Files is a distinct SMB/NFS data plane (account.file.core.windows.net) with no core in this repo yet — not yet implemented."
+   ]
+  },
+  {
+   "id": "azure.storage.tables",
+   "title": "Table storage",
+   "level": "limited",
+   "limitations": [
+    "core/azure_table_core.py models table create/list/delete and entity insert/get/query/replace/merge/delete over the native OData/JSON wire, in ONE global namespace per Nano instance (the same simplification Queues makes — tables are not isolated per storage account). $filter supports only `Field eq 'value'` terms joined by `and`; batch/transaction (EntityGroupTransaction), continuation-token paging and complex OData queries are not simulated."
+   ]
+  },
+  {
+   "id": "azure.storage.frontdoorcdn",
+   "title": "Front Door and CDN",
+   "level": "not_simulated",
+   "limitations": [
+    "A separate edge/CDN product fronting the storage endpoint — outside a local simulator's network topology."
+   ]
+  },
+  {
+   "id": "azure.storage.sas",
+   "title": "Shared access signature (SAS) generation",
+   "level": "limited",
+   "limitations": [
+    "The form builds a structurally correct SAS query string (sv/ss/srt/sp/st/se/spr/sig) from the selected options and signs it with the account's listKeys value, but core/azure_blob_core.py and core/azure_queue_core.py do not verify any request signature (SharedKey or SAS) — the generated token is not a real, checkable credential."
+   ]
+  },
+  {
+   "id": "azure.storage.defender",
+   "title": "Microsoft Defender for Cloud",
+   "level": "not_simulated",
+   "limitations": [
+    "A separate security product (threat detection, vulnerability scanning) with its own billing plan — not modelled by any Vyomi core."
+   ]
+  },
+  {
+   "id": "azure.storage.objectreplication",
+   "title": "Object replication",
+   "level": "not_simulated",
+   "limitations": [
+    "Requires a second storage account and cross-account async replication; Vyomi stores each account's blobs independently with nothing to replicate between them."
+   ]
+  },
+  {
+   "id": "azure.storage.inventory",
+   "title": "Blob inventory",
+   "level": "not_simulated",
+   "limitations": [
+    "A scheduled background job that writes an inventory report blob — Vyomi has no job scheduler wired to the Blob core."
+   ]
+  },
+  {
+   "id": "azure.storage.lifecycle",
+   "title": "Lifecycle management policies",
+   "level": "limited",
+   "limitations": [
+    "Enforced, but lazily: core/azure_blob_core.py re-evaluates every enabled rule's prefixMatch filter against blob age on each list/get (not a daily background job) and applies the most aggressive matching baseBlob action (delete > tierToArchive > tierToCool), setting a real x-ms-access-tier / <AccessTier> or removing the blob. blobTypes beyond blockBlob, snapshot/version actions and the 'days after last access/creation' trigger variants are not modelled."
+   ]
+  },
+  {
+   "id": "azure.storage.azureaisearch",
+   "title": "Azure AI Search (index this storage account)",
+   "level": "not_simulated",
+   "limitations": [
+    "A separate Azure product (search indexing + a query engine) — not modelled by any Vyomi core."
+   ]
+  },
+  {
+   "id": "azure.storage.datalakegen2upgrade",
+   "title": "Data Lake Gen2 upgrade",
+   "level": "not_simulated",
+   "limitations": [
+    "A one-way, backend-run upgrade of the account's namespace flag plus a full-container metadata rewrite — there is no equivalent background migration job in Vyomi."
+   ]
+  },
+  {
+   "id": "azure.storage.cors",
+   "title": "Resource sharing (CORS) rules",
+   "level": "limited",
+   "limitations": [
+    "Enforced for the Blob service only: core/azure_blob_core.py answers an OPTIONS preflight against the configured corsRules, denying (403 CorsPreflightFailure) any Origin/method/header combination that matches no rule and 200ing with real Access-Control-* headers for one that does. File/Queue/Table service CORS are honest gaps — Set/Get Service Properties isn't implemented on those data planes."
+   ]
+  },
+  {
+   "id": "azure.storage.advisor",
+   "title": "Advisor recommendations",
+   "level": "not_simulated",
+   "limitations": [
+    "Azure Advisor's recommendations come from analysing real usage telemetry and cost data across Microsoft's fleet — there is no equivalent analytics pipeline in Vyomi."
+   ]
+  },
+  {
+   "id": "azure.storage.insights",
+   "title": "Insights (storage account metrics dashboards)",
+   "level": "not_simulated",
+   "limitations": [
+    "Azure Monitor metrics (capacity, transactions, latency) are not emitted by core/azure_blob_core.py or core/azure_queue_core.py."
+   ]
+  },
+  {
+   "id": "azure.storage.alerts",
+   "title": "Alerts",
+   "level": "not_simulated",
+   "limitations": [
+    "Alert rules fire against Azure Monitor metrics the storage data planes do not emit."
+   ]
+  },
+  {
+   "id": "azure.storage.metrics",
+   "title": "Metrics",
+   "level": "not_simulated",
+   "limitations": [
+    "Azure Monitor metrics (capacity, transactions, latency, availability) are not emitted by the storage data planes."
+   ]
+  },
+  {
+   "id": "azure.storage.workbooks",
+   "title": "Workbooks",
+   "level": "not_simulated",
+   "limitations": [
+    "Workbooks visualize Azure Monitor log/metric queries the storage data planes do not emit."
+   ]
+  },
+  {
+   "id": "azure.storage.diagnostics",
+   "title": "Diagnostic settings",
+   "level": "not_simulated",
+   "limitations": [
+    "Diagnostic settings forward platform logs/metrics to a Log Analytics workspace or Event Hub — the storage data planes do not emit platform logs to forward."
+   ]
+  },
+  {
+   "id": "azure.storage.logs",
+   "title": "Logs (Log Analytics queries over storage diagnostics)",
+   "level": "not_simulated",
+   "limitations": [
+    "Depends on diagnostic settings forwarding to a Log Analytics workspace, which is not simulated (see azure.storage.diagnostics)."
+   ]
+  },
+  {
+   "id": "azure.storage.tasks",
+   "title": "Tasks (Azure Automation runbooks)",
+   "level": "not_simulated",
+   "limitations": [
+    "Azure Automation runbook execution is a separate product with its own worker fleet — not modelled by any Vyomi core."
+   ]
+  },
+  {
+   "id": "azure.storage.support",
+   "title": "Support + Troubleshooting",
+   "level": "not_simulated",
+   "limitations": [
+    "Opens a real Microsoft support ticket workflow — outside what a local simulator can run."
+   ]
+  }
+ ],
+ "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source.\n\nSECOND PASS (orchestrator): this service already had one depth pass; many entries remain not_simulated/config_only. Re-examine each: make it real wherever a local simulator can model it (enforced > stored); for the rest, keep honest with a concrete reason.",
  "continue_from": "v4/ui-azure-storage-41123836907",
  "review_feedback": "RESUMING PR #339 — your previous run hit the 250-turn limit; its work is already merged into this branch, so continue from it, don't restart. The gate failed on: (1) core tests (core=0) — run the core suites + tests/conformance/test_capabilities.py and fix what fails; (2) list/detail pages without a liveness check: storage-account-file-shares, storage-account-tables, storage-account-lifecycle-management — add \"live\" to spec-map + fixtures; (3) the smoke run times out (locator.waitFor) — fix the step or the page. Depth review: 26 of 43 entries are still not_simulated. Tables (Azurite Table service / a core), Queues (Azurite), CORS, lifecycle management (ENFORCED expiry/tiering on the blob core), static website, SAS and the storage browser can all be modelled locally — BUILD them (enforced over stored). Keep honest only things a simulator cannot run (Defender, Front Door/CDN, AI Search, partner solutions, Storage Mover, support, advisor) with the reason in `limitations`. Budget your turns: commit working increments as you go."
 }

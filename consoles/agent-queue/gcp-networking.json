@@ -1,7 +1,7 @@
 {
  "cloud": "gcp",
  "service": "networking",
- "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "goal": "DEPTH: sub-sections / config sections in real integration with the backend — raise real coverage and capability levels",
  "must_build": [
   "Every page in ui-spec/gcp/networking.json (16 pages; nav: VPC networks, IP addresses, Internal ranges, Bring your own IP, Firewall, Routes, VPC connectivity, Shared VPC, Serverless VPC access, Packet mirroring, VPC Flow Logs)",
   "Backend: VPC network: networks, subnets, firewall rules, routes via the existing gcp compute/network handling (grep core/ providers/)",
@@ -13,5 +13,98 @@
   "Capability feature ids MUST start with 'gcp.' (e.g. 'gcp.networking.<section>') — ids share one namespace with the AWS registry",
   "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
  ],
- "attempt": 1
+ "attempt": 2,
+ "phase": "depth",
+ "depth_targets": [
+  {
+   "id": "gcp.networking.peering",
+   "title": "VPC network peering",
+   "level": "limited",
+   "limitations": [
+    "networks.addPeering / removePeering are real: a peering is ACTIVE only once both networks peer, subnet routes are exchanged (non-transitive) and Connectivity Tests route across it. Custom-route import/export flags are stored but not applied; offline packet enforcement across peered networks is compiled but not covered by the real-packet test."
+   ]
+  },
+  {
+   "id": "gcp.networking.private-service-connection",
+   "title": "Private service connection",
+   "level": "not_simulated",
+   "limitations": [
+    "Allocating ranges for Google-managed services and the private-services-access connection to them is not modeled."
+   ]
+  },
+  {
+   "id": "gcp.networking.network-firewall-policies",
+   "title": "Network firewall policies (hierarchical / regional policy resources)",
+   "level": "not_simulated",
+   "limitations": [
+    "Vyomi models the classic per-network VPC firewall rule, not the newer Network Firewall Policy resource (its own rule evaluation order and org/folder attachment)."
+   ]
+  },
+  {
+   "id": "gcp.networking.vpc-flow-logs",
+   "title": "VPC Flow Logs (Subnets / VLAN attachments / Cloud VPN tunnels)",
+   "level": "not_simulated",
+   "limitations": [
+    "No VPC Flow Logs export. Offline with netsim enforcement on, real per-flow counters exist and core/netsim/flowlogs.py renders GCP flow records from them, but nothing writes them to Cloud Logging yet."
+   ]
+  },
+  {
+   "id": "gcp.networking.internal-ranges",
+   "title": "Internal ranges",
+   "level": "not_simulated",
+   "limitations": [
+    "The Internal Range Allocator (planning/reserving CIDR blocks across an org before they're assigned to subnets) is not modeled."
+   ]
+  },
+  {
+   "id": "gcp.networking.byoip",
+   "title": "Bring your own IP (BYOIP)",
+   "level": "not_simulated",
+   "limitations": [
+    "Advertising customer-owned IP ranges over Google's network requires real BGP/RPKI infrastructure Vyomi does not have."
+   ]
+  },
+  {
+   "id": "gcp.networking.hybrid-connectivity",
+   "title": "VPC connectivity (Cloud Interconnect, Cloud VPN, Network Connectivity Center)",
+   "level": "not_simulated",
+   "limitations": [
+    "Hybrid connectivity to on-premises or other clouds needs real tunnels/circuits; Vyomi's network model stops at the project boundary."
+   ]
+  },
+  {
+   "id": "gcp.networking.shared-vpc",
+   "title": "Shared VPC (host/service project attachment)",
+   "level": "not_simulated",
+   "limitations": [
+    "Vyomi's Compute core is single-project; cross-project host/service VPC sharing and its IAM delegation are not modeled."
+   ]
+  },
+  {
+   "id": "gcp.networking.serverless-vpc-access",
+   "title": "Serverless VPC Access connectors",
+   "level": "not_simulated",
+   "limitations": [
+    "Connectors bridge serverless products (Cloud Run/Functions) into a VPC; Vyomi does not run a serverless data plane that would use one."
+   ]
+  },
+  {
+   "id": "gcp.networking.packet-mirroring",
+   "title": "Packet mirroring",
+   "level": "not_simulated",
+   "limitations": [
+    "Mirroring clones live packets to a collector; Vyomi has no data plane producing real packets to mirror."
+   ]
+  },
+  {
+   "id": "gcp.networking.cloud-nat",
+   "title": "Cloud Router + Cloud NAT (regions/*/routers)",
+   "level": "limited",
+   "limitations": [
+    "Routers and their NAT configs are real resources (insert/get/list/patch/delete); a NAT covering a subnet gives its external-IP-less VMs internet egress in Connectivity Tests and, offline with enforcement on, real masquerade. BGP sessions, NAT IP allocation/ports and logging are not modeled.",
+    "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
+   ]
+  }
+ ],
+ "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source.\n\nNETWORKING (orchestrator): the shared network engine core/netsim/ is merged (read core/netsim/README.md first). It is THE engine for reachability: AWS Reachability Analyzer (vpc_core AnalyzeReachability + native Network Insights paths/analyses), GCP Connectivity Tests (networkmanagement v1), Azure Network Watcher ipFlowVerify/nextHop already answer from netsim.reach() on the core side. Build the CONSOLE screens for them (native look: AWS VPC > Reachability Analyzer; GCP Network Intelligence > Connectivity Tests; Azure Network Watcher > IP flow verify / Next hop) with UI<->wire smoke round-trips, and wire the Azure subnet blade's NAT gateway / route table pickers to the now-real routeTables / natGateways / publicIPAddresses / applicationSecurityGroups ARM types. Never add a second evaluator; packet enforcement stays offline-only behind VYOMI_NETSIM_ENFORCE (don't change capability entries' offline wording about it). Capability entries must describe 'evaluated on Nano and offline; packet-enforced offline when enabled' exactly as netsim does today."
 }

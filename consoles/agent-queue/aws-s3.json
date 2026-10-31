@@ -2,55 +2,55 @@
  "cloud": "aws",
  "service": "s3",
  "goal": "DEPTH: sub-sections / config sections in real integration with the backend — raise real coverage and capability levels",
- "attempt": 3,
+ "attempt": 4,
  "phase": "depth",
  "depth_targets": [
   {
    "id": "s3.bucket.encryption",
    "title": "Default encryption",
-   "level": "config_only",
+   "level": "limited",
    "limitations": [
-    "Stored and returned exactly as configured; objects are not encrypted at rest and responses do not carry x-amz-server-side-encryption yet."
+    "Every PutObject/GetObject/HeadObject/CopyObject/CompleteMultipartUpload response carries x-amz-server-side-encryption (and the KMS key id / bucket-key header when configured) reflecting the bucket's default-encryption setting — AES256 by default, matching S3's own always-on default — but objects are not actually encrypted at rest."
    ]
   },
   {
    "id": "s3.bucket.public-access-block",
    "title": "Block public access (bucket settings)",
-   "level": "config_only",
+   "level": "limited",
    "limitations": [
-    "Stored and returned; public bucket policies and ACLs are not rejected yet, and Vyomi does not authenticate requests, so anonymous access is not modelled."
+    "PutBucketAcl/PutObjectAcl with a public canned ACL (public-read, public-read-write, authenticated-read) is rejected with AccessDenied when BlockPublicAcls is on, and PutBucketPolicy is rejected when the policy is public (Principal \"*\", Effect Allow) and BlockPublicPolicy is on. Existing grants/policies already stored before the block was enabled are not retroactively revoked, and Vyomi does not authenticate requests, so there is no per-request anonymous-access check."
    ]
   },
   {
    "id": "s3.bucket.policy",
    "title": "Bucket policy",
-   "level": "config_only",
+   "level": "limited",
    "limitations": [
-    "Stored and returned; the policy is not evaluated for authorization."
+    "PutBucketPolicy validates the document is well-formed JSON and is rejected (see Block Public Access) when it is public and blocked; otherwise the policy is stored and returned verbatim and is not evaluated for request authorization — Vyomi has no IAM principal/condition evaluator."
    ]
   },
   {
    "id": "s3.bucket.lifecycle",
    "title": "Lifecycle rules",
-   "level": "config_only",
+   "level": "limited",
    "limitations": [
-    "Rules are stored and returned; expiration and transitions are not applied yet."
+    "Expiration rules are enforced, evaluated lazily on list/get/head: Date-based rules fire deterministically once the date has passed; Days-based rules use the real elapsed wall-clock (not accelerated), as in real S3. In a versioned bucket, expiration inserts a delete marker rather than destroying history. NoncurrentVersionExpiration, storage-class Transition actions and AbortIncompleteMultipartUpload are stored and returned but not yet enforced."
    ]
   },
   {
    "id": "s3.bucket.cors",
    "title": "Cross-origin resource sharing (CORS)",
-   "level": "config_only",
+   "level": "limited",
    "limitations": [
-    "Stored and returned; CORS headers are not applied to browser requests yet."
+    "OPTIONS preflight and the Access-Control-* response headers are enforced on actual GET/HEAD/PUT/DELETE requests whose Origin and method match a configured rule; this is wire-level header emulation of CORS, not a real browser's same-origin/CORS enforcement engine."
    ]
   },
   {
    "id": "s3.bucket.ownership",
    "title": "Object Ownership",
-   "level": "config_only",
+   "level": "limited",
    "limitations": [
-    "Stored and returned; object ownership is not enforced."
+    "BucketOwnerEnforced is enforced: every PutBucketAcl/PutObjectAcl call on the bucket is rejected (InvalidBucketAclWithObjectOwnership), matching real S3's \"ACLs disabled\" behaviour. BucketOwnerPreferred/ObjectWriter are stored and returned but have no further effect, since Vyomi has no per-request uploader identity to attribute ownership to."
    ]
   },
   {
@@ -58,26 +58,32 @@
    "title": "Access control list (ACL)",
    "level": "limited",
    "limitations": [
-    "Bucket and object ACLs are stored and returned (Get/PutBucketAcl, Get/PutObjectAcl); grants are not evaluated for authorization."
+    "Bucket and object ACLs are stored and returned (Get/PutBucketAcl, Get/PutObjectAcl); a canned ACL (private, public-read, public-read-write, authenticated-read) now produces the real grant list GetAcl returns. Writes are rejected under Block Public Access / BucketOwnerEnforced (see those capabilities), but grants are not evaluated for request authorization — Vyomi does not authenticate requests."
    ]
   },
   {
    "id": "s3.bucket.object-lock",
    "title": "Object Lock",
-   "level": "not_simulated",
-   "limitations": []
+   "level": "limited",
+   "limitations": [
+    "Object Lock can only be enabled at bucket creation (as in real S3) — PutObjectLockConfiguration on a bucket created without it returns InvalidBucketState. Legal hold (Put/GetObjectLegalHold) and retention (Put/GetObjectRetention, GOVERNANCE/COMPLIANCE) are enforced: DeleteObject for a held/retained version id is rejected, GOVERNANCE can be overridden with x-amz-bypass-governance-retention, COMPLIANCE cannot. A bucket-level default-retention rule is not yet stored."
+   ]
   },
   {
    "id": "s3.bucket.website",
    "title": "Static website hosting",
    "level": "not_simulated",
-   "limitations": []
+   "limitations": [
+    "Static website hosting serves GET/HEAD over a separate bucket-name.s3-website-<region>.amazonaws.com HTTP origin with index/error-document routing; Vyomi's native wire is a single S3 control+data endpoint and does not run a per-bucket website origin."
+   ]
   },
   {
    "id": "s3.bucket.logging",
    "title": "Server access logging",
    "level": "not_simulated",
-   "limitations": []
+   "limitations": [
+    "Server access logging periodically writes delivery-log objects (one per time window) into a target bucket from S3's internal request-logging pipeline; Vyomi has no request-log writer producing those objects."
+   ]
   },
   {
    "id": "s3.bucket.notification",
@@ -92,38 +98,50 @@
    "id": "s3.bucket.replication",
    "title": "Replication rules",
    "level": "not_simulated",
-   "limitations": []
+   "limitations": [
+    "Cross-/same-region replication asynchronously copies objects to a destination bucket (often cross-account/cross-region) via a background replication engine; Vyomi has no background replication worker."
+   ]
   },
   {
    "id": "s3.bucket.accelerate",
    "title": "Transfer acceleration",
    "level": "not_simulated",
-   "limitations": []
+   "limitations": [
+    "Transfer acceleration only changes the network path (ingest via a CloudFront edge location) to the same S3 API — there is no behavioural difference for a client to observe, so there is nothing for a single-endpoint simulator to enforce or differentiate."
+   ]
   },
   {
    "id": "s3.bucket.request-payment",
    "title": "Requester pays",
    "level": "not_simulated",
-   "limitations": []
+   "limitations": [
+    "Requester Pays changes who is billed for data transfer and requests; Vyomi has no request-identity or billing model, so there is no payer to attribute cost to."
+   ]
   },
   {
    "id": "s3.bucket.intelligent-tiering",
    "title": "Intelligent-Tiering Archive configurations",
    "level": "not_simulated",
-   "limitations": []
+   "limitations": [
+    "Intelligent-Tiering archive configurations move objects between access tiers automatically based on 30/90+ day access-pattern windows; Vyomi does not run a long-horizon storage-class scheduler."
+   ]
   },
   {
    "id": "s3.bucket.inventory",
    "title": "Inventory configurations",
    "level": "not_simulated",
-   "limitations": []
+   "limitations": [
+    "Inventory configurations run on a daily/weekly schedule and write a CSV/ORC/Parquet manifest of bucket contents to a destination bucket; Vyomi has no scheduler producing those exports."
+   ]
   },
   {
    "id": "s3.bucket.metrics",
    "title": "Metrics",
    "level": "not_simulated",
-   "limitations": []
+   "limitations": [
+    "Request/storage filter metrics publish to CloudWatch on a recurring schedule; Vyomi does not run a CloudWatch metrics pipeline for S3."
+   ]
   }
  ],
- "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source."
+ "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source.\n\nSECOND PASS (orchestrator): this service already had one depth pass; many entries remain not_simulated/config_only. Re-examine each: make it real wherever a local simulator can model it (enforced > stored); for the rest, keep honest with a concrete reason."
 }

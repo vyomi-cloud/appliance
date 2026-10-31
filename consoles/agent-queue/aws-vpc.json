@@ -1,7 +1,7 @@
 {
  "cloud": "aws",
  "service": "vpc",
- "goal": "P2: native-fidelity console on real backends — fidelity >= 90%, raise real coverage, no statics",
+ "goal": "DEPTH: sub-sections / config sections in real integration with the backend — raise real coverage and capability levels",
  "must_build": [
   "Every page in ui-spec/aws/vpc.json (65 pages; nav: VPC dashboard, AWS Global View, Virtual private cloud, Security, PrivateLink and Lattice, DNS firewall, Network Firewall, Virtual private network (VPN), AWS Verified Access, Transit gateways, Traffic Mirroring, Network Manager, Cloud WAN, VPC IP Address Manager)",
   "Backend: core/vpc_core.py (VPC network simulation) + the EC2 Query API Vyomi serves for VPCs, subnets, route tables, internet/NAT gateways, security groups, NACLs, endpoints (see consoles/src/aws/services/ec2 api.js for the Query wire)",
@@ -14,5 +14,187 @@
   "Register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py — tests/conformance/test_nano_core_manifest.py checks this",
   "Use unique variable names in consoles/tests/smoke-aws.mjs (other blocks already use R, RDB, ROLE, …); write 'Vyomi' as plain text; commit your source"
  ],
- "attempt": 1
+ "attempt": 2,
+ "phase": "depth",
+ "depth_targets": [
+  {
+   "id": "aws.vpc.nat-gateways",
+   "title": "NAT gateways (create, describe, delete)",
+   "level": "limited",
+   "limitations": [
+    "Evaluated like AWS: the route works only while the NAT gateway exists, is public and sits in a subnet that routes to an attached internet gateway, and that subnet's NACL applies in both directions. Offline with enforcement on, egress is really translated (masquerade) — but the internet sees the appliance host's address, not the NAT gateway's EIP, and the NAT keeps the client's source port (real NAT GW uses 1024-65535).",
+    "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
+   ]
+  },
+  {
+   "id": "aws.vpc.dhcp-option-sets",
+   "title": "DHCP option sets (create, describe, delete, associate)",
+   "level": "config_only",
+   "limitations": [
+    "Vyomi stores and returns DHCP configuration exactly as set, but has no real DHCP server — subnets don't actually receive these options over a simulated network stack."
+   ]
+  },
+  {
+   "id": "aws.vpc.peering-connections",
+   "title": "VPC peering connections (create, accept, describe, delete)",
+   "level": "limited",
+   "limitations": [
+    "The analyzer routes across an ACTIVE peering (non-transitive; the peer's route table needs the return route). Offline packet enforcement across peered VPCs is compiled but not yet covered by the real-packet test, and VPCs with overlapping CIDRs cannot be enforced on one Docker host.",
+    "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
+   ]
+  },
+  {
+   "id": "aws.vpc.route-servers",
+   "title": "VPC Route Server (create, describe, delete)",
+   "level": "limited",
+   "limitations": [
+    "Only the resource lifecycle is modeled — no real BGP peering or route exchange."
+   ]
+  },
+  {
+   "id": "aws.vpc.flow-logs",
+   "title": "VPC/subnet Flow logs",
+   "level": "not_simulated",
+   "limitations": [
+    "CreateFlowLogs / DescribeFlowLogs and delivery to CloudWatch Logs or S3 are not implemented. Offline with netsim enforcement on, the enforcer does count real per-flow packets/bytes and core/netsim/flowlogs.py renders AWS v2 records from them, but that is not exposed through the EC2 API yet."
+   ]
+  },
+  {
+   "id": "aws.vpc.integrations",
+   "title": "VPC console third-party integrations (e.g. Transit Gateway Network Manager tiles)",
+   "level": "not_simulated",
+   "limitations": [
+    "No third-party integrations are modeled."
+   ]
+  },
+  {
+   "id": "aws.vpc.create-vpc-and-more",
+   "title": "\"VPC and more\" wizard (auto-generated subnets/route tables/NAT gateways/endpoints)",
+   "level": "not_simulated",
+   "limitations": [
+    "Use \"VPC only\" and then create subnets, route tables, and NAT gateways individually — the guided multi-resource wizard isn't modeled, including its Name tag auto-generation, Number of Availability Zones (AZs), Number of public subnets, Number of private subnets, NAT gateways ($), VPC endpoints, and DNS options fields."
+   ]
+  },
+  {
+   "id": "aws.vpc.cidr-reservations",
+   "title": "Subnet CIDR reservations",
+   "level": "not_simulated",
+   "limitations": [
+    "Subnet CIDR reservations aren't modeled."
+   ]
+  },
+  {
+   "id": "aws.vpc.resource-sharing",
+   "title": "Subnet sharing (AWS RAM)",
+   "level": "not_simulated",
+   "limitations": [
+    "Cross-account resource sharing via AWS Resource Access Manager isn't modeled."
+   ]
+  },
+  {
+   "id": "aws.vpc.edge-associations",
+   "title": "Route table edge associations (Outposts / Local Gateway)",
+   "level": "not_simulated",
+   "limitations": [
+    "Edge associations to Outposts or Local Gateways aren't modeled."
+   ]
+  },
+  {
+   "id": "aws.vpc.route-propagation",
+   "title": "Route table route propagation (Virtual Private Gateway)",
+   "level": "not_simulated",
+   "limitations": [
+    "Virtual Private Gateway route propagation isn't modeled — see aws.vpc.vpn."
+   ]
+  },
+  {
+   "id": "aws.vpc.security-group-sharing",
+   "title": "Security group sharing (AWS RAM), VPC associations, related resources",
+   "level": "not_simulated",
+   "limitations": [
+    "Cross-account sharing via AWS Resource Access Manager isn't modeled; every security group stays scoped to this account."
+   ]
+  },
+  {
+   "id": "aws.vpc.nat-gateway-monitoring",
+   "title": "NAT gateway CloudWatch monitoring",
+   "level": "not_simulated",
+   "limitations": [
+    "No CloudWatch metrics pipeline backs NAT gateways."
+   ]
+  },
+  {
+   "id": "aws.vpc.console-settings",
+   "title": "VPC console preferences",
+   "level": "not_simulated",
+   "limitations": [
+    "Console display preferences aren't modeled; they have no effect in Vyomi."
+   ]
+  },
+  {
+   "id": "aws.vpc.privatelink",
+   "title": "PrivateLink (VPC endpoints, endpoint services)",
+   "level": "not_simulated",
+   "limitations": [
+    "AWS PrivateLink is a separate, large AWS service surfaced under the VPC nav — not in scope for vpc_core.py's VPC/subnet/route-table/SG/NACL network-simulation model."
+   ]
+  },
+  {
+   "id": "aws.vpc.lattice",
+   "title": "VPC Lattice (service networks, services, resource configurations/gateways, target groups, domain verifications)",
+   "level": "not_simulated",
+   "limitations": [
+    "Amazon VPC Lattice is a separate AWS service surfaced under the VPC nav — not simulated."
+   ]
+  },
+  {
+   "id": "aws.vpc.dns-firewall",
+   "title": "Route 53 Resolver DNS Firewall (rule groups, domain lists)",
+   "level": "not_simulated",
+   "limitations": [
+    "Route 53 Resolver DNS Firewall is a separate AWS service surfaced under the VPC nav — not simulated."
+   ]
+  },
+  {
+   "id": "aws.vpc.network-firewall",
+   "title": "AWS Network Firewall (firewalls, policies, rule groups, TLS inspection, resource groups, endpoint/container associations)",
+   "level": "not_simulated",
+   "limitations": [
+    "AWS Network Firewall is a separate AWS service surfaced under the VPC nav — not simulated."
+   ]
+  },
+  {
+   "id": "aws.vpc.vpn",
+   "title": "Site-to-Site VPN and Client VPN (customer/virtual private gateways, VPN concentrators/connections, client endpoints)",
+   "level": "not_simulated",
+   "limitations": [
+    "AWS Site-to-Site VPN and Client VPN aren't simulated — no IPsec/TLS tunnel data plane."
+   ]
+  },
+  {
+   "id": "aws.vpc.verified-access",
+   "title": "AWS Verified Access (instances, trust providers, groups, endpoints)",
+   "level": "not_simulated",
+   "limitations": [
+    "AWS Verified Access is a separate AWS service surfaced under the VPC nav — not simulated."
+   ]
+  },
+  {
+   "id": "aws.vpc.transit-gateway",
+   "title": "Transit Gateway (gateways, attachments, policy/route tables, multicast, metering policies)",
+   "level": "not_simulated",
+   "limitations": [
+    "AWS Transit Gateway is a separate AWS service surfaced under the VPC nav — vpc_core.py's docstring lists it as future scope."
+   ]
+  },
+  {
+   "id": "aws.vpc.traffic-mirroring",
+   "title": "Traffic Mirroring (mirror sessions, targets, filters)",
+   "level": "not_simulated",
+   "limitations": [
+    "Traffic Mirroring has no packet-level data plane to mirror in Vyomi."
+   ]
+  }
+ ],
+ "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source.\n\nNETWORKING (orchestrator): the shared network engine core/netsim/ is merged (read core/netsim/README.md first). It is THE engine for reachability: AWS Reachability Analyzer (vpc_core AnalyzeReachability + native Network Insights paths/analyses), GCP Connectivity Tests (networkmanagement v1), Azure Network Watcher ipFlowVerify/nextHop already answer from netsim.reach() on the core side. Build the CONSOLE screens for them (native look: AWS VPC > Reachability Analyzer; GCP Network Intelligence > Connectivity Tests; Azure Network Watcher > IP flow verify / Next hop) with UI<->wire smoke round-trips, and wire the Azure subnet blade's NAT gateway / route table pickers to the now-real routeTables / natGateways / publicIPAddresses / applicationSecurityGroups ARM types. Never add a second evaluator; packet enforcement stays offline-only behind VYOMI_NETSIM_ENFORCE (don't change capability entries' offline wording about it). Capability entries must describe 'evaluated on Nano and offline; packet-enforced offline when enabled' exactly as netsim does today."
 }
