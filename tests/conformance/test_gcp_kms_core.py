@@ -156,6 +156,38 @@ def run() -> int:
                           json.dumps({"plaintext": base64.b64encode(b"y").decode()}).encode())
     _check("encrypt with re-enabled primary 200", again.status == 200)
 
+    # 8a. each CryptoKeyVersion has its OWN key material (real rotation, not bookkeeping
+    #     over shared bytes) and Decrypt re-checks the ORIGINATING version's state, not
+    #     just that the CryptoKey still exists.
+    dec_again = gkms.dispatch(st, "POST", f"{KEY}:decrypt", {}, {"content-type": "application/json"},
+                              json.dumps({"ciphertext": _jbody(again)["ciphertext"]}).encode())
+    _check("decrypt v2 ciphertext 200", dec_again.status == 200)
+    _check("decrypt v2 recovers exact plaintext", base64.b64decode(_jbody(dec_again)["plaintext"]) == b"y")
+    _check("decrypt reports usedPrimary True (v2 is primary)", _jbody(dec_again)["usedPrimary"] is True)
+
+    setprim2 = gkms.dispatch(st, "POST", f"{KEY}:updateCryptoKeyPrimaryVersion", {},
+                             {"content-type": "application/json"}, json.dumps({"cryptoKeyVersionId": "1"}).encode())
+    _check("primary switched to v1", _jbody(setprim2)["primary"]["name"].endswith("/cryptoKeyVersions/1"))
+    dec_nonprimary = gkms.dispatch(st, "POST", f"{KEY}:decrypt", {}, {"content-type": "application/json"},
+                                   json.dumps({"ciphertext": _jbody(again)["ciphertext"]}).encode())
+    _check("decrypt still works for a non-primary but enabled version", dec_nonprimary.status == 200)
+    _check("usedPrimary now False (v2 is enabled but no longer primary)", _jbody(dec_nonprimary)["usedPrimary"] is False)
+
+    dis2 = gkms.dispatch(st, "PATCH", f"{KEY}/cryptoKeyVersions/2", {}, {"content-type": "application/json"},
+                        json.dumps({"state": "DISABLED"}).encode())
+    _check("disable v2 (no longer primary) 200", dis2.status == 200)
+    blocked_dec = gkms.dispatch(st, "POST", f"{KEY}:decrypt", {}, {"content-type": "application/json"},
+                                json.dumps({"ciphertext": _jbody(again)["ciphertext"]}).encode())
+    _check("decrypt refuses a ciphertext whose originating version is disabled -> 400 FAILED_PRECONDITION",
+           blocked_dec.status == 400 and _jbody(blocked_dec)["error"]["status"] == "FAILED_PRECONDITION")
+
+    en2 = gkms.dispatch(st, "PATCH", f"{KEY}/cryptoKeyVersions/2", {}, {"content-type": "application/json"},
+                       json.dumps({"state": "ENABLED"}).encode())
+    _check("re-enable v2 200", en2.status == 200)
+    setprim3 = gkms.dispatch(st, "POST", f"{KEY}:updateCryptoKeyPrimaryVersion", {},
+                             {"content-type": "application/json"}, json.dumps({"cryptoKeyVersionId": "2"}).encode())
+    _check("primary switched back to v2", _jbody(setprim3)["primary"]["name"].endswith("/cryptoKeyVersions/2"))
+
     destroy = gkms.dispatch(st, "POST", f"{KEY}/cryptoKeyVersions/1:destroy", {}, {}, b"{}")
     _check("destroy version 200", destroy.status == 200)
     dobj = _jbody(destroy)
@@ -168,6 +200,14 @@ def run() -> int:
     _check("restore version 200", restore.status == 200 and _jbody(restore)["state"] == "DISABLED")
     bad_restore = gkms.dispatch(st, "POST", f"{KEY}/cryptoKeyVersions/1:restore", {}, {}, b"{}")
     _check("restore a non-scheduled version → 400", bad_restore.status == 400)
+
+    # 8b. v1 is now DISABLED (destroyed + restored above). The ciphertext it minted way
+    #     back in step 5 (while ENABLED and primary) must now be refused — the CryptoKey
+    #     still exists, but Decrypt tracks the specific version, not just the key.
+    stale = gkms.dispatch(st, "POST", f"{KEY}:decrypt", {}, {"content-type": "application/json"},
+                          json.dumps({"ciphertext": eo["ciphertext"]}).encode())
+    _check("decrypt refuses a ciphertext whose version is now disabled -> 400 FAILED_PRECONDITION",
+          stale.status == 400 and _jbody(stale)["error"]["status"] == "FAILED_PRECONDITION")
 
     listv = gkms.dispatch(st, "GET", f"{KEY}/cryptoKeyVersions", {}, {}, b"")
     _check("list versions has both", len(_jbody(listv)["cryptoKeyVersions"]) == 2)

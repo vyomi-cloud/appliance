@@ -30,8 +30,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "The rotation period and next rotation time are stored and returned exactly as configured, but Vyomi has no background scheduler — it never rotates a key on its own.",
-   "\"Rotate key\" creates a new primary CryptoKeyVersion for real, but every version of a CryptoKey shares the same underlying key material in Vyomi (there is no per-version crypto); rotating is a bookkeeping change, not a new encryption key."
+   "The rotation period and next rotation time are stored and returned exactly as configured, but Vyomi has no background scheduler — it never rotates a key on its own; use \"Rotate key\" or wait for an external caller to do it."
   ],
   "tests": [
    "tests/conformance/test_gcp_kms_core.py"
@@ -40,12 +39,10 @@
  "gcp.kms.key.versions": {
   "title": "Key versions (create, make primary, enable, disable, destroy, restore)",
   "level": {
-   "nano": "limited",
-   "offline": "limited"
+   "nano": "full",
+   "offline": "full"
   },
-  "limitations": [
-   "Version state is enforced for Encrypt (it fails with FAILED_PRECONDITION unless the primary version is ENABLED), but Decrypt does not re-check the state of the version that originally produced a ciphertext — only the CryptoKey itself must still exist."
-  ],
+  "limitations": [],
   "tests": [
    "tests/conformance/test_gcp_kms_core.py"
   ]
