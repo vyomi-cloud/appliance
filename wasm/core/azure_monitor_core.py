@@ -526,6 +526,58 @@ _BUILDERS = {"actiongroups": lambda pr, old, nm: _action_group_props(pr, old),
              "privatelinkscopes": lambda pr, old, nm: _plscope_props(pr, old)}
 
 
+# ═══════════════════ private link scopes — scoped resources (child resource) ═════
+# Microsoft.Insights/privateLinkScopes/{name}/scopedResources/{name} 2021-07-01-preview: links a
+# Log Analytics workspace (or other Monitor resource) INTO the scope, the real "Azure Monitor
+# Resources" tab of the scope's blade. Modelled as a real sub-resource (linkedResourceId must
+# name a resource that actually exists in the shared ARM store) — unlike private endpoint
+# connections, which need an actual private-networking stack Vyomi does not have.
+_SCOPED_RESOURCE_TYPE = f"{NAMESPACE}/privateLinkScopes/scopedResources"
+
+
+def _scoped_resource_ops(state, rec, rest, method, payload):
+    base = f"{rec['id']}/scopedResources"
+    if not rest:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        scope_key = rec["id"].lower()
+        items = [r for r in state.values()
+                 if r.get("_type") == _SCOPED_RESOURCE_TYPE.lower() and r.get("_plscope") == scope_key]
+        items.sort(key=lambda r: r["name"].lower())
+        return _ok({"value": [_view(r) for r in items]})
+    if len(rest) > 1:
+        return _err(404, "ResourceTypeNotSupported",
+                    f"The resource type '{_SCOPED_RESOURCE_TYPE}/{'/'.join(rest[1:])}' is not supported.")
+    name = rest[0]
+    rid = f"{base}/{name}"
+    key = rid.lower()
+    if method == "GET":
+        r = state.get(key)
+        if r is None:
+            raise _E(404, "NotFound", f"The scoped resource '{name}' was not found.")
+        return _ok(_view(r))
+    if method in ("PUT", "PATCH"):
+        prob = _name_problem(name)
+        if prob:
+            raise _bad(prob)
+        props = (payload or {}).get("properties")
+        linked = str((props or {}).get("linkedResourceId") or "").strip()
+        if not linked:
+            raise _bad("The property 'properties.linkedResourceId' is required.")
+        if linked.lower() not in state:
+            raise _E(400, "ResourceNotFound", f"The linked resource '{linked}' was not found.")
+        existed = key in state
+        r = {"id": rid, "name": name, "type": _SCOPED_RESOURCE_TYPE,
+             "properties": {"linkedResourceId": linked, "provisioningState": "Succeeded"},
+             "_type": _SCOPED_RESOURCE_TYPE.lower(), "_plscope": rec["id"].lower()}
+        state[key] = r
+        return _ok(_view(r), 201 if not existed else 200, rid=rid, verb="put")
+    if method == "DELETE":
+        r = state.pop(key, None)
+        return _ok(None, 200 if r is not None else 204)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
 # ═══════════════════════════ diagnostic settings (ARM extension resource) ════════
 # Microsoft.Insights/diagnosticSettings is scoped to ANY other resource's own id (the chain
 # re-enters "providers"), the same shape azure_locks_core.find_marker handles for
@@ -797,6 +849,8 @@ def _dispatch(state, method, sub, rg, chain, payload, query, base=""):
             return _action_group_ops(state, rec, rest, method, payload, base)
         if low == "metricalerts" and rest[0].lower() == "status" and method == "GET":
             return _ok({"value": []})
+        if low == "privatelinkscopes" and rest[0].lower() == "scopedresources":
+            return _scoped_resource_ops(state, rec, rest[1:], method, payload)
         return _err(404, "ResourceTypeNotSupported", f"The resource type '{NAMESPACE}/{low}/{'/'.join(rest)}' is not supported.")
     if method == "GET":
         if rec is None:
@@ -810,6 +864,10 @@ def _dispatch(state, method, sub, rg, chain, payload, query, base=""):
         if rec is None:
             return _ok(None, 204)
         state.pop(rid.lower(), None)
+        if low == "privatelinkscopes":
+            scope_key = rid.lower()
+            for k in [k for k, v in state.items() if v.get("_plscope") == scope_key]:
+                state.pop(k, None)
         return _ok(None, 200, rid=rid, verb="delete")
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 

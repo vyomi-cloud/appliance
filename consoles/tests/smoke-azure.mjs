@@ -1216,6 +1216,21 @@ try {
   const plsGet = await armMonitor("GET", `/resourceGroups/${MON_RG}/providers/Microsoft.Insights/privateLinkScopes/${PLS}`);
   check("UI create private link scope → visible over native ARM", plsGet.status === 200, `HTTP ${plsGet.status}`);
 
+  // ── Monitor depth: the scope's "Azure Monitor Resources" tab — a Log Analytics workspace
+  // linked INTO the scope through the UI → visible as a real scopedResources extension
+  // resource over native ARM (azure.monitor.private_link_scopes) ─────────────────────────
+  const PLSWS = `vysmokeplsws${n}`;
+  const plsWsPut = await wire(`/subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.OperationalInsights/workspaces/${PLSWS}?api-version=2022-10-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ location: "eastus", properties: {} }) });
+  check("ARM PUT Log Analytics workspace for Private Link Scope resources over wire", plsWsPut.status === 200 || plsWsPut.status === 201, `HTTP ${plsWsPut.status}`);
+  await page.goto(UI + `#/monitor/privatelinkscoperesources?rg=${MON_RG}&name=${PLS}`);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByLabel("Log Analytics workspace", { exact: true }).selectOption({ label: PLSWS });
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByText(PLSWS, { exact: true }).first().waitFor({ timeout: 10000 });
+  const plsResGet = await armMonitor("GET", `/resourceGroups/${MON_RG}/providers/Microsoft.Insights/privateLinkScopes/${PLS}/scopedResources/${PLSWS}`);
+  check("UI link workspace into Private Link Scope → visible over native ARM", plsResGet.status === 200, `HTTP ${plsResGet.status}`);
+
   // ── Monitor depth: diagnostic setting added through the UI (resource-scoped extension
   // resource, Microsoft.Insights/diagnosticSettings) → visible over native ARM, and the
   // reverse (wire-created resource's diagnostics status shown in the picker grid) ─────────

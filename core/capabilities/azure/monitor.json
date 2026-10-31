@@ -216,12 +216,13 @@
     "limitations": ["Azure Monitor pipelines (on-premises collector fleet management) are out of scope for a simulator."]
   },
   "azure.monitor.private_link_scopes": {
-    "title": "Azure Monitor Private Link Scopes (create, list, delete, access mode settings)",
+    "title": "Azure Monitor Private Link Scopes (create, list, delete, access mode settings, Azure Monitor Resources)",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "The scope resource and its query/ingestion access-mode settings are real and round-trip exactly as configured; private endpoint connections and scoped-resource associations (linking workspaces/App Insights components into the scope) are not modelled — Vyomi has no private networking stack."
+      "The scope resource, its query/ingestion access-mode settings and its scoped resources (the \"Azure Monitor Resources\" tab — linking a Log Analytics workspace into the scope) are real and validated against the shared inventory; private endpoint connections are not modelled — Vyomi has no private networking stack."
     ],
-    "api": ["PrivateLinkScopes.CreateOrUpdate", "PrivateLinkScopes.List", "PrivateLinkScopes.Delete"],
+    "api": ["PrivateLinkScopes.CreateOrUpdate", "PrivateLinkScopes.List", "PrivateLinkScopes.Delete",
+            "PrivateLinkScopes.ScopedResources.CreateOrUpdate", "PrivateLinkScopes.ScopedResources.List", "PrivateLinkScopes.ScopedResources.Delete"],
     "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
   "azure.monitor.new_support_request": {

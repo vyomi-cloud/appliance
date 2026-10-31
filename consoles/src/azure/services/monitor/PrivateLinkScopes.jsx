@@ -14,7 +14,9 @@ export default function PrivateLinkScopes() {
   useEffect(load, []);
 
   const columns = [
-    { key: "name", label: "Name" },
+    { key: "name", label: "Name", render: (r) => (
+      <a href={`#/monitor/privatelinkscoperesources?rg=${encodeURIComponent(r.resourceGroup)}&name=${encodeURIComponent(r.name)}`}>{r.name}</a>
+    ) },
     { key: "rg", label: "Resource group", value: (r) => r.resourceGroup },
     { key: "query", label: "Query access mode", value: (r) => r.properties.accessModeSettings?.queryAccessMode },
     { key: "ingest", label: "Ingestion access mode", value: (r) => r.properties.accessModeSettings?.ingestionAccessMode },

@@ -108,6 +108,18 @@ export const listPrivateLinkScopes = async () => (await PRIVATE_LINK_SCOPES.list
 export const putPrivateLinkScope = (rg, name, body) => PRIVATE_LINK_SCOPES.put(rg, name, body);
 export const deletePrivateLinkScope = (rg, name) => PRIVATE_LINK_SCOPES.remove(rg, name);
 
+// ── private link scope "Azure Monitor Resources" tab (Microsoft.Insights/privateLinkScopes/
+// {name}/scopedResources) — links a Log Analytics workspace INTO the scope; a real sub-resource
+// (validated against the resource it names), not a stored-but-inert setting.
+export const listScopedResources = async (rg, scopeName) =>
+  (await restJson("GET", `${PRIVATE_LINK_SCOPES.path(rg, scopeName)}/scopedResources`, { query: { "api-version": PRIVATE_LINK_SCOPES.apiVersion } })).value || [];
+export const putScopedResource = (rg, scopeName, name, linkedResourceId) =>
+  restJson("PUT", `${PRIVATE_LINK_SCOPES.path(rg, scopeName)}/scopedResources/${encodeURIComponent(name)}`,
+    { query: { "api-version": PRIVATE_LINK_SCOPES.apiVersion }, body: { properties: { linkedResourceId } } });
+export const deleteScopedResource = (rg, scopeName, name) =>
+  restJson("DELETE", `${PRIVATE_LINK_SCOPES.path(rg, scopeName)}/scopedResources/${encodeURIComponent(name)}`,
+    { query: { "api-version": PRIVATE_LINK_SCOPES.apiVersion } });
+
 // ── diagnostic settings (Microsoft.Insights/diagnosticSettings) — a real ARM extension
 // resource scoped to ANY other resource's own id (the path re-enters "providers", the same
 // shape Microsoft.Authorization/locks uses), so it's a plain restJson call keyed off the
