@@ -141,9 +141,9 @@
       cell.style.cssText = 'margin-left:auto; display:inline-flex; align-items:center; gap:6px; flex:none;';
       cell.title = 'live ' + (_metric === 'mem' ? 'memory' : 'CPU');
       cell.innerHTML =
-        '<span style="width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,0.10);overflow:hidden;display:inline-block;">' +
+        '<span style="width:44px;height:5px;border-radius:3px;background:#e4e7ec;overflow:hidden;display:inline-block;">' +
         '<span style="display:block;height:100%;width:' + w + '%;background:' + col + ';"></span></span>' +
-        '<span style="font-variant-numeric:tabular-nums;color:#a1a1aa;min-width:40px;text-align:right;font-size:11px;">' + txt + '</span>';
+        '<span style="font-variant-numeric:tabular-nums;color:#667085;min-width:40px;text-align:right;font-size:11px;">' + txt + '</span>';
       return cell;
     }
 
@@ -194,7 +194,7 @@
       } else {
         var g = document.createElement('span');
         g.className = 'material-icons'; g.setAttribute('aria-hidden', 'true');
-        g.style.cssText = 'font-size:17px; color:' + (m[0] === 'gcp' ? '#4285f4' : '#a1a1aa') + ';';
+        g.style.cssText = 'font-size:17px; color:' + (m[0] === 'gcp' ? '#4285f4' : '#667085') + ';';
         g.textContent = m[1] || (m[0] === 'core' ? 'dns' : 'cloud');
         box.appendChild(g);
       }
@@ -216,7 +216,7 @@
         svg.style.cssText = 'height:' + (cat === 'aws' ? 13 : 15) + 'px; width:' + (cat === 'aws' ? 22 : 15) + 'px; display:block;';
       } else {
         var g = document.createElement('span');
-        g.className = 'material-icons'; g.style.cssText = 'font-size:16px; color:#a1a1aa;';
+        g.className = 'material-icons'; g.style.cssText = 'font-size:16px; color:#667085;';
         g.textContent = cat === 'core' ? 'dns' : 'cloud';
         box.appendChild(g);
       }
@@ -237,7 +237,7 @@
       }
       var name = document.createElement('span');
       name.style.cssText = 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;' +
-        (onDark ? '' : ' color:#c7cbe0;');
+        (onDark ? '' : ' color:#344054;');
       name.textContent = s.label || s.name || '';
       row.appendChild(name);
       if (!onDark) row.appendChild(metricCell(s));    // live CPU/Mem bar (body card)
@@ -273,13 +273,13 @@
       var rowEl = document.createElement('div');
       rowEl.style.cssText = 'display:flex; justify-content:flex-end; margin-bottom:14px;';
       var wrap = document.createElement('div');
-      wrap.style.cssText = 'display:inline-flex; border:1px solid rgba(255,255,255,0.14); border-radius:999px; overflow:hidden;';
+      wrap.style.cssText = 'display:inline-flex; border:1px solid #d0d5dd; border-radius:999px; overflow:hidden;';
       ['cpu', 'mem'].forEach(function (mk) {
         var on = (_metric === mk);
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.style.cssText = 'border:0; padding:4px 14px; font:inherit; font-size:11px; font-weight:600; cursor:pointer; background:' +
-          (on ? 'rgba(255,255,255,0.14)' : 'transparent') + '; color:' + (on ? '#fff' : '#a1a1aa') + ';';
+          (on ? '#eef4ff' : 'transparent') + '; color:' + (on ? '#1d4ed8' : '#667085') + ';';
         btn.textContent = (mk === 'cpu') ? 'CPU' : 'Mem';
         btn.addEventListener('click', function () {
           if (_metric !== mk) { _metric = mk; if (_lastJ) render(_lastJ); }
@@ -325,18 +325,18 @@
         var rc = (byc.ready != null) ? byc.ready : svcs.filter(function (x) { return x.status === 'ready'; }).length;
         var tc = (byc.total != null) ? byc.total : svcs.length;
         var tile = document.createElement('div');    // each tile IS the card now
-        tile.style.cssText = 'background:linear-gradient(180deg,#14172e 0%,#0d1228 100%); border:1px solid rgba(255,255,255,0.10); ' +
+        tile.style.cssText = 'background:#f8fafc; border:1px solid #eef0f3; ' +
           'border-radius:14px; padding:16px 18px;';
         var head = document.createElement('div');
         head.style.cssText = 'display:flex; align-items:center; justify-content:space-between; ' +
-          'padding-bottom:9px; margin-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.12);';  // tab-style title + rule
+          'padding-bottom:9px; margin-bottom:12px; border-bottom:1px solid #e4e7ec;';  // tab-style title + rule
         var htitle = document.createElement('span');
-        htitle.style.cssText = 'font-weight:600; color:#e4e4e7; font-size:13.5px; display:inline-flex; align-items:center; gap:6px;';
+        htitle.style.cssText = 'font-weight:600; color:#101828; font-size:13.5px; display:inline-flex; align-items:center; gap:6px;';
         htitle.appendChild(cloudMark(cat));
         htitle.appendChild(document.createTextNode(CAT_LABELS[cat] || cat));
         var hcount = document.createElement('span');
         var allUp = rc === tc;
-        hcount.style.cssText = 'font-size:12px; font-weight:600; color:' + (allUp ? '#16a34a' : '#a1a1aa') + ';';
+        hcount.style.cssText = 'font-size:12px; font-weight:600; color:' + (allUp ? '#16a34a' : '#667085') + ';';
         hcount.textContent = rc + '/' + tc + ' running';
         head.appendChild(htitle); head.appendChild(hcount);
         tile.appendChild(head);

@@ -1262,6 +1262,148 @@
     /* Modals → dark surface (readable on the dark backdrop). */
     .modal, #modal-body, .cl-box { background: #0d1228 !important; color: #e4e4e7 !important; border: 1px solid rgba(255,255,255,0.10) !important; }
 </style>
+  <style id="vy-light-theme">
+    /* ═══════════ Light theme — the whole console page (Spaces, Health, Knowledge Center,
+       SDK & CLI usage, API). Last in <head>, so it overrides the dark layers above.
+       Tokens: page #f4f5f7 · surface #fff · tile #f8fafc · border #e4e7ec ·
+       text #101828 / #475467 / #667085 · accent #2563eb. ═══════════ */
+    html, body { background: #f4f5f7 !important; color: #101828 !important; }
+    #app-body, #app-main { background: transparent !important; }
+
+    /* top bar + logo */
+    #app-topbar, #app-topbar .top-bar { background: #fff !important; border-bottom: 1px solid #e4e7ec !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+
+    /* side menu */
+    #app-sidebar { background: #fff !important; border-right: 1px solid #e4e7ec !important; color: #344054 !important; }
+    #app-sidebar .side-item { color: #475467 !important; }
+    #app-sidebar .side-item:hover { background: #f2f4f7 !important; color: #101828 !important; }
+    #app-sidebar .side-item.active { background: #eef4ff !important; color: #1d4ed8 !important; }
+    #app-sidebar .side-item .side-ic, #app-sidebar .side-item .material-icons { color: #667085 !important; }
+    #app-sidebar .side-item.active .side-ic, #app-sidebar .side-item.active .material-icons { color: #2563eb !important; }
+    #app-sidebar .side-foot { border-top-color: #e4e7ec !important; }
+    .side-collapse { background: #fff !important; border-color: #d0d5dd !important; color: #475467 !important; box-shadow: 0 1px 3px rgba(16,24,40,.12) !important; }
+    .side-collapse:hover { color: #101828 !important; border-color: #2563eb !important; }
+    .side-user { background: #f9fafb !important; border-color: #e4e7ec !important; }
+    .side-user .who b { color: #101828 !important; } .side-user .who span, .side-user .chev { color: #667085 !important; }
+    .side-user .av { background: #eef4ff !important; color: #1d4ed8 !important; }
+    .side-user-dd { background: #fff !important; border-color: #e4e7ec !important; box-shadow: 0 12px 32px -8px rgba(16,24,40,.25) !important; }
+    .side-user-dd a, .side-user-dd button { color: #344054 !important; }
+    .side-user-dd a:hover, .side-user-dd button:hover { background: #f2f4f7 !important; color: #101828 !important; }
+    .side-user-dd .signout { color: #d92d20 !important; }
+    #side-burger { background: #fff !important; border-color: #d0d5dd !important; color: #344054 !important; }
+    body.side-open #side-scrim { background: rgba(16,24,40,.30) !important; }
+
+    /* text */
+    h1, h2, h3, h4, h5, h6, .sc-title h2, .kct h3, header.hero h1,
+    .stat-value, .pc-val, .modal h3 { color: #101828 !important; }
+    p, .sc-desc, header.hero p, .stat-sub, .pc-sub, .kct p, .kct-sub, .stat-label,
+    .pie-label, .kc-sec-label, .empty-spaces, .filter-empty, .modal .modal-sub { color: #475467 !important; }
+    .hero-eyebrow { color: #475467 !important; border-color: #d0d5dd !important; background: #fff !important; }
+    .kc-open { color: #2563eb !important; border-color: #2563eb !important; background: #fff !important; }
+
+    /* panels (Active spaces, Health sections, Knowledge Center groups, SDK & CLI usage) */
+    #spaces-card, #stats-card, #host-util-card, #svc-status-card, #view-kc .kc-panel, #view-usage .u-panel {
+      background: #fff !important; border: 1px solid #e4e7ec !important;
+      box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 6px 16px rgba(16,24,40,.06) !important;
+    }
+    #spaces-card > .sc-head, #stats-card > .sc-head, #host-util-card > .sc-head, #svc-status-card > .sc-head,
+    #view-kc .kc-panel > .sc-head, #view-usage .u-panel > .sc-head { border-bottom-color: #e4e7ec !important; }
+
+    /* tiles inside panels */
+    #stats-card .pie-card, #host-util-card .stat-card, #vyomi-services-mount > div:last-child > div,
+    #view-kc .kct, #view-kc .kct.kct-pack, #view-usage .u-card { background: #f8fafc !important; border: 1px solid #eef0f3 !important; }
+    #view-kc .kct:hover { background: #f2f4f7 !important; }
+    #stats-card .pie-card .pie-label, #host-util-card .stat-card .stat-label { color: #667085 !important; }
+    .pie-card .pie-center .pc-sub, .pie-legend-item .lv, .pie-legend-item .ll { color: #475467 !important; }
+    .pie-card .pie-legend-item .swatch { outline-color: rgba(16,24,40,.12) !important; }
+    .stat-graph .sg-track { stroke: #e4e7ec !important; }
+    #host-util-card .stat-actions button { background: #fff !important; border: 1px solid #d0d5dd !important; color: #344054 !important; }
+    #host-util-card .stat-actions button:hover { background: #f9fafb !important; }
+
+    /* Spaces header controls */
+    #spaces-card .btn-create-space { background: #2563eb !important; color: #fff !important; border-color: #2563eb !important; }
+    #spaces-card .btn-create-space:hover { background: #1d4ed8 !important; }
+    #spaces-card .prov-select-wrap select, #spaces-card #prov-select { background: #fff !important; color: #344054 !important; border: 1px solid #d0d5dd !important; }
+
+    /* SDK & CLI usage */
+    #view-usage .u-cloud-tab { color: #667085 !important; }
+    #view-usage .u-cloud-tab:hover, #view-usage .u-cloud-tab.on { color: #101828 !important; }
+    #view-usage .u-card .u-head h3 { color: #101828 !important; }
+    #view-usage .u-strip { border-bottom-color: #e4e7ec !important; }
+    #view-usage .u-tab { color: #667085 !important; }
+    #view-usage .u-tab:hover { color: #101828 !important; }
+    #view-usage .u-tab[aria-selected="true"] { color: #2563eb !important; box-shadow: inset 0 -3px 0 #2563eb !important; }
+    #view-usage .u-cp, #view-usage .u-expand, #view-usage .u-ibtn { color: #667085 !important; background: #fff !important; border-color: #d0d5dd !important; }
+    #view-usage .u-cp:hover, #view-usage .u-expand:hover, #view-usage .u-ibtn:hover { color: #101828 !important; }
+    #view-usage pre.u-code, #usage-modal pre.u-code { background: #fff !important; border: 1px solid #e4e7ec !important; }
+    #view-usage pre.u-code code, #usage-modal pre.u-code code { color: #101828 !important; }
+    #view-usage .u-note { color: #667085 !important; }
+
+    /* dialogs */
+    .modal, #modal-body, .cl-box, #usage-modal .u-modal { background: #fff !important; color: #101828 !important; border: 1px solid #e4e7ec !important; }
+
+    /* update banner, hero buttons */
+    #update-banner { background: #eef4ff !important; color: #1e3a8a !important; border-bottom: 1px solid #d1e0ff !important; }
+    #update-banner a { color: #2563eb !important; }
+    #update-banner button { color: #475467 !important; }
+    #update-banner a[onclick] { background: #fff !important; color: #344054 !important; border: 1px solid #d0d5dd !important; text-decoration: none !important; }
+    #update-banner button[onclick*="update"], #update-banner #update-banner-howto { background: #fff !important; border: 1px solid #d0d5dd !important; color: #344054 !important; }
+    .hero-btn.hero-btn-activate { background: #2563eb !important; color: #fff !important; border-color: #2563eb !important; }
+    .hero-btn.hero-btn-activate:hover { background: #1d4ed8 !important; }
+
+    /* usage code blocks (beat the card's own rule) */
+    #view-usage .u-card pre.u-code { background: #fff !important; border: 1px solid #e4e7ec !important; }
+
+    /* API (Swagger) view */
+    #view-api .api-search { background: #fff !important; border-color: #d0d5dd !important; color: #101828 !important; }
+    #view-api .api-search::placeholder { color: #98a2b3 !important; }
+    #view-api .api-tag-head { color: #101828 !important; border-bottom-color: #e4e7ec !important; }
+    #view-api .api-tag-head .material-icons { color: #2563eb !important; }
+    #view-api .api-tag-head .cnt, #view-api .api-op .s, #view-api .api-caret, #view-api .api-empty { color: #667085 !important; }
+    #view-api .api-op { background: #fff !important; border: 1px solid #e4e7ec !important; }
+    #view-api .api-op:hover, #view-api .api-op-wrap.open .api-op { border-color: #84adff !important; }
+    #view-api .api-op .p { color: #101828 !important; }
+    #view-api .api-op-wrap.open .api-caret { color: #344054 !important; }
+    #view-api .api-detail { background: #f8fafc !important; border-color: #84adff !important; }
+    #view-api .api-detail .am-sec-h, #view-api .api-detail table.am-t th, #view-api .api-detail .am-none, #view-api .api-detail .api-rdesc { color: #667085 !important; }
+    #view-api .api-detail table.am-t td { color: #344054 !important; border-bottom-color: #eef0f3 !important; }
+    #view-api .api-detail table.am-t th { border-bottom-color: #eef0f3 !important; }
+    #view-api .api-detail code.am-inline { background: #f2f4f7 !important; color: #344054 !important; }
+    #view-api .api-detail .am-schema { color: #2563eb !important; }
+    #view-api .api-detail pre.api-pre { background: #fff !important; border-color: #e4e7ec !important; }
+    #view-api .api-detail pre.api-pre code { color: #101828 !important; }
+    #view-api .api-detail .api-code.ok { background: #ecfdf3 !important; color: #067647 !important; }
+    #view-api .api-detail .api-code.err { background: #fef3f2 !important; color: #b42318 !important; }
+    .api-m.get { background: #eff8ff !important; color: #175cd3 !important; }
+    .api-m.post { background: #ecfdf3 !important; color: #067647 !important; }
+    .api-m.put { background: #fffaeb !important; color: #b54708 !important; }
+    .api-m.delete { background: #fef3f2 !important; color: #b42318 !important; }
+    .api-m.patch { background: #f4f3ff !important; color: #5925dc !important; }
+    #view-api .usage-tabs, #view-usage .usage-tabs { border-color: #d0d5dd !important; background: #fff !important; }
+    #view-api .usage-tab:not(.active) { color: #475467 !important; }
+
+    /* Nano: relay tunnel bar + its menu (the Logs pane stays a dark terminal) */
+    #nano-foot { background: #fff !important; border-top: 1px solid #e4e7ec !important; color: #344054 !important; box-shadow: 0 -2px 10px rgba(16,24,40,.06) !important; }
+    #nano-foot button { background: #fff !important; color: #2563eb !important; border: 1px solid #d0d5dd !important; }
+    #nano-foot button:hover { background: #eef4ff !important; color: #1d4ed8 !important; }
+    #nano-foot .ep { color: #667085 !important; }
+    #nano-foot-menu { background: #fff !important; border-color: #e4e7ec !important; box-shadow: 0 12px 32px rgba(16,24,40,.18) !important; }
+    #nano-foot-menu button { color: #344054 !important; }
+    #nano-foot-menu button:hover { background: #f2f4f7 !important; color: #101828 !important; }
+
+    /* donut track + the AWS wordmark (its letters are white in the logo) on light surfaces */
+    .pie-card .pie-svg-wrap svg circle.seg, .pie-card.empty .pie-svg-wrap svg circle.seg { stroke: #e4e7ec !important; }
+    svg[aria-label="AWS"] path[fill="#fff"] { fill: #232f3e !important; }
+
+    /* API view: the AWS / Google Cloud / Azure switch as a segmented pill */
+    #view-api .tabs-wrap { text-align: center; margin-bottom: 18px; }
+    #view-api .usage-tabs { display: inline-flex; gap: 4px; border: 1px solid #d0d5dd !important; border-radius: 999px; padding: 4px; background: #fff !important; }
+    #view-api .usage-tab { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 0; padding: 7px 15px;
+      border-radius: 999px; font: inherit; font-size: 13px; font-weight: 600; color: #475467; cursor: pointer; }
+    #view-api .usage-tab:hover { background: #f2f4f7; }
+    #view-api .usage-tab .material-icons { font-size: 17px; }
+    #view-api .usage-tab.active { background: #2563eb !important; color: #fff !important; }
+  </style>
 </head>
 <body class="side-collapsed">
   <div id="app-topbar">
@@ -1284,7 +1426,7 @@
   </div>
   <nav class="top-bar">
     <button id="side-burger" type="button" onclick="toggleSidebar()" aria-label="Open menu" aria-controls="app-sidebar" aria-expanded="false"><span class="material-icons">menu</span></button>
-    <a class="tb-brand" href="/clouds" onclick="showAppView('spaces');return false;" aria-label="vyomi"><img src="/assets/brand/vyomi-wordmark.png" alt="vyomi"></a>
+    <a class="tb-brand" href="/clouds" onclick="showAppView('spaces');return false;" aria-label="vyomi"><img src="/assets/brand/vyomi-wordmark-light.png" alt="vyomi"></a>
     <div class="tb-actions"></div>
   </nav>
   </div><!-- /app-topbar -->
@@ -1833,7 +1975,7 @@
     <header class="hero">
       <div class="hero-eyebrow">API reference</div>
       <h1>REST API — Swagger.</h1>
-      <p>Explore and try every REST endpoint the simulator serves — interactive Swagger UI, in the app's dark theme.</p>
+      <p>Explore and try every REST endpoint the simulator serves — interactive Swagger UI.</p>
     </header>
     <div class="tabs-wrap">
       <div class="usage-tabs" id="api-cloud-tabs" role="tablist">
