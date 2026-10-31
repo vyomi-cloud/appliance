@@ -1,5 +1,5 @@
 {
-  "_doc": "ui-spec page id \u2192 v4 route (same contract as consoles/src/aws/services/*/spec-map.json). Fixtures/live hooks are consoles/src/azure/services/storage/fixtures.mjs. honest_page is reserved for the base-branch allowlist (consoles/honest-allowlist.json) \u2014 azure/storage has no entries there yet, so gaps here are declared per-section inside the page via NotSimulatedContainer instead.",
+  "_doc": "ui-spec page id \u2192 v4 route (same contract as consoles/src/aws/services/*/spec-map.json). Fixtures/live hooks are consoles/src/azure/services/storage/fixtures.mjs. honest_page is reserved for the base-branch allowlist (consoles/honest-allowlist.json) \u2014 azure/storage's only entry there is storage-account-file-shares (Azure Files has no core in this repo); every other gap is declared per-section inside its page via NotSimulatedContainer instead.",
   "storage-accounts": {
     "route": "#/storage",
     "fixtures": [
@@ -104,7 +104,8 @@
     ],
     "vars": {
       "resource-name": "uicstorage"
-    }
+    },
+    "honest_page": true
   },
   "storage-account-queues": {
     "route": "#/storage/uic-rg/{live}/queues",
