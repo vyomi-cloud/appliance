@@ -58,6 +58,22 @@ def run(store=None):
                          "denyActions": ["Microsoft.Storage/blob/write"], "scope": "/subscriptions/S1"}})
     _check("explicit deny wins", check("carol", "Microsoft.Storage/blob/write", "/subscriptions/S1") == "NotAllowed")
 
+    # Entra ID | Properties' "Access management for Azure resources" toggle
+    # (azure.entra.security_defaults): Yes really grants "User Access Administrator" at
+    # the tenant root ("/"), which checkAccess then honours at ANY subscription scope —
+    # the same elevateAccess semantics the real console's radio button triggers.
+    _check("dave has no Azure-management access before elevation",
+           check("dave", "Microsoft.Authorization/roleAssignments/write", "/subscriptions/S2") == "NotAllowed")
+    call("PUT", f"{AUTH}/roleAssignments/elevate-dave",
+         {"properties": {"principalId": "dave", "roleName": "User Access Administrator", "scope": "/"}})
+    _check("User Access Administrator at '/' grants role-assignment write on any subscription",
+           check("dave", "Microsoft.Authorization/roleAssignments/write", "/subscriptions/S2") == "Allowed")
+    _check("elevation also covers a resource group under that subscription",
+           check("dave", "Microsoft.Authorization/roleAssignments/write", "/subscriptions/S2/resourceGroups/RG9") == "Allowed")
+    call("DELETE", f"{AUTH}/roleAssignments/elevate-dave")
+    _check("turning the toggle back off revokes the access",
+           check("dave", "Microsoft.Authorization/roleAssignments/write", "/subscriptions/S2") == "NotAllowed")
+
     # Roles and administrators (Entra ID "Roles and administrators" blade): list built-in +
     # custom role definitions with assignment counts, and custom-role create/delete.
     defs = json.loads(call("GET", f"{AUTH}/roleDefinitions").body)["value"]

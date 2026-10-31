@@ -32,6 +32,12 @@ _BUILTIN_ROLES = {
                                    "Microsoft.Authorization/elevateAccess/Action"],
                     "privileged": False},
     "Reader": {"actions": ["*/read"], "notActions": [], "privileged": False},
+    # Granted at scope "/" by Entra ID | Properties' "Access management for Azure
+    # resources" toggle (azure.entra.security_defaults) — the real console's
+    # elevateAccess action, modelled here as a real role assignment at the tenant root.
+    "User Access Administrator": {"actions": ["*/read", "Microsoft.Authorization/*"], "notActions": [],
+                                  "privileged": True,
+                                  "description": "Lets you manage user access to Azure resources."},
     # Entra ID directory roles (Microsoft Graph roleManagement/directory catalog, modelled
     # on this same assignment store — scope "/" is the tenant root).
     "Global Administrator": {"actions": ["*"], "notActions": [], "privileged": True, "directory": True,

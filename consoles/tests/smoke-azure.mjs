@@ -1935,6 +1935,36 @@ try {
   check("setting back to Yes allows the same group creation over native Microsoft Graph wire", allowedCreated);
   await shot("25-entra-group-allowed");
 
+  // ── Entra ID | Properties: "Access management for Azure resources" = Yes really grants a
+  // tenant-root "User Access Administrator" role assignment over native Azure RBAC — the same
+  // checkAccess engine Subscription/vnet Access control (IAM) uses (azure.entra.security_defaults
+  // is now "limited", not just stored). "Manage security defaults" really stores the real
+  // Graph policy document ───────────────────────────────────────────────────────────────
+  await page.goto(UI + "#/entra/properties");
+  await page.getByRole("radiogroup", { name: "Access management for Azure resources" }).getByRole("radio", { name: "Yes" }).check();
+  await page.getByText("Access management for Azure resources set to Yes").first().waitFor({ timeout: 10000 });
+  const roleAssignmentsOn = await wire("/providers/Microsoft.Authorization/roleAssignments");
+  const elevated = (roleAssignmentsOn.status === 200 ? JSON.parse(roleAssignmentsOn.text).value : [])
+    .find((a) => a.properties.principalId === "global-admin" && a.properties.roleDefinitionId === "User Access Administrator" && a.properties.scope === "/");
+  check("UI 'Access management for Azure resources' = Yes grants a tenant-root User Access Administrator assignment over native Azure RBAC", !!elevated);
+  await shot("25a-entra-elevate-access");
+
+  await page.getByRole("radiogroup", { name: "Access management for Azure resources" }).getByRole("radio", { name: "No" }).check();
+  await page.getByText("Access management for Azure resources set to No").first().waitFor({ timeout: 10000 });
+  const roleAssignmentsOff = await wire("/providers/Microsoft.Authorization/roleAssignments");
+  const stillElevated = (roleAssignmentsOff.status === 200 ? JSON.parse(roleAssignmentsOff.text).value : [])
+    .some((a) => a.name === elevated?.name);
+  check("setting back to No revokes the tenant-root role assignment over native Azure RBAC", !stillElevated);
+
+  await page.getByRole("button", { name: "Manage security defaults" }).click();
+  await page.getByRole("dialog", { name: "Enable security defaults" }).getByRole("radiogroup", { name: "Enable security defaults" }).getByRole("radio", { name: "No" }).check();
+  await page.getByRole("dialog", { name: "Enable security defaults" }).getByRole("button", { name: "Save" }).click();
+  await page.getByText("Security defaults disabled").first().waitFor({ timeout: 10000 });
+  const secDefaultsGet = await graph("GET", "/policies/identitySecurityDefaultsEnforcementPolicy");
+  check("UI 'Manage security defaults' → Disabled stored over the native Graph policy endpoint",
+    secDefaultsGet.status === 200 && JSON.parse(secDefaultsGet.text).isEnabled === false);
+  await shot("25b-entra-security-defaults");
+
   // ── Cosmos DB: account created through the wizard → visible over native ARM ───────────
   const cosmosArm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-05-15`,
     { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
