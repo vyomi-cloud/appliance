@@ -19,11 +19,16 @@ definitions and Logs Insights queries (`fields`, `filter`, `sort`, `limit`,
 """
 from __future__ import annotations
 
+import base64
+import gzip
 import json
 import re
 import time
 import uuid
 from dataclasses import dataclass, field
+
+from core import kinesis_core as _kinesis_mod
+from core import lambda_core as _lam_mod
 
 DEFAULT_ACCOUNT_ID = "123456789012"
 REGION = "us-east-1"
@@ -60,6 +65,8 @@ class LogsStore:
         self.query_definitions: dict[str, dict] = {}
         self.queries: dict[str, dict] = {}
         self._clock: float | None = None
+        self.lam_store = None       # the shared Lambda function registry (set by the wire router) — real subscription-filter delivery
+        self.kinesis_store = None   # the shared Kinesis stream store (set by the wire router) — real subscription-filter delivery
 
     def now_ms(self) -> int:
         return int((self._clock if self._clock is not None else time.time()) * 1000)
@@ -121,6 +128,9 @@ def _group_view(store, g):
     if g.get("kmsKeyId"):
         out["kmsKeyId"] = g["kmsKeyId"]
     out["deletionProtectionEnabled"] = bool(g.get("deletionProtectionEnabled", False))
+    # Vyomi console convenience fields (ignored by real SDKs, which deserialize by shape).
+    out["dataProtectionMode"] = (g.get("dataProtectionPolicy") or {}).get("_mode")
+    out["dataProtectionFindings"] = g.get("dataProtectionFindings", 0)
     return out
 
 
@@ -225,6 +235,231 @@ def _associate_kms_key(store, body):
 def _disassociate_kms_key(store, body):
     g = _resolve_group(store, body)
     g.pop("kmsKeyId", None)
+    store.persist()
+    return LogsResponse(body={})
+
+
+# ── data protection (PII masking) ────────────────────────────────────────────
+# A subset of AWS's managed data identifiers — see aws.cloudwatch.logs.data-protection
+# for the ones Vyomi doesn't recognize (accepted and stored, but never matched).
+_DATA_IDENTIFIERS = {
+    "EmailAddress": re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"),
+    "CreditCardNumber": re.compile(r"\b(?:\d[ -]?){13,16}\b"),
+    "Ssn-US": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    "AwsSecretKey": re.compile(r"\b[A-Za-z0-9/+=]{40}\b"),
+}
+
+
+def _dp_identifiers(doc: dict) -> set:
+    ids = set()
+    for stmt in doc.get("Statement") or []:
+        for d in stmt.get("DataIdentifier") or []:
+            name = str(d).rsplit("/", 1)[-1]
+            if name in _DATA_IDENTIFIERS:
+                ids.add(name)
+    return ids
+
+
+def _dp_mode(doc: dict) -> str | None:
+    """'mask' if any Statement Deidentifies (masking wins when a policy mixes Audit
+    statements with Deidentify ones, matching how AWS applies the strictest operation)."""
+    saw_audit = False
+    for stmt in doc.get("Statement") or []:
+        op = stmt.get("Operation") or {}
+        if "Deidentify" in op:
+            return "mask"
+        if "Audit" in op:
+            saw_audit = True
+    return "audit" if saw_audit else None
+
+
+def _dp_parse(doc_str: str) -> dict:
+    try:
+        doc = json.loads(doc_str)
+    except Exception:
+        raise _E("InvalidParameterException", "The data protection policy is not valid JSON.")
+    if not isinstance(doc, dict) or not isinstance(doc.get("Statement"), list) or not doc["Statement"]:
+        raise _E("InvalidParameterException", "The data protection policy document must have a non-empty Statement list.")
+    return doc
+
+
+def _apply_data_protection(g: dict, message: str) -> str:
+    """Masks the managed data identifiers a Deidentify policy names; an Audit-only policy
+    just counts findings (dataProtectionFindings) without altering the stored message —
+    both only recognize the identifiers in _DATA_IDENTIFIERS."""
+    pol = g.get("dataProtectionPolicy")
+    if not pol or not pol["_identifiers"] or not pol["_mode"]:
+        return message
+    out, total = message, 0
+    for name in pol["_identifiers"]:
+        rx = _DATA_IDENTIFIERS[name]
+        total += len(rx.findall(out))
+        if pol["_mode"] == "mask":
+            out = rx.sub(lambda m: "*" * len(m.group(0)), out)
+    if total:
+        g["dataProtectionFindings"] = g.get("dataProtectionFindings", 0) + total
+    return out
+
+
+def _put_data_protection_policy(store, body):
+    g = _resolve_group(store, body)
+    doc_str = str(_req(body, "policyDocument"))
+    doc = _dp_parse(doc_str)
+    g["dataProtectionPolicy"] = {"policyDocument": doc_str, "lastUpdatedTime": store.now_ms(),
+                                 "_identifiers": _dp_identifiers(doc), "_mode": _dp_mode(doc)}
+    store.persist()
+    return LogsResponse(body={"logGroupIdentifier": body.get("logGroupIdentifier") or body.get("logGroupName"),
+                              "policyDocument": doc_str, "lastUpdatedTime": g["dataProtectionPolicy"]["lastUpdatedTime"]})
+
+
+def _get_data_protection_policy(store, body):
+    g = _resolve_group(store, body)
+    pol = g.get("dataProtectionPolicy")
+    if not pol:
+        raise _E("ResourceNotFoundException", "No data protection policy was found for this log group.")
+    return LogsResponse(body={"logGroupIdentifier": body.get("logGroupIdentifier") or body.get("logGroupName"),
+                              "policyDocument": pol["policyDocument"], "lastUpdatedTime": pol["lastUpdatedTime"]})
+
+
+def _delete_data_protection_policy(store, body):
+    g = _resolve_group(store, body)
+    g.pop("dataProtectionPolicy", None)
+    store.persist()
+    return LogsResponse(body={})
+
+
+# ── field indexes ─────────────────────────────────────────────────────────
+_FIELD_NAME_RE = re.compile(r"^[@A-Za-z][\w.\-]{0,127}$")
+
+
+def _index_policy_view(g: dict) -> dict:
+    p = g["fieldIndexPolicy"]
+    return {"logGroupIdentifier": g["arn"], "lastUpdateTime": p["lastUpdateTime"],
+            "policyDocument": p["policyDocument"], "source": "LOG_GROUP"}
+
+
+def _put_index_policy(store, body):
+    g = _resolve_group(store, body)
+    doc_str = str(_req(body, "policyDocument"))
+    try:
+        doc = json.loads(doc_str)
+    except Exception:
+        raise _E("InvalidParameterException", "The index policy document is not valid JSON.")
+    fields = doc.get("fields")
+    if not isinstance(fields, list) or not 1 <= len(fields) <= 20:
+        raise _E("InvalidParameterException", "fields must be a list of 1 to 20 field names.")
+    for f in fields:
+        if not isinstance(f, str) or not _FIELD_NAME_RE.match(f):
+            raise _E("InvalidParameterException", f"Invalid field name: {f!r}")
+    g["fieldIndexPolicy"] = {"policyDocument": doc_str, "lastUpdateTime": store.now_ms()}
+    store.persist()
+    return LogsResponse(body={"indexPolicyDocument": _index_policy_view(g)})
+
+
+def _get_index_policy(store, body):
+    g = _resolve_group(store, body)
+    if "fieldIndexPolicy" not in g:
+        raise _E("ResourceNotFoundException", "There is no index policy for this log group.")
+    return LogsResponse(body={"indexPolicyDocument": _index_policy_view(g)})
+
+
+def _delete_index_policy(store, body):
+    g = _resolve_group(store, body)
+    g.pop("fieldIndexPolicy", None)
+    store.persist()
+    return LogsResponse(body={})
+
+
+def _describe_index_policies(store, body):
+    out = []
+    for ident in body.get("logGroupIdentifiers") or []:
+        try:
+            g = _resolve_group(store, {"logGroupIdentifier": ident})
+        except _E:
+            continue
+        if "fieldIndexPolicy" in g:
+            out.append(_index_policy_view(g))
+    return LogsResponse(body={"indexPolicies": out})
+
+
+# ── transformer (ingestion-time processor pipeline) ────────────────────────
+# A subset of AWS's processors — see aws.cloudwatch.logs.transformer for the rest.
+_TRANSFORMER_PROCESSORS = {"parseJSON", "addKeys", "deleteKeys", "renameKeys"}
+
+
+def _validate_transformer_config(cfg):
+    if not isinstance(cfg, list) or not cfg:
+        raise _E("InvalidParameterException", "transformerConfig must be a non-empty list of processors.")
+    for proc in cfg:
+        if not isinstance(proc, dict) or len(proc) != 1 or next(iter(proc)) not in _TRANSFORMER_PROCESSORS:
+            raise _E("InvalidParameterException", f"Unsupported or malformed processor: {proc!r}")
+
+
+def _run_transformer(cfg: list, message: str) -> str:
+    """Runs the ingestion-time processor pipeline, returning the message that gets stored
+    (a JSON rendering of the working document if any processor touched it, else the raw
+    message unchanged)."""
+    doc: dict = {"@message": message}
+    changed = False
+    for proc in cfg:
+        kind, params = next(iter(proc.items()))
+        params = params or {}
+        if kind == "parseJSON":
+            try:
+                parsed = json.loads(doc.get(params.get("source", "@message"), ""))
+            except Exception:
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            dest = params.get("destination")
+            if dest:
+                doc[dest] = parsed
+            else:
+                doc.update(parsed)
+            changed = True
+        elif kind == "addKeys":
+            for e in params.get("entries") or []:
+                k = e.get("key")
+                if k and (e.get("overwriteIfExists") or k not in doc):
+                    doc[k] = e.get("value")
+                    changed = True
+        elif kind == "deleteKeys":
+            for k in params.get("withKeys") or []:
+                if doc.pop(k, None) is not None:
+                    changed = True
+        elif kind == "renameKeys":
+            for e in params.get("entries") or []:
+                k, new = e.get("key"), e.get("renameTo")
+                if new and k in doc:
+                    doc[new] = doc.pop(k)
+                    changed = True
+    if not changed:
+        return message
+    out = dict(doc)
+    out.pop("@message", None)
+    return json.dumps(out, separators=(",", ":"))
+
+
+def _put_transformer(store, body):
+    g = _resolve_group(store, body)
+    cfg = body.get("transformerConfig")
+    _validate_transformer_config(cfg)
+    g["transformerConfig"] = cfg
+    store.persist()
+    return LogsResponse(body={})
+
+
+def _get_transformer(store, body):
+    g = _resolve_group(store, body)
+    cfg = g.get("transformerConfig")
+    if cfg is None:
+        raise _E("ResourceNotFoundException", "There is no transformer for this log group.")
+    return LogsResponse(body={"logGroupIdentifier": body.get("logGroupIdentifier") or body.get("logGroupName"), "transformerConfig": cfg})
+
+
+def _delete_transformer(store, body):
+    g = _resolve_group(store, body)
+    g.pop("transformerConfig", None)
     store.persist()
     return LogsResponse(body={})
 
@@ -348,7 +583,11 @@ def _put_log_events(store, body):
         elif retention and ts < now - retention * day:
             expired += 1
         else:
-            ok.append({"timestamp": int(ts), "message": str(msg), "ingestionTime": now})
+            out_msg = str(msg)
+            if g.get("transformerConfig"):
+                out_msg = _run_transformer(g["transformerConfig"], out_msg)
+            out_msg = _apply_data_protection(g, out_msg)
+            ok.append({"timestamp": int(ts), "message": out_msg, "ingestionTime": now})
     ok.sort(key=lambda e: e["timestamp"])
     added = sum(len(e["message"].encode("utf-8")) + 26 for e in ok)
     s["events"].extend(ok)
@@ -375,12 +614,39 @@ def _put_log_events(store, body):
     return LogsResponse(body=out)
 
 
+def _subscription_envelope(store, g, s, events) -> bytes:
+    """The gzip-compressed JSON payload a real CloudWatch Logs subscription delivers
+    (CloudWatch Logs -> Lambda/Kinesis), matching the `awslogs`/`DATA_MESSAGE` shape."""
+    doc = {"messageType": "DATA_MESSAGE", "owner": store.account_id, "logGroup": g["name"], "logStream": s["name"],
+           "subscriptionFilters": [f["filterName"] for f in g["subscriptionFilters"].values()],
+           "logEvents": [{"id": uuid.uuid4().hex, "timestamp": e["timestamp"], "message": e["message"]} for e in events]}
+    return gzip.compress(json.dumps(doc).encode())
+
+
 def _deliver_subscriptions(store, g, s, events):
-    """Subscription filters with a Kinesis/Lambda/Firehose destination are recorded
-    on the group; delivery is kept as a counter (no cross-service fan-out here)."""
+    """Subscription filters really fan out: a Lambda destination is invoked (lambda_core.
+    invoke_by_arn) and a Kinesis destination really receives a PutRecord (kinesis_core.
+    put_record), both with the real gzip+base64 `awslogs` envelope. A Firehose destination
+    has no backing core and is kept as a delivery counter — see
+    aws.cloudwatch.logs.subscription-filters."""
     for f in g["subscriptionFilters"].values():
-        n = sum(1 for e in events if _filter_match(f.get("filterPattern", ""), e["message"]))
-        f["deliveredEvents"] = f.get("deliveredEvents", 0) + n
+        matched = [e for e in events if _filter_match(f.get("filterPattern", ""), e["message"])]
+        if not matched:
+            continue
+        f["deliveredEvents"] = f.get("deliveredEvents", 0) + len(matched)
+        arn = str(f.get("destinationArn", ""))
+        if ":lambda:" in arn and store.lam_store is not None:
+            payload = base64.b64encode(_subscription_envelope(store, g, s, matched)).decode()
+            try:
+                _lam_mod.invoke_by_arn(store.lam_store, arn, {"awslogs": {"data": payload}})
+            except Exception:
+                pass
+        elif ":kinesis:" in arn and store.kinesis_store is not None:
+            payload = base64.b64encode(_subscription_envelope(store, g, s, matched)).decode()
+            try:
+                _kinesis_mod.put_record(store.kinesis_store, {"StreamARN": arn, "Data": payload, "PartitionKey": s["name"]})
+            except Exception:
+                pass
 
 
 def _get_log_events(store, body):
@@ -663,6 +929,22 @@ def _start_query(store, body):
     return LogsResponse(body={"queryId": qid})
 
 
+_PATTERN_TOKEN_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|0x[0-9a-fA-F]+|\b[0-9a-fA-F]{12,}\b|\d+(?:\.\d+)?")
+
+
+def _mine_pattern(msg: str) -> str:
+    """The template a log line reduces to once its variable parts (numbers, hex blobs,
+    UUIDs) are masked — the same tokenization Logs Insights' `pattern` command and the
+    console's Patterns tab use to group similar lines (see aws.cloudwatch.logs.patterns-visualization)."""
+    return _PATTERN_TOKEN_RE.sub("<*>", msg)
+
+
+def _duration_secs(s: str) -> int:
+    total = sum(int(n) * {"s": 1, "m": 60, "h": 3600}[u] for n, u in re.findall(r"(\d+)\s*([smh])", s, re.I))
+    return total or 60
+
+
 def _run_insights(store, groups, qs, start_ms, end_ms):
     stages = [s.strip() for s in qs.split("|") if s.strip()]
     recs = []
@@ -704,14 +986,37 @@ def _run_insights(store, groups, qs, start_ms, end_ms):
                 recs.sort(key=lambda r: r.get(m.group(1), ""), reverse=(m.group(2) or "asc").lower() == "desc")
         elif low.startswith("limit"):
             recs = recs[:int(st.split()[1])]
+        elif low.startswith("pattern"):
+            m = re.match(r'^pattern\s+(@?\w+)\s*$', st, re.I)
+            field = m.group(1) if m else "@message"
+            mined: dict[str, list] = {}
+            for r in recs:
+                mined.setdefault(_mine_pattern(str(r.get(field, ""))), []).append(r)
+            total = len(recs) or 1
+            rows = []
+            for tmpl, members in mined.items():
+                rows.append({"@pattern": tmpl, "@severityLabel": "ERROR" if re.search(r"error|exception|fail", tmpl, re.I) else "BASELINE",
+                            "@ratio": f"{len(members) / total:.4f}", "@sampleCount": str(len(members)),
+                            "@logSamples": json.dumps([m.get(field, "") for m in members[:3]])})
+            rows.sort(key=lambda r: -int(r["@sampleCount"]))
+            recs = rows
+            fields = ["@pattern", "@severityLabel", "@ratio", "@sampleCount", "@logSamples"]
+            stats_col = True
         elif low.startswith("stats"):
             m = re.match(r'^stats\s+count\(\*?\)\s*(?:as\s+(\w+))?\s*(?:by\s+(.+))?$', st, re.I)
             if m:
                 alias, by = m.group(1) or "count(*)", (m.group(2) or "").strip()
                 if by:
+                    bm = re.match(r'^bin\(\s*([\dsmh]+)\s*\)$', by, re.I)
+                    if bm:
+                        secs_ms = _duration_secs(bm.group(1)) * 1000
+                        key = lambda r: _iso(int(r["_ts"] // secs_ms * secs_ms))
+                    else:
+                        key = lambda r: str(r.get(by, ""))
                     buckets: dict = {}
                     for r in recs:
-                        buckets[str(r.get(by, ""))] = buckets.get(str(r.get(by, "")), 0) + 1
+                        k = key(r)
+                        buckets[k] = buckets.get(k, 0) + 1
                     recs = [{by: k, alias: str(v)} for k, v in sorted(buckets.items())]
                     fields = [by, alias]
                 else:
@@ -765,6 +1070,11 @@ _OPS = {
     "DescribeLogGroups": _describe_log_groups, "PutRetentionPolicy": _put_retention_policy,
     "DeleteRetentionPolicy": _delete_retention_policy,
     "AssociateKmsKey": _associate_kms_key, "DisassociateKmsKey": _disassociate_kms_key,
+    "PutDataProtectionPolicy": _put_data_protection_policy, "GetDataProtectionPolicy": _get_data_protection_policy,
+    "DeleteDataProtectionPolicy": _delete_data_protection_policy,
+    "PutIndexPolicy": _put_index_policy, "GetIndexPolicy": _get_index_policy,
+    "DeleteIndexPolicy": _delete_index_policy, "DescribeIndexPolicies": _describe_index_policies,
+    "PutTransformer": _put_transformer, "GetTransformer": _get_transformer, "DeleteTransformer": _delete_transformer,
     "TagLogGroup": _tag_log_group, "UntagLogGroup": _untag_log_group,
     "ListTagsLogGroup": _list_tags_log_group, "TagResource": _tag_resource,
     "UntagResource": _untag_resource, "ListTagsForResource": _list_tags_for_resource,

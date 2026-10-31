@@ -36,6 +36,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from xml.sax.saxutils import escape as _xml_escape
 
+from core import sns_core as _sns_mod
+from core import lambda_core as _lam_mod
+
 CW_NS = "http://monitoring.amazonaws.com/doc/2010-08-01/"
 TARGET_PREFIX = "GraniteServiceVersion20100801"
 REGION = "us-east-1"
@@ -138,8 +141,11 @@ class CloudWatchStore:
         self.anomaly: list[dict] = []
         self.insight_rules: dict[str, dict] = {}
         self.streams: dict[str, dict] = {}
-        self.action_hook = None                   # optional (arn, alarm, new_state, reason) -> None
+        self.action_hook = None                   # optional (arn, alarm, new_state, reason) -> bool; overrides the default SNS/Lambda delivery below
         self.metric_sink = None                   # optional (namespace, name, dims, point) -> None; mirrors samples to a metrics backend
+        self.msg_store = None                     # the shared SNS/SQS store (set by the wire router) — real SNS alarm notifications
+        self.lam_store = None                     # the shared Lambda function registry (set by the wire router) — real Lambda alarm actions
+        self.logs_store = None                    # the shared CloudWatch Logs store (set by the wire router) — real Contributor Insights log rules
 
     def persist(self) -> None:
         """Flush hook (no-op in memory)."""
@@ -894,17 +900,60 @@ def op_put_composite_alarm(store, a):
     return None
 
 
+def _trigger_doc(rec: dict) -> dict:
+    if rec.get("Metrics"):
+        return {"MetricName": None, "Namespace": None, "Dimensions": [], "Metrics": rec["Metrics"]}
+    return {"MetricName": rec.get("MetricName"), "Namespace": rec.get("Namespace"),
+            "StatisticType": "Statistic" if rec.get("Statistic") else "Extended Statistic",
+            "Statistic": (rec.get("Statistic") or "").upper() or None, "ExtendedStatistic": rec.get("ExtendedStatistic"),
+            "Unit": rec.get("Unit"), "Dimensions": rec.get("Dimensions") or [], "Period": rec.get("Period"),
+            "EvaluationPeriods": rec.get("EvaluationPeriods"), "DatapointsToAlarm": rec.get("DatapointsToAlarm"),
+            "ComparisonOperator": rec.get("ComparisonOperator"), "Threshold": rec.get("Threshold"),
+            "TreatMissingData": rec.get("TreatMissingData")}
+
+
+def _deliver_action(store, arn: str, rec: dict, new_state: str, reason: str, now: float) -> bool:
+    """Real delivery for the two ARN kinds Vyomi backs end-to-end: an SNS topic really
+    receives the alarm notification (sns_core.publish_arn); a Lambda function is really
+    invoked with the alarm event (lambda_core.invoke_by_arn). EC2 / Auto Scaling / SSM
+    action ARNs aren't modeled — see aws.cloudwatch.alarms.actions.compute — and fall
+    through to False (recorded as a failed action, same as a real misconfigured action)."""
+    arn = str(arn)
+    if ":sns:" in arn:
+        if store.msg_store is None:
+            return False
+        payload = json.dumps({
+            "AlarmName": rec["AlarmName"], "AlarmDescription": rec.get("AlarmDescription"),
+            "AWSAccountId": store.account_id, "AlarmConfigurationUpdatedTimestamp": _iso(rec.get("AlarmConfigurationUpdatedTimestamp") or now),
+            "NewStateValue": new_state, "NewStateReason": reason, "StateChangeTime": _iso(now),
+            "Region": store.region, "AlarmArn": rec.get("AlarmArn") or store.alarm_arn(rec["AlarmName"]),
+            "OldStateValue": rec.get("_prevStateForNotify") or "INSUFFICIENT_DATA", "Trigger": _trigger_doc(rec),
+        }, separators=(",", ":"))
+        return bool(_sns_mod.publish_arn(store.msg_store, arn, payload))
+    if ":lambda:" in arn:
+        if store.lam_store is None:
+            return False
+        event = {"version": "0", "region": store.region, "source": "aws.cloudwatch", "time": _iso(now),
+                 "accountId": store.account_id, "alarmArn": rec.get("AlarmArn") or store.alarm_arn(rec["AlarmName"]),
+                 "alarmData": {"alarmName": rec["AlarmName"],
+                               "state": {"value": new_state, "reason": reason, "timestamp": _iso(now)},
+                               "configuration": {"description": rec.get("AlarmDescription"), "metrics": rec.get("Metrics")}}}
+        return bool(_lam_mod.invoke_by_arn(store.lam_store, arn, event))
+    return False
+
+
 def _fire_actions(store, rec: dict, kind: str, new_state: str, reason: str, now: float) -> None:
     if not rec.get("ActionsEnabled"):
         return
     key = {"OK": "OKActions", "ALARM": "AlarmActions", "INSUFFICIENT_DATA": "InsufficientDataActions"}[new_state]
     for arn in rec.get(key, []):
-        ok = True
         if store.action_hook:
             try:
-                store.action_hook(arn, rec, new_state, reason)
+                ok = bool(store.action_hook(arn, rec, new_state, reason))
             except Exception:
                 ok = False
+        else:
+            ok = _deliver_action(store, arn, rec, new_state, reason, now)
         _hist(store, rec["AlarmName"], kind, "Action",
               f"Successfully executed action {arn}" if ok else f"Failed to execute action {arn}",
               {"actionState": "Succeeded" if ok else "Failed", "notificationResource": arn, "publishedMessage": reason}, now)
@@ -944,6 +993,86 @@ def _breach(op: str, v: float, thr: float) -> bool:
     return {">=": v >= thr, ">": v > thr, "<": v < thr, "<=": v <= thr}[op]
 
 
+ANOMALY_MIN_POINTS = 10   # datapoints of history needed before a band leaves PENDING_TRAINING
+ANOMALY_LOOKBACK_S = 7 * 86400
+
+
+def _anomaly_band_ref(rec: dict):
+    """For an anomaly-threshold alarm (Metrics with an ANOMALY_DETECTION_BAND(id, stdevs)
+    expression as ThresholdMetricId), the banded metric's MetricStat + the configured number
+    of standard deviations. None if this isn't an anomaly-band alarm."""
+    tid = rec.get("ThresholdMetricId")
+    if not tid or not rec.get("Metrics"):
+        return None
+    band = next((m for m in rec["Metrics"] if m.get("Id") == tid and m.get("Expression")), None)
+    if not band:
+        return None
+    m = re.match(r'^\s*ANOMALY_DETECTION_BAND\(\s*(\w+)\s*(?:,\s*([\d.]+))?\s*\)\s*$', str(band["Expression"]), re.I)
+    if not m:
+        return None
+    ref = next((x for x in rec["Metrics"] if x.get("Id") == m.group(1)), None)
+    if not ref or not ref.get("MetricStat"):
+        return None
+    return ref["MetricStat"], float(m.group(2) or 2.0)
+
+
+def _train_band(store, metric_stat: dict, stdevs: float, end: float):
+    """A simple statistical model standing in for AWS's ML-trained anomaly bands: mean ±
+    stdevs * population-stddev, trained from up to 7 days of the metric's own history (see
+    the aws.cloudwatch.anomaly-detection capability's limitation). Returns (lower, upper,
+    trained) — trained is False (band unusable) until ANOMALY_MIN_POINTS have been seen."""
+    period = int(metric_stat.get("Period") or 300)
+    stat = metric_stat.get("Stat") or "Average"
+    start = end - max(ANOMALY_LOOKBACK_S, period * ANOMALY_MIN_POINTS)
+    ser = _stat_series(store, metric_stat["Metric"], period, stat, metric_stat.get("Unit"), start, end)
+    vals = list(ser.values())
+    if len(vals) < ANOMALY_MIN_POINTS:
+        return 0.0, 0.0, False
+    mean = sum(vals) / len(vals)
+    var = sum((v - mean) ** 2 for v in vals) / len(vals)
+    sd = var ** 0.5
+    return mean - stdevs * sd, mean + stdevs * sd, True
+
+
+def _evaluate_band_alarm(store, rec: dict, band_ref, n: int, period: int, start: float, end: float,
+                         series: dict, now: float, initial: bool) -> None:
+    metric_stat, stdevs = band_ref
+    lower, upper, trained = _train_band(store, metric_stat, stdevs, end)
+    if not trained:
+        return                                  # still PENDING_TRAINING — not enough history yet
+    cmp_ = rec["ComparisonOperator"]
+    kind = {"LessThanLowerOrGreaterThanUpperThreshold": "band", "LessThanLowerThreshold": "lower",
+            "GreaterThanUpperThreshold": "upper"}[cmp_]
+    breach = {"band": lambda v: v < lower or v > upper, "lower": lambda v: v < lower, "upper": lambda v: v > upper}[kind]
+    tmd = rec.get("TreatMissingData", "missing")
+    vals = [series.get(start + i * period) for i in range(n)]
+    states = ["B" if v is not None and breach(v) else ("O" if v is not None else {"breaching": "B", "notBreaching": "O"}.get(tmd, "M")) for v in vals]
+    b, o = states.count("B"), states.count("O")
+    dta = rec.get("DatapointsToAlarm", n)
+    seen = [(start + i * period, v) for i, v in enumerate(vals) if v is not None]
+    when = lambda t: datetime.fromtimestamp(t, timezone.utc).strftime("%d/%m/%y %H:%M:%S")
+    shown = ", ".join(f"{v} ({when(t)})" for t, v in seen[-dta:] or [])
+    band_str = f"[{lower:.4g}, {upper:.4g}]"
+    if b >= dta:
+        new = "ALARM"
+        reason = (f"Thresholds Crossed: {b} out of the last {n} datapoints [{shown}] were outside the expected band {band_str} "
+                  f"(minimum {dta} datapoint{'s' if dta != 1 else ''} for OK -> ALARM transition).")
+    elif b == 0 and o == 0:
+        if tmd == "ignore" and not initial:
+            return
+        new = "INSUFFICIENT_DATA"
+        reason = f"Insufficient Data: {n} datapoint{'s' if n != 1 else ''} were unknown."
+    else:
+        new = "OK"
+        reason = (f"Thresholds Crossed: {max(len(seen), o)} out of the last {n} datapoints [{shown}] were within the expected band {band_str} "
+                  f"(minimum {dta} datapoint{'s' if dta != 1 else ''} for OK -> ALARM transition).")
+    data = json.dumps({"version": "1.0", "queryDate": _iso(now), "startDate": _iso(start), "period": period,
+                       "recentDatapoints": [v for _, v in seen]}, separators=(",", ":"))
+    if initial and rec.get("StateValue") == "INSUFFICIENT_DATA" and new == "INSUFFICIENT_DATA":
+        return
+    _set_state(store, rec, "MetricAlarm", new, reason, data, now)
+
+
 def _evaluate_alarm(store, rec: dict, now: float, initial: bool = False) -> None:
     period = _alarm_period(rec)
     n = rec["EvaluationPeriods"]
@@ -957,9 +1086,12 @@ def _evaluate_alarm(store, rec: dict, now: float, initial: bool = False) -> None
     series = res[rid]["series"]
     cmp_ = rec["ComparisonOperator"]
     thr = rec.get("Threshold")
-    if rec.get("ThresholdMetricId") and rec["ThresholdMetricId"] in res:
-        pass                                   # anomaly-band alarms are not evaluated (no model)
-    if thr is None or cmp_ in ("LessThanLowerOrGreaterThanUpperThreshold", "LessThanLowerThreshold", "GreaterThanUpperThreshold"):
+    if cmp_ in ("LessThanLowerOrGreaterThanUpperThreshold", "LessThanLowerThreshold", "GreaterThanUpperThreshold"):
+        band_ref = _anomaly_band_ref(rec)
+        if band_ref is not None:
+            _evaluate_band_alarm(store, rec, band_ref, n, period, start, end, series, now, initial)
+        return
+    if thr is None:
         return
     op = COMPARISONS[cmp_]
     tmd = rec.get("TreatMissingData", "missing")
@@ -1363,6 +1495,18 @@ def op_put_anomaly_detector(store, a):
     return {}
 
 
+def _detector_state(store, d: dict) -> str:
+    """SINGLE_METRIC detectors really train off the metric's own history (ANOMALY_MIN_POINTS
+    datapoints over ANOMALY_LOOKBACK_S); METRIC_MATH detectors stay PENDING_TRAINING — see
+    the aws.cloudwatch.anomaly-detection capability's limitation."""
+    if "Namespace" not in d:
+        return "PENDING_TRAINING"
+    ms = {"Metric": {"Namespace": d["Namespace"], "MetricName": d["MetricName"], "Dimensions": d.get("Dimensions") or []},
+          "Period": 60, "Stat": d.get("Stat") or "Average"}
+    _, _, trained = _train_band(store, ms, 2.0, _now())
+    return "TRAINED" if trained else "PENDING_TRAINING"
+
+
 def op_describe_anomaly_detectors(store, a):
     ns, name = a.get("Namespace"), a.get("MetricName")
     dims = _dims(a.get("Dimensions")) if a.get("Dimensions") else None
@@ -1381,7 +1525,7 @@ def op_describe_anomaly_detectors(store, a):
             continue
         if kinds and ("SINGLE_METRIC" if "Namespace" in d else "METRIC_MATH") not in kinds:
             continue
-        rows.append(d)
+        rows.append({**d, "StateValue": _detector_state(store, d)})
     chunk, nxt = _page(rows, a.get("NextToken"), limit)
     return _clean({"AnomalyDetectors": chunk, "NextToken": nxt})
 
@@ -1463,6 +1607,91 @@ def op_enable_insight_rules(store, a):
 
 def op_disable_insight_rules(store, a):
     return _rule_op(store, a, "disable")
+
+
+def _ci_json_path(doc, path: str):
+    """The `$.a.b` JSONPath subset a Contributor Insights log rule's Keys/ValueOf/Filters use."""
+    if not isinstance(path, str) or not path.startswith("$"):
+        return None
+    cur = doc
+    for part in path[1:].split("."):
+        if not part:
+            continue
+        if not isinstance(cur, dict) or part not in cur:
+            return None
+        cur = cur[part]
+    return cur
+
+
+def _ci_passes_filters(doc, filters) -> bool:
+    for f in filters or []:
+        val = _ci_json_path(doc, f.get("Match", ""))
+        if "In" in f and val not in f["In"]:
+            return False
+        if "NotIn" in f and val in f["NotIn"]:
+            return False
+    return True
+
+
+def op_get_insight_rule_report(store, a):
+    """Real aggregation for a log-based Contributor Insights rule: scans the matching log
+    groups (through store.logs_store — the shared CloudWatch Logs store) over the window,
+    extracts each event's Contribution.Keys via a JSONPath subset, and ranks contributors —
+    see aws.cloudwatch.logs.contributor-insights for the format/filter-operator limitations."""
+    name = str(a.get("RuleName") or "")
+    rule = store.insight_rules.get(name)
+    if not rule:
+        raise CwError("ResourceNotFoundException", f"Rule {name} does not exist.")
+    start = _f(a["StartTime"], "StartTime") if a.get("StartTime") is not None else 0.0
+    end = _f(a["EndTime"], "EndTime") if a.get("EndTime") is not None else _now()
+    max_contrib = _i(a["MaxContributorCount"], "MaxContributorCount") if a.get("MaxContributorCount") is not None else 10
+    try:
+        definition = json.loads(rule["Definition"])
+    except Exception:
+        definition = {}
+    contrib_cfg = definition.get("Contribution") or {}
+    key_paths = contrib_cfg.get("Keys") or []
+    value_path = contrib_cfg.get("ValueOf")
+    filters = contrib_cfg.get("Filters") or []
+    agg = definition.get("AggregateOn") or ("Sum" if value_path else "Count")
+    totals: dict[tuple, float] = {}
+    logs_store = store.logs_store
+    if logs_store is not None and key_paths and definition.get("LogFormat", "JSON") == "JSON":
+        for gn in definition.get("LogGroupNames") or []:
+            g = logs_store.log_groups.get(gn)
+            if not g:
+                continue
+            for s in g["streams"].values():
+                for e in s["events"]:
+                    if not (start * 1000 <= e["timestamp"] <= end * 1000):
+                        continue
+                    try:
+                        doc = json.loads(e["message"])
+                    except Exception:
+                        continue
+                    if not isinstance(doc, dict) or not _ci_passes_filters(doc, filters):
+                        continue
+                    key_vals = tuple(_ci_json_path(doc, kp) for kp in key_paths)
+                    if any(v is None for v in key_vals):
+                        continue
+                    v = 1.0
+                    if value_path is not None:
+                        raw = _ci_json_path(doc, value_path)
+                        try:
+                            v = float(raw)
+                        except (TypeError, ValueError):
+                            continue
+                    key_vals = tuple(str(v) for v in key_vals)
+                    totals[key_vals] = totals.get(key_vals, 0.0) + (v if agg == "Sum" else 1.0)
+    ranked = sorted(totals.items(), key=lambda kv: -kv[1])[:max_contrib]
+    ts = Ts(end)
+    contributors = [{"Keys": list(k), "ApproximateAggregateValue": val,
+                     "Datapoints": [{"Timestamp": ts, "ApproximateValue": val}]} for k, val in ranked]
+    return {"KeyLabels": [p.rsplit(".", 1)[-1] for p in key_paths], "AggregationStatistic": agg,
+           "ApproximateUniqueCount": float(len(totals)), "Contributors": contributors,
+           "MetricDatapoints": [{"Timestamp": ts, "UniqueContributors": float(len(totals)),
+                                 "MaxContributorValue": max((v for v in totals.values()), default=0.0),
+                                 "SampleCount": float(sum(totals.values()))}]}
 
 
 # ── metric streams ─────────────────────────────────────────────────────────
@@ -1579,6 +1808,7 @@ _OPS = {
     "PutInsightRule": (op_put_insight_rule, True), "DescribeInsightRules": (op_describe_insight_rules, True),
     "DeleteInsightRules": (op_delete_insight_rules, True), "EnableInsightRules": (op_enable_insight_rules, True),
     "DisableInsightRules": (op_disable_insight_rules, True),
+    "GetInsightRuleReport": (op_get_insight_rule_report, True),
     "PutMetricStream": (op_put_metric_stream, True), "GetMetricStream": (op_get_metric_stream, True),
     "ListMetricStreams": (op_list_metric_streams, True), "DeleteMetricStream": (op_delete_metric_stream, True),
     "StartMetricStreams": (op_start_metric_streams, True), "StopMetricStreams": (op_stop_metric_streams, True),

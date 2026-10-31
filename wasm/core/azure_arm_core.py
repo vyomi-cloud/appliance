@@ -596,6 +596,12 @@ class AzureArm:
             return _ok(_view(rec))
         if method in ("PUT", "PATCH"):
             existed_before = key in self.state
+            blocked = self._lock_block(rid, full_type, for_delete=False)
+            if blocked:
+                return blocked
+            blocked = self._servicebus_tier_block(type_chain, names, payload, sub, rg)
+            if blocked:
+                return blocked
             resp = self._upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
             if lro:
                 resp["status"] = 200
@@ -605,6 +611,9 @@ class AzureArm:
             _record_activity(leaf_name, "Update" if existed_before else "Create", f"{full_type} '{leaf_name}'")
             return resp
         if method == "DELETE":
+            blocked = self._lock_block(rid, full_type, for_delete=True)
+            if blocked:
+                return blocked
             rec = self.state.pop(key, None)
             if rec is not None:
                 _record_activity(leaf_name, "Delete", f"{full_type} '{leaf_name}'")
@@ -616,6 +625,59 @@ class AzureArm:
                     del self.state[child_key]
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+    def _lock_block(self, rid, full_type, for_delete):
+        # Enforcement is scoped to Microsoft.ServiceBus (namespaces/queues/topics) only —
+        # every other resource type in this generic engine still leaves Microsoft.Authorization/
+        # locks config_only (stored, not enforced), matching their own capability registries.
+        if not full_type.lower().startswith("microsoft.servicebus/"):
+            return None
+        levels = {(r.get("properties") or {}).get("level")
+                  for r in self.state.values() if r.get("_lock_scope") == rid.lower()}
+        if not levels:
+            return None
+        if for_delete or "ReadOnly" in levels:
+            verb = "delete" if for_delete else "write"
+            return _err(409, "ScopeLocked",
+                        f"The scope '{rid}' cannot perform {verb} operation because the "
+                        f"following scope(s) are locked: '{rid}'. Please remove the lock and try again.")
+        return None
+
+    def _servicebus_tier_block(self, type_chain, names, payload, sub, rg):
+        # Real Service Bus rejects topics and session/duplicate-detection queues on a Basic
+        # namespace, and messaging units / partitions are a Premium-only field — Vyomi now
+        # ENFORCES those tier limits instead of just round-tripping whatever sku/properties
+        # the caller sends (azure.servicebus.namespace.scale).
+        if type_chain[0].lower() != "microsoft.servicebus" or type_chain[1].lower() != "namespaces":
+            return None
+        props = (payload or {}).get("properties") or {}
+        if len(type_chain) == 2:
+            existing = self.state.get(_canonical_id(sub, rg, type_chain, names).lower())
+            sku = (payload or {}).get("sku") or {}
+            tier = sku.get("tier") or sku.get("name") or (existing or {}).get("sku", {}).get("tier")
+            if tier != "Premium":
+                if sku.get("capacity") is not None:
+                    return _err(400, "BadRequest",
+                                "Messaging units (sku.capacity) require a Premium namespace.")
+                if props.get("premiumMessagingPartitions") is not None:
+                    return _err(400, "BadRequest",
+                                "premiumMessagingPartitions requires a Premium namespace.")
+            return None
+        if len(type_chain) == 3 and type_chain[2].lower() in ("queues", "topics"):
+            parent = self.state.get(_canonical_id(sub, rg, type_chain[:-1], names[:-1]).lower())
+            tier = (parent or {}).get("sku", {}).get("tier")
+            if tier != "Basic":
+                return None
+            if type_chain[2].lower() == "topics":
+                return _err(400, "BadRequest",
+                            "Topics are not supported on a Basic-tier Service Bus namespace.")
+            if props.get("requiresSession"):
+                return _err(400, "BadRequest",
+                            "Sessions are not supported on a Basic-tier Service Bus namespace.")
+            if props.get("requiresDuplicateDetection"):
+                return _err(400, "BadRequest",
+                            "Duplicate detection is not supported on a Basic-tier Service Bus namespace.")
+        return None
 
     def _locks(self, method, sub, rg, namespace, chain, marker, payload):
         # Replay the SAME type/name alternation the main dispatcher uses (see `_arm` above)
