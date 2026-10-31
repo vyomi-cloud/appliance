@@ -174,6 +174,7 @@ try {
   await page.getByLabel("Confirm deletion").fill(SA2);
   await shot("14-delete-confirm");
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
   await page.getByRole("link", { name: SA2, exact: true }).waitFor({ state: "detached", timeout: 10000 });
   // The row can leave the grid before the DELETE round-trip settles on a slow substrate (Nano
   // runs the engine in the tab) — poll the ARM read-back briefly instead of reading once.
@@ -264,6 +265,7 @@ try {
   await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByLabel("Confirm deletion").fill(FA);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
   await page.getByRole("heading", { name: "Function App", exact: true }).waitFor({ timeout: 10000 });
   const faGone = await armWeb("GET", `/resourceGroups/${FARG}/providers/Microsoft.Web/sites/${FA}`);
   check("UI delete function app → ARM GET 404", faGone.status === 404, `HTTP ${faGone.status}`);
@@ -320,6 +322,7 @@ try {
   await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(APP2);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
   await page.getByRole("link", { name: APP2, exact: true }).waitFor({ state: "detached", timeout: 10000 });
   // The grid drops the row as soon as it starts reloading; on Nano the DELETE may still be in flight.
   let gone2 = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP2}`);
@@ -476,6 +479,7 @@ try {
   await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(EGT);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
   await page.getByRole("heading", { name: "Event Grid Topics" }).waitFor({ timeout: 10000 });
   const egGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}`);
   check("UI delete topic → ARM GET 404", egGone.status === 404, `HTTP ${egGone.status}`);
@@ -505,6 +509,7 @@ try {
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await page.getByLabel("Lock name", { exact: true }).fill(RGLOCK);
   await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog", { name: "Add lock" }).waitFor({ state: "detached", timeout: 20000 });   // its overlay blocks the next click
   await page.getByText(RGLOCK, { exact: true }).waitFor({ timeout: 10000 });
   const rgLockGet = await arm("GET", `/resourceGroups/${RGUI}/providers/Microsoft.Authorization/locks/${RGLOCK}`);
   check("UI add resource-group-scoped lock → visible over native ARM", rgLockGet.status === 200, `HTTP ${rgLockGet.status}`);
@@ -579,6 +584,7 @@ try {
   const APIMLOCK = `smoke-apimlock-${n}`;
   await page.getByLabel("Lock name", { exact: true }).fill(APIMLOCK);
   await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog", { name: "Add lock" }).waitFor({ state: "detached", timeout: 20000 });   // its overlay blocks the next click
   await page.getByText(APIMLOCK, { exact: true }).waitFor({ timeout: 10000 });
   const apimLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/providers/Microsoft.Authorization/locks/${APIMLOCK}?api-version=2020-05-01`);
   check("UI create lock → visible over native ARM (extension resource)", apimLockGet.status === 200, `HTTP ${apimLockGet.status}`);
@@ -597,6 +603,7 @@ try {
   await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(APIM);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
   await page.getByRole("heading", { name: "API Management services" }).waitFor({ timeout: 10000 });
   const apimGone = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}`);
   check("UI delete API Management service → ARM GET 404", apimGone.status === 404, `HTTP ${apimGone.status}`);
@@ -658,6 +665,7 @@ try {
   const ACRLOCK = `smoke-acrlock-${n}`;
   await page.getByLabel("Lock name", { exact: true }).fill(ACRLOCK);
   await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog", { name: "Add lock" }).waitFor({ state: "detached", timeout: 20000 });   // its overlay blocks the next click
   await page.getByText(ACRLOCK, { exact: true }).waitFor({ timeout: 10000 });
   const acrLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR}/providers/Microsoft.Authorization/locks/${ACRLOCK}?api-version=2020-05-01`);
   check("UI create lock → visible over native ARM", acrLockGet.status === 200, `HTTP ${acrLockGet.status}`);
@@ -676,6 +684,7 @@ try {
   await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(ACR2);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
   await page.getByRole("link", { name: ACR2, exact: true }).waitFor({ state: "detached", timeout: 10000 });
   let acrGone = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerRegistry/registries/${ACR2}`);
   for (let i = 0; i < 20 && acrGone.status !== 404; i++) {
@@ -813,6 +822,7 @@ try {
   const AKSLOCK = `smoke-akslock-${n}`;
   await page.getByLabel("Lock name", { exact: true }).fill(AKSLOCK);
   await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog", { name: "Add lock" }).waitFor({ state: "detached", timeout: 20000 });   // its overlay blocks the next click
   await page.getByText(AKSLOCK, { exact: true }).waitFor({ timeout: 10000 });
   const aksLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}/providers/Microsoft.Authorization/locks/${AKSLOCK}?api-version=2020-05-01`);
   check("UI create lock → visible over native ARM (extension resource)", aksLockGet.status === 200, `HTTP ${aksLockGet.status}`);
@@ -831,6 +841,7 @@ try {
   await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByLabel("Confirm deletion").fill(AKS);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
   await page.getByRole("heading", { name: "Kubernetes services" }).waitFor({ timeout: 10000 });
   const aksGone = await armAks("GET", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}`);
   check("UI delete kubernetes service → ARM GET 404", aksGone.status === 404, `HTTP ${aksGone.status}`);
@@ -943,6 +954,7 @@ try {
   const SQLLOCK = `smoke-sqllock-${n}`;
   await page.getByLabel("Lock name", { exact: true }).fill(SQLLOCK);
   await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog", { name: "Add lock" }).waitFor({ state: "detached", timeout: 20000 });   // its overlay blocks the next click
   await page.getByText(SQLLOCK, { exact: true }).waitFor({ timeout: 10000 });
   const sqlLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SRV}/databases/${DB}/providers/Microsoft.Authorization/locks/${SQLLOCK}?api-version=2020-05-01`);
   check("UI create lock on SQL database → visible over native ARM", sqlLockGet.status === 200, `HTTP ${sqlLockGet.status}`);
@@ -953,6 +965,7 @@ try {
   await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(DB);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
   await page.getByRole("heading", { name: "SQL databases", exact: true }).waitFor({ timeout: 10000 });
   const dbGone = await sqlArm("GET", `/resourceGroups/${RG}/providers/Microsoft.Sql/servers/${SRV}/databases/${DB}`);
   check("UI delete SQL database → ARM GET 404", dbGone.status === 404, `HTTP ${dbGone.status}`);
@@ -993,6 +1006,7 @@ try {
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await page.getByLabel("Lock name", { exact: true }).fill(NSGLOCK);
   await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog", { name: "Add lock" }).waitFor({ state: "detached", timeout: 20000 });   // its overlay blocks the next click
   await page.getByText(NSGLOCK, { exact: true }).waitFor({ timeout: 10000 });
   const nsgLockGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}/providers/Microsoft.Authorization/locks/${NSGLOCK}`);
   check("UI create lock on NSG → visible over native ARM", nsgLockGet.status === 200, `HTTP ${nsgLockGet.status}`);
@@ -1009,6 +1023,7 @@ try {
   await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(NSG2);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
   await page.getByRole("link", { name: NSG2, exact: true }).waitFor({ state: "detached", timeout: 10000 });
   let nsgGone = { status: 0 };
   for (let i = 0; i < 20 && nsgGone.status !== 404; i++) {
@@ -1043,6 +1058,7 @@ try {
   await page.getByRole("toolbar", { name: "User commands" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(EUSR);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
   await page.getByRole("heading", { name: "Users", exact: true }).waitFor({ timeout: 10000 });
   const afterDelete = await graph("GET", "/users");
   const stillThere = (afterDelete.status === 200 ? JSON.parse(afterDelete.text).value : []).some((u) => u.displayName === EUSR);
@@ -1104,6 +1120,7 @@ try {
   const COSMOSLOCK = `smoke-cosmoslock-${n}`;
   await page.getByLabel("Lock name", { exact: true }).fill(COSMOSLOCK);
   await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog", { name: "Add lock" }).waitFor({ state: "detached", timeout: 20000 });   // its overlay blocks the next click
   await page.getByText(COSMOSLOCK, { exact: true }).waitFor({ timeout: 10000 });
   const cosmosLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS}/providers/Microsoft.Authorization/locks/${COSMOSLOCK}?api-version=2020-05-01`);
   check("UI create lock on Cosmos account → visible over native ARM", cosmosLockGet.status === 200, `HTTP ${cosmosLockGet.status}`);
@@ -1115,6 +1132,7 @@ try {
   await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete account" }).click();
   await page.getByLabel("Confirm deletion").fill(COSMOS);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
   await page.getByRole("heading", { name: "Azure Cosmos DB", exact: true }).waitFor({ timeout: 10000 });
   const cosmosGone = await cosmosArm("GET", `/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS}`);
   check("UI delete Azure Cosmos DB account → ARM GET 404", cosmosGone.status === 404, `HTTP ${cosmosGone.status}`);
@@ -1185,6 +1203,7 @@ try {
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await page.getByLabel("Lock name", { exact: true }).fill(VNETLOCK);
   await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog", { name: "Add lock" }).waitFor({ state: "detached", timeout: 20000 });   // its overlay blocks the next click
   await page.getByText(VNETLOCK, { exact: true }).waitFor({ timeout: 10000 });
   const vnetLockGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/providers/Microsoft.Authorization/locks/${VNETLOCK}`);
   check("UI create lock on virtual network → visible over native ARM", vnetLockGet.status === 200, `HTTP ${vnetLockGet.status}`);
@@ -1201,6 +1220,7 @@ try {
   await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(VNET2);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
   await page.getByRole("link", { name: VNET2, exact: true }).waitFor({ state: "detached", timeout: 10000 });
   let vnetGone = { status: 0 };
   for (let i = 0; i < 20 && vnetGone.status !== 404; i++) {
@@ -1209,6 +1229,10 @@ try {
   }
   check("UI delete virtual network → ARM GET 404", vnetGone.status === 404, `HTTP ${vnetGone.status}`);
   // ── Subscriptions: the one simulated subscription, renamed through the UI → visible over ARM ──
+  // (the name persists, so start — and finish, below — from the default)
+  const resetSubName = () => wire(`/subscriptions/${SUB}/providers/Microsoft.Subscription/rename?api-version=2021-10-01`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ subscriptionName: "CloudLearn Subscription" }) });
+  await resetSubName();
   await page.goto(UI + "#/subscriptions");
   await page.getByRole("heading", { name: "Subscriptions", exact: true }).waitFor({ timeout: 10000 });
   await page.getByRole("link", { name: "CloudLearn Subscription", exact: true }).waitFor({ timeout: 10000 });
@@ -1237,6 +1261,7 @@ try {
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await page.getByLabel("Lock name", { exact: true }).fill(SUBLOCK);
   await page.getByRole("dialog").getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog", { name: "Add lock" }).waitFor({ state: "detached", timeout: 20000 });   // its overlay blocks the next click
   await page.getByText(SUBLOCK, { exact: true }).waitFor({ timeout: 10000 });
   const subLockGet = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/locks/${SUBLOCK}?api-version=2016-09-01`);
   check("UI add subscription-scoped lock → visible over native ARM", subLockGet.status === 200, `HTTP ${subLockGet.status}`);
@@ -1285,6 +1310,7 @@ try {
   await page.getByRole("heading", { name: `${SUBNAME}-2`, exact: true }).waitFor({ timeout: 10000 });
   const subscriptionGot2 = await arm("GET", "");
   check("UI create-subscription wizard → renames the one simulated subscription over ARM", JSON.parse(subscriptionGot2.text).displayName === `${SUBNAME}-2`, subscriptionGot2.text);
+  await resetSubName();
   // ── Virtual machine created through the wizard → visible over native ARM ──────────────
   const DEFAULT_RG = "cloudlearn-rg";   // kit/arm.js's DEFAULT_RG — the wizard's default resource group
   const VM = `vysmokevm${n}`;
@@ -1324,6 +1350,7 @@ try {
   await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(VM2);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog", { name: /^Delete / }).waitFor({ state: "detached", timeout: 30000 });   // open until the (async) delete returns; its modal hides the page
   await page.getByRole("heading", { name: "Virtual machines", exact: true }).waitFor({ timeout: 10000 });
   const vmGone = await arm("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM2}`);
   check("UI delete virtual machine → ARM GET 404", vmGone.status === 404, `HTTP ${vmGone.status}`);

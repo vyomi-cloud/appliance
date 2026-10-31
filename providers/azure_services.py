@@ -788,10 +788,15 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     sub = segs[0]
     rest_segs = segs[1:]
 
-    # GET /subscriptions/{sub}
-    if not rest_segs:
-        return JSONResponse({"id": f"/subscriptions/{sub}", "subscriptionId": sub,
-                             "displayName": "CloudLearn Subscription", "state": "Enabled"})
+    # GET /subscriptions/{sub}, Microsoft.Subscription/rename and subscription-scope tags
+    # (Microsoft.Resources/tags/default) — the subscription blade's header + Tags panel —
+    # are the shared core ARM engine's, over the persisted per-subscription names/tags.
+    low0 = [s.lower() for s in rest_segs]
+    if (not rest_segs
+            or (len(low0) >= 3 and low0[0] == "providers"
+                and ((low0[1] == "microsoft.subscription" and low0[2] == "rename")
+                     or (low0[1] == "microsoft.resources" and low0[2] == "tags")))):
+        return await _handle_core_arm(request, method, rest, base)
 
     # v4 C0f — resource groups themselves (collection / item with real tags + cascade
     # delete), a group's generic `/resources` list and its own Microsoft.Authorization/locks
@@ -1185,7 +1190,16 @@ def core_arm():
     arm = AzureArm()
     arm.state = _state
     arm.operations = _operations
+    arm.sub_names = _subscription_meta("names")   # Microsoft.Subscription/rename
+    arm.sub_tags = _subscription_meta("tags")     # Microsoft.Resources/tags/default at subscription scope
     return arm
+
+
+def _subscription_meta(key: str) -> dict:
+    """Per-subscription display names / tags, persisted in the Azure space (not in the ARM
+    resource map, whose values every consumer iterates as resources)."""
+    from core.appliance_stores import _proxy
+    return _proxy("azure_subscription_meta", lambda: {"names": {}, "tags": {}}, key)._target()
 
 
 async def _handle_core_arm(request: Request, method: str, rest: str, base: str):
