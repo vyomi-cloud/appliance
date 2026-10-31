@@ -49,6 +49,7 @@ try {
   check((await rail.count()) > 0, "Monitor alerts is on the Nano Azure console rail");
   await rail.click({ timeout: 5000 });
   await sleep(1500);
+  await page.waitForFunction((src) => new RegExp(src, "i").test(document.querySelector("#main")?.innerText || ""), 'metric alert rules', { timeout: 10000 }).catch(() => {});
   check(/metric alert rules/i.test(await page.locator("#main").innerText()), "service page explains what the service does");
 
   await page.locator("#main button").filter({ hasText: /create/i }).first().click({ timeout: 5000 });
