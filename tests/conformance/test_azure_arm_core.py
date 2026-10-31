@@ -531,6 +531,24 @@ def run() -> int:
     _check("subnet carries its NSG association and address prefix",
            subnet_rec["properties"]["networkSecurityGroup"]["id"].lower() == nsg3.lower() and subnet_rec["properties"]["addressPrefix"] == "10.0.1.0/24")
 
+    # 22b. A vnet created with its subnet defined INLINE (properties.subnets) — the much more
+    # common real-Azure pattern (`az network vnet create --subnet-prefix`, ARM templates) than
+    # the dedicated subnets/{name} PUT above — must land in the SAME shared subnet collection:
+    # individually gettable and listable, same as a dedicated-PUT subnet (azure.nsgs.effective_rules
+    # and the "Subnets" association tab both read this collection, not the vnet's own body).
+    vnet3 = _p(RG, "Microsoft.Network", "virtualNetworks", "vnet3")
+    r = arm.handle("PUT", vnet3, {"api-version": "2023-11-01"}, {"location": "eastus", "properties": {
+        "subnets": [{"name": "inline", "properties": {"addressPrefix": "10.0.2.0/24", "networkSecurityGroup": {"id": nsg3}}}]}})
+    _check("vnet put with an inline subnet", r["status"] in (200, 201))
+    inline_subnet = vnet3 + "/subnets/inline"
+    r = arm.handle("GET", inline_subnet, {"api-version": "2023-11-01"})
+    _check("inline subnet individually gettable via the dedicated subresource path",
+           r["status"] == 200 and r["body"]["properties"]["addressPrefix"] == "10.0.2.0/24")
+    r = arm.handle("GET", vnet3 + "/subnets", {"api-version": "2023-11-01"})
+    _check("inline subnet appears in the subnets collection list",
+           r["status"] == 200 and [x["name"] for x in r["body"]["value"]] == ["inline"]
+           and r["body"]["value"][0]["properties"]["networkSecurityGroup"]["id"].lower() == nsg3.lower())
+
     # 22c. azure.nsgs.iam: Microsoft.Authorization/roleAssignments + checkAccess, both
     # resource-scoped to the NSG itself (not just the resource-group/subscription scope
     # section 29 below already covers) — the console's NSG "Access control (IAM) >

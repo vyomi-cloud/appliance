@@ -86,6 +86,43 @@ export const listSubnetsForNsg = async (nsgId) => {
  *  that has no network security group of its own yet (same real-Azure constraint the
  *  portal's Associate dialog enforces — you dissociate the old one before picking a new
  *  one), so the console can finally offer the picker the NIC/Subnet lists above couldn't. */
+/** Every network interface this NSG's rules apply to — associated directly, or through a
+ *  subnet that carries this NSG — for the Effective security rules picker (azure.nsgs.effective_rules). */
+export const listInterfacesInScope = async (nsgId) => {
+  const [nics, subnets] = await Promise.all([NIC_ARM.list(), listSubnetsForNsg(nsgId)]);
+  const subnetIds = new Set(subnets.map((s) => s.id.toLowerCase()));
+  return nics.filter((n) => sameNsg(nsgId)(n) || subnetIds.has((n.properties?.ipConfigurations?.[0]?.properties?.subnet?.id || "").toLowerCase()));
+};
+
+const SUBNET_ID_RE = /\/resourceGroups\/([^/]+)\/providers\/Microsoft\.Network\/virtualNetworks\/([^/]+)\/subnets\/([^/]+)/i;
+const getSubnetOfNic = async (nic) => {
+  const m = (nic.properties?.ipConfigurations?.[0]?.properties?.subnet?.id || "").match(SUBNET_ID_RE);
+  if (!m) return null;
+  const [, rg, vnet, subnet] = m;
+  return restJson("GET", `${VNET_ARM.path(rg, vnet)}/subnets/${encodeURIComponent(subnet)}`, { query: { "api-version": "2023-11-01" } });
+};
+
+const listSecurityRulesForNsgId = async (nsgId) => {
+  if (!nsgId) return [];
+  const { resourceGroup, name } = parseId(nsgId);
+  return listSecurityRules(resourceGroup, name);
+};
+
+/** Effective security rules (azure.nsgs.effective_rules): the merged custom + default rule
+ *  sets from both the NIC's own network security group and its subnet's — real ARM reads,
+ *  same two-NSG picture `az network nic show-effective-nsg` / the real portal's page shows. */
+export const loadEffectiveSecurityRules = async (nic) => {
+  const subnet = await getSubnetOfNic(nic);
+  const nicNsgId = nic.properties?.networkSecurityGroup?.id || "";
+  const subnetNsgId = subnet?.properties?.networkSecurityGroup?.id || "";
+  const [nicRules, subnetRules] = await Promise.all([listSecurityRulesForNsgId(nicNsgId), listSecurityRulesForNsgId(subnetNsgId)]);
+  return {
+    nicNsgName: nicNsgId ? parseId(nicNsgId).name : "",
+    subnetNsgName: subnetNsgId ? parseId(subnetNsgId).name : "",
+    nicRules, subnetRules,
+  };
+};
+
 export const listUnassociatedNics = async () => (await NIC_ARM.list()).filter((r) => !r.properties?.networkSecurityGroup?.id);
 export const associateNic = (nic, nsgId) => {
   const { resourceGroup, name } = parseId(nic.id);
