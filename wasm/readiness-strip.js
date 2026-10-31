@@ -147,14 +147,94 @@
       return cell;
     }
 
+    // Each backend's native service icon — what it serves, in that cloud's console style:
+    // AWS / Azure tiles from service-icons.js (the v4 consoles' set), GCP as Material glyphs in
+    // Google blue (as the GCP console does). Keys cover the offline containers and the Nano engines.
+    var SVC_ICON = {
+      // offline appliance containers
+      mysql: ['aws', 'rds', 'Amazon RDS'], vault: ['aws', 'secretsmanager', 'Secrets Manager'],
+      minio: ['aws', 's3', 'Amazon S3'], dynamodb: ['aws', 'dynamodb', 'DynamoDB'],
+      nats: ['aws', 'eventbridge', 'EventBridge'], elasticmq: ['aws', 'sqs', 'Amazon SQS'],
+      victoriametrics: ['aws', 'cloudwatch', 'CloudWatch'], gateway: ['aws', 'apigateway', 'API Gateway'],
+      'fake-gcs': ['gcp', 'inventory_2', 'Cloud Storage'], pubsub: ['gcp', 'message', 'Pub/Sub'],
+      firestore: ['gcp', 'description', 'Firestore'], valkey: ['gcp', 'speed', 'Memorystore'],
+      registry: ['gcp', 'view_in_ar', 'Artifact Registry'], azurite: ['azure', 'storage', 'Storage accounts'],
+      // Nano in-browser engines
+      s3: ['aws', 's3', 'Amazon S3'], ddb: ['aws', 'dynamodb', 'DynamoDB'], kms: ['aws', 'kms', 'AWS KMS'],
+      sec: ['aws', 'secretsmanager', 'Secrets Manager'], rds: ['aws', 'rds', 'Amazon RDS'], iam: ['aws', 'iam', 'IAM'],
+      msg: ['aws', 'sqs', 'Amazon SQS + SNS'], kinesis: ['aws', 'kinesis', 'Kinesis', 'Analytics'],
+      apigwv2: ['aws', 'apigateway', 'API Gateway'], logs: ['aws', 'cloudwatch', 'CloudWatch Logs'],
+      cw: ['aws', 'cloudwatch', 'CloudWatch'], elbv2: ['aws', 'elbv2', 'Elastic Load Balancing', 'Networking'],
+      ssm: ['aws', 'ssm', 'Systems Manager', 'Management'], sfn: ['aws', 'sfn', 'Step Functions', 'Application Integration'],
+      gcs: ['gcp', 'inventory_2', 'Cloud Storage'], gcp_fs: ['gcp', 'description', 'Firestore'],
+      gcp_kms: ['gcp', 'vpn_key', 'Cloud KMS'], gcp_sec: ['gcp', 'password', 'Secret Manager'],
+      gcp_gke: ['gcp', 'hub', 'Kubernetes Engine'], gcp_mon: ['gcp', 'bar_chart', 'Cloud Monitoring'],
+      gcp_redis: ['gcp', 'speed', 'Memorystore'], gcp_iamc: ['gcp', 'admin_panel_settings', 'IAM Credentials'],
+      gcp_sched: ['gcp', 'schedule', 'Cloud Scheduler'], gcp_msg: ['gcp', 'message', 'Pub/Sub'],
+      gcp_iam: ['gcp', 'admin_panel_settings', 'IAM'], gcp_sql: ['gcp', 'storage', 'Cloud SQL'],
+      gcp_ar: ['gcp', 'view_in_ar', 'Artifact Registry'],
+      az_blob: ['azure', 'storage', 'Blob storage'], az_cosmos: ['azure', 'cosmos', 'Azure Cosmos DB'],
+      az_kvsec: ['azure', 'keyvaults', 'Key Vault secrets'], az_kvkeys: ['azure', 'keyvaults', 'Key Vault keys'],
+      az_queue: ['azure', 'storage', 'Queue storage'], az_sb: ['azure', 'servicebus', 'Service Bus'],
+      az_arm: ['azure', 'resourcegroups', 'Resource Manager'],
+      // shared core (serves every cloud)
+      simulator: ['core', 'dns', 'Vyomi engine'], postgres: ['core', 'storage', 'Shared PostgreSQL'],
+      cloudsim: ['core', 'hub', 'Cloud simulator'], runtime: ['core', 'memory', 'Pyodide runtime'],
+      events: ['core', 'bolt', 'Event store']
+    };
+    function svcIcon(s) {
+      var m = SVC_ICON[s.name] || [s.category === 'core' ? 'core' : (s.category || 'core'), null, ''];
+      var box = document.createElement('span');
+      box.style.cssText = 'flex:none; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center;';
+      if (m[2]) box.title = m[2];
+      var lib = window.VyomiServiceIcons;
+      if ((m[0] === 'aws' || m[0] === 'azure') && lib) {
+        box.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="display:block">' +
+          (m[0] === 'aws' ? lib.aws(m[1] || '', m[3]) : lib.azure(m[1] || '')) + '</svg>';
+      } else {
+        var g = document.createElement('span');
+        g.className = 'material-icons'; g.setAttribute('aria-hidden', 'true');
+        g.style.cssText = 'font-size:17px; color:' + (m[0] === 'gcp' ? '#4285f4' : '#a1a1aa') + ';';
+        g.textContent = m[1] || (m[0] === 'core' ? 'dns' : 'cloud');
+        box.appendChild(g);
+      }
+      return box;
+    }
+
+    // Tile header: the cloud's logo (the same inline SVGs the space cards use, when the page
+    // has them); core gets a server glyph. Gradient ids are unique per copy so a logo never
+    // points at a definition inside a hidden view.
+    var _markSeq = 0;
+    function cloudMark(cat) {
+      var box = document.createElement('span');
+      box.style.cssText = 'flex:none; width:22px; height:16px; display:inline-flex; align-items:center; justify-content:center;';
+      var logos = (typeof SPACE_LOGOS !== 'undefined') ? SPACE_LOGOS : null;
+      if (logos && logos[cat]) {
+        box.innerHTML = logos[cat].replace(/sp-az-g/g, 'vyr' + (++_markSeq) + '-az-g');
+        var svg = box.firstChild;
+        svg.setAttribute('aria-hidden', 'true'); svg.removeAttribute('role');
+        svg.style.cssText = 'height:' + (cat === 'aws' ? 13 : 15) + 'px; width:' + (cat === 'aws' ? 22 : 15) + 'px; display:block;';
+      } else {
+        var g = document.createElement('span');
+        g.className = 'material-icons'; g.style.cssText = 'font-size:16px; color:#a1a1aa;';
+        g.textContent = cat === 'core' ? 'dns' : 'cloud';
+        box.appendChild(g);
+      }
+      return box;
+    }
+
     function buildRow(s) {
       var up = s.status === 'ready';
       var row = document.createElement('div');
       row.style.cssText = 'display:flex; align-items:center; gap:8px;';
-      var dot = document.createElement('span');
-      dot.style.cssText = 'width:8px; height:8px; border-radius:50%; flex:none; background:' +
-        (up ? '#34d399' : s.status === 'error' ? '#ef4444' : (onDark ? 'rgba(255,255,255,.35)' : '#d4d4d8')) + ';';
-      row.appendChild(dot);
+      if (onDark) {
+        var dot = document.createElement('span');
+        dot.style.cssText = 'width:8px; height:8px; border-radius:50%; flex:none; background:' +
+          (up ? '#34d399' : s.status === 'error' ? '#ef4444' : 'rgba(255,255,255,.35)') + ';';
+        row.appendChild(dot);
+      } else {
+        row.appendChild(svcIcon(s));                 // status card: the native service icon
+      }
       var name = document.createElement('span');
       name.style.cssText = 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;' +
         (onDark ? '' : ' color:#c7cbe0;');
@@ -217,7 +297,6 @@
       strip.querySelector('#vyr-details-btn').style.display = 'none';
       strip.querySelector('#vyr-detail').style.display = 'none';
       var CAT_LABELS = { core: 'Core', aws: 'AWS', gcp: 'GCP', azure: 'Azure' };
-      var CAT_ICONS = { core: 'dns', aws: 'cloud', gcp: 'cloud_queue', azure: 'cloud_circle' };
       var CAT_ORDER = ['core', 'aws', 'gcp', 'azure'];
       var groups = {};
       (j.services || []).forEach(function (s) {
@@ -253,11 +332,7 @@
           'padding-bottom:9px; margin-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.12);';  // tab-style title + rule
         var htitle = document.createElement('span');
         htitle.style.cssText = 'font-weight:600; color:#e4e4e7; font-size:13.5px; display:inline-flex; align-items:center; gap:6px;';
-        var tico = document.createElement('span');
-        tico.className = 'material-icons';
-        tico.style.cssText = 'font-size:16px; color:#2563eb;';
-        tico.textContent = CAT_ICONS[cat] || 'dns';
-        htitle.appendChild(tico);
+        htitle.appendChild(cloudMark(cat));
         htitle.appendChild(document.createTextNode(CAT_LABELS[cat] || cat));
         var hcount = document.createElement('span');
         var allUp = rc === tc;

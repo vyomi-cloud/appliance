@@ -3453,6 +3453,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   </script>
   <!-- Persistent appliance readiness / diagnostics strip (renders into
        #vyomi-readiness-mount above). Shared with the launch page. -->
+  <script src="./service-icons.js" defer></script>
   <script src="./readiness-strip.js" defer></script>
 
 <style>
@@ -3482,6 +3483,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
  #nano-foot .ep{font:11px ui-monospace,Menlo,monospace;color:#8b8ba7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40vw}
  #nano-logs{position:fixed;left:0;right:0;bottom:34px;z-index:99998;height:240px;background:#05071a;border-top:1px solid #2a2f55;display:none;flex-direction:column;box-shadow:0 -12px 34px rgba(0,0,0,.5)}
  #nano-logs.open{display:flex}
+ /* The tunnel bar + its logs start at the side menu's edge, so the menu's account / Sign out stays visible. */
+ #nano-foot,#nano-logs{left:216px;transition:left .2s ease}
+ body.side-collapsed #nano-foot,body.side-collapsed #nano-logs{left:68px}
+ @media (max-width:768px){#nano-foot,#nano-logs,body.side-collapsed #nano-foot,body.side-collapsed #nano-logs{left:0} #app-sidebar{bottom:34px}}
  #nano-logs .h{padding:5px 14px;font:11px system-ui,-apple-system,sans-serif;color:#8b8ba7;background:#0a0c24;border-bottom:1px solid #1a1f44}
  #nano-logs pre{flex:1;margin:0;padding:10px 14px;overflow:auto;font:12px ui-monospace,Menlo,monospace;color:#cdd8e6;white-space:pre-wrap}
  #nano-logs pre .ok{color:#34d399}#nano-logs pre .err{color:#f87171}#nano-logs pre .dim{color:#71717a}
