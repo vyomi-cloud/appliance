@@ -1043,6 +1043,14 @@
       "timeout": 600
     },
     {
+      "id": "nano-ui-gcp-scheduler-pubsub",
+      "target": "nano",
+      "cloud": "gcp",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-gcp-scheduler-pubsub.mjs",
+      "timeout": 300
+    },
+    {
       "id": "offline-sdk-java-gcp-container",
       "target": "offline",
       "cloud": "gcp",
