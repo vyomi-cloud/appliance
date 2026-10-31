@@ -325,6 +325,16 @@ async function nanoCostPull() {
 }
 async function metaGet(k) { const db = await idb(); const r = await _req(db.transaction("meta").objectStore("meta").get(k)); return r && r.v; }
 async function metaPut(k, v) { const db = await idb(); return await _req(db.transaction("meta", "readwrite").objectStore("meta").put({ k, v })); }
+// The engines reporting right now: each console tab's census (heap + busy time, every 5 s)
+// and the tunnel's relay worker (load:relay). A report older than maxAge means it's gone.
+async function liveEngines(maxAge = 60000) {
+  const now = Date.now(), out = [];
+  for (const k of ["census:aws", "census:gcp", "census:azure", "load:relay"]) {
+    let c = null; try { c = await metaGet(k); } catch (_) {}
+    if (c && typeof c.ts === "number" && (now - c.ts) < maxAge) out.push(c);
+  }
+  return out;
+}
 
 function mkSpace(provider, name, region) {
   const base = nanoSpace(provider);  // provider-correct account + default region
@@ -1090,15 +1100,35 @@ self.addEventListener("fetch", (event) => {
       // utilization card shows a genuine live memory number, not a proxy.
       if (apiPath === "/api/host/sizing" && method === "GET") {
         const base = await (await fetch(FIX + "/host-sizing.json")).json().catch(() => ({}));
-        const now = Date.now();
-        let heap = 0, sessions = 0;
-        for (const p of ["aws", "gcp", "azure"]) {
-          let c = null; try { c = await metaGet("census:" + p); } catch (_) {}
-          if (!c || typeof c.ts !== "number" || (now - c.ts) >= 60000) continue;
-          heap += c.wasm_heap_bytes || 0; sessions++;
-        }
-        if (heap > 0) { base.wasm_heap_mb = Math.round(heap / (1024 * 1024)); base.runtime_sessions = sessions; }
+        const eng = await liveEngines();
+        let heap = 0;
+        for (const e of eng) heap += e.wasm_heap_bytes || 0;
+        if (heap > 0) { base.wasm_heap_mb = Math.round(heap / (1024 * 1024)); base.runtime_sessions = eng.length; }
+        if (typeof navigator.deviceMemory === "number") base.device_memory_gb = navigator.deviceMemory;
         return json(base);
+      }
+      // Host utilization → CPU on Nano: the share of time the in-browser engines (console
+      // tabs + the tunnel's relay worker) spent running Python over their last 5 s window,
+      // as % of one core (each engine runs on one thread). Real, measured — not a fixture.
+      if (apiPath === "/api/host/cpu" && method === "GET") {
+        const eng = await liveEngines(15000);
+        let busy = 0, win = 0;
+        for (const e of eng) { if (e.window_ms > 0) { busy += e.busy_ms || 0; win = Math.max(win, e.window_ms); } }
+        return json({ cpu_percent: win ? Math.min(100, Math.round((busy / win) * 1000) / 10) : 0,
+                      cpu_count: navigator.hardwareConcurrency || 0, engines: eng.length, basis: "engine-busy" });
+      }
+      // Host utilization → Disk on Nano: what this site has stored in the browser (IndexedDB,
+      // caches) against the space the browser lets it use (StorageManager.estimate()).
+      if (apiPath === "/api/runtime/disk-health" && method === "GET") {
+        let est = null, persisted = false;
+        try { est = await navigator.storage.estimate(); } catch (_) {}
+        try { persisted = !!(navigator.storage.persisted && await navigator.storage.persisted()); } catch (_) {}
+        if (!est || !est.quota) return json({ available: false, status: "unknown", error: "storage estimate unavailable" });
+        const used = est.usage || 0, quota = est.quota, GB = 1024 ** 3;
+        const pct = Math.round((used / quota) * 1000) / 10;
+        return json({ available: true, status: pct >= 92 ? "freeze" : pct >= 80 ? "warn" : "green", source: "browser", persisted,
+                      disk: { used_bytes: used, total_bytes: quota, avail_bytes: Math.max(0, quota - used), pct_used: pct,
+                              used_gb: used / GB, total_gb: quota / GB, avail_gb: Math.max(0, quota - used) / GB } });
       }
       // Service status (readiness-strip.js) — the Nano cores are always ready
       // (one Pyodide runtime, nothing to boot), grouped Core/AWS/GCP/Azure.

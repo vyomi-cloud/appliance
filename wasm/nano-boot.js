@@ -211,6 +211,14 @@ import builtins; builtins._disp = _disp
   }
   writeEngines(); setInterval(writeEngines, 30000);
 
+  // CPU: time this engine spends running Python (every request, census, health check
+  // goes through runPython), reported with the census as busy ms per window.
+  let _busyMs = 0, _busySince = performance.now();
+  { const _rp = py.runPython.bind(py);
+    py.runPython = (...a) => { const t = performance.now(); try { return _rp(...a); } finally { _busyMs += performance.now() - t; } }; }
+  const takeBusy = () => { const now = performance.now(), r = { busy_ms: Math.round(_busyMs), window_ms: Math.round(now - _busySince) };
+    _busyMs = 0; _busySince = now; return r; };
+
   const dispatch = (prov, svc, op, params) =>
     JSON.parse(py.runPython(
       `_disp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
@@ -230,6 +238,7 @@ import builtins; builtins._disp = _disp
     try {
       const c = dispatch(CONSOLE_PROVIDER, "_census", "GET", {});
       c.wasm_heap_bytes = heapBytes();
+      Object.assign(c, takeBusy());
       c.ts = Date.now();
       await nbMetaPut("census:" + CONSOLE_PROVIDER, c);
     } catch (_) { /* best-effort — never disturb the console */ }

@@ -159,6 +159,19 @@ async def _handle(req_json):
 import builtins; builtins._handle = _handle
 builtins._capture = _capture; builtins._restore = _restore
 `);
+    // CPU: time spent running Python here (each CLI / SDK request), reported every 5 s with
+    // the heap size — the Health view's Host utilization reads it (sw.js /api/host/cpu).
+    let _busyMs = 0, _busySince = performance.now();
+    const _timed = (fn) => (...a) => { const t = performance.now(); let r;
+      try { r = fn(...a); } catch (e) { _busyMs += performance.now() - t; throw e; }
+      if (r && typeof r.then === "function") return r.finally(() => { _busyMs += performance.now() - t; });
+      _busyMs += performance.now() - t; return r; };
+    py.runPython = _timed(py.runPython.bind(py)); py.runPythonAsync = _timed(py.runPythonAsync.bind(py));
+    setInterval(() => {
+      const now = performance.now(), heap = (py._module && py._module.HEAP8 && py._module.HEAP8.byteLength) || 0;
+      idbPut("load:relay", { ts: Date.now(), busy_ms: Math.round(_busyMs), window_ms: Math.round(now - _busySince), wasm_heap_bytes: heap }).catch(() => {});
+      _busyMs = 0; _busySince = now;
+    }, 5000);
     handle = (reqJson) => py.runPythonAsync(`await _handle(${JSON.stringify(reqJson)})`);
     log("cores loaded (S3·DynamoDB·KMS·Secrets·SQS·SNS·IAM·RDS — real handlers in Pyodide)", "ok");
     log(hasPg ? "RDS engine: PGlite (real Postgres)" : "RDS engine: sqlite3 (PGlite unavailable)", hasPg ? "ok" : "dim");

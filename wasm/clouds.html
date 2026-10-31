@@ -1187,7 +1187,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     /* Modals → dark surface (readable on the dark backdrop). */
     .modal, #modal-body, .cl-box { background: #0d1228 !important; color: #e4e4e7 !important; border: 1px solid rgba(255,255,255,0.10) !important; }
 </style>
-  <style>#host-util-card{display:none!important}</style>
+  <style>#host-util-card .stat-actions{display:none!important}</style>   <!-- Free up space / Grow disk are appliance-only -->
   <script src="./nano-sw.js" defer></script>
 </head>
 <body>
@@ -1397,7 +1397,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
           <h2><span class="material-icons">speed</span>Host utilization</h2>
         </div>
       </div>
-      <p class="sc-desc">Live CPU / RAM / Disk on the host VM.</p>
+      <p class="sc-desc">Live CPU, memory and storage of the in-browser engines on this device.</p>
 
     <!-- ── Live host stats ─────────────────────────────────────────── -->
     <div class="host-stats" id="host-stats">
@@ -1420,7 +1420,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         </svg>
       </div>
       <div class="stat-card" id="stat-disk">
-        <div class="stat-label"><span class="material-icons">storage</span> Disk</div>
+        <div class="stat-label"><span class="material-icons">storage</span> Storage</div>
         <div class="stat-value" id="stat-disk-val">—</div>
         <div class="stat-sub"  id="stat-disk-sub">—</div>
         <svg class="stat-graph" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
@@ -3041,6 +3041,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       el.classList.remove('warn', 'danger');
       if (klass) el.classList.add(klass);
     }
+    if ('PressureObserver' in window && document.getElementById('nano-foot')) {
+      try { new PressureObserver(function (recs) { var r = recs[recs.length - 1]; if (r) window._vyCpuPressure = r.state; }).observe('cpu').catch(function () {}); } catch (_) {}
+    }
     async function refreshHostStats() {
       // CPU + memory: parallel fetch (both small endpoints)
       try {
@@ -3061,9 +3064,18 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
           } else {
             document.getElementById('stat-cpu-val').textContent = '—';
           }
+          if (cpu.basis === 'engine-busy') {
+            // Nano: share of time the in-browser engines spent running (one thread each);
+            // Chrome's Compute Pressure API adds the whole system's CPU state.
+            const n = cpu.engines || 0;
+            document.getElementById('stat-cpu-sub').textContent = (n
+              ? `${cores} cores · ${n} engine${n === 1 ? '' : 's'} running`
+              : `${cores} cores · engines idle — open a console`) + (window._vyCpuPressure ? ` · system ${window._vyCpuPressure}` : '');
+          } else {
           const load1 = (typeof cpu.load_1m === 'number') ? cpu.load_1m.toFixed(2) : '—';
           document.getElementById('stat-cpu-sub').textContent =
             `${cores} cores · load1m ${load1}`;
+          }
         }
 
         // ── Memory ────────────────────────────────────────────────
@@ -3080,7 +3092,13 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
           setStatCurve('stat-mem-line', pct);
           _setStatClass('stat-mem', _classifyStat(pct));
           document.getElementById('stat-mem-sub').textContent =
-            'Pyodide runtime · ' + n + ' active console' + (n === 1 ? '' : 's');
+            'Pyodide engines · ' + n + ' running' + (sizing.device_memory_gb ? ' · device ~' + sizing.device_memory_gb + ' GB' : '');
+        } else if (sizing && document.getElementById('nano-foot')) {
+          // Nano with no engine running: nothing is using memory (never the placeholder total).
+          document.getElementById('stat-mem-val').textContent = '0 MiB';
+          setStatCurve('stat-mem-line', 0);
+          document.getElementById('stat-mem-sub').textContent =
+            'engines not running — open a console' + (sizing.device_memory_gb ? ' · device ~' + sizing.device_memory_gb + ' GB' : '');
         } else if (sizing) {
           const totGiB = sizing.memory_gib || 0;
           let usedPct = null;
@@ -3110,12 +3128,19 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
           const used = (typeof d.used_gb === 'number') ? d.used_gb.toFixed(1) : '—';
           const tot  = (typeof d.total_gb === 'number') ? d.total_gb.toFixed(1) : '—';
           if (pct !== null) {
-            document.getElementById('stat-disk-val').textContent = pct.toFixed(0) + '%';
+            document.getElementById('stat-disk-val').textContent = pct.toFixed(pct > 0 && pct < 1 ? 1 : 0) + '%';
             setStatCurve('stat-disk-line', pct);
             _setStatClass('stat-disk', _classifyStat(pct));
           }
+          if (disk.source === 'browser') {
+            // Nano: what this site stores in the browser vs. what the browser allows it.
+            const fmt = (b) => b >= 1024 ** 3 ? (b / 1024 ** 3).toFixed(1) + ' GB' : (b / 1024 ** 2).toFixed(1) + ' MB';
+            document.getElementById('stat-disk-sub').textContent =
+              `${fmt(d.used_bytes || 0)} of ${fmt(d.total_bytes || 0)} browser storage`;
+          } else {
           document.getElementById('stat-disk-sub').textContent =
             `${used} / ${tot} GB used`;
+          }
         }
       } catch (e) {
         // Best-effort; never break the page
