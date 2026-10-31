@@ -155,6 +155,33 @@ try {
   check("Management: lifecycle rule created (native GetBucketLifecycleConfiguration)", /v4-smoke-rule/.test(lcXml) && /logs\//.test(lcXml), lcXml.slice(0, 200));
   await shot("05c-s3-lifecycle-created");
 
+  // DEPTH pass 2: Requester pays (config_only — stored+returned, UI → native wire).
+  await page.getByRole("tab", { name: "Properties" }).click();
+  await editIn("Requester pays");
+  await page.getByRole("dialog").getByRole("radio", { name: "Enable" }).check();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.waitForTimeout(800);
+  check("Properties: Requester pays saved (native GetBucketRequestPayment)", /<Payer>Requester<\/Payer>/.test(await wire(`/${B}?requestPayment=`)));
+
+  // DEPTH pass 2: Replication rules are now ENFORCED (synchronous same-appliance copy),
+  // not a static panel — create a destination bucket over the wire, a rule through the UI,
+  // then prove a matching PutObject lands in the destination for real.
+  // Named independently of B (not a superstring of it) — the final "bucket list shows it"
+  // check below does a substring-name lookup that must resolve to exactly one bucket.
+  const DEST = `v4-repldest-${Date.now() % 100000}`;
+  await wire(`/${DEST}`, { method: "PUT", headers: { authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=0" } });
+  await page.getByRole("tab", { name: "Management" }).click();
+  await page.getByRole("button", { name: "Create replication rule" }).click();
+  await page.getByLabel("Replication rule name").fill("v4-smoke-repl");
+  await page.getByLabel("Destination bucket").fill(DEST);
+  await page.getByLabel("Prefix").fill("repl/");
+  await page.getByRole("button", { name: "Create rule" }).click();
+  await page.getByRole("cell", { name: "v4-smoke-repl" }).waitFor({ timeout: 10000 });
+  await wire(`/${B}/repl/x.txt`, { method: "PUT", body: "replicate me" });
+  const replicated = await wire(`/${DEST}/repl/x.txt`);
+  check("Management: replication rule enforced (matching PutObject lands in destination bucket)", replicated === "replicate me", replicated);
+  await shot("05d-s3-replication-created");
+
   // Bucket list shows it
   await page.goto(UI + "#/s3");
   // The list paginates (as the native console does), so find it the way a user would.

@@ -96,9 +96,12 @@ def probe(fid: str, p: dict, level: str, ctx: dict) -> tuple[bool, str]:
         ok = st == 200 and b"<Status>Enabled</Status>" in body and lv == 200 and vbody.count(b"<Version>") >= 2
         return ok, f"put {st}, get {g}, ListObjectVersions {lv} ({vbody.count(b'<Version>')} versions)"
     if "s3_roundtrip" in p:
+        if p.get("need_versioning"):
+            call("PUT", f"/{b}?versioning=", svc="s3", body=b"<VersioningConfiguration><Status>Enabled</Status></VersioningConfiguration>")
         sub, doc = p["s3_roundtrip"], p["doc"].encode()
-        st, _ = call("PUT", f"/{b}?{sub}=", svc="s3", body=doc)
-        g, body = call("GET", f"/{b}?{sub}=", svc="s3")
+        qs = f"{sub}=&id={p['id']}" if "id" in p else f"{sub}="
+        st, _ = call("PUT", f"/{b}?{qs}", svc="s3", body=doc)
+        g, body = call("GET", f"/{b}?{qs}", svc="s3")
         same = norm(body) == norm(doc) if sub != "policy" else json.loads(body or b"{}") == json.loads(doc)
         return st in (200, 204) and g == 200 and same, f"PUT {st} GET {g} round-trip={'ok' if same else 'DIFFERS'}"
     if "s3_unsupported" in p:

@@ -37,6 +37,10 @@ from core.object_store import ObjectStore
 S3_NS = "http://s3.amazonaws.com/doc/2006-03-01/"
 
 
+def _strip_xml_decl(s: str) -> str:
+    return re.sub(r'^\s*<\?xml[^>]*\?>\s*', '', s)
+
+
 def _xml_escape(s: str) -> str:
     return (str(s).replace("&", "&amp;").replace("<", "&lt;")
             .replace(">", "&gt;"))
@@ -728,6 +732,63 @@ def _emit(store: ObjectStore, bucket: str, key: str, event: str, entry: dict | N
         pass
 
 
+def _replication_rules(store: ObjectStore, bucket: str) -> list:
+    """Parsed <Rule> entries from the bucket's stored ReplicationConfiguration (if any)."""
+    meta = store.buckets.get(bucket, {})
+    doc = meta.get("cfg", {}).get("replication")
+    if not doc:
+        return []
+    try:
+        root = ET.fromstring(doc)
+    except ET.ParseError:
+        return []
+    rules = []
+    for r in _children(root, "Rule"):
+        dest_el = _child(r, "Destination")
+        dest_arn = _child_text(dest_el, "Bucket") if dest_el is not None else ""
+        filt = _child(r, "Filter")
+        prefix = _child_text(filt, "Prefix") if filt is not None else _child_text(r, "Prefix")
+        rules.append({
+            "id": _child_text(r, "ID"),
+            "status": _child_text(r, "Status", "Disabled"),
+            "prefix": prefix,
+            "destination": dest_arn.rsplit(":", 1)[-1] if dest_arn else "",
+        })
+    return rules
+
+
+def _replicate(store: ObjectStore, bucket: str, key: str, entry: dict | None) -> None:
+    """Replication rules are enforced SYNCHRONOUSLY (no async worker in this simulator):
+    a matching Enabled rule copies the just-written current version into its destination
+    bucket immediately, in-store. Only reaches destinations that exist in this appliance."""
+    if not entry or not entry.get("versions"):
+        return
+    cur = entry["versions"][0]
+    if cur.get("is_delete_marker"):
+        return
+    applied = False
+    for rule in _replication_rules(store, bucket):
+        if rule["status"] != "Enabled":
+            continue
+        if rule["prefix"] and not key.startswith(rule["prefix"]):
+            continue
+        dest = rule["destination"]
+        if not dest or dest == bucket or not store.bucket_exists(dest):
+            continue
+        vstatus_dest = store.versioning_status(dest)
+        vid = _new_version_id(store, dest) if vstatus_dest == "Enabled" else "null"
+        version = _make_version_record(
+            data=_version_bytes(store, bucket, key, cur), content_type=cur.get("content_type", "application/octet-stream"),
+            storage_class=cur.get("storage_class", "STANDARD"), metadata=cur.get("metadata", {}),
+            tags=cur.get("tags", {}), version_id=vid, delete_marker=False,
+        )
+        replace = "__overwrite__" if vstatus_dest == "Disabled" else ("null" if vstatus_dest == "Suspended" else None)
+        _write_object_version(store, dest, key, version, replace_version_id=replace)
+        applied = True
+    if applied:
+        cur["replication_status"] = "COMPLETED"
+
+
 # ── the 5 operations (faithful ports of the handler bodies) ───────────────
 def put_object(store: ObjectStore, bucket: str, key: str, body: bytes, headers: dict) -> S3Response:
     headers = {k.lower(): v for k, v in (headers or {}).items()}
@@ -745,6 +806,7 @@ def put_object(store: ObjectStore, bucket: str, key: str, body: bytes, headers: 
                                    version_id=vid, delete_marker=False)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
+    _replicate(store, bucket, key, entry)
     _emit(store, bucket, key, "s3:ObjectCreated:Put", entry, "PutObject")
     extra = {"ETag": version["etag"], "x-amz-version-id": entry.get("current_version_id", vid)}
     extra.update(_sse_headers(store, bucket))
@@ -798,6 +860,7 @@ def copy_object(store: ObjectStore, bucket: str, key: str, headers: dict) -> S3R
                                    version_id=vid, delete_marker=False)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
+    _replicate(store, bucket, key, entry)
     _emit(store, bucket, key, "s3:ObjectCreated:Copy", entry, "CopyObject")
     store.persist()
     xml = ('<?xml version="1.0" encoding="UTF-8"?>'
@@ -828,6 +891,8 @@ def head_object(store: ObjectStore, bucket: str, key: str, query: dict, headers:
          "ETag": obj["etag"], "Last-Modified": _iso_to_http_date(obj["last_modified"]),
          "x-amz-storage-class": obj.get("storage_class", "STANDARD"),
          "x-amz-version-id": obj.get("version_id", "null")}
+    if obj.get("replication_status"):
+        h["x-amz-replication-status"] = obj["replication_status"]
     for k, v in obj.get("metadata", {}).items():
         h[f"x-amz-meta-{k}"] = v
     h.update(_sse_headers(store, bucket))
@@ -870,6 +935,8 @@ def get_object(store: ObjectStore, bucket: str, key: str, query: dict, headers: 
          "x-amz-request-id": _req_id(), "x-amz-id-2": uuid.uuid4().hex}
     if content_range:
         h["Content-Range"] = content_range
+    if obj.get("replication_status"):
+        h["x-amz-replication-status"] = obj["replication_status"]
     for k, v in obj.get("metadata", {}).items():
         h[f"x-amz-meta-{k}"] = v
     h.update(_sse_headers(store, bucket))
@@ -1154,6 +1221,7 @@ def complete_multipart_upload(store, bucket, key, query, body) -> S3Response:
                                    version_id=vid, delete_marker=False, etag=etag)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
+    _replicate(store, bucket, key, entry)
     _mpu(store).pop(upload_id, None)
     _emit(store, bucket, key, "s3:ObjectCreated:CompleteMultipartUpload", entry, "CompleteMultipartUpload")
     store.persist()
@@ -1195,12 +1263,20 @@ _SUBRESOURCES_STORED = {
     "lifecycle": "NoSuchLifecycleConfiguration",
     "cors": "NoSuchCORSConfiguration",
     "ownershipControls": "OwnershipControlsNotFoundError",
+    "replication": "ReplicationConfigurationNotFoundError",
 }
 # Sub-resources whose PUT body must be well-formed XML (validated like real S3).
-_SUBRESOURCES_XML = ("tagging", "encryption", "publicAccessBlock", "lifecycle", "cors", "ownershipControls")
+_SUBRESOURCES_XML = ("tagging", "encryption", "publicAccessBlock", "lifecycle", "cors", "ownershipControls", "replication")
+# query key → id-keyed config store key, list/item XML tags (BUILD: stored+returned verbatim,
+# not enforced — Vyomi runs neither the long-horizon tiering scheduler nor the CloudWatch
+# metrics/inventory export pipelines these configure).
+_ID_KEYED_SUBRESOURCES = {
+    "intelligent-tiering": ("it_configs", "ListBucketIntelligentTieringConfigurationsOutput", "NoSuchConfiguration"),
+    "inventory": ("inv_configs", "ListInventoryConfigurationsResult", "NoSuchConfiguration"),
+    "metrics": ("metrics_configs", "ListBucketMetricsConfigurationsResult", "NoSuchConfiguration"),
+}
 _SUBRESOURCES_UNSUPPORTED = (
-    "website", "logging", "replication", "accelerate", "requestPayment",
-    "inventory", "analytics", "metrics", "intelligent-tiering", "object-lock",
+    "accelerate", "analytics", "object-lock",
 )
 _NS = 'xmlns="http://s3.amazonaws.com/doc/2006-03-01/"'
 
@@ -1226,7 +1302,8 @@ def _list_multipart_uploads(store: ObjectStore, bucket: str, query: dict) -> S3R
 def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dict,
                         headers: dict, body: bytes) -> S3Response | None:
     sub = next((k for k in ("versioning", "location", "acl", "object-lock", "versions", "notification",
-                            "uploads", *_SUBRESOURCES_STORED) if k in query), None)
+                            "uploads", "website", "logging", "requestPayment",
+                            *_ID_KEYED_SUBRESOURCES, *_SUBRESOURCES_STORED) if k in query), None)
     if sub is None:
         sub = next((k for k in _SUBRESOURCES_UNSUPPORTED if k in query), None)
         if sub is None:
@@ -1292,6 +1369,78 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
         if method == "DELETE":
             meta["notifications"] = default_notifications()
             return _done(store, _empty_response(204))
+    elif sub == "website":
+        if method == "GET":
+            doc = meta.get("website")
+            if doc is None:
+                return _error_xml("NoSuchWebsiteConfiguration", "The specified bucket does not have a website configuration", f"/{bucket}", 404)
+            return _xml_response(doc)
+        if method == "PUT":
+            text = (body or b"").decode("utf-8", "replace").strip()
+            if not text:
+                return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
+            try:
+                ET.fromstring(text)
+            except ET.ParseError:
+                return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
+            meta["website"] = text
+            return _done(store, _empty_response(200))
+        if method == "DELETE":
+            meta.pop("website", None)
+            return _done(store, _empty_response(204))
+    elif sub == "logging":
+        if method == "GET":
+            doc = meta.get("logging") or f'<?xml version="1.0" encoding="UTF-8"?><BucketLoggingStatus {_NS}/>'
+            return _xml_response(doc)
+        if method == "PUT":
+            text = (body or b"").decode("utf-8", "replace").strip()
+            if text:
+                try:
+                    ET.fromstring(text)
+                except ET.ParseError:
+                    return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
+                meta["logging"] = text
+            else:
+                meta.pop("logging", None)
+            return _done(store, _empty_response(200))
+    elif sub == "requestPayment":
+        if method == "GET":
+            payer = meta.get("payer", "BucketOwner")
+            return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><RequestPaymentConfiguration {_NS}><Payer>{payer}</Payer></RequestPaymentConfiguration>')
+        if method == "PUT":
+            text = (body or b"").decode("utf-8", "replace")
+            m = re.search(r"<Payer>\s*(BucketOwner|Requester)\s*</Payer>", text)
+            if not m:
+                return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
+            meta["payer"] = m.group(1)
+            return _done(store, _empty_response(200))
+    elif sub in _ID_KEYED_SUBRESOURCES:
+        store_key, list_tag, not_found_code = _ID_KEYED_SUBRESOURCES[sub]
+        configs = meta.setdefault(store_key, {})
+        cfg_id = (query or {}).get("id")
+        if method == "GET":
+            if cfg_id:
+                doc = configs.get(cfg_id)
+                if doc is None:
+                    return _error_xml(not_found_code, "The specified configuration does not exist.", f"/{bucket}", 404)
+                return _xml_response(doc)
+            items = "".join(_strip_xml_decl(v) for v in configs.values())
+            return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><{list_tag} {_NS}><IsTruncated>false</IsTruncated>{items}</{list_tag}>')
+        if not cfg_id:
+            return _error_xml("InvalidArgument", "The id parameter must be specified.", f"/{bucket}", 400)
+        if method == "PUT":
+            text = (body or b"").decode("utf-8", "replace").strip()
+            if not text:
+                return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
+            try:
+                ET.fromstring(text)
+            except ET.ParseError:
+                return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
+            configs[cfg_id] = text
+            return _done(store, _empty_response(200))
+        if method == "DELETE":
+            configs.pop(cfg_id, None)
+            return _done(store, _empty_response(204))
     elif sub == "object-lock":
         if not meta.get("object_lock"):
             if method == "GET":
@@ -1338,6 +1487,8 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
                     return _error_xml("AccessDenied",
                                       "This request is not allowed because the bucket owner enforced the "
                                       "Block Public Access setting that disallows public bucket policies.", f"/{bucket}", 403)
+            if sub == "replication" and store.versioning_status(bucket) != "Enabled":
+                return _error_xml("InvalidRequest", "Versioning must be 'Enabled' on the bucket to apply a replication configuration.", f"/{bucket}", 400)
             cfg[sub] = text
             if sub == "tagging":
                 meta["tags"] = parse_tagging_xml(text.encode("utf-8"))
