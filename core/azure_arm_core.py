@@ -116,9 +116,11 @@ def _record_activity(resource_name: str, action: str, detail: str = "") -> None:
 
 def _parse_odata_ts(s: str):
     try:
-        return datetime.datetime.fromisoformat(s.strip().replace("Z", "+00:00"))
+        d = datetime.datetime.fromisoformat(s.strip().replace("Z", "+00:00"))
     except ValueError:
         return None
+    return d if d.tzinfo else d.replace(tzinfo=datetime.timezone.utc)   # naive = UTC (comparable)
+
 
 
 def _activity_log_query(query: dict) -> dict:
@@ -547,7 +549,10 @@ class AzureArm:
                     ts = _parse_odata_ts(str(e.get("eventTimestamp") or ""))
                     return ts is None or ((since is None or ts >= since) and (until is None or ts <= until))
                 events = [e for e in events if _in_range(e)]
-            events.sort(key=lambda e: str(e.get("eventTimestamp") or ""), reverse=True)
+            # sort by the parsed instant: the two sources write ms vs µs precision, which
+            # string order gets wrong ("…47.463Z" > "…47.463441Z")
+            _epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+            events.sort(key=lambda e: _parse_odata_ts(str(e.get("eventTimestamp") or "")) or _epoch, reverse=True)
             return _ok({"value": events})
 
         # Microsoft.Authorization/locks scoped directly to the RESOURCE GROUP (or, with no

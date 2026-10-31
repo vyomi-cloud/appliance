@@ -741,6 +741,14 @@ def _activity_log_list(state, sub, query):
     rows = [r for r in state.values()
             if str(r.get("_type", "")).lower() == "microsoft.insights/eventtypes" and r.get("_sub") == sub
             and (want is None or str(r.get("resourceId", "")).lower() == want)]
+    # Timespan picker: real ARM eventTimestamp ge/le OData predicates. ISO-8601 UTC strings
+    # sort lexicographically, so plain string comparison is correct.
+    ge = re.search(r"eventTimestamp\s+ge\s+'([^']*)'", flt, re.I)
+    le = re.search(r"eventTimestamp\s+le\s+'([^']*)'", flt, re.I)
+    if ge:
+        rows = [r for r in rows if str(r.get("eventTimestamp") or "") >= ge.group(1)]
+    if le:
+        rows = [r for r in rows if str(r.get("eventTimestamp") or "") <= le.group(1)]
     rows.sort(key=lambda e: (e.get("eventTimestamp") or "", e.get("_seq", 0)), reverse=True)
     return _ok({"value": [_view(r) for r in rows]})
 
