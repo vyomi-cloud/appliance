@@ -722,6 +722,11 @@
       border-bottom: 2px solid #2563eb;
     }
     #spaces-card > .sc-head > .btn-create-space { margin-bottom: 10px; }
+    /* Filter pills sit in the header row (right); Create Space sits right above the cards. */
+    #spaces-card > .sc-head > .prov-filter { margin: 0 0 10px; }
+    #spaces-card .sc-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 14px 0 18px; }
+    #spaces-card .sc-actions .sc-desc { margin: 0; }
+    #spaces-card .sc-actions-btns { display: flex; align-items: center; gap: 8px; margin-left: auto; }
     /* Restored section description, below the tab baseline. */
     .sc-desc { margin: 14px 0 18px; font-size: 13px; color: #5f6b7a; }
 
@@ -1281,13 +1286,7 @@
         <div class="sc-title">
           <h2><span class="material-icons">workspaces</span>Active spaces</h2>
         </div>
-        <button class="save-chip" id="save-chip" type="button" title="Activate the appliance to keep your workspace" style="display:none"><span class="material-icons">bookmark_add</span>Activate to save</button>
-        <button class="btn-create-space" type="button" onclick="openCreateSpaceModal()">
-          <span class="material-icons">add</span>Create Space
-        </button>
-      </div>
-      <p class="sc-desc">Click any space to switch context and open its console. Use the pills below to filter by cloud.</p>
-      <div class="prov-filter" id="prov-filter">
+        <div class="prov-filter" id="prov-filter">
         <button class="active" type="button" data-prov="" onclick="onSpaceFilter('')">
           All <span class="pf-count" id="pf-count-all">0</span>
         </button>
@@ -1303,6 +1302,17 @@
           <span class="pf-glyph"><svg viewBox="0 0 24 24"><path d="M11.5 3 4 19.5h6.2l3.2-9.5L11.5 3z" fill="#50e6ff"/><path d="M13 7.2 10.4 14h5l.4 2-4.5 2H20l-7-10.8z" fill="#0078d4"/></svg></span>
           Azure <span class="pf-count" id="pf-count-azure">0</span>
         </button>
+      </div>
+      </div>
+      <!-- Description + actions, right above the space cards -->
+      <div class="sc-actions">
+        <p class="sc-desc">Click any space to switch context and open its console. Filter by cloud with the pills above.</p>
+        <div class="sc-actions-btns">
+          <button class="save-chip" id="save-chip" type="button" title="Activate the appliance to keep your workspace" style="display:none"><span class="material-icons">bookmark_add</span>Activate to save</button>
+        <button class="btn-create-space" type="button" onclick="openCreateSpaceModal()">
+          <span class="material-icons">add</span>Create Space
+        </button>
+        </div>
       </div>
       <div id="spaces-grid" class="spaces-grid" data-filter="">
         <div class="empty-spaces">Loading spaces…</div>
