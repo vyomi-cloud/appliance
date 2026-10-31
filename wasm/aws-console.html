@@ -100,15 +100,32 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 
   /* ---- Page layout (rail + main) ---- */
   .page{display:flex;min-height:calc(100vh - 40px - 36px)}
-  aside.service-rail{width:232px;background:#fff;border-right:1px solid var(--line);padding:14px 0;overflow-y:auto}
-  aside.service-rail h3{font-size:15px;font-weight:700;color:var(--ink);margin:0 14px 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
-  aside.service-rail .group{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--sub);padding:14px 14px 4px;font-weight:600}
-  aside.service-rail a.item{display:flex;align-items:center;gap:9px;padding:6px 14px;color:var(--ink);font-size:13px;line-height:1.3;cursor:pointer;text-decoration:none;border-left:3px solid transparent}
-  aside.service-rail a.item:hover{background:#f1f3f4}
-  aside.service-rail a.item.active{background:var(--orange-l);color:var(--orange-d);border-left-color:var(--orange);font-weight:600}
-  aside.service-rail a.item .ic{font-size:17px;color:var(--sub);width:18px}
-  aside.service-rail a.item.active .ic{color:var(--orange-d)}
+  /* Left navigation — the AWS console's own (Cloudscape side navigation): the service name as a
+     header link with a close button, plain text links (no icons), expandable sections with a
+     caret, a divider before the footer links, the current page in bold blue. Closed, it leaves a
+     slim strip with the menu button. */
+  aside.service-rail{width:240px;background:#fff;border-right:1px solid #e9ebed;padding:0 0 20px;overflow-y:auto;flex-shrink:0;position:relative}
+  aside.service-rail .nav-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:18px 16px 14px 24px;border-bottom:1px solid #e9ebed;margin-bottom:12px}
+  aside.service-rail .nav-title{font-size:18px;line-height:22px;font-weight:700;color:#000716;cursor:pointer;text-decoration:none}
+  aside.service-rail .nav-title:hover{color:#0972d3}
+  aside.service-rail .nav-x,aside.service-rail .nav-open{border:0;background:none;color:#414d5c;cursor:pointer;padding:2px;border-radius:4px;display:flex}
+  aside.service-rail .nav-x:hover,aside.service-rail .nav-open:hover{color:#000716;background:#f4f4f4}
+  aside.service-rail .nav-x .material-symbols-outlined,aside.service-rail .nav-open .material-symbols-outlined{font-size:20px}
+  aside.service-rail a.item{display:flex;align-items:center;gap:6px;padding:4px 16px 4px 24px;color:#414d5c;font-size:14px;line-height:20px;cursor:pointer;text-decoration:none}
+  aside.service-rail a.item:hover{color:#0972d3}
+  aside.service-rail a.item.active{color:#0972d3;font-weight:700}
   aside.service-rail a.item .lbl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  aside.service-rail a.item .ext{font-size:14px;color:#5f6b7a}
+  aside.service-rail .nav-sec-h{display:flex;align-items:center;gap:2px;width:100%;border:0;background:none;padding:6px 16px 4px 18px;font:inherit;font-size:14px;line-height:20px;font-weight:700;color:#000716;cursor:pointer;text-align:left}
+  aside.service-rail .nav-sec-h .material-symbols-outlined{font-size:20px;color:#414d5c;transition:transform .12s}
+  aside.service-rail .nav-sec.closed .nav-sec-h .material-symbols-outlined{transform:rotate(-90deg)}
+  aside.service-rail .nav-sec.closed .nav-sec-b{display:none}
+  aside.service-rail .nav-sec-b a.item{padding-left:40px}
+  aside.service-rail hr.nav-div{border:0;border-top:1px solid #e9ebed;margin:12px 16px 12px 24px}
+  aside.service-rail.closed{width:40px;padding:0;overflow:hidden}
+  aside.service-rail.closed > :not(.nav-open){display:none}
+  aside.service-rail .nav-open{margin:14px auto 0}
+  aside.service-rail:not(.closed) .nav-open{display:none}
   /* Stub items are now real schema-driven pages — no special dim/tag needed */
 
   main.aws-main{flex:1;overflow-y:auto;padding:20px 26px;max-width:1500px}
@@ -749,9 +766,34 @@ function renderCrumbs(){
 // =====================================================================
 function renderRail(){
   const rail = document.getElementById("rail"); rail.innerHTML = "";
+  // Closed: a slim strip with the menu button (remembered across reloads).
+  let closed = false; try { closed = localStorage.getItem("vyomi.aws.navclosed") === "1"; } catch (_) {}
+  rail.classList.toggle("closed", closed);
+  const setClosed = (c) => { try { localStorage.setItem("vyomi.aws.navclosed", c ? "1" : "0"); } catch (_) {} renderRail(); };
+  rail.append(el("button",{class:"nav-open",type:"button",title:"Open navigation","aria-label":"Open navigation",onclick:()=>setClosed(false)},
+    el("span",{class:"material-symbols-outlined"}, "menu")));
+  const head = (title, onTitle) => rail.append(el("div",{class:"nav-head"},
+    el("a",{class:"nav-title",onclick:onTitle}, title),
+    el("button",{class:"nav-x",type:"button",title:"Close navigation","aria-label":"Close navigation",onclick:()=>setClosed(true)},
+      el("span",{class:"material-symbols-outlined"}, "close"))));
+  // Expandable sections keep their open / closed state while you move around.
+  const navClosed = (STATE._navClosed = STATE._navClosed || {});
+  let body = rail;
+  const section = (label) => {
+    const id = (STATE.service || "home") + "/" + label;
+    const sec = el("div",{class:"nav-sec"+(navClosed[id] ? " closed" : "")});
+    const b = el("div",{class:"nav-sec-b"});
+    sec.append(el("button",{class:"nav-sec-h",type:"button","aria-expanded":String(!navClosed[id]),
+      onclick:()=>{ navClosed[id] = !navClosed[id]; sec.classList.toggle("closed", !!navClosed[id]); }},
+      el("span",{class:"material-symbols-outlined"}, "arrow_drop_down"), label), b);
+    rail.append(sec); body = b;
+  };
+  const link = (label, onclick, opts) => body.append(el("a",{class:"item"+(opts && opts.active ? " active" : "")+(opts && opts.cls || ""),onclick},
+    el("span",{class:"lbl"}, label), opts && opts.ext ? el("span",{class:"material-symbols-outlined ext"}, "open_in_new") : null));
+
   if (!STATE.service) {
-    // Home rail: services grouped by category
-    rail.append(el("h3",{}, "Console Home"));
+    // Home: services grouped by category
+    head("Console Home", ()=>navigate({view:"home", service:null}));
     const groups = [
       ["Compute", ["ec2", "lambda"]],
       ["Storage", ["s3"]],
@@ -763,20 +805,15 @@ function renderRail(){
       ["Management & Governance", ["logs", "ssm", "cloudwatch"]],
     ];
     groups.forEach(([label, keys]) => {
-      rail.append(el("div",{class:"group"}, label));
-      keys.forEach(k => {
-        const s = svcByKey(k); if (!s) return;
-        rail.append(el("a",{class:"item",onclick:()=>navigate({view:"list", service:s.key, item:null})},
-          el("span",{class:"material-symbols-outlined ic"}, s.icon),
-          el("span",{class:"lbl"}, s.label)));
-      });
+      section(label);
+      keys.forEach(k => { const s = svcByKey(k); if (s) link(s.label, ()=>navigate({view:"list", service:s.key, item:null})); });
     });
     return;
   }
   // Service-specific rail
   const svc = svcByKey(STATE.service);
   if (!svc) return;
-  rail.append(el("h3",{}, svc.label + " Dashboard"));
+  head(svc.label, ()=>navigate({view:"list", child:null, item:null}));
 
   // Prefer the catalog's rail_items (schema-driven, AWS-faithful) when present;
   // fall back to the legacy children list. Each rail item is one of:
@@ -790,7 +827,7 @@ function renderRail(){
 
   railItems.forEach(it => {
     if (it.group) {
-      rail.append(el("div",{class:"group"}, it.group));
+      section(it.group);   // the catalog already uses the console's own capitalisation
       return;
     }
     let isActive = false, onClick = null, extraClass = "";
@@ -823,20 +860,15 @@ function renderRail(){
       const stubKey = it.stub_key
         ? it.stub_key.replace(svc.key + "/", "")  // strip svc/ prefix if present
         : it.key;
+      isActive = (STATE.view === "stub" && STATE.stub === stubKey);
       onClick = () => navigate({view:"stub", stub:stubKey, stubLabel:it.label});
     }
-    rail.append(el("a",{class:"item"+(isActive?" active":"")+extraClass,onclick:onClick},
-      el("span",{class:"material-symbols-outlined ic"}, it.icon||"chevron_right"),
-      el("span",{class:"lbl"}, it.label),
-      // Stub items now open real (schema-driven) pages — no "soon" tag needed
-      null,
-      it.type === "link" ? el("span",{class:"material-symbols-outlined",style:"font-size:13px;color:var(--sub);margin-left:auto"}, "open_in_new") : null));
+    link(it.label, onClick, {active:isActive, cls:extraClass, ext:it.type === "link"});
   });
-  // Back to all services
-  rail.append(el("div",{class:"group"}, "Navigate"));
-  rail.append(el("a",{class:"item",onclick:()=>navigate({view:"home", service:null})},
-    el("span",{class:"material-symbols-outlined ic"}, "home"),
-    el("span",{class:"lbl"}, "Console Home")));
+  // Footer: back to all services
+  body = rail;
+  rail.append(el("hr",{class:"nav-div"}));
+  link("Console Home", ()=>navigate({view:"home", service:null}));
 }
 
 // =====================================================================
