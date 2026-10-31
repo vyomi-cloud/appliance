@@ -655,7 +655,7 @@ try {
   await page.getByRole("button", { name: `Delete ${LOCK}` }).click();
   await page.getByLabel("Confirm deletion").fill(LOCK);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
-  await page.getByText(LOCK).waitFor({ state: "detached", timeout: 10000 });
+  await page.getByRole("button", { name: `Delete ${LOCK}` }).waitFor({ state: "detached", timeout: 10000 });   // the lock's own row (its name also appears in activity/notifications)
   await page.goto(UI + `#/eventgrid/topics/${RG}/${EGT}`);
   await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(EGT);

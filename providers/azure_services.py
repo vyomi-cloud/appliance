@@ -1041,6 +1041,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
                 raise
             except Exception:
                 pass
+        blocked = _core_lock_block(rid, full_type, for_delete=False)   # ReadOnly locks (same types as the core)
+        if blocked is not None:
+            return blocked
         resp = _upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
         # Data-plane provisioning hooks (real Postgres for SQL, etc.).
         _provision_on_create(full_type, _state.get(key), base)
@@ -1058,6 +1061,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         _record_arm_activity(rid, f"{full_type}/write", sub)
         return resp
     if method == "DELETE":
+        blocked = _core_lock_block(rid, full_type, for_delete=True)    # CanNotDelete / ReadOnly locks
+        if blocked is not None:
+            return blocked
         rec = _state.pop(key, None)
         _deprovision_on_delete(full_type, rec)
         if rec is not None:
@@ -1221,6 +1227,20 @@ def _core_arm_handles(namespace: str, top_type: str) -> bool:
         return False
     key = (namespace.lower(), (top_type or "").lower())
     return any((c["namespace"].lower(), c["type"].lower()) == key for c in _core_catalog)
+
+
+def _core_lock_block(rid: str, full_type: str, for_delete: bool):
+    """Microsoft.Authorization/locks enforcement for writes served by this offline catalog —
+    the core ARM engine's own rule (same resource types it enforces for, e.g. Event Grid topics,
+    Service Bus), so a lock behaves the same offline and on Nano. A 409 ScopeLocked response,
+    or None when the write may proceed."""
+    try:
+        out = core_arm()._lock_block(rid, full_type, for_delete)
+    except Exception:
+        return None
+    if not out:
+        return None
+    return JSONResponse(status_code=out.get("status", 409), content=out.get("body"))
 
 
 def _record_arm_activity(rid: str, operation_name: str, sub: str) -> None:
