@@ -69,4 +69,15 @@ export default {
     });
     return uniq;
   },
+
+  // A Microsoft.Insights/diagnosticSettings extension resource scoped to the VM's own id —
+  // the same generic engine core/azure_monitor_core.py's find_diagnostic_marker wires for
+  // any resource (azure.vms.diagnostic_settings).
+  "live-diag": async (wire, uniq) => {
+    await ensureVm(wire);
+    await wire("PUT", `${vmPath(VM).split("?")[0]}/providers/Microsoft.Insights/diagnosticSettings/${uniq}?api-version=2021-05-01-preview`, {
+      svc: null, body: { properties: { workspaceId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.OperationalInsights/workspaces/uic-law`, logs: [{ categoryGroup: "allLogs", enabled: true }], metrics: [{ category: "AllMetrics", enabled: true }] } },
+    });
+    return uniq;
+  },
 };

@@ -35,7 +35,7 @@
   "vm-insights": { "route": "#/vms/uic-rg/uicvm/insights", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },
   "vm-alerts": { "route": "#/vms/uic-rg/uicvm/alerts", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },
   "vm-metrics": { "route": "#/vms/uic-rg/uicvm/metrics", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },
-  "vm-diagnostic-settings": { "route": "#/vms/uic-rg/uicvm/diagnosticsettings", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },
+  "vm-diagnostic-settings": { "route": "#/vms/uic-rg/uicvm/diagnosticsettings", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" }, "live": "live-diag" },
   "vm-logs": { "route": "#/vms/uic-rg/uicvm/logs", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },
   "vm-connection-monitor": { "route": "#/vms/uic-rg/uicvm/connectionmonitor", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },
   "vm-workbooks": { "route": "#/vms/uic-rg/uicvm/workbooks", "fixtures": ["az-vm"], "vars": { "resource-name": "uicvm" } },

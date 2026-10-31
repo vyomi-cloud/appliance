@@ -88,6 +88,22 @@ export const listSizesForVm = async (rg, name) =>
 /** A rough, clearly-labelled monthly cost estimate (vCPU + RAM linear model) — not live Azure retail pricing. */
 export const estMonthlyCost = (s) => Math.round(s.numberOfCores * 18 + (s.memoryInMB / 1024) * 4.5);
 
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings) — a real ARM extension
+// resource scoped to ANY resource's own id (core/azure_arm_core.py's generic diag_marker
+// dispatch, the same engine the Monitor service's cross-resource picker uses), wired here
+// directly to the VM's own blade instead of routing through that picker.
+const DIAG_API_VERSION = "2021-05-01-preview";
+const diagPath = (resourceId, name) => `${resourceId}/providers/Microsoft.Insights/diagnosticSettings${name ? `/${encodeURIComponent(name)}` : ""}`;
+export const listDiagnosticSettings = async (resourceId) =>
+  (await restJson("GET", diagPath(resourceId), { query: { "api-version": DIAG_API_VERSION } })).value || [];
+export const putDiagnosticSetting = (resourceId, name, body) =>
+  restJson("PUT", diagPath(resourceId, name), { query: { "api-version": DIAG_API_VERSION }, body });
+export const deleteDiagnosticSetting = (resourceId, name) =>
+  restJson("DELETE", diagPath(resourceId, name), { query: { "api-version": DIAG_API_VERSION } });
+
+const WORKSPACE_ARM = armType("Microsoft.OperationalInsights", "workspaces", "2022-10-01");
+export const listWorkspaces = async () => (await WORKSPACE_ARM.list()).map((w) => ({ ...w, resourceGroup: parseId(w.id).resourceGroup }));
+
 // ── create-VM form model → ARM bodies (VM + NIC + optional NSG) ─────────────────────────
 export function toVmBody(f) {
   const nicId = NIC_ARM.path(f.resourceGroup, nicNameFor(f.name));

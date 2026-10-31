@@ -107,9 +107,18 @@
   ]
  },
  "azure.vms.monitoring": {
-  "title": "Insights, Alerts, Metrics, Diagnostic settings, Logs, Connection monitor, Workbooks",
+  "title": "Insights, Alerts, Metrics, Logs, Connection monitor, Workbooks",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Azure Monitor metrics/alerts/diagnostic settings and Network Watcher connection monitor for virtual machines are not modelled."]
+  "limitations": ["Azure Monitor metrics/alerts and Network Watcher connection monitor for virtual machines are not modelled."]
+ },
+ "azure.vms.diagnostic_settings": {
+  "title": "Diagnostic settings (routing this VM's logs/metrics to a Log Analytics workspace, storage account or event hub)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Logs/metrics are never actually delivered to the configured destination — there is no agent/telemetry pipeline, so the setting is stored and validated exactly as the real resource requires but nothing flows.",
+   "Vyomi has no catalog of a virtual machine's real log/metric category names (GET .../diagnosticSettingsCategories is not modelled) — the add form offers the 'allLogs' category group and 'AllMetrics' rather than a VM-specific category picker, and only a Log Analytics workspace destination is offered (storage account and event hub destinations are real over the wire but have no picker in this blade)."
+  ],
+  "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
  },
  "azure.vms.tools": {
   "title": "Diagnose and solve problems, Resource visualizer, Bastion, Load balancing, Application security groups, Network manager, Extensions + applications, Operating system, Configuration, Advisor recommendations, Availability + scaling, Microsoft Defender for Cloud, Backup, Disaster recovery, Updates, Inventory, Change tracking, Tasks, Resource health, Boot diagnostics, Performance diagnostics, Reset password, Redeploy + reapply, Serial console, Support + Troubleshooting",

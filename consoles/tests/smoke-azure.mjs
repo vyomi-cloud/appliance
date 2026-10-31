@@ -1455,6 +1455,33 @@ try {
   await page.getByText("Start succeeded").waitFor({ timeout: 10000 });
   await shot("31-vm-power");
 
+  // ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, scoped to this VM's own
+  // resource id — the same generic ARM extension engine the Monitor service's cross-resource
+  // picker uses) added through the VM's own blade → visible over native ARM, and the
+  // reverse (wire-created setting shown in the blade) ───────────────────────────────────
+  const VMLAW = `vysmokevmlaw${n}`;
+  const vmLawPut = await wire(`/subscriptions/${SUB}/resourceGroups/${DEFAULT_RG}/providers/Microsoft.OperationalInsights/workspaces/${VMLAW}?api-version=2022-10-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ location: "eastus" }) });
+  check("ARM PUT Log Analytics workspace for VM diagnostic settings over wire", vmLawPut.status === 200 || vmLawPut.status === 201, `HTTP ${vmLawPut.status}`);
+  await page.goto(UI + `#/vms/${DEFAULT_RG}/${VM}/diagnosticsettings`);
+  const VMDIAG = `vysmokevmdiag${n}`;
+  await page.getByRole("button", { name: "Add diagnostic setting" }).click();
+  await page.getByLabel("Log Analytics workspace", { exact: true }).waitFor({ timeout: 5000 });
+  await page.getByLabel("Diagnostic setting name", { exact: true }).fill(VMDIAG);
+  await page.getByLabel("Log Analytics workspace", { exact: true }).selectOption({ label: VMLAW });
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByText(VMDIAG, { exact: true }).first().waitFor({ timeout: 10000 });
+  const vmDiagGet = await wire(`/subscriptions/${SUB}/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM}/providers/Microsoft.Insights/diagnosticSettings/${VMDIAG}?api-version=2021-05-01-preview`);
+  check("UI create VM diagnostic setting → visible over native ARM extension resource", vmDiagGet.status === 200, `HTTP ${vmDiagGet.status}`);
+  const VMDIAG2 = `vywirevmdiag${n}`;
+  const vmDiagPut = await wire(`/subscriptions/${SUB}/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM}/providers/Microsoft.Insights/diagnosticSettings/${VMDIAG2}?api-version=2021-05-01-preview`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties: { storageAccountId: `/subscriptions/${SUB}/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Storage/storageAccounts/vysmokevmdiagsa${n}`, logs: [{ categoryGroup: "allLogs", enabled: true }], metrics: [{ category: "AllMetrics", enabled: true }] } }) });
+  check("ARM PUT VM diagnostic setting over wire", vmDiagPut.status === 200 || vmDiagPut.status === 201, `HTTP ${vmDiagPut.status}`);
+  await page.reload();
+  await page.getByText(VMDIAG2, { exact: true }).first().waitFor({ timeout: 10000 });
+  check("wire-created VM diagnostic setting shown in the blade", true);
+  await shot("31b-vm-diagnostic-settings");
+
   // ── Virtual machine created over the wire → visible in the UI (CLI → UI) ──────────────
   const vmPut = await arm("PUT", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM2}`,
     { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_B2s" }, osProfile: { computerName: VM2, adminUsername: "azureuser" }, storageProfile: { osDisk: { osType: "Linux" } } } });

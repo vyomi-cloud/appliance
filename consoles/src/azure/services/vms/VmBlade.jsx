@@ -1,9 +1,11 @@
 /* Virtual machine resource blade: left resource menu + panels. Overview, Tags, Locks, Activity
  * log, Size, Disks, Identity, Auto-shutdown, Connect, Network settings (network interface +,
  * when attached, its network security group's inbound/outbound rules — the same engine the
- * Network security groups console uses), Properties and Export template are backed by real ARM
- * calls; the remaining menu items are honest CapabilityContainer gaps
- * (core/capabilities/azure/vms.json is the single source of truth for which). */
+ * Network security groups console uses), Diagnostic settings (Microsoft.Insights/diagnostic
+ * Settings, the same generic ARM extension engine the Monitor service's cross-resource picker
+ * uses), Properties and Export template are backed by real ARM calls; the remaining menu items
+ * are honest CapabilityContainer gaps (core/capabilities/azure/vms.json is the single source
+ * of truth for which). */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -70,7 +72,7 @@ const GAP_CAP = {
   resourcehealth: "azure.vms.tools", bootdiagnostics: "azure.vms.tools", perfdiagnostics: "azure.vms.tools",
   resetpassword: "azure.vms.tools", redeploy: "azure.vms.tools", serialconsole: "azure.vms.tools", support: "azure.vms.tools",
   insights: "azure.vms.monitoring", alerts: "azure.vms.monitoring", metrics: "azure.vms.monitoring",
-  diagnosticsettings: "azure.vms.monitoring", logs: "azure.vms.monitoring", connectionmonitor: "azure.vms.monitoring", workbooks: "azure.vms.monitoring",
+  logs: "azure.vms.monitoring", connectionmonitor: "azure.vms.monitoring", workbooks: "azure.vms.monitoring",
 };
 
 export default function VmBlade({ params }) {
@@ -101,6 +103,7 @@ export default function VmBlade({ params }) {
       autoshutdown: () => <AutoShutdown a={a} reload={reload} />,
       connect: () => <Connect a={a} />,
       networksettings: () => <NetworkSettings a={a} />,
+      diagnosticsettings: () => <DiagnosticSettings a={a} />,
       runcommand: () => <RunCommand />,
       exporttemplate: () => <ExportTemplate a={a} />,
     }[panel];
@@ -866,6 +869,71 @@ function NetworkSettings({ a }) {
         {tab === "asgs" && <NotSimulated feature="Application security groups" note="This lens does not model Microsoft.Network/applicationSecurityGroups." />}
         {tab === "lb" && <NotSimulated feature="Load balancing" note="This lens does not model Microsoft.Network/loadBalancers." />}
       </div>
+    </CapabilityContainer>
+  );
+}
+
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, scoped to this VM's own
+// resource id) — the same generic ARM extension engine the Monitor service's cross-resource
+// picker uses, wired directly from the VM's own blade (see azure.vms.diagnostic_settings). ──
+function DiagnosticSettings({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listDiagnosticSettings(a.id), [a.id]);
+  const workspaces = useAsync(() => api.listWorkspaces(), []);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [workspace, setWorkspace] = useState("");
+  const rows = data || [];
+  useEffect(() => { if (add) { setName(""); setWorkspace(workspaces.data?.[0]?.id || ""); } }, [add, workspaces.data]);
+  return (
+    <CapabilityContainer id="azure.vms.diagnostic_settings" title={`${a.name} | Diagnostic settings`}
+      actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>}>
+      <BrowseGrid
+        resourceName="diagnostic setting" rowKey={(r) => r.name} filterPlaceholder="Search to filter items..."
+        items={rows} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add diagnostic setting</ToolbarButton>}
+        onDelete={async (sel) => {
+          for (const r of sel) await api.deleteDiagnosticSetting(a.id, r.name);
+          notify.success(`Deleted ${sel.length} diagnostic setting${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+          reload();
+        }}
+        csvName="diagnostic-settings.csv"
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "dest", label: "Destination details", value: (r) => (r.properties?.workspaceId ? "Log Analytics workspace" : r.properties?.storageAccountId ? "Storage account" : r.properties?.eventHubAuthorizationRuleId ? "Event hub" : "--") },
+          { key: "logs", label: "Log categories", value: (r) => (r.properties?.logs || []).filter((l) => l.enabled).length },
+          { key: "metrics", label: "Metric categories", value: (r) => (r.properties?.metrics || []).filter((m) => m.enabled).length },
+        ]}
+      />
+      <Dialog open={add} onOpenChange={(_, d) => !d.open && setAdd(false)}>
+        <DialogSurface aria-label="Add diagnostic setting">
+          <DialogBody>
+            <DialogTitle>Add diagnostic setting</DialogTitle>
+            <DialogContent>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <Field label="Diagnostic setting name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Diagnostic setting name" /></Field>
+                <Field label="Log Analytics workspace">
+                  {workspaces.data?.length ? (
+                    <Select value={workspace} onChange={(_, d) => setWorkspace(d.value)} aria-label="Log Analytics workspace">
+                      {workspaces.data.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                    </Select>
+                  ) : <p className="vy-muted">No Log Analytics workspace yet. <Link href="#/monitor/createloganalyticsworkspace">Create one</Link></p>}
+                </Field>
+              </div>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" disabled={!name || !workspace} onClick={async () => {
+                try {
+                  await api.putDiagnosticSetting(a.id, name, { properties: { workspaceId: workspace, logs: [{ categoryGroup: "allLogs", enabled: true }], metrics: [{ category: "AllMetrics", enabled: true }] } });
+                  notify.success(`Diagnostic setting '${name}' was saved.`, "Save succeeded");
+                  setAdd(false); reload();
+                } catch (e) { notify.error(e, "Saving diagnostic setting failed"); }
+              }}>Save</Button>
+              <Button onClick={() => setAdd(false)}>Cancel</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </CapabilityContainer>
   );
 }
