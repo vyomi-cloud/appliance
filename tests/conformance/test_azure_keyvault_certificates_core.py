@@ -11,6 +11,8 @@ with recoveryId, CertificateNotFound 404 errors).
 Run on host:    python3 tests/conformance/test_azure_keyvault_certificates_core.py
 Run in Pyodide: loaded by the wasm/ harness (same file).
 """
+import base64
+import hashlib
 import json
 
 try:
@@ -93,6 +95,35 @@ def run() -> int:
     # 7. missing api-version -> 400
     noapi = kv.dispatch(st, "GET", "/certificates/tls-cert", {}, {}, b"")
     _check("missing api-version 400", noapi.status == 400)
+
+    # 8. import a real PEM certificate -> cer/x5t are the ACTUAL certificate bytes, not synthesized
+    der = b"\x30\x82\x01\x0a" + hashlib.sha256(b"fake-but-real-der").digest() * 3  # stand-in DER payload
+    pem = b"-----BEGIN CERTIFICATE-----\n" + base64.encodebytes(der) + b"-----END CERTIFICATE-----\n"
+    imp = kv.dispatch(st, "POST", "/certificates/pem-cert/import", API,
+                       {"content-type": "application/json"},
+                       json.dumps({"value": base64.b64encode(pem).decode(),
+                                   "policy": {"x509_certificate_properties": {"validity_in_months": 3}}}).encode())
+    _check("import PEM 200", imp.status == 200)
+    bi = _jbody(imp)
+    _check("import PEM cer is the real DER (base64)", base64.b64decode(bi["cer"]) == der)
+    _check("import PEM x5t is the real SHA-1 of the DER", bi["x5t"] == kv._b64url(hashlib.sha1(der).digest()))
+    _check("import PEM expiration from policy validity",
+           bi["attributes"]["exp"] - bi["attributes"]["created"] == 3 * 30 * 24 * 3600)
+    gi = kv.dispatch(st, "GET", "/certificates/pem-cert", API, {}, b"")
+    _check("import PEM round-trips on get", _jbody(gi)["cer"] == bi["cer"])
+
+    # 9. import a binary (non-PEM) PFX -> no ASN.1 parser on this substrate, cosmetic fallback (still 200)
+    pfx = hashlib.sha256(b"binary-pkcs12-stand-in").digest()
+    impb = kv.dispatch(st, "POST", "/certificates/pfx-cert/import", API,
+                        {"content-type": "application/json"},
+                        json.dumps({"value": base64.b64encode(pfx).decode()}).encode())
+    _check("import PFX 200", impb.status == 200)
+    _check("import PFX cer present (cosmetic, not parsed)", isinstance(_jbody(impb)["cer"], str) and len(_jbody(impb)["cer"]) > 0)
+
+    # 10. import with invalid base64 -> 400
+    badimp = kv.dispatch(st, "POST", "/certificates/bad-cert/import", API,
+                          {"content-type": "application/json"}, json.dumps({"value": "not-base64!!"}).encode())
+    _check("import invalid base64 400", badimp.status == 400)
 
     print("\nAzure Key Vault certificates-core conformance: ALL GREEN")
     return 0

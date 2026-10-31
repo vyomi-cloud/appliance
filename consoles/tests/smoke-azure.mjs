@@ -478,6 +478,19 @@ try {
   check("UI create certificate → readable over Key Vault Certificates wire", cGet.status === 200 && !!JSON.parse(cGet.text).x5t, `HTTP ${cGet.status}`);
   await shot("21b-certificates");
 
+  // ── Certificate imported over the wire (real PEM DER) → visible in the UI (CLI → UI) ───
+  const CERTIMPORT = `wirecert-import-${n}`;
+  const certDer = createHash("sha256").update(`smoke-cert-der-${n}`).digest();
+  const certPem = `-----BEGIN CERTIFICATE-----\n${certDer.toString("base64")}\n-----END CERTIFICATE-----\n`;
+  const putImportCert = await kvWire(`/certificates/${CERTIMPORT}/import`, "POST", { value: Buffer.from(certPem).toString("base64") });
+  const importedCerBody = putImportCert.status === 200 ? JSON.parse(putImportCert.text) : null;
+  check("Key Vault Certificates REST import over wire → real DER round-trips",
+    putImportCert.status === 200 && Buffer.from(importedCerBody.cer, "base64").equals(certDer), `HTTP ${putImportCert.status}`);
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Refresh" }).click();
+  await page.getByText(CERTIMPORT, { exact: true }).waitFor({ timeout: 10000 });
+  check("wire-imported certificate shown in Certificates grid", true);
+  await shot("21c-certificates-imported");
+
   // ── Lock created in the UI → visible over the native ARM wire (and the reverse) ────────
   await openPanel("Locks");
   await page.getByRole("button", { name: "Add", exact: true }).click();

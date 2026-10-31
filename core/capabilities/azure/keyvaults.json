@@ -29,7 +29,7 @@
    "offline": "config_only"
   },
   "limitations": [
-   "enableRbacAuthorization and the resource-access flags are stored and returned exactly as written, but Vyomi does not enforce them — data-plane calls to keys/secrets are never denied based on the permission model."
+   "enableRbacAuthorization and the resource-access flags are stored and returned exactly as written, but Vyomi does not enforce them. Real Key Vault data-plane calls are routed by the vault's own hostname ({vault}.vault.azure.net); Vyomi's Key Vault Keys/Secrets/Certificates REST data planes sit behind one shared, vault-agnostic relay (same simplification the AWS lens makes for KMS/Secrets Manager key policies), so a keys/secrets call carries no wire signal identifying which vault's access model should apply — enforcing against a guessed vault would deny or allow calls incorrectly rather than modelling the real control."
   ],
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
@@ -42,7 +42,7 @@
    "offline": "config_only"
   },
   "limitations": [
-   "Access policy entries round-trip through ARM exactly as written, but Vyomi never evaluates them — every data-plane key/secret call succeeds regardless of the configured permissions."
+   "Access policy entries round-trip through ARM exactly as written, but Vyomi never evaluates them — every data-plane key/secret call succeeds regardless of the configured permissions. Same root cause as azure.keyvaults.access_configuration: the data-plane relay is shared across every vault (no per-vault hostname), so a call has no wire signal saying which vault's access-policy list to check."
   ],
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
@@ -55,7 +55,7 @@
    "offline": "config_only"
   },
   "limitations": [
-   "publicNetworkAccess and networkAcls round-trip through ARM, but the Key Vault Keys/Secrets REST data planes never enforce them — a call from a 'denied' network still succeeds."
+   "publicNetworkAccess and networkAcls round-trip through ARM, but the Key Vault Keys/Secrets REST data planes never enforce them — a call from a 'denied' network still succeeds. Same root cause as azure.keyvaults.access_configuration: the data-plane relay has no per-vault hostname, so it cannot tell which vault's firewall config a given call should be checked against."
   ],
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
@@ -97,13 +97,15 @@
   ]
  },
  "azure.keyvaults.certificates": {
-  "title": "Certificates (generate self-signed, get, list, delete) over the Key Vault Certificates REST API",
+  "title": "Certificates (generate self-signed, import, get, list, delete) over the Key Vault Certificates REST API",
   "level": {
    "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Certificate creation completes synchronously (no pending CertificateOperation to poll) and only issues self-signed certificates — CA-issued and imported (PFX/PEM) certificates are not simulated. The `cer`/`x5t` fields are deterministic cosmetic bytes, not real X.509 DER."
+   "Generated (self-signed) certificate creation completes synchronously, and GET .../pending always reports the operation already 'completed' — there is no real multi-step issuance to poll. The `cer`/`x5t` on a GENERATED certificate are deterministic cosmetic bytes, not real X.509 DER.",
+   "Importing a PEM certificate is real: the `-----BEGIN CERTIFICATE-----` block is decoded and its actual DER becomes `cer`, with `x5t` the real SHA-1 thumbprint of that DER. A password-protected PFX (PKCS#12) `value` is accepted but not parsed — this substrate has no ASN.1/PKCS#12 library, so it falls back to the same cosmetic bytes as a generated certificate. Either way the expiration attribute is derived from the request policy's validity_in_months, not read from the certificate's own ASN.1 validity period.",
+   "CA-issued certificates (a real external certificate authority) are not simulated on any substrate."
   ],
   "tests": [
    "tests/conformance/test_azure_keyvault_certificates_core.py"

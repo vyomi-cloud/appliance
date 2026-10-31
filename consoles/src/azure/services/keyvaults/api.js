@@ -53,6 +53,7 @@ export const parseSecretId = (id = "") => {
 // ── Certificates data plane (Key Vault Certificates REST) ──────────────────────────────
 export const listCertificates = async () => (await kv("GET", "/certificates")).value || [];
 export const createCertificate = (name, body) => kv("POST", `/certificates/${encodeURIComponent(name)}/create`, { body });
+export const importCertificate = (name, body) => kv("POST", `/certificates/${encodeURIComponent(name)}/import`, { body });
 export const getCertificate = (name) => kv("GET", `/certificates/${encodeURIComponent(name)}`);
 export const deleteCertificate = (name) => kv("DELETE", `/certificates/${encodeURIComponent(name)}`);
 

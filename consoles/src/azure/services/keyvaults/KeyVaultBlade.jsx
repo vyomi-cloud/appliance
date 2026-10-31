@@ -15,7 +15,7 @@ import { locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
-import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
+import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, downloadCsv, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
@@ -684,25 +684,44 @@ function Certificates() {
   );
 }
 
+/** File (text or binary) -> base64, the shape ImportCertificate's `value` wants. */
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",").pop());
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 function CreateCertificateDialog({ open, onClose, onCreated }) {
   const notify = useNotify();
+  const [method, setMethod] = useState("Generate");
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("CN=vyomi.local");
   const [months, setMonths] = useState("12");
+  const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
-  const valid = /^[a-zA-Z0-9-]{1,127}$/.test(name);
+  const valid = /^[a-zA-Z0-9-]{1,127}$/.test(name) && (method === "Generate" || !!file);
   const go = async () => {
     setBusy(true);
     try {
-      await api.createCertificate(name, {
-        policy: {
-          x509_certificate_properties: { subject, validity_in_months: Number(months) },
-          issuer_parameters: { name: "Self" },
-        },
-      });
-      notify.success(`Successfully created certificate '${name}'.`, "Certificate created");
-      setName(""); onClose(); onCreated();
-    } catch (e) { notify.error(e, "Failed to create certificate"); }
+      if (method === "Generate") {
+        await api.createCertificate(name, {
+          policy: {
+            x509_certificate_properties: { subject, validity_in_months: Number(months) },
+            issuer_parameters: { name: "Self" },
+          },
+        });
+      } else {
+        await api.importCertificate(name, {
+          value: await fileToBase64(file),
+          policy: { x509_certificate_properties: { validity_in_months: Number(months) } },
+        });
+      }
+      notify.success(`Successfully ${method === "Generate" ? "created" : "imported"} certificate '${name}'.`, "Certificate created");
+      setName(""); setFile(null); onClose(); onCreated();
+    } catch (e) { notify.error(e, `Failed to ${method === "Generate" ? "create" : "import"} certificate`); }
     finally { setBusy(false); }
   };
   return (
@@ -712,16 +731,32 @@ function CreateCertificateDialog({ open, onClose, onCreated }) {
           <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Create a certificate</DialogTitle>
           <DialogContent>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <Field label="Method of Certificate Creation"><Select value="Generate" aria-label="Method of Certificate Creation"><option>Generate</option></Select></Field>
+              <Field label="Method of Certificate Creation">
+                <Select value={method} onChange={(_, d) => setMethod(d.value)} aria-label="Method of Certificate Creation">
+                  <option>Generate</option><option>Import</option>
+                </Select>
+              </Field>
               <Field label="Certificate Name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Certificate Name" /></Field>
-              <Field label="Type of Certificate Authority (CA)"><Select value="Self-signed certificate" aria-label="Type of Certificate Authority (CA)"><option>Self-signed certificate</option></Select></Field>
-              <Field label="Subject"><Input value={subject} onChange={(_, d) => setSubject(d.value)} aria-label="Subject" /></Field>
-              <Field label="Validity period (in months)"><Input type="number" value={months} onChange={(_, d) => setMonths(d.value)} aria-label="Validity period (in months)" /></Field>
-              <NotSimulated feature="Content type, lifetime action and advanced policy configuration on a new certificate" />
+              {method === "Generate" ? (
+                <>
+                  <Field label="Type of Certificate Authority (CA)"><Select value="Self-signed certificate" aria-label="Type of Certificate Authority (CA)"><option>Self-signed certificate</option></Select></Field>
+                  <Field label="Subject"><Input value={subject} onChange={(_, d) => setSubject(d.value)} aria-label="Subject" /></Field>
+                  <Field label="Validity period (in months)"><Input type="number" value={months} onChange={(_, d) => setMonths(d.value)} aria-label="Validity period (in months)" /></Field>
+                  <NotSimulated feature="Content type, lifetime action and advanced policy configuration on a new certificate" />
+                </>
+              ) : (
+                <>
+                  <Field label="Upload Certificate File" required
+                    hint="A PEM file (-----BEGIN CERTIFICATE-----…) imports its real certificate bytes. A password-protected PFX (PKCS#12) file is accepted but not parsed on this substrate — it stores a placeholder certificate instead.">
+                    <input type="file" accept=".pem,.crt,.cer,.pfx" aria-label="Upload Certificate File" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+                  </Field>
+                  <Field label="Password"><Input type="password" disabled aria-label="Password" /></Field>
+                </>
+              )}
             </div>
           </DialogContent>
           <DialogActions>
-            <Button appearance="primary" disabled={!valid || busy} onClick={go}>Create</Button>
+            <Button appearance="primary" disabled={!valid || busy} onClick={go}>{method === "Generate" ? "Create" : "Import"}</Button>
             <Button onClick={onClose}>Cancel</Button>
           </DialogActions>
         </DialogBody>
@@ -924,6 +959,15 @@ function AddLockDialog({ open, onClose, onCreate }) {
   );
 }
 
+const ACTIVITY_LOG_COLUMNS = [
+  { key: "op", label: "Operation name", csv: (r) => r.operationName?.localizedValue || r.operationName?.value },
+  { key: "status", label: "Status", csv: (r) => r.status?.localizedValue || r.status?.value },
+  { key: "time", label: "Time", csv: (r) => fmtDate(r.eventTimestamp) },
+  { key: "stamp", label: "Time stamp", csv: (r) => r.eventTimestamp },
+  { key: "sub", label: "Subscription", csv: (r) => r.subscriptionId },
+  { key: "by", label: "Event initiated by", csv: (r) => r.caller },
+];
+
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this vault) ──
 function ActivityLog({ a }) {
   const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
@@ -935,7 +979,8 @@ function ActivityLog({ a }) {
         <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
-        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={() => setGap("Download as CSV")}>Download as CSV</ToolbarButton>
+        <ToolbarButton icon={<ArrowDownload20Regular />} disabled={!rows.length}
+          onClick={() => downloadCsv("activity-log.csv", ACTIVITY_LOG_COLUMNS, rows)}>Download as CSV</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Reset filters")}>Reset filters</ToolbarButton>
@@ -943,7 +988,7 @@ function ActivityLog({ a }) {
       <ErrorBar error={error} />
       <NotSimulated feature="Severity/category filtering and the Timespan picker" note="This list always shows everything recorded since the simulation booted." />
       <table className="vy-grid">
-        <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
+        <thead><tr>{ACTIVITY_LOG_COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
         <tbody>
           {loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
             <tr key={r.id}>

@@ -11,15 +11,27 @@ secrets store (a cert and a secret may share a name in real Key Vault).
 
 Scope (v1 slice): create (self-signed, completes synchronously — no polling
 CertificateOperation, same simplification the keys/secrets cores make), get
-latest, list, delete. The `cer`/`x5t` fields are synthesized deterministically
-from the name + version (cosmetic wire shape, not real X.509 DER) — what must
-conform is the WIRE shape, not the certificate math (same principle as the keys
-core's RSA public-number synthesis).
+latest, list, delete, import. The `cer`/`x5t` fields for a *created* (self-signed)
+certificate are synthesized deterministically from the name + version (cosmetic
+wire shape, not real X.509 DER) — what must conform is the WIRE shape, not the
+certificate math (same principle as the keys core's RSA public-number synthesis).
+
+Import (`/certificates/{name}/import`) is real for a PEM-encoded `value`: the
+`-----BEGIN CERTIFICATE-----` block is base64-decoded and its actual DER bytes
+become `cer`/`x5t` (a real SHA-1 thumbprint of the real certificate, not a
+synthesized stand-in) — this substrate has no ASN.1/PKCS#12 parser, so a
+password-protected PFX (PKCS#12) `value` cannot be unpacked and falls back to
+the same cosmetic synthesis as `create`. Either way the expiration attribute is
+NOT read from the certificate's real validity period (no ASN.1 parse); it is
+derived from `policy.x509_certificate_properties.validity_in_months` the same
+way `create` derives it.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -79,6 +91,30 @@ def _json(status: int, obj: dict) -> KvResponse:
 
 def _err(status: int, code: str, message: str) -> KvResponse:
     return KvResponse(status=status, body=json.dumps({"error": {"code": code, "message": message}}).encode())
+
+
+_PEM_CERT_RE = re.compile(r"-----BEGIN CERTIFICATE-----(.*?)-----END CERTIFICATE-----", re.S)
+
+
+def _pem_cert_der(raw: bytes) -> bytes | None:
+    """Pull the real DER bytes out of a PEM `-----BEGIN CERTIFICATE-----` block,
+    or None if `raw` isn't PEM text (e.g. a binary PFX we can't parse)."""
+    try:
+        text = raw.decode("ascii")
+    except Exception:
+        return None
+    m = _PEM_CERT_RE.search(text)
+    if not m:
+        return None
+    try:
+        return base64.b64decode("".join(m.group(1).split()))
+    except Exception:
+        return None
+
+
+def _validity_months(policy: dict) -> int:
+    props = policy.get("x509_certificate_properties") or policy.get("x509CertificateProperties") or {}
+    return int(props.get("validity_in_months") or props.get("validityInMonths") or 12)
 
 
 def _bundle(name: str, version: str, rec: dict) -> dict:
@@ -147,8 +183,7 @@ def dispatch(store: InMemoryKvStore, method: str, path: str,
         version = _new_version()
         now = _now()
         policy = payload.get("policy") or {}
-        months = ((policy.get("x509_certificate_properties") or policy.get("x509CertificateProperties") or {})
-                  .get("validity_in_months") or (policy.get("x509_certificate_properties") or policy.get("x509CertificateProperties") or {}).get("validityInMonths") or 12)
+        months = _validity_months(policy)
         req_attrs = payload.get("attributes") or {}
         rec = {
             "name": name, "version": version, "deleted": False,
@@ -165,6 +200,43 @@ def dispatch(store: InMemoryKvStore, method: str, path: str,
         store.mirror_put(name, rec)
         if _sdk:   # the azure-keyvault-certificates poller: 202 + a (completed) CertificateOperation
             return _json(202, _operation(name, rec))
+        return _json(200, _bundle(name, version, rec))
+
+    # ---- /certificates/{name}/import ----
+    if len(segs) == 3 and segs[2] == "import":
+        if method != "POST":
+            return _err(405, "MethodNotAllowed", f"Unsupported method {method} on import")
+        try:
+            payload = json.loads(body.decode("utf-8")) if body else {}
+        except Exception:
+            return _err(400, "BadParameter", "Request body is not valid JSON.")
+        try:
+            raw = base64.b64decode(payload.get("value", ""))
+        except Exception:
+            return _err(400, "BadParameter", "The 'value' field is not valid base64.")
+        version = _new_version()
+        now = _now()
+        policy = payload.get("policy") or {}
+        months = _validity_months(policy)
+        req_attrs = payload.get("attributes") or {}
+        der = _pem_cert_der(raw)
+        if der is not None:   # real certificate: DER pulled straight out of the PEM block
+            x5t, cer, imported_real = _b64url(hashlib.sha1(der).digest()), base64.b64encode(der).decode("ascii"), True
+        else:   # binary PFX (PKCS#12) — this substrate has no ASN.1 parser, falls back to cosmetic bytes
+            x5t, cer, imported_real = _synth_thumbprint(name, version), _synth_cer(name, version), False
+        rec = {
+            "name": name, "version": version, "deleted": False,
+            "x5t": x5t, "cer": cer, "imported": True, "imported_real": imported_real,
+            "policy": policy, "tags": payload.get("tags"),
+            "attributes": {
+                "enabled": req_attrs.get("enabled", True), "created": now, "updated": now,
+                "nbf": now, "exp": now + months * 30 * 24 * 3600,
+                "recoveryLevel": _RECOVERY_LEVEL,
+            },
+        }
+        store.put_secret(name, rec)
+        store.persist()
+        store.mirror_put(name, rec)
         return _json(200, _bundle(name, version, rec))
 
     # ---- /certificates/{name}/pending (CertificateOperation — completes synchronously) ----
