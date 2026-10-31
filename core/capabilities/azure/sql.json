@@ -22,11 +22,11 @@
  },
  "azure.sql.networking": {
   "title": "Server public network access toggle",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "publicNetworkAccess round-trips through ARM, but the azure-sql data-plane query wire never enforces it — a query still runs regardless of the configured setting."
+   "When publicNetworkAccess is Disabled, the azure-sql query data plane now rejects every connection with a 403 (matching real SQL servers, where disabling it blocks public-endpoint traffic outright). Per-IP firewall-rule filtering when Enabled is still not modelled — there is no real client IP to check against in a browser-only simulator, so any connection succeeds while public access stays Enabled."
   ],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "tests": ["tests/conformance/test_azure_sql_core.py", "tests/conformance/test_azure_arm_core.py"]
  },
  "azure.sql.query_editor": {
   "title": "Query editor (real SQL execution over the azure-sql data plane)",
@@ -46,11 +46,11 @@
  },
  "azure.sql.compute_storage": {
   "title": "Compute + storage (service/compute tier, vCore auto-scaling, auto-pause, max size, zone redundancy)",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "sku and the related properties round-trip through ARM exactly as written, but Vyomi does not enforce vCore limits, auto-pause behaviour, storage caps or zone placement — the query data plane runs unchanged regardless of the configured tier."
+   "maxSizeBytes is now enforced on the query data plane: once the database's real on-disk size (sqlite's own page accounting) reaches the configured cap, further INSERT/UPDATE/REPLACE statements are rejected with the real error 40544 (DatabaseSizeQuotaExceeded) until data is freed or the cap is raised. Service/compute tier, vCore auto-scaling, auto-pause and zone redundancy remain config-only — Vyomi does not enforce vCore limits, pause the compute, or model zone placement."
   ],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "tests": ["tests/conformance/test_azure_sql_core.py", "tests/conformance/test_azure_arm_core.py"]
  },
  "azure.sql.transparent_data_encryption": {
   "title": "Transparent data encryption on/off",
@@ -69,12 +69,13 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.sql.automatic_tuning": {
-  "title": "Automatic tuning options (FORCE_LAST_GOOD_PLAN, CREATE_INDEX, DROP_INDEX)",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "title": "Automatic tuning options (FORCE_LAST_GOOD_PLAN, CREATE_INDEX, DROP_INDEX) and Performance recommendations",
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "properties.automaticTuning round-trips through ARM, but Vyomi never generates or applies tuning recommendations."
+   "CREATE_INDEX recommendations are real: generated from the Query editor's own statement log by checking the SAME engine's EXPLAIN QUERY PLAN for WHERE-equality lookups that need a table scan, shown on Performance recommendations with an Apply action that runs a real CREATE INDEX. When the automatic tuning option is On, matching recommendations are applied automatically instead of waiting for Apply. FORCE_LAST_GOOD_PLAN and DROP_INDEX stay config-only — no plan-regression detection or orphan-index pruning is modelled."
   ],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "api": ["recommendations", "recommendations/{id}/apply"],
+  "tests": ["tests/conformance/test_azure_sql_core.py", "tests/conformance/test_azure_arm_core.py"]
  },
  "azure.sql.locks": {
   "title": "Resource locks (Microsoft.Authorization/locks), scoped to a database",

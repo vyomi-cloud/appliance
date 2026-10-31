@@ -1,7 +1,8 @@
 /* SQL database resource blade: left resource menu + panels. Overview, Tags, Activity log,
  * Query editor, Compute + storage, Connection strings, Properties, Locks, Transparent data
- * encryption, Identity, Automatic tuning and Export template are backed by native ARM / the
- * azure-sql data-plane wire; everything else in the menu is an honest NotSimulated panel. */
+ * encryption, Identity, Automatic tuning, Performance recommendations and Export template
+ * are backed by native ARM / the azure-sql data-plane wire; everything else in the menu is
+ * an honest NotSimulated panel. */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -58,7 +59,6 @@ const NS_NOTES = {
   defender: "Microsoft Defender for Cloud",
   ledger: "Database ledger",
   perfoverview: "Performance overview dashboards",
-  perfrecommendations: "Performance recommendations",
   queryperfinsight: "Query Performance Insight",
   alerts: "Alert rules",
   metrics: "Database metrics charts",
@@ -95,6 +95,7 @@ export default function SqlDatabaseBlade({ params }) {
       tde: () => <Tde a={a} reload={reload} />,
       identity: () => <IdentityPanel a={a} reload={reload} />,
       autotuning: () => <AutomaticTuning a={a} reload={reload} />,
+      perfrecommendations: () => <PerformanceRecommendations a={a} />,
       exporttemplate: () => <ExportTemplate a={a} />,
     }[panel];
     body = P ? P() : (
@@ -565,6 +566,59 @@ function AutomaticTuning({ a, reload }) {
         <Checkbox label="FORCE LAST GOOD PLAN" checked={f.forceLastGoodPlan} onChange={(_, d) => setF((x) => ({ ...x, forceLastGoodPlan: !!d.checked }))} />
         <Checkbox label="CREATE INDEX" checked={f.createIndex} onChange={(_, d) => setF((x) => ({ ...x, createIndex: !!d.checked }))} />
         <Checkbox label="DROP INDEX" checked={f.dropIndex} onChange={(_, d) => setF((x) => ({ ...x, dropIndex: !!d.checked }))} />
+      </CapabilityContainer>
+    </>
+  );
+}
+
+// ── Performance recommendations (real CREATE_INDEX suggestions from the query log) ─────
+function PerformanceRecommendations({ a }) {
+  const notify = useNotify();
+  const recs = useAsync(() => api.listRecommendations(a.server, a.name), [a.server, a.name]);
+  const [applying, setApplying] = useState(null);
+  const apply = async (rec) => {
+    setApplying(rec.id);
+    try {
+      await api.applyRecommendation(a.server, a.name, rec.id);
+      notify.success(`Created an index on ${rec.table}(${rec.column}).`, "Recommendation applied");
+      recs.reload();
+    } catch (e) { notify.error(e, "Applying the recommendation failed"); }
+    finally { setApplying(null); }
+  };
+  return (
+    <>
+      <div className="vy-panel-title">Performance recommendations</div>
+      <div className="vy-cmdbar" role="toolbar" aria-label="Performance recommendations commands">
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={recs.reload}>Refresh</ToolbarButton>
+      </div>
+      <CapabilityContainer id="azure.sql.automatic_tuning" title="Recommendations">
+        <ErrorBar error={recs.error} title="Failed to load recommendations" />
+        {recs.loading && !recs.data ? <Loading /> : !recs.data?.length ? (
+          <div className="vy-muted">No recommendations right now. Vyomi looks for WHERE-equality lookups in the Query editor's recent activity that need a table scan — run some queries first.</div>
+        ) : (
+          <Table aria-label="Performance recommendations">
+            <TableHeader>
+              <TableRow>
+                <TableHeaderCell>Recommendation</TableHeaderCell>
+                <TableHeaderCell>Type</TableHeaderCell>
+                <TableHeaderCell>Impacted queries</TableHeaderCell>
+                <TableHeaderCell></TableHeaderCell>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {recs.data.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>Create index on {r.table}({r.column})</TableCell>
+                  <TableCell>Create index</TableCell>
+                  <TableCell>{r.impactedQueries}</TableCell>
+                  <TableCell>
+                    <Button size="small" disabled={applying === r.id} onClick={() => apply(r)}>Apply</Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </CapabilityContainer>
     </>
   );
