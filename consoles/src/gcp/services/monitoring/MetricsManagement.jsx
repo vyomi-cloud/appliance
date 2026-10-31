@@ -29,8 +29,11 @@ export default function MetricsManagement() {
         <CapabilityContainer id="gcp.monitoring.metrics-management" title="Excluded metrics" />
       ) : (
         <Stack spacing={1.5}>
-          <TextField size="small" placeholder="Filter" value={filter} onChange={(e) => setFilter(e.target.value)}
-            inputProps={{ "aria-label": "Filter" }} sx={{ maxWidth: 320 }} />
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <TextField size="small" placeholder="Filter" value={filter} onChange={(e) => setFilter(e.target.value)}
+              inputProps={{ "aria-label": "Filter" }} sx={{ maxWidth: 320 }} />
+            <Button size="small" disabled>Exclude metric</Button>
+          </Stack>
           <Table size="small">
             <TableHead>
               <TableRow>

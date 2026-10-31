@@ -43,6 +43,18 @@ export const listSlos = async (sid) => (await restJson("GET", `${v3()}/services/
 export const createSlo = (sid, body) => restJson("POST", `${v3()}/services/${e(sid)}/serviceLevelObjectives`, { body });
 export const deleteSlo = (sid, oid) => restJson("DELETE", `${v3()}/services/${e(sid)}/serviceLevelObjectives/${e(oid)}`);
 
+// Real SLO burn-down: the same select_slo_budget_fraction() timeSeries.list filter function
+// the native API reserves for SLO queries, computed server-side from the request-based
+// good/total-ratio time series the SLO's filters actually match.
+export async function sloBudgetFraction(sloName, days) {
+  const end = new Date(), start = new Date(end.getTime() - (days || 28) * 86400000);
+  const r = await restJson("GET", `${v3()}/timeSeries`, { query: {
+    filter: `select_slo_budget_fraction("${sloName}")`, "interval.startTime": start.toISOString(), "interval.endTime": end.toISOString(),
+  } });
+  const v = r.timeSeries?.[0]?.points?.[0]?.value;
+  return v && "doubleValue" in v ? v.doubleValue : null;
+}
+
 // ── metric & monitored-resource descriptors ──────────────────────────────────
 export const listMetricDescriptors = async (filter) => (await restJson("GET", `${v3()}/metricDescriptors`, { query: { pageSize: 500, ...(filter ? { filter } : {}) } })).metricDescriptors || [];
 export const listMonitoredResourceDescriptors = async () => (await restJson("GET", `${v3()}/monitoredResourceDescriptors`)).resourceDescriptors || [];

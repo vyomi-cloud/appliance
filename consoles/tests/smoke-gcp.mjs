@@ -683,6 +683,51 @@ try {
   check("group membership shows a real resource count (not a static stub)", groupCells[2]?.trim() === "1", JSON.stringify(groupCells));
   await shot("13c-monitoring-group-members");
 
+  // Cloud Monitoring depth: a request-based SLO's error budget is computed for real from the
+  // good/total time series it names — create the service + SLO through the UI, write good/bad
+  // samples over the native wire (the reverse direction), and the "SLOs out of error budget"
+  // count on the page must reflect the real burn, not a static placeholder.
+  const SVC = `v4-gcp-smoke-svc-${Date.now() % 100000}`;
+  await page.goto(UI + "#/monitoring/services");
+  await page.getByRole("button", { name: "Define service" }).click();
+  await page.getByRole("dialog").getByLabel("Service name").fill(SVC);
+  await page.getByRole("dialog").getByRole("button", { name: "Define" }).click();
+  const svcRow = page.getByRole("row", { name: new RegExp(SVC) });
+  await svcRow.waitFor({ timeout: 10000 });
+  const sloGoodMetric = `custom.googleapis.com/smoke-slo-good-${Date.now() % 100000}`;
+  const sloTotalMetric = `custom.googleapis.com/smoke-slo-total-${Date.now() % 100000}`;
+  await svcRow.getByRole("button", { name: `Actions for ${SVC}` }).click();
+  await page.getByRole("menuitem", { name: "Create SLO" }).click();
+  const sloDialog = page.getByRole("dialog");
+  await sloDialog.getByLabel("SLO name").fill(`${SVC}-slo`);
+  await sloDialog.getByLabel("Goal (%)").fill("99");
+  await sloDialog.getByLabel("Good events filter").fill(`metric.type = "${sloGoodMetric}"`);
+  await sloDialog.getByLabel("Total events filter").fill(`metric.type = "${sloTotalMetric}"`);
+  await sloDialog.getByRole("button", { name: "Create" }).click();
+  await sloDialog.waitFor({ state: "detached", timeout: 10000 });
+  const svcWire = await wjson(`/v3/projects/vyomi-project/services`);
+  const sloService = (svcWire.services || []).find((s) => s.displayName === SVC);
+  check("create SLO via UI → visible over native Service Monitoring wire", !!sloService, JSON.stringify(svcWire).slice(0, 200));
+  const sloListWire = await wjson(`/v3/projects/vyomi-project/services/${sloService.name.split("/").pop()}/serviceLevelObjectives`);
+  const slo = sloListWire.serviceLevelObjectives?.[0];
+  check("SLO created via UI has the request-based good/total-ratio indicator", slo?.serviceLevelIndicator?.requestBased?.goodTotalRatio?.goodServiceFilter === `metric.type = "${sloGoodMetric}"`);
+  // Burn the SLO's 1% error budget 2x over by writing a 2% failure rate, directly over the wire.
+  await wjson(`/v3/projects/vyomi-project/timeSeries`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ timeSeries: [
+      { metric: { type: sloGoodMetric }, resource: { type: "global", labels: { project_id: "vyomi-project" } },
+        points: [{ interval: { endTime: new Date().toISOString() }, value: { doubleValue: 98 } }] },
+      { metric: { type: sloTotalMetric }, resource: { type: "global", labels: { project_id: "vyomi-project" } },
+        points: [{ interval: { endTime: new Date().toISOString() }, value: { doubleValue: 100 } }] },
+    ] }),
+  });
+  await page.goto(UI + "#/monitoring/services");
+  await svcRow.waitFor({ timeout: 10000 });
+  await page.waitForTimeout(1500);
+  const sloBudgetCells = await svcRow.getByRole("cell").allTextContents();
+  check("SLO error budget computed for real from written time series (not a '—' stub)", sloBudgetCells[2]?.trim() === "1", JSON.stringify(sloBudgetCells));
+  await shot("13d-monitoring-slo-budget");
+
   // Cloud Run functions: create a service via the UI → visible over the native Cloud Run
   // Admin API v2 wire, then the reverse (a job created over the wire shows up in the UI).
   const FN = `v4-gcp-fn-${Date.now() % 100000}`;

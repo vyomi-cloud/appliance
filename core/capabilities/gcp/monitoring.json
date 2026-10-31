@@ -90,7 +90,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Services and their SLOs (goal, compliance period, indicator) are real resources — the same Service Monitoring API v3 create/get/list/delete the gcloud/client libraries use. Vyomi doesn't compute error-budget burn from live request/latency time series, so 'SLOs out of error budget' and 'SLOs with firing alert' are always empty."
+   "Services and their SLOs (goal, compliance period, indicator) are real resources — the same Service Monitoring API v3 create/get/list/delete the gcloud/client libraries use. For a request-based SLO (service_level_indicator.request_based.good_total_ratio), Vyomi computes a real error-budget fraction from the good/total time series you've written, via the same select_slo_compliance()/select_slo_budget_fraction()/select_slo_health() timeSeries.list filter functions the real API reserves for SLO burn-down queries — the 'SLOs out of error budget' count reflects that. Windows-based and basic SLIs aren't evaluated (shown as '—', since there's no live request/latency pipeline to classify them against). 'SLOs with firing alert' is always 0: Vyomi has no alert-evaluation engine (see gcp.monitoring.incidents), so an SLO's burn-rate alert condition never actually opens an incident."
   ],
   "tests": [
    "tests/conformance/test_gcp_monitoring_core.py"
@@ -220,7 +220,7 @@
    "offline": "not_simulated"
   },
   "limitations": [
-   "Application monitoring needs Cloud Profiler/APM language agents reporting into the project; Vyomi has no application runtime to instrument."
+   "Application monitoring needs Cloud Profiler/APM language agents reporting into the project; Vyomi has no application runtime to instrument. The alert policy wizard's Application and Service or Workload selectors, which link a policy to Application Monitoring, aren't modeled either."
   ]
  },
  "gcp.monitoring.ops-agent": {
