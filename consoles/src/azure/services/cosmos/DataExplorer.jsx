@@ -12,6 +12,7 @@ import { Add20Regular, ArrowClockwise20Regular, ChevronDown16Regular, ChevronRig
 import { useNotify } from "../../../common/notify.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { FormRow } from "../../kit/CreateWizard.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
 import { ErrorBar, NotSimulated } from "../../kit/common.jsx";
 import * as api from "./api.js";
 
@@ -221,9 +222,10 @@ function Items({ db, coll }) {
         <ToolbarButton icon={<Add20Regular />} onClick={() => setNewItem(NEW_ITEM_TEMPLATE)}>New Item</ToolbarButton>
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={() => { setResults(null); docs.reload(); }}>Refresh</ToolbarButton>
       </div>
-      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
         <Input style={{ flex: 1, fontFamily: "monospace" }} value={query} onChange={(_, d) => setQuery(d.value)} aria-label="SQL query" />
         <Button icon={<Play20Regular />} disabled={running} onClick={run}>Execute</Button>
+        <CapabilityBadge id="azure.cosmos.query" />
       </div>
       <ErrorBar error={queryError} title="Query failed" />
       <Table size="small" aria-label="Items" style={{ marginTop: 8 }}>

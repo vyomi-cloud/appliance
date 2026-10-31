@@ -12,7 +12,7 @@ import { Add20Regular, ArrowClockwise20Regular, ArrowDownload20Regular, Delete20
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
-import { locationLabel } from "../../kit/arm.js";
+import { locationLabel, LOCATIONS } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
@@ -106,12 +106,12 @@ export default function CosmosAccountBlade({ params }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <ActivityLog a={a} />,
-      iam: () => <Iam />,
+      iam: () => <Iam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       dataexplorer: () => <DataExplorer />,
       replicate: () => <Replicate a={a} reload={reload} />,
       consistency: () => <Consistency a={a} reload={reload} />,
-      backup: () => <Backup a={a} />,
+      backup: () => <Backup a={a} reload={reload} />,
       keys: () => <Keys a={a} />,
       locks: () => <Locks a={a} />,
       exporttemplate: () => <ExportTemplate a={a} />,
@@ -228,10 +228,14 @@ function Overview({ a, reload, self }) {
 }
 
 // ── Activity log ──────────────────────────────────────────────────────────────────────
+const TIMESPANS = { "1h": 1, "6h": 6, "24h": 24, "7d": 24 * 7, "30d": 24 * 30 };
+
 function ActivityLog({ a }) {
   const sub = useSubscription();
   const resPath = api.resourcePath(a.resourceGroup, a.name);
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(resPath, sub.id), [resPath, sub.id]);
+  const [timespan, setTimespan] = useState("24h");
+  const since = () => new Date(Date.now() - TIMESPANS[timespan] * 3600 * 1000).toISOString();
+  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(resPath, sub.id, since()), [resPath, sub.id, timespan]);
   const [gap, setGap] = useState(null);
   const rows = data || [];
   const GAPS = ["Edit columns", "Export Activity Logs", "Download as CSV", "Insights", "Feedback", "Pin current filters", "Reset filters"];
@@ -242,6 +246,13 @@ function ActivityLog({ a }) {
         <ToolbarButton onClick={reload}>Activity</ToolbarButton>
         {GAPS.map((g) => <ToolbarButton key={g} onClick={() => setGap(g)}>{g}</ToolbarButton>)}
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
+        <Select size="small" value={timespan} onChange={(_, d) => setTimespan(d.value)} aria-label="Timespan" style={{ marginLeft: "auto", width: 160 }}>
+          <option value="1h">Last hour</option>
+          <option value="6h">Last 6 hours</option>
+          <option value="24h">Last 24 hours</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+        </Select>
       </div>
       <ErrorBar error={error} />
       <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
@@ -273,11 +284,12 @@ function ActivityLog({ a }) {
 }
 
 // ── Access control (IAM) ─────────────────────────────────────────────────────────────────
-function Iam() {
+function Iam({ a }) {
   const sub = useSubscription();
   const [tab, setTab] = useState("checkaccess");
   const [gap, setGap] = useState(null);
-  const roleAssignments = useAsync(() => api.listRoleAssignments(sub.id), [sub.id]);
+  const resPath = api.resourcePath(a.resourceGroup, a.name);
+  const roleAssignments = useAsync(() => api.listRoleAssignments(resPath), [resPath]);
   const roleDefinitions = useAsync(() => api.listRoleDefinitions(sub.id), [sub.id]);
   return (
     <>
@@ -395,15 +407,53 @@ function Replicate({ a, reload }) {
   const notify = useNotify();
   const [gap, setGap] = useState(null);
   const [addRegion, setAddRegion] = useState(false);
+  const [newRegion, setNewRegion] = useState("");
+  const [failover, setFailover] = useState(false);
+  const [failoverTarget, setFailoverTarget] = useState("");
+  const [busy, setBusy] = useState(false);
   const locations = a.properties?.locations || [{ locationName: a.location, failoverPriority: 0 }];
+  const unused = LOCATIONS.filter(([id]) => !locations.some((l) => l.locationName === id));
+  const others = locations.filter((l) => l.failoverPriority !== 0);
+
+  const openAddRegion = () => { setNewRegion(unused[0]?.[0] || ""); setAddRegion(true); };
+  const addRegionGo = async () => {
+    setBusy(true);
+    try {
+      const next = [...locations, { locationName: newRegion, failoverPriority: locations.length, isZoneRedundant: false }];
+      await api.updateAccount(a.resourceGroup, a.name, { properties: { locations: next } });
+      notify.success(`Region '${locationLabel(newRegion)}' was added to '${a.name}'.`, "Region added");
+      setAddRegion(false);
+      reload();
+    } catch (e) { notify.error(e, "Adding region failed"); }
+    finally { setBusy(false); }
+  };
+
+  const openFailover = () => { setFailoverTarget(others[0]?.locationName || ""); setFailover(true); };
+  const failoverGo = async () => {
+    setBusy(true);
+    try {
+      const primary = locations.find((l) => l.failoverPriority === 0);
+      const target = locations.find((l) => l.locationName === failoverTarget);
+      const policies = locations.map((l) => ({
+        locationName: l.locationName,
+        failoverPriority: l.locationName === target.locationName ? 0 : (l.locationName === primary.locationName ? target.failoverPriority : l.failoverPriority),
+      }));
+      await api.failoverPriorityChange(a.resourceGroup, a.name, policies);
+      notify.success(`'${locationLabel(failoverTarget)}' is now the write region for '${a.name}'.`, "Failover succeeded");
+      setFailover(false);
+      reload();
+    } catch (e) { notify.error(e, "Manual failover failed"); }
+    finally { setBusy(false); }
+  };
+
   return (
     <>
       <div className="vy-panel-title">Replicate data globally</div>
       <div className="vy-cmdbar" role="toolbar" aria-label="Replicate data globally commands">
-        <ToolbarButton onClick={() => setGap("Manual Failover")}>Manual Failover</ToolbarButton>
+        <ToolbarButton disabled={others.length === 0} onClick={openFailover}>Manual Failover</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Service-Managed Failover")}>Service-Managed Failover</ToolbarButton>
       </div>
-      <CapabilityContainer id="azure.cosmos.replicate_data_globally" title="Regions" actions={<Button size="small" icon={<Add20Regular />} onClick={() => setAddRegion(true)}>Add region</Button>}>
+      <CapabilityContainer id="azure.cosmos.replicate_data_globally" title="Regions" actions={<Button size="small" icon={<Add20Regular />} disabled={!unused.length} onClick={openAddRegion}>Add region</Button>}>
         <Table size="small" aria-label="Regions" style={{ marginTop: 8 }}>
           <TableHeader><TableRow><TableHeaderCell>Region</TableHeaderCell><TableHeaderCell>Read</TableHeaderCell><TableHeaderCell>Write</TableHeaderCell></TableRow></TableHeader>
           <TableBody>
@@ -421,8 +471,30 @@ function Replicate({ a, reload }) {
         <DialogSurface aria-label="Add region">
           <DialogBody>
             <DialogTitle>Add region</DialogTitle>
-            <DialogContent><NotSimulated feature="Provisioning a second replica region" note="Vyomi has one logical region; a region you add is recorded on the account but no second replica is actually provisioned." /></DialogContent>
-            <DialogActions><Button onClick={() => setAddRegion(false)}>Close</Button></DialogActions>
+            <DialogContent>
+              <Field label="Region">
+                <Select value={newRegion} onChange={(_, d) => setNewRegion(d.value)} aria-label="Region">
+                  {unused.map(([id, l]) => <option key={id} value={id}>{l}</option>)}
+                </Select>
+              </Field>
+              <p style={{ fontSize: 12, marginTop: 8 }} className="vy-muted">Vyomi records this region on the account for real (properties.locations round-trips through ARM), but has one logical region underneath — the added region does not get a separately provisioned data-plane copy.</p>
+            </DialogContent>
+            <DialogActions><Button appearance="primary" disabled={!newRegion || busy} onClick={addRegionGo}>Save</Button><Button onClick={() => setAddRegion(false)}>Cancel</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+      <Dialog open={failover} onOpenChange={(_, d) => !d.open && setFailover(false)}>
+        <DialogSurface aria-label="Manual Failover">
+          <DialogBody>
+            <DialogTitle>Manual Failover</DialogTitle>
+            <DialogContent>
+              <Field label="New write region">
+                <Select value={failoverTarget} onChange={(_, d) => setFailoverTarget(d.value)} aria-label="New write region">
+                  {others.map((l) => <option key={l.locationName} value={l.locationName}>{locationLabel(l.locationName)}</option>)}
+                </Select>
+              </Field>
+            </DialogContent>
+            <DialogActions><Button appearance="primary" disabled={!failoverTarget || busy} onClick={failoverGo}>OK</Button><Button onClick={() => setFailover(false)}>Cancel</Button></DialogActions>
           </DialogBody>
         </DialogSurface>
       </Dialog>
@@ -442,15 +514,21 @@ function Replicate({ a, reload }) {
 // ── Default consistency ────────────────────────────────────────────────────────────────
 function Consistency({ a, reload }) {
   const notify = useNotify();
-  const current = a.properties?.consistencyPolicy?.defaultConsistencyLevel || "Session";
+  const cp = a.properties?.consistencyPolicy || {};
+  const current = cp.defaultConsistencyLevel || "Session";
   const [value, setValue] = useState(current);
+  const [prefix, setPrefix] = useState(cp.maxStalenessPrefix ?? 100000);
+  const [interval, setInterval_] = useState(cp.maxIntervalInSeconds ?? 300);
   const [busy, setBusy] = useState(false);
-  useEffect(() => setValue(current), [current]);
-  const dirty = value !== current;
+  useEffect(() => { setValue(current); setPrefix(cp.maxStalenessPrefix ?? 100000); setInterval_(cp.maxIntervalInSeconds ?? 300); }, [a]);
+  const dirty = value !== current || (value === "BoundedStaleness" && (Number(prefix) !== (cp.maxStalenessPrefix ?? 100000) || Number(interval) !== (cp.maxIntervalInSeconds ?? 300)));
   const save = async () => {
     setBusy(true);
     try {
-      await api.updateAccount(a.resourceGroup, a.name, { properties: { consistencyPolicy: { defaultConsistencyLevel: value } } });
+      const consistencyPolicy = value === "BoundedStaleness"
+        ? { defaultConsistencyLevel: value, maxStalenessPrefix: Number(prefix), maxIntervalInSeconds: Number(interval) }
+        : { defaultConsistencyLevel: value };
+      await api.updateAccount(a.resourceGroup, a.name, { properties: { consistencyPolicy } });
       notify.success(`Default consistency for '${a.name}' was saved.`, "Saved");
       reload();
     } catch (e) { notify.error(e, "Saving default consistency failed"); }
@@ -461,7 +539,7 @@ function Consistency({ a, reload }) {
       <div className="vy-panel-title">Default consistency</div>
       <div className="vy-cmdbar" role="toolbar" aria-label="Default consistency commands">
         <ToolbarButton icon={<Save20Regular />} disabled={!dirty || busy} onClick={save}>Save</ToolbarButton>
-        <ToolbarButton disabled={!dirty} onClick={() => setValue(current)}>Discard</ToolbarButton>
+        <ToolbarButton disabled={!dirty} onClick={() => { setValue(current); setPrefix(cp.maxStalenessPrefix ?? 100000); setInterval_(cp.maxIntervalInSeconds ?? 300); }}>Discard</ToolbarButton>
       </div>
       <CapabilityContainer id="azure.cosmos.default_consistency" title="Default consistency">
         <RadioGroup value={value} onChange={(_, d) => setValue(d.value)} aria-label="Default consistency">
@@ -471,27 +549,85 @@ function Consistency({ a, reload }) {
           <Radio value="ConsistentPrefix" label="Consistent Prefix" />
           <Radio value="Eventual" label="Eventual" />
         </RadioGroup>
+        {value === "BoundedStaleness" && (
+          <div className="vy-props" style={{ marginTop: 8 }}>
+            <Field label="Max staleness (operations)" hint="10 - 2,147,483,647">
+              <Input type="number" value={String(prefix)} onChange={(_, d) => setPrefix(d.value)} aria-label="Max staleness operations" />
+            </Field>
+            <Field label="Max staleness (time, seconds)" hint="5 - 86,400">
+              <Input type="number" value={String(interval)} onChange={(_, d) => setInterval_(d.value)} aria-label="Max staleness time seconds" />
+            </Field>
+          </div>
+        )}
       </CapabilityContainer>
     </>
   );
 }
 
 // ── Backup & Restore ────────────────────────────────────────────────────────────────────
-function Backup({ a }) {
-  const p = a.properties?.backupPolicy || { type: "Periodic", periodicModeProperties: { backupIntervalInMinutes: 240, backupRetentionIntervalInHours: 8, backupStorageRedundancy: "Geo" } };
-  const redundancy = { Geo: "Geo-redundant backup storage", Zone: "Zone-redundant backup storage", Local: "Locally-redundant backup storage" };
+const REDUNDANCY_LABEL = { Geo: "Geo-redundant backup storage", Zone: "Zone-redundant backup storage", Local: "Locally-redundant backup storage" };
+
+function Backup({ a, reload }) {
+  const notify = useNotify();
+  const current = a.properties?.backupPolicy || { type: "Periodic", periodicModeProperties: { backupIntervalInMinutes: 240, backupRetentionIntervalInHours: 8, backupStorageRedundancy: "Geo" } };
+  const init = () => ({
+    type: current.type,
+    interval: current.periodicModeProperties?.backupIntervalInMinutes ?? 240,
+    retention: current.periodicModeProperties?.backupRetentionIntervalInHours ?? 8,
+    redundancy: current.periodicModeProperties?.backupStorageRedundancy ?? "Geo",
+    tier: current.continuousModeProperties?.tier ?? "Continuous30Days",
+  });
+  const [f, setF] = useState(init);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setF(init()), [a]);
+  const dirty = JSON.stringify(f) !== JSON.stringify(init());
+  const save = async () => {
+    setBusy(true);
+    try {
+      const backupPolicy = f.type === "Periodic"
+        ? { type: "Periodic", periodicModeProperties: { backupIntervalInMinutes: Number(f.interval), backupRetentionIntervalInHours: Number(f.retention), backupStorageRedundancy: f.redundancy } }
+        : { type: "Continuous", continuousModeProperties: { tier: f.tier } };
+      await api.updateAccount(a.resourceGroup, a.name, { properties: { backupPolicy } });
+      notify.success(`Backup policy for '${a.name}' was saved.`, "Saved");
+      reload();
+    } catch (e) { notify.error(e, "Saving backup policy failed"); }
+    finally { setBusy(false); }
+  };
   return (
     <>
       <div className="vy-panel-title">Backup & Restore</div>
+      <div className="vy-cmdbar" role="toolbar" aria-label="Backup & Restore commands">
+        <ToolbarButton icon={<Save20Regular />} disabled={!dirty || busy} onClick={save}>Save</ToolbarButton>
+        <ToolbarButton disabled={!dirty} onClick={() => setF(init())}>Discard</ToolbarButton>
+      </div>
       <CapabilityContainer id="azure.cosmos.backup_restore" title="Backup Policy">
-        <div className="vy-props" style={{ marginTop: 8 }}>
-          <KV label="Backup policy" value={p.type} />
-          {p.type === "Periodic" && <>
-            <KV label="Backup Interval" value={`${p.periodicModeProperties?.backupIntervalInMinutes ?? 240} minutes`} />
-            <KV label="Backup Retention" value={`${p.periodicModeProperties?.backupRetentionIntervalInHours ?? 8} hours`} />
-            <KV label="Backup storage redundancy" value={redundancy[p.periodicModeProperties?.backupStorageRedundancy] || "Geo-redundant backup storage"} />
-          </>}
-        </div>
+        <RadioGroup value={f.type} onChange={(_, d) => setF((x) => ({ ...x, type: d.value }))} aria-label="Backup policy">
+          <Radio value="Periodic" label="Periodic" disabled={current.type === "Continuous"} />
+          <Radio value="Continuous" label="Continuous" />
+        </RadioGroup>
+        {current.type === "Continuous" && f.type === "Periodic" && (
+          <p className="vy-muted" style={{ fontSize: 12 }}>Migrating from Continuous back to Periodic backup mode is not supported — same as real Azure Cosmos DB.</p>
+        )}
+        {f.type === "Periodic" ? (
+          <div className="vy-props" style={{ marginTop: 8 }}>
+            <Field label="Backup Interval" hint="60 - 1,440 minutes"><Input type="number" value={String(f.interval)} onChange={(_, d) => setF((x) => ({ ...x, interval: d.value }))} aria-label="Backup Interval" /></Field>
+            <Field label="Backup Retention" hint="8 - 720 hours"><Input type="number" value={String(f.retention)} onChange={(_, d) => setF((x) => ({ ...x, retention: d.value }))} aria-label="Backup Retention" /></Field>
+            <Field label="Backup storage redundancy">
+              <RadioGroup value={f.redundancy} onChange={(_, d) => setF((x) => ({ ...x, redundancy: d.value }))} aria-label="Backup storage redundancy">
+                {Object.entries(REDUNDANCY_LABEL).map(([k, label]) => <Radio key={k} value={k} label={label} />)}
+              </RadioGroup>
+            </Field>
+          </div>
+        ) : (
+          <div className="vy-props" style={{ marginTop: 8 }}>
+            <Field label="Continuous backup tier">
+              <RadioGroup value={f.tier} onChange={(_, d) => setF((x) => ({ ...x, tier: d.value }))} aria-label="Continuous backup tier">
+                <Radio value="Continuous7Days" label="7 days" />
+                <Radio value="Continuous30Days" label="30 days" />
+              </RadioGroup>
+            </Field>
+          </div>
+        )}
       </CapabilityContainer>
     </>
   );
