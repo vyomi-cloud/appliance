@@ -2332,7 +2332,7 @@ _IAM_KEYS = {
     "users": dict, "groups": dict, "roles": dict, "policies": dict, "access_keys": dict,
     "saml_providers": dict, "oidc_providers": dict, "account_aliases": list,
     "password_policy": lambda: None, "credential_report": lambda: None,
-    "org_policies": dict, "access_requests": dict,
+    "org_policies": dict, "access_requests": dict, "virtual_mfa_devices": dict,
 }
 
 
@@ -2359,6 +2359,7 @@ class AppStateIamStore(_SlotStore, _IamStoreBase):
     credential_report = _slot_attr_rw("credential_report")
     org_policies = _slot_attr("org_policies")
     access_requests = _slot_attr("access_requests")
+    virtual_mfa_devices = _slot_attr("virtual_mfa_devices")
 
     def adopt(self) -> None:
         """Pre-v4 server.py IAM state (core.app_context.iam_state) -> this slot, once per space."""

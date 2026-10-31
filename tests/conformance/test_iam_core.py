@@ -307,6 +307,65 @@ def run() -> int:
     _check("access request created", "<RequestId>ar-" in req and "<RequestorId>444455556666</RequestorId>" in req)
     _check("access request listed", "444455556666" in iam.dispatch(st, {"Action": "ListAccountAccessRequests"}).body)
 
+    # 25. Virtual MFA devices — real assignment/resync/removal; aws:MultiFactorAuthPresent
+    # (both the live device state AND a SimulatePrincipalPolicy ContextEntries override) is
+    # evaluated by the SAME decision path as every other condition key.
+    iam.dispatch(st, {"Action": "CreateUser", "UserName": "erin"})
+    cvmd = iam.dispatch(st, {"Action": "CreateVirtualMFADevice", "VirtualMFADeviceName": "erin-phone"}).body
+    _check("virtual MFA device created", "<SerialNumber>arn:aws:iam::123456789012:mfa/erin-phone</SerialNumber>" in cvmd
+           and "<Base32StringSeed>" in cvmd)
+    serial = cvmd.split("<SerialNumber>")[1].split("</SerialNumber>")[0]
+    dup = iam.dispatch(st, {"Action": "CreateVirtualMFADevice", "VirtualMFADeviceName": "erin-phone"})
+    _check("duplicate virtual MFA device -> EntityAlreadyExists", "<Code>EntityAlreadyExists</Code>" in dup.body)
+    _check("unassigned device listed", serial in iam.dispatch(st, {"Action": "ListVirtualMFADevices", "AssignmentStatus": "Unassigned"}).body)
+    _check("unassigned device not in Assigned filter", serial not in iam.dispatch(st, {"Action": "ListVirtualMFADevices", "AssignmentStatus": "Assigned"}).body)
+
+    short_codes = iam.dispatch(st, {"Action": "EnableMFADevice", "UserName": "erin", "SerialNumber": serial,
+                                    "AuthenticationCode1": "123", "AuthenticationCode2": "456"})
+    _check("malformed code rejected", "<Code>InvalidAuthenticationCode</Code>" in short_codes.body)
+    same_codes = iam.dispatch(st, {"Action": "EnableMFADevice", "UserName": "erin", "SerialNumber": serial,
+                                   "AuthenticationCode1": "111111", "AuthenticationCode2": "111111"})
+    _check("identical consecutive codes rejected", "<Code>InvalidAuthenticationCode</Code>" in same_codes.body)
+    enabled = iam.dispatch(st, {"Action": "EnableMFADevice", "UserName": "erin", "SerialNumber": serial,
+                                "AuthenticationCode1": "111111", "AuthenticationCode2": "222222"})
+    _check("MFA device enabled", enabled.status == 200)
+    _check("device now listed for erin", serial in iam.dispatch(st, {"Action": "ListMFADevices", "UserName": "erin"}).body)
+    _check("device now in Assigned filter", "erin" in iam.dispatch(st, {"Action": "ListVirtualMFADevices", "AssignmentStatus": "Assigned"}).body)
+    already = iam.dispatch(st, {"Action": "EnableMFADevice", "UserName": "erin", "SerialNumber": serial,
+                                "AuthenticationCode1": "111111", "AuthenticationCode2": "222222"})
+    _check("enabling an already-assigned device fails", "<Code>EntityAlreadyExists</Code>" in already.body)
+    del_assigned = iam.dispatch(st, {"Action": "DeleteVirtualMFADevice", "SerialNumber": serial})
+    _check("deleting an assigned device -> DeleteConflict", "<Code>DeleteConflict</Code>" in del_assigned.body)
+
+    mfa_policy = _policy({"Effect": "Allow", "Action": "s3:*", "Resource": "*",
+                          "Condition": {"Bool": {"aws:MultiFactorAuthPresent": "true"}}})
+    iam.dispatch(st, {"Action": "CreatePolicy", "PolicyName": "RequireMfa", "PolicyDocument": mfa_policy})
+    erin_arn = iam.dispatch(st, {"Action": "GetUser", "UserName": "erin"}).body.split("<Arn>")[1].split("</Arn>")[0]
+    iam.dispatch(st, {"Action": "AttachUserPolicy", "UserName": "erin", "PolicyArn": erin_arn.replace(":user/erin", ":policy/RequireMfa")})
+    mfa_sim = iam.dispatch(st, {"Action": "SimulatePrincipalPolicy", "PolicySourceArn": "erin", "ActionNames.member.1": "s3:GetObject"})
+    _check("MFA-gated action allowed once device is enabled", _decisions(mfa_sim.body).get("s3:GetObject") == "allowed")
+
+    iam.dispatch(st, {"Action": "DeactivateMFADevice", "UserName": "erin", "SerialNumber": serial})
+    no_mfa_sim = iam.dispatch(st, {"Action": "SimulatePrincipalPolicy", "PolicySourceArn": "erin", "ActionNames.member.1": "s3:GetObject"})
+    _check("MFA-gated action denied once device is deactivated", _decisions(no_mfa_sim.body).get("s3:GetObject") == "implicitDeny")
+
+    override_sim = iam.dispatch(st, {"Action": "SimulatePrincipalPolicy", "PolicySourceArn": "erin", "ActionNames.member.1": "s3:GetObject",
+                                     "ContextEntries.member.1.ContextKeyName": "aws:MultiFactorAuthPresent",
+                                     "ContextEntries.member.1.ContextKeyValues.member.1": "true"})
+    _check("ContextEntries override allows without a live device", _decisions(override_sim.body).get("s3:GetObject") == "allowed")
+
+    not_erins = iam.dispatch(st, {"Action": "DeactivateMFADevice", "UserName": "erin", "SerialNumber": serial})
+    _check("deactivating an already-unassigned device -> NoSuchEntity", "<Code>NoSuchEntity</Code>" in not_erins.body)
+    resync_bad = iam.dispatch(st, {"Action": "ResyncMFADevice", "UserName": "erin", "SerialNumber": serial, "AuthenticationCode1": "1", "AuthenticationCode2": "2"})
+    _check("resync on unassigned device -> NoSuchEntity", "<Code>NoSuchEntity</Code>" in resync_bad.body)
+    iam.dispatch(st, {"Action": "EnableMFADevice", "UserName": "erin", "SerialNumber": serial,
+                      "AuthenticationCode1": "333333", "AuthenticationCode2": "444444"})
+    resync_ok = iam.dispatch(st, {"Action": "ResyncMFADevice", "UserName": "erin", "SerialNumber": serial, "AuthenticationCode1": "333333", "AuthenticationCode2": "444444"})
+    _check("resync on assigned device succeeds", resync_ok.status == 200)
+    iam.dispatch(st, {"Action": "DeactivateMFADevice", "UserName": "erin", "SerialNumber": serial})
+    del_ok = iam.dispatch(st, {"Action": "DeleteVirtualMFADevice", "SerialNumber": serial})
+    _check("deleting an unassigned device succeeds", del_ok.status == 200)
+
     print("\nRESULT: PASS — IAM core conforms (native Query-protocol wire + real policy evaluation) on this substrate.")
     return 0
 

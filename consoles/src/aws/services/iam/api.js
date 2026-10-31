@@ -76,6 +76,19 @@ export const listAccessKeys = async (UserName) => asList((await call("ListAccess
 export const updateAccessKey = (UserName, AccessKeyId, Status) => call("UpdateAccessKey", { UserName, AccessKeyId, Status });
 export const deleteAccessKey = (UserName, AccessKeyId) => call("DeleteAccessKey", { UserName, AccessKeyId });
 
+// ── multi-factor authentication (virtual MFA devices) ───────────────────
+export const createVirtualMfaDevice = async (VirtualMFADeviceName) =>
+  (await call("CreateVirtualMFADevice", { VirtualMFADeviceName })).CreateVirtualMFADeviceResponse.CreateVirtualMFADeviceResult.VirtualMFADevice;
+export const deleteVirtualMfaDevice = (SerialNumber) => call("DeleteVirtualMFADevice", { SerialNumber });
+export const enableMfaDevice = (UserName, SerialNumber, AuthenticationCode1, AuthenticationCode2) =>
+  call("EnableMFADevice", { UserName, SerialNumber, AuthenticationCode1, AuthenticationCode2 });
+export const deactivateMfaDevice = (UserName, SerialNumber) => call("DeactivateMFADevice", { UserName, SerialNumber });
+export const resyncMfaDevice = (UserName, SerialNumber, AuthenticationCode1, AuthenticationCode2) =>
+  call("ResyncMFADevice", { UserName, SerialNumber, AuthenticationCode1, AuthenticationCode2 });
+export const listMfaDevices = async (UserName) => asList((await call("ListMFADevices", { UserName })).ListMFADevicesResponse.ListMFADevicesResult.MFADevices?.member);
+export const listVirtualMfaDevices = async (AssignmentStatus) =>
+  asList((await call("ListVirtualMFADevices", AssignmentStatus ? { AssignmentStatus } : {})).ListVirtualMFADevicesResponse.ListVirtualMFADevicesResult.VirtualMFADevices?.member);
+
 // ── roles ────────────────────────────────────────────────────────────────
 export const createRole = async (params) => (await call("CreateRole", params)).CreateRoleResponse.CreateRoleResult.Role;
 export const getRole = async (RoleName) => (await call("GetRole", { RoleName })).GetRoleResponse.GetRoleResult.Role;
@@ -142,9 +155,22 @@ export const generateCredentialReport = () => call("GenerateCredentialReport", {
 export const getCredentialReport = async () => (await call("GetCredentialReport", {})).GetCredentialReportResponse.GetCredentialReportResult;
 
 // ── policy simulator ─────────────────────────────────────────────────────
-export const simulatePrincipalPolicy = async (PolicySourceArn, actionNames = [], resourceArns = []) => {
-  const r = (await call("SimulatePrincipalPolicy", { PolicySourceArn, ...members("ActionNames", actionNames), ...members("ResourceArns", resourceArns) }))
-    .SimulatePrincipalPolicyResponse.SimulatePrincipalPolicyResult;
+// contextEntries: [{key: "aws:MultiFactorAuthPresent", value: "true"}, …] — the real
+// AWS ContextEntries mechanism for supplying condition keys the simulator can't read
+// off a live request (see core/iam_core.py's SimulatePrincipalPolicy).
+const contextEntriesParams = (entries = []) => {
+  const out = {};
+  entries.forEach((e, i) => {
+    out[`ContextEntries.member.${i + 1}.ContextKeyName`] = e.key;
+    out[`ContextEntries.member.${i + 1}.ContextKeyValues.member.1`] = e.value;
+  });
+  return out;
+};
+export const simulatePrincipalPolicy = async (PolicySourceArn, actionNames = [], resourceArns = [], contextEntries = []) => {
+  const r = (await call("SimulatePrincipalPolicy", {
+    PolicySourceArn, ...members("ActionNames", actionNames), ...members("ResourceArns", resourceArns),
+    ...contextEntriesParams(contextEntries),
+  })).SimulatePrincipalPolicyResponse.SimulatePrincipalPolicyResult;
   return asList(r.EvaluationResults?.member);
 };
 

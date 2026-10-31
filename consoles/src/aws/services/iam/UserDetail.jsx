@@ -1,6 +1,7 @@
 /* IAM user detail — Summary + 5 tabs, all backed by real native calls except the
- * declared gaps (MFA, CloudTrail policy generator, non-CodeCommit/Keyspaces/X.509
- * credential sections, Last Accessed). */
+ * declared gaps (CloudTrail policy generator, non-CodeCommit/Keyspaces/X.509
+ * credential sections, Last Accessed). MFA devices are real (assignment + resync),
+ * limited only by there being no console sign-in flow to challenge the code against. */
 import { useState } from "react";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -273,11 +274,89 @@ function ConsoleSignInSection({ userName, reload }) {
   );
 }
 
+function MfaSection({ userName }) {
+  const notify = useNotify();
+  const m = useAsync(() => api.listMfaDevices(userName), [userName]);
+  const [sel, setSel] = useState([]);
+  const [assign, setAssign] = useState(null); // {step, name, device} | null
+  const [codes, setCodes] = useState({ a: "", b: "" });
+  const [resync, setResync] = useState(null); // {device, a, b} | null
+  const devices = m.data || [];
+
+  const createDevice = async () => {
+    try { const device = await api.createVirtualMfaDevice(assign.name); setAssign((a) => ({ ...a, step: 2, device })); }
+    catch (e) { notify.error(e); }
+  };
+  const enable = async () => {
+    try {
+      await api.enableMfaDevice(userName, assign.device.SerialNumber, codes.a, codes.b);
+      notify.success("MFA device assigned."); setAssign(null); setCodes({ a: "", b: "" }); m.reload();
+    } catch (e) { notify.error(e); }
+  };
+  const remove = async () => {
+    try {
+      for (const d of sel) { await api.deactivateMfaDevice(userName, d.SerialNumber); await api.deleteVirtualMfaDevice(d.SerialNumber); }
+      notify.success("MFA device removed."); setSel([]); m.reload();
+    } catch (e) { notify.error(e); }
+  };
+  const doResync = async () => {
+    try { await api.resyncMfaDevice(userName, resync.device.SerialNumber, resync.a, resync.b); notify.success("MFA device resynchronized."); setResync(null); }
+    catch (e) { notify.error(e); }
+  };
+
+  return (
+    <CapabilityContainer id="iam.user.mfa" title="Multi-factor authentication (MFA)" counter={`(${devices.length})`}
+      actions={<SpaceBetween direction="horizontal" size="xs">
+        <Button disabled={sel.length !== 1} onClick={() => setResync({ device: sel[0], a: "", b: "" })}>Resync</Button>
+        <Button disabled={!sel.length} onClick={remove}>Remove</Button>
+        <Button variant="primary" onClick={() => setAssign({ step: 1, name: "", device: null })}>Assign MFA device</Button>
+      </SpaceBetween>}>
+      <Table variant="embedded" items={devices} trackBy="SerialNumber"
+        selectionType="single" selectedItems={sel} onSelectionChange={({ detail }) => setSel(detail.selectedItems)}
+        columnDefinitions={[
+          { id: "type", header: "Type", cell: () => "Virtual" },
+          { id: "id", header: "Identifier", cell: (d) => d.SerialNumber },
+          { id: "cert", header: "Certifications", cell: () => "-" },
+          { id: "created", header: "Created on", cell: (d) => fmtDate(d.EnableDate) },
+        ]}
+        empty={<Box textAlign="center" color="inherit"><b>No MFA devices.</b> Assign an MFA device to improve the security of your AWS environment.</Box>} />
+
+      <Modal visible={!!assign} onDismiss={() => setAssign(null)} header="Assign MFA device"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setAssign(null)}>Cancel</Button>
+          {assign?.step === 1
+            ? <Button variant="primary" disabled={!assign.name} onClick={createDevice}>Next</Button>
+            : <Button variant="primary" disabled={!codes.a || !codes.b} onClick={enable}>Assign MFA</Button>}
+        </SpaceBetween></Box>}>
+        {assign?.step === 1 && <FormField label="Device name"><Input value={assign.name} onChange={({ detail }) => setAssign((a) => ({ ...a, name: detail.value }))} ariaLabel="Device name" /></FormField>}
+        {assign?.step === 2 && <SpaceBetween size="m">
+          <FormField label="Secret key" description="Enter this key into your virtual MFA application (there is no camera to scan a QR code in this environment).">
+            <Input value={assign.device.Base32StringSeed} readOnly ariaLabel="Secret key" />
+          </FormField>
+          <FormField label="MFA code 1"><Input value={codes.a} onChange={({ detail }) => setCodes((c) => ({ ...c, a: detail.value }))} ariaLabel="MFA code 1" /></FormField>
+          <FormField label="MFA code 2"><Input value={codes.b} onChange={({ detail }) => setCodes((c) => ({ ...c, b: detail.value }))} ariaLabel="MFA code 2" /></FormField>
+        </SpaceBetween>}
+      </Modal>
+
+      <Modal visible={!!resync} onDismiss={() => setResync(null)} header="Resynchronize MFA device"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setResync(null)}>Cancel</Button>
+          <Button variant="primary" disabled={!resync?.a || !resync?.b} onClick={doResync}>Resynchronize</Button>
+        </SpaceBetween></Box>}>
+        {resync && <SpaceBetween size="m">
+          <FormField label="MFA code 1"><Input value={resync.a} onChange={({ detail }) => setResync((r) => ({ ...r, a: detail.value }))} ariaLabel="MFA code 1" /></FormField>
+          <FormField label="MFA code 2"><Input value={resync.b} onChange={({ detail }) => setResync((r) => ({ ...r, b: detail.value }))} ariaLabel="MFA code 2" /></FormField>
+        </SpaceBetween>}
+      </Modal>
+    </CapabilityContainer>
+  );
+}
+
 function SecurityCredentialsTab({ userName }) {
   return (
     <SpaceBetween size="l">
       <ConsoleSignInSection userName={userName} />
-      <CapabilityContainer id="iam.user.mfa" title="Multi-factor authentication (MFA)" />
+      <MfaSection userName={userName} />
       <AccessKeysSection userName={userName} />
       <CapabilityContainer id="iam.security-credentials.codecommit" title="API keys" />
       <CapabilityContainer id="iam.security-credentials.codecommit" title="SSH public keys for AWS CodeCommit" />

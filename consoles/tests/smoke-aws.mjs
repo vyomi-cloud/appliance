@@ -582,6 +582,24 @@ try {
   await page.getByText(ROLE).first().waitFor({ timeout: 10000 });
   check("IAM role created over wire → shown in Roles list", true);
   await shot("17-iam-roles");
+
+  // IAM: assign a virtual MFA device to the smoke user through the console wizard,
+  // verify it shows over the native wire (UI → CLI direction). MFA codes are
+  // format-checked, not cryptographically verified (core/iam_core.py _check_mfa_codes).
+  const MFA = `v4smoke-mfa-${Date.now() % 100000}`;
+  await page.goto(UI + `#/iam/users/${U}`);
+  await page.getByRole("tab", { name: "Security credentials" }).click();
+  await page.getByRole("button", { name: "Assign MFA device" }).click();
+  await page.getByLabel("Device name").fill(MFA);
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByLabel("MFA code 1").fill("111111");
+  await page.getByLabel("MFA code 2").fill("222222");
+  await page.getByRole("button", { name: "Assign MFA", exact: true }).click();
+  await page.getByText(`mfa/${MFA}`).waitFor({ timeout: 10000 });
+  const mfaXml = await iamXml({ Action: "ListMFADevices", UserName: U });
+  check("IAM assign MFA device (UI) → visible over native wire", mfaXml.includes(`mfa/${MFA}`), mfaXml.slice(0, 200));
+  await shot("17b-iam-user-mfa");
+
   // EC2: launch an instance through the wizard (UI → CLI direction)
   const EN = `v4-smoke-instance-${Date.now() % 100000}`;
   await page.goto(UI + "#/ec2/launch-instance");

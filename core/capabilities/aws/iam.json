@@ -40,10 +40,12 @@
  },
  "iam.user.mfa": {
   "title": "Multi-factor authentication (MFA) devices",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Assigning, resyncing or removing a virtual/hardware MFA device is not modeled; no MFA state exists to check at sign-in or policy-condition time."
-  ]
+   "Virtual MFA devices (create, assign, resync, remove) and the resulting aws:MultiFactorAuthPresent condition key (evaluated by SimulatePrincipalPolicy and is_authorized) are real. There is no console sign-in flow in this environment to actually challenge for a TOTP code, so authentication codes are format-checked (two different 6-digit codes), not cryptographically verified.",
+   "Hardware MFA devices, security keys (FIDO) and passkeys are not modeled — only the virtual (authenticator app) device type."
+  ],
+  "tests": ["tests/conformance/test_iam_core.py"]
  },
  "iam.security-credentials.codecommit": {
   "title": "API keys, SSH keys, Git credentials, X.509 certificates",
