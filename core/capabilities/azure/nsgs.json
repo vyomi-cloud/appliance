@@ -54,11 +54,19 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.nsgs.tools": {
-  "title": "Diagnose and solve problems, Tasks, Effective security rules, Support + Troubleshooting",
+  "title": "Diagnose and solve problems (remaining tiles), Tasks, Effective security rules, Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "Diagnose and solve problems, Tasks, Effective security rules and Support blades are not built. Network Watcher's IP flow verify and Next hop ARE simulated as ARM actions (Microsoft.Network/networkWatchers/*/ipFlowVerify|nextHop) — no console blade for them yet."
+   "Tasks, Effective security rules and Support + Troubleshooting are not built, and Diagnose and solve problems' other diagnostic tiles (VM connectivity issue, Network configuration diagnostics, …) remain an honest gap. Its IP flow verify and Next hop tiles ARE built — see azure.nsgs.network_watcher."
   ]
+ },
+ "azure.nsgs.network_watcher": {
+  "title": "Diagnose and solve problems: IP flow verify, Next hop (Network Watcher)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "IP flow verify and Next hop answer from the shared netsim evaluator (core/netsim) — the same engine behind AWS Reachability Analyzer and GCP Connectivity Tests — scoped to a virtual machine's network interface in this subscription. Vyomi auto-provisions the regional NetworkWatcher_<location> resource the first time either tool runs in a location, same as the real portal's 'Enable Network Watcher' behaviour. There is no standalone Network Watcher service console (browsing/deleting networkWatchers resources) yet, only these two diagnostic tools reached from the NSG and Virtual network blades."
+  ],
+  "tests": ["tests/conformance/test_azure_netsim_core.py"]
  },
  "azure.nsgs.monitoring": {
   "title": "Alerts, Diagnostic settings, Logs, NSG flow logs",

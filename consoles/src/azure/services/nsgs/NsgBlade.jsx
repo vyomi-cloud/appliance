@@ -23,6 +23,7 @@ import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedCon
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import NetworkWatcherTools from "./NetworkWatcher.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -44,7 +45,7 @@ export const MENU = [
 ];
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 const GAP_CAP = {
-  diagnose: "azure.nsgs.tools", tasks: "azure.nsgs.tools", support: "azure.nsgs.tools", effectivesecurityrules: "azure.nsgs.tools",
+  tasks: "azure.nsgs.tools", support: "azure.nsgs.tools", effectivesecurityrules: "azure.nsgs.tools",
 };
 
 export default function NsgBlade({ params }) {
@@ -72,6 +73,7 @@ export default function NsgBlade({ params }) {
       activitylog: () => <ActivityLog a={a} />,
       exporttemplate: () => <ExportTemplate a={a} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} />,
+      diagnose: () => <Diagnose />,
       alerts: () => <NotSimulatedContainer title={`${name} | Alerts`} feature="Alerts" />,
       logs: () => <NotSimulatedContainer title={`${name} | Logs`} feature="Logs" />,
       flowlogs: () => <NotSimulatedContainer title={`${name} | NSG flow logs`} feature="NSG flow logs" />,
@@ -128,6 +130,20 @@ function Overview({ a, reload, self }) {
           notify.success(`Network security group '${a.name}' was deleted.`, "Delete succeeded");
           navigate("nsgs");
         }} />
+    </>
+  );
+}
+
+// ── Diagnose and solve problems: the Network Watcher tiles (IP flow verify, Next hop) are
+// real; its other diagnostic tiles stay an honest gap (azure.nsgs.tools). ─────────────────
+function Diagnose() {
+  return (
+    <>
+      <div className="vy-panel-title">Diagnose and solve problems</div>
+      <NetworkWatcherTools />
+      <div style={{ marginTop: 16 }}>
+        <NotSimulatedContainer title="Other diagnostic tools" feature="Tasks, Effective security rules, Support + Troubleshooting and the remaining Diagnose and solve problems tiles" />
+      </div>
     </>
   );
 }
