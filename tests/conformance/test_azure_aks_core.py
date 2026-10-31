@@ -89,8 +89,25 @@ def run() -> int:
     _check("cluster stop succeeded", r["status"] == 200 and r["body"]["powerState"]["code"] == "Stopped")
     r = arm.handle("GET", c1, {"api-version": AV})
     _check("stopped power state persisted", r["body"]["properties"]["powerState"]["code"] == "Stopped")
+
+    # 6b. A stopped cluster rejects node-pool writes/deletes AND runCommand (ENFORCED, not just
+    # stored) until it is started again.
+    r = arm.handle("PATCH", pool1, {"api-version": AV}, {"properties": {"count": 7}})
+    _check("node pool scale rejected while cluster stopped", r["status"] == 409 and r["body"]["error"]["code"] == "ClusterNotRunning")
+    r = arm.handle("GET", pool1, {"api-version": AV})
+    _check("node pool count unchanged while cluster stopped", r["body"]["properties"]["count"] == 5)
+    r = arm.handle("DELETE", pool1, {"api-version": AV})
+    _check("node pool delete rejected while cluster stopped", r["status"] == 409)
+    r = arm.handle("POST", c1 + "/runCommand", {"api-version": AV}, {"command": "kubectl get pods -A"})
+    _check("runCommand rejected while cluster stopped", r["status"] == 409 and r["body"]["error"]["code"] == "ClusterNotRunning")
+    # the OTHER (running) cluster's pool is unaffected by cluster1's stopped state
+    r = arm.handle("PATCH", poolX, {"api-version": AV}, {"properties": {"count": 2}})
+    _check("unrelated running cluster's node pool still scales", r["status"] == 200 and r["body"]["properties"]["count"] == 2)
+
     r = arm.handle("POST", c1 + "/start", {"api-version": AV})
     _check("cluster start succeeded", r["status"] == 200 and r["body"]["powerState"]["code"] == "Running")
+    r = arm.handle("PATCH", pool1, {"api-version": AV}, {"properties": {"count": 5}})
+    _check("node pool scale works again once cluster is running", r["status"] == 200)
 
     # 7. runCommand — honest canned result (no live kubelet), but a real accepted round-trip
     r = arm.handle("POST", c1 + "/runCommand", {"api-version": AV}, {"command": "kubectl get pods -A"})
