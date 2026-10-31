@@ -50,11 +50,11 @@
  "kms.key.rotation": {
   "title": "Key rotation (automatic flag + on-demand)",
   "level": {
-   "nano": "limited",
-   "offline": "limited"
+   "nano": "full",
+   "offline": "full"
   },
   "limitations": [
-   "Automatic rotation (EnableKeyRotation) is recorded with its period and reflected in GetKeyRotationStatus, but Vyomi has no background scheduler — it never fires on its own. Use on-demand rotation (RotateKeyOnDemand) to actually rotate the backing key material; ciphertext from before a rotation keeps decrypting, exactly like AWS."
+   "Automatic rotation really fires: Vyomi has no background scheduler, so EnableKeyRotation's period is checked lazily (on the next operation against the key, or the next GetKeyRotationStatus/DescribeKey/ListKeyRotations call) rather than on a running clock, exactly how DynamoDB TTL and Secrets Manager rotation are evaluated here — but the backing key material does genuinely rotate on schedule, not just get recorded. Ciphertext from before any rotation keeps decrypting, exactly like AWS."
   ],
   "tests": [
    "tests/conformance/test_kms_secrets_rotation_core.py",

@@ -111,11 +111,14 @@ function TagsTab({ keyId }) {
   );
 }
 
-function RotationTab({ keyId, reload }) {
+function RotationTab({ keyId, creationDate, reload }) {
   const notify = useNotify();
   const status = useAsync(() => api.getKeyRotationStatus(keyId), [keyId]);
   const rotations = useAsync(() => api.listKeyRotations(keyId), [keyId]);
   const [busy, setBusy] = useState(false);
+  const lastRotation = rotations.data?.length ? rotations.data[rotations.data.length - 1].RotationDate : creationDate;
+  const nextRotation = (status.data?.KeyRotationEnabled && lastRotation)
+    ? fmtDate(lastRotation + status.data.RotationPeriodInDays * 86400) : "-";
   const toggle = async () => {
     setBusy(true);
     try {
@@ -137,8 +140,14 @@ function RotationTab({ keyId, reload }) {
         <ColumnLayout columns={3} variant="text-grid">
           <div><Box variant="awsui-key-label">Automatic key rotation</Box><div>{status.loading ? "-" : (status.data?.KeyRotationEnabled ? "On" : "Off")}</div></div>
           <div><Box variant="awsui-key-label">Rotation period (in days)</Box><div>{status.data?.RotationPeriodInDays || "-"}</div></div>
-          <div><Box variant="awsui-key-label">Next rotation date</Box><div>{status.data?.KeyRotationEnabled ? "Vyomi rotates on demand only — there's no background scheduler." : "-"}</div></div>
+          <div><Box variant="awsui-key-label">Next rotation date</Box><div>{nextRotation}</div></div>
         </ColumnLayout>
+        {status.data?.KeyRotationEnabled && (
+          <Box color="text-body-secondary" margin={{ top: "s" }} fontSize="body-s">
+            Vyomi checks the schedule lazily (on the next operation against this key, or when this page loads) rather than
+            running a background scheduler — the key still rotates on time, it's just evaluated on next touch.
+          </Box>
+        )}
       </CapabilityContainer>
       <Container header={<Header variant="h2" actions={<Button loading={busy} onClick={rotateNow}>Rotate now</Button>}>On-demand rotation</Header>}>
         <Box color="text-body-secondary">Immediately rotate this key's backing material. Data already encrypted under it keeps decrypting.</Box>
@@ -226,7 +235,7 @@ export default function CustomerManagedKeyDetail({ params }) {
             </Container>
           ) },
           { id: "tags", label: "Tags", content: <TagsTab keyId={keyId} /> },
-          { id: "rotation", label: "Key rotation", content: <RotationTab keyId={keyId} reload={d.reload} /> },
+          { id: "rotation", label: "Key rotation", content: <RotationTab keyId={keyId} creationDate={md.CreationDate} reload={d.reload} /> },
           { id: "aliases", label: "Aliases", content: <AliasesTab keyId={keyId} /> },
         ]} />
       </SpaceBetween>

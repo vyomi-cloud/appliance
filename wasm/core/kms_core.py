@@ -164,6 +164,7 @@ def _key_metadata(store: KeyStore, key_id: str) -> dict:
 
 
 def _touch_last_used(store: KeyStore, key_id: str) -> None:
+    _maybe_auto_rotate(store, key_id)
     k = store.get_key(key_id)
     if k is not None:
         k["LastUsedDate"] = time.time()
@@ -226,6 +227,7 @@ def _provision_aws_managed_key(store: KeyStore, ref: str) -> str:
     service = alias[len("alias/aws/"):] or "service"
     key_id = uuid.uuid4().hex
     material_id = uuid.uuid4().hex
+    now = time.time()
     store.put_key(key_id, {
         "KeyState": "Enabled",
         "Description": f"Default master key that protects my {service} data when no other key is defined",
@@ -233,9 +235,13 @@ def _provision_aws_managed_key(store: KeyStore, ref: str) -> str:
         "KeySpec": "SYMMETRIC_DEFAULT",
         "Origin": "AWS_KMS",
         "KeyManager": "AWS",
-        "CreationDate": time.time(),
+        "CreationDate": now,
         "MaterialId": material_id,
         "Tags": {},
+        # AWS managed keys rotate automatically every year, always, non-configurable.
+        "KeyRotationEnabled": True,
+        "RotationPeriodInDays": 365,
+        "LastRotationDate": now,
     }, store.engine.new_key_material())
     k = store.get_key(key_id)
     k["Policy"] = _default_key_policy(store)
@@ -249,6 +255,7 @@ def _describe_key(store: KeyStore, body: dict) -> dict:
     key_id = _resolve_key_id(store, body.get("KeyId", ""))
     if not key_id or not store.key_exists(key_id):
         raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    _maybe_auto_rotate(store, key_id)
     return {"KeyMetadata": _key_metadata(store, key_id)}
 
 
@@ -513,12 +520,18 @@ def _set_key_rotation(store: KeyStore, body: dict, enabled: bool) -> dict:
     k = store.get_key(key_id)
     if k.get("KeyState") == "PendingDeletion":
         raise KmsError("KMSInvalidStateException", "Key is pending deletion.", 400)
+    if k.get("KeyManager") == "AWS":
+        raise KmsError("UnsupportedOperationException",
+                       "You cannot perform this operation on an AWS managed CMK.", 400)
     k["KeyRotationEnabled"] = enabled
     if enabled:
         days = int(body.get("RotationPeriodInDays") or k.get("RotationPeriodInDays") or 365)
         if days < 90 or days > 2560:
             raise KmsError("ValidationException", "RotationPeriodInDays must be 90..2560.", 400)
         k["RotationPeriodInDays"] = days
+        # Anchor the lazy automatic-rotation clock (see _maybe_auto_rotate) the first
+        # time rotation is enabled; re-enabling later keeps the existing anchor.
+        k.setdefault("LastRotationDate", k.get("CreationDate") or time.time())
     store.persist()
     return {}
 
@@ -527,11 +540,31 @@ def _get_key_rotation_status(store: KeyStore, body: dict) -> dict:
     key_id = _resolve_key_id(store, body.get("KeyId", ""))
     if not key_id or not store.key_exists(key_id):
         raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    _maybe_auto_rotate(store, key_id)
     k = store.get_key(key_id)
     out = {"KeyId": key_id, "KeyRotationEnabled": bool(k.get("KeyRotationEnabled", False))}
     if k.get("KeyRotationEnabled"):
         out["RotationPeriodInDays"] = int(k.get("RotationPeriodInDays", 365))
     return out
+
+
+def _do_rotate_material(store: KeyStore, key_id: str, rotation_type: str) -> None:
+    """Shared step behind both on-demand and lazy-automatic rotation: fresh key
+    material, but the key id and all prior ciphertexts stay valid (KMS keeps old
+    versions for decrypt — see _decrypt_with_history)."""
+    k = store.get_key(key_id)
+    old_material = store.get_material(key_id)
+    if old_material:
+        k.setdefault("MaterialHistory", []).append(old_material)
+    store.material[key_id] = store.engine.new_key_material()
+    material_id = uuid.uuid4().hex
+    k["MaterialId"] = material_id
+    now = time.time()
+    k.setdefault("RotationHistory", []).append({
+        "KeyMaterialId": material_id, "RotationDate": now, "RotationType": rotation_type,
+    })
+    k["RotationCount"] = int(k.get("RotationCount", 0)) + 1
+    k["LastRotationDate"] = now
 
 
 def _rotate_key_on_demand(store: KeyStore, body: dict, rotation_type: str = "CUSTOMER_INITIATED") -> dict:
@@ -544,24 +577,33 @@ def _rotate_key_on_demand(store: KeyStore, body: dict, rotation_type: str = "CUS
     k = store.get_key(key_id)
     if k.get("KeyState") == "PendingDeletion":
         raise KmsError("KMSInvalidStateException", "Key is pending deletion.", 400)
-    old_material = store.get_material(key_id)
-    if old_material:
-        k.setdefault("MaterialHistory", []).append(old_material)
-    store.material[key_id] = store.engine.new_key_material()
-    material_id = uuid.uuid4().hex
-    k["MaterialId"] = material_id
-    k.setdefault("RotationHistory", []).append({
-        "KeyMaterialId": material_id, "RotationDate": time.time(), "RotationType": rotation_type,
-    })
-    k["RotationCount"] = int(k.get("RotationCount", 0)) + 1
+    _do_rotate_material(store, key_id, rotation_type)
     store.persist()
     return {"KeyId": _key_arn(store, key_id)}
+
+
+def _maybe_auto_rotate(store: KeyStore, key_id: str) -> None:
+    """Lazy, on-access automatic rotation — the same pattern Secrets Manager uses
+    (core/secrets_core.py:_auto_rotate_if_due). Vyomi has no background scheduler,
+    but any touch of a key whose automatic-rotation period has elapsed since the
+    last rotation fires it right there, so the setting really takes effect instead
+    of just being recorded."""
+    k = store.get_key(key_id)
+    if k is None or not k.get("KeyRotationEnabled") or k.get("KeyState") != "Enabled":
+        return
+    anchor = k.get("LastRotationDate") or k.get("CreationDate") or time.time()
+    period_seconds = int(k.get("RotationPeriodInDays") or 365) * 86400
+    if time.time() - anchor < period_seconds:
+        return
+    _do_rotate_material(store, key_id, "AWS_KMS_AUTOMATIC")
+    store.persist()
 
 
 def _list_key_rotations(store: KeyStore, body: dict) -> dict:
     key_id = _resolve_key_id(store, body.get("KeyId", ""))
     if not key_id or not store.key_exists(key_id):
         raise KmsError("NotFoundException", f"Key '{body.get('KeyId','')}' does not exist.", 400)
+    _maybe_auto_rotate(store, key_id)
     history = store.get_key(key_id).get("RotationHistory", [])
     rotations = [{"KeyId": key_id, **r} for r in history]
     return {"Rotations": rotations, "Truncated": False}
