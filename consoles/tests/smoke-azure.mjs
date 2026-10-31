@@ -1091,8 +1091,122 @@ try {
   await outBox.waitFor({ timeout: 10000 });
   await page.waitForFunction(() => document.querySelector('textarea[aria-label="Output"]')?.value?.length > 0, null, { timeout: 10000 });
   const runOut = await outBox.inputValue();
-  check("Run command executes the real (honestly simulated) round-trip", runOut.includes("Vyomi does not run a real kubelet"), runOut.slice(0, 80));
+  check("Run command runs kubectl against the cluster's (still empty) Kubernetes object store", runOut.includes("No resources found"), runOut.slice(0, 80));
   await shot("27-aks-run-command");
+
+  {   // own block scope: these names stay local to the Defender section
+  // ── Kubernetes objects + Microsoft Defender for Cloud (Kubescape) ─────────────────────────
+  // Defender plans: turn the Containers plan on through the UI → Standard over native ARM.
+  const SECQ = (p, v) => `/subscriptions/${SUB}/providers/Microsoft.Security${p}?api-version=${v}`;
+  const secGet = async (p, v) => { const r = await wire(SECQ(p, v)); return r.status === 200 ? JSON.parse(r.text) : { status: r.status }; };
+  await page.goto(UI + `#/defender/environment/${SUB}`);
+  const contSwitch = page.getByRole("switch", { name: "Containers plan" });
+  await contSwitch.waitFor({ timeout: 15000 });
+  if (!(await contSwitch.isChecked())) await contSwitch.click();
+  await page.getByRole("toolbar", { name: "Defender plans commands" }).getByRole("button", { name: "Save" }).click();
+  await page.getByText("Defender plans updated").first().waitFor({ timeout: 10000 });
+  const cont = await secGet("/pricings/Containers", "2024-01-01");
+  check("UI Defender plans: Containers plan on → Standard over native ARM", cont.properties?.pricingTier === "Standard", JSON.stringify(cont.properties || cont));
+  await shot("27a-defender-plans");
+
+  // Workloads → Create → Apply a YAML: a Deployment with a privileged container, through the UI.
+  const PRIV = `priv-${n}`;
+  const AKSID = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}`;
+  await page.goto(UI + `#/aks/${RG}/${AKS}/workloads`);
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Create" }).click();
+  await page.getByLabel("YAML", { exact: true }).fill(`apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: ${PRIV}\n  namespace: default\nspec:\n  replicas: 2\n  selector:\n    matchLabels: {app: ${PRIV}}\n  template:\n    metadata:\n      labels: {app: ${PRIV}}\n    spec:\n      containers:\n      - name: web\n        image: nginx:1.25\n        securityContext:\n          privileged: true\n`);
+  await page.getByRole("dialog").getByRole("button", { name: "Apply", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('textarea[aria-label="kubectl output"]')?.value?.length > 0, null, { timeout: 15000 });
+  const applyOut = await page.getByLabel("kubectl output", { exact: true }).inputValue();
+  check("UI Apply a YAML → kubectl apply through runCommand", applyOut.includes(`deployment.apps/${PRIV} created`), applyOut.slice(0, 120));
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).last().click();
+  await page.getByRole("cell", { name: PRIV, exact: true }).waitFor({ timeout: 10000 });
+  check("Workloads lists the applied Deployment with a truthful status",
+    await page.getByRole("row", { name: new RegExp(PRIV) }).getByText("Not scheduled — Vyomi doesn't run containers").isVisible());
+  const kget = await armAks("POST", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}/runCommand`, { command: `kubectl get deployment ${PRIV} -o json` });
+  const kobj = kget.status === 200 ? JSON.parse(JSON.parse(kget.text).properties.logs) : {};
+  check("UI-applied Deployment readable over the native wire (runCommand kubectl get -o json)",
+    kobj.spec?.template?.spec?.containers?.[0]?.securityContext?.privileged === true && kobj.status?.readyReplicas === 0, `HTTP ${kget.status}`);
+  await shot("27b-aks-workloads");
+
+  // The Kubescape scan runs after the change (offline: the CLI container, debounced in the background;
+  // Nano: the OPA-wasm evaluator) — wait for the C-0057 recommendation over the native wire.
+  const clusterAssessments = async () => {
+    const r = await wire(`${AKSID}/providers/Microsoft.Security/assessments?api-version=2021-06-01`);
+    return r.status === 200 ? JSON.parse(r.text) : { value: [], status: r.status };
+  };
+  let privA = null, scanners = [];
+  for (let i = 0; i < 90 && !privA; i++) {
+    const b = await clusterAssessments();
+    scanners = b.vyomiKubernetesScanners || [];
+    privA = (b.value || []).find((v) => v.properties.additionalData?.kubescapeControlId === "C-0057" && v.properties.status.code === "Unhealthy");
+    if (!privA) await page.waitForTimeout(2000);
+  }
+  check("Kubescape finds the privileged container → Defender recommendation (C-0057) on the cluster",
+    !!privA, privA ? privA.properties.displayName : JSON.stringify(scanners).slice(0, 300));
+  if (privA) {
+    const subs = JSON.parse((await wire(`${privA.id}/subAssessments?api-version=2019-01-01-preview`)).text).value || [];
+    check("sub-assessment names the failing Deployment", subs.some((x) => x.properties.id === `Deployment/default/${PRIV}`), JSON.stringify(subs.map((x) => x.properties.id)));
+    await page.goto(UI + `#/aks/${RG}/${AKS}/defender`);
+    await page.getByRole("link", { name: "Privileged containers should be avoided (C-0057)" }).click();
+    await page.getByRole("table", { name: "Failing Kubernetes objects" }).getByRole("cell", { name: PRIV, exact: true }).waitFor({ timeout: 15000 });
+    check("UI: cluster blade → Defender → recommendation detail lists the failing Kubernetes object", true);
+    await shot("27c-defender-k8s-recommendation");
+  }
+
+  // NSG with 0.0.0.0/0 → 22 over the wire → recommendation in the UI; fix it → it resolves.
+  const DNSG = `vydefnsg${n}`;
+  const nsgId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${DNSG}`;
+  await wire(`${nsgId}?api-version=2023-11-01`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ location: "eastus" }) });
+  const sshRule = (src) => wire(`${nsgId}/securityRules/allow-ssh?api-version=2023-11-01`, { method: "PUT", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ properties: { direction: "Inbound", access: "Allow", protocol: "Tcp", priority: 300, sourceAddressPrefix: src, sourcePortRange: "*", destinationAddressPrefix: "*", destinationPortRange: "22" } }) });
+  await sshRule("0.0.0.0/0");
+  const MGMT = "Management ports should not be open to the internet on network security groups";
+  await page.goto(UI + `#/defender/recommendations?resource=${encodeURIComponent(nsgId)}`);
+  const mgmtRow = page.getByRole("row", { name: new RegExp(MGMT) });
+  await mgmtRow.waitFor({ timeout: 15000 });
+  check("NSG allowing 0.0.0.0/0 → 22 shows as an Unhealthy recommendation in the UI", await mgmtRow.getByText("Unhealthy").isVisible());
+  await mgmtRow.getByRole("link", { name: MGMT }).click();
+  await page.getByRole("table", { name: "Unhealthy resources" }).getByRole("link", { name: DNSG, exact: true }).waitFor({ timeout: 10000 });
+  check("recommendation detail lists the NSG as an unhealthy resource with the exposing rule",
+    await page.getByRole("table", { name: "Unhealthy resources" }).getByText(/port 22 allowed from the internet by rule 'allow-ssh'/).isVisible());
+  await shot("27d-defender-nsg");
+  await sshRule("10.20.0.0/16");
+  await page.getByRole("toolbar", { name: "Defender commands" }).getByRole("button", { name: "Refresh" }).click();
+  await page.getByRole("tab", { name: /Healthy resources \(1\)/ }).waitFor({ timeout: 10000 });
+  check("restricting the source over the wire → the recommendation resolves (resource Healthy) in the UI",
+    await page.getByRole("tab", { name: /Unhealthy resources \(0\)/ }).isVisible());
+
+  // Deleting the privileged Deployment (UI) → rescan → C-0057 resolves.
+  if (privA) {
+    await page.goto(UI + `#/aks/${RG}/${AKS}/workloads`);
+    await page.getByRole("cell", { name: PRIV, exact: true }).waitFor({ timeout: 10000 });
+    await page.getByRole("checkbox", { name: `Select default/${PRIV}` }).click();
+    await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Delete" }).click();
+    const dlg = page.getByRole("dialog");
+    const confirm = dlg.getByLabel("Confirm deletion");
+    await confirm.fill(PRIV);
+    await dlg.getByRole("button", { name: "Delete" }).click();
+    await page.getByText("Delete succeeded").first().waitFor({ timeout: 15000 });
+    let resolved = false;
+    for (let i = 0; i < 90 && !resolved; i++) {
+      const b = await clusterAssessments();
+      const a = (b.value || []).find((v) => v.properties.additionalData?.kubescapeControlId === "C-0057");
+      resolved = !!a && a.properties.status.code !== "Unhealthy" && !(b.vyomiKubernetesScanners || []).some((x) => x.stale);
+      if (!resolved) await page.waitForTimeout(2000);
+    }
+    check("UI delete of the privileged Deployment → rescan → C-0057 no longer Unhealthy", resolved);
+  }
+  await page.goto(UI + "#/defender");
+  await page.getByLabel("Secure score percentage").waitFor({ timeout: 15000 });
+  const ss = await secGet("/secureScores/ascScore", "2020-01-01");
+  check("Defender Overview shows the secure score the wire computes",
+    (await page.getByLabel("Secure score percentage").innerText()).trim() === `${Math.round((ss.properties?.score?.percentage || 0) * 100)}%`);
+  await shot("27e-defender-overview");
+  await wire(SECQ("/pricings/Containers", "2024-01-01"), { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties: { pricingTier: "Free" } }) });
+    await page.goto(UI + `#/aks/${RG}/${AKS}`);   // back on the cluster blade for the steps below
+    await page.getByRole("navigation", { name: "Resource menu" }).waitFor({ timeout: 15000 });
+  }
 
   // ── Namespaces: create through the UI → visible over native ARM ───────────────────────
   await openPanel("Namespaces");

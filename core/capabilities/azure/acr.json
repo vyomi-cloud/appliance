@@ -82,9 +82,16 @@
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": ["These 2025 ARM additions are collected in the wizard for fidelity but stored on neither ARM nor the registry record — Vyomi has no DNS label or ABAC-repository-permission layer to apply them to."]
  },
+ "azure.acr.defender": {
+  "title": "Microsoft Defender for Cloud (this container registry's recommendations)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Shows the live Defender for Cloud recommendations for this resource from Vyomi's rule engine (see azure.defender.recommendations); Azure's full built-in recommendation catalogue is not reproduced."],
+  "api": ["Assessments_List (resource scope)"],
+  "tests": ["tests/conformance/test_azure_security_core.py"]
+ },
  "azure.acr.tools": {
-  "title": "Quick start, Events, Encryption, Identity, Networking, Microsoft Defender for Cloud, Geo-replications, Tasks, Cache, Connected registries, Tokens, Scope maps, Retention (Preview), and Support + Troubleshooting",
+  "title": "Quick start, Events, Encryption, Identity, Networking, Geo-replications, Tasks, Cache, Connected registries, Tokens, Scope maps, Retention (Preview), and Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["These portal blade menu items (push/pull quick-start snippets, CMK encryption, managed identity, private networking, Defender for Cloud, geo-replication, ACR Tasks, cache rules, connected registries, repository-scoped tokens/scope maps, retention policy, and the support tools) are not modeled."]
+  "limitations": ["These portal blade menu items (push/pull quick-start snippets, CMK encryption, managed identity, private networking, geo-replication, ACR Tasks, cache rules, connected registries, repository-scoped tokens/scope maps, retention policy, and the support tools) are not modeled."]
  }
 }

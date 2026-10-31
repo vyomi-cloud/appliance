@@ -20,6 +20,7 @@ import { ErrorBar, Essentials, Glyph, KV, Loading, NotSimulatedContainer } from 
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 const ROLE_ASSIGNMENTS = armType("Microsoft.Authorization", "roleAssignments", "2022-04-01");
 const ROLE_DEFINITIONS = armType("Microsoft.Authorization", "roleDefinitions", "2022-04-01");
@@ -87,6 +88,7 @@ export default function WebAppBlade({ params, query }) {
     const a = site.data, reload = site.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
+      defender: () => <ResourceRecommendations resourceId={a.id} />,
       activitylog: () => <ActivityLog rg={rg} name={name} />,
       iam: () => <AccessControl a={a} />,
       tags: () => <Tags a={a} reload={reload} />,

@@ -21,6 +21,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { TagRows } from "../keyvaults/KeyVaultBlade.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -58,6 +59,7 @@ export default function RegistryBlade({ params, query }) {
     const a = reg.data, reload = reg.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
+      defender: () => <ResourceRecommendations resourceId={a.id} />,
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       accesskeys: () => <AccessKeys a={a} reload={reload} />,

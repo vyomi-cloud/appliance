@@ -84,6 +84,27 @@ def run() -> int:
     k8s.run_command(rec, "kubectl create namespace a")
     _check("result is stale once the objects change", not ks.is_fresh(rec))
 
+    # ── offline runner degrades honestly without Docker ──────────────────────────────────
+    try:
+        from providers import kubescape_runner as kr0
+        real_which = kr0.shutil.which
+        kr0.shutil.which = lambda _n: None
+        try:
+            why = kr0.preflight()
+            _check("no docker CLI -> preflight gives the reason", bool(why) and "docker CLI is not available" in why)
+            sc = kr0.OfflineScanner()
+            rec2 = {"id": "/y", "properties": {"namespaces": [{"name": "default"}]}}
+            k8s.run_command(rec2, "kubectl create namespace b")
+            sc.request(rec2, "/y")
+            _check("request() only queues on the caller's thread (never blocks)", ks.result(rec2)["status"] == "queued")
+            sc.wait_idle(60)
+            r2 = ks.result(rec2)
+            _check("no docker -> 'unavailable' + reason, no findings", r2["status"] == "unavailable" and "docker" in r2["reason"].lower() and not r2.get("controls"))
+        finally:
+            kr0.shutil.which = real_which
+    except ImportError as e:                        # pragma: no cover
+        print(f"  --  runner import failed ({e})")
+
     # ── REAL Kubescape CLI container ─────────────────────────────────────────────────────
     try:
         from providers import kubescape_runner as kr

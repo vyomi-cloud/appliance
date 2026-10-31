@@ -402,6 +402,7 @@ def evaluate(state: dict, sub: str, *, refresh: bool = True) -> dict:
                          "reason": res.get("reason") or "", "scannedAt": res.get("scannedAt"),
                          "kubescapeVersion": res.get("kubescapeVersion"), "frameworks": res.get("frameworks"),
                          "controlsEvaluated": len(res.get("controlsEvaluated") or []),
+                         "frameworkScores": res.get("frameworkScores") or {},
                          "stale": res.get("lastObjectsVersion") != ks.k8s.version(r) if res.get("controls") is not None else None,
                          "objectsVersion": ks.k8s.version(r)})
         for f in res.get("controls") or []:

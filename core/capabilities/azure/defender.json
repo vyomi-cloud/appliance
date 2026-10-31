@@ -1,0 +1,117 @@
+{
+ "$doc": "Vyomi capability registry — Microsoft Defender for Cloud (Microsoft.Security, core/azure_security_core.py; Kubernetes posture from Kubescape via core/kubescape_core.py). See aws/s3.json for the contract.",
+ "azure.defender.recommendations": {
+  "title": "Recommendations (assessments, sub-assessments, assessment metadata) from the native rule engine",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "The rule set is Vyomi's own, evaluated live over the ARM state on every read: storage public blob access and secure transfer, NSG SSH/RDP open to the internet (priority-ordered, child and inline rules), SQL public network access and TDE, Key Vault soft delete and purge protection, VM encryption at host, App Service and Function app HTTPS-only, Container registry network access, API Management virtual network. Azure's full built-in catalogue (hundreds of Azure Policy-backed recommendations) is not reproduced."
+  ],
+  "api": [
+   "Assessments_List",
+   "Assessments_Get",
+   "SubAssessments_List",
+   "AssessmentsMetadata_ListBySubscription"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_security_core.py"
+  ]
+ },
+ "azure.defender.kubernetes": {
+  "title": "Kubernetes recommendations from Kubescape (NSA-CISA, MITRE ATT&CK, CIS Kubernetes v1.12.0)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Kubescape scans the Kubernetes objects stored in the cluster (applied with kubectl through Run command) — Vyomi runs no API server, nodes or containers, so controls that need a live control plane, node/host data or cloud APIs are not evaluated (Kubescape reports them only for live clusters).",
+   "Offline appliance: the real Kubescape CLI (quay.io/kubescape/kubescape-cli:v4.0.16, digest-pinned) runs as a sibling container with no network, debounced after object changes; it needs Docker, and downloads its framework artifacts once. Without Docker the cluster shows 'Scanner unavailable' with the reason and no Kubernetes findings.",
+   "Nano: the browser cannot run the Kubescape CLI, so the same regolibrary Rego controls are compiled to WebAssembly with OPA and evaluated in the page; 22 of the 61 controls the CLI evaluates on stored objects are included (those whose rules need no RBAC aggregation, resource enumerator or rule dependency) and produce the same findings as the CLI. The other controls run only on the offline appliance.",
+   "Recommendations exist only while the Containers plan is on, as in Azure."
+  ],
+  "tests": [
+   "tests/conformance/test_kubescape_core.py",
+   "tests/conformance/test_azure_security_core.py"
+  ]
+ },
+ "azure.defender.secure_score": {
+  "title": "Secure score and security controls",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Computed with Azure's formula (control score = max x healthy / (healthy + unhealthy) resources; score = sum of control scores / sum of their max) over Vyomi's recommendations, so the number differs from what the full Azure catalogue would give for the same resources."
+  ],
+  "api": [
+   "SecureScores_List",
+   "SecureScoreControls_List"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_security_core.py"
+  ]
+ },
+ "azure.defender.plans": {
+  "title": "Defender plans (environment settings / pricings)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Every plan can be turned on and off and reads back as set, but only the Containers plan changes behaviour (it gates the Kubernetes recommendations). The other plans enable no plan-specific protection — no agents, threat detection, vulnerability assessment or malware scanning run."
+  ],
+  "api": [
+   "Pricings_List",
+   "Pricings_Update"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_security_core.py"
+  ]
+ },
+ "azure.defender.inventory": {
+  "title": "Inventory (resources with their recommendation health)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_azure_security_core.py"
+  ]
+ },
+ "azure.defender.compliance": {
+  "title": "Regulatory compliance (Kubescape framework scores per cluster)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Shows the NSA-CISA, MITRE ATT&CK and CIS Kubernetes compliance scores Kubescape computes for each scanned cluster. Azure's regulatory standards (Microsoft cloud security benchmark, PCI DSS, ISO 27001, …) are not simulated."
+  ],
+  "tests": [
+   "tests/conformance/test_kubescape_core.py"
+  ]
+ },
+ "azure.defender.alerts": {
+  "title": "Security alerts",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "Defender for Cloud derives security alerts from runtime threat telemetry (process, network and control-plane activity of running workloads). Vyomi runs no workloads, so no alerts are generated; the alerts API answers 501 NotImplemented."
+  ]
+ },
+ "azure.defender.other": {
+  "title": "Getting started, Attack path analysis, Cloud Security Explorer, Workbooks, Community, Diagnose and solve problems, Workload protections, Data security, Firewall Manager, DevOps security, Security solutions, Workflow automation",
+  "level": {
+   "nano": "not_simulated",
+   "offline": "not_simulated"
+  },
+  "limitations": [
+   "These pages depend on Defender CSPM's cloud security graph, connected DevOps/data/firewall services or Logic Apps automation, none of which Vyomi simulates."
+  ]
+ }
+}

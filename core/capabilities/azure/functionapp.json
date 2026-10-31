@@ -175,8 +175,15 @@
    "tests/conformance/test_azure_functionapp_core.py"
   ]
  },
+ "azure.functionapp.defender": {
+  "title": "Microsoft Defender for Cloud (this function app's recommendations)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Shows the live Defender for Cloud recommendations for this resource from Vyomi's rule engine (see azure.defender.recommendations); Azure's full built-in recommendation catalogue is not reproduced."],
+  "api": ["Assessments_List (resource scope)"],
+  "tests": ["tests/conformance/test_azure_security_core.py"]
+ },
  "azure.functionapp.diagnostics": {
-  "title": "Diagnose and solve problems, Microsoft Defender for Cloud, Events, Log stream, Resource visualizer, App files, Deployment Center, Authentication, Application Insights, Identity, Custom domains, Certificates, Networking, Service Connector, Advanced Tools, Extensions, API Management, CORS, Alerts, Metrics, Logs, Advisor recommendations, Health check, Diagnostic settings, Tasks, Resource health, New support request",
+  "title": "Diagnose and solve problems, Events, Log stream, Resource visualizer, App files, Deployment Center, Authentication, Application Insights, Identity, Custom domains, Certificates, Networking, Service Connector, Advanced Tools, Extensions, API Management, CORS, Alerts, Metrics, Logs, Advisor recommendations, Health check, Diagnostic settings, Tasks, Resource health, New support request",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"

@@ -127,10 +127,17 @@
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
+ "azure.apim.defender": {
+  "title": "Microsoft Defender for Cloud (this API Management service's recommendations)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Shows the live Defender for Cloud recommendations for this resource from Vyomi's rule engine (see azure.defender.recommendations); Azure's full built-in recommendation catalogue is not reproduced."],
+  "api": ["Assessments_List (resource scope)"],
+  "tests": ["tests/conformance/test_azure_security_core.py"]
+ },
  "azure.apim.deployment": {
-  "title": "Network, Custom domains, Locations, Managed identities (user-assigned), Certificates, Gateways, Self-hosted gateways, Defender for Cloud",
+  "title": "Network, Custom domains, Locations, Managed identities (user-assigned), Certificates, Gateways, Self-hosted gateways",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Multi-region deployment, VNet/custom-domain/certificate configuration, managed/self-hosted gateways and Defender for Cloud are not modeled."]
+  "limitations": ["Multi-region deployment, VNet/custom-domain/certificate configuration, and managed/self-hosted gateways are not modeled."]
  },
  "azure.apim.apitags.crud": {
   "title": "API Tags (Microsoft.ApiManagement/service/tags) — create, get, list, delete",

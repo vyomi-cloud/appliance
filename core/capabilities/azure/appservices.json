@@ -113,12 +113,12 @@
   "tests": ["tests/conformance/test_azure_webapp_core.py"]
  },
  "azure.appservices.webapp.platform": {
-  "title": "Authentication, Identity, Application Insights, Microsoft Defender for Cloud, Backups, Certificates, Networking, WebJobs, Service Connector",
+  "title": "Authentication, Identity, Application Insights, Backups, Certificates, Networking, WebJobs, Service Connector",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
    "Identity: enabling a system-assigned managed identity mints a stable principalId/tenantId that can be the subject of a role assignment on Access control (IAM); user-assigned identities are not modelled.",
    "Backups: modelled as snapshots — backup configuration (storage URL, schedule) and on-demand/scheduled backup records (status, size, timestamp) round-trip for real, and Restore acknowledges, but there is no real site content to archive or replay.",
-   "Authentication providers, Application Insights linkage, Microsoft Defender for Cloud, TLS/SSL certificates, VNet integration / private endpoints, WebJobs and Service Connector are not modelled."
+   "Authentication providers, Application Insights linkage, TLS/SSL certificates, VNet integration / private endpoints, WebJobs and Service Connector are not modelled."
   ],
   "api": ["sites Update (identity)", "sites/config/backup CreateOrUpdate", "sites/backups List/Create", "sites/backups/{id}/restore Action"],
   "tests": ["tests/conformance/test_azure_webapp_core.py"]
@@ -139,8 +139,15 @@
   "limitations": ["No Automation Tasks or ARM/Bicep/Terraform template export for the Web App."],
   "api": []
  },
+ "azure.appservices.defender": {
+  "title": "Microsoft Defender for Cloud (this web app's recommendations)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["Shows the live Defender for Cloud recommendations for this resource from Vyomi's rule engine (see azure.defender.recommendations); Azure's full built-in recommendation catalogue is not reproduced."],
+  "api": ["Assessments_List (resource scope)"],
+  "tests": ["tests/conformance/test_azure_security_core.py"]
+ },
  "azure.appservices.webapp.support": {
-  "title": "Diagnose and solve problems, Microsoft Defender for Cloud, Events (preview), Resource visualizer, Resource health, New support request",
+  "title": "Diagnose and solve problems, Events (preview), Resource visualizer, Resource health, New support request",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": ["No diagnostics engine, Event Grid wiring, resource visualizer, resource-health telemetry or support-ticket flow."],
   "api": []

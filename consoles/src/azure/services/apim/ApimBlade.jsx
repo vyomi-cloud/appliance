@@ -31,6 +31,7 @@ import ApiTags from "./ApiTags.jsx";
 import PolicyFragments from "./PolicyFragments.jsx";
 import DiagnosticSettings from "./DiagnosticSettings.jsx";
 import * as api from "./api.js";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -78,7 +79,6 @@ const CAP_FOR = {
   network: "azure.apim.deployment", customdomains: "azure.apim.deployment", locations: "azure.apim.deployment",
   managedidentities: "azure.apim.deployment",
   certificates: "azure.apim.deployment", gateways: "azure.apim.deployment", selfhostedgateways: "azure.apim.deployment",
-  defenderforcloud: "azure.apim.deployment",
 };
 
 export default function ApimBlade({ params, query }) {
@@ -95,6 +95,7 @@ export default function ApimBlade({ params, query }) {
     const a = svc.data, reload = svc.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
+      defenderforcloud: () => <ResourceRecommendations resourceId={a.id} />,
       activitylog: () => <ActivityLog a={a} />,
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,

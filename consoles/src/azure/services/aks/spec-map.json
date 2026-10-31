@@ -78,7 +78,7 @@
     "vars": {
       "resource-name": "uicaks"
     },
-    "honest_page": true
+    "live": "live-workload"
   },
   "aks-services-and-ingresses": {
     "route": "#/aks/uic-rg/uicaks/servicesingresses",
@@ -88,7 +88,7 @@
     "vars": {
       "resource-name": "uicaks"
     },
-    "honest_page": true
+    "live": "live-service"
   },
   "aks-storage": {
     "route": "#/aks/uic-rg/uicaks/storage",
@@ -106,7 +106,8 @@
     ],
     "vars": {
       "resource-name": "uicaks"
-    }
+    },
+    "live": "live-configmap"
   },
   "aks-custom-resources": {
     "route": "#/aks/uic-rg/uicaks/customresources",

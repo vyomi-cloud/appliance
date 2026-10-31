@@ -2,9 +2,11 @@
  *   Control plane:  ARM  /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.ContainerService/managedClusters/{name}
  *   Node pools:      ARM extension-shaped nested resource …/managedClusters/{name}/agentPools/{pool}
  *   Namespaces:      modelled as a stateful array on properties.namespaces (see
- *                     core/capabilities/azure/aks.json "azure.aks.namespaces") — there is no ARM
- *                     surface for live Kubernetes objects in the real service either; those are
- *                     read from the cluster's own Kubernetes API server, which Vyomi does not run.
+ *                     core/capabilities/azure/aks.json "azure.aks.namespaces").
+ *   Kubernetes objects (Workloads, Services and ingresses, Configuration): read and written with
+ *                     kubectl through the native runCommand action (`az aks command invoke`) — Vyomi
+ *                     stores the objects (core/azure_aks_k8s_core.py) but runs no API server, kubelet
+ *                     or containers, so nothing is scheduled and status says so.
  */
 import { restJson } from "../../../common/wire.js";
 import { armType, getSubscription, parseId } from "../../kit/arm.js";
@@ -23,6 +25,24 @@ export const startCluster = (rg, name) => ARM.action(rg, name, "start");
 export const stopCluster = (rg, name) => ARM.action(rg, name, "stop");
 export const runCommand = (rg, name, command) => ARM.action(rg, name, "runCommand", { command });
 export const listClusterUserCredential = (rg, name) => ARM.action(rg, name, "listClusterUserCredential");
+
+/** kubectl through runCommand; throws with kubectl's own message on a non-zero exit. */
+export async function kubectl(rg, name, command) {
+  const r = await runCommand(rg, name, command);
+  const res = r.properties || r;
+  if (res.exitCode !== 0) {
+    const e = new Error((res.logs || "").trim() || `kubectl exited with ${res.exitCode}`);
+    e.code = "KubectlError";
+    throw e;
+  }
+  return res.logs || "";
+}
+/** All objects of the given kinds across namespaces (kubectl get … -A -o json). */
+export const listK8s = async (rg, name, kinds) => JSON.parse(await kubectl(rg, name, `kubectl get ${kinds} -A -o json`)).items || [];
+/** kubectl apply -f - with the YAML as a heredoc (multi-document manifests welcome). */
+export const applyYaml = (rg, name, yaml) => kubectl(rg, name, `kubectl apply -f - <<'VYOMI_EOF'\n${yaml.replace(/\n?$/, "\n")}VYOMI_EOF`);
+export const deleteK8s = (rg, name, kind, ns, objName) =>
+  kubectl(rg, name, `kubectl delete ${kind} ${objName}${ns ? ` -n ${ns}` : ""}`);
 
 /** base64 kubeconfig -> decoded YAML text. */
 export const decodeKubeconfig = (b64) => atob(b64);
