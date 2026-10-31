@@ -85,8 +85,15 @@
   },
   "azure.monitor.log_query": {
     "title": "Log Analytics query (KQL)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["The KQL query data plane (api.loganalytics.io) is not modelled; workspaces, tables and saved searches are, over ARM."]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Only a small KQL subset is understood: a table name, then any of where (==/!=/contains/startswith), project, sort by/order by, take/limit and count — unsupported syntax returns a real error instead of succeeding silently.",
+      "Only the built-in AzureActivity table has rows, and they are the subscription's real Activity log (the same Microsoft.Insights/eventtypes feed the Activity log page reads) — every other table (Heartbeat, Perf, Syslog, Event, Usage, AzureDiagnostics, any custom _CL/_RST table) is always empty: there is no agent/telemetry ingestion pipeline.",
+      "AzureActivity is not gated by a per-workspace Activity Log export / diagnostic setting (Vyomi does not model one at subscription scope) — every workspace's AzureActivity table sees the whole subscription feed.",
+      "The api.loganalytics.io data-plane host itself (azure-monitor-query / LogsQueryClient) is not modelled; the query runs over the same ARM pass-through path (.../workspaces/{ws}/api/query) the Azure Portal's Logs blade uses."
+    ],
+    "api": ["Workspaces.Query"],
+    "tests": ["tests/conformance/test_azure_operationalinsights_core.py"]
   },
   "azure.monitor.observability_agents": {
     "title": "Observability agents (preview)",
