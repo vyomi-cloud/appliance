@@ -298,8 +298,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .recent-list a:last-child{border-bottom:none}
   .recent-list .ic{font-size:18px;color:var(--link)}
   .recent-list .when{margin-left:auto;font-size:11.5px;color:var(--sub)}
-  .cost-bar{height:120px;display:flex;align-items:flex-end;gap:4px;margin-top:6px}
-  .cost-bar div{flex:1;background:var(--orange);border-radius:2px 2px 0 0;opacity:.85}
   .widget-add{margin-top:14px;display:flex;justify-content:center}
   /* Toast */
   #toast{position:fixed;bottom:18px;right:18px;display:flex;flex-direction:column;gap:6px;z-index:60}
@@ -835,6 +833,145 @@ function recordRecentVisit(svcKey){
   localStorage.setItem(recentVisitsKey(), JSON.stringify(recent.slice(0, 8)));
 }
 
+// ── Home cards shared by the AWS / GCP / Azure consoles (offline + Nano) ─────────
+// Each console wraps these bodies in its own card chrome. Bars use the console's
+// accent; numbers and labels stay in text colors (identity is the label, not color).
+
+// Cost savings: headline + where the savings come from (ranked, top 4 + Other).
+// body.update(items, note) — items: [{key, label, save ($/mo), cnt?}].
+function vySavingsBody(o){
+  const root = el("div",{});
+  const amt = el("span",{style:"font-size:26px;font-weight:800;line-height:1;color:var(--ink,#16191f)"}, "…");
+  const yr = el("span",{style:"margin-left:auto;font-size:12px;color:var(--sub)"}, "");
+  root.append(el("div",{style:"display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:2px 0 12px"},
+    amt, el("span",{style:"font-size:12px;color:var(--sub)"}, "/mo saved vs " + o.cloud), yr));
+  const rows = el("div",{role:"list"}, el("div",{style:"font-size:12.5px;color:var(--sub);padding:4px 0"}, "Loading savings…"));
+  const foot = el("div",{style:"margin-top:10px;font-size:11px;color:var(--sub)"}, "");
+  root.append(rows, foot);
+  const money = (v) => "$" + v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  root.update = function(items, note){
+    const paid = (items || []).filter(i => i.save > 0).sort((a, b) => b.save - a.save);
+    const free = (items || []).filter(i => !(i.save > 0)).length;
+    const total = paid.reduce((t, i) => t + i.save, 0);
+    amt.textContent = money(total);
+    yr.textContent = total > 0 ? "~$" + Math.round(total * 12).toLocaleString() + "/yr" : "";
+    rows.innerHTML = "";
+    if (!(total > 0)){
+      rows.append(el("div",{style:"font-size:12.5px;color:var(--sub);line-height:1.5;padding:4px 0 2px"}, o.empty));
+      foot.textContent = "";
+      return;
+    }
+    const shown = paid.slice(0, 4);
+    const rest = paid.slice(4);
+    if (rest.length) shown.push({label: "Other (" + rest.length + ")", save: rest.reduce((t, i) => t + i.save, 0),
+                                 cnt: rest.reduce((t, i) => t + (i.cnt || 0), 0) || undefined, other: rest});
+    const max = shown.reduce((m, i) => Math.max(m, i.save), 0);
+    for (const it of shown){
+      const pct = Math.round(it.save / total * 100);
+      const pick = !it.other && it.key && o.onPick ? () => o.onPick(it.key) : null;
+      const tip = it.label + ": " + money(it.save) + "/mo · ~$" + Math.round(it.save * 12).toLocaleString() + "/yr · " + pct + "% of savings"
+        + (it.cnt ? " · " + it.cnt + " resource" + (it.cnt === 1 ? "" : "s") : "")
+        + (it.other ? "\n" + it.other.map(i => i.label + " " + money(i.save)).join(", ") : "");
+      const row = el("div",{role:"listitem", title: tip,
+        style:"display:grid;grid-template-columns:minmax(0,9fr) minmax(0,14fr) auto;gap:10px;align-items:center;padding:6px 0;font-size:12.5px"
+          + (pick ? ";cursor:pointer" : "")});
+      if (pick) row.onclick = pick;
+      row.append(el("span",{style:"overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink,#16191f)"}, it.label));
+      row.append(el("span",{style:"height:8px;border-radius:4px;background:var(--line,#e5e7eb);overflow:hidden"},
+        el("i",{style:"display:block;height:100%;border-radius:4px;background:" + o.accent + ";width:" + Math.max(2, Math.round(it.save / max * 100)) + "%"})));
+      row.append(el("span",{style:"text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums"},
+        el("b",{style:"font-weight:600;color:var(--ink,#16191f)"}, money(it.save)),
+        el("span",{style:"color:var(--sub);margin-left:6px;display:inline-block;min-width:32px"}, pct + "%")));
+      rows.append(row);
+    }
+    foot.textContent = paid.length + " paid service" + (paid.length === 1 ? "" : "s")
+      + (free ? " · " + free + " free" : "") + " · estimated at public list prices; the simulator costs $0" + (note ? " · " + note : "");
+  };
+  return root;
+}
+
+// Connect your SDK or CLI: tabs of ready-to-paste snippets + copy button.
+function vyCodeTabs(o){
+  const root = el("div",{});
+  const strip = el("div",{role:"tablist",style:"display:flex;gap:22px;border-bottom:1px solid var(--line,#e5e7eb)"});
+  const code = el("pre",{style:"margin:0;padding:12px;font:12px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;"
+    + "white-space:pre;overflow:auto;resize:vertical;min-height:132px;max-height:440px;color:var(--ink,#16191f);"
+    + "background:var(--code-bg,#fafafa);border:1px solid var(--line,#e5e7eb);border-radius:6px"});
+  const copyIc = el("span",{class:"material-symbols-outlined",style:"font-size:17px"}, "content_copy");
+  const copy = el("button",{type:"button",title:"Copy","aria-label":"Copy",
+    style:"margin-left:auto;align-self:center;display:flex;align-items:center;justify-content:center;width:28px;height:28px;"
+      + "border:none;border-radius:4px;background:transparent;color:var(--sub);cursor:pointer"}, copyIc);
+  root.append(strip, el("div",{style:"margin-top:12px"}, code));
+  if (o.note) root.append(el("div",{style:"margin-top:8px;font-size:11px;color:var(--sub);line-height:1.5"}, o.note));
+  let cur = 0;
+  const btns = o.tabs.map((t, i) => el("button",{type:"button",role:"tab",
+    style:"border:none;background:none;padding:8px 2px 9px;font:inherit;font-size:13px;font-weight:600;cursor:pointer",
+    onclick:() => show(i)}, t.label));
+  btns.forEach(b => strip.append(b));
+  strip.append(copy);   // right end of the tab row, clear of the code
+  function show(i){
+    cur = i;
+    btns.forEach((b, j) => {
+      b.setAttribute("aria-selected", String(j === i));
+      b.style.color = j === i ? o.accent : "var(--sub)";
+      b.style.boxShadow = j === i ? "inset 0 -3px 0 " + o.accent : "none";
+    });
+    code.textContent = o.tabs[i].code;
+  }
+  copy.onclick = async () => {
+    try { await navigator.clipboard.writeText(o.tabs[cur].code); }
+    catch (_) { const r = document.createRange(); r.selectNodeContents(code); const s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand("copy"); s.removeAllRanges(); }
+    copyIc.textContent = "check"; copy.style.color = o.accent;
+    setTimeout(() => { copyIc.textContent = "content_copy"; copy.style.color = "var(--sub)"; }, 1400);
+  };
+  show(0);
+  return root;
+}
+
+// The snippets for each cloud (the same commands the release CLI checks run).
+// c: {cloud, ep, region, project, sub, nano}
+function vyConnectTabs(c){
+  const ep = c.ep;
+  const pre = "", pyPre = "";
+  if (c.cloud === "aws") return [
+    {label: "AWS CLI", code: pre +
+      "export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test\n" +
+      "export AWS_DEFAULT_REGION=" + c.region + "\n" +
+      "aws --endpoint-url " + ep + " s3 ls\n" +
+      "aws --endpoint-url " + ep + " dynamodb list-tables"},
+    {label: "Python (boto3)", code: pyPre +
+      "import boto3\n" +
+      "s3 = boto3.client(\"s3\", endpoint_url=\"" + ep + "\",\n" +
+      "    aws_access_key_id=\"test\", aws_secret_access_key=\"test\",\n" +
+      "    region_name=\"" + c.region + "\")\n" +
+      "print([b[\"Name\"] for b in s3.list_buckets()[\"Buckets\"]])"}];
+  if (c.cloud === "gcp") return [
+    {label: "gcloud CLI", code: pre +
+      "export CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true\n" +
+      "export CLOUDSDK_API_ENDPOINT_OVERRIDES_CLOUDRESOURCEMANAGER=" + ep + "/\n" +
+      "export CLOUDSDK_API_ENDPOINT_OVERRIDES_STORAGE=" + ep + "/storage/v1/\n" +
+      "gcloud projects list\n" +
+      "gcloud storage buckets list --project=" + c.project},
+    {label: "Python (google-cloud-storage)", code: pyPre +
+      "import os\n" +
+      "os.environ[\"STORAGE_EMULATOR_HOST\"] = \"" + ep + "\"\n" +
+      "from google.cloud import storage\n" +
+      "client = storage.Client(project=\"" + c.project + "\")\n" +
+      "print([b.name for b in client.list_buckets()])"}];
+  return [
+    {label: "Azure CLI", code: pre +
+      "az rest --method get --skip-authorization-header \\\n" +
+      "  --url \"" + ep + "/subscriptions?api-version=2022-12-01\"\n" +
+      "az rest --method get --skip-authorization-header \\\n" +
+      "  --url \"" + ep + "/subscriptions/" + c.sub + "/resourcegroups?api-version=2021-04-01\""},
+    {label: "Python (azure-storage-blob)", code: pyPre +
+      "from azure.core.credentials import AzureNamedKeyCredential\n" +
+      "from azure.storage.blob import BlobServiceClient\n" +
+      "svc = BlobServiceClient(\"" + ep + "/azure-data/blob/mystorage/\",\n" +
+      "    credential=AzureNamedKeyCredential(\"mystorage\", \"a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2V5a2U=\"))\n" +
+      "print([c.name for c in svc.list_containers()])"}];
+}
+
 function renderHome(main){
   // Self-clear so any caller is safe (matches list/detail/create pattern).
   main.innerHTML = "";
@@ -851,56 +988,31 @@ function renderHome(main){
   // Widget grid — 12-col responsive layout (real AWS pattern)
   const grid = el("div",{class:"widget-grid"});
 
-  // 3) Cost savings (col-6) — REAL 12-month projection from core/cost_model,
-  //    fetched live via /api/spaces → active_space.cost_savings.by_provider.
-  //    Simulator cost is $0, so every dollar of real-AWS cost for the services
-  //    you've spun up is a dollar saved. Client-side only (no backend change).
-  const SAVINGS_PROVIDER = "aws", SAVINGS_CLOUD = "AWS";
-  const cost = el("div",{class:"widget",style:"grid-column:1 / -1"});
+  // Cost savings + Connect your SDK or CLI — two Console Home widgets side by side.
+  // Savings: what real AWS would charge each month for the services you've spun up
+  // (active_space.cost_savings.by_service from core/cost_model; the simulator costs $0).
+  const cost = el("div",{class:"widget"});
   cost.append(el("div",{class:"wh"}, icon("savings"), "Cost savings",
-    el("a",{class:"info"}, "Info")));
-  const costBody = el("div",{class:"wb"});
-  const costDesc = el("div",{class:"desc"},
-    `What you'd pay ${SAVINGS_CLOUD} each month for the services you've spun up — saved by running locally ($0).`);
-  costBody.append(costDesc);
-  const savAmt = el("span",{style:"font-size:26px;font-weight:800;color:var(--orange)"}, "$0");
-  costBody.append(el("div",{style:"display:flex;align-items:baseline;gap:8px;margin:12px 0 2px"},
-    savAmt, el("span",{style:"font-size:12px;color:var(--sub)"}, `/mo saved vs ${SAVINGS_CLOUD}`)));
-  const bar = el("div",{class:"cost-bar"});
-  for (let i=0;i<12;i++){ bar.append(el("div",{style:"height:4%"})); }
-  costBody.append(bar);
-  const barLabels = el("div",{style:"display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--sub)"});
-  costBody.append(barLabels);
-  const savFoot = el("div",{style:"margin-top:8px;font-size:11px;color:var(--sub)"}, "Projected 12-month savings: $0");
-  costBody.append(savFoot);
-  cost.append(costBody);
+    el("a",{class:"info",onclick:()=>toast("What real AWS would charge each month for the services you've spun up, at public list prices. The simulator costs $0.","ok")}, "Info")));
+  const savings = vySavingsBody({cloud:"AWS", accent:"var(--orange)",
+    empty:"Spin up AWS services (EC2, S3, RDS…) and your monthly savings vs real AWS appear here, service by service.",
+    onPick:(k)=>{ if (svcByKey(k)) { recordRecentVisit(k); navigate({view:"list", service:k, item:null}); } }});
+  cost.append(el("div",{class:"wb"}, savings));
   grid.append(cost);
-  (function(){
-    const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const now=new Date();
-    for(let i=0;i<12;i++){ barLabels.append(el("span",{}, MON[(now.getMonth()+i)%12])); }
-    const x=new XMLHttpRequest();
-    x.open("GET","/api/spaces",true);
-    x.onload=function(){
-      let monthly=0;
-      try{
-        const cs=((JSON.parse(x.responseText).active_space||{}).cost_savings)||{};
-        const bp=cs.by_provider||{};
-        if(bp[SAVINGS_PROVIDER]!=null){ monthly=Number(bp[SAVINGS_PROVIDER])||0; }
-        else { const bs=cs.by_service||{}; Object.keys(bs).forEach(k=>{ if(k.indexOf(SAVINGS_PROVIDER+".")===0) monthly+=Number(bs[k])||0; }); }
-      }catch(e){}
-      savAmt.textContent="$"+monthly.toFixed(2);
-      savFoot.textContent="Projected 12-month savings: $"+(monthly*12).toFixed(2);
-      // Cumulative projection: bar i = (i+1) months at the current monthly rate.
-      const bars=bar.children;
-      for(let i=0;i<12;i++){
-        bars[i].style.height=(monthly>0 ? Math.max(6, Math.round(((i+1)/12)*100)) : 4)+"%";
-        if(monthly>0) bars[i].title="After "+(i+1)+" mo: $"+(monthly*(i+1)).toFixed(2)+" saved";
-      }
-      if(monthly<=0){ costDesc.textContent=`Spin up ${SAVINGS_CLOUD} services (EC2, S3, RDS…) — your monthly savings vs real ${SAVINGS_CLOUD} appear here.`; }
-    };
-    x.send();
-  })();
+  api("GET","/api/spaces").then(r=>{
+    const bs=((((r.json||{}).active_space)||{}).cost_savings||{}).by_service||{};
+    savings.update(Object.keys(bs).filter(k=>k.indexOf("aws.")===0).map(k=>{
+      const key=k.slice(4), s=svcByKey(key);
+      return {key, label: s ? s.label : key.charAt(0).toUpperCase()+key.slice(1), save: Number(bs[k])||0};
+    }).filter(i=>i.save>0 || svcByKey(i.key)));   // $0 rows only for real services (not e.g. "usage")
+  }).catch(()=>savings.update([]));
+
+  const conn = el("div",{class:"widget"});
+  conn.append(el("div",{class:"wh"}, icon("terminal"), "Connect your SDK or CLI",
+    el("a",{class:"info",onclick:()=>toast("The real AWS CLI and SDKs work against this simulator with only the endpoint changed.","ok")}, "Info")));
+  conn.append(el("div",{class:"wb"}, vyCodeTabs({accent:"var(--link)",
+    tabs: vyConnectTabs({cloud:"aws", ep: location.origin, region: REGION})})));
+  grid.append(conn);
 
 
   main.append(grid);
