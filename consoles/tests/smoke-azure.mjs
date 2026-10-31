@@ -1106,6 +1106,11 @@ try {
   check("UI create namespace → visible over native ARM (properties.namespaces)",
     (nsCluster.properties?.namespaces || []).some((x) => x.name === NS), JSON.stringify(nsCluster.properties?.namespaces));
   await shot("28-aks-namespaces");
+  // ── System namespaces are ENFORCED protected (not just stored) — same wire path as the UI uses
+  const withoutKubeSystem = (nsCluster.properties?.namespaces || []).filter((x) => x.name !== "kube-system");
+  const protectedNsPatch = await armAks("PATCH", `/resourceGroups/${RG}/providers/Microsoft.ContainerService/managedClusters/${AKS}`,
+    { properties: { namespaces: withoutKubeSystem } });
+  check("deleting the kube-system namespace is rejected over native ARM", protectedNsPatch.status === 409, `HTTP ${protectedNsPatch.status}`);
 
   // ── Lock created in the UI → visible over the native ARM wire ─────────────────────────
   await openPanel("Locks");
