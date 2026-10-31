@@ -13,8 +13,10 @@ queue/topic/function is a real, receivable delivery, not a log line.
 Scope: event buses (default + custom), rules with event patterns + targets
 (enable/disable), PutEvents (pattern match → SQS/SNS/Lambda fan-out), archives +
 replay (a bounded per-bus event log stands in for AWS's unlimited archive
-retention — see the `eventbridge.archives` capability entry for the honest
-limitation), tags. Event-pattern operators: exact value lists + {"prefix"},
+retention — RetentionDays IS enforced within that bounded window, excluding
+events older than it from DescribeArchive/StartReplay; see the
+`eventbridge.archives` capability entry for the honest limitation on the window
+itself), tags. Event-pattern operators: exact value lists + {"prefix"},
 {"anything-but"}, {"exists"} — mirroring SNS filter policies.
 """
 from __future__ import annotations
@@ -22,7 +24,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from core.messaging_store import MessagingStore, REGION
 from core import sqs_core
@@ -508,8 +510,13 @@ def _create_archive(store, body):
 
 def _archived_events(store, archive):
     log = _buses(store).get(archive["bus"], {}).get("event_log", [])
-    return [e for e in log if _match_pattern(archive.get("pattern", {}), {
+    matched = [e for e in log if _match_pattern(archive.get("pattern", {}), {
         "source": e.get("source"), "detail-type": e.get("detail-type"), "detail": e.get("detail")})]
+    days = archive.get("retention_days") or 0
+    if not days:
+        return matched  # 0 = indefinite (bounded only by the shared 500-event log)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    return [e for e in matched if (_parse_iso(e.get("time")) or cutoff) >= cutoff]
 
 
 def _describe_archive(store, body):

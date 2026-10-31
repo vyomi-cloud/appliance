@@ -31,6 +31,7 @@ const sm = async (target, body) => JSON.parse(await wire("/", { method: "POST", 
 const sqs = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `AmazonSQS.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/sqs/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const sns = async (action, body) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/sns/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...body }).toString() });
 const events = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `AWSEvents.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/events/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
+const scheduler = async (method, path, body) => { const t = await wire(path, { method, headers: { "content-type": "application/json", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/scheduler/aws4_request, SignedHeaders=host, Signature=0" }, body: body === undefined ? undefined : JSON.stringify(body) }); try { return JSON.parse(t); } catch { return t; } };
 const lam = async (method, path, body) => { const t = await wire(path, { method, body: body === undefined ? undefined : JSON.stringify(body) }); try { return JSON.parse(t); } catch { return t; } };
 const rds = async (action, body = {}) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/rds/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...body }).toString() });
 const iamXml = async (body) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/iam/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams(body).toString() });
@@ -412,6 +413,31 @@ try {
   await page.getByText(EBUS).first().waitFor({ timeout: 10000 });
   check("EventBridge CreateEventBus over wire → shown in UI (CLI → UI direction)", true);
   await shot("18-eventbridge-event-buses");
+
+  // EventBridge Scheduler: create a one-time schedule due in the past through the UI
+  // (UI → CLI direction). Vyomi has no background timer — the schedule fires the next
+  // time the Scheduler API is polled, which the Schedules list's own GET does on load.
+  const SCHEDQ = `v4smoke-sched-q-${Date.now() % 100000}`;
+  const schedQueueUrl = (await sqs("CreateQueue", { QueueName: SCHEDQ })).QueueUrl;
+  const SCH = `v4smoke-schedule-${Date.now() % 100000}`;
+  const dueAt = new Date(Date.now() - 5 * 60000).toISOString().slice(0, 19);
+  await page.goto(UI + "#/eventbridge/create-schedule");
+  await page.getByLabel("Schedule name").fill(SCH);
+  await page.getByRole("radio", { name: "One-time schedule" }).check();
+  await page.getByLabel("Date and time").fill(dueAt);
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByLabel("Target API").first().click();
+  await page.getByRole("option", { name: new RegExp(`SQS queue: ${SCHEDQ}$`) }).click();
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Submit" }).click();
+  await page.getByRole("heading", { name: "Schedules", level: 1 }).waitFor({ timeout: 10000 });
+  const scheds = await scheduler("GET", "/schedules?GroupName=default");
+  check("Scheduler create schedule (UI) → visible over native wire", (scheds.Schedules || []).some((s) => s.Name === SCH), JSON.stringify(scheds.Schedules?.slice(-1)));
+  await shot("18b-eventbridge-schedule-created");
+  const schedMsgs = await sqs("ReceiveMessage", { QueueUrl: schedQueueUrl, MaxNumberOfMessages: 10 });
+  check("Scheduler due schedule fires on next poll (UI list's own GET) → delivered to its SQS target", (schedMsgs.Messages || []).length > 0, JSON.stringify(schedMsgs));
+
   // Lambda: create a function through the UI (UI → CLI direction), invoke it for real via
   // the Test tab, then prove a function created directly over the wire (CLI → UI direction)
   // shows up in the Functions list.
