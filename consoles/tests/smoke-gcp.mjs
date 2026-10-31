@@ -349,8 +349,32 @@ try {
   check("delete firewall rule via UI → gone over native wire", (await wire(`/compute/v1/projects/vyomi-project/global/firewalls/${FW}`)).status === 404);
   await shot("13-networking");
 
-  // Delete the subnet (so the network can be deleted) then the network itself, from the UI
+  // VPC network peering: create via the UI → visible over native wire, then remove via the UI
+  const NET2 = `v4-gcp-net2-${Date.now() % 100000}`;
+  await wire("/compute/v1/projects/vyomi-project/global/networks", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: NET2, autoCreateSubnetworks: false }),
+  });
+  const PEER = `v4-gcp-peer-${Date.now() % 100000}`;
   await page.goto(UI + `#/networking/networks/details/${NET}`);
+  await page.getByRole("tab", { name: "VPC network peering" }).click();
+  await page.getByRole("button", { name: "Create peering connection" }).click();
+  await page.getByLabel("Name").fill(PEER);
+  await page.getByRole("combobox", { name: "Peered VPC network" }).click();
+  await page.getByRole("option", { name: NET2 }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("cell", { name: PEER, exact: true }).waitFor({ timeout: 10000 });
+  const net1 = await wjson(`/compute/v1/projects/vyomi-project/global/networks/${NET}`);
+  check("create VPC peering via UI → visible over native wire (networks.get)", (net1.peerings || []).some((p) => p.name === PEER && p.network.endsWith(`/networks/${NET2}`)));
+  await page.getByRole("checkbox", { name: `Select ${PEER}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("cell", { name: PEER, exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  const net1b = await wjson(`/compute/v1/projects/vyomi-project/global/networks/${NET}`);
+  check("delete VPC peering via UI → gone over native wire", !(net1b.peerings || []).some((p) => p.name === PEER));
+  await wire(`/compute/v1/projects/vyomi-project/global/networks/${NET2}`, { method: "DELETE" });
+
+  // Delete the subnet (so the network can be deleted) then the network itself, from the UI
+  await page.getByRole("tab", { name: "Subnets" }).click();
   await page.getByRole("checkbox", { name: new RegExp(`Select .*${SUB}`) }).check();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByRole("cell", { name: SUB, exact: true }).waitFor({ state: "detached", timeout: 10000 });
