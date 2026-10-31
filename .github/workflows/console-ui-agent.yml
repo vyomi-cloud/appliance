@@ -141,11 +141,24 @@ jobs:
           Extra goals for this run (mandatory): consoles/agent-queue/${{ matrix.target }}.json.
           Baseline UI conformance report: ui-out-before/${{ steps.tg.outputs.cloud }}.md (if present).
           Reference captures: captures/ (present only if the private checkout succeeded).
-          Commit your work on the current branch ${{ steps.tg.outputs.branch }}; do not push." \
+          Commit your work on the current branch ${{ steps.tg.outputs.branch }}; do not push.
+          This is a headless run: it ENDS the moment you stop replying. Never start commands in the
+          background or with '&' and never stop to 'wait' for something — run builds and tests in the
+          foreground (split long suites) and finish the whole task before your final message." \
             --max-turns 250 \
             --allowedTools "Bash,Read,Edit,Write,Glob,Grep" \
             --permission-mode acceptEdits \
             --output-format text 2>&1 | tee $RUNNER_TEMP/agent-summary.txt | tail -60
+          # An agent that still ended its turn "waiting" for a background job gets resumed (up to 3x)
+          for i in 1 2 3; do
+            tail -c 3000 $RUNNER_TEMP/agent-summary.txt | grep -qiE "wait(ing)? for|in the background|background (test|run|job|task)|once (it|the .*) (finishes|completes)" || break
+            echo "::notice::agent ended while waiting on a background job — resuming ($i)"
+            claude -p --continue "You ended your turn waiting on a background job, but this headless run stops when you stop. Check that job's result now (re-run it in the FOREGROUND if needed) and finish the task completely, committing your source. Do not use background commands." \
+              --max-turns 120 \
+              --allowedTools "Bash,Read,Edit,Write,Glob,Grep" \
+              --permission-mode acceptEdits \
+              --output-format text 2>&1 | tee -a $RUNNER_TEMP/agent-summary.txt | tail -40
+          done
 
       # The agents share the owner's Claude subscription: if the agent stopped on a usage
       # limit, postpone (no gate, no PR) instead of reporting a meaningless 0 % failure.
