@@ -83,6 +83,29 @@ def run(store=None):
     _check("patch organization", call("PATCH", f"/v1.0/organization/{org['id']}", {"displayName": "Contoso"}).status == 204)
     _check("organization name round-trips", body(call("GET", "/v1.0/organization"))["value"][0]["displayName"] == "Contoso")
 
+    # Directory settings (User settings page) enforce two of their toggles tenant-wide
+    # (azure.entra.directory_settings: limited — Vyomi has no signed-in identity to tell
+    # admins from non-admin members apart, so the toggle gates every caller).
+    _check("usersCanCreateSecurityGroups defaults to allowing security groups",
+           call("POST", "/v1.0/groups", {"displayName": "Default-Allowed"}).status == 201)
+    call("PATCH", "/v1.0/settings/directory", {"usersCanCreateSecurityGroups": False})
+    r = call("POST", "/v1.0/groups", {"displayName": "Blocked Security Group"})
+    _check("security group creation denied once the toggle is off", r.status == 403)
+    _check("denied security group is not created", not any(g["displayName"] == "Blocked Security Group" for g in body(call("GET", "/v1.0/groups"))["value"]))
+    r = call("POST", "/v1.0/groups", {"displayName": "M365 Still Allowed", "groupTypes": ["Unified"], "mailEnabled": True})
+    _check("Microsoft 365 group creation is unaffected by the security-group toggle", r.status == 201)
+    call("PATCH", "/v1.0/settings/directory", {"usersCanCreateSecurityGroups": True})
+    _check("security group creation allowed again once the toggle is back on",
+           call("POST", "/v1.0/groups", {"displayName": "Re-Allowed"}).status == 201)
+
+    call("PATCH", "/v1.0/settings/directory", {"usersCanRegisterApplications": False})
+    r = call("POST", "/v1.0/applications", {"displayName": "Blocked App"})
+    _check("application registration denied once the toggle is off", r.status == 403)
+    _check("denied application is not created", not any(a["displayName"] == "Blocked App" for a in body(call("GET", "/v1.0/applications"))["value"]))
+    call("PATCH", "/v1.0/settings/directory", {"usersCanRegisterApplications": True})
+    _check("application registration allowed again once the toggle is back on",
+           call("POST", "/v1.0/applications", {"displayName": "Re-Allowed App"}).status == 201)
+
     # Directory audit log — every mutation above should have appended an entry.
     audits = body(call("GET", "/v1.0/auditLogs/directoryAudits"))["value"]
     _check("directory audit log recorded the mutations", len(audits) >= 8)

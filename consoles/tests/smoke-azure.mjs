@@ -43,6 +43,7 @@ const AKS2 = `vywireaks${n}`;      // AKS cluster created over the wire
 const POOL = `pool${n}`;           // node pool created through the UI (AKS pool names are short: <=12 chars)
 const EUSR = `vysmokeuser${n}`;    // Entra ID user created through the UI
 const EUSR2 = `vywireuser${n}`;    // Entra ID user created over the wire
+const EGRP = `vysmokegrp${n}`;     // Entra ID security group, created through the UI once the directory-settings toggle allows it
 const SUBNAME = `Vyomi Smoke Subscription ${n}`;  // subscription renamed through the UI
 const SUBLOCK = `vysublock${n}`;   // subscription-scoped lock created through the UI
 const SUBRG = `vysubrg${n}`;       // resource group created over the wire (shown in the Subscription's Resource groups panel)
@@ -1182,6 +1183,30 @@ try {
   const afterDelete = await graph("GET", "/users");
   const stillThere = (afterDelete.status === 200 ? JSON.parse(afterDelete.text).value : []).some((u) => u.displayName === EUSR);
   check("UI delete user → gone over native Microsoft Graph wire", !stillThere);
+
+  // ── Entra ID: "Users can create security groups" (User settings) really blocks/allows
+  // security-group creation over the native Microsoft Graph wire (azure.entra.directory_settings
+  // is now "limited", not just stored) ────────────────────────────────────────────────────
+  await graph("PATCH", "/settings/directory", { usersCanCreateSecurityGroups: false });
+  await page.goto(UI + "#/entra/groups/new");
+  await page.getByLabel("Group name", { exact: true }).fill(EGRP);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(/Users can create security groups/).waitFor({ timeout: 10000 });
+  const blockedGroups = await graph("GET", "/groups");
+  const blockedCreated = (blockedGroups.status === 200 ? JSON.parse(blockedGroups.text).value : []).some((g) => g.displayName === EGRP);
+  check("'Users can create security groups' = No blocks group creation over native Microsoft Graph wire", !blockedCreated);
+  await shot("24-entra-group-blocked");
+
+  await graph("PATCH", "/settings/directory", { usersCanCreateSecurityGroups: true });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(EGRP, { exact: true }).waitFor({ timeout: 10000 });
+  const allowedGroups = await graph("GET", "/groups");
+  const allowedCreated = (allowedGroups.status === 200 ? JSON.parse(allowedGroups.text).value : []).some((g) => g.displayName === EGRP);
+  check("setting back to Yes allows the same group creation over native Microsoft Graph wire", allowedCreated);
+  await shot("25-entra-group-allowed");
+
   // ── Cosmos DB: account created through the wizard → visible over native ARM ───────────
   const cosmosArm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-05-15`,
     { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });

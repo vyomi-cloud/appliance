@@ -26,11 +26,13 @@ export default function RegisterApplication() {
   const validate = () => (name.trim() ? [] : ["Name is required."]);
 
   const create = async () => {
-    const web = platform === "Web" && redirectUri ? { redirectUris: [redirectUri] } : undefined;
-    const spa = platform === "Single-page application (SPA)" && redirectUri ? { redirectUris: [redirectUri] } : undefined;
-    const app = await api.createApplication({ displayName: name, signInAudience: audience, web, spa });
-    notify.success(`Registered ${name}.`, "Application registered");
-    navigate("entra", "appregistrations", app.id);
+    try {
+      const web = platform === "Web" && redirectUri ? { redirectUris: [redirectUri] } : undefined;
+      const spa = platform === "Single-page application (SPA)" && redirectUri ? { redirectUris: [redirectUri] } : undefined;
+      const app = await api.createApplication({ displayName: name, signInAudience: audience, web, spa });
+      notify.success(`Registered ${name}.`, "Application registered");
+      navigate("entra", "appregistrations", app.id);
+    } catch (e) { notify.error(e, "Register application failed"); }
   };
 
   return (
@@ -40,8 +42,8 @@ export default function RegisterApplication() {
         content: (
           <>
             <FormSection title="Name">
-              <FormRow label="Name" required info="The user-facing display name for this application">
-                <Input value={name} onChange={(_, d) => setName(d.value)} style={{ width: 360 }} />
+              <FormRow label="Name" required htmlFor="app-name" info="The user-facing display name for this application">
+                <Input id="app-name" value={name} onChange={(_, d) => setName(d.value)} style={{ width: 360 }} />
               </FormRow>
             </FormSection>
             <FormSection title="Supported account types">
