@@ -862,7 +862,40 @@
     #view-usage .u-cloud-head .material-icons { font-size: 21px; }
     #view-usage .u-cloud-note { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #b9a15a; background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.22); border-radius: 9px; padding: 8px 12px; margin: -4px 0 14px; }
     #view-usage .u-cloud-note .material-icons { font-size: 16px; color: #fbbf24; }
-    #view-usage .u-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; margin-bottom: 6px; }
+    #view-usage .u-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }   /* 2 cards per row */
+    @media (max-width: 760px) { #view-usage .u-grid { grid-template-columns: 1fr; } }   /* narrow: single column */
+    /* SDK & CLI usage — the console's "Connect your SDK or CLI" card: per cloud a rounded
+       panel (as Active spaces / Health); per service a tile with CLI / SDK / curl tabs, a copy
+       icon at the right end of the tab row, and the snippet below. */
+    #view-usage .u-panel {
+      background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.10); border-radius: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.30), 0 14px 36px rgba(0,0,0,0.38); padding: 20px 22px 22px; margin-bottom: 28px;
+    }
+    #view-usage .u-panel > .sc-head {
+      display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+      margin: 0 -22px; padding: 0 22px; border-bottom: 1px solid rgba(255,255,255,0.12);
+    }
+    #view-usage .u-panel > .sc-head .sc-title { display: inline-block; padding: 0 2px 10px; margin-bottom: -1px; border-bottom: 2px solid #2563eb; }
+    #view-usage .u-panel > .sc-head h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 18px; font-weight: 700; }
+    #view-usage .u-panel > .sc-head .u-info { margin: 0 0 8px; }
+    #view-usage .u-logo { display: inline-flex; align-items: center; }
+    #view-usage .u-logo svg { height: 18px; width: 18px; display: block; }
+    #view-usage .u-logo.aws svg { width: 30px; }
+    #view-usage .u-panel > .sc-desc { margin: 12px 0 16px; font-size: 13px; color: #a1a1aa; }
+    #view-usage .u-card { background: #1f2937; border-radius: 14px; padding: 16px 18px 18px; min-width: 0; display: flex; flex-direction: column; }
+    #view-usage .u-card .u-head { margin-bottom: 4px; }
+    #view-usage .u-card .u-head h3 { display: flex; align-items: center; gap: 9px; font-size: 14.5px; font-weight: 600; }
+    #view-usage .u-svc-ic { flex: none; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; }
+    #view-usage .u-svc-ic svg { width: 20px; height: 20px; display: block; }
+    #view-usage .u-svc-ic .material-icons { font-size: 20px; color: #4285f4; }
+    #view-usage .u-strip { display: flex; align-items: center; gap: 22px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+    #view-usage .u-tab { border: 0; background: none; padding: 8px 2px 9px; font: inherit; font-size: 13px; font-weight: 600; color: #a1a1aa; cursor: pointer; }
+    #view-usage .u-tab:hover { color: #e4e4e7; }
+    #view-usage .u-tab[aria-selected="true"] { color: #60a5fa; box-shadow: inset 0 -3px 0 #60a5fa; }
+    #view-usage .u-cp { margin-left: auto; width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: #a1a1aa; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+    #view-usage .u-cp:hover { color: #fff; background: rgba(255,255,255,0.06); }
+    #view-usage .u-cp .material-icons { font-size: 17px; }
+    #view-usage .u-card pre.u-code { margin-top: 12px; flex: 1; resize: vertical; min-height: 96px; max-height: 440px; background: #0b0e22 !important; }
     #view-usage .u-info { margin-left: auto; display: inline-flex; gap: 6px; }
     #view-usage .u-ibtn {
       display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
@@ -1710,20 +1743,12 @@
       <p>Point any AWS SDK, CLI or tool at your endpoint — no code changes, just one URL. Copy a ready-to-run snippet for each service.</p>
     </header>
 
-    <div class="usage-ep" id="usage-ep">
+    <div class="usage-ep" id="usage-ep" style="margin-bottom:28px">
       <span class="material-icons" style="color:#7c8cf8;font-size:19px">cable</span>
       <span class="k">Endpoint</span>
       <code id="u-ep-url">—</code>
       <span class="badge off" id="u-ep-badge">—</span>
       <button type="button" id="u-ep-copy">Copy</button>
-    </div>
-
-    <div class="tabs-wrap">
-      <div class="usage-tabs" role="tablist">
-        <button class="usage-tab active" type="button" data-k="cli"><span class="material-icons">terminal</span>CLI</button>
-        <button class="usage-tab" type="button" data-k="sdk"><span class="material-icons">code</span>SDK</button>
-        <button class="usage-tab" type="button" data-k="curl"><span class="material-icons">http</span>curl</button>
-      </div>
     </div>
 
     <div id="usage-cards"></div>
@@ -1902,7 +1927,7 @@
     function initUsage(){
       var view = document.getElementById('view-usage'); if(!view) return;
       var isNano = !!document.getElementById('nano-foot');   // relay footer = Nano bundle
-      var tool = 'cli', live = false;
+      var live = false;
       function derived(){
         var o = location.origin;
         if(!isNano) return o;                                 // appliance → its own origin
@@ -1920,7 +1945,7 @@
       // without -X), which looked like "rds describe-db-instances prints nothing".
       var AWS_CLI_ENV = 'export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=""\n';
       function code(s, k){ var c = sub(s[k]); return (s.cloud==='aws' && k==='cli') ? AWS_CLI_ENV + c : c; }
-      function snip(s){ return code(s, tool); }
+      function snipOf(s, k){ return code(s, k); }
 
       // ── Full-instructions dialog (every transport for one service) ──────
       var modal = document.getElementById('usage-modal');
@@ -1981,13 +2006,29 @@
         if(badge){ if(isNano){ badge.textContent = live ? 'live' : 'start the tunnel'; badge.className = 'badge ' + (live?'on':'off'); }
                    else { badge.textContent = 'appliance'; badge.className = 'badge on'; } }
       }
+      // Each card keeps its own tab (CLI / SDK / curl), like the console's Connect card.
+      var picked = {};
+      var SVC_IC = { 'aws-s3':'s3', 'aws-dynamodb':'dynamodb', 'aws-kms':'kms', 'aws-secrets':'secretsmanager', 'aws-sqs':'sqs',
+                     'aws-sns':'sns', 'aws-iam':'iam', 'aws-rds':'rds', 'az-blob':'storage', 'az-queue':'storage',
+                     'az-cosmos':'cosmos', 'az-keyvault':'keyvaults' };
+      function svcIcon(s){
+        var lib = window.VyomiServiceIcons, id = SVC_IC[s.key];
+        if(lib && id && (s.cloud==='aws' || s.cloud==='azure'))
+          return '<span class="u-svc-ic" aria-hidden="true"><svg viewBox="0 0 24 24">'+(s.cloud==='aws' ? lib.aws(id) : lib.azure(id))+'</svg></span>';
+        return '<span class="u-svc-ic" aria-hidden="true"><span class="material-icons"'+(s.cloud==='gcp' ? '' : ' style="color:'+s.color+'"')+'>'+s.icon+'</span></span>';
+      }
+      function cloudLogo(id){
+        var L = (typeof SPACE_LOGOS !== 'undefined') && SPACE_LOGOS[id];
+        return L ? '<span class="u-logo '+id+'" aria-hidden="true">'+L.replace(/sp-az-g/g, 'ul-az-g')+'</span>' : '';
+      }
       function cardHtml(s){
-        return '<div class="kct"><div class="u-head"><h3><span class="material-icons" style="color:'+s.color+'">'+s.icon+'</span>'+s.name+'</h3>'
-          + '<div class="u-actions">'
-          + '<button class="u-expand" type="button" data-c="'+s.key+'" title="Full instructions" aria-label="Full instructions"><span class="material-icons">open_in_full</span></button>'
-          + '<button class="u-copy" type="button" data-c="'+s.key+'">Copy</button>'
-          + '</div></div>'
-          + '<pre class="u-code"><code>'+esc(snip(s))+'</code></pre></div>';
+        var cur = picked[s.key] || 'cli';
+        return '<div class="u-card" data-c="'+s.key+'"><div class="u-head"><h3>'+svcIcon(s)+s.name+'</h3>'
+          + '<div class="u-actions"><button class="u-expand" type="button" data-c="'+s.key+'" title="Full instructions" aria-label="Full instructions"><span class="material-icons">open_in_full</span></button></div></div>'
+          + '<div class="u-strip" role="tablist">'
+          + TRANSPORTS.map(function(t){ return '<button class="u-tab" type="button" role="tab" data-k="'+t.k+'" aria-selected="'+(t.k===cur)+'">'+t.label+'</button>'; }).join('')
+          + '<button class="u-cp" type="button" title="Copy" aria-label="Copy"><span class="material-icons">content_copy</span></button></div>'
+          + '<pre class="u-code"><code>'+esc(snipOf(s, cur))+'</code></pre></div>';
       }
       function render(){
         if(grid){
@@ -1999,14 +2040,27 @@
             var icons = '';
             if(c.setup) icons += '<button class="u-ibtn" type="button" data-tt="Setup" data-tip="'+escAttr(sub(c.setup))+'" title="Setup" aria-label="Setup"><span class="material-icons">terminal</span></button>';
             if(isNano && c.nanoNote) icons += '<button class="u-ibtn info" type="button" data-tt="Nano" data-tip="'+escAttr(c.nanoNote)+'" title="Nano note" aria-label="Nano note"><span class="material-icons">info</span></button>';
-            var head = '<div class="u-cloud-head"><span class="material-icons" style="color:'+c.color+'">'+c.icon+'</span>'+c.name
-              + (icons ? '<span class="u-info">'+icons+'</span>' : '') + '</div>';
-            return head + '<div class="u-grid">' + svcs.map(cardHtml).join('') + '</div>';
+            return '<section class="u-panel"><div class="sc-head"><div class="sc-title"><h2>'+cloudLogo(c.id)+c.name+'</h2></div>'
+              + (icons ? '<span class="u-info">'+icons+'</span>' : '') + '</div>'
+              + '<p class="sc-desc">'+svcs.length+' services · pick CLI, SDK or curl on each card and copy the snippet.</p>'
+              + '<div class="u-grid">' + svcs.map(cardHtml).join('') + '</div></section>';
           }).join('');
-          grid.querySelectorAll('.u-copy').forEach(function(b){
-            b.onclick = function(){
-              var s = SERVICES.filter(function(x){ return x.key===b.dataset.c; })[0];
-              if(s && navigator.clipboard) navigator.clipboard.writeText(snip(s)).then(function(){ b.textContent='Copied'; setTimeout(function(){ b.textContent='Copy'; },1200); });
+          grid.querySelectorAll('.u-card').forEach(function(card){
+            var s = SERVICES.filter(function(x){ return x.key===card.dataset.c; })[0]; if(!s) return;
+            var codeEl = card.querySelector('pre.u-code code'), cp = card.querySelector('.u-cp');
+            card.querySelectorAll('.u-tab').forEach(function(t){
+              t.onclick = function(){
+                picked[s.key] = t.dataset.k;
+                card.querySelectorAll('.u-tab').forEach(function(x){ x.setAttribute('aria-selected', String(x===t)); });
+                codeEl.textContent = snipOf(s, t.dataset.k);
+              };
+            });
+            cp.onclick = function(){
+              var txt = snipOf(s, picked[s.key] || 'cli'), ic = cp.querySelector('.material-icons');
+              if(navigator.clipboard) navigator.clipboard.writeText(txt).then(function(){
+                ic.textContent = 'check'; cp.style.color = '#60a5fa';
+                setTimeout(function(){ ic.textContent = 'content_copy'; cp.style.color = ''; }, 1400);
+              });
             };
           });
           grid.querySelectorAll('.u-expand').forEach(function(b){ b.onclick = function(){ openModal(b.dataset.c); }; });
@@ -2014,9 +2068,6 @@
         }
         paintEp();
       }
-      view.querySelectorAll('.usage-tab').forEach(function(t){
-        t.onclick = function(){ view.querySelectorAll('.usage-tab').forEach(function(x){ x.classList.toggle('active', x===t); }); tool = t.dataset.k; render(); };
-      });
       var epc = document.getElementById('u-ep-copy');
       if(epc) epc.onclick = function(){ if(navigator.clipboard) navigator.clipboard.writeText(endpoint).then(function(){ epc.textContent='Copied'; setTimeout(function(){ epc.textContent='Copy'; },1200); }); };
       var fd = document.getElementById('u-fulldoc'); if(fd && !isNano) fd.setAttribute('href','/docs/aws/usage');
