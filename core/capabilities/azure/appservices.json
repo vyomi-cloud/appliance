@@ -45,7 +45,7 @@
  "azure.appservices.webapp.locks": {
   "title": "Locks (resource-scoped management locks)",
   "level": { "nano": "full", "offline": "full" },
-  "limitations": ["Locks are stored and listed; they are not enforced against delete/write requests on the resource."],
+  "limitations": ["A CanNotDelete/ReadOnly lock on the Web App really blocks delete/write requests on it (409 ScopeLocked), but enforcement is scoped to the exact locked resource — it does not cascade from a resource-group- or subscription-scoped lock the way real ARM would."],
   "api": ["Microsoft.Authorization/locks CreateOrUpdate", "Microsoft.Authorization/locks List", "Microsoft.Authorization/locks Delete"],
   "tests": ["tests/conformance/test_azure_webapp_core.py"]
  },

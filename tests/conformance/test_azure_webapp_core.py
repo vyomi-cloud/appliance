@@ -146,17 +146,25 @@ check("function app lands on an auto-provisioned plan that exists",
 check("web app has no Functions sub-resources", call(st3, "GET", ["sites", "web3", "functions"])["body"]["error"]["code"] == "ResourceTypeNotSupported")
 check("function app has no deployment slots", call(st3, "PUT", ["sites", "fn3", "slots", "s1"], {})["body"]["error"]["code"] == "ResourceTypeNotSupported")
 check("web app has no FUNCTIONS_* settings", call(st3, "GET", ["sites", "web3", "config", "appsettings"])["body"]["properties"] == {})
-call(st3, "PUT", ["sites", "fn3", "locks", "short"], {"properties": {"level": "ReadOnly"}})
-native = call(st3, "GET", ["sites", "fn3", "providers", "Microsoft.Authorization", "locks"])["body"]["value"]
-check("legacy locks/{n} path and the native Microsoft.Authorization/locks path share ONE store",
-      [l["name"] for l in native] == ["short"] and native[0]["type"] == "Microsoft.Authorization/locks", native)
 r = call(st3, "PUT", ["sites", "fn3"], {"location": "westus", "kind": "app"})
 check("PUT on an existing site never flips its kind", r["status"] == 200 and r["body"]["kind"] == "functionapp")
 fn_feed = mc.dispatch(st3, "GET", "sub1", None, ["eventtypes", "management", "values"], [], {},
                       {"$filter": "resourceUri eq '/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Web/sites/fn3'"})["body"]["value"]
 check("function app writes land on the same Activity log feed, newest first, labelled by kind",
-      fn_feed[0]["operationName"]["localizedValue"] == "Update Function App 'fn3'"
-      and fn_feed[1]["operationName"]["value"] == "Microsoft.Web/sites/locks/short/write", [e["operationName"] for e in fn_feed])
+      fn_feed[0]["operationName"]["localizedValue"] == "Update Function App 'fn3'", [e["operationName"] for e in fn_feed])
+
+call(st3, "PUT", ["sites", "fn3", "locks", "short"], {"properties": {"level": "ReadOnly"}})
+native = call(st3, "GET", ["sites", "fn3", "providers", "Microsoft.Authorization", "locks"])["body"]["value"]
+check("legacy locks/{n} path and the native Microsoft.Authorization/locks path share ONE store",
+      [l["name"] for l in native] == ["short"] and native[0]["type"] == "Microsoft.Authorization/locks", native)
+# a ReadOnly lock enforces on BOTH kinds — this engine is shared between web apps and function apps
+check("ReadOnly lock blocks a write on the function app too",
+      call(st3, "PUT", ["sites", "fn3"], {"location": "westus", "kind": "app"})["body"]["error"]["code"] == "ScopeLocked")
+call(st3, "DELETE", ["sites", "fn3", "locks", "short"])
+fn_feed2 = mc.dispatch(st3, "GET", "sub1", None, ["eventtypes", "management", "values"], [], {},
+                       {"$filter": "resourceUri eq '/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Web/sites/fn3'"})["body"]["value"]
+check("the blocked write never reached the Activity log feed",
+      fn_feed2[0]["operationName"]["value"] == "Microsoft.Web/sites/locks/short/delete", [e["operationName"] for e in fn_feed2])
 check("plan-in-use guard counts both kinds", call(st3, "DELETE", ["serverfarms", "p3"])["body"]["error"]["code"] == "ServerFarmInUse")
 
 # ── AzureArm (Nano): native Microsoft.Authorization/locks on a site goes to the generic locks
