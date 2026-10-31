@@ -196,6 +196,74 @@ try {
   const reposAfter = await wjson("/v1/projects/vyomi-project/locations/-/repositories");
   check("delete repository via UI → gone over native wire", !(reposAfter.repositories || []).some((x) => x.name.endsWith(`/repositories/${R}`)));
 
+  // Cleanup policies are ENFORCED, not just stored: an unconditional "Delete artifacts"
+  // policy added via the Edit dialog deletes a pushed version immediately.
+  const CR = `v4-gcp-ar-cleanup-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories?repositoryId=${CR}`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ format: "DOCKER" }) });
+  await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories/${CR}:pushSample`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: "cleanup-me", tag: "v1" }) });
+  await page.goto(UI + `#/artifacts/repo/us-central1/${CR}`);
+  await page.getByRole("link", { name: "cleanup-me" }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Edit repository" }).click();
+  const editDialog = page.getByRole("dialog", { name: "Edit repository" });
+  await editDialog.getByRole("button", { name: "Add a cleanup policy" }).click();
+  const policyDialog = page.getByRole("dialog", { name: "Add a cleanup policy" });
+  await policyDialog.getByLabel("Policy name").fill("purge-all");
+  await policyDialog.getByLabel("Older than (days)").fill("0");   // unconditional: matches regardless of age
+  await policyDialog.getByRole("button", { name: "Add" }).click();
+  await policyDialog.waitFor({ state: "detached", timeout: 10000 });
+  await editDialog.getByRole("button", { name: "Save" }).click();
+  await editDialog.waitFor({ state: "detached", timeout: 10000 });
+  await page.getByText("No images in this repository yet.").waitFor({ timeout: 10000 });
+  const crVersions = await wjson(`/v1/projects/vyomi-project/locations/us-central1/repositories/${CR}/packages/cleanup-me/versions`);
+  check("cleanup policy via UI → version actually deleted over native wire", !(crVersions.versions || []).length,
+    JSON.stringify(crVersions).slice(0, 160));
+  await shot("13b-cleanup-policy-enforced");
+
+  // Virtual repositories aggregate their upstreams — ENFORCED, not just stored config: the
+  // UI's Repositories table shows images from two other repositories merged read-only.
+  const VSTD1 = `v4-gcp-ar-vstd1-${Date.now() % 100000}`;
+  const VSTD2 = `v4-gcp-ar-vstd2-${Date.now() % 100000}`;
+  const VIRT = `v4-gcp-ar-virt-${Date.now() % 100000}`;
+  for (const [id, image] of [[VSTD1, "from-std1"], [VSTD2, "from-std2"]]) {
+    await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories?repositoryId=${id}`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ format: "DOCKER" }) });
+    await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories/${id}:pushSample`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image, tag: "v1" }) });
+  }
+  await page.goto(UI + "#/artifacts/create-repo");
+  await page.getByLabel("Name").fill(VIRT);
+  await page.getByRole("radio", { name: "Virtual" }).check();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: "Upstream repositories" }).waitFor({ timeout: 10000 });
+  check("create virtual repository via UI → native wire", true);
+
+  await page.getByRole("button", { name: "Add repository" }).click();
+  let addDialog = page.getByRole("dialog", { name: "Add upstream repository" });
+  await addDialog.getByLabel("Repository").click();
+  await page.getByRole("option", { name: VSTD1 }).click();
+  await addDialog.getByRole("button", { name: "Add" }).click();
+  await addDialog.waitFor({ state: "detached", timeout: 10000 });
+
+  await page.getByRole("button", { name: "Add repository" }).click();
+  addDialog = page.getByRole("dialog", { name: "Add upstream repository" });
+  await addDialog.getByLabel("Repository").click();
+  await page.getByRole("option", { name: VSTD2 }).click();
+  await addDialog.getByLabel("Priority").fill("5");
+  await addDialog.getByRole("button", { name: "Add" }).click();
+  await addDialog.waitFor({ state: "detached", timeout: 10000 });
+
+  await page.getByRole("link", { name: "from-std1" }).waitFor({ timeout: 10000 });
+  await page.getByRole("link", { name: "from-std2" }).waitFor({ timeout: 10000 });
+  check("virtual repository aggregates both upstreams' images in the UI", true);
+  check("virtual repository is read-only: no Push sample button", (await page.getByRole("button", { name: /Push sample/ }).count()) === 0);
+  const virtImages = await wjson(`/v1/projects/vyomi-project/locations/us-central1/repositories/${VIRT}/dockerImages`);
+  const virtNames = (virtImages.dockerImages || []).map((i) => i.name.split("/dockerImages/")[1]);
+  check("virtual repository aggregation enforced over native wire (dockerImages)",
+    virtNames.some((n) => n.startsWith("from-std1")) && virtNames.some((n) => n.startsWith("from-std2")), JSON.stringify(virtNames));
+  await shot("13c-virtual-repository");
+
   // Settings: toggle redirection → native projectSettings round-trip
   await page.goto(UI + "#/artifacts/settings");
   // State persists across runs on a real appliance — start from "disabled".

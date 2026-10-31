@@ -4,7 +4,7 @@
 import { useState } from "react";
 import {
   Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-  FormControlLabel, IconButton, Radio, RadioGroup, Stack, TextField, Tooltip, Typography,
+  FormControl, FormControlLabel, IconButton, InputLabel, MenuItem, Radio, RadioGroup, Select, Stack, TextField, Tooltip, Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
@@ -18,9 +18,11 @@ import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { ErrorAlert, fmtDate, PageHeader } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import { CleanupPolicyDialog, describeCleanupPolicy } from "./CreateRepository.jsx";
 
 export default function RepositoryDetail({ params }) {
   const { location, name } = params;
@@ -59,14 +61,27 @@ export default function RepositoryDetail({ params }) {
             ))}
           </Stack>
 
+          {repo.data.mode === "VIRTUAL_REPOSITORY" && (
+            <UpstreamRepositoriesSection location={location} name={name} repo={repo.data} onChange={repo.reload} />
+          )}
+
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
             <Typography variant="h3" component="h2" sx={{ flex: 1 }}>{repo.data.format === "DOCKER" ? "Images" : "Packages"}</Typography>
-            <Button startIcon={<AddIcon />} onClick={() => setPush(true)}>{repo.data.format === "DOCKER" ? "Push sample image" : "Push sample package"}</Button>
-            <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={async () => {
-              try { for (const p of sel) await api.deletePackage(location, name, p); notify.success(`Deleted ${sel.length} package${sel.length === 1 ? "" : "s"}`); setSel([]); pkgs.reload(); }
-              catch (e) { notify.error(e); }
-            }}>Delete</Button>
+            {repo.data.mode !== "VIRTUAL_REPOSITORY" && (
+              <>
+                <Button startIcon={<AddIcon />} onClick={() => setPush(true)}>{repo.data.format === "DOCKER" ? "Push sample image" : "Push sample package"}</Button>
+                <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={async () => {
+                  try { for (const p of sel) await api.deletePackage(location, name, p); notify.success(`Deleted ${sel.length} package${sel.length === 1 ? "" : "s"}`); setSel([]); pkgs.reload(); }
+                  catch (e) { notify.error(e); }
+                }}>Delete</Button>
+              </>
+            )}
           </Stack>
+          {repo.data.mode === "VIRTUAL_REPOSITORY" && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              Aggregated live from the upstream repositories above — read-only here.
+            </Typography>
+          )}
           <ResourceTable
             resourceName={repo.data.format === "DOCKER" ? "images" : "packages"}
             items={pkgs.data || []}
@@ -74,7 +89,7 @@ export default function RepositoryDetail({ params }) {
             loading={pkgs.loading}
             error={pkgs.error}
             onRetry={pkgs.reload}
-            selectable
+            selectable={repo.data.mode !== "VIRTUAL_REPOSITORY"}
             selected={sel}
             onSelectedChange={setSel}
             filterPlaceholder="Filter"
@@ -95,7 +110,8 @@ export default function RepositoryDetail({ params }) {
       </DeleteDialog>
 
       {edit && repo.data && <EditRepositoryDialog repo={repo.data} onClose={() => setEdit(false)} onSave={async (body, mask) => {
-        await api.patchRepository(location, name, body, mask); notify.success("Updated repository"); repo.reload();
+        await api.patchRepository(location, name, body, mask); notify.success("Updated repository");
+        repo.reload(); pkgs.reload();   // a cleanup policy change can delete versions the packages list already cached
       }} />}
 
       {setup && repo.data && <SetupInstructionsDialog repo={repo.data} project={project} location={location} name={name} onClose={() => setSetup(false)} />}
@@ -127,11 +143,23 @@ function EditRepositoryDialog({ repo, onClose, onSave }) {
   const [description, setDescription] = useState(repo.description || "");
   const [labels, setLabels] = useState(Object.entries(repo.labels || {}).map(([key, value]) => ({ key, value })));
   const [immutableTags, setImmutableTags] = useState(!!repo.dockerConfig?.immutableTags);
+  const [dryRun, setDryRun] = useState(!!repo.cleanupPolicyDryRun);
+  const [policies, setPolicies] = useState(Object.entries(repo.cleanupPolicies || {}).map(([id, p]) => ({ id, ...p })));
+  const [addPolicy, setAddPolicy] = useState(false);
+  const canCleanup = repo.mode !== "VIRTUAL_REPOSITORY";
   const bad = labels.some((l) => !/^[a-z][a-z0-9_-]{0,62}$/.test(l.key));
   return (
     <SaveDialog title="Edit repository" onClose={onClose} disabled={bad} onSave={() => {
-      const body = { description, labels: Object.fromEntries(labels.map((l) => [l.key, l.value])), ...(repo.format === "DOCKER" ? { dockerConfig: { immutableTags } } : {}) };
-      const mask = ["description", "labels", ...(repo.format === "DOCKER" ? ["dockerConfig"] : [])].join(",");
+      const body = {
+        description, labels: Object.fromEntries(labels.map((l) => [l.key, l.value])),
+        ...(repo.format === "DOCKER" ? { dockerConfig: { immutableTags } } : {}),
+        ...(canCleanup ? {
+          cleanupPolicies: Object.fromEntries(policies.map((p) => [p.id, { action: p.action, condition: p.condition }])),
+          cleanupPolicyDryRun: dryRun,
+        } : {}),
+      };
+      const mask = ["description", "labels", ...(repo.format === "DOCKER" ? ["dockerConfig"] : []),
+        ...(canCleanup ? ["cleanupPolicies", "cleanupPolicyDryRun"] : [])].join(",");
       return onSave(body, mask);
     }}>
       <TextField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} multiline minRows={2} />
@@ -153,7 +181,93 @@ function EditRepositoryDialog({ repo, onClose, onSave }) {
           </RadioGroup>
         </>
       )}
+      {canCleanup && (
+        <>
+          <Typography variant="body2" sx={{ fontWeight: 500 }}>Cleanup policies</Typography>
+          <RadioGroup row value={dryRun ? "dry-run" : "delete"} onChange={(e) => setDryRun(e.target.value === "dry-run")}>
+            <FormControlLabel value="delete" control={<Radio size="small" />} label="Delete artifacts" />
+            <FormControlLabel value="dry-run" control={<Radio size="small" />} label="Dry run" />
+          </RadioGroup>
+          {policies.map((p, i) => (
+            <Stack key={p.id} direction="row" spacing={1} alignItems="center">
+              <Typography variant="body2">{describeCleanupPolicy(p)}</Typography>
+              <IconButton aria-label={`Remove cleanup policy ${p.id}`} size="small" onClick={() => setPolicies(policies.filter((_, j) => j !== i))}><DeleteIcon fontSize="small" /></IconButton>
+            </Stack>
+          ))}
+          <Box><Button startIcon={<AddIcon />} onClick={() => setAddPolicy(true)}>Add a cleanup policy</Button></Box>
+          {addPolicy && <CleanupPolicyDialog existingIds={policies.map((p) => p.id)} onClose={() => setAddPolicy(false)}
+            onSave={(p) => { setPolicies([...policies, p]); setAddPolicy(false); }} />}
+        </>
+      )}
     </SaveDialog>
+  );
+}
+
+function UpstreamRepositoriesSection({ location, name, repo, onChange }) {
+  const notify = useNotify();
+  const [addOpen, setAddOpen] = useState(false);
+  const policies = repo.virtualRepositoryConfig?.upstreamPolicies || [];
+  const save = async (next, msg) => {
+    try { await api.patchRepository(location, name, { virtualRepositoryConfig: { upstreamPolicies: next } }, "virtualRepositoryConfig"); notify.success(msg); onChange(); }
+    catch (e) { notify.error(e); }
+  };
+  return (
+    <CapabilityContainer id="gcp.artifacts.repository-mode" title="Upstream repositories"
+      description="Packages, versions and tags are aggregated live from these repositories; the highest-priority repository wins on a name collision."
+      actions={<Button startIcon={<AddIcon />} onClick={() => setAddOpen(true)}>Add repository</Button>}>
+      {policies.length === 0
+        ? <Typography variant="body2" color="text.secondary">No upstream repositories configured yet.</Typography>
+        : (
+          <Stack spacing={1}>
+            {[...policies].sort((a, b) => (b.priority || 0) - (a.priority || 0)).map((p) => (
+              <Stack key={p.id} direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2" sx={{ flex: 1 }}>{p.repository.split("/repositories/").pop()} — priority {p.priority ?? 0}</Typography>
+                <IconButton aria-label={`Remove upstream repository ${p.repository.split("/repositories/").pop()}`} size="small"
+                  onClick={() => save(policies.filter((x) => x.id !== p.id), "Removed upstream repository")}><DeleteIcon fontSize="small" /></IconButton>
+              </Stack>
+            ))}
+          </Stack>
+        )}
+      {addOpen && <AddUpstreamDialog location={location} existing={policies} onClose={() => setAddOpen(false)}
+        onSave={(p) => { setAddOpen(false); save([...policies, p], "Added upstream repository"); }} />}
+    </CapabilityContainer>
+  );
+}
+
+function AddUpstreamDialog({ location, existing, onClose, onSave }) {
+  const repos = useAsync(() => api.listRepositories(), []);
+  const [repository, setRepository] = useState("");
+  const [priority, setPriority] = useState("10");
+  const candidates = (repos.data || []).filter((r) => r.location === location && r.mode !== "VIRTUAL_REPOSITORY"
+    && !existing.some((e) => e.repository === r.name));
+  const n = Number(priority);
+  const ok = !!repository && /^\d+$/.test(priority) && n >= 0 && n <= 100;
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth aria-label="Add upstream repository">
+      <DialogTitle>Add upstream repository</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          {repos.loading
+            ? <CircularProgress size={20} />
+            : candidates.length === 0
+              ? <Typography variant="body2" color="text.secondary">No eligible standard or remote repositories in {location}.</Typography>
+              : (
+                <FormControl fullWidth>
+                  <InputLabel id="upstream-repo-label">Repository</InputLabel>
+                  <Select labelId="upstream-repo-label" label="Repository" value={repository} onChange={(e) => setRepository(e.target.value)}>
+                    {candidates.map((r) => <MenuItem key={r.name} value={r.name}>{r.id}</MenuItem>)}
+                  </Select>
+                </FormControl>
+              )}
+          <TextField label="Priority" type="number" value={priority} onChange={(e) => setPriority(e.target.value)}
+            helperText="0-100; the highest-priority upstream wins on a name collision." />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" disabled={!ok} onClick={() => onSave({ id: `up-${repository.split("/repositories/").pop()}`, repository, priority: n })}>Add</Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
