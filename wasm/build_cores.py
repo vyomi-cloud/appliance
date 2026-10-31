@@ -95,6 +95,11 @@ CORES = [
     "azure_webapp_core.py",                         # Azure: App Service (Microsoft.Web: web apps + function apps by kind, serverfarms) — vendored VERBATIM
     "azure_eventgrid_core.py",                      # v4: Azure Event Grid event subscriptions (topic-scoped extension resource)
     "azure_locks_core.py",                          # v4: Management locks (Microsoft.Authorization/locks, scoped to ANY resource)
+    "k8s_yaml.py",                                  # v4: dependency-free YAML reader for Kubernetes manifests (AKS kubectl)
+    "azure_aks_k8s_core.py",                        # v4: AKS Kubernetes object store + kubectl subset behind runCommand
+    "kubescape_catalog.py",                         # v4: Kubescape control metadata (GENERATED, regolibrary Apache-2.0)
+    "kubescape_core.py",                            # v4: Kubescape result mapping + scanner seam (Nano: OPA-wasm evaluator)
+    "azure_security_core.py",                       # v4: Microsoft Defender for Cloud (Microsoft.Security), live over the ARM state
     "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
     "console_conformance.py",                       # console-next capability manifest: per-service conformance signal (pure, `os` only)
     "nano_events.py",                               # per-resource cloudsim event/activity log (recorded on every mutating dispatch; MUST precede nano_registry which imports it)

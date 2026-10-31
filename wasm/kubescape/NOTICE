@@ -1,0 +1,20 @@
+Vyomi Nano in-browser Kubescape evaluator — third-party notices
+
+policy.wasm, controls.json, catalog.json
+  Compiled/extracted from the Kubescape control library (kubescape/regolibrary) as
+  downloaded by the Kubescape CLI v4.0.16 (`kubescape download artifacts`), frameworks
+  NSA, MITRE and cis-v1.12.0, plus Kubescape's controls-inputs and default exceptions.
+  Copyright The Kubescape Authors. Licensed under the Apache License, Version 2.0.
+  https://github.com/kubescape/regolibrary  https://github.com/kubescape/kubescape
+
+cautils.rego
+  Kubescape's always-loaded Rego helper library, verbatim from
+  github.com/kubescape/opa-utils v0.0.315 (resources/dependencies.go). Apache-2.0.
+
+vendor/opa-wasm.mjs
+  @open-policy-agent/opa-wasm 1.10.0 (dist/opa-wasm-browser.esm.js), which bundles
+  sprintf-js (BSD-3-Clause) and yaml (ISC). Copyright The OPA Authors. Apache-2.0.
+  https://github.com/open-policy-agent/npm-opa-wasm
+
+Compiled with OPA 1.21.1 (`opa build -t wasm`). Rebuild: see build_kubescape_wasm.py.
+ks-eval.mjs and build_kubescape_wasm.py are Vyomi code.

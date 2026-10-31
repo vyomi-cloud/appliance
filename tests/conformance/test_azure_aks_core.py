@@ -109,10 +109,16 @@ def run() -> int:
     r = arm.handle("PATCH", pool1, {"api-version": AV}, {"properties": {"count": 5}})
     _check("node pool scale works again once cluster is running", r["status"] == 200)
 
-    # 7. runCommand — honest canned result (no live kubelet), but a real accepted round-trip
+    # 7. runCommand — kubectl against the cluster's Kubernetes object store (no kubelet: objects
+    #    are stored, not scheduled; the full kubectl surface is test_azure_aks_k8s_core.py)
     r = arm.handle("POST", c1 + "/runCommand", {"api-version": AV}, {"command": "kubectl get pods -A"})
     _check("runCommand accepted", r["status"] == 200 and r["body"]["exitCode"] == 0)
-    _check("runCommand echoes the command honestly", "kubectl get pods -A" in r["body"]["logs"])
+    _check("runCommand returns the RunCommandResult shape", r["body"]["properties"]["provisioningState"] == "Succeeded"
+           and r["body"]["properties"]["exitCode"] == 0)
+    _check("runCommand reads the (empty) object store", "No resources found" in r["body"]["logs"])
+    r = arm.handle("POST", c1 + "/runCommand", {"api-version": AV}, {"command": "kubectl logs web"})
+    _check("runCommand fails honestly for what needs running containers", r["body"]["exitCode"] == 1
+           and "doesn't run containers" in r["body"]["logs"])
 
     # 8. listClusterUserCredential / listClusterAdminCredential — kubeconfig shape
     r = arm.handle("POST", c1 + "/listClusterUserCredential", {"api-version": AV})
