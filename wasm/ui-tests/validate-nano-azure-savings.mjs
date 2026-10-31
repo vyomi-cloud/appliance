@@ -13,7 +13,7 @@ const snap = () => page.evaluate(async () => {
   return (d.spaces[0] || {}).cost_savings || null;
 });
 const put = (type, name, body) => page.evaluate(async ([t, n, b]) => {
-  const r = await fetch(`/subscriptions/nano-sub/resourceGroups/rg1/providers/${t}/${n}?api-version=2023-01-01`,
+  const r = await fetch(`/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg1/providers/${t}/${n}?api-version=2023-01-01`,
     { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
   return r.status;
 }, [type, name, body]);
