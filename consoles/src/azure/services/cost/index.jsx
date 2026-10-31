@@ -8,10 +8,12 @@ import Budgets from "./Budgets.jsx";
 import CreateBudget from "./CreateBudget.jsx";
 import AdvisorRecommendations from "./AdvisorRecommendations.jsx";
 import SavingsPlans from "./SavingsPlans.jsx";
+import ReservationsHybridBenefit from "./ReservationsHybridBenefit.jsx";
+import CostAllocation from "./CostAllocation.jsx";
 import PreviewFeatures from "./PreviewFeatures.jsx";
 import Configuration from "./Configuration.jsx";
 import AzureSubscriptions from "./AzureSubscriptions.jsx";
-import { CostAllocation, DiagnoseAndSolveProblems, Invoices, NewSupportRequest, PaymentMethods, ReservationsHybridBenefit } from "./StaticPages.jsx";
+import { DiagnoseAndSolveProblems, Invoices, NewSupportRequest, PaymentMethods } from "./StaticPages.jsx";
 
 const crumb = (text, href) => [{ text, href }];
 

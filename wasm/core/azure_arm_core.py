@@ -542,6 +542,8 @@ class AzureArm:
             return self._cost_consumption(method, sub, rg, chain, payload, query)
         if namespace.lower() == "microsoft.billingbenefits":
             return self._cost_billingbenefits(method, sub, rg, chain, payload, query)
+        if namespace.lower() == "microsoft.capacity":
+            return self._cost_capacity(method, sub, rg, chain, payload, query)
         # Microsoft.EventGrid/topics/{name}/providers/Microsoft.EventGrid/eventSubscriptions/{name}:
         # a real ARM extension resource (scoped to the topic), so the chain re-enters "providers"
         # instead of alternating type/name — the eventgrid engine owns that shape.
@@ -815,6 +817,11 @@ class AzureArm:
     def _cost_billingbenefits(self, method, sub, rg, chain, payload, query):
         r = cost_engine.dispatch_billingbenefits(self.state, method, sub, chain, payload, query, base=self._base)
         return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
+    def _cost_capacity(self, method, sub, rg, chain, payload, query):
+        r = cost_engine.dispatch_capacity(self.state, method, sub, chain, payload, query, base=self._base)
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
     def _web(self, method, sub, rg, chain, payload, query):
         r = web_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query)
         resp = {"status": r["status"], "headers": {}, "body": r["body"]}

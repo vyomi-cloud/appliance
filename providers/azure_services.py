@@ -901,6 +901,8 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         return await _handle_consumption(request, method, sub, rg, chain, base)
     if namespace.lower() == "microsoft.billingbenefits":
         return await _handle_billingbenefits(request, method, sub, chain, base)
+    if namespace.lower() == "microsoft.capacity":
+        return await _handle_capacity(request, method, sub, chain, base)
 
     # Microsoft.Web (App Service: web apps + function apps by `kind`, App Service plans): a
     # dedicated engine (core/azure_webapp_core.py) owns the semantics and writes the Activity
@@ -1132,6 +1134,15 @@ async def _handle_billingbenefits(request: Request, method: str, sub: str,
     from core import azure_cost_core as _cm
     payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
     r = _cm.dispatch_billingbenefits(_state, method, sub, chain, payload, dict(request.query_params), base=base)
+    return JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
+        else Response(status_code=r["status"])
+
+
+async def _handle_capacity(request: Request, method: str, sub: str,
+                           chain: list[str], base: str) -> JSONResponse:
+    from core import azure_cost_core as _cm
+    payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
+    r = _cm.dispatch_capacity(_state, method, sub, chain, payload, dict(request.query_params), base=base)
     return JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
         else Response(status_code=r["status"])
 
