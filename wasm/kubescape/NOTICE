@@ -11,7 +11,7 @@ cautils.rego
   Kubescape's always-loaded Rego helper library, verbatim from
   github.com/kubescape/opa-utils v0.0.315 (resources/dependencies.go). Apache-2.0.
 
-vendor/opa-wasm.mjs
+lib/opa-wasm.mjs
   @open-policy-agent/opa-wasm 1.10.0 (dist/opa-wasm-browser.esm.js), which bundles
   sprintf-js (BSD-3-Clause) and yaml (ISC). Copyright The OPA Authors. Apache-2.0.
   https://github.com/open-policy-agent/npm-opa-wasm

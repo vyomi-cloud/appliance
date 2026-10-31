@@ -15,7 +15,7 @@
  *   globalThis.__vyomi_kubescape_eval(JSON.stringify(objects)) -> JSON string (synchronous)
  * Node/tests can pass the bytes directly: installKubescape(null, { controls, wasm }).
  */
-import opa from "./vendor/opa-wasm.mjs";
+import opa from "./lib/opa-wasm.mjs";
 
 const SEVERITY_ORDER = ["Unknown", "Low", "Medium", "High", "Critical"];
 
