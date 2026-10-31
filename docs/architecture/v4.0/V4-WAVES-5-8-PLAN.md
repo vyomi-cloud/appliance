@@ -25,9 +25,15 @@ simulator can model, lift `limited` labels that are only missing engine coverage
   ranges only, isolated namespaces); Outposts / Local Zones via a Local Gateway router namespace
   + an on-prem LAN network; S3 Transfer Acceleration via one lazy edge proxy + an honest latency
   profile.
-- Proposed (pending approval): SCOM Managed Instance lightweight (scom_core + Samba AD DC +
-  OpenTelemetry gateway on 5723) and Samba AD for Entra Domain Services / AWS Managed AD / GCP
-  Managed AD.
+- SCOM Managed Instance, lightweight (approved): `scom_core` (ARM resource + wizard with real
+  dependency checks, YAML management packs, health rollup, alerts, OperationsManager/DW tables in
+  the user's Azure SQL db — Nano + offline); Samba AD DC + CoreDNS for real domain join (the same
+  backend makes Entra Domain Services, AWS Managed Microsoft AD and GCP Managed AD real); an
+  OpenTelemetry Collector gateway on 5723 with mTLS and agents in on-prem LAN containers over the
+  hybrid network. No Microsoft SCOM / SQL Server / Windows is shipped; management packs, the
+  Operations console and the Windows agent stay honestly labelled.
+- Vyomi Copilot (local LLM): spike in progress (llama.cpp offline, WebLLM / wllama on Nano,
+  retrieval over Vyomi docs + read-only tools); ships as an optional download if approved.
 
 ## Wave 7 — consoles for services whose backend already exists
 AWS: Kinesis Data Streams, Step Functions, Systems Manager (Parameter Store), EC2 Load
