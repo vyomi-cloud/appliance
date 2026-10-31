@@ -29,7 +29,7 @@
    "offline": "config_only"
   },
   "limitations": [
-   "enableRbacAuthorization and the resource-access flags are stored and returned exactly as written, but Vyomi does not enforce them. Real Key Vault data-plane calls are routed by the vault's own hostname ({vault}.vault.azure.net); Vyomi's Key Vault Keys/Secrets/Certificates REST data planes sit behind one shared, vault-agnostic relay (same simplification the AWS lens makes for KMS/Secrets Manager key policies), so a keys/secrets call carries no wire signal identifying which vault's access model should apply — enforcing against a guessed vault would deny or allow calls incorrectly rather than modelling the real control."
+   "enableRbacAuthorization and the resource-access flags are stored and returned exactly as written, but Vyomi does not enforce them. The console now tags every Keys/Secrets/Certificates call with the vault it's showing (x-vyomi-vault, the same signal azure.keyvaults.networking enforces against) — the remaining gap isn't 'which vault' but 'which caller': Vyomi has no signed-in-identity/session-principal concept behind a data-plane call anywhere in the product (the Azure RBAC decision engine, core/azure_iam_core.py checkAccess, is wired only as the Subscription/Resource group IAM blades' informational 'Check access' probe, never as a live gate on a real operation). Real Azure's own default-deny semantics — nobody has access to a freshly created vault until a role or access-policy entry is explicitly granted — would, if enforced only here, lock the data plane of every vault this console's own create wizard produces (it defaults to RBAC mode and never auto-grants a role), breaking the ordinary create-vault-then-add-a-secret path for a simplification no other Vyomi service makes."
   ],
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
@@ -42,7 +42,7 @@
    "offline": "config_only"
   },
   "limitations": [
-   "Access policy entries round-trip through ARM exactly as written, but Vyomi never evaluates them — every data-plane key/secret call succeeds regardless of the configured permissions. Same root cause as azure.keyvaults.access_configuration: the data-plane relay is shared across every vault (no per-vault hostname), so a call has no wire signal saying which vault's access-policy list to check."
+   "Access policy entries round-trip through ARM exactly as written, but Vyomi never evaluates them — every data-plane key/secret call succeeds regardless of the configured permissions. Same root cause as azure.keyvaults.access_configuration: evaluating a policy needs a caller identity to check it against, and Vyomi has no signed-in-identity/session-principal concept behind a data-plane call anywhere in the product — enforcing it only here, with an empty accessPolicies list denying by default exactly as real Azure does, would lock every vault's data plane on creation (this console's own create wizard doesn't add a self-granting entry, matching a raw ARM/Bicep deploy, not the CLI's auto-grant)."
   ],
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
@@ -51,14 +51,16 @@
  "azure.keyvaults.networking": {
   "title": "Networking (public network access / firewall default action)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "publicNetworkAccess and networkAcls round-trip through ARM, but the Key Vault Keys/Secrets REST data planes never enforce them — a call from a 'denied' network still succeeds. Same root cause as azure.keyvaults.access_configuration: the data-plane relay has no per-vault hostname, so it cannot tell which vault's firewall config a given call should be checked against."
+   "ENFORCED: the console tags every Keys/Secrets/Certificates call with the vault it's showing (x-vyomi-vault), and publicNetworkAccess:'Disabled' or networkAcls.defaultAction:'Deny' really makes the Key Vault Keys/Secrets/Certificates REST data planes return 403 for that vault (core/azure_arm_core.py keyvault_network_denied, read by core/aws_wire_router.py and core/wire_ingress.py on both substrates).",
+   "'Allow public access from specific virtual networks and IP addresses' is modelled as 'Deny everything' — Vyomi has no caller IP/VNet identity to match an allow-list entry against, so a configured allow-list never lets a call through; it still faithfully blocks the common 'locked down to a VNet, forgot it also blocks me' real-world case, just without the allow-list working.",
+   "A call that names no vault (direct wire/SDK calls bypassing the console, and the AWS-KMS-style simplification this data plane already made before this change) is not checked — same as a vault that doesn't exist."
   ],
   "tests": [
-   "tests/conformance/test_azure_arm_core.py"
+   "tests/conformance/test_azure_keyvault_networking_core.py"
   ]
  },
  "azure.keyvaults.keys.crud": {
@@ -131,7 +133,8 @@
    "offline": "limited"
   },
   "limitations": [
-   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the 7/30/90-day timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill), and `caller` is a fixed placeholder identity rather than the real signed-in principal. Severity/category filtering is not modelled (every recorded event is Informational/Administrative).",
+   "The Timespan picker IS enforced: its lower bound is a real OData `eventTimestamp ge` predicate (core/azure_arm_core.py _activity_log_query) — narrowing it really narrows the result, it isn't a cosmetic control."
   ],
   "api": [
    "ActivityLogs_List"

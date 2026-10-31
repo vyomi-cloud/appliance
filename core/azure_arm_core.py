@@ -188,6 +188,36 @@ def _activity_log_query(query: dict) -> dict:
     return _ok({"value": value})
 
 
+def vault_properties(state: dict | None, vault: str) -> dict:
+    """Look up a Microsoft.KeyVault/vaults resource's `properties` by vault name alone (the
+    Key Vault Keys/Secrets/Certificates data planes never learn the subscription/resource
+    group — same read-only-snapshot pattern as azure_sql_core._server_props). Returns {} if
+    `vault` is blank or no such vault exists (callers must treat that as "not enforced", not
+    "denied" — an unknown vault name is not evidence of a network restriction)."""
+    if not state or not vault:
+        return {}
+    want = f"/vaults/{vault}".lower()
+    for rec in state.values():
+        if isinstance(rec, dict) and rec.get("_type", "").lower() == "microsoft.keyvault/vaults" \
+                and rec.get("id", "").lower().endswith(want):
+            return rec.get("properties") or {}
+    return {}
+
+
+def keyvault_network_denied(state: dict | None, vault: str) -> bool:
+    """True when this vault's ARM-configured networking (Networking blade /
+    azure.keyvaults.networking) would reject a data-plane call from the console: public
+    network access disabled, or the firewall default action is Deny (Vyomi has no caller
+    IP/VNet to match an allow-list entry against, so Deny blocks unconditionally — the same
+    simplification real Azure makes for an unrecognized caller)."""
+    p = vault_properties(state, vault)
+    if not p:
+        return False
+    if p.get("publicNetworkAccess") == "Disabled":
+        return True
+    return (p.get("networkAcls") or {}).get("defaultAction") == "Deny"
+
+
 def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 

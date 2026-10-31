@@ -377,6 +377,7 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
             return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
         from core import (azure_keyvault_certificates_core as kvc, azure_keyvault_keys_core as kvk,
                           azure_keyvault_secrets_core as kvs)
+        from core.azure_arm_core import keyvault_network_denied
         if hasattr(r.az_kvkeys, "adopt"):
             r.az_kvkeys.adopt()          # pre-v4 Vault-backed secrets / RSA keys (once per space)
         p = kv_core_path(path)
@@ -386,6 +387,17 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
         if mod is None:
             return {"status": 404, "headers": {"content-type": "application/json"},
                     "body": b'{"error":{"code":"NotFound","message":"Unknown Key Vault path."}}'}
+        # Same per-vault networking enforcement as the Nano router (aws_wire_router.py) — see
+        # azure.keyvaults.networking. The console sends `x-vyomi-vault`; Key Vault's real wire
+        # has no other way to say which vault's publicNetworkAccess/networkAcls apply.
+        lh0 = {str(k).lower(): v for k, v in (headers or {}).items()}
+        vault0 = lh0.get("x-vyomi-vault", "")
+        if vault0 and keyvault_network_denied(r.az_arm.state, vault0):
+            import json as _json
+            body_json = _json.dumps({"error": {"code": "Forbidden",
+                "message": f"Client address is not authorized and caller is not a trusted "
+                           f"service. Client address not allowed to access vault '{vault0}'."}}).encode()
+            return {"status": 403, "headers": {"content-type": "application/json"}, "body": body_json}
         resp = mod.dispatch(st, method, p, query or {}, headers or {}, body or b"")
         hdrs = dict(resp.headers or {})
         if resp.media_type and not any(k.lower() == "content-type" for k in hdrs):

@@ -24,7 +24,16 @@ export const vaultUri = (name) => `https://${name}.vault.azure.net/`;
 export const skuLabel = (sku) => (sku?.name === "premium" ? "Premium" : "Standard");
 
 // ── Keys data plane (Key Vault Keys REST) ───────────────────────────────────────────────
-const kv = (method, path, { body } = {}) => restJson(method, path, { query: { "api-version": KV_API_VERSION }, body });
+// Which vault the blade currently showing is calling for — real Key Vault learns this from
+// the vault's own hostname ({vault}.vault.azure.net); Vyomi's one shared relay has no
+// per-vault host, so the console carries it as a header instead (azure.keyvaults.networking
+// enforcement in core/aws_wire_router.py / core/wire_ingress.py reads it).
+let activeVault = "";
+export const setActiveVault = (name) => { activeVault = name || ""; };
+const kv = (method, path, { body } = {}) => restJson(method, path, {
+  query: { "api-version": KV_API_VERSION }, body,
+  headers: activeVault ? { "x-vyomi-vault": activeVault } : {},
+});
 
 export const listKeys = async () => (await kv("GET", "/keys")).value || [];
 export const createKey = (name, body) => kv("POST", `/keys/${encodeURIComponent(name)}/create`, { body });
@@ -78,9 +87,12 @@ export const putLock = (rg, name, lockName, body) => restJson("PUT", lockPath(rg
 export const deleteLock = (rg, name, lockName) => restJson("DELETE", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION } });
 
 // ── activity log (Microsoft.Insights/eventtypes/management/values, filtered to this vault) ──
-export const listActivityLog = async (rg, name) => {
+// The Timespan picker's lower bound is a real OData `eventTimestamp ge` predicate
+// (core/azure_arm_core.py _activity_log_query — ENFORCED, not cosmetic).
+export const listActivityLog = async (rg, name, sinceIso) => {
   const rid = ARM.path(rg, name);
-  const query = { "api-version": "2015-04-01", "$filter": `resourceUri eq '${rid}'` };
+  const filter = sinceIso ? `resourceUri eq '${rid}' and eventTimestamp ge '${sinceIso}'` : `resourceUri eq '${rid}'`;
+  const query = { "api-version": "2015-04-01", "$filter": filter };
   return (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/eventtypes/management/values`, { query })).value || [];
 };
 

@@ -474,8 +474,9 @@ try {
   }
   check("UI delete app service → ARM GET 404", gone2.status === 404, `HTTP ${gone2.status}`);
   // ── Key vault created through the wizard → visible over native ARM ─────────────────────
-  const kvWire = (path, method = "GET", body) => wire(`${path}${path.includes("?") ? "&" : "?"}api-version=7.4`,
-    { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const kvWire = (path, method = "GET", body, vault) => wire(`${path}${path.includes("?") ? "&" : "?"}api-version=7.4`,
+    { method, headers: { "content-type": "application/json", ...(vault ? { "x-vyomi-vault": vault } : {}) },
+      body: body ? JSON.stringify(body) : undefined });
   const KV = `vysmokekv${n}`;
   await page.goto(UI + "#/keyvaults/create");
   await page.getByLabel("Key vault name", { exact: true }).fill(KV);
@@ -534,6 +535,26 @@ try {
   await page.getByText(CERTIMPORT, { exact: true }).waitFor({ timeout: 10000 });
   check("wire-imported certificate shown in Certificates grid", true);
   await shot("21c-certificates-imported");
+
+  // ── Networking: "Disable public access" really blocks this vault's Key Vault wire ──────
+  await arm("PATCH", `/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${KV}`,
+    { properties: { publicNetworkAccess: "Disabled" } });
+  const blockedSecret = `smoke-netblocked-${n}`;
+  const putBlocked = await kvWire(`/secrets/${blockedSecret}`, "PUT", { value: "x" }, KV);
+  check("publicNetworkAccess=Disabled blocks the Key Vault Secrets wire", putBlocked.status === 403, `HTTP ${putBlocked.status}`);
+  const putBlockedNoVault = await kvWire(`/secrets/${blockedSecret}`, "PUT", { value: "x" });
+  check("the SAME call with no vault signal is unaffected (direct SDK, unmodelled)", putBlockedNoVault.status === 200, `HTTP ${putBlockedNoVault.status}`);
+  await arm("PATCH", `/resourceGroups/${RG}/providers/Microsoft.KeyVault/vaults/${KV}`,
+    { properties: { publicNetworkAccess: "Enabled" } });
+  const putUnblocked = await kvWire(`/secrets/${blockedSecret}`, "PUT", { value: "x" }, KV);
+  check("re-enabling publicNetworkAccess unblocks the same vault", putUnblocked.status === 200, `HTTP ${putUnblocked.status}`);
+
+  // ── Activity log Timespan picker really narrows the query (eventTimestamp ge, ENFORCED) ──
+  await openPanel("Activity log");
+  await page.getByText("Microsoft.KeyVault/vaults/write").first().waitFor({ timeout: 10000 });
+  await page.getByLabel("Timespan", { exact: true }).selectOption("1h");
+  await page.getByText("Microsoft.KeyVault/vaults/write").first().waitFor({ timeout: 10000 });
+  check("UI Activity log timespan picker narrows the query without losing this vault's own recent events", true);
 
   // ── Lock created in the UI → visible over the native ARM wire (and the reverse) ────────
   await openPanel("Locks");

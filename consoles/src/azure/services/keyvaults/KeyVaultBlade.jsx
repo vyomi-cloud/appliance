@@ -57,6 +57,9 @@ export default function KeyVaultBlade({ params, query }) {
   const vault = useAsync(() => api.getVault(rg, name), [rg, name]);
   const self = `#/keyvaults/${encodeURIComponent(rg)}/${encodeURIComponent(name)}`;
   useEffect(() => { if (vault.data) remember({ name, type: "Key vault", href: self }); }, [!!vault.data, self]);
+  // Keys/Secrets/Certificates calls carry this vault's name on the wire (see api.js `kv()`)
+  // so the Networking blade's publicNetworkAccess/networkAcls can be enforced per vault.
+  useEffect(() => { api.setActiveVault(name); return () => api.setActiveVault(""); }, [name]);
 
   let body;
   if (vault.loading && !vault.data) body = <Loading />;
@@ -969,8 +972,15 @@ const ACTIVITY_LOG_COLUMNS = [
 ];
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this vault) ──
+const TIMESPANS = [["1h", "Last hour"], ["24h", "Last 24 hours"], ["7d", "Last 7 days"], ["30d", "Last 30 days"], ["90d", "Last 90 days"]];
+const timespanSinceIso = (code) => {
+  const ms = { "1h": 36e5, "24h": 24 * 36e5, "7d": 7 * 24 * 36e5, "30d": 30 * 24 * 36e5, "90d": 90 * 24 * 36e5 }[code] || 90 * 24 * 36e5;
+  return new Date(Date.now() - ms).toISOString();
+};
+
 function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
+  const [timespan, setTimespan] = useState("90d");
+  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name, timespanSinceIso(timespan)), [a.id, timespan]);
   const [gap, setGap] = useState(null);
   const rows = data || [];
   return (
@@ -986,7 +996,12 @@ function ActivityLog({ a }) {
         <ToolbarButton onClick={() => setGap("Reset filters")}>Reset filters</ToolbarButton>
       </>}>
       <ErrorBar error={error} />
-      <NotSimulated feature="Severity/category filtering and the Timespan picker" note="This list always shows everything recorded since the simulation booted." />
+      <Field label="Timespan" style={{ maxWidth: 220, marginBottom: 8 }}>
+        <Select value={timespan} onChange={(_, d) => setTimespan(d.value)} aria-label="Timespan">
+          {TIMESPANS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </Select>
+      </Field>
+      <NotSimulated feature="Severity/category filtering" note="Every recorded event is Informational/Administrative, so there is nothing for that filter to narrow; only mutations made since the simulation booted are recorded (no historical backfill)." />
       <table className="vy-grid">
         <thead><tr>{ACTIVITY_LOG_COLUMNS.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
         <tbody>
