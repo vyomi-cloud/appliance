@@ -1,6 +1,6 @@
 /* Key detail: Versions (lifecycle: create/make-primary/enable/disable/destroy/restore),
- * Overview (read-only settings) and Permissions (IAM policy on the key — config_only:
- * Vyomi stores and returns it, but never enforces it on a KMS call). */
+ * Overview (read-only settings) and Permissions (a real, enforced IAM policy on the key —
+ * grant a role and the native wire actually denies/allows Encrypt/Decrypt/setIamPolicy by it). */
 import { useState } from "react";
 import {
   Box, Breadcrumbs, Button, Chip, FormControl, IconButton, InputLabel, Menu, MenuItem, Select, Stack, Tab, Tabs, TextField, Typography,

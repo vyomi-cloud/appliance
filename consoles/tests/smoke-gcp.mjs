@@ -1081,16 +1081,31 @@ try {
   check("edit rotation period via UI → cryptoKeys.get shows new period", true);
   await shot("20-kms-overview");
 
-  // Permissions: grant access via UI → native getIamPolicy shows the binding
+  // Permissions: grant access via UI → native getIamPolicy shows the binding. KMS DEPTH:
+  // unlike the store-only policy before this wave, the binding is now ENFORCED — prove the
+  // native wire actually denies an ungranted principal and allows the granted one on :encrypt.
   await page.getByRole("tab", { name: "Permissions" }).click();
   await page.getByRole("button", { name: "Grant access" }).click();
-  await page.getByLabel("New principals").fill("user:dev@example.com");
+  await page.getByLabel("New principals").fill("user:kms-smoke@example.com");
   await page.getByRole("button", { name: "Save" }).click();
-  await page.getByText("user:dev@example.com").waitFor({ timeout: 10000 });
+  await page.getByText("user:kms-smoke@example.com").waitFor({ timeout: 10000 });
   const kmsPol = await wjson(`/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}:getIamPolicy`);
   check("grant access via UI → getIamPolicy shows binding",
-    (kmsPol.bindings || []).some((b) => b.role === "roles/cloudkms.cryptoKeyEncrypterDecrypter" && b.members.includes("user:dev@example.com")));
+    (kmsPol.bindings || []).some((b) => b.role === "roles/cloudkms.cryptoKeyEncrypterDecrypter" && b.members.includes("user:kms-smoke@example.com")));
   await shot("21-kms-permissions");
+
+  const kmsEncPath = `/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}:encrypt`;
+  const kmsDeniedResp = await wire(kmsEncPath, {
+    method: "POST", headers: { "content-type": "application/json", "X-Cloudlearn-Principal": "someone-else@example.com" },
+    body: JSON.stringify({ plaintext: Buffer.from("smoke-secret").toString("base64") }),
+  });
+  const kmsAllowedResp = await wire(kmsEncPath, {
+    method: "POST", headers: { "content-type": "application/json", "X-Cloudlearn-Principal": "kms-smoke@example.com" },
+    body: JSON.stringify({ plaintext: Buffer.from("smoke-secret").toString("base64") }),
+  });
+  check("grant access via UI → native wire denies an ungranted principal on :encrypt", kmsDeniedResp.status === 403);
+  check("grant access via UI → native wire allows the granted principal on :encrypt", kmsAllowedResp.status === 200);
+
   // Secret Manager: create a secret (with an initial value) via the UI → visible over the
   // native wire; add a version from the detail page; a version added over the wire shows up
   // in the UI; delete from the list → gone over the native wire.

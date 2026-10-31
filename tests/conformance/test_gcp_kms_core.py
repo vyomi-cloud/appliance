@@ -222,6 +222,57 @@ def run() -> int:
     pol1 = gkms.dispatch(st, "GET", f"{KEY}:getIamPolicy", {}, {}, b"")
     _check("getIamPolicy round-trips the binding", _jbody(pol1)["bindings"][0]["members"] == ["user:dev@example.com"])
 
+    # 9b. permissions enforcement (v4 DEPTH): unlike the store-only policy above, the binding
+    #     just set actually gates :encrypt / :decrypt / :setIamPolicy by the caller's role.
+    denied_enc = gkms.dispatch(st, "POST", f"{KEY}:encrypt", {},
+                               {"content-type": "application/json", "X-Cloudlearn-Principal": "bob@example.com"},
+                               json.dumps({"plaintext": base64.b64encode(b"z").decode()}).encode())
+    _check("encrypt denied for ungranted principal -> 403", denied_enc.status == 403 and
+           _jbody(denied_enc)["error"]["status"] == "PERMISSION_DENIED")
+    allowed_enc = gkms.dispatch(st, "POST", f"{KEY}:encrypt", {},
+                                {"content-type": "application/json", "X-Cloudlearn-Principal": "dev@example.com"},
+                                json.dumps({"plaintext": base64.b64encode(b"z").decode()}).encode())
+    _check("encrypt allowed for principal granted cryptoKeyEncrypterDecrypter", allowed_enc.status == 200)
+    owner_enc = gkms.dispatch(st, "POST", f"{KEY}:encrypt", {}, {"content-type": "application/json"},
+                              json.dumps({"plaintext": base64.b64encode(b"z").decode()}).encode())
+    _check("encrypt allowed with no principal header (owner bypass)", owner_enc.status == 200)
+
+    denied_dec = gkms.dispatch(st, "POST", f"{KEY}:decrypt", {},
+                               {"content-type": "application/json", "X-Cloudlearn-Principal": "bob@example.com"},
+                               json.dumps({"ciphertext": _jbody(allowed_enc)["ciphertext"]}).encode())
+    _check("decrypt denied for ungranted principal -> 403", denied_dec.status == 403)
+    allowed_dec = gkms.dispatch(st, "POST", f"{KEY}:decrypt", {},
+                                {"content-type": "application/json", "X-Cloudlearn-Principal": "dev@example.com"},
+                                json.dumps({"ciphertext": _jbody(allowed_enc)["ciphertext"]}).encode())
+    _check("decrypt allowed for principal granted cryptoKeyEncrypterDecrypter",
+           allowed_dec.status == 200 and base64.b64decode(_jbody(allowed_dec)["plaintext"]) == b"z")
+
+    denied_setpol = gkms.dispatch(st, "POST", f"{KEY}:setIamPolicy", {},
+                                  {"content-type": "application/json", "X-Cloudlearn-Principal": "bob@example.com"},
+                                  json.dumps({"policy": {"bindings": [
+                                      {"role": "roles/cloudkms.cryptoKeyEncrypterDecrypter", "members": ["user:dev@example.com"]},
+                                  ]}}).encode())
+    _check("setIamPolicy denied for a principal without cloudkms.admin -> 403", denied_setpol.status == 403)
+
+    grant_admin = gkms.dispatch(st, "POST", f"{KEY}:setIamPolicy", {}, {"content-type": "application/json"},
+                                json.dumps({"policy": {"bindings": [
+                                    {"role": "roles/cloudkms.admin", "members": ["user:kms-admin@example.com"]},
+                                    {"role": "roles/cloudkms.cryptoKeyEncrypterDecrypter", "members": ["user:dev@example.com"]},
+                                ]}}).encode())
+    _check("owner (no principal header) grants cloudkms.admin", grant_admin.status == 200)
+
+    admin_setpol = gkms.dispatch(st, "POST", f"{KEY}:setIamPolicy", {},
+                                 {"content-type": "application/json", "X-Cloudlearn-Principal": "kms-admin@example.com"},
+                                 json.dumps({"policy": {"bindings": [
+                                     {"role": "roles/cloudkms.admin", "members": ["user:kms-admin@example.com"]},
+                                 ]}}).encode())
+    _check("setIamPolicy allowed for a principal granted cloudkms.admin", admin_setpol.status == 200)
+
+    bad_members = gkms.dispatch(st, "POST", f"{KEY}:setIamPolicy", {}, {"content-type": "application/json"},
+                                json.dumps({"policy": {"bindings": [{"role": "roles/cloudkms.admin", "members": []}]}}).encode())
+    _check("setIamPolicy rejects a binding with empty members -> 400", bad_members.status == 400 and
+           _jbody(bad_members)["error"]["status"] == "INVALID_ARGUMENT")
+
     # 10. project-wide aggregated listing (locations/-/keyRings/-) — the "Key inventory" page.
     agg = gkms.dispatch(st, "GET", "/v1/projects/demo/locations/-/keyRings/-/cryptoKeys", {}, {}, b"")
     _check("aggregated cryptoKeys list 200", agg.status == 200)

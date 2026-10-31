@@ -50,11 +50,11 @@
  "gcp.kms.key.permissions": {
   "title": "Permissions (IAM policy on a key)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "getIamPolicy/setIamPolicy store and return the policy exactly as written, but Vyomi does not evaluate it — it never denies or allows a KMS call based on policy content."
+   "setIamPolicy, :encrypt and :decrypt are enforced against the policy's bindings (an ungranted caller gets PERMISSION_DENIED; a caller with the matching predefined role — cryptoKeyEncrypterDecrypter/Encrypter/Decrypter/Viewer/admin — is let through). getIamPolicy and the key/version CRUD calls stay open to any caller, and conditions, custom roles, and org-policy constraints are not evaluated."
   ],
   "tests": [
    "tests/conformance/test_gcp_kms_core.py"
