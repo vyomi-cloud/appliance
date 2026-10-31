@@ -5,6 +5,9 @@ an alarm can evaluate against — see ec2.instances.monitoring / ec2.instances.a
 
     PYTHONPATH=. python3 -m pytest -q tests/conformance/test_ec2_offline_monitoring.py
 """
+import sys
+
+import pytest
 from __future__ import annotations
 
 import json
@@ -74,6 +77,8 @@ def test_monitor_instances_flips_and_persists_offline():
     assert server.ec2_state["instances"][iid]["monitoring"] is False
 
 
+@pytest.mark.skipif(sys.platform != "linux",
+                    reason="offline RunInstances launches a real instance (Docker compute), which the appliance supports on Linux hosts only")
 def test_run_instances_honors_monitoring_enabled_param_offline():
     st, body = ec2("RunInstances", InstanceType="t3.micro", MaxCount="1",
                     **{"Monitoring.Enabled": "true"})
