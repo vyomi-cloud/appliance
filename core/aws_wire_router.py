@@ -134,6 +134,17 @@ from core import azure_dns_core as az_dns
 import types as _types
 
 
+# The offline appliance serves Azure Storage per account at /azure-data/{blob|queue}/{account}
+# (core/azure_dataplane.py); Nano has one Azurite-style account. Accept the offline form too,
+# so one connection string works on both.
+_AZ_DATA_ALIAS = re.compile(r"^/azure-data/(?:blob|queue)/[^/?]+")
+
+
+def _azure_data_alias(path):
+    m = _AZ_DATA_ALIAS.match(path or "")
+    return "/devstoreaccount1" + path[m.end():] if m else path
+
+
 def _azure_service(path, lheaders, query):
     """Route an Azure data-plane request. Azure carries no SigV4; we read the
     x-ms-* headers, the ?api-version / ?restype / ?comp query, and the path
@@ -585,6 +596,7 @@ class AwsWireRouter:
     def handle(self, method, path, query, headers, body):
         """Route ONE native-wire request. Returns {status, headers, body(bytes)}.
         SYNC services only — the RDS Data API goes through ahandle()."""
+        path = _azure_data_alias(path)
         lheaders = _lower_headers(headers)
         body = body if isinstance(body, (bytes, bytearray)) else (body or b"")
         if isinstance(body, str):
