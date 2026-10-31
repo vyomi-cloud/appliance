@@ -795,6 +795,10 @@
     #app-main { flex: 1; min-width: 0; }
     /* Menu toggle: a hamburger when collapsed. Small screens: no icon rail — the menu is a
        drawer opened by the hamburger, over a dimmed page (tap outside / Esc / pick closes). */
+    @media (min-width: 769px) {
+      #app-sidebar { position: sticky; top: 0; align-self: flex-start; min-height: 0; height: var(--side-h, calc(100vh - 104px)); }
+      #app-sidebar .side-nav { overflow-y: auto; }
+    }
     #side-burger, #side-scrim { display: none; }
     @media (max-width: 768px) {
       #app-sidebar {
@@ -2055,6 +2059,24 @@
     }
     window.addEventListener('scroll', function () { if (document.body.classList.contains('side-open')) _placeSideDrawer(); }, { passive: true });
     window.addEventListener('resize', function () { if (document.body.classList.contains('side-open')) _placeSideDrawer(); });
+    // Desktop: the menu is sticky and exactly as tall as the visible window below the logo
+    // bar, so its account menu / Sign out stays on screen in every view, however long.
+    function _sizeSideMenu() {
+      var ab = document.getElementById('app-body');
+      var r = ab ? ab.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+      var h = Math.min(window.innerHeight, r.bottom) - Math.max(0, r.top);
+      document.body.style.setProperty('--side-h', Math.round(Math.max(240, h)) + 'px');
+    }
+    window.addEventListener('scroll', _sizeSideMenu, { passive: true });
+    window.addEventListener('resize', _sizeSideMenu);
+    document.addEventListener('DOMContentLoaded', function () {
+      _sizeSideMenu();
+      var ab = document.getElementById('app-body');   // view switches change its height without a scroll
+      if (window.ResizeObserver) {                      // …and banners above it move it without one
+        var ro = new ResizeObserver(_sizeSideMenu);
+        [ab, document.getElementById('app-topbar'), document.body].forEach(function (n) { if (n) ro.observe(n); });
+      }
+    });
     function closeSideDrawer() {
       document.body.classList.remove('side-open');
       var bb = document.getElementById('side-burger'); if (bb) bb.setAttribute('aria-expanded', 'false');
