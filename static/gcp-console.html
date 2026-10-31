@@ -105,7 +105,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
      PAGE LAYOUT — left rail (collapsible) + main content
      ============================================================ */
   .body{display:flex;min-height:calc(100vh - 56px)}  /* matches header height */
-  aside#rail{width:256px;background:#fff;border-right:1px solid var(--line);overflow-y:auto;transition:width .15s;flex-shrink:0}
+  aside#rail{width:256px;background:#fff;border-right:1px solid var(--line);overflow-y:auto;flex-shrink:0}
+  aside#rail.anim{transition:width .15s}   /* only when the user toggles it — no animation on load */
   /* Minimized: an icon-only strip, as the Google Cloud console does — labels hide, group
      names become thin dividers, each icon names its product on hover. */
   aside#rail.collapsed{width:56px;overflow-x:hidden}
@@ -421,6 +422,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 <!-- ==================== PAGE BODY ==================== -->
 <div class="body">
   <aside id="rail"></aside>
+  <script>try { if (localStorage.getItem("vyomi.gcp.railcollapsed") === "1") document.getElementById("rail").classList.add("collapsed"); } catch (_) {}</script>
   <main id="main"><div class="empty">Loading…</div></main>
 </div>
 
@@ -555,10 +557,11 @@ async function boot(){
 
 function wireHeader(){
   document.getElementById("hambBtn").addEventListener("click", () => {
-    const c = document.getElementById("rail").classList.toggle("collapsed");
+    const rail = document.getElementById("rail");
+    rail.classList.add("anim");
+    const c = rail.classList.toggle("collapsed");
     try { localStorage.setItem("vyomi.gcp.railcollapsed", c ? "1" : "0"); } catch (_) {}
   });
-  try { if (localStorage.getItem("vyomi.gcp.railcollapsed") === "1") document.getElementById("rail").classList.add("collapsed"); } catch (_) {}
   document.getElementById("cloudShellBtn").addEventListener("click", () =>
     toast("Cloud Shell drawer is wired in GCP-E (planned). Use /api/gcp/compute/...:console endpoints for now.", "ok"));
   document.getElementById("notifBtn").addEventListener("click", e => {
