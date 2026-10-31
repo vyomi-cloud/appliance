@@ -140,7 +140,18 @@ def appliance_stores() -> dict:
             "az_acr": aps.acr_store(), "az_sb": aps.az_servicebus_store(),
             "gcp_msg": aps.gcp_pubsub_store(), "az_graph": aps.graph_store(),
             "az_cosmos": aps.cosmos_store(), "iam": aps.iam_store(), "az_table": aps.table_store(),
-            **_gcp_logging_store()}
+            **_gcp_logging_store(), **_azure_arm_store()}
+
+
+def _azure_arm_store() -> dict:
+    """The offline ARM engine (providers/azure_services.core_arm — the appliance's real ARM
+    state), so data planes that read ARM config (Key Vault networking, Blob CORS/lifecycle,
+    APIM Key Vault named values) see the vault/account the console configured."""
+    try:
+        from providers.azure_services import core_arm
+        return {"az_arm": core_arm()}
+    except Exception:
+        return {}
 
 
 def _gcp_logging_store() -> dict:
@@ -164,7 +175,7 @@ STORE_SERVICE = {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb", "az_blob": "azure_
                  "az_kvcerts": "azure_keyvault", "az_acr": "azure_acr", "az_sb": "azure_servicebus",
                  "gcp_msg": "gcp_pubsub", "az_graph": "azure_graph", "az_cosmos": "azure_cosmos",
                  "iam": "iam", "az_table": "azure_table",
-                 "gcp_logging": "gcp_secrets"}   # Secret Manager writes its audit entries here
+                 "gcp_logging": "gcp_secrets", "az_arm": "azure_keyvault"}   # Secret Manager writes its audit entries here
 
 
 def appliance_router() -> AwsWireRouter:
