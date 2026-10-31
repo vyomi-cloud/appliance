@@ -723,10 +723,21 @@
     }
     #spaces-card > .sc-head > .btn-create-space { margin-bottom: 10px; }
     /* Filter pills sit in the header row (right); Create Space sits right above the cards. */
-    #spaces-card > .sc-head > .prov-filter { margin: 0 0 10px; }
+    /* Cloud filter: a dropdown next to Create Space. */
+    #spaces-card .prov-select-wrap { position: relative; display: inline-flex; align-items: center; }
+    #spaces-card .prov-select-wrap .material-icons { position: absolute; left: 11px; font-size: 17px; color: #a1a1aa; pointer-events: none; }
+    #spaces-card #prov-select {
+      appearance: none; -webkit-appearance: none; height: 39px; padding: 0 36px 0 36px;   /* = Create Space */ border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.14); color: #e4e4e7; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+      background: rgba(255,255,255,0.05) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 11px center / 15px;
+    }
+    #spaces-card #prov-select:hover { border-color: rgba(96,165,250,0.55); }
+    #spaces-card #prov-select:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+    #spaces-card #prov-select option { background: #0f121c; color: #e4e4e7; }
     #spaces-card .sc-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 14px 0 18px; }
     #spaces-card .sc-actions .sc-desc { margin: 0; }
     #spaces-card .sc-actions-btns { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+    #spaces-card > .sc-head > .sc-actions-btns { margin-bottom: 10px; }   /* header row, right, above the baseline */
     /* Restored section description, below the tab baseline. */
     .sc-desc { margin: 14px 0 18px; font-size: 13px; color: #5f6b7a; }
 
@@ -1286,34 +1297,26 @@
         <div class="sc-title">
           <h2><span class="material-icons">workspaces</span>Active spaces</h2>
         </div>
-        <div class="prov-filter" id="prov-filter">
-        <button class="active" type="button" data-prov="" onclick="onSpaceFilter('')">
-          All <span class="pf-count" id="pf-count-all">0</span>
-        </button>
-        <button type="button" data-prov="aws" onclick="onSpaceFilter('aws')">
-          <span class="pf-glyph"><svg viewBox="0 0 24 24"><path d="M12 2L4 6v6c0 4.5 3.4 8.7 8 10 4.6-1.3 8-5.5 8-10V6l-8-4z" fill="#ff9900"/><path d="M12 6.5L8 8.5v3.4c0 2.3 1.7 4.4 4 5 2.3-.6 4-2.7 4-5V8.5l-4-2z" fill="#ec7211"/></svg></span>
-          AWS <span class="pf-count" id="pf-count-aws">0</span>
-        </button>
-        <button type="button" data-prov="gcp" onclick="onSpaceFilter('gcp')">
-          <span class="pf-glyph"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="2.4" fill="#fbbc04"/><circle cx="17" cy="12" r="2.4" fill="#34a853"/><circle cx="12" cy="17" r="2.4" fill="#ea4335"/><circle cx="7" cy="12" r="2.4" fill="#4285f4"/></svg></span>
-          GCP <span class="pf-count" id="pf-count-gcp">0</span>
-        </button>
-        <button type="button" data-prov="azure" onclick="onSpaceFilter('azure')">
-          <span class="pf-glyph"><svg viewBox="0 0 24 24"><path d="M11.5 3 4 19.5h6.2l3.2-9.5L11.5 3z" fill="#50e6ff"/><path d="M13 7.2 10.4 14h5l.4 2-4.5 2H20l-7-10.8z" fill="#0078d4"/></svg></span>
-          Azure <span class="pf-count" id="pf-count-azure">0</span>
-        </button>
-      </div>
-      </div>
-      <!-- Description + actions, right above the space cards -->
-      <div class="sc-actions">
-        <p class="sc-desc">Click any space to switch context and open its console. Filter by cloud with the pills above.</p>
         <div class="sc-actions-btns">
+          <label class="prov-select-wrap" title="Filter spaces by cloud">
+            <span class="material-icons">filter_list</span>
+            <select id="prov-select" aria-label="Filter spaces by cloud" onchange="onSpaceFilter(this.value)">
+              <option value="" data-label="All clouds">All clouds (0)</option>
+              <option value="aws" data-label="AWS">AWS (0)</option>
+              <option value="gcp" data-label="GCP">GCP (0)</option>
+              <option value="azure" data-label="Azure">Azure (0)</option>
+            </select>
+          </label>
+          <!-- the per-cloud counts (read by the save chip); shown through the options above -->
+          <span id="prov-filter" hidden><span id="pf-count-all">0</span><span id="pf-count-aws">0</span><span id="pf-count-gcp">0</span><span id="pf-count-azure">0</span></span>
           <button class="save-chip" id="save-chip" type="button" title="Activate the appliance to keep your workspace" style="display:none"><span class="material-icons">bookmark_add</span>Activate to save</button>
         <button class="btn-create-space" type="button" onclick="openCreateSpaceModal()">
           <span class="material-icons">add</span>Create Space
         </button>
         </div>
       </div>
+      <!-- Description + actions, right above the space cards -->
+      <p class="sc-desc">Click any space to switch context and open its console.</p>
       <div id="spaces-grid" class="spaces-grid" data-filter="">
         <div class="empty-spaces">Loading spaces…</div>
       </div>
@@ -2200,6 +2203,8 @@
       const grid = document.getElementById('spaces-grid');
       if (!grid) return;
       grid.setAttribute('data-filter', prov || '');
+      const sel = document.getElementById('prov-select');
+      if (sel && sel.value !== (prov || '')) sel.value = prov || '';
       document.querySelectorAll('#prov-filter button').forEach(btn => {
         const p = btn.getAttribute('data-prov') || '';
         btn.classList.remove('active','aws','gcp','azure');
@@ -2569,6 +2574,9 @@
         setCount('pf-count-aws',  counts.aws);
         setCount('pf-count-gcp',  counts.gcp);
         setCount('pf-count-azure',counts.azure);
+        document.querySelectorAll('#prov-select option').forEach(o => {
+          o.textContent = o.dataset.label + ' (' + (counts[o.value || 'total'] || 0) + ')';
+        });
         // Refresh the license FIRST (needs SW control, which the parse-time call
         // may have missed), then update the chip + decide on the modal.
         _lastSpaceCount = counts.total;
