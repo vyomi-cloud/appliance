@@ -67,11 +67,23 @@ export const putLock = (rg, name, lockName, body) => restJson("PUT", lockPath(rg
 export const deleteLock = (rg, name, lockName) => restJson("DELETE", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION } });
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, filtered to this VM) ──
-export const listActivityLog = async (rg, name) => {
+/** sinceIso: ISO timestamp lower bound (the timespan picker) — ENFORCED, narrows the result. */
+export const listActivityLog = async (rg, name, sinceIso) => {
   const rid = ARM.path(rg, name);
-  const query = { "api-version": "2015-04-01", "$filter": `resourceUri eq '${rid}'` };
+  const filter = `resourceUri eq '${rid}'` + (sinceIso ? ` and eventTimestamp ge '${sinceIso}'` : "");
+  const query = { "api-version": "2015-04-01", "$filter": filter };
   return (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/eventtypes/management/values`, { query })).value || [];
 };
+
+// ── Access control (IAM): role assignments scoped to THIS virtual machine (plus its
+// subscription/resource-group ancestors, real Azure's "inherited access" view) read over the
+// same generic Microsoft.Authorization/roleAssignments extension-resource engine the Cosmos DB
+// account blade uses — GET-only; assignments are still created at the subscription scope. ──
+const AUTHZ_API_VERSION = "2022-04-01";
+export const listRoleAssignments = async (rg, name) =>
+  (await restJson("GET", `${ARM.path(rg, name)}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": AUTHZ_API_VERSION } })).value || [];
+export const listRoleDefinitions = async () =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": AUTHZ_API_VERSION } })).value || [];
 
 // ── Size catalog: real ARM Microsoft.Compute/locations/{location}/vmSizes (subscription +
 // location scoped) and .../virtualMachines/{vm}/vmSizes (resource-scoped, for an existing
