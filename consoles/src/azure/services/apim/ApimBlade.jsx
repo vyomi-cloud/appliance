@@ -227,10 +227,7 @@ function Properties({ a }) {
 
 // ── Access control (IAM) ──────────────────────────────────────────────────────────────
 function AccessControlIam({ a }) {
-  return (
-    <CapabilityContainer id="azure.apim.iam" title={`${a.name} | Access control (IAM)`}
-      note="Tabs: Check access, Role assignments, Roles, Deny assignments, Classic administrators. My access and Check access actions (View my access) live on the Check access tab." />
-  );
+  return <CapabilityContainer id="azure.apim.iam" title={`${a.name} | Access control (IAM)`} />;
 }
 
 // ── Tags ───────────────────────────────────────────────────────────────────────────────

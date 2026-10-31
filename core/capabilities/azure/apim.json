@@ -95,7 +95,9 @@
  "azure.apim.iam": {
   "title": "Access control (IAM) on a service",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Role assignments scoped to an individual resource are not modeled."]
+  "limitations": [
+   "Role assignments scoped to an individual resource are not modeled: the Check access (My access, View my access, Check access), Role assignments, Roles, Deny assignments and Classic administrators tabs show no backend-driven data."
+  ]
  },
  "azure.apim.developerportal": {
   "title": "Developer portal (overview, settings, Users, Groups, Identities, Delegation)",
