@@ -21,12 +21,15 @@ function CreateDialog({ open, onClose, onCreated }) {
   const [touched, setTouched] = useState(false);
   const [machineTypes, setMachineTypes] = useState([]);
   const [machineType, setMachineType] = useState("e2-medium");
+  const [osIdx, setOsIdx] = useState(0);
+  const [diskType, setDiskType] = useState("pd-balanced");
+  const [diskSize, setDiskSize] = useState(10);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!open) return;
-    setName(""); setTouched(false); setError(null); setMachineType("e2-medium");
+    setName(""); setTouched(false); setError(null); setMachineType("e2-medium"); setOsIdx(0); setDiskType("pd-balanced"); setDiskSize(10);
     api.listMachineTypes(api.DEFAULT_ZONE).then(setMachineTypes).catch(() => setMachineTypes([]));
   }, [open]);
 
@@ -36,8 +39,16 @@ function CreateDialog({ open, onClose, onCreated }) {
     setTouched(true);
     if (api.validResourceName(name)) return;
     setBusy(true); setError(null);
+    const [osProject, osFamily] = api.OS_IMAGES[osIdx];
     try {
-      await api.insertInstanceTemplate({ name, properties: { machineType } });
+      await api.insertInstanceTemplate({
+        name,
+        properties: {
+          machineType,
+          disks: [{ boot: true, autoDelete: true, initializeParams: { sourceImage: api.osImageSource(osProject, osFamily), diskType, diskSizeGb: Number(diskSize) } }],
+          networkInterfaces: [{}],
+        },
+      });
       notify.success(`Created instance template "${name}"`);
       onCreated();
       onClose();
@@ -59,6 +70,21 @@ function CreateDialog({ open, onClose, onCreated }) {
               {machineTypes.map((m) => <MenuItem key={m.name} value={m.name}>{m.name} ({m.guestCpus} vCPU, {Math.round(m.memoryMb / 1024)} GB memory)</MenuItem>)}
             </Select>
           </FormControl>
+          <FormControl fullWidth>
+            <InputLabel id="it-os-l">Boot disk — Operating system</InputLabel>
+            <Select labelId="it-os-l" label="Boot disk — Operating system" value={osIdx} onChange={(e) => setOsIdx(e.target.value)}>
+              {api.OS_IMAGES.map(([, , , label], i) => <MenuItem key={i} value={i}>{label}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <Stack direction="row" spacing={2}>
+            <FormControl fullWidth>
+              <InputLabel id="it-dt-l">Boot disk type</InputLabel>
+              <Select labelId="it-dt-l" label="Boot disk type" value={diskType} onChange={(e) => setDiskType(e.target.value)}>
+                {api.DISK_TYPES.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+              </Select>
+            </FormControl>
+            <TextField fullWidth label="Boot disk size (GB)" type="number" value={diskSize} onChange={(e) => setDiskSize(e.target.value)} inputProps={{ min: 10 }} />
+          </Stack>
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>

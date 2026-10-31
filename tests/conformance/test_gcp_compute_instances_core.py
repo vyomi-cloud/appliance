@@ -39,9 +39,9 @@ ZONE = "us-central1-a"
 BASE = "/compute/v1/projects/%s" % PROJECT
 
 
-def _call(store, method, path, body=None):
+def _call(store, method, path, body=None, query=None):
     b = json.dumps(body).encode() if body is not None else b""
-    return gce.dispatch(store, method, BASE + path, {}, {"content-type": "application/json"}, b)
+    return gce.dispatch(store, method, BASE + path, query or {}, {"content-type": "application/json"}, b)
 
 
 def run() -> int:
@@ -173,6 +173,64 @@ def run() -> int:
     _check("removeInstances 200", rem.status == 200)
     glist2 = _jbody(_call(st, "GET", "/zones/%s/instanceGroups" % ZONE))["items"]
     _check("group size back to 0", glist2[0]["size"] == 0)
+
+    # 9b. managed instance group: insert from a template (targetSize creates real instances),
+    # resize up/down (creates/deletes instances), listManagedInstances, delete cascades.
+    mtpl = _call(st, "POST", "/global/instanceTemplates", {
+        "name": "tpl-mig", "properties": {"machineType": "e2-small",
+            "disks": [{"boot": True, "initializeParams": {"sourceImage": "projects/debian-cloud/global/images/family/debian-12", "diskSizeGb": 10}}]},
+    })
+    _check("insert template for MIG 200", mtpl.status == 200)
+
+    bad_mig_tpl = _call(st, "POST", "/zones/%s/instanceGroupManagers" % ZONE, {"name": "mig-bad", "instanceTemplate": "nope", "targetSize": 1})
+    _check("MIG with unknown template -> 400", bad_mig_tpl.status == 400)
+
+    no_disk_tpl = _call(st, "POST", "/global/instanceTemplates", {"name": "tpl-no-disk", "properties": {"machineType": "e2-small"}})
+    _check("insert template without disk 200", no_disk_tpl.status == 200)
+    bad_mig_disk = _call(st, "POST", "/zones/%s/instanceGroupManagers" % ZONE, {"name": "mig-bad2", "instanceTemplate": "tpl-no-disk", "targetSize": 1})
+    _check("MIG from diskless template -> 400", bad_mig_disk.status == 400)
+
+    mig = _call(st, "POST", "/zones/%s/instanceGroupManagers" % ZONE, {
+        "name": "mig-1", "baseInstanceName": "mig-1", "instanceTemplate": "tpl-mig", "targetSize": 2,
+    })
+    _check("insert MIG 200", mig.status == 200)
+    migv = _jbody(_call(st, "GET", "/zones/%s/instanceGroupManagers/mig-1" % ZONE))
+    _check("MIG targetSize reflects create-time size", migv["targetSize"] == 2)
+    _check("MIG instanceTemplate link", migv["instanceTemplate"].endswith("/instanceTemplates/tpl-mig"))
+
+    agg_inst = _jbody(_call(st, "GET", "/aggregated/instances"))
+    mig_members = [i for z in agg_inst["items"].values() for i in z.get("instances", []) if i["name"].startswith("mig-1-")]
+    _check("MIG created 2 real instances from the template", len(mig_members) == 2)
+    _check("MIG member uses template's machine type", all(m["machineType"].endswith("/machineTypes/e2-small") for m in mig_members))
+
+    lmi = _jbody(_call(st, "POST", "/zones/%s/instanceGroupManagers/mig-1:listManagedInstances" % ZONE))
+    _check("listManagedInstances returns 2 members", len(lmi["items"]) == 2)
+    _check("listManagedInstances reports RUNNING", all(m["instanceStatus"] == "RUNNING" for m in lmi["items"]))
+
+    dup_mig = _call(st, "POST", "/zones/%s/instanceGroupManagers" % ZONE, {"name": "mig-1", "instanceTemplate": "tpl-mig"})
+    _check("duplicate MIG name -> 409", dup_mig.status == 409)
+
+    resize_up = _call(st, "POST", "/zones/%s/instanceGroupManagers/mig-1:resize" % ZONE, query={"size": "4"})
+    _check("resize up 200", resize_up.status == 200)
+    migv2 = _jbody(_call(st, "GET", "/zones/%s/instanceGroupManagers/mig-1" % ZONE))
+    _check("resize up to 4", migv2["targetSize"] == 4)
+    agg_inst2 = _jbody(_call(st, "GET", "/aggregated/instances"))
+    _check("resize up created more instances", sum(1 for z in agg_inst2["items"].values() for i in z.get("instances", []) if i["name"].startswith("mig-1-")) == 4)
+
+    resize_down = _call(st, "POST", "/zones/%s/instanceGroupManagers/mig-1:resize" % ZONE, query={"size": "1"})
+    _check("resize down 200", resize_down.status == 200)
+    agg_inst3 = _jbody(_call(st, "GET", "/aggregated/instances"))
+    _check("resize down deleted instances", sum(1 for z in agg_inst3["items"].values() for i in z.get("instances", []) if i["name"].startswith("mig-1-")) == 1)
+
+    unmanaged_list = _jbody(_call(st, "GET", "/zones/%s/instanceGroups" % ZONE))["items"]
+    _check("MIG's backing group is excluded from the unmanaged list", not any(g["name"] == "mig-1" for g in unmanaged_list))
+
+    del_mig = _call(st, "DELETE", "/zones/%s/instanceGroupManagers/mig-1" % ZONE)
+    _check("delete MIG 200", del_mig.status == 200)
+    agg_inst4 = _jbody(_call(st, "GET", "/aggregated/instances"))
+    _check("deleting MIG deletes its member instances", not any(i["name"].startswith("mig-1-") for z in agg_inst4["items"].values() for i in z.get("instances", [])))
+    missing_mig = _call(st, "GET", "/zones/%s/instanceGroupManagers/mig-1" % ZONE)
+    _check("deleted MIG -> 404", missing_mig.status == 404)
 
     # 10. health check
     hc = _call(st, "POST", "/global/healthChecks", {"name": "hc-1", "type": "HTTP", "httpHealthCheck": {"port": 8080, "requestPath": "/healthz"}})
