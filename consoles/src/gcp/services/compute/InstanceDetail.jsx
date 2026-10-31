@@ -10,6 +10,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { ErrorAlert, KeyValue, NotSimulated, PageHeader, Section, fmtDate } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
 
@@ -129,9 +130,9 @@ export default function InstanceDetail({ params }) {
           </Section>
         </Stack>
       )}
-      {tab === "Observability" && <NotSimulated feature="Observability" note="Per-instance CPU/disk/network metrics and logs aren't modeled." />}
-      {tab === "OS info" && <NotSimulated feature="OS info" note="No guest OS runs behind this instance, so guest attributes/inventory can't be reported." />}
-      {tab === "Screenshot" && <NotSimulated feature="Screenshot" note="No framebuffer exists to capture — there is no guest OS behind this instance." />}
+      {tab === "Observability" && <CapabilityContainer id="gcp.compute.observability" title="Observability" />}
+      {tab === "OS info" && <CapabilityContainer id="gcp.compute.instances.data_plane" title="OS info" />}
+      {tab === "Screenshot" && <CapabilityContainer id="gcp.compute.instances.data_plane" title="Screenshot" />}
 
       <DeleteDialog
         open={del} onClose={() => setDel(false)} title="Delete instance?" confirmText={name}

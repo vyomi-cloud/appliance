@@ -504,6 +504,34 @@ try {
   check("managed group stamped out real instances from the template", migMembers1.length === 2);
   await shot("15-managed-instance-group");
 
+  // Change instance template → "All VM instances now" rolling-replaces every member
+  // (instanceGroupManagers.patch, updatePolicy.type=PROACTIVE): same member count,
+  // every member recreated from the new template over the native wire.
+  const MIG_TPL2 = `v4-gcp-mig-tpl2-${Date.now() % 100000}`;
+  await page.goto(UI + "#/compute/instance-templates");
+  await page.getByRole("button", { name: "Create instance template" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(MIG_TPL2);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("cell", { name: MIG_TPL2, exact: true }).waitFor({ timeout: 10000 });
+
+  await page.goto(UI + "#/compute/instance-groups");
+  const migMembersBefore = migMembers1.map((i) => i.name);
+  await page.getByRole("button", { name: `Actions for ${MIG_NAME}` }).click();
+  await page.getByRole("menuitem", { name: "Change instance template" }).click();
+  await page.getByRole("combobox", { name: "Instance template" }).click();
+  await page.getByRole("option", { name: MIG_TPL2 }).click();
+  await page.getByRole("radio", { name: "All VM instances now (rolling replace)" }).check();
+  await page.getByRole("button", { name: "Update", exact: true }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  const migAgg1b = await wjson("/compute/v1/projects/vyomi-project/aggregated/instanceGroupManagers");
+  const mig1b = Object.values(migAgg1b.items || {}).flatMap((v) => v.instanceGroupManagers || []).find((m) => m.name === MIG_NAME);
+  check("change instance template via UI → instanceGroupManagers.get reflects the new template", !!mig1b?.instanceTemplate.endsWith(`/${MIG_TPL2}`));
+  const instAgg1b = await wjson("/compute/v1/projects/vyomi-project/aggregated/instances");
+  const migMembersRolled = Object.values(instAgg1b.items || {}).flatMap((v) => v.instances || []).filter((i) => i.name.startsWith(`${MIG_NAME}-`));
+  check("rolling replace via UI → member count unchanged over native wire", migMembersRolled.length === 2);
+  check("rolling replace via UI → every member recreated, none of the old names survive",
+    migMembersRolled.every((i) => !migMembersBefore.includes(i.name)));
+
   await page.getByRole("button", { name: `Actions for ${MIG_NAME}` }).click();
   await page.getByRole("menuitem", { name: "Edit group size" }).click();
   await page.getByLabel("Number of instances").fill("1");

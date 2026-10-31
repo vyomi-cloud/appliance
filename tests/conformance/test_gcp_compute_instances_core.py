@@ -222,6 +222,46 @@ def run() -> int:
     agg_inst3 = _jbody(_call(st, "GET", "/aggregated/instances"))
     _check("resize down deleted instances", sum(1 for z in agg_inst3["items"].values() for i in z.get("instances", []) if i["name"].startswith("mig-1-")) == 1)
 
+    # 9c. patch: an OPPORTUNISTIC instanceTemplate swap (the default) only affects members
+    # created afterwards; a PROACTIVE patch rolling-replaces every existing member onto the
+    # new template, honoring updatePolicy maxSurge/maxUnavailable.
+    mtpl2 = _call(st, "POST", "/global/instanceTemplates", {
+        "name": "tpl-mig-2", "properties": {"machineType": "e2-medium",
+            "disks": [{"boot": True, "initializeParams": {"sourceImage": "projects/debian-cloud/global/images/family/debian-12", "diskSizeGb": 10}}]},
+    })
+    _check("insert second template for MIG 200", mtpl2.status == 200)
+
+    before_names = {m["instance"].rsplit("/", 1)[-1] for m in _jbody(_call(st, "POST", "/zones/%s/instanceGroupManagers/mig-1:listManagedInstances" % ZONE))["items"]}
+
+    patch_missing_tpl = _call(st, "PATCH", "/zones/%s/instanceGroupManagers/mig-1" % ZONE, {"instanceTemplate": "nope"})
+    _check("patch with unknown template -> 400", patch_missing_tpl.status == 400)
+
+    patch_opp = _call(st, "PATCH", "/zones/%s/instanceGroupManagers/mig-1" % ZONE, {"instanceTemplate": "tpl-mig-2"})
+    _check("patch (opportunistic) 200", patch_opp.status == 200)
+    migv3 = _jbody(_call(st, "GET", "/zones/%s/instanceGroupManagers/mig-1" % ZONE))
+    _check("patch updates the instanceTemplate pointer", migv3["instanceTemplate"].endswith("/instanceTemplates/tpl-mig-2"))
+    after_opp_names = {m["instance"].rsplit("/", 1)[-1] for m in _jbody(_call(st, "POST", "/zones/%s/instanceGroupManagers/mig-1:listManagedInstances" % ZONE))["items"]}
+    _check("opportunistic patch leaves existing members untouched", after_opp_names == before_names)
+    agg_members_opp = [i for z in _jbody(_call(st, "GET", "/aggregated/instances"))["items"].values() for i in z.get("instances", []) if i["name"] in after_opp_names]
+    _check("opportunistic patch doesn't retroactively change an existing member's machine type", all(m["machineType"].endswith("/machineTypes/e2-small") for m in agg_members_opp))
+
+    resize_after_opp = _call(st, "POST", "/zones/%s/instanceGroupManagers/mig-1:resize" % ZONE, query={"size": "2"})
+    _check("resize after opportunistic patch 200", resize_after_opp.status == 200)
+    mig_members_after_opp = [i for z in _jbody(_call(st, "GET", "/aggregated/instances"))["items"].values() for i in z.get("instances", []) if i["name"].startswith("mig-1-")]
+    new_member = next(m for m in mig_members_after_opp if m["name"] not in before_names)
+    _check("a NEW member created after an opportunistic patch uses the new template", new_member["machineType"].endswith("/machineTypes/e2-medium"))
+
+    patch_proactive = _call(st, "PATCH", "/zones/%s/instanceGroupManagers/mig-1" % ZONE,
+                             {"updatePolicy": {"type": "PROACTIVE", "maxSurge": {"fixed": 1}, "maxUnavailable": {"fixed": 0}}})
+    _check("patch (proactive rolling replace) 200", patch_proactive.status == 200)
+    migv4 = _jbody(_call(st, "GET", "/zones/%s/instanceGroupManagers/mig-1" % ZONE))
+    _check("rolling replace keeps targetSize stable", migv4["targetSize"] == 2)
+    mig_members_after_proactive = [i for z in _jbody(_call(st, "GET", "/aggregated/instances"))["items"].values() for i in z.get("instances", []) if i["name"].startswith("mig-1-")]
+    _check("rolling replace keeps member count stable", len(mig_members_after_proactive) == 2)
+    _check("rolling replace stamps every member from the new template", all(m["machineType"].endswith("/machineTypes/e2-medium") for m in mig_members_after_proactive))
+    stale_names = {m["name"] for m in mig_members_after_opp}
+    _check("rolling replace retires every stale member", not any(m["name"] in stale_names for m in mig_members_after_proactive))
+
     unmanaged_list = _jbody(_call(st, "GET", "/zones/%s/instanceGroups" % ZONE))["items"]
     _check("MIG's backing group is excluded from the unmanaged list", not any(g["name"] == "mig-1" for g in unmanaged_list))
 
