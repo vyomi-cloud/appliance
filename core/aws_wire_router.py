@@ -842,8 +842,8 @@ class AwsWireRouter:
                 r = ddb.dispatch(self.ddb, target, payload, s3_store=self.s3)
             elif svc == "kms":
                 r = kms.dispatch(self.kms, target, payload)
-            elif svc == "secretsmanager":
-                r = secrets.dispatch(self.sec, target, payload)
+            elif svc == "secretsmanager":   # a customer KmsKeyId is really encrypted/decrypted through the KMS core
+                r = secrets.dispatch(self.sec, target, payload, kms_store=self.kms)
             elif svc == "events":
                 r = events.dispatch(self.events, target, payload, lam_store=self.lam, kinesis_store=self.kinesis, sfn_store=self.sfn)
             elif svc == "kinesis":

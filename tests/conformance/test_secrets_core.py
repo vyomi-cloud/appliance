@@ -17,10 +17,14 @@ Run in Pyodide: loaded by wasm/ harness (same file).
 
 # Allow running both as a repo script (host) and from a flat FS (Pyodide).
 try:
+    from core.kms_keystore import InMemoryKeyStore
     from core.kv_store import InMemoryKvStore
+    from core import kms_core as kms
     from core import secrets_core as sm
 except ImportError:  # pragma: no cover - Pyodide flat layout
+    from kms_keystore import InMemoryKeyStore  # type: ignore
     from kv_store import InMemoryKvStore  # type: ignore
+    import kms_core as kms  # type: ignore
     import secrets_core as sm  # type: ignore
 
 T = "secretsmanager."  # the native Secrets Manager X-Amz-Target prefix
@@ -208,6 +212,72 @@ def run() -> int:
     _check("GetSecretValue lazily auto-rotates when due", v2 != v1)
     after = sm.dispatch(st, T + "DescribeSecret", {"SecretId": "auto-rotated"}).body
     _check("auto-rotation reschedules NextRotationDate forward", after["NextRotationDate"] > before["NextRotationDate"])
+
+    # 24. A customer KmsKeyId is genuinely encrypted/decrypted through the KMS core
+    # (v4 depth wave 5) when a kms_store is passed — every check above ran WITHOUT
+    # one and must keep behaving exactly as before (plaintext stored as-is).
+    ks = InMemoryKeyStore()
+    key1 = kms.dispatch(ks, "TrentService.CreateKey", {}).body["KeyMetadata"]["KeyId"]
+    key2 = kms.dispatch(ks, "TrentService.CreateKey", {}).body["KeyMetadata"]["KeyId"]
+    sm.dispatch(st, T + "CreateSecret", {"Name": "cmk", "SecretString": "s3cr3t", "KmsKeyId": key1}, kms_store=ks)
+    cmk_v1 = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "cmk"}, kms_store=ks).body
+    _check("KMS-encrypted secret still round-trips plaintext", cmk_v1["SecretString"] == "s3cr3t")
+    _check("KmsKeyId round-trips on DescribeSecret",
+           sm.dispatch(st, T + "DescribeSecret", {"SecretId": "cmk"}, kms_store=ks).body["KmsKeyId"] == key1)
+
+    # Disabling the key really blocks access — proof the value is actually
+    # encrypted under it, not just stored next to a KmsKeyId label.
+    kms.dispatch(ks, "TrentService.DisableKey", {"KeyId": key1})
+    blocked_get = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "cmk"}, kms_store=ks)
+    _check("GetSecretValue fails when the CMK is disabled", blocked_get.body.get("__type") == "InvalidRequestException")
+    blocked_put = sm.dispatch(st, T + "PutSecretValue", {"SecretId": "cmk", "SecretString": "new"}, kms_store=ks)
+    _check("PutSecretValue fails when the CMK is disabled", blocked_put.body.get("__type") == "InvalidRequestException")
+    kms.dispatch(ks, "TrentService.EnableKey", {"KeyId": key1})
+    _check("re-enabling the CMK restores access",
+           sm.dispatch(st, T + "GetSecretValue", {"SecretId": "cmk"}, kms_store=ks).body["SecretString"] == "s3cr3t")
+
+    # PutSecretValue (no explicit KmsKeyId) re-encrypts the new version under the
+    # secret's existing key, and ClientRequestToken idempotency compares plaintext
+    # (decrypting both sides) rather than raw ciphertext.
+    put1 = sm.dispatch(st, T + "PutSecretValue",
+                       {"SecretId": "cmk", "SecretString": "s3cr3t-2", "ClientRequestToken": "tok-1"}, kms_store=ks)
+    _check("PutSecretValue under a CMK succeeds", put1.status == 200)
+    retry = sm.dispatch(st, T + "PutSecretValue",
+                        {"SecretId": "cmk", "SecretString": "s3cr3t-2", "ClientRequestToken": "tok-1"}, kms_store=ks)
+    _check("idempotent retry (same value) returns the same version", retry.body["VersionId"] == put1.body["VersionId"])
+    conflict = sm.dispatch(st, T + "PutSecretValue",
+                           {"SecretId": "cmk", "SecretString": "different", "ClientRequestToken": "tok-1"}, kms_store=ks)
+    _check("idempotent retry (different value) is ResourceExistsException",
+           conflict.body.get("__type") == "ResourceExistsException")
+
+    # UpdateSecret to a new KmsKeyId re-encrypts every existing version under it —
+    # disabling the OLD key afterwards must NOT block access, proving the value
+    # really moved to the new key (KMS embeds the key id in the ciphertext).
+    sm.dispatch(st, T + "UpdateSecret", {"SecretId": "cmk", "KmsKeyId": key2}, kms_store=ks)
+    _check("KmsKeyId updated", sm.dispatch(st, T + "DescribeSecret", {"SecretId": "cmk"}, kms_store=ks).body["KmsKeyId"] == key2)
+    kms.dispatch(ks, "TrentService.DisableKey", {"KeyId": key1})
+    still_ok = sm.dispatch(st, T + "GetSecretValue", {"SecretId": "cmk"}, kms_store=ks)
+    _check("re-wrapped secret still readable after the OLD key is disabled",
+           still_ok.status == 200 and still_ok.body["SecretString"] == "s3cr3t-2")
+    kms.dispatch(ks, "TrentService.DisableKey", {"KeyId": key2})
+    _check("re-wrapped secret now blocked once the NEW (current) key is disabled",
+           sm.dispatch(st, T + "GetSecretValue", {"SecretId": "cmk"}, kms_store=ks).body.get("__type") == "InvalidRequestException")
+    kms.dispatch(ks, "TrentService.EnableKey", {"KeyId": key2})
+
+    # RotateSecret (immediate + lazy auto-rotation) carries the current, decrypted
+    # value forward and re-encrypts it, under a kms_store.
+    rotated = sm.dispatch(st, T + "RotateSecret", {"SecretId": "cmk"}, kms_store=ks)
+    _check("RotateSecret works under a kms_store", rotated.status == 200)
+    _check("rotated value still decrypts correctly",
+           sm.dispatch(st, T + "GetSecretValue", {"SecretId": "cmk"}, kms_store=ks).body["SecretString"] == "s3cr3t-2")
+
+    # A secret with no KmsKeyId is unaffected by kms_store being present — it
+    # stays on the implicit default (no real encryption modeled for that path).
+    sm.dispatch(st, T + "CreateSecret", {"Name": "no-cmk", "SecretString": "plain"}, kms_store=ks)
+    _check("no-CMK secret has no KmsKeyId",
+           "KmsKeyId" not in sm.dispatch(st, T + "DescribeSecret", {"SecretId": "no-cmk"}, kms_store=ks).body)
+    _check("no-CMK secret still round-trips",
+           sm.dispatch(st, T + "GetSecretValue", {"SecretId": "no-cmk"}, kms_store=ks).body["SecretString"] == "plain")
 
     print("\nRESULT: PASS — Secrets Manager core conforms (native wire semantics) on this substrate.")
     return 0

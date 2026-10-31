@@ -267,7 +267,10 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
                                          "message": "Request body is not valid JSON."}).encode()}
         if hasattr(st, "adopt"):
             st.adopt()                   # pre-v4 Vault keys / secrets → this state (once per space)
-        resp = mod.dispatch(st, target, payload if isinstance(payload, dict) else {})
+        if service == "secretsmanager":   # a customer KmsKeyId is really encrypted/decrypted through the KMS core
+            resp = mod.dispatch(st, target, payload if isinstance(payload, dict) else {}, kms_store=r.kms)
+        else:
+            resp = mod.dispatch(st, target, payload if isinstance(payload, dict) else {})
         hdrs = {"x-amzn-requestid": str(_uuid.uuid4()), **dict(resp.headers or {})}
         hdrs.setdefault("content-type", "application/x-amz-json-1.1")
         return {"status": resp.status, "headers": hdrs, "body": _json.dumps(resp.body).encode()}
