@@ -677,6 +677,28 @@ try {
   check("CloudFormation stack created over wire → shown in Stacks list", true);
   await shot("21-cloudformation-stacks");
 
+  // CloudFormation: a log group provisioned by a stack, then drifted out-of-band through
+  // the Logs engine itself (CLI → CLI) — "Stack actions" → "Detect drift" / "View drift
+  // results" render the real PROPERTY difference, not just existence.
+  const CFN3 = `v4-smoke-stack3-${Date.now() % 100000}`;
+  const LOGRP = `v4-smoke-loggroup-${Date.now() % 100000}`;
+  await cfn("CreateStack", { StackName: CFN3, TemplateBody: JSON.stringify({ Resources: { LG: { Type: "AWS::Logs::LogGroup", Properties: { LogGroupName: LOGRP, RetentionInDays: 7 } } } }) });
+  await cwlogs("PutRetentionPolicy", { logGroupName: LOGRP, retentionInDays: 30 });
+  // already on the Stacks list (from the CFN2 check above); re-navigating to the identical
+  // hash wouldn't remount the page, so refresh explicitly to pick up the new stack.
+  await page.getByRole("button", { name: "Refresh" }).click();
+  await page.getByPlaceholder("Search by stack name").fill(CFN3);
+  await page.getByRole("row", { name: new RegExp(CFN3) }).getByRole("radio").check();
+  await page.getByRole("button", { name: "Stack actions" }).click();
+  await page.getByRole("menuitem", { name: "Detect drift" }).click();
+  await page.getByText(`Drift results — ${CFN3}`).waitFor({ timeout: 10000 });
+  await page.getByText("MODIFIED", { exact: true }).waitFor({ timeout: 10000 });
+  const driftModalText = await page.getByRole("dialog").innerText();
+  check("CloudFormation drift: out-of-band retention change → UI shows MODIFIED + /RetentionInDays diff",
+        driftModalText.includes("MODIFIED") && driftModalText.includes("RetentionInDays") && driftModalText.includes("30"), driftModalText.slice(0, 300));
+  await shot("22-cloudformation-drift");
+  await page.getByRole("button", { name: "Close" }).click();
+
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));
   await page.reload();

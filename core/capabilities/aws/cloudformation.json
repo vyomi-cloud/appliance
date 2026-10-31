@@ -11,13 +11,13 @@
   "tests": ["tests/conformance/test_cloudformation_core.py"]
  },
  "aws.cloudformation.resource-provisioning": {
-  "title": "Template resources provisioned through the real S3 / DynamoDB / SNS / SQS / IAM engines",
+  "title": "Template resources provisioned through the real S3 / DynamoDB / SNS / SQS / IAM / CloudWatch Logs engines",
   "level": {
    "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Only AWS::S3::Bucket, AWS::DynamoDB::Table, AWS::SNS::Topic, AWS::SQS::Queue, AWS::IAM::Role and the no-infrastructure AWS::CloudFormation::WaitCondition[Handle] are provisioned.",
+   "Only AWS::S3::Bucket, AWS::DynamoDB::Table, AWS::SNS::Topic, AWS::SQS::Queue, AWS::IAM::Role, AWS::Logs::LogGroup and the no-infrastructure AWS::CloudFormation::WaitCondition[Handle] are provisioned.",
    "A template with any other resource type fails CreateStack/UpdateStack honestly (rolled back, never a silent success) — the same way a real account without the matching service permissions would fail."
   ],
   "api": ["CreateStack", "UpdateStack", "DeleteStack"],
@@ -82,7 +82,8 @@
    "offline": "limited"
   },
   "limitations": [
-   "Drift is detected by checking whether each resource still exists in its owning service's store — a resource deleted independently (e.g. through the S3 console) shows as DELETED. Property-level drift (a resource edited, not deleted, outside the stack) is not detected."
+   "Beyond existence (a resource deleted independently shows as DELETED), PROPERTY-level drift is enforced for DynamoDB (BillingMode, ProvisionedThroughput), SNS (DisplayName, FifoTopic), SQS (VisibilityTimeout, MessageRetentionPeriod, FifoQueue, ContentBasedDeduplication), IAM roles (AssumeRolePolicyDocument, Description, Path) and Logs log groups (RetentionInDays): each property is re-read from the owning service's own store and diffed against the value CloudFormation last applied, reported as MODIFIED with concrete PropertyDifferences.",
+   "S3 buckets have no provisioner-managed mutable property in this simulation (Vyomi's S3 bucket provisioning doesn't apply VersioningConfiguration or other template properties), so they remain existence-only drift."
   ],
   "api": ["DetectStackDrift", "DescribeStackDriftDetectionStatus", "DescribeStackResourceDrifts"],
   "tests": ["tests/conformance/test_cloudformation_core.py"]

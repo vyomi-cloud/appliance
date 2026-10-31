@@ -8,11 +8,21 @@ boto3 / socket imports -> loads under Pyodide (Nano) and on the appliance alike.
 
 Templates (JSON or a YAML subset — see `_parse_yaml`) are REALLY provisioned: each
 `Resources` entry whose `Type` is in RESOURCE_TYPES is created/updated/deleted through
-the proven core for that service (S3/DynamoDB/SNS/SQS/IAM), sharing the SAME stores the
-rest of the AWS wire uses — so a stack's bucket/table/topic/queue/role is the identical
-resource the S3/DynamoDB/SNS/SQS/IAM consoles and SDKs see. A resource type outside that
-set fails CreateStack/UpdateStack with the real rollback semantics (never a silent
-success) — see the module docstring note in consoles/src/aws/services/cloudformation/.
+the proven core for that service (S3/DynamoDB/SNS/SQS/IAM/CloudWatch Logs), sharing the
+SAME stores the rest of the AWS wire uses — so a stack's bucket/table/topic/queue/role/
+log group is the identical resource the S3/DynamoDB/SNS/SQS/IAM/Logs consoles and SDKs
+see. A resource type outside that set fails CreateStack/UpdateStack with the real
+rollback semantics (never a silent success) — see the module docstring note in
+consoles/src/aws/services/cloudformation/.
+
+Drift detection also compares PROPERTIES, not just existence: each provisioner that
+registers a `read` function has its live state snapshotted right after create/update
+(`PropertiesBaseline`); DetectStackDrift re-reads the same live state and diffs it
+against that baseline, so a property changed out-of-band through the owning service's
+own console/API (DynamoDB billing mode, SNS display name, SQS visibility timeout, an
+IAM role's trust policy, a log group's retention) is reported as MODIFIED with
+PropertyDifferences — not just DELETED/IN_SYNC. S3 buckets have no provisioner-managed
+mutable property, so they remain existence-only.
 
 Scope (v1 slice): CreateStack/UpdateStack/DeleteStack with dependency ordering, Ref/
 Fn::GetAtt/Fn::Sub/Fn::Join/Fn::Select/Fn::Split/Fn::FindInMap/Fn::Base64/Fn::ImportValue/
@@ -42,6 +52,7 @@ from core import dynamodb_core as ddbmod
 from core import sns_core as snsmod
 from core import sqs_core as sqsmod
 from core import iam_core as iammod
+from core import logs_core as logsmod
 
 CFN_NS = "http://cloudformation.amazonaws.com/doc/2010-05-15/"
 REGION = "us-east-1"
@@ -491,6 +502,14 @@ def _exists_ddb_table(stores, physical_id):
     return stores["ddb"].get_table(physical_id) is not None
 
 
+def _read_ddb_table(stores, physical_id):
+    t = stores["ddb"].get_table(physical_id)
+    if not t:
+        return None
+    return {"BillingMode": t.get("billing_mode", "PAY_PER_REQUEST"),
+            "ProvisionedThroughput": t.get("provisioned_throughput") or {}}
+
+
 def _prov_sns_topic(stores, name, props):
     msg_store = stores["msg"]
     params = {"Action": "CreateTopic", "Name": name}
@@ -517,6 +536,15 @@ def _teardown_sns_topic(stores, physical_id):
 
 def _exists_sns_topic(stores, physical_id):
     return stores["msg"].get_topic(physical_id) is not None
+
+
+def _read_sns_topic(stores, physical_id):
+    t = stores["msg"].get_topic(physical_id)
+    if not t:
+        return None
+    attrs = t.get("attributes") or {}
+    return {"DisplayName": attrs.get("DisplayName", ""),
+            "FifoTopic": str(attrs.get("FifoTopic", "false")).lower() == "true"}
 
 
 def _prov_sqs_queue(stores, name, props):
@@ -551,6 +579,17 @@ def _exists_sqs_queue(stores, physical_id):
     return stores["msg"].get_queue(physical_id) is not None
 
 
+def _read_sqs_queue(stores, physical_id):
+    q = stores["msg"].get_queue(physical_id)
+    if not q:
+        return None
+    attrs = q.get("attributes") or {}
+    return {"VisibilityTimeout": int(q.get("visibility_timeout", 30)),
+            "MessageRetentionPeriod": int(attrs.get("MessageRetentionPeriod", 345600)),
+            "FifoQueue": bool(q.get("fifo", False)),
+            "ContentBasedDeduplication": bool(q.get("content_based_dedup", False))}
+
+
 def _prov_iam_role(stores, name, props):
     iam_store = stores["iam"]
     params = {"Action": "CreateRole", "RoleName": name}
@@ -578,6 +617,57 @@ def _exists_iam_role(stores, physical_id):
     return stores["iam"].get_role(physical_id) is not None
 
 
+def _read_iam_role(stores, physical_id):
+    role = stores["iam"].get_role(physical_id)
+    if not role:
+        return None
+    return {"AssumeRolePolicyDocument": role.get("assume_role_policy_document") or {},
+            "Description": role.get("description", ""), "Path": role.get("path", "/")}
+
+
+def _prov_log_group(stores, name, props):
+    logs_store = stores["logs"]
+    r = logsmod.dispatch(logs_store, "Logs_20140328.CreateLogGroup", {"logGroupName": name})
+    if r.status != 200:
+        raise CfnError("CREATE_FAILED", _wire_message(r.body), 400)
+    if props.get("RetentionInDays") is not None:
+        rr = logsmod.dispatch(logs_store, "Logs_20140328.PutRetentionPolicy",
+                              {"logGroupName": name, "retentionInDays": int(props["RetentionInDays"])})
+        if rr.status != 200:
+            raise CfnError("CREATE_FAILED", _wire_message(rr.body), 400)
+    g = logs_store.log_groups.get(name) or {}
+    return {"ref": name, "physical_id": name, "attrs": {"Arn": g.get("arn", "")}}
+
+
+def _update_log_group(stores, name, props):
+    logs_store = stores["logs"]
+    if props.get("RetentionInDays") is not None:
+        r = logsmod.dispatch(logs_store, "Logs_20140328.PutRetentionPolicy",
+                             {"logGroupName": name, "retentionInDays": int(props["RetentionInDays"])})
+    else:
+        r = logsmod.dispatch(logs_store, "Logs_20140328.DeleteRetentionPolicy", {"logGroupName": name})
+    if r.status != 200:
+        raise CfnError("UPDATE_FAILED", _wire_message(r.body), 400)
+    return {"attrs": {}}
+
+
+def _teardown_log_group(stores, physical_id):
+    r = logsmod.dispatch(stores["logs"], "Logs_20140328.DeleteLogGroup", {"logGroupName": physical_id})
+    if r.status != 200 and (r.body or {}).get("__type") != "ResourceNotFoundException":
+        raise CfnError("DELETE_FAILED", _wire_message(r.body), 400)
+
+
+def _exists_log_group(stores, physical_id):
+    return stores["logs"].log_groups.get(physical_id) is not None
+
+
+def _read_log_group(stores, physical_id):
+    g = stores["logs"].log_groups.get(physical_id)
+    if not g:
+        return None
+    return {"RetentionInDays": g.get("retentionInDays")}
+
+
 def _prov_virtual(kind):
     def _create(stores, name, props):
         token = uuid.uuid4().hex
@@ -598,13 +688,17 @@ RESOURCE_TYPES = {
     "AWS::S3::Bucket": {"create": _prov_s3_bucket, "delete": _teardown_s3_bucket,
                         "exists": _exists_s3_bucket, "name_prop": "BucketName"},
     "AWS::DynamoDB::Table": {"create": _prov_ddb_table, "delete": _teardown_ddb_table,
-                             "exists": _exists_ddb_table, "name_prop": "TableName"},
+                             "exists": _exists_ddb_table, "update": _update_ddb_table,
+                             "read": _read_ddb_table, "name_prop": "TableName"},
     "AWS::SNS::Topic": {"create": _prov_sns_topic, "delete": _teardown_sns_topic,
-                        "exists": _exists_sns_topic, "name_prop": "TopicName"},
+                        "exists": _exists_sns_topic, "read": _read_sns_topic, "name_prop": "TopicName"},
     "AWS::SQS::Queue": {"create": _prov_sqs_queue, "delete": _teardown_sqs_queue,
-                        "exists": _exists_sqs_queue, "name_prop": "QueueName"},
+                        "exists": _exists_sqs_queue, "read": _read_sqs_queue, "name_prop": "QueueName"},
     "AWS::IAM::Role": {"create": _prov_iam_role, "delete": _teardown_iam_role,
-                       "exists": _exists_iam_role, "name_prop": "RoleName"},
+                       "exists": _exists_iam_role, "read": _read_iam_role, "name_prop": "RoleName"},
+    "AWS::Logs::LogGroup": {"create": _prov_log_group, "delete": _teardown_log_group,
+                            "exists": _exists_log_group, "update": _update_log_group,
+                            "read": _read_log_group, "name_prop": "LogGroupName"},
     "AWS::CloudFormation::WaitConditionHandle": {
         "create": _prov_virtual("waitconditionhandle"), "delete": _teardown_virtual,
         "exists": _exists_virtual, "name_prop": None},
@@ -920,6 +1014,11 @@ def _apply_outputs(store, stack, template, ctx):
     stack["outputs"] = outs
 
 
+def _capture_baseline(provisioner, stores, physical_id):
+    reader = provisioner.get("read")
+    return reader(stores, physical_id) if reader else None
+
+
 def _apply_resources(stack, template, params_ctx, stores, store=None):
     resources_def = template.get("Resources")
     if not isinstance(resources_def, dict) or not resources_def:
@@ -953,7 +1052,8 @@ def _apply_resources(stack, template, params_ctx, stores, store=None):
         stack["resources"][logical_id] = {
             "LogicalResourceId": logical_id, "PhysicalResourceId": result["physical_id"],
             "ResourceType": rtype, "ResourceStatus": "CREATE_COMPLETE", "ResourceStatusReason": "",
-            "Properties": props, "ref": result["ref"], "attrs": result.get("attrs", {}), "Module": ""}
+            "Properties": props, "ref": result["ref"], "attrs": result.get("attrs", {}), "Module": "",
+            "PropertiesBaseline": _capture_baseline(provisioner, stores, result["physical_id"])}
         ctx["resources"][logical_id] = {"ref": result["ref"], "attrs": result.get("attrs", {})}
         _emit_event(stack, logical_id, "CREATE_COMPLETE", "", rtype, result["physical_id"])
     stack["_ctx"] = ctx
@@ -998,10 +1098,11 @@ def _apply_update(stack, template, params_ctx, stores, store=None):
             new_resources[logical_id] = existing
             ctx["resources"][logical_id] = {"ref": existing["ref"], "attrs": existing["attrs"]}
             continue
-        if existing and existing["ResourceType"] == rtype and rtype == "AWS::DynamoDB::Table":
-            result = _update_ddb_table(stores, existing["PhysicalResourceId"], props)
+        if existing and existing["ResourceType"] == rtype and provisioner.get("update"):
+            result = provisioner["update"](stores, existing["PhysicalResourceId"], props)
             rec = {**existing, "Properties": props, "ResourceStatus": "UPDATE_COMPLETE",
-                   "ResourceStatusReason": "", "attrs": {**existing["attrs"], **result.get("attrs", {})}}
+                   "ResourceStatusReason": "", "attrs": {**existing["attrs"], **result.get("attrs", {})},
+                   "PropertiesBaseline": _capture_baseline(provisioner, stores, existing["PhysicalResourceId"])}
             new_resources[logical_id] = rec
             ctx["resources"][logical_id] = {"ref": rec["ref"], "attrs": rec["attrs"]}
             _emit_event(stack, logical_id, "UPDATE_COMPLETE", "", rtype, rec["PhysicalResourceId"])
@@ -1025,7 +1126,8 @@ def _apply_update(stack, template, params_ctx, stores, store=None):
             raise CfnError("UPDATE_FAILED", f"{logical_id} ({rtype}): {e}", 400)
         rec = {"LogicalResourceId": logical_id, "PhysicalResourceId": result["physical_id"],
                "ResourceType": rtype, "ResourceStatus": "CREATE_COMPLETE", "ResourceStatusReason": "",
-               "Properties": props, "ref": result["ref"], "attrs": result.get("attrs", {}), "Module": ""}
+               "Properties": props, "ref": result["ref"], "attrs": result.get("attrs", {}), "Module": "",
+               "PropertiesBaseline": _capture_baseline(provisioner, stores, result["physical_id"])}
         new_resources[logical_id] = rec
         ctx["resources"][logical_id] = {"ref": result["ref"], "attrs": result.get("attrs", {})}
         _emit_event(stack, logical_id, "CREATE_COMPLETE", "", rtype, result["physical_id"])
@@ -1543,22 +1645,48 @@ def _execute_change_set(store, params, stores):
 
 
 # ── drift ─────────────────────────────────────────────────────────────────
+def _property_diffs(expected: dict, actual: dict) -> list:
+    diffs = []
+    for key in sorted(set(expected) | set(actual)):
+        e, a = expected.get(key), actual.get(key)
+        if json.dumps(e, sort_keys=True, default=str) != json.dumps(a, sort_keys=True, default=str):
+            diffs.append({"PropertyPath": f"/{key}", "ExpectedValue": e, "ActualValue": a})
+    return diffs
+
+
 def _drift_check_resource(stores, rec):
+    """Existence drift for every provisioned type; PROPERTY drift too for any type whose
+    provisioner registers a `read` (live-state) function — compared against the
+    `PropertiesBaseline` snapshot taken right after the resource was created/updated, so a
+    property changed out-of-band through the owning service's own console/API (DynamoDB
+    billing mode, SNS display name, SQS visibility timeout, an IAM role's trust policy, a log
+    group's retention) is reported as MODIFIED with concrete PropertyDifferences."""
     prov = RESOURCE_TYPES.get(rec["ResourceType"])
     if not prov:
-        return "NOT_CHECKED"
+        return "NOT_CHECKED", []
     try:
-        return "IN_SYNC" if prov["exists"](stores, rec["PhysicalResourceId"]) else "DELETED"
+        if not prov["exists"](stores, rec["PhysicalResourceId"]):
+            return "DELETED", []
+        reader = prov.get("read")
+        baseline = rec.get("PropertiesBaseline")
+        if not reader or baseline is None:
+            return "IN_SYNC", []
+        live = reader(stores, rec["PhysicalResourceId"])
+        if live is None:
+            return "DELETED", []
+        diffs = _property_diffs(baseline, live)
+        return ("MODIFIED", diffs) if diffs else ("IN_SYNC", [])
     except Exception:
-        return "NOT_CHECKED"
+        return "NOT_CHECKED", []
 
 
 def _detect_stack_drift(store, params, stores):
     stack = _require_stack(store, _p(params, "StackName"))
     any_drift = False
     for rec in stack["resources"].values():
-        status = _drift_check_resource(stores, rec)
+        status, diffs = _drift_check_resource(stores, rec)
         rec["DriftStatus"] = status
+        rec["PropertyDifferences"] = diffs
         if status not in ("IN_SYNC", "NOT_CHECKED"):
             any_drift = True
     stack["drift_status"] = "DRIFTED" if any_drift else "IN_SYNC"
@@ -1582,10 +1710,18 @@ def _describe_drift_status(store, params, stores):
 
 def _describe_resource_drifts(store, params, stores):
     stack = _require_stack(store, _p(params, "StackName"))
+
+    def _diff_xml(d):
+        return ("<member>" + _el("PropertyPath", d["PropertyPath"]) +
+                _el("ExpectedValue", json.dumps(d["ExpectedValue"], default=str)) +
+                _el("ActualValue", json.dumps(d["ActualValue"], default=str)) + "</member>")
+
     body = "<StackResourceDrifts>" + "".join(
         "<member>" + _el("StackId", stack["stack_id"]) + _el("LogicalResourceId", r["LogicalResourceId"]) +
         _el("PhysicalResourceId", r["PhysicalResourceId"]) + _el("ResourceType", r["ResourceType"]) +
-        _el("StackResourceDriftStatus", r.get("DriftStatus", "NOT_CHECKED")) + "</member>"
+        _el("StackResourceDriftStatus", r.get("DriftStatus", "NOT_CHECKED")) +
+        "<PropertyDifferences>" + "".join(_diff_xml(d) for d in r.get("PropertyDifferences") or []) +
+        "</PropertyDifferences></member>"
         for r in stack["resources"].values()) + "</StackResourceDrifts>"
     return _envelope("DescribeStackResourceDrifts", body)
 
@@ -1738,6 +1874,7 @@ _TYPE_DESCRIPTIONS = {
     "AWS::SNS::Topic": "An SNS topic, provisioned through Vyomi's SNS engine.",
     "AWS::SQS::Queue": "An SQS queue, provisioned through Vyomi's SQS engine.",
     "AWS::IAM::Role": "An IAM role, provisioned through Vyomi's IAM engine.",
+    "AWS::Logs::LogGroup": "A CloudWatch Logs log group, provisioned through Vyomi's Logs engine.",
     "AWS::CloudFormation::WaitCondition": "A CloudFormation-internal signaling resource (no underlying infrastructure in real AWS either).",
     "AWS::CloudFormation::WaitConditionHandle": "A CloudFormation-internal signaling handle (no underlying infrastructure in real AWS either).",
 }
@@ -1805,7 +1942,7 @@ _ACTIONS = {
 
 
 def dispatch(store: CloudFormationStore, params: dict | None = None,
-             s3_store=None, ddb_store=None, iam_store=None, msg_store=None) -> CfnResponse:
+             s3_store=None, ddb_store=None, iam_store=None, msg_store=None, logs_store=None) -> CfnResponse:
     params = params or {}
     action = str(params.get("Action", "")).strip()
     if not action:
@@ -1813,7 +1950,7 @@ def dispatch(store: CloudFormationStore, params: dict | None = None,
     fn = _ACTIONS.get(action)
     if fn is None:
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)
-    stores = {"s3": s3_store, "ddb": ddb_store, "iam": iam_store, "msg": msg_store}
+    stores = {"s3": s3_store, "ddb": ddb_store, "iam": iam_store, "msg": msg_store, "logs": logs_store}
     try:
         return fn(store, params, stores)
     except CfnError as e:

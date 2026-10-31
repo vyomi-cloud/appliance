@@ -7,13 +7,40 @@ import Toggle from "@cloudscape-design/components/toggle";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Box from "@cloudscape-design/components/box";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import Modal from "@cloudscape-design/components/modal";
+import Table from "@cloudscape-design/components/table";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { fmtDate } from "../../kit/common.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
+import { asList } from "../../../common/wire.js";
 import * as api from "./api.js";
+
+const DRIFT_TYPE = (s) => (s === "IN_SYNC" ? "success" : s === "DELETED" || s === "MODIFIED" ? "warning" : "info");
+
+function DriftModal({ name, visible, onDismiss }) {
+  const { data = [], loading } = useAsync(() => (visible && name ? api.describeResourceDrifts(name) : Promise.resolve([])), [name, visible]);
+  return (
+    <Modal visible={visible} onDismiss={onDismiss} size="large" header={`Drift results — ${name}`}
+      footer={<Box float="right"><Button onClick={onDismiss}>Close</Button></Box>}>
+      <Table variant="embedded" loading={loading} items={data} trackBy="LogicalResourceId"
+        columnDefinitions={[
+          { id: "lid", header: "Logical ID", cell: (r) => r.LogicalResourceId },
+          { id: "type", header: "Type", cell: (r) => r.ResourceType },
+          { id: "status", header: "Drift status", cell: (r) => <StatusIndicator type={DRIFT_TYPE(r.StackResourceDriftStatus)}>{r.StackResourceDriftStatus}</StatusIndicator> },
+          { id: "diff", header: "Property differences", cell: (r) => {
+              const diffs = asList(r.PropertyDifferences?.member);
+              return diffs.length
+                ? diffs.map((d) => `${d.PropertyPath}: expected ${d.ExpectedValue} → actual ${d.ActualValue}`).join("; ")
+                : "-";
+            } },
+        ]}
+        empty={<Box textAlign="center" color="inherit"><b>No resources</b></Box>} />
+    </Modal>
+  );
+}
 
 const ACTIVE_STATUSES = ["CREATE_COMPLETE", "UPDATE_COMPLETE", "UPDATE_ROLLBACK_COMPLETE", "ROLLBACK_COMPLETE",
   "CREATE_FAILED", "DELETE_FAILED", "CREATE_IN_PROGRESS", "UPDATE_IN_PROGRESS", "DELETE_IN_PROGRESS",
@@ -30,6 +57,7 @@ export default function Stacks() {
   const [del, setDel] = useState(false);
   const [filterActive, setFilterActive] = useState(true);
   const [viewNested, setViewNested] = useState(true);
+  const [drift, setDrift] = useState(false);
   const { data = [], loading, error, reload } = useAsync(
     () => api.listStacks(filterActive ? ACTIVE_STATUSES : undefined),
     [filterActive],
@@ -38,8 +66,8 @@ export default function Stacks() {
   const runStackAction = async (id) => {
     const name = sel[0].StackName;
     try {
-      if (id === "drift") { await api.detectStackDrift(name); notify.success(`Drift detection started for "${name}".`); navigate("cloudformation", "stacks", name); }
-      if (id === "view-drift") navigate("cloudformation", "stacks", name);
+      if (id === "drift") { await api.detectStackDrift(name); notify.success(`Drift detection complete for "${name}".`); setDrift(true); }
+      if (id === "view-drift") setDrift(true);
       if (id === "termination") { await api.updateTerminationProtection(name, sel[0].EnableTerminationProtection !== "true"); notify.success(`Termination protection ${sel[0].EnableTerminationProtection === "true" ? "disabled" : "enabled"} for "${name}".`); reload(); }
       if (id === "changeset") { location.hash = `#/cloudformation/stacks/${encodeURIComponent(name)}?tab=changesets`; }
       if (id === "rollback") { await api.continueUpdateRollback(name); notify.success(`Continuing rollback for "${name}".`); reload(); }
@@ -95,6 +123,7 @@ export default function Stacks() {
           setSel([]); reload();
         }}
       />
+      <DriftModal name={sel[0]?.StackName} visible={drift} onDismiss={() => setDrift(false)} />
     </>
   );
 }
