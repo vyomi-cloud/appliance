@@ -461,9 +461,33 @@ try {
   const SA = `smoke-sa-${Date.now() % 100000}`;
   await wire("/v1/projects/vyomi-project/serviceAccounts", { method: "POST", body: JSON.stringify({ accountId: SA, serviceAccount: { displayName: SA } }) });
   await page.goto(UI + "#/iam-admin/serviceaccounts");
-  await page.getByText(`${SA}@vyomi-project.iam.gserviceaccount.com`).waitFor({ timeout: 10000 });
+  const SA_EMAIL = `${SA}@vyomi-project.iam.gserviceaccount.com`;
+  await page.getByText(SA_EMAIL).waitFor({ timeout: 10000 });
   check("service account created over wire → shown in UI list", true);
   await shot("13-service-accounts");
+
+  // Service account "Logs" tab: key create events recorded against the SA's OWN
+  // resource (not the project-wide IAM log) are real — created over the UI, shown
+  // in the tab, and cross-checked over the native per-SA policyActivity wire.
+  await page.getByRole("link", { name: SA_EMAIL }).click();
+  await page.waitForURL(/#\/iam-admin\/serviceaccounts\/details\//);
+  await page.getByRole("tab", { name: "Keys" }).click();
+  await page.getByRole("button", { name: "Add key" }).click();
+  await page.getByText("Active").first().waitFor({ timeout: 10000 });
+  await page.getByRole("tab", { name: "Logs" }).click();
+  await page.getByText("Created key").first().waitFor({ timeout: 10000 });
+  const saActivity = await wjson(`/v1/projects/vyomi-project/serviceAccounts/${encodeURIComponent(SA_EMAIL)}/policyActivity`);
+  check("SA key creation via UI → shown in Logs tab and native per-SA policyActivity",
+    (saActivity.activity || []).some((e) => e.action === "CREATE_KEY"));
+  await shot("13b-service-account-logs");
+
+  // Quotas & System Limits: a real dashboard over current resource counts, not a
+  // static page — cross-check the "Service accounts" row against the native wire count.
+  const saCountWire = (await wjson("/v1/projects/vyomi-project/serviceAccounts")).accounts?.length || 0;
+  await page.goto(UI + "#/iam-admin/quotas");
+  await page.getByRole("row", { name: /Service accounts/ }).getByText(String(saCountWire), { exact: true }).waitFor({ timeout: 10000 });
+  check("Quotas & System Limits shows the real service-account count from the native wire", true);
+  await shot("13c-quotas");
 
   // Privileged Access Manager: requesting a grant on an auto-approved entitlement via the
   // UI activates it immediately and really adds the IAM binding (cross-checked over the

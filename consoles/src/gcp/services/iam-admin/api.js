@@ -33,6 +33,10 @@ export const disableServiceAccount = (email) => restJson("POST", `/v1/projects/$
 export const enableServiceAccount = (email) => restJson("POST", `/v1/projects/${getProject()}/serviceAccounts/${e(email)}:enable`, { body: {} });
 export const deleteServiceAccount = (email) => restJson("DELETE", `/v1/projects/${getProject()}/serviceAccounts/${e(email)}`);
 export const serviceAccountResource = (email) => `projects/${getProject()}/serviceAccounts/${email}`;
+export async function listServiceAccountActivity(email) {
+  const r = await restJson("GET", `/v1/projects/${getProject()}/serviceAccounts/${e(email)}/policyActivity`);
+  return r.activity || [];
+}
 
 // ── service account keys ─────────────────────────────────────────────────────
 export async function listKeys(email) {

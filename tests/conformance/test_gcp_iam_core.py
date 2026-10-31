@@ -263,6 +263,28 @@ def run() -> int:
            len(log) == 2 and log[0]["action"] == "REVOKE" and log[1]["action"] == "GRANT")
     _check("activity entry has role/member/time", bool(log[0]["role"]) and bool(log[0]["member"]) and bool(log[0]["time"]))
 
+    # 16. per-service-account activity log (console SA detail 'Logs' tab) ----
+    # Key create/delete, disable/enable and a Principals-with-access grant on the SA's
+    # OWN resource all land in the same per-resource log, filtered by the SA's name.
+    sa4 = _jbody(_post(st, f"/v1/projects/{project}/serviceAccounts", {"accountId": "svc-logs", "serviceAccount": {}}))
+    sa4_resource = sa4["name"]
+    ck4 = _post(st, f"/v1/projects/{project}/serviceAccounts/{sa4['email']}/keys", {})
+    kid4 = _jbody(ck4)["name"].rsplit("/", 1)[-1]
+    giam.dispatch(st, "DELETE", f"/v1/projects/{project}/serviceAccounts/{sa4['email']}/keys/{kid4}", {}, {}, b"")
+    _post(st, f"projects/{project}/serviceAccounts/{sa4['email']}:disable", {})
+    _post(st, f"projects/{project}/serviceAccounts/{sa4['email']}:enable", {})
+    _post(st, f"/v1/{sa4_resource}:setIamPolicy",
+          {"policy": {"bindings": [{"role": "roles/iam.serviceAccountUser", "members": ["user:dev@example.com"]}]}})
+    sa_act = giam.dispatch(st, "GET", f"/v1/projects/{project}/serviceAccounts/{sa4['email']}/policyActivity", {}, {}, b"")
+    _check("SA activity 200", sa_act.status == 200)
+    sa_log = _jbody(sa_act)["activity"]
+    actions = [e["action"] for e in sa_log]
+    _check("SA log has CREATE_KEY, DELETE_KEY, DISABLE, ENABLE, GRANT",
+           {"CREATE_KEY", "DELETE_KEY", "DISABLE", "ENABLE", "GRANT"} <= set(actions))
+    _check("SA log most-recent-first", sa_log[0]["action"] == "GRANT")
+    _check("SA log scoped to this SA only (project-level activity untouched)",
+           all(e["resource"] == sa4_resource for e in sa_log))
+
     print("\nGCP IAM-core conformance: ALL GREEN")
     return 0
 

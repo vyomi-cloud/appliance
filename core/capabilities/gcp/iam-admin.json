@@ -35,11 +35,19 @@
   "tests": ["tests/conformance/test_gcp_iam_core.py"]
  },
  "gcp.iam-admin.service-account-metrics-logs": {
-  "title": "Service account Metrics / Logs tabs",
+  "title": "Service account Metrics tab",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "Per-service-account request metrics and audit log panels aren't modeled; Vyomi has no telemetry pipeline backing this view."
+   "Per-service-account request metrics aren't modeled; Vyomi has no telemetry pipeline backing this view."
   ]
+ },
+ "gcp.iam-admin.service-account-logs": {
+  "title": "Service account Logs tab",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Shows the admin-activity events Vyomi itself records for this service account — key create/delete, enable/disable, display-name updates, and Principals-with-access grants/revokes — not GCP's full Cloud Audit Log trail (e.g. API calls made using the account's own credentials)."
+  ],
+  "tests": ["tests/conformance/test_gcp_iam_core.py"]
  },
  "gcp.iam-admin.roles-predefined": {
   "title": "Predefined roles catalog",
@@ -148,7 +156,9 @@
  "gcp.iam-admin.managed-workload-identities": {
   "title": "Managed Workload Identities",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Not backed by a Vyomi backend yet."]
+  "limitations": [
+   "Managed Workload Identities auto-issues and rotates short-lived workload certificates (SPIFFE/mTLS trust domains) outside the key-file model; Vyomi doesn't run a certificate authority or credential-issuance pipeline to back that."
+  ]
  },
  "gcp.iam-admin.asset-inventory": {
   "title": "Asset Inventory",
@@ -162,8 +172,11 @@
  },
  "gcp.iam-admin.quotas-system-limits": {
   "title": "Quotas & System Limits",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Not backed by a Vyomi backend yet."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Shows real current usage (service accounts, their keys, custom roles, workload identity pools, organization policy constraints) against GCP's documented default per-project limits. Request-rate quotas (e.g. IAM API requests per minute) aren't shown — Vyomi doesn't meter API traffic — and limits are reference values only: Vyomi does not enforce them, so creating past a shown limit still succeeds."
+  ],
+  "tests": ["tests/conformance/test_gcp_iam_core.py", "tests/conformance/test_gcp_resourcemanager_core.py"]
  },
  "gcp.iam-admin.identity-organization": {
   "title": "Identity & Organization",
