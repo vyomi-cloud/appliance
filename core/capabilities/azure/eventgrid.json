@@ -7,9 +7,15 @@
     "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
   "azure.eventgrid.topics.listactions": {
-    "title": "\"Open query\" (Azure Resource Graph Explorer) and \"Assign tags\" bulk action on the Topics list",
+    "title": "\"Open query\" (Azure Resource Graph Explorer) on the Topics list",
     "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Azure Resource Graph and bulk tag assignment across resources are not modeled."]
+    "limitations": ["Azure Resource Graph is a separate, cross-resource-type query service (its own Kusto-based engine spanning every resource in a subscription) and is not modeled."]
+  },
+  "azure.eventgrid.topics.bulktags": {
+    "title": "\"Assign tags\" bulk action on the Topics list",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
   "azure.eventgrid.topic.listactions": {
     "title": "Secondary toolbar actions on a topic's Activity log and Locks panels (Edit columns, Export, Insights, Feedback, pin/reset filters)",
@@ -105,9 +111,9 @@
   },
   "azure.eventgrid.topic.locks": {
     "title": "Resource locks",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi stores and returns locks exactly as configured (CanNotDelete / ReadOnly, notes) but never enforces them — writes and deletes on a locked resource are not blocked."
+      "CanNotDelete and ReadOnly locks on the topic itself ARE enforced (a locked topic's write/delete is rejected with 409 ScopeLocked, same as real ARM). The lock does not cascade to the topic's event subscriptions, which are dispatched by a separate extension-resource module (core/azure_eventgrid_core.py) and are never blocked by a lock on their parent topic."
     ],
     "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
   },

@@ -891,10 +891,12 @@ class AzureArm:
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
     def _lock_block(self, rid, full_type, for_delete):
-        # Enforcement is scoped to Microsoft.ServiceBus (namespaces/queues/topics) only —
-        # every other resource type in this generic engine still leaves Microsoft.Authorization/
-        # locks config_only (stored, not enforced), matching their own capability registries.
-        if not full_type.lower().startswith("microsoft.servicebus/"):
+        # Enforcement is scoped to Microsoft.ServiceBus (namespaces/queues/topics) and
+        # Microsoft.EventGrid/topics only — every other resource type in this generic engine
+        # still leaves Microsoft.Authorization/locks config_only (stored, not enforced),
+        # matching their own capability registries.
+        ft = full_type.lower()
+        if not (ft.startswith("microsoft.servicebus/") or ft == "microsoft.eventgrid/topics"):
             return None
         levels = {(r.get("properties") or {}).get("level")
                   for r in self.state.values() if r.get("_lock_scope") == rid.lower()}

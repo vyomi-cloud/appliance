@@ -147,6 +147,27 @@ def run() -> int:
     r = arm.handle("GET", lock_path("t1"), {"api-version": "2016-09-01"})
     check("lock gone after delete", r["body"]["value"] == [], r["body"])
 
+    # ── Lock ENFORCEMENT: a CanNotDelete lock blocks delete but not writes; a ReadOnly
+    # lock blocks both — on its own topic (t3), so it doesn't disturb t1's later
+    # event-subscription/activity-log assertions ───────────────────────────────────────
+    arm.handle("PUT", topic_path("t3"), {"api-version": AV}, {"location": "eastus"})
+    arm.handle("PUT", lock_path("t3", "cnd"), {"api-version": "2016-09-01"}, {"properties": {"level": "CanNotDelete"}})
+    r = arm.handle("PATCH", topic_path("t3"), {"api-version": AV}, {"tags": {"env": "prod"}})
+    check("CanNotDelete lock still allows a write", r["status"] == 200 and r["body"]["tags"]["env"] == "prod", r)
+    r = arm.handle("DELETE", topic_path("t3"), {"api-version": AV})
+    check("CanNotDelete lock blocks delete -> 409 ScopeLocked", r["status"] == 409 and r["body"]["error"]["code"] == "ScopeLocked", r)
+
+    arm.handle("DELETE", lock_path("t3", "cnd"), {"api-version": "2016-09-01"})
+    arm.handle("PUT", lock_path("t3", "ro"), {"api-version": "2016-09-01"}, {"properties": {"level": "ReadOnly"}})
+    r = arm.handle("PATCH", topic_path("t3"), {"api-version": AV}, {"tags": {"env": "staging"}})
+    check("ReadOnly lock blocks writes too -> 409", r["status"] == 409, r)
+    r = arm.handle("DELETE", topic_path("t3"), {"api-version": AV})
+    check("ReadOnly lock blocks delete -> 409", r["status"] == 409, r)
+
+    arm.handle("DELETE", lock_path("t3", "ro"), {"api-version": "2016-09-01"})
+    r = arm.handle("DELETE", topic_path("t3"), {"api-version": AV})
+    check("delete succeeds once the lock is removed", r["status"] == 200, r)
+
     # ── Expiration time: enforced even without a delivery runtime (real Event Grid
     # auto-deletes a subscription once expirationTimeUtc passes) ───────────────────────
     arm.handle("PUT", sub_path("t1", "es-future"), {"api-version": ESAV},
