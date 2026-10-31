@@ -756,6 +756,10 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
 
     methods = ["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"]
     for prefix in ("/2015-03-31/functions", "/restapis", "/v2/apis", "/v2/domainnames", "/v2/vpclinks", "/v2/tags", "/azure-sql",
-                   "/providers/Microsoft.Authorization"):
+                   "/providers/Microsoft.Authorization",
+                   # GCP IAM custom roles, Workload Identity Federation, Org Policy v2 — the
+                   # cores Nano serves (the offline legacy GCP IAM never had these: 404)
+                   "/v1/projects/{project}/roles", "/v1/projects/{project}/locations/global/workloadIdentityPools",
+                   "/v2/projects/{project}/policies"):
         app.add_route(prefix, _proxy, methods=methods)
         app.add_route(prefix + "/{rest:path}", _proxy, methods=methods)

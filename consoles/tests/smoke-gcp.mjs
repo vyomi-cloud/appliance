@@ -722,6 +722,7 @@ try {
     ] }),
   });
   await page.goto(UI + "#/monitoring/services");
+  await page.reload();   // same URL: goto only changes the hash — reload so the page recomputes the stats
   await svcRow.waitFor({ timeout: 10000 });
   // the page computes every service's SLO stats one after another — poll for this row's value
   let sloBudgetCells = [];
