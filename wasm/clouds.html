@@ -1443,6 +1443,16 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #spaces-grid .space-card[data-provider="aws"].active   { border-color: #0972d3 !important; box-shadow: 0 0 0 1px #0972d3 !important; }
     #spaces-grid .space-card[data-provider="gcp"].active   { border-color: #1a73e8 !important; box-shadow: 0 0 0 1px #1a73e8 !important; }
     #spaces-grid .space-card[data-provider="azure"].active { border-color: #0078d4 !important; box-shadow: 0 0 0 1px #0078d4 !important; }
+    /* Internal white cards are borderless (the gray panel around them is the edge);
+       selection keeps its colour — the active space and an opened Swagger endpoint. */
+    #stats-card .pie-card, #host-util-card .stat-card, #vyomi-services-mount > div:last-child > div,
+    #view-kc .kct, #view-kc .kct.kct-pack, #view-usage .u-card,
+    #view-api .api-op, #view-api .api-op:hover, #view-api .api-detail,
+    #spaces-grid .space-card[data-provider], #spaces-grid .space-card[data-provider]:hover { border-color: transparent !important; }
+    #view-api .api-op-wrap.open .api-op, #view-api .api-op-wrap.open .api-detail { border-color: #84adff !important; }
+    #spaces-grid .space-card[data-provider="aws"].active   { border-color: #0972d3 !important; }
+    #spaces-grid .space-card[data-provider="gcp"].active   { border-color: #1a73e8 !important; }
+    #spaces-grid .space-card[data-provider="azure"].active { border-color: #0078d4 !important; }
   </style>
 </head>
 <body>
