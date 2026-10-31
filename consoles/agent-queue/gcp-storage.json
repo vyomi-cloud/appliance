@@ -2,8 +2,148 @@
  "cloud": "gcp",
  "service": "storage",
  "phase": "depth",
- "goal": "DEPTH: sub-sections / config sections in real integration with the backend — raise real coverage and capability levels",
- "attempt": 3,
- "depth_targets": "NO capability registry yet — first create core/capabilities/gcp/storage.json (one entry per console section, ids 'gcp.storage.<section>', honest levels + tests), then work through every not_simulated / config_only / limited entry as below",
- "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source."
+ "goal": "WAVE 5: finish every buildable gap with real backend integration on Nano + offline (config_only enforced, buildable not_simulated built, engine-coverage limits lifted)",
+ "attempt": 4,
+ "depth_targets": [
+  {
+   "id": "gcp.storage.lifecycle",
+   "title": "Lifecycle rules (Delete / SetStorageClass actions)",
+   "level": "limited",
+   "limitations": [
+    "Age, createdBefore, matchesPrefix/Suffix, matchesStorageClass and the custom-time conditions are evaluated against real object fields and really delete or transition objects (swept lazily on every request against the bucket's objects, not once a day like the real API).",
+    "numNewerVersions, daysSinceNoncurrentTime and noncurrentTimeBefore never match — Vyomi keeps no noncurrent object versions to evaluate them against.",
+    "The AbortIncompleteMultipartUpload action never fires — Vyomi's resumable-upload sessions carry no persistent \"incomplete upload\" record to sweep."
+   ]
+  },
+  {
+   "id": "gcp.storage.permissions",
+   "title": "Bucket IAM policy (getIamPolicy / setIamPolicy), uniform/fine-grained access control, public access prevention",
+   "level": "config_only",
+   "limitations": [
+    "Policies, the access-control mode and public access prevention round-trip through getIamPolicy/setIamPolicy/buckets.patch exactly as a client sets them, but Vyomi never checks them on a request — every object read/write it allows is unconditional."
+   ]
+  },
+  {
+   "id": "gcp.storage.insights-datasets",
+   "title": "Insights datasets (Storage Intelligence inventory/usage dataset configs)",
+   "level": "config_only",
+   "limitations": [
+    "Dataset configs are accepted and listed exactly like the real create/list calls, but Vyomi never runs the underlying export — no BigQuery dataset is populated.",
+    "Modeled as a sub-resource of Vyomi's own wire (/storage/v1/insightsDatasets) rather than the real separate storageinsights.googleapis.com service."
+   ]
+  },
+  {
+   "id": "gcp.storage.cors",
+   "title": "Cross-origin resource sharing (CORS) configuration",
+   "level": "config_only",
+   "limitations": [
+    "The cors list round-trips through buckets.patch exactly as a client sets it, but Vyomi's wire layer never adds Access-Control-* response headers or blocks a cross-origin browser request — the configuration is not enforced."
+   ]
+  },
+  {
+   "id": "gcp.storage.static-website",
+   "title": "Static website configuration (main page suffix / 404 page)",
+   "level": "config_only",
+   "limitations": [
+    "The website config round-trips through buckets.patch exactly as a client sets it, but Vyomi does not run the separate public per-bucket static-website HTTP host (storage.googleapis.com website serving) — the suffix object and 404 page are never actually served."
+   ]
+  },
+  {
+   "id": "gcp.storage.requester-pays",
+   "title": "Requester Pays billing",
+   "level": "config_only",
+   "limitations": [
+    "The billing.requesterPays flag round-trips through buckets.patch exactly as a client sets it, but Vyomi has no billing account or distinct \"requester\" identity separate from the bucket owner to charge — access is never actually billed to a requester."
+   ]
+  },
+  {
+   "id": "gcp.storage.versioning",
+   "title": "Object versioning (noncurrent object versions)",
+   "level": "not_simulated",
+   "limitations": [
+    "Vyomi's GCS core keeps only the latest generation of an object; it has no store for noncurrent versions, so turning on versioning cannot preserve, list or restore older generations."
+   ]
+  },
+  {
+   "id": "gcp.storage.soft-delete",
+   "title": "Soft delete policy (for data recovery)",
+   "level": "not_simulated",
+   "limitations": [
+    "Soft delete restores a deleted/overwritten object from its prior generation within a retention window; it depends on the same noncurrent-version history Vyomi does not keep (see gcp.storage.versioning), so a deleted object cannot be recovered."
+   ]
+  },
+  {
+   "id": "gcp.storage.encryption",
+   "title": "Data encryption with customer-managed encryption keys (CMEK)",
+   "level": "not_simulated",
+   "limitations": [
+    "Vyomi always stores object data under Google-managed encryption; selecting a Cloud KMS key is not modeled since the GCS core does not delegate envelope encryption to Cloud KMS on object writes."
+   ]
+  },
+  {
+   "id": "gcp.storage.hierarchical-namespace",
+   "title": "Hierarchical namespace (HNS buckets with true folders)",
+   "level": "not_simulated",
+   "limitations": [
+    "Vyomi's GCS core models every bucket as a flat key-value namespace (folders are zero-byte \"name/\" placeholder objects); it has no HNS bucket mode with atomic folder rename/delete and folder-level IAM."
+   ]
+  },
+  {
+   "id": "gcp.storage.tags",
+   "title": "Resource tags (GCP-wide tag bindings, distinct from labels)",
+   "level": "not_simulated",
+   "limitations": [
+    "Tags are bindings against Resource Manager's separate Tags API (tagKeys/tagValues); Vyomi's GCS core has no integration with that service, so tags can't be attached to a bucket."
+   ]
+  },
+  {
+   "id": "gcp.storage.security-insights",
+   "title": "Security insights (bucket column) and Advisor recommendations",
+   "level": "not_simulated",
+   "limitations": [
+    "Both are produced by IAM Recommender / Security Command Center analysis and usage-pattern ML over real production traffic; Vyomi runs no such analysis, so it has no findings or recommendations to show."
+   ]
+  },
+  {
+   "id": "gcp.storage.observability",
+   "title": "Monitoring (Cloud Monitoring charts: request/error rates, bandwidth)",
+   "level": "not_simulated",
+   "limitations": [
+    "Vyomi does not meter per-request traffic over time, so it has no time-series data to chart for request counts, error rates or bandwidth — including the Time range selector and the \"Filter by: All locations\" control, which have nothing to filter."
+   ]
+  },
+  {
+   "id": "gcp.storage.operations",
+   "title": "Long-running bucket operations (rename/relocate bucket, Turbo replication switch)",
+   "level": "not_simulated",
+   "limitations": [
+    "Vyomi's bucket operations complete synchronously (see gcp.storage.buckets); it keeps no separate long-running-operation resource to list or poll."
+   ]
+  },
+  {
+   "id": "gcp.storage.inventory-reports",
+   "title": "Inventory reports (per-bucket Storage Insights object inventory, CSV/Parquet to a destination bucket)",
+   "level": "not_simulated",
+   "limitations": [
+    "Inventory reports are a separate Storage Insights sub-product (distinct from gcp.storage.insights-datasets' project-level dataset configs); Vyomi has no report generator to run on a schedule and write CSV/Parquet output to a destination bucket."
+   ]
+  },
+  {
+   "id": "gcp.storage.object-enrichments",
+   "title": "Object enrichments (Smart Storage — Document AI classification/extraction on upload)",
+   "level": "not_simulated",
+   "limitations": [
+    "Enrichments run Document AI (and other Vertex AI pipelines) against newly uploaded objects; Vyomi has no ML inference engine to classify or extract from object content."
+   ]
+  },
+  {
+   "id": "gcp.storage.interoperability",
+   "title": "Interoperable access (HMAC keys for service/user accounts)",
+   "level": "not_simulated",
+   "limitations": [
+    "HMAC key issuance is a separate Cloud Storage Interoperability / IAM credentials flow; Vyomi's GCS core has no HMAC keystore or signature verification for the S3-compatible XML API that these keys authenticate against."
+   ]
+  }
+ ],
+ "note": "DEPTH PASS (the base console is merged). Goal: turn this service's sub-sections and config sections into REAL backend integrations. For EACH capability entry listed in `depth_targets` decide:\n  BUILD — Vyomi can model it in the shared core (state + native API semantics): implement it in core/<svc>_core.py (and the offline route if offline lacks it), add conformance checks in tests/conformance/, raise the entry's level in core/capabilities/<cloud>/<svc>.json (not_simulated→limited/full, config_only→limited/full where now ENFORCED, limited→full where a limitation is removed), wire the console section to it with a UI↔native-API round trip in consoles/tests/smoke-<cloud>.mjs and a \"live\" fixture for any list/detail page.\n  KEEP HONEST — only if it needs something a local simulator cannot run (a separate product, real hardware/network, billing, third-party identity): leave it NotSimulated and put the concrete reason in the entry's `limitations`.\nPrefer behaviour that is ENFORCED (e.g. lifecycle rules actually expire objects, a DLQ really receives, a policy really denies) over config that is only stored. Real coverage must go UP; nothing may regress: fidelity ≥ 90%, every capability claim true on nano AND offline, smokes green. Do not edit consoles/honest-allowlist.json or .github/.\nHouse rules: keep consoles/src/<cloud>/kit/Capability.jsx as on base (add JSON imports only), list the service ONCE in registry.js, register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py (tests/conformance/test_nano_core_manifest.py), unique variable names in the smoke files, 'Vyomi' as plain text, re-vendor with python3 wasm/build_cores.py, rebuild bundles, COMMIT your source.\n\nWAVE 5 — FINISH THE GAPS (orchestrator). Work through EVERY entry in depth_targets in this order:\n  1. config_only → make the stored setting TAKE EFFECT (e.g. encryption really uses our KMS / Key Vault cores; access logging really writes log objects; org-policy constraints really reject violating calls; tiering/lifecycle really moves objects; replication really copies within the simulator). Raise to limited/full.\n  2. not_simulated that a simulator CAN model → build it in the shared core (state + native API + console + smoke round-trip + conformance test). Networking behaviour MUST use core/netsim (never a second evaluator).\n  3. limited whose limit is only missing engine coverage (query grammar, per-request policy evaluation, missing sub-resources) → lift it.\n  KEEP HONEST only: separate products (Grafana, Prometheus, Defender, Bastion, VPN/TGW/ExpressRoute, PrivateLink, Firehose without a core…), billing/payment/support, physical hardware, AI-generated insights — with the concrete reason in `limitations`.\nBoth substrates: every change must work on Nano (wasm cores) AND offline (check the offline route serves it — offline sometimes uses legacy provider handlers; route to the core or implement there; see core/wire_ingress.py, providers/*, routes/*). New offline state must be durable (core/appliance_stores._CoreSlotStore) and JSON-safe. Run the gate, the cloud's smoke, and the conformance tests in the FOREGROUND before your final message; commit source."
 }
