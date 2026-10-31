@@ -811,19 +811,21 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #side-burger, #side-scrim { display: none; }
     @media (max-width: 768px) {
       #app-sidebar {
-        position: fixed; top: 0; bottom: 0; left: 0; z-index: 210; width: 248px; padding: 14px 10px;   /* above the sticky top bar (100) */
+        position: fixed; top: var(--side-top, 0px); bottom: 0; left: 0; z-index: 210; width: 248px; padding: 14px 10px;   /* starts below the logo bar (JS sets --side-top) */
         min-height: 0; overflow-y: auto; transform: translateX(-105%); transition: transform .22s ease;
         box-shadow: 0 0 44px rgba(0,0,0,.6);
       }
       body.side-open #app-sidebar { transform: none; }
       .side-collapse { display: none !important; }
       #side-burger {
-        display: flex; position: absolute; top: 12px; left: 12px; z-index: 60; width: 40px; height: 40px;
+        display: flex; flex: none; width: 40px; height: 40px;   /* in the logo bar, left of the logo */
         align-items: center; justify-content: center; border-radius: 10px; cursor: pointer;
         border: 1px solid rgba(255,255,255,0.14); background: #1f2937; color: #e4e4e7;
       }
       #side-burger .material-icons { font-size: 22px; }
-      body.side-open #side-scrim { display: block; position: fixed; inset: 0; z-index: 209; background: rgba(2,4,14,0.55); }
+      .top-bar { padding-left: 12px; gap: 12px; }
+      .top-bar .tb-brand { margin-right: auto; }
+      body.side-open #side-scrim { display: block; position: fixed; top: var(--side-top, 0px); right: 0; bottom: 0; left: 0; z-index: 209; background: rgba(2,4,14,0.55); }
     }
     /* ── SDK & CLI usage view — native design, matches Knowledge Center ──── */
     #view-usage .usage-ep {
@@ -1203,6 +1205,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     <button onclick="document.getElementById('update-banner').style.display='none'; sessionStorage.setItem('vyomi.update-banner-dismissed','1');" style="background:none; border:none; color:#9ca3af; margin-left:14px; cursor:pointer; font-size:14px;" aria-label="Dismiss">✕</button>
   </div>
   <nav class="top-bar">
+    <button id="side-burger" type="button" onclick="toggleSidebar()" aria-label="Open menu" aria-controls="app-sidebar" aria-expanded="false"><span class="material-icons">menu</span></button>
     <a class="tb-brand" href="./" aria-label="vyomi"><img src="assets/brand/vyomi-wordmark.png" alt="vyomi"></a>
     <div class="tb-actions">
       <style>
@@ -1292,7 +1295,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   <button class="side-collapse" type="button" onclick="toggleSidebar()" aria-label="Collapse / expand menu" title="Collapse / expand">
     <span class="material-icons ic-expanded">menu_open</span><span class="material-icons ic-collapsed">menu</span>
   </button>
-  <button id="side-burger" type="button" onclick="toggleSidebar()" aria-label="Open menu" aria-controls="app-sidebar" aria-expanded="false"><span class="material-icons">menu</span></button>
   <div id="side-scrim" onclick="closeSideDrawer()"></div>
   <div id="app-main">
 
@@ -2194,12 +2196,21 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       try { localStorage.setItem('vyomi.appview', view); } catch (_) {}
     }
     var _sideMQ = window.matchMedia('(max-width: 768px)');
+    // The drawer (and its backdrop) start right below the sticky logo bar, so neither covers the other.
+    function _placeSideDrawer() {
+      var tb = document.querySelector('#app-topbar .top-bar') || document.getElementById('app-topbar');
+      var top = tb ? Math.max(0, Math.round(tb.getBoundingClientRect().bottom)) : 0;
+      document.body.style.setProperty('--side-top', top + 'px');
+    }
+    window.addEventListener('scroll', function () { if (document.body.classList.contains('side-open')) _placeSideDrawer(); }, { passive: true });
+    window.addEventListener('resize', function () { if (document.body.classList.contains('side-open')) _placeSideDrawer(); });
     function closeSideDrawer() {
       document.body.classList.remove('side-open');
       var bb = document.getElementById('side-burger'); if (bb) bb.setAttribute('aria-expanded', 'false');
     }
     function toggleSidebar() {
       if (_sideMQ.matches) {   // small screen: open / close the drawer (nothing saved)
+        _placeSideDrawer();
         var o = document.body.classList.toggle('side-open');
         var bb = document.getElementById('side-burger'); if (bb) bb.setAttribute('aria-expanded', String(o));
         return;
