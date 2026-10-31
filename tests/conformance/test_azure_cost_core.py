@@ -149,6 +149,27 @@ check("a scoped query (single RG) is unaffected by allocation rules", any(row[1]
       cost.run_cost_query(ST, SUB, "rg1", {"dataset": {"grouping": [{"name": "ResourceGroupName"}]}}, NOW)["properties"]["rows"]))
 check("list allocation rules", len(cost.dispatch_allocationrules(ST, "GET", SUB, [], {}, {})["body"]["value"]) == 1)
 check("get missing allocation rule → 404", cost.dispatch_allocationrules(ST, "GET", SUB, ["none"], {}, {})["status"] == 404)
+
+# ── "Even" allocationType — mirrors the console's "allocate evenly across all targets" ──
+P3 = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg3/providers"
+P4 = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg4/providers"
+arm.handle("PUT", f"{P3}/Microsoft.Storage/storageAccounts/uicstorage3", {}, {"location": "eastus"})
+arm.handle("PUT", f"{P4}/Microsoft.Storage/storageAccounts/uicstorage4", {}, {"location": "eastus"})
+check("invalid allocationType → 400", cost.dispatch_allocationrules(ST, "PUT", SUB, ["bad-type"], {"properties": {"details": {
+    "sourceResources": [{"name": "rg2"}], "targetResources": [{"name": "rg3"}], "allocationType": "Proportional"}}}, {})["status"] == 400)
+before_even = {row[1]: row[0] for row in cost.run_cost_query(ST, SUB, None, {"dataset": {"grouping": [{"name": "ResourceGroupName"}]}}, NOW)["properties"]["rows"]}
+r = cost.dispatch_allocationrules(ST, "PUT", SUB, ["alloc-even"], {"properties": {"details": {
+    "allocationType": "Even", "sourceResources": [{"name": "rg2"}],
+    "targetResources": [{"name": "rg3"}, {"name": "rg4"}]}}}, {})
+check("create Even allocation rule → 201", r["status"] == 201 and r["body"]["properties"]["details"]["allocationType"] == "Even", r["body"])
+after_even = {row[1]: row[0] for row in cost.run_cost_query(ST, SUB, None, {"dataset": {"grouping": [{"name": "ResourceGroupName"}]}}, NOW)["properties"]["rows"]}
+check("Even split moves rg2's cost off rg2", "rg2" not in after_even, after_even)
+check("Even split lands half of rg2's cost on each target", after_even.get("rg3", 0) == after_even.get("rg4", 0) > 0, after_even)
+check("Even split totals match rg2's pre-rule cost plus rg3/rg4's own",
+      round(after_even.get("rg3", 0) + after_even.get("rg4", 0), 4) ==
+      round(before_even["rg2"] + before_even.get("rg3", 0) + before_even.get("rg4", 0), 4),
+      (before_even, after_even))
+check("delete Even allocation rule", cost.dispatch_allocationrules(ST, "DELETE", SUB, ["alloc-even"], {}, {})["status"] == 200)
 check("create requires source/target resources", cost.dispatch_allocationrules(ST, "PUT", SUB, ["bad"], {"properties": {"details": {}}}, {})["status"] == 400)
 check("delete allocation rule → 200, then 204", cost.dispatch_allocationrules(ST, "DELETE", SUB, ["alloc1"], {}, {})["status"] == 200
       and cost.dispatch_allocationrules(ST, "DELETE", SUB, ["alloc1"], {}, {})["status"] == 204)

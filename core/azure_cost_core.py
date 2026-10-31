@@ -629,6 +629,13 @@ def _apply_allocation_rules(state, sub, agg):
                 source_total += agg.pop(k)
         if source_total <= 0:
             continue
+        if str(details.get("allocationType") or "Fixed").lower() == "even":
+            # "Even" mirrors the real console's "Allocate evenly across all targets" option —
+            # ignores any per-target percentage and splits the source cost equally.
+            share = source_total / len(targets)
+            for t in targets:
+                agg[t["name"]] = round(agg.get(t["name"], 0.0) + share, 6)
+            continue
         total_pct = sum(float(t.get("allocation") or 0) for t in targets)
         for t in targets:
             name = t["name"]
@@ -660,6 +667,8 @@ def dispatch_allocationrules(state, method, sub, rest, payload, query):
         details = props.get("details") or {}
         if method == "PUT" and (not details.get("sourceResources") or not details.get("targetResources")):
             return _err(400, "BadRequest", "properties.details.sourceResources and targetResources are required.")
+        if "allocationType" in details and str(details["allocationType"]) not in ("Fixed", "Even"):
+            return _err(400, "BadRequest", "properties.details.allocationType must be 'Fixed' or 'Even'.")
         rec = state.get(key) or {"id": rid, "name": name, "type": f"{COST_NS}/{ALLOCRULE_TYPE}",
                                   "_type": f"{COST_NS}/{ALLOCRULE_TYPE}", "_sub": sub, "_rg": None, "properties": {}}
         merged = dict(rec["properties"])

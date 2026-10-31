@@ -9,7 +9,12 @@ import { listResourceGroups } from "../../kit/arm.js";
 import { ErrorBar } from "../../kit/common.jsx";
 
 const SOURCES_LABEL = (r) => (r.properties.details?.sourceResources || []).map((s) => s.name).join(", ");
-const TARGETS_LABEL = (r) => (r.properties.details?.targetResources || []).map((t) => `${t.name} (${t.allocation}%)`).join(", ");
+const TARGETS_LABEL = (r) => {
+  const d = r.properties.details || {};
+  const names = (d.targetResources || []).map((t) => t.name);
+  return d.allocationType === "Even" ? `${names.join(", ")} (even split)` : (d.targetResources || []).map((t) => `${t.name} (${t.allocation}%)`).join(", ");
+};
+const ALLOCATION_TYPE_LABEL = { Fixed: "Fixed", Even: "Even split" };
 
 export default function CostAllocation() {
   const [items, setItems] = useState([]);
@@ -18,6 +23,7 @@ export default function CostAllocation() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [sourceRg, setSourceRg] = useState("");
+  const [allocationType, setAllocationType] = useState("Fixed");
   const [targets, setTargets] = useState([{ name: "", allocation: "100" }]);
   const [rgs, setRgs] = useState([]);
 
@@ -30,6 +36,7 @@ export default function CostAllocation() {
     { key: "status", label: "Status", value: (r) => r.properties.status },
     { key: "source", label: "Source resource group", value: SOURCES_LABEL },
     { key: "target", label: "Target resource group(s)", value: TARGETS_LABEL },
+    { key: "allocationType", label: "Allocation type", value: (r) => ALLOCATION_TYPE_LABEL[r.properties.details?.allocationType] || r.properties.details?.allocationType },
     { key: "order", label: "Order", value: (r) => r.properties.order },
   ];
 
@@ -50,6 +57,10 @@ export default function CostAllocation() {
                   <option value="">Source resource group...</option>
                   {rgs.map((rg) => <option key={rg.name} value={rg.name}>{rg.name}</option>)}
                 </Select>
+                <Select value={allocationType} onChange={(_, d) => setAllocationType(d.value)} aria-label="Allocation type">
+                  <option value="Fixed">Fixed percentage</option>
+                  <option value="Even">Allocate evenly across all targets</option>
+                </Select>
               </div>
               {targets.map((t, i) => (
                 <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
@@ -57,8 +68,11 @@ export default function CostAllocation() {
                     <option value="">Target resource group...</option>
                     {rgs.map((rg) => <option key={rg.name} value={rg.name}>{rg.name}</option>)}
                   </Select>
-                  <Input type="number" min="0" max="100" value={t.allocation} onChange={(_, d) => update(i, { allocation: d.value })}
-                    aria-label="Allocation percentage" style={{ width: 90 }} />%
+                  {allocationType === "Fixed" && (
+                    <Input type="number" min="0" max="100" value={t.allocation} onChange={(_, d) => update(i, { allocation: d.value })}
+                      aria-label="Allocation percentage" style={{ width: 90 }} />
+                  )}
+                  {allocationType === "Fixed" && "%"}
                   <Button icon={<Delete20Regular />} appearance="subtle" aria-label="Remove target"
                     onClick={() => setTargets(targets.filter((_, j) => j !== i))} />
                 </div>
@@ -67,11 +81,11 @@ export default function CostAllocation() {
               <div style={{ marginTop: 8 }}>
                 <Button appearance="primary" disabled={!name || !sourceRg || !validTargets.length} onClick={async () => {
                   await putAllocationRule(name, { properties: { status: "Active", details: {
-                    allocationType: "Fixed",
+                    allocationType,
                     sourceResources: [{ name: sourceRg }],
                     targetResources: validTargets.map((t) => ({ name: t.name, allocation: Number(t.allocation) || 0 })),
                   } } });
-                  setName(""); setSourceRg(""); setTargets([{ name: "", allocation: "100" }]); setCreating(false); load();
+                  setName(""); setSourceRg(""); setAllocationType("Fixed"); setTargets([{ name: "", allocation: "100" }]); setCreating(false); load();
                 }}>Save</Button>
               </div>
             </div>
