@@ -266,28 +266,45 @@
  "s3.bucket.website": {
   "title": "Static website hosting",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "config_only",
+   "offline": "config_only"
   },
   "limitations": [
-   "Static website hosting serves GET/HEAD over a separate bucket-name.s3-website-<region>.amazonaws.com HTTP origin with index/error-document routing; Vyomi's native wire is a single S3 control+data endpoint and does not run a per-bucket website origin."
+   "Put/Get/DeleteBucketWebsite store and return the index/error-document configuration verbatim, but static website hosting serves GET/HEAD over a separate bucket-name.s3-website-<region>.amazonaws.com HTTP origin; Vyomi's native wire is a single S3 control+data endpoint and does not run a per-bucket website origin, so that serving path does not exist."
+  ],
+  "api": [
+   "PutBucketWebsite",
+   "GetBucketWebsite",
+   "DeleteBucketWebsite"
   ],
   "probe": {
-   "s3_unsupported": "website"
-  }
+   "s3_roundtrip": "website",
+   "doc": "<WebsiteConfiguration><IndexDocument><Suffix>index.html</Suffix></IndexDocument><ErrorDocument><Key>error.html</Key></ErrorDocument></WebsiteConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py"
+  ]
  },
  "s3.bucket.logging": {
   "title": "Server access logging",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "config_only",
+   "offline": "config_only"
   },
   "limitations": [
-   "Server access logging periodically writes delivery-log objects (one per time window) into a target bucket from S3's internal request-logging pipeline; Vyomi has no request-log writer producing those objects."
+   "Put/GetBucketLogging store and return the target bucket/prefix verbatim, but server access logging periodically writes delivery-log objects (one per time window) into that target bucket from S3's internal request-logging pipeline; Vyomi has no request-log writer producing those objects."
+  ],
+  "api": [
+   "PutBucketLogging",
+   "GetBucketLogging"
   ],
   "probe": {
-   "s3_unsupported": "logging"
-  }
+   "s3_roundtrip": "logging",
+   "doc": "<BucketLoggingStatus><LoggingEnabled><TargetBucket>log-dest</TargetBucket><TargetPrefix>logs/</TargetPrefix></LoggingEnabled></BucketLoggingStatus>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py"
+  ]
  },
  "s3.bucket.notification": {
   "title": "Event notifications",
@@ -314,15 +331,25 @@
  "s3.bucket.replication": {
   "title": "Replication rules",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Cross-/same-region replication asynchronously copies objects to a destination bucket (often cross-account/cross-region) via a background replication engine; Vyomi has no background replication worker."
+   "PutBucketReplication requires source-bucket Versioning Enabled (as real S3 does). Enabled rules are enforced SYNCHRONOUSLY on PutObject/CopyObject/CompleteMultipartUpload — a matching key is copied into its destination bucket immediately (no async replication-time delay), and the source version's GetObject/HeadObject response carries x-amz-replication-status: COMPLETED. Only destination buckets that exist in this same Vyomi appliance are reachable — real cross-account/cross-region destinations outside it are not. NoncurrentVersionReplication, delete-marker replication, RTC/metrics and replica-modification-sync are not yet enforced."
+  ],
+  "api": [
+   "PutBucketReplication",
+   "GetBucketReplication",
+   "DeleteBucketReplication"
   ],
   "probe": {
-   "s3_unsupported": "replication"
-  }
+   "s3_roundtrip": "replication",
+   "need_versioning": true,
+   "doc": "<ReplicationConfiguration><Role>arn:aws:iam::123456789012:role/repl</Role><Rule><ID>cap-rule</ID><Status>Enabled</Status><Filter><Prefix>cap/</Prefix></Filter><Destination><Bucket>arn:aws:s3:::cap-replication-dest</Bucket></Destination></Rule></ReplicationConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py"
+  ]
  },
  "s3.bucket.accelerate": {
   "title": "Transfer acceleration",
@@ -340,53 +367,94 @@
  "s3.bucket.request-payment": {
   "title": "Requester pays",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "config_only",
+   "offline": "config_only"
   },
   "limitations": [
-   "Requester Pays changes who is billed for data transfer and requests; Vyomi has no request-identity or billing model, so there is no payer to attribute cost to."
+   "Put/GetBucketRequestPayment store and return the Payer setting (BucketOwner/Requester), but Requester Pays changes who is billed for data transfer and requests; Vyomi has no request-identity or billing model, so there is no payer to attribute cost to and no billing behaviour changes."
+  ],
+  "api": [
+   "PutBucketRequestPayment",
+   "GetBucketRequestPayment"
   ],
   "probe": {
-   "s3_unsupported": "requestPayment"
-  }
+   "s3_roundtrip": "requestPayment",
+   "doc": "<RequestPaymentConfiguration><Payer>Requester</Payer></RequestPaymentConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py"
+  ]
  },
  "s3.bucket.intelligent-tiering": {
   "title": "Intelligent-Tiering Archive configurations",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "config_only",
+   "offline": "config_only"
   },
   "limitations": [
-   "Intelligent-Tiering archive configurations move objects between access tiers automatically based on 30/90+ day access-pattern windows; Vyomi does not run a long-horizon storage-class scheduler."
+   "Put/Get/List/DeleteBucketIntelligentTieringConfiguration store and return each named configuration verbatim, but Intelligent-Tiering archive configurations move objects between access tiers automatically based on 30/90+ day access-pattern windows; Vyomi does not run a long-horizon storage-class scheduler, so no object ever actually transitions tier."
+  ],
+  "api": [
+   "PutBucketIntelligentTieringConfiguration",
+   "GetBucketIntelligentTieringConfiguration",
+   "ListBucketIntelligentTieringConfigurations",
+   "DeleteBucketIntelligentTieringConfiguration"
   ],
   "probe": {
-   "s3_unsupported": "intelligent-tiering"
-  }
+   "s3_roundtrip": "intelligent-tiering",
+   "id": "cap-cfg",
+   "doc": "<IntelligentTieringConfiguration><Id>cap-cfg</Id><Status>Enabled</Status><Tierings><Tiering><AccessTier>ARCHIVE_ACCESS</AccessTier><Days>90</Days></Tiering></Tierings></IntelligentTieringConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py"
+  ]
  },
  "s3.bucket.inventory": {
   "title": "Inventory configurations",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "config_only",
+   "offline": "config_only"
   },
   "limitations": [
-   "Inventory configurations run on a daily/weekly schedule and write a CSV/ORC/Parquet manifest of bucket contents to a destination bucket; Vyomi has no scheduler producing those exports."
+   "Put/Get/List/DeleteBucketInventoryConfiguration store and return each named configuration verbatim, but inventory configurations run on a daily/weekly schedule and write a CSV/ORC/Parquet manifest of bucket contents to a destination bucket; Vyomi has no scheduler producing those exports."
+  ],
+  "api": [
+   "PutBucketInventoryConfiguration",
+   "GetBucketInventoryConfiguration",
+   "ListBucketInventoryConfigurations",
+   "DeleteBucketInventoryConfiguration"
   ],
   "probe": {
-   "s3_unsupported": "inventory"
-  }
+   "s3_roundtrip": "inventory",
+   "id": "cap-cfg",
+   "doc": "<InventoryConfiguration><Id>cap-cfg</Id><IsEnabled>true</IsEnabled><IncludedObjectVersions>Current</IncludedObjectVersions><Schedule><Frequency>Daily</Frequency></Schedule><Destination><S3BucketDestination><Bucket>arn:aws:s3:::cap-inventory-dest</Bucket><Format>CSV</Format></S3BucketDestination></Destination></InventoryConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py"
+  ]
  },
  "s3.bucket.metrics": {
   "title": "Metrics",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "config_only",
+   "offline": "config_only"
   },
   "limitations": [
-   "Request/storage filter metrics publish to CloudWatch on a recurring schedule; Vyomi does not run a CloudWatch metrics pipeline for S3."
+   "Put/Get/List/DeleteBucketMetricsConfiguration store and return each named request-metrics filter verbatim, but request/storage filter metrics publish to CloudWatch on a recurring schedule; Vyomi does not run a CloudWatch metrics pipeline for S3, so no metric data points are ever produced."
+  ],
+  "api": [
+   "PutBucketMetricsConfiguration",
+   "GetBucketMetricsConfiguration",
+   "ListBucketMetricsConfigurations",
+   "DeleteBucketMetricsConfiguration"
   ],
   "probe": {
-   "s3_unsupported": "metrics"
-  }
+   "s3_roundtrip": "metrics",
+   "id": "cap-cfg",
+   "doc": "<MetricsConfiguration><Id>cap-cfg</Id><Filter><Prefix>logs/</Prefix></Filter></MetricsConfiguration>"
+  },
+  "tests": [
+   "tests/conformance/test_s3_depth2_core.py"
+  ]
  }
 }

@@ -258,6 +258,89 @@ export const putRetention = (b, key, mode, retainUntil, bypass) => s3("PUT", `/$
   headers: bypass ? { "x-amz-bypass-governance-retention": "true" } : {},
 });
 
+export async function getWebsite(b) {
+  const r = await sub(b, "website");
+  if (r.absent) return { config: null };
+  if (!r.value) return r;
+  const w = r.value.WebsiteConfiguration || {};
+  return { config: { indexDocument: w.IndexDocument?.Suffix || "", errorDocument: w.ErrorDocument?.Key || "" } };
+}
+export const putWebsite = (b, indexDocument, errorDocument) => s3("PUT", `/${b}`, {
+  query: { website: "" },
+  body: xml(`<WebsiteConfiguration ${NS}><IndexDocument><Suffix>${esc(indexDocument)}</Suffix></IndexDocument>${errorDocument ? `<ErrorDocument><Key>${esc(errorDocument)}</Key></ErrorDocument>` : ""}</WebsiteConfiguration>`),
+});
+export const deleteWebsite = (b) => s3("DELETE", `/${b}`, { query: { website: "" } });
+
+export async function getLogging(b) {
+  const r = await s3("GET", `/${b}`, { query: { logging: "" } });
+  const le = r.BucketLoggingStatus?.LoggingEnabled;
+  return { enabled: !!le, targetBucket: le?.TargetBucket || "", targetPrefix: le?.TargetPrefix || "" };
+}
+export const putLogging = (b, targetBucket, targetPrefix) => s3("PUT", `/${b}`, {
+  query: { logging: "" },
+  body: xml(targetBucket
+    ? `<BucketLoggingStatus ${NS}><LoggingEnabled><TargetBucket>${esc(targetBucket)}</TargetBucket><TargetPrefix>${esc(targetPrefix || "")}</TargetPrefix></LoggingEnabled></BucketLoggingStatus>`
+    : `<BucketLoggingStatus ${NS}/>`),
+});
+
+export async function getRequestPayment(b) {
+  const r = await s3("GET", `/${b}`, { query: { requestPayment: "" } });
+  return { payer: r.RequestPaymentConfiguration?.Payer || "BucketOwner" };
+}
+export const putRequestPayment = (b, payer) => s3("PUT", `/${b}`, {
+  query: { requestPayment: "" },
+  body: xml(`<RequestPaymentConfiguration ${NS}><Payer>${payer}</Payer></RequestPaymentConfiguration>`),
+});
+
+export async function getIntelligentTiering(b) {
+  const r = await s3("GET", `/${b}`, { query: { "intelligent-tiering": "" } });
+  return { configs: asList(r.ListBucketIntelligentTieringConfigurationsOutput?.IntelligentTieringConfiguration).map((c) => ({
+    id: c.Id, status: c.Status, tierings: asList(c.Tierings?.Tiering).map((t) => ({ accessTier: t.AccessTier, days: Number(t.Days) })),
+  })) };
+}
+export const putIntelligentTiering = (b, id, status, tierings) => s3("PUT", `/${b}`, {
+  query: { "intelligent-tiering": "", id },
+  body: xml(`<IntelligentTieringConfiguration ${NS}><Id>${esc(id)}</Id><Status>${status}</Status><Tierings>${tierings.map((t) => `<Tiering><AccessTier>${t.accessTier}</AccessTier><Days>${t.days}</Days></Tiering>`).join("")}</Tierings></IntelligentTieringConfiguration>`),
+});
+export const deleteIntelligentTiering = (b, id) => s3("DELETE", `/${b}`, { query: { "intelligent-tiering": "", id } });
+
+export async function getInventory(b) {
+  const r = await s3("GET", `/${b}`, { query: { inventory: "" } });
+  return { configs: asList(r.ListInventoryConfigurationsResult?.InventoryConfiguration).map((c) => ({
+    id: c.Id, enabled: c.IsEnabled === "true", destination: (c.Destination?.S3BucketDestination?.Bucket || "").split(":::").pop() || "",
+    format: c.Destination?.S3BucketDestination?.Format, frequency: c.Schedule?.Frequency, includedVersions: c.IncludedObjectVersions,
+  })) };
+}
+export const putInventory = (b, { id, destinationBucket, format = "CSV", frequency = "Daily", includedVersions = "Current" }) => s3("PUT", `/${b}`, {
+  query: { inventory: "", id },
+  body: xml(`<InventoryConfiguration ${NS}><Id>${esc(id)}</Id><IsEnabled>true</IsEnabled><IncludedObjectVersions>${includedVersions}</IncludedObjectVersions><Schedule><Frequency>${frequency}</Frequency></Schedule><Destination><S3BucketDestination><Bucket>arn:aws:s3:::${esc(destinationBucket)}</Bucket><Format>${format}</Format></S3BucketDestination></Destination></InventoryConfiguration>`),
+});
+export const deleteInventory = (b, id) => s3("DELETE", `/${b}`, { query: { inventory: "", id } });
+
+export async function getMetricsConfigs(b) {
+  const r = await s3("GET", `/${b}`, { query: { metrics: "" } });
+  return { configs: asList(r.ListBucketMetricsConfigurationsResult?.MetricsConfiguration).map((c) => ({ id: c.Id, prefix: c.Filter?.Prefix || "" })) };
+}
+export const putMetricsConfig = (b, id, prefix) => s3("PUT", `/${b}`, {
+  query: { metrics: "", id },
+  body: xml(`<MetricsConfiguration ${NS}><Id>${esc(id)}</Id>${prefix ? `<Filter><Prefix>${esc(prefix)}</Prefix></Filter>` : ""}</MetricsConfiguration>`),
+});
+export const deleteMetricsConfig = (b, id) => s3("DELETE", `/${b}`, { query: { metrics: "", id } });
+
+const REPLICATION_ROLE = "arn:aws:iam::000000000000:role/vyomi-s3-replication";
+export async function getReplication(b) {
+  const r = await sub(b, "replication");
+  if (r.absent) return { rules: [] };
+  if (!r.value) return r;
+  return { rules: asList(r.value.ReplicationConfiguration?.Rule).map((x) => ({
+    id: x.ID, status: x.Status, prefix: x.Filter?.Prefix ?? "", destination: (x.Destination?.Bucket || "").split(":::").pop() || "",
+  })) };
+}
+const replicationRuleXml = (r) => `<Rule><ID>${esc(r.id)}</ID><Status>${r.status}</Status><Filter><Prefix>${esc(r.prefix || "")}</Prefix></Filter><Destination><Bucket>arn:aws:s3:::${esc(r.destination)}</Bucket></Destination></Rule>`;
+export const putReplicationRules = (b, rules) => rules.length
+  ? s3("PUT", `/${b}`, { query: { replication: "" }, body: xml(`<ReplicationConfiguration ${NS}><Role>${REPLICATION_ROLE}</Role>${rules.map(replicationRuleXml).join("")}</ReplicationConfiguration>`) })
+  : s3("DELETE", `/${b}`, { query: { replication: "" } });
+
 export async function getCors(b) {
   const r = await sub(b, "cors");
   if (r.absent) return { rules: null };

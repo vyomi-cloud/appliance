@@ -38,7 +38,7 @@ export default function BucketDetail({ params, query }) {
           { id: "metadata", label: "Metadata", content: <NotSimulatedContainer title="Metadata configuration" note="S3 Metadata (the queryable metadata table for a bucket) isn't modeled in Vyomi." /> },
           { id: "properties", label: "Properties", content: <Properties bucket={bucket} /> },
           { id: "permissions", label: "Permissions", content: <Permissions bucket={bucket} /> },
-          { id: "metrics", label: "Metrics", content: <Metrics /> },
+          { id: "metrics", label: "Metrics", content: <Metrics bucket={bucket} /> },
           { id: "management", label: "Management", content: <Management bucket={bucket} /> },
           { id: "access-points", label: "Access Points", content: <NotSimulatedContainer title="Access Points" feature="S3 Access Points" /> },
         ]}
@@ -142,15 +142,15 @@ function Properties({ bucket }) {
         </Container>
       )} />
       <Encryption bucket={bucket} state={enc} />
-      <CapabilityContainer id="s3.bucket.intelligent-tiering" title="Intelligent-Tiering Archive configurations" />
-      <CapabilityContainer id="s3.bucket.logging" title="Server access logging" />
+      <IntelligentTieringSection bucket={bucket} />
+      <LoggingSection bucket={bucket} />
       <NotSimulatedContainer title="AWS CloudTrail data events" />
       <CapabilityContainer id="s3.bucket.notification" title="Event notifications" />
       <NotSimulatedContainer title="Amazon EventBridge" />
       <CapabilityContainer id="s3.bucket.accelerate" title="Transfer acceleration" />
       <ObjectLockSection bucket={bucket} />
-      <CapabilityContainer id="s3.bucket.request-payment" title="Requester pays" />
-      <CapabilityContainer id="s3.bucket.website" title="Static website hosting" />
+      <RequestPaymentSection bucket={bucket} />
+      <WebsiteSection bucket={bucket} />
     </SpaceBetween>
   );
 }
@@ -211,15 +211,312 @@ function ObjectLockSection({ bucket }) {
   );
 }
 
-function Metrics() {
+function WebsiteSection({ bucket }) {
+  const notify = useNotify();
+  const site = useAsync(() => api.getWebsite(bucket), [bucket]);
+  const [edit, setEdit] = useState(null);
+  const [saving, setSaving] = useState(false);
+  return (
+    <CapabilityContainer id="s3.bucket.website" title="Static website hosting"
+      actions={<Button onClick={() => setEdit({ enabled: !!site.data?.config, indexDocument: site.data?.config?.indexDocument || "index.html", errorDocument: site.data?.config?.errorDocument || "" })}>Edit</Button>}>
+      {site.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
+        : site.data?.error ? <ErrorAlert error={site.data.error} />
+        : <div><Box variant="awsui-key-label">Static website hosting</Box><div>{site.data.config ? "Enabled" : "Disabled"}</div></div>}
+      <Modal visible={!!edit} onDismiss={() => setEdit(null)} header="Edit static website hosting"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setEdit(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={async () => {
+            setSaving(true);
+            try {
+              if (edit.enabled) await api.putWebsite(bucket, edit.indexDocument, edit.errorDocument);
+              else await api.deleteWebsite(bucket);
+              notify.success(`Successfully edited Static website hosting.${saveNotice("s3.bucket.website")}`);
+              setEdit(null); site.reload();
+            } catch (e) { notify.error(e); } finally { setSaving(false); }
+          }}>Save changes</Button>
+        </SpaceBetween></Box>}>
+        {edit && <SpaceBetween size="m">
+          <FormField label="Static website hosting">
+            <RadioGroup value={edit.enabled ? "enabled" : "disabled"} onChange={({ detail }) => setEdit({ ...edit, enabled: detail.value === "enabled" })}
+              items={[{ value: "disabled", label: "Disable" }, { value: "enabled", label: "Enable" }]} />
+          </FormField>
+          {edit.enabled && <>
+            <FormField label="Index document"><Input value={edit.indexDocument} onChange={({ detail }) => setEdit({ ...edit, indexDocument: detail.value })} /></FormField>
+            <FormField label="Error document"><Input value={edit.errorDocument} onChange={({ detail }) => setEdit({ ...edit, errorDocument: detail.value })} /></FormField>
+          </>}
+        </SpaceBetween>}
+      </Modal>
+    </CapabilityContainer>
+  );
+}
+
+function LoggingSection({ bucket }) {
+  const notify = useNotify();
+  const log = useAsync(() => api.getLogging(bucket), [bucket]);
+  const [edit, setEdit] = useState(null);
+  const [saving, setSaving] = useState(false);
+  return (
+    <CapabilityContainer id="s3.bucket.logging" title="Server access logging"
+      actions={<Button onClick={() => setEdit({ enabled: !!log.data?.enabled, targetBucket: log.data?.targetBucket || "", targetPrefix: log.data?.targetPrefix || "" })}>Edit</Button>}>
+      {log.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
+        : log.error ? <ErrorAlert error={log.error} />
+        : <div><Box variant="awsui-key-label">Server access logging</Box><div>{log.data.enabled ? `Enabled — target: ${log.data.targetBucket}` : "Disabled"}</div></div>}
+      <Modal visible={!!edit} onDismiss={() => setEdit(null)} header="Edit server access logging"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setEdit(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={async () => {
+            setSaving(true);
+            try {
+              await api.putLogging(bucket, edit.enabled ? edit.targetBucket : "", edit.enabled ? edit.targetPrefix : "");
+              notify.success(`Successfully edited Server access logging.${saveNotice("s3.bucket.logging")}`);
+              setEdit(null); log.reload();
+            } catch (e) { notify.error(e); } finally { setSaving(false); }
+          }}>Save changes</Button>
+        </SpaceBetween></Box>}>
+        {edit && <SpaceBetween size="m">
+          <FormField label="Server access logging">
+            <RadioGroup value={edit.enabled ? "enabled" : "disabled"} onChange={({ detail }) => setEdit({ ...edit, enabled: detail.value === "enabled" })}
+              items={[{ value: "disabled", label: "Disable" }, { value: "enabled", label: "Enable" }]} />
+          </FormField>
+          {edit.enabled && <>
+            <FormField label="Target bucket"><Input value={edit.targetBucket} onChange={({ detail }) => setEdit({ ...edit, targetBucket: detail.value })} /></FormField>
+            <FormField label="Target prefix"><Input value={edit.targetPrefix} onChange={({ detail }) => setEdit({ ...edit, targetPrefix: detail.value })} /></FormField>
+          </>}
+        </SpaceBetween>}
+      </Modal>
+    </CapabilityContainer>
+  );
+}
+
+function RequestPaymentSection({ bucket }) {
+  const notify = useNotify();
+  const pay = useAsync(() => api.getRequestPayment(bucket), [bucket]);
+  const [edit, setEdit] = useState(null);
+  const [saving, setSaving] = useState(false);
+  return (
+    <CapabilityContainer id="s3.bucket.request-payment" title="Requester pays"
+      actions={<Button onClick={() => setEdit({ payer: pay.data?.payer || "BucketOwner" })}>Edit</Button>}>
+      {pay.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
+        : pay.error ? <ErrorAlert error={pay.error} />
+        : <div><Box variant="awsui-key-label">Requester pays</Box><div>{pay.data.payer === "Requester" ? "Enabled" : "Disabled"}</div></div>}
+      <Modal visible={!!edit} onDismiss={() => setEdit(null)} header="Edit requester pays"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setEdit(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={async () => {
+            setSaving(true);
+            try {
+              await api.putRequestPayment(bucket, edit.payer);
+              notify.success(`Successfully edited Requester pays.${saveNotice("s3.bucket.request-payment")}`);
+              setEdit(null); pay.reload();
+            } catch (e) { notify.error(e); } finally { setSaving(false); }
+          }}>Save changes</Button>
+        </SpaceBetween></Box>}>
+        {edit && <FormField label="Requester pays">
+          <RadioGroup value={edit.payer} onChange={({ detail }) => setEdit({ ...edit, payer: detail.value })}
+            items={[{ value: "BucketOwner", label: "Disable" }, { value: "Requester", label: "Enable" }]} />
+        </FormField>}
+      </Modal>
+    </CapabilityContainer>
+  );
+}
+
+function IntelligentTieringSection({ bucket }) {
+  const notify = useNotify();
+  const it = useAsync(() => api.getIntelligentTiering(bucket), [bucket]);
+  const [sel, setSel] = useState([]);
+  const [create, setCreate] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const configs = it.data?.configs || [];
+  return (
+    <CapabilityContainer id="s3.bucket.intelligent-tiering" title="Intelligent-Tiering Archive configurations" counter={`(${configs.length})`}
+      actions={<SpaceBetween direction="horizontal" size="xs">
+        <Button disabled={!sel.length} onClick={async () => {
+          for (const c of sel) await api.deleteIntelligentTiering(bucket, c.id);
+          notify.success("Successfully deleted configuration.");
+          setSel([]); it.reload();
+        }}>Delete</Button>
+        <Button onClick={() => setCreate({ id: "", days: "90" })}>Create configuration</Button>
+      </SpaceBetween>}>
+      {it.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
+        : it.error ? <ErrorAlert error={it.error} />
+        : <Table variant="embedded" items={configs} selectionType="multi" selectedItems={sel} onSelectionChange={({ detail }) => setSel(detail.selectedItems)} trackBy="id"
+            columnDefinitions={[{ id: "id", header: "Configuration ID", cell: (c) => c.id }, { id: "status", header: "Status", cell: (c) => c.status }]}
+            empty={<Box textAlign="center" color="inherit"><b>No configurations</b></Box>} />}
+      <Modal visible={!!create} onDismiss={() => setCreate(null)} header="Create configuration"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setCreate(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={async () => {
+            setSaving(true);
+            try {
+              await api.putIntelligentTiering(bucket, create.id, "Enabled", [{ accessTier: "ARCHIVE_ACCESS", days: Number(create.days) || 90 }]);
+              notify.success(`Successfully created configuration.${saveNotice("s3.bucket.intelligent-tiering")}`);
+              setCreate(null); it.reload();
+            } catch (e) { notify.error(e); } finally { setSaving(false); }
+          }}>Create</Button>
+        </SpaceBetween></Box>}>
+        {create && <SpaceBetween size="m">
+          <FormField label="Configuration ID"><Input value={create.id} onChange={({ detail }) => setCreate({ ...create, id: detail.value })} /></FormField>
+          <FormField label="Days until archive access tier" description="Days of no access before this configuration moves objects to the Archive Access tier.">
+            <Input type="number" value={create.days} onChange={({ detail }) => setCreate({ ...create, days: detail.value })} />
+          </FormField>
+        </SpaceBetween>}
+      </Modal>
+    </CapabilityContainer>
+  );
+}
+
+function MetricsConfigSection({ bucket }) {
+  const notify = useNotify();
+  const met = useAsync(() => api.getMetricsConfigs(bucket), [bucket]);
+  const [sel, setSel] = useState([]);
+  const [create, setCreate] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const configs = met.data?.configs || [];
+  return (
+    <CapabilityContainer id="s3.bucket.metrics" title="Request metrics" counter={`(${configs.length})`}
+      actions={<SpaceBetween direction="horizontal" size="xs">
+        <Button disabled={!sel.length} onClick={async () => {
+          for (const c of sel) await api.deleteMetricsConfig(bucket, c.id);
+          notify.success("Successfully deleted metrics filter.");
+          setSel([]); met.reload();
+        }}>Delete</Button>
+        <Button onClick={() => setCreate({ id: "", prefix: "" })}>Create filter</Button>
+      </SpaceBetween>}>
+      {met.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
+        : met.error ? <ErrorAlert error={met.error} />
+        : <Table variant="embedded" items={configs} selectionType="single" selectedItems={sel} onSelectionChange={({ detail }) => setSel(detail.selectedItems)} trackBy="id"
+            columnDefinitions={[{ id: "name", header: "Filter name", cell: (c) => c.id }, { id: "scope", header: "Scope", cell: (c) => c.prefix ? `Prefix ${c.prefix}` : "Entire bucket" }]}
+            empty={<Box textAlign="center" color="inherit"><b>No request metrics filters</b></Box>} />}
+      <Modal visible={!!create} onDismiss={() => setCreate(null)} header="Create filter"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setCreate(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={async () => {
+            setSaving(true);
+            try {
+              await api.putMetricsConfig(bucket, create.id, create.prefix);
+              notify.success(`Successfully created filter.${saveNotice("s3.bucket.metrics")}`);
+              setCreate(null); met.reload();
+            } catch (e) { notify.error(e); } finally { setSaving(false); }
+          }}>Create</Button>
+        </SpaceBetween></Box>}>
+        {create && <SpaceBetween size="m">
+          <FormField label="Filter name"><Input value={create.id} onChange={({ detail }) => setCreate({ ...create, id: detail.value })} /></FormField>
+          <FormField label="Prefix" description="Limit this filter to keys starting with this prefix. Leave blank to apply to the entire bucket.">
+            <Input value={create.prefix} onChange={({ detail }) => setCreate({ ...create, prefix: detail.value })} />
+          </FormField>
+        </SpaceBetween>}
+      </Modal>
+    </CapabilityContainer>
+  );
+}
+
+function Metrics({ bucket }) {
   return (
     <SpaceBetween size="l">
       <NotSimulatedContainer title="Bucket metrics" feature="CloudWatch storage metrics for S3" />
       <NotSimulatedContainer title="Storage Lens metrics" />
-      <NotSimulatedContainer title="Request metrics" />
+      <MetricsConfigSection bucket={bucket} />
       <NotSimulatedContainer title="Replication metrics" />
       <NotSimulatedContainer title="Data transfer metrics" />
     </SpaceBetween>
+  );
+}
+
+function ReplicationSection({ bucket }) {
+  const notify = useNotify();
+  const rep = useAsync(() => api.getReplication(bucket), [bucket]);
+  const [sel, setSel] = useState([]);
+  const [create, setCreate] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const rules = rep.data?.rules || [];
+  return (
+    <CapabilityContainer id="s3.bucket.replication" title="Replication rules" counter={`(${rules.length})`}
+      actions={<SpaceBetween direction="horizontal" size="xs">
+        <Button disabled={!sel.length} onClick={async () => {
+          try {
+            await api.putReplicationRules(bucket, rules.filter((r) => !sel.includes(r)));
+            notify.success("Successfully deleted replication rule.");
+            setSel([]); rep.reload();
+          } catch (e) { notify.error(e); }
+        }}>Delete</Button>
+        <Button onClick={() => setCreate({ id: "", prefix: "", destination: "" })}>Create replication rule</Button>
+      </SpaceBetween>}>
+      {rep.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
+        : rep.data?.error ? <ErrorAlert error={rep.data.error} />
+        : <Table variant="embedded" items={rules} selectionType="single" selectedItems={sel} onSelectionChange={({ detail }) => setSel(detail.selectedItems)} trackBy="id"
+            columnDefinitions={[{ id: "id", header: "Replication rule name", cell: (r) => r.id }, { id: "status", header: "Status", cell: (r) => r.status },
+              { id: "dest", header: "Destination bucket", cell: (r) => r.destination }, { id: "scope", header: "Scope", cell: (r) => r.prefix ? `Prefix ${r.prefix}` : "Entire bucket" }]}
+            empty={<Box textAlign="center" color="inherit"><b>No replication rules</b><Box variant="p" color="inherit">Bucket Versioning must be Enabled before a replication rule can be created.</Box></Box>} />}
+      <Modal visible={!!create} onDismiss={() => setCreate(null)} header="Create replication rule"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setCreate(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={async () => {
+            setSaving(true);
+            try {
+              const rule = { id: create.id || `rule-${Date.now()}`, status: "Enabled", prefix: create.prefix, destination: create.destination };
+              await api.putReplicationRules(bucket, [...rules, rule]);
+              notify.success(`Successfully created replication rule.${saveNotice("s3.bucket.replication")}`);
+              setCreate(null); rep.reload();
+            } catch (e) { notify.error(e); } finally { setSaving(false); }
+          }}>Create rule</Button>
+        </SpaceBetween></Box>}>
+        {create && <SpaceBetween size="m">
+          <FormField label="Replication rule name"><Input value={create.id} onChange={({ detail }) => setCreate({ ...create, id: detail.value })} /></FormField>
+          <FormField label="Destination bucket" description="Must be an existing bucket in this Vyomi appliance.">
+            <Input value={create.destination} onChange={({ detail }) => setCreate({ ...create, destination: detail.value })} />
+          </FormField>
+          <FormField label="Prefix" description="Limit the scope of this rule to keys starting with this prefix. Leave blank to apply to the entire bucket.">
+            <Input value={create.prefix} onChange={({ detail }) => setCreate({ ...create, prefix: detail.value })} />
+          </FormField>
+        </SpaceBetween>}
+      </Modal>
+    </CapabilityContainer>
+  );
+}
+
+function InventorySection({ bucket }) {
+  const notify = useNotify();
+  const inv = useAsync(() => api.getInventory(bucket), [bucket]);
+  const [sel, setSel] = useState([]);
+  const [create, setCreate] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const configs = inv.data?.configs || [];
+  return (
+    <CapabilityContainer id="s3.bucket.inventory" title="Inventory configurations" counter={`(${configs.length})`}
+      actions={<SpaceBetween direction="horizontal" size="xs">
+        <Button disabled={!sel.length} onClick={async () => {
+          for (const c of sel) await api.deleteInventory(bucket, c.id);
+          notify.success("Successfully deleted inventory configuration.");
+          setSel([]); inv.reload();
+        }}>Delete</Button>
+        <Button onClick={() => setCreate({ id: "", destinationBucket: "" })}>Create inventory configuration</Button>
+      </SpaceBetween>}>
+      {inv.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
+        : inv.error ? <ErrorAlert error={inv.error} />
+        : <Table variant="embedded" items={configs} selectionType="single" selectedItems={sel} onSelectionChange={({ detail }) => setSel(detail.selectedItems)} trackBy="id"
+            columnDefinitions={[{ id: "name", header: "Name", cell: (c) => c.id }, { id: "dest", header: "Destination", cell: (c) => c.destination },
+              { id: "freq", header: "Frequency", cell: (c) => c.frequency }, { id: "format", header: "Format", cell: (c) => c.format }]}
+            empty={<Box textAlign="center" color="inherit"><b>No inventory configurations</b></Box>} />}
+      <Modal visible={!!create} onDismiss={() => setCreate(null)} header="Create inventory configuration"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setCreate(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={async () => {
+            setSaving(true);
+            try {
+              await api.putInventory(bucket, { id: create.id, destinationBucket: create.destinationBucket });
+              notify.success(`Successfully created inventory configuration.${saveNotice("s3.bucket.inventory")}`);
+              setCreate(null); inv.reload();
+            } catch (e) { notify.error(e); } finally { setSaving(false); }
+          }}>Create</Button>
+        </SpaceBetween></Box>}>
+        {create && <SpaceBetween size="m">
+          <FormField label="Name"><Input value={create.id} onChange={({ detail }) => setCreate({ ...create, id: detail.value })} /></FormField>
+          <FormField label="Destination bucket" description="Must be an existing bucket in this Vyomi appliance.">
+            <Input value={create.destinationBucket} onChange={({ detail }) => setCreate({ ...create, destinationBucket: detail.value })} />
+          </FormField>
+        </SpaceBetween>}
+      </Modal>
+    </CapabilityContainer>
   );
 }
 
@@ -247,8 +544,8 @@ function Management({ bucket }) {
           columnDefinitions={[{ id: "id", header: "Lifecycle rule name", cell: (r) => r.id }, { id: "status", header: "Status", cell: (r) => r.status }, { id: "scope", header: "Scope", cell: (r) => r.prefix ? `Prefix ${r.prefix}` : "Entire bucket" }]}
           empty={<Box textAlign="center" color="inherit"><b>No lifecycle rules</b><Box variant="p" color="inherit">There are no lifecycle rules for this bucket.</Box></Box>} />
       )} />
-      <CapabilityContainer id="s3.bucket.replication" title="Replication rules" />
-      <CapabilityContainer id="s3.bucket.inventory" title="Inventory configurations" />
+      <ReplicationSection bucket={bucket} />
+      <InventorySection bucket={bucket} />
       <Modal visible={!!create} onDismiss={() => setCreate(null)} header="Create lifecycle rule"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setCreate(null)}>Cancel</Button>
