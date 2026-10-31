@@ -335,8 +335,12 @@ async function crawlConsole(browser, base, con, needsSW) {
   });
   const calls = () => {
     const now = Date.now();
-    const bg = new Set(log.filter((x) => x.t >= t0 - 2500 && x.t < t0).map((x) => x.p));
-    const n = new Set(log.filter((x) => x.t >= t0 && x.t <= now && !bg.has(x.p)).map((x) => x.p)).size;
+    // Fetches a previous surface was already credited for (e.g. Insights then Metrics both
+    // call /api/metrics/series) are not background polling, so they don't mask this surface's own.
+    const bg = new Set(log.filter((x) => x.t >= t0 - 2500 && x.t < t0 && !x.own).map((x) => x.p));
+    const mine = log.filter((x) => x.t >= t0 && x.t <= now && !bg.has(x.p));
+    mine.forEach((x) => { x.own = true; });
+    const n = new Set(mine.map((x) => x.p)).size;
     t0 = now;
     return n;
   };
