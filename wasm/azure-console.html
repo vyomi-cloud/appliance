@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script src="nano-rates.js"></script>
   <script>
   (function(){
     var base = location.pathname.replace(/\/[^\/]*$/, "");
@@ -915,12 +916,7 @@ function markActive(key){ CURRENT=key; document.querySelectorAll(".navitem").for
 // (/api/runtime/host-distribution → providers[cloud].by_service) using rates
 // that mirror core/cost_model. Nano resources are ephemeral, so this reflects
 // what this console currently holds; simulator cost = $0 → all of it is saved.
-var _NANO_RATE = {
-  s3:0.50, dynamodb:1.25, kms:1.00,cloudwatch:0.10,secretsmanager:0.40, sqs:0.40, sns:0.50, iam:0, rds:25.55, elbv2:16.43, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0,
-  compute:24.53, storage:0.50, cloudsql:25.00, pubsub:0.40, firestore:0.18, functions:0.20, secretmanager:0.18,
-  'microsoft.compute/virtualmachines':30.37, 'microsoft.sql/servers':4.99, 'microsoft.storage/storageaccounts':0.50,
-  'microsoft.documentdb/databaseaccounts':24.48, 'microsoft.web/sites':0.20, 'microsoft.servicebus/namespaces':9.81, 'microsoft.keyvault/vaults':0.03
-};
+var _NANO_RATE = window.NANO_RATE || {};   // the shared table: wasm/nano-rates.js
 // ── Home cards shared by the AWS / GCP / Azure consoles (offline + Nano) ─────────
 // Each console wraps these bodies in its own card chrome. Bars use the console's
 // accent; numbers and labels stay in text colors (identity is the label, not color).
