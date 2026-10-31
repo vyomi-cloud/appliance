@@ -45,6 +45,10 @@ TOPIC_SETTABLE = {"DeliveryPolicy", "DisplayName", "Policy", "TracingConfig", "K
                   "SignatureVersion", "ContentBasedDeduplication", "ArchivePolicy",
                   "FifoThroughputScope", "BeginningArchiveTime"}
 TOPIC_SETTABLE_PREFIXES = ("HTTP", "Lambda", "SQS", "Application", "Firehose")
+# Delivery-status logging feedback attributes (CloudWatch Logs), keyed by botocore's
+# per-protocol prefix on {prefix}SuccessFeedbackRoleArn / SampleRate / FailureFeedbackRoleArn.
+FEEDBACK_PREFIX = {"sqs": "SQS", "http": "HTTP", "https": "HTTP", "lambda": "Lambda",
+                   "application": "Application", "firehose": "Firehose"}
 SUB_SETTABLE = {"DeliveryPolicy", "FilterPolicy", "FilterPolicyScope", "RawMessageDelivery",
                 "RedrivePolicy", "SubscriptionRoleArn", "ReplayPolicy"}
 SMS_ATTRS = {"MonthlySpendLimit", "DeliveryStatusIAMRole", "DeliveryStatusSuccessSamplingRate",
@@ -212,6 +216,57 @@ def _log_delivery(store, **rec) -> dict:
     s["deliveries"].append(rec)
     del s["deliveries"][:-DELIVERY_LOG_MAX]
     return rec
+
+
+def _feedback_sample_ok(rate_raw) -> bool:
+    try:
+        rate = float(rate_raw) if rate_raw not in (None, "") else 100.0
+    except Exception:
+        rate = 100.0
+    if rate >= 100:
+        return True
+    if rate <= 0:
+        return False
+    return (uuid.uuid4().int % 10000) < rate * 100
+
+
+def _record_delivery_feedback(store, topic: dict, protocol: str, endpoint: str, message_id: str,
+                              success: bool, detail: str = "") -> None:
+    """Write a real CloudWatch Logs delivery-status record when the topic has a
+    {Protocol}SuccessFeedbackRoleArn / FailureFeedbackRoleArn configured (SetTopicAttributes).
+    Only SQS outcomes are known synchronously on this substrate (no durable delivery worker),
+    so other protocols are recorded in the delivery log but never produce a feedback log."""
+    prefix = FEEDBACK_PREFIX.get(protocol)
+    if not prefix:
+        return
+    attrs = topic.get("attributes", {})
+    kind = "Success" if success else "Failure"
+    if not attrs.get(f"{prefix}{kind}FeedbackRoleArn"):
+        return
+    if success and not _feedback_sample_ok(attrs.get(f"{prefix}SuccessFeedbackSampleRate")):
+        return
+    logs_store = getattr(store, "logs_store", None)
+    if logs_store is None:
+        return
+    from core import logs_core
+    group = f"sns/{REGION}/{store.account_id}/{topic['name']}/{kind}"
+    # Log stream names may not contain ':' — an endpoint ARN has to be sanitized, same as real
+    # CloudWatch Logs would reject the raw ARN.
+    stream = (endpoint or "default").replace(":", "_")
+    doc = {"notification": {"messageId": message_id, "topicArn": topic["topic_arn"], "timestamp": _now_iso()},
+           "delivery": {"destination": endpoint, "attempts": 1, **({"providerResponse": detail} if detail else {})},
+           "status": kind.upper()}
+    try:
+        if group not in logs_store.log_groups:
+            logs_core._create_log_group(logs_store, {"logGroupName": group})
+        g = logs_store.log_groups[group]
+        if stream not in g["streams"]:
+            logs_core._create_log_stream(logs_store, {"logGroupName": group, "logStreamName": stream})
+        logs_core._put_log_events(logs_store, {"logGroupName": group, "logStreamName": stream,
+                                               "logEvents": [{"timestamp": int(time.time() * 1000),
+                                                              "message": json.dumps(doc)}]})
+    except Exception:
+        pass
 
 
 # ── topics ──────────────────────────────────────────────────────────────────
@@ -917,11 +972,14 @@ def _publish_to_topic(store, topic: dict, msg: dict) -> tuple[str, str]:
                            UnsubscribeURL=envelope["UnsubscribeURL"] % sub["subscription_arn"])
                 body, sattrs = json.dumps(env), None
             if _deliver_sqs(store, sub["endpoint"], body, sattrs, msg.get("group"), dedup):
+                _record_delivery_feedback(store, topic, "sqs", sub["endpoint"], message_id, True)
                 continue
             _log_delivery(store, kind="DeliveryFailure", topic_arn=arn, protocol="sqs",
                           endpoint=sub["endpoint"], subscription_arn=sub["subscription_arn"],
                           subject=msg.get("Subject") or "", message=text, message_id=message_id,
                           error="queue does not exist")
+            _record_delivery_feedback(store, topic, "sqs", sub["endpoint"], message_id, False,
+                                      "queue does not exist")
         else:
             queued = False
             if sub["protocol"] in _PUSH_PROTOCOLS:

@@ -29,10 +29,18 @@
     "tests": ["tests/conformance/test_sns_core.py"]
   },
   "sns.topic.delivery-policy": {
-    "title": "Delivery policy (HTTP/S retry policy) and delivery status logging feedback attributes",
+    "title": "Delivery policy (HTTP/S retry policy)",
     "level": { "nano": "config_only", "offline": "config_only" },
     "limitations": [
-      "The per-topic/per-subscription retry policy and the {Protocol}SuccessFeedbackRoleArn / SampleRate / FailureFeedbackRoleArn attributes round-trip through SetTopicAttributes/GetTopicAttributes exactly as set, but Vyomi never emits the corresponding CloudWatch delivery-status logs."
+      "The per-topic/per-subscription HTTP/S retry policy (healthyRetryPolicy) round-trips through SetTopicAttributes/SetSubscriptionAttributes/GetTopicAttributes exactly as set, but Vyomi never actually retries a push delivery against it — see sns.publish.other-protocols for what Vyomi does deliver."
+    ],
+    "tests": ["tests/conformance/test_sns_core.py"]
+  },
+  "sns.topic.delivery-status-logging": {
+    "title": "Delivery status logging (CloudWatch Logs feedback for successful/failed deliveries)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Setting {Protocol}SuccessFeedbackRoleArn / SuccessFeedbackSampleRate / FailureFeedbackRoleArn is real, and Vyomi really writes a CloudWatch Logs delivery-status record (notification/delivery/status, sample-rated) to a sns/<region>/<account-id>/<topic-name>/Success|Failure log group it creates — but only for Amazon SQS subscriptions, since Nano has no durable delivery worker to know the HTTP/Lambda/Firehose/platform-endpoint outcome synchronously; Vyomi never creates or checks the IAM role named in the role ARN."
     ],
     "tests": ["tests/conformance/test_sns_core.py"]
   },

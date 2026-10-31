@@ -207,6 +207,34 @@ def run(store=None):
     call("DeleteSMSSandboxPhoneNumber", PhoneNumber="+15555550100")
     _check("delete sandbox number twice", err(call("DeleteSMSSandboxPhoneNumber", PhoneNumber="+15555550100"), "ResourceNotFound"))
 
+    # delivery status logging — real CloudWatch Logs feedback for SQS success/failure
+    try:
+        from core.logs_core import LogsStore
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        from logs_core import LogsStore  # type: ignore
+    st.logs_store = LogsStore()
+    call("SetTopicAttributes", TopicArn=arn, AttributeName="SQSSuccessFeedbackRoleArn",
+         AttributeValue="arn:aws:iam::123456789012:role/Success")
+    call("SetTopicAttributes", TopicArn=arn, AttributeName="SQSFailureFeedbackRoleArn",
+         AttributeValue="arn:aws:iam::123456789012:role/Failure")
+    call("Publish", TopicArn=arn, Message="feedback-ok")
+    ok_group = st.logs_store.log_groups.get(f"sns/us-east-1/{ACCT}/orders/Success")
+    _check("success feedback log group created", ok_group is not None)
+    ok_stream = ok_group["streams"].get(q1_arn.replace(":", "_")) if ok_group else None
+    ok_evt = json.loads(ok_stream["events"][-1]["message"]) if ok_stream and ok_stream["events"] else {}
+    _check("success feedback event", ok_evt.get("status") == "SUCCESS" and ok_evt["delivery"]["destination"] == q1_arn)
+
+    ghost_arn = "arn:aws:sqs:us-east-1:123456789012:ghost"
+    gsub = _v(call("Subscribe", TopicArn=arn, Protocol="sqs", Endpoint=ghost_arn).body, "SubscriptionArn")
+    call("Publish", TopicArn=arn, Message="feedback-fail")
+    fail_group = st.logs_store.log_groups.get(f"sns/us-east-1/{ACCT}/orders/Failure")
+    _check("failure feedback log group created", fail_group is not None)
+    fail_stream = fail_group["streams"].get(ghost_arn.replace(":", "_")) if fail_group else None
+    fail_evt = json.loads(fail_stream["events"][-1]["message"]) if fail_stream and fail_stream["events"] else {}
+    _check("failure feedback event", fail_evt.get("status") == "FAILURE" and fail_evt["delivery"]["destination"] == ghost_arn)
+    call("SetTopicAttributes", TopicArn=arn, AttributeName="SQSSuccessFeedbackRoleArn", AttributeValue="")
+    call("SetTopicAttributes", TopicArn=arn, AttributeName="SQSFailureFeedbackRoleArn", AttributeValue="")
+
     # unsubscribe + delete
     _check("unsubscribe", call("Unsubscribe", SubscriptionArn=sub).status == 200)
     _check("unsubscribe missing", err(call("Unsubscribe", SubscriptionArn=sub), "NotFound"))

@@ -480,6 +480,7 @@ class AwsWireRouter:
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.logs.lam_store, self.logs.kinesis_store = self.lam, self.kinesis   # real subscription-filter delivery
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules
+        self.msg.logs_store = self.logs           # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
         self.elbv2 = s.get("elbv2") or elbv2.Elbv2Store()
         self.sfn = s.get("sfn") or sfn.StepFunctionsStore()   # Step Functions (state machines + executions)
         self.cfn = s.get("cfn") or cfn.CloudFormationStore()   # CloudFormation (stacks, change sets, stack sets)
