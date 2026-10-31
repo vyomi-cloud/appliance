@@ -1296,7 +1296,11 @@
        Tokens: page #f4f5f7 · surface #fff · tile #f8fafc · border #e4e7ec ·
        text #101828 / #475467 / #667085 · accent #2563eb. ═══════════ */
     html, body { background: #f4f5f7 !important; color: #101828 !important; }
-    #app-body, #app-main { background: transparent !important; }
+    #app-body { background: transparent !important; }
+    /* the view next to the side menu: a white rounded sheet, no border, with the gray page
+       showing on all four sides (Nano adds room below for the tunnel bar) */
+    #app-main { background: #fff !important; border: 0 !important; border-radius: 14px; margin: 16px; box-sizing: border-box; }
+    body:has(#nano-foot) #app-main { margin-bottom: 50px; }
 
     /* top bar + logo */
     #app-topbar, #app-topbar .top-bar { background: #fff !important; border-bottom: 1px solid #e4e7ec !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
