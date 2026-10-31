@@ -1663,7 +1663,9 @@ try {
   await page.getByText("Identity", { exact: true }).first().waitFor({ timeout: 10000 });
   await page.waitForTimeout(300);
   await page.getByRole("radio", { name: "On" }).click();
+  const identitySaved = page.waitForResponse((r) => ["PATCH", "PUT"].includes(r.request().method()) && new RegExp(`/databases/${DB}\\?`).test(r.url()), { timeout: 15000 });
   await page.getByRole("toolbar", { name: "Identity commands" }).getByRole("button", { name: "Save" }).click();
+  await identitySaved;   // the "Object (principal) ID" label shows before the save completes
   await page.getByText("Object (principal) ID").waitFor({ timeout: 10000 });
 
   await page.goto(UI + `#/sql/${RG}/${SRV}/${DB}/tde`);

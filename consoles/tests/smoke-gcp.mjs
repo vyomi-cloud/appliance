@@ -1164,7 +1164,7 @@ try {
   await page.getByRole("button", { name: "Grant access" }).click();
   await page.getByLabel("New principals").fill("user:kms-smoke@example.com");
   await page.getByRole("button", { name: "Save" }).click();
-  await page.getByText("user:kms-smoke@example.com").waitFor({ timeout: 10000 });
+  await page.getByText("user:kms-smoke@example.com").first().waitFor({ timeout: 10000 });
   const kmsPol = await wjson(`/v1/projects/vyomi-project/locations/us-central1/keyRings/${KR}/cryptoKeys/${KK}:getIamPolicy`);
   check("grant access via UI → getIamPolicy shows binding",
     (kmsPol.bindings || []).some((b) => b.role === "roles/cloudkms.cryptoKeyEncrypterDecrypter" && b.members.includes("user:kms-smoke@example.com")));

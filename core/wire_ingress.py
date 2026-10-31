@@ -802,6 +802,11 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
         _ns["az_arm"] = _core_arm()
     except Exception:
         pass
+    try:   # …and a customer-managed TDE protector is checked against the space's REAL Key Vault keys
+        from core import appliance_stores as _aps2
+        _ns["az_kvkeys"] = _aps2.az_kv_keys_store()
+    except Exception:
+        pass
     r = router or AwsWireRouter(stores=_ns)
     _sfn_lambda(r.lam)   # Step Functions Task states invoke the Lambdas this router serves
     global _NEW_SERVICES_ROUTER
@@ -827,6 +832,8 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
                    # GCP IAM custom roles, Workload Identity Federation, Org Policy v2 — the
                    # cores Nano serves (the offline legacy GCP IAM never had these: 404)
                    "/v1/projects/{project}/roles", "/v1/projects/{project}/locations/global/workloadIdentityPools",
-                   "/v2/projects/{project}/policies"):
+                   "/v2/projects/{project}/policies",
+                   # Backup for GKE (gkebackup backupPlans / backups) on the shared GKE core
+                   "/v1/projects/{project}/locations/{location}/backupPlans"):
         app.add_route(prefix, _proxy, methods=methods)
         app.add_route(prefix + "/{rest:path}", _proxy, methods=methods)
