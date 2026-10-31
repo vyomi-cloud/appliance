@@ -97,14 +97,18 @@
  "gcp.artifacts.repository-mode": {
   "title": "Repository mode (remote / virtual)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Remote and virtual repository configuration is stored and returned; Vyomi does not proxy a remote upstream or aggregate a virtual repository's member repositories."
+   "A virtual repository's upstream policies are enforced: its packages/versions/tags/images are a live, priority-ordered aggregate of its member (standard/remote) repositories in the same location, and it rejects direct pushes/deletes since it has none of its own. Remote repositories still only store their config — proxying a real upstream (Docker Hub, npm, Maven Central, …) needs real network egress to a third-party registry, which Vyomi does not perform."
   ],
   "api": [
-   "repositories.create (mode, remoteRepositoryConfig, virtualRepositoryConfig)"
+   "repositories.create (mode, remoteRepositoryConfig, virtualRepositoryConfig)",
+   "repositories.patch (virtualRepositoryConfig)",
+   "repositories.packages.{list,get}",
+   "repositories.packages.versions.{list,get}",
+   "repositories.packages.tags.{list,get}"
   ],
   "tests": [
    "tests/conformance/test_gcp_artifactregistry_core.py"
@@ -113,11 +117,11 @@
  "gcp.artifacts.cleanup-policies": {
   "title": "Cleanup policies",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Cleanup policies (and dry-run mode) are stored on the repository and returned by the API; Vyomi does not run them against packages and versions."
+   "Cleanup policies are enforced, not just stored: a DELETE policy's olderThan/newerThan/tagState/packageNamePrefixes/versionNamePrefixes conditions are evaluated against real package versions (lazily, the next time the repository is read or written, rather than on the real product's periodic schedule), and matching versions are actually deleted unless a KEEP policy protects them. cleanupPolicyDryRun is honoured (nothing is deleted) but Vyomi does not produce the real product's Cloud Logging dry-run preview report, and the mostRecentVersions (keep-N) policy variant is not modeled."
   ],
   "api": [
    "repositories.patch (cleanupPolicies, cleanupPolicyDryRun)"

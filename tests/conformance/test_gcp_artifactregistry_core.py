@@ -55,7 +55,9 @@ def test_packages_tags_images_and_iam():
     assert call(st, "POST", B + "/r1:getIamPolicy")[1]["etag"] == pol["etag"]
     assert call(st, "POST", B + "/r1:testIamPermissions", None, {"permissions": ["a.b"]})[1] == {"permissions": ["a.b"]}
     call(st, "DELETE", B + "/r1/packages/app/versions/" + digest)
-    assert call(st, "GET", B + "/r1/packages/app/tags")[1].get("tags") == []
+    # Deleting a package's last version drops the (now-empty) package too.
+    assert call(st, "GET", B + "/r1/packages/app/tags")[0] == 404
+    assert call(st, "GET", B + "/r1/packages")[1]["packages"] == []
 
 
 def test_pagination():
@@ -105,6 +107,82 @@ def test_push_sample_verb_and_cleanup_vuln_config():
     code, repo = call(st, "PATCH", B + "/r1", {"updateMask": "cleanupPolicyDryRun,vulnerabilityScanningConfig"},
                       {"cleanupPolicyDryRun": True, "vulnerabilityScanningConfig": {"enablementConfig": "DISABLED"}})
     assert code == 200 and repo["cleanupPolicyDryRun"] is True and repo["vulnerabilityScanningConfig"]["enablementConfig"] == "DISABLED"
+
+
+def test_cleanup_policies_delete_matching_versions_enforced():
+    st = ar.ArtifactRegistryStore()
+    call(st, "POST", B, {"repositoryId": "r1"}, {"format": "DOCKER"})
+    old = ar.ingest_image(st, R, "app", "old")
+    fresh = ar.ingest_image(st, R, "app", "fresh")
+    # Backdate the "old" version the way a real version would age — the engine has no
+    # other way to fast-forward time.
+    old["createTime"] = "2000-01-01T00:00:00.000000Z"
+    # Reject malformed policies before they ever reach the store.
+    assert call(st, "PATCH", B + "/r1", {"updateMask": "cleanupPolicies"},
+                {"cleanupPolicies": {"p1": {"action": "BOGUS"}}})[0] == 400
+    code, repo = call(st, "PATCH", B + "/r1", {"updateMask": "cleanupPolicies"},
+                      {"cleanupPolicies": {"p1": {"action": "DELETE", "condition": {"olderThan": "86400s"}}}})
+    assert code == 200 and repo["cleanupPolicies"]["p1"]["action"] == "DELETE"
+    versions = call(st, "GET", B + "/r1/packages/app/versions")[1]["versions"]
+    ids = {v["name"].rsplit("/", 1)[-1] for v in versions}
+    assert ids == {fresh["name"].rsplit("/", 1)[-1]}, f"old version should have been swept: {ids}"
+
+    # Dry run accepts the policy but enforces nothing.
+    st2 = ar.ArtifactRegistryStore()
+    call(st2, "POST", B, {"repositoryId": "r1"}, {"format": "DOCKER"})
+    old2 = ar.ingest_image(st2, R, "app", "old")
+    old2["createTime"] = "2000-01-01T00:00:00.000000Z"
+    call(st2, "PATCH", B + "/r1", {"updateMask": "cleanupPolicies,cleanupPolicyDryRun"},
+         {"cleanupPolicies": {"p1": {"action": "DELETE", "condition": {"olderThan": "86400s"}}}, "cleanupPolicyDryRun": True})
+    versions2 = call(st2, "GET", B + "/r1/packages/app/versions")[1]["versions"]
+    assert len(versions2) == 1, "dry run must not delete anything despite the matching policy"
+
+    # A KEEP policy protects a version a DELETE policy would otherwise catch.
+    st3 = ar.ArtifactRegistryStore()
+    call(st3, "POST", B, {"repositoryId": "r1"}, {"format": "DOCKER"})
+    protected = ar.ingest_image(st3, R, "app", "pinned")
+    protected["createTime"] = "2000-01-01T00:00:00.000000Z"
+    call(st3, "PATCH", B + "/r1", {"updateMask": "cleanupPolicies"},
+         {"cleanupPolicies": {
+             "del": {"action": "DELETE", "condition": {"olderThan": "86400s"}},
+             "keep": {"action": "KEEP", "condition": {"tagState": "TAGGED"}}}})
+    versions3 = call(st3, "GET", B + "/r1/packages/app/versions")[1]["versions"]
+    assert len(versions3) == 1, "KEEP policy should have protected the tagged version"
+
+
+def test_virtual_repository_aggregates_upstreams_read_only():
+    st = ar.ArtifactRegistryStore()
+    call(st, "POST", B, {"repositoryId": "std1"}, {"format": "DOCKER"})
+    call(st, "POST", B, {"repositoryId": "std2"}, {"format": "DOCKER"})
+    ar.ingest_image(st, "projects/p/locations/us-central1/repositories/std1", "shared", "v1")
+    ar.ingest_image(st, "projects/p/locations/us-central1/repositories/std1", "only-in-std1", "v1")
+    ar.ingest_image(st, "projects/p/locations/us-central1/repositories/std2", "shared", "v2")
+
+    code, op = call(st, "POST", B, {"repositoryId": "virt1"}, {
+        "format": "DOCKER", "mode": "VIRTUAL_REPOSITORY",
+        "virtualRepositoryConfig": {"upstreamPolicies": [
+            {"id": "a", "repository": "projects/p/locations/us-central1/repositories/std1", "priority": 10},
+            {"id": "b", "repository": "projects/p/locations/us-central1/repositories/std2", "priority": 5}]}})
+    assert code == 200, op
+
+    names = {p["displayName"] for p in call(st, "GET", B + "/virt1/packages")[1]["packages"]}
+    assert names == {"shared", "only-in-std1"}
+    # std1 has higher priority: its version of the "shared" package wins the collision.
+    assert len(call(st, "GET", B + "/virt1/packages/shared/versions")[1]["versions"]) == 1
+    tags = {t["name"].rsplit("/", 1)[-1] for t in call(st, "GET", B + "/virt1/packages/shared/tags")[1]["tags"]}
+    assert tags == {"v1"}, f"the higher-priority upstream (std1, tag v1) should win, got {tags}"
+
+    # Virtual repositories are read-only: no direct pushes or deletes.
+    assert call(st, "POST", B + "/virt1:pushSample", None, {"image": "x", "tag": "y"})[0] == 400
+    assert call(st, "DELETE", B + "/virt1/packages/shared")[0] == 400
+
+    # Validation: can't reference a non-existent or a virtual upstream, or cross locations.
+    assert call(st, "POST", B, {"repositoryId": "virt2"}, {
+        "format": "DOCKER", "mode": "VIRTUAL_REPOSITORY",
+        "virtualRepositoryConfig": {"upstreamPolicies": [{"id": "a", "repository": "projects/p/locations/us-central1/repositories/bogus", "priority": 1}]}})[0] == 400
+    assert call(st, "POST", B, {"repositoryId": "virt3"}, {
+        "format": "DOCKER", "mode": "VIRTUAL_REPOSITORY",
+        "virtualRepositoryConfig": {"upstreamPolicies": [{"id": "a", "repository": "projects/p/locations/us-central1/repositories/virt1", "priority": 1}]}})[0] == 400
 
 
 if __name__ == "__main__":

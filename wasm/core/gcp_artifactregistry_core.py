@@ -49,6 +49,10 @@ LOCATIONS = ("us-central1", "us-east1", "us-east4", "us-west1", "us-west2", "eur
 _TYPE = "type.googleapis.com/google.devtools.artifactregistry.v1."
 # Real repository ids: 1-63 chars, lowercase letters / digits / hyphens, start with a letter.
 _ID_OK = set("abcdefghijklmnopqrstuvwxyz0123456789-")
+CLEANUP_ACTIONS = ("DELETE", "KEEP")
+CLEANUP_TAG_STATES = ("ANY", "TAGGED", "UNTAGGED")
+# A virtual repository can only aggregate standard/remote repos (never another virtual one).
+_UPSTREAM_MODES = ("STANDARD_REPOSITORY", "REMOTE_REPOSITORY")
 
 
 @dataclass
@@ -214,6 +218,151 @@ _MUTABLE = ("description", "labels", "kmsKeyName", "dockerConfig", "mavenConfig"
             "virtualRepositoryConfig", "disallowUnspecifiedMode")
 
 
+# ── cleanup policies — ENFORCED (not just stored): matching versions are actually
+# deleted the next time the repository is read, mirroring the real product's periodic
+# background sweep without needing an actual scheduler. ────────────────────────────────
+def _parse_duration(s) -> int | None:
+    """A protobuf Duration JSON string ("2592000s") → whole seconds, or None if invalid."""
+    if not isinstance(s, str) or not s.endswith("s"):
+        return None
+    try:
+        return int(float(s[:-1]))
+    except ValueError:
+        return None
+
+
+def _validate_cleanup_policies(policies) -> str | None:
+    if not isinstance(policies, dict):
+        return "cleanupPolicies must be a map of policy id to CleanupPolicy."
+    for pid, pol in policies.items():
+        if not isinstance(pol, dict) or pol.get("action") not in CLEANUP_ACTIONS:
+            return f"Invalid cleanup policy \"{pid}\": action must be one of {CLEANUP_ACTIONS}."
+        cond = pol.get("condition") or {}
+        if not isinstance(cond, dict):
+            return f"Invalid cleanup policy \"{pid}\": condition must be an object."
+        if "tagState" in cond and cond["tagState"] not in CLEANUP_TAG_STATES:
+            return f"Invalid cleanup policy \"{pid}\": tagState must be one of {CLEANUP_TAG_STATES}."
+        for key in ("olderThan", "newerThan"):
+            if cond.get(key) is not None and _parse_duration(cond[key]) is None:
+                return f"Invalid cleanup policy \"{pid}\": {key} must be a duration string such as \"2592000s\"."
+    return None
+
+
+def _parse_time(s: str):
+    try:
+        return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return None
+
+
+def _policy_condition_matches(cond: dict, pkg_display: str, ver: dict, now_dt) -> bool:
+    tag_state = cond.get("tagState", "ANY")
+    tagged = bool(ver.get("_tags"))
+    if tag_state == "TAGGED" and not tagged:
+        return False
+    if tag_state == "UNTAGGED" and tagged:
+        return False
+    prefixes = cond.get("packageNamePrefixes")
+    if prefixes and not any(pkg_display.startswith(p) for p in prefixes):
+        return False
+    vprefixes = cond.get("versionNamePrefixes")
+    vid = ver["name"].rsplit("/", 1)[-1]
+    if vprefixes and not any(vid.startswith(p) for p in vprefixes):
+        return False
+    created = _parse_time(ver.get("createTime", ""))
+    if created is None:
+        return True
+    age = (now_dt - created).total_seconds()
+    older = _parse_duration(cond.get("olderThan")) if cond.get("olderThan") is not None else None
+    if older is not None and age < older:
+        return False
+    newer = _parse_duration(cond.get("newerThan")) if cond.get("newerThan") is not None else None
+    if newer is not None and age > newer:
+        return False
+    return True
+
+
+def _apply_cleanup_policies(repo: dict) -> int:
+    """Delete versions matched by a DELETE policy and not protected by a KEEP policy.
+    No-op while cleanupPolicyDryRun is set (Vyomi accepts dry-run mode but does not
+    produce the real product's Cloud Logging preview report)."""
+    policies = repo.get("cleanupPolicies") or {}
+    if not policies or repo.get("cleanupPolicyDryRun"):
+        return 0
+    deletes = [p.get("condition") or {} for p in policies.values() if p.get("action") == "DELETE"]
+    if not deletes:
+        return 0
+    keeps = [p.get("condition") or {} for p in policies.values() if p.get("action") == "KEEP"]
+    now_dt = datetime.now(timezone.utc)
+    n = 0
+    for pkg in list(repo["packages"].values()):
+        for vid, ver in list(pkg["versions"].items()):
+            if not any(_policy_condition_matches(c, pkg["displayName"], ver, now_dt) for c in deletes):
+                continue
+            if any(_policy_condition_matches(c, pkg["displayName"], ver, now_dt) for c in keeps):
+                continue
+            _drop_version(repo, pkg, vid)
+            n += 1
+    return n
+
+
+# ── virtual repositories — ENFORCED aggregation of other (non-virtual) repositories in
+# the same project/location, highest `priority` wins on a name collision. Remote
+# repositories still just store their config: proxying a real upstream needs real
+# network egress to a third-party registry, which a local simulator cannot do. ─────────
+def _validate_virtual_config(store, project: str, loc: str, cfg, self_name: str) -> str | None:
+    if not isinstance(cfg, dict):
+        return "virtualRepositoryConfig must be an object."
+    policies = cfg.get("upstreamPolicies") or []
+    if not isinstance(policies, list):
+        return "virtualRepositoryConfig.upstreamPolicies must be a list."
+    prefix = f"projects/{project}/locations/{loc}/repositories/"
+    seen = set()
+    for up in policies:
+        if not isinstance(up, dict) or not up.get("id") or not up.get("repository"):
+            return "Each upstream policy needs an \"id\" and a \"repository\"."
+        if up["id"] in seen:
+            return f"Duplicate upstream policy id \"{up['id']}\"."
+        seen.add(up["id"])
+        rname = up["repository"]
+        if rname == self_name:
+            return "A virtual repository cannot reference itself as an upstream."
+        if not rname.startswith(prefix):
+            return f"Upstream repository \"{rname}\" must be in the same project and location."
+        target = store.repos.get(rname)
+        if target is None:
+            return f"Upstream repository \"{rname}\" not found."
+        if target["mode"] not in _UPSTREAM_MODES:
+            return f"Upstream repository \"{rname}\" must be a standard or remote repository."
+        try:
+            pr = int(up.get("priority", 0))
+        except (TypeError, ValueError):
+            return f"Upstream policy \"{up['id']}\" priority must be an integer."
+        if not (0 <= pr <= 100):
+            return f"Upstream policy \"{up['id']}\" priority must be between 0 and 100."
+    return None
+
+
+def _virtual_members(store, repo: dict) -> list:
+    ups = sorted((repo.get("virtualRepositoryConfig") or {}).get("upstreamPolicies") or [],
+                 key=lambda u: -int(u.get("priority", 0)))
+    out = []
+    for u in ups:
+        target = store.repos.get(u["repository"])
+        if target is not None:
+            out.append(target)
+    return out
+
+
+def _virtual_merge(store, repo: dict) -> dict:
+    """Packages keyed by id, highest-priority upstream wins on a name collision."""
+    merged: dict = {}
+    for m in _virtual_members(store, repo):
+        for pkey, p in m["packages"].items():
+            merged.setdefault(pkey, p)
+    return merged
+
+
 def _create_repo(store, project, loc, query, body) -> GcpResponse:
     rid = query.get("repositoryId") or query.get("repository_id") or ""
     if not rid:
@@ -243,6 +392,14 @@ def _create_repo(store, project, loc, query, body) -> GcpResponse:
             "packages": {}}
     for k in _MUTABLE[2:]:
         if body.get(k) is not None:
+            if k == "cleanupPolicies":
+                err = _validate_cleanup_policies(body[k])
+                if err:
+                    return _err(400, err)
+            if k == "virtualRepositoryConfig":
+                err = _validate_virtual_config(store, project, loc, body[k], name)
+                if err:
+                    return _err(400, err)
             repo[k] = body[k]
     if fmt == "DOCKER":
         repo.setdefault("dockerConfig", {"immutableTags": False})
@@ -255,6 +412,7 @@ def _get_repo(store, name) -> GcpResponse:
     repo = store.repos.get(name)
     if repo is None:
         return _err(404, f"Repository \"{name}\" not found.")
+    _apply_cleanup_policies(repo)
     return _json(200, _repo_view(repo))
 
 
@@ -267,7 +425,10 @@ def _list_repos(store, project, loc, query) -> GcpResponse:
     else:
         prefix = f"projects/{project}/locations/{loc}/repositories/"
         pred = lambda n: n.startswith(prefix)
-    repos = [_repo_view(r) for n, r in sorted(store.repos.items()) if pred(n)]
+    matched = [r for n, r in sorted(store.repos.items()) if pred(n)]
+    for r in matched:
+        _apply_cleanup_policies(r)
+    repos = [_repo_view(r) for r in matched]
     return _json(200, _with_page("repositories", repos, query))
 
 
@@ -277,14 +438,24 @@ def _patch_repo(store, name, query, body) -> GcpResponse:
         return _err(404, f"Repository \"{name}\" not found.")
     mask = [m.strip() for m in (query.get("updateMask") or "").split(",") if m.strip()]
     fields = [m.split(".")[0] for m in mask] if mask else [k for k in _MUTABLE if k in body]
+    project, loc = _pl(name)
     for f in fields:
         if f not in _MUTABLE:
             return _err(400, f"Invalid field mask path: \"{f}\" is not an updatable field of Repository.")
         if f in body:
+            if f == "cleanupPolicies":
+                err = _validate_cleanup_policies(body[f])
+                if err:
+                    return _err(400, err)
+            if f == "virtualRepositoryConfig":
+                err = _validate_virtual_config(store, project, loc, body[f], name)
+                if err:
+                    return _err(400, err)
             repo[f] = body[f]
         else:
             repo.pop(f, None)
     repo["updateTime"] = _now()
+    _apply_cleanup_policies(repo)
     store.persist()
     return _json(200, _repo_view(repo))
 
@@ -353,6 +524,7 @@ def ingest_package(store: ArtifactRegistryStore, repo_name: str, package: str, v
     for t in tags or []:
         _set_tag(pkg, t, ver)
     repo["updateTime"] = now
+    _apply_cleanup_policies(repo)
     store.persist()
     return ver
 
@@ -378,6 +550,7 @@ def _find(store, repo_name, pkey=None):
     repo = store.repos.get(repo_name)
     if repo is None:
         return None, None, _err(404, f"Repository \"{repo_name}\" not found.")
+    _apply_cleanup_policies(repo)
     if pkey is None:
         return repo, None, None
     pkg = repo["packages"].get(pkey)
@@ -387,8 +560,35 @@ def _find(store, repo_name, pkey=None):
 
 
 # ── packages / versions / tags ────────────────────────────────────────────
+def _virtual_packages(store, repo, rest, query) -> GcpResponse:
+    """Read-only aggregate view: packages/versions/tags come from upstream member
+    repositories, never from the virtual repository's own (always empty) packages map."""
+    merged = _virtual_merge(store, repo)
+    if not rest:
+        items = [_pkg_view(p) for _, p in sorted(merged.items())]
+        return _json(200, _with_page("packages", items, query))
+    pkey = rest[0]
+    pkg = merged.get(pkey)
+    if pkg is None:
+        return _err(404, f"Package \"{repo['name']}/packages/{pkey}\" not found.")
+    if len(rest) == 1:
+        return _json(200, _pkg_view(pkg))
+    if rest[1] == "versions":
+        return _versions(store, "GET", repo["name"], repo, pkg, rest[2:], query, {})
+    if rest[1] == "tags":
+        return _tags(store, "GET", pkg, rest[2:], query, {})
+    return _err(404, "Unknown path.")
+
+
 def _packages(store, method, repo_name, rest, query, body) -> GcpResponse:
     """rest = segments after .../packages"""
+    repo, _, err = _find(store, repo_name)
+    if err:
+        return err
+    if repo["mode"] == "VIRTUAL_REPOSITORY":
+        if method != "GET":
+            return _err(400, "Packages in a virtual repository are read-only; configure its upstream repositories instead.")
+        return _virtual_packages(store, repo, rest, query)
     repo, pkg, err = _find(store, repo_name, rest[0] if rest else None)
     if err:
         return err
@@ -431,7 +631,7 @@ def _versions(store, method, repo_name, repo, pkg, rest, query, body) -> GcpResp
             if vid not in pkg["versions"]:
                 return _err(404, f"Version \"{vn}\" not found.")
         for vn in body.get("names") or []:
-            _drop_version(pkg, vn.rsplit("/", 1)[-1])
+            _drop_version(repo, pkg, vn.rsplit("/", 1)[-1])
         store.persist()
         return _json(200, _operation(store, *_pl(repo_name), "Empty", None))
     vid = rest[0]
@@ -441,16 +641,21 @@ def _versions(store, method, repo_name, repo, pkg, rest, query, body) -> GcpResp
     if method == "GET":
         return _json(200, _ver_view(ver))
     if method == "DELETE":
-        _drop_version(pkg, vid)
+        _drop_version(repo, pkg, vid)
         store.persist()
         return _json(200, _operation(store, *_pl(repo_name), "Empty", None))
     return _err(400, f"Unsupported method {method} on version.")
 
 
-def _drop_version(pkg: dict, vid: str) -> None:
+def _drop_version(repo: dict, pkg: dict, vid: str) -> None:
+    """Pop a version (and its tags); a package with no versions left isn't a real
+    resource any more, so drop it too — matches a user's expectation that cleaning up
+    the last version of a package makes the package disappear."""
     ver = pkg["versions"].pop(vid, None)
     for t in (ver or {}).get("_tags", []):
         pkg["tags"].pop(t["name"].rsplit("/", 1)[-1], None)
+    if not pkg["versions"]:
+        repo["packages"].pop(pkg["name"].rsplit("/", 1)[-1], None)
 
 
 def _tags(store, method, pkg, rest, query, body) -> GcpResponse:
@@ -502,8 +707,9 @@ def _images(store, method, repo_name, rest, query) -> GcpResponse:
         return err
     project, loc = _pl(repo_name)
     rid = repo_name.rsplit("/", 1)[-1]
+    pkgs = _virtual_merge(store, repo) if repo["mode"] == "VIRTUAL_REPOSITORY" else repo["packages"]
     images = [_image_view(project, loc, rid, p, v)
-              for _, p in sorted(repo["packages"].items()) for _, v in sorted(p["versions"].items())] \
+              for _, p in sorted(pkgs.items()) for _, v in sorted(p["versions"].items())] \
         if repo["format"] == "DOCKER" else []
     if not rest:
         return _json(200, _with_page("dockerImages", images, query))
@@ -642,10 +848,12 @@ def console_children(store: ArtifactRegistryStore, name: str, kind: str) -> list
     full, repo = console_find(store, name)
     if repo is None:
         return []
+    _apply_cleanup_policies(repo)
     project, loc = _pl(full)
     rid = full.rsplit("/", 1)[-1]
+    pkgs = _virtual_merge(store, repo) if repo["mode"] == "VIRTUAL_REPOSITORY" else repo["packages"]
     out = []
-    for p in sorted(repo["packages"].values(), key=lambda x: x["name"]):
+    for p in sorted(pkgs.values(), key=lambda x: x["name"]):
         if kind == "packages":
             out.append({"name": p["displayName"], "versions": len(p["versions"]), "tags": len(p["tags"]),
                         "created": p["createTime"], "updated": p["updateTime"]})
@@ -670,6 +878,9 @@ def console_push_sample(store: ArtifactRegistryStore, name: str, body: dict | No
     full, repo = console_find(store, name)
     if repo is None:
         return {"ok": False, "code": "NotFound", "name": name}
+    if repo["mode"] == "VIRTUAL_REPOSITORY":
+        return {"ok": False, "code": "FailedPrecondition", "name": name,
+                "message": "Virtual repositories aggregate their upstream repositories; they can't be pushed to directly."}
     body = body or {}
     if repo["format"] == "DOCKER":
         ver = ingest_image(store, full, str(body.get("image") or "sample-app"), str(body.get("tag") or "latest"))
@@ -754,6 +965,8 @@ def dispatch(store: ArtifactRegistryStore, method: str, path: str,
         if verb == "pushSample":
             res = console_push_sample(store, rname, payload)
             if not res["ok"]:
+                if res["code"] == "FailedPrecondition":
+                    return _err(400, res["message"], "FAILED_PRECONDITION")
                 return _err(404, f"Repository \"{rname}\" not found.")
             return _json(200, {"name": res["name"], "version": res["version"]})
         if method == "GET":

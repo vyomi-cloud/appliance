@@ -3,7 +3,7 @@
  * call. Settings Vyomi stores but doesn't enforce carry their capability badge inline. */
 import { useState } from "react";
 import {
-  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel,
+  Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel,
   FormHelperText, IconButton, InputLabel, MenuItem, Radio, RadioGroup, Select, Stack, TextField, Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
@@ -65,7 +65,7 @@ export default function CreateRepository() {
       ...(labels.length ? { labels: Object.fromEntries(labels.map((l) => [l.key, l.value])) } : {}),
       ...(encryption === "cmek" ? { kmsKeyName: kmsKey.trim() } : {}),
       ...(format === "DOCKER" ? { dockerConfig: { immutableTags } } : {}),
-      ...(policies.length ? { cleanupPolicies: policies, cleanupPolicyDryRun: dryRun } : {}),
+      ...(policies.length ? { cleanupPolicies: Object.fromEntries(policies.map((p) => [p.id, { action: p.action, condition: p.condition }])), cleanupPolicyDryRun: dryRun } : {}),
       vulnerabilityScanningConfig: { enablementConfig: vulnScanning ? "INHERITED" : "DISABLED" },
     };
     try {
@@ -94,11 +94,14 @@ export default function CreateRepository() {
 
         <Sub title="Mode">
           <RadioGroup value={mode} onChange={(ev) => setMode(ev.target.value)} aria-label="Mode">
-            {Object.entries(api.MODE_LABEL).map(([v, l]) => <FormControlLabel key={v} value={v} control={<Radio size="small" />} label={l} />)}
+            {Object.entries(api.MODE_LABEL).map(([v, l]) => (
+              <FormControlLabel key={v} value={v} control={<Radio size="small" />}
+                label={v === "STANDARD_REPOSITORY" ? l : <Stack direction="row" spacing={1} alignItems="center"><span>{l}</span><CapabilityBadge id="gcp.artifacts.repository-mode" /></Stack>} />
+            ))}
           </RadioGroup>
-          {mode !== "STANDARD_REPOSITORY" && (
-            <Typography variant="caption" color="text.secondary">
-              {`Vyomi stores the ${api.MODE_LABEL[mode].toLowerCase()} repository setting and returns it from the API; it does not proxy a remote upstream or aggregate a virtual repository's members.`}
+          {mode === "VIRTUAL_REPOSITORY" && (
+            <Typography variant="body2" color="text.secondary">
+              Add upstream repositories to aggregate from the repository's details page once it's created.
             </Typography>
           )}
         </Sub>
@@ -158,32 +161,28 @@ export default function CreateRepository() {
         </>
       )}
 
-      <Section title="Cleanup policies">
+      <Section title={<Stack direction="row" spacing={1} alignItems="center"><span>Cleanup policies</span><CapabilityBadge id="gcp.artifacts.cleanup-policies" /></Stack>}>
         <RadioGroup value={dryRun ? "dry-run" : "delete"} onChange={(ev) => setDryRun(ev.target.value === "dry-run")} aria-label="Cleanup policies">
           <FormControlLabel value="delete" control={<Radio size="small" />} label="Delete artifacts" />
           <FormControlLabel value="dry-run" control={<Radio size="small" />} label="Dry run" />
         </RadioGroup>
         {policies.map((p, i) => (
           <Stack key={i} direction="row" spacing={1} alignItems="center">
-            <Typography variant="body2">{p.id} — {p.action.type === "Delete" ? "Delete" : "Keep"}{p.condition?.olderThan ? `, older than ${p.condition.olderThan}` : ""}</Typography>
+            <Typography variant="body2">{describeCleanupPolicy(p)}</Typography>
             <IconButton aria-label={`Remove cleanup policy ${p.id}`} size="small" onClick={() => setPolicies(policies.filter((_, j) => j !== i))}><DeleteIcon fontSize="small" /></IconButton>
           </Stack>
         ))}
         <Box><Button startIcon={<AddIcon />} onClick={() => setAddPolicy(true)}>Add a cleanup policy</Button></Box>
-        <Typography variant="caption" color="text.secondary">
-          "Vyomi stores cleanup policies on the repository and returns them from the API; it does not run them against packages and versions."
-        </Typography>
       </Section>
       <Divider />
 
       <Section title="Artifact Analysis">
-        <Sub title="Vulnerability scanning">
+        <Sub title={<Stack direction="row" spacing={1} alignItems="center"><span>Vulnerability scanning</span><CapabilityBadge id="gcp.artifacts.vulnerability-scanning" /></Stack>}>
           <RadioGroup value={vulnScanning ? "enabled" : "disabled"} onChange={(ev) => setVulnScanning(ev.target.value === "enabled")} aria-label="Vulnerability scanning">
             <FormControlLabel value="enabled" control={<Radio size="small" />} label="Enabled" />
             <FormControlLabel value="disabled" control={<Radio size="small" />} label="Disabled" />
           </RadioGroup>
         </Sub>
-        <Alert severity="info" variant="outlined">"Vyomi stores this setting and returns it from the API; it does not scan images or report vulnerability findings."</Alert>
       </Section>
 
       <Stack direction="row" spacing={1} sx={{ pt: 3 }}>
@@ -191,24 +190,48 @@ export default function CreateRepository() {
         <Button href="#/artifacts">Cancel</Button>
       </Stack>
 
-      {addPolicy && <CleanupPolicyDialog onClose={() => setAddPolicy(false)} onSave={(p) => { setPolicies([...policies, p]); setAddPolicy(false); }} />}
+      {addPolicy && <CleanupPolicyDialog existingIds={policies.map((p) => p.id)} onClose={() => setAddPolicy(false)} onSave={(p) => { setPolicies([...policies, p]); setAddPolicy(false); }} />}
     </Box>
   );
 }
 
-function CleanupPolicyDialog({ onClose, onSave }) {
+// Pretty-print a stored CleanupPolicy ({id, action, condition}) for the summary list.
+export function describeCleanupPolicy(p) {
+  const bits = [p.action === "DELETE" ? "Delete" : "Keep"];
+  if (p.condition?.tagState && p.condition.tagState !== "ANY") bits.push(p.condition.tagState.toLowerCase());
+  const days = api.durationToDays(p.condition?.olderThan);
+  if (days) bits.push(`older than ${days}d`);
+  return `${p.id} — ${bits.join(", ")}`;
+}
+
+export function CleanupPolicyDialog({ onClose, onSave, existingIds = [] }) {
   const [id, setId] = useState("");
-  const [action, setAction] = useState("Delete");
-  const [olderThan, setOlderThan] = useState("30d");
-  const ok = /^[a-z][a-z0-9-]{0,62}$/.test(id);
+  const [action, setAction] = useState("DELETE");
+  const [tagState, setTagState] = useState("ANY");
+  const [olderThanDays, setOlderThanDays] = useState("30");
+  const idOk = /^[a-z][a-z0-9-]{0,62}$/.test(id) && !existingIds.includes(id);
+  const days = parseInt(olderThanDays, 10);
+  const daysOk = olderThanDays === "" || (Number.isFinite(days) && days >= 0);
   return (
-    <ConfirmDialog title="Add a cleanup policy" onClose={onClose} disabled={!ok} onSave={() => onSave({ id, action: { type: action }, condition: { olderThan } })}>
-      <TextField label="Policy name" value={id} onChange={(ev) => setId(ev.target.value.trim())} helperText="Lowercase letters, numbers and hyphens." autoFocus />
-      <RadioGroup value={action} onChange={(ev) => setAction(ev.target.value)} aria-label="Policy action">
-        <FormControlLabel value="Delete" control={<Radio size="small" />} label="Delete artifacts" />
-        <FormControlLabel value="Keep" control={<Radio size="small" />} label="Keep artifacts" />
+    <ConfirmDialog title="Add a cleanup policy" onClose={onClose} disabled={!idOk || !daysOk} onSave={() => {
+      const condition = {};
+      if (tagState !== "ANY") condition.tagState = tagState;
+      if (days > 0) condition.olderThan = api.daysToDuration(days);
+      onSave({ id, action, condition });
+    }}>
+      <TextField label="Policy name" value={id} onChange={(ev) => setId(ev.target.value.trim())}
+        error={!!id && !idOk} helperText="Lowercase letters, numbers and hyphens; must be unique." autoFocus />
+      <RadioGroup row value={action} onChange={(ev) => setAction(ev.target.value)} aria-label="Policy action">
+        <FormControlLabel value="DELETE" control={<Radio size="small" />} label="Delete artifacts" />
+        <FormControlLabel value="KEEP" control={<Radio size="small" />} label="Keep artifacts" />
       </RadioGroup>
-      <TextField label="Older than" value={olderThan} onChange={(ev) => setOlderThan(ev.target.value)} helperText="e.g. 30d" />
+      <RadioGroup row value={tagState} onChange={(ev) => setTagState(ev.target.value)} aria-label="Tag status">
+        <FormControlLabel value="ANY" control={<Radio size="small" />} label="Any tag status" />
+        <FormControlLabel value="TAGGED" control={<Radio size="small" />} label="Tagged" />
+        <FormControlLabel value="UNTAGGED" control={<Radio size="small" />} label="Untagged" />
+      </RadioGroup>
+      <TextField label="Older than (days)" type="number" value={olderThanDays} error={!daysOk}
+        onChange={(ev) => setOlderThanDays(ev.target.value)} helperText="0 to match regardless of age." />
     </ConfirmDialog>
   );
 }
