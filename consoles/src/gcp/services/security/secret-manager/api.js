@@ -31,6 +31,21 @@ export const enableVersion = (name, ver) => restJson("POST", `${base()}/${e(name
 export const disableVersion = (name, ver) => restJson("POST", `${base()}/${e(name)}/versions/${e(String(ver))}:disable`, { body: {} });
 export const destroyVersion = (name, ver) => restJson("POST", `${base()}/${e(name)}/versions/${e(String(ver))}:destroy`, { body: {} });
 
+export const getIamPolicy = (name) => restJson("GET", `${base()}/${e(name)}:getIamPolicy`);
+export const setIamPolicy = (name, policy) => restJson("POST", `${base()}/${e(name)}:setIamPolicy`, { body: { policy } });
+
+/* Logs tab: the native Cloud Logging v2 entries:list the real console's audit log reads —
+ * Secret Manager lifecycle events are written there by the backend (core/aws_wire_router.py). */
+export async function listLogs(name) {
+  const r = await restJson("POST", "/v2/entries:list", { body: {
+    resourceNames: [`projects/${getProject()}`],
+    filter: `resource.type="secretmanager.googleapis.com/Secret" AND resource.labels.secret_id="${name}"`,
+    orderBy: "timestamp desc",
+    pageSize: 50,
+  } });
+  return r.entries || [];
+}
+
 export const shortName = (resourceName) => resourceName.split("/secrets/")[1];
 export const versionNumber = (resourceName) => resourceName.split("/versions/")[1];
 

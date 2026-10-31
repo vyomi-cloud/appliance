@@ -82,7 +82,10 @@ export function EditSecretDialog({ secret, onClose, onSaved, notify }) {
           </Box>
           <Box>
             <FormControlLabel control={<Checkbox size="small" checked={rotation} onChange={(e) => setRotation(e.target.checked)} />} label="Set rotation period" />
-            {rotation && <TextField size="small" type="number" label="Rotation period (days)" value={rotationDays} onChange={(e) => setRotationDays(e.target.value)} sx={{ ml: 4, width: 220 }} />}
+            {rotation && <Stack sx={{ ml: 4 }} spacing={0.5}>
+              <TextField size="small" type="number" label="Rotation period (days)" value={rotationDays} onChange={(e) => setRotationDays(e.target.value)} sx={{ width: 220 }} />
+              <Typography variant="caption" color="text.secondary">Requires at least one notification topic already configured on this secret.</Typography>
+            </Stack>}
           </Box>
           <Box>
             <FormControlLabel control={<Checkbox size="small" checked={expiration} onChange={(e) => setExpiration(e.target.checked)} />} label="Set expiration date" />

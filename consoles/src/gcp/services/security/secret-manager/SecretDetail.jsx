@@ -1,10 +1,12 @@
 /* Secret details: summary + tabs (Overview, Versions, Permissions, Logs). Versions is the
  * console's real working surface — add / enable / disable / destroy / view value, all on
- * the native Secret Manager REST API. Permissions and Logs aren't backed by Vyomi yet. */
+ * the native Secret Manager REST API. Permissions (a real, enforced per-secret IAM policy)
+ * and Logs (real Cloud Logging entries for the lifecycle events below) are real too. */
 import { useRef, useState } from "react";
 import {
-  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
-  Checkbox, IconButton, InputAdornment, Menu, MenuItem, Stack, Tab, Tabs, TextField, Tooltip, Typography,
+  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControl,
+  FormControlLabel, Checkbox, IconButton, InputAdornment, InputLabel, Menu, MenuItem, Select, Stack, Tab, Tabs,
+  TextField, Tooltip, Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
@@ -58,8 +60,8 @@ export default function SecretDetail({ params, query }) {
       {s.error ? <ErrorAlert error={s.error} title="Failed to load secret" /> : !s.data ? <CircularProgress size={24} /> : <>
         {tab === "overview" && <Overview secret={s.data} />}
         {tab === "versions" && <Versions secret={s.data} />}
-        {tab === "permissions" && <CapabilityContainer id="gcp.secret-manager.permissions" title="Permissions" />}
-        {tab === "logs" && <CapabilityContainer id="gcp.secret-manager.logs" title="Logs" />}
+        {tab === "permissions" && <Permissions name={name} />}
+        {tab === "logs" && <Logs name={name} />}
       </>}
       {edit && s.data && <EditSecretDialog secret={s.data} onClose={() => setEdit(false)} onSaved={s.reload} notify={notify} />}
       <DeleteDialog open={del} onClose={() => setDel(false)} title="Delete secret?" confirmText={name}
@@ -216,5 +218,120 @@ function ViewValueDialog({ name, version, onClose }) {
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}><Button onClick={onClose}>Close</Button></DialogActions>
     </Dialog>
+  );
+}
+
+// ── Permissions ─────────────────────────────────────────────────────────────────────────
+const ROLES = [
+  ["roles/secretmanager.admin", "Secret Manager Admin"],
+  ["roles/secretmanager.secretAccessor", "Secret Manager Secret Accessor"],
+  ["roles/secretmanager.secretVersionAdder", "Secret Manager Secret Version Adder"],
+  ["roles/secretmanager.secretVersionManager", "Secret Manager Secret Version Manager"],
+  ["roles/secretmanager.viewer", "Secret Manager Viewer"],
+];
+const roleName = (r) => ROLES.find(([v]) => v === r)?.[1] || r;
+
+function Permissions({ name }) {
+  const notify = useNotify();
+  const [sel, setSel] = useState([]);
+  const [grant, setGrant] = useState(false);
+  const pol = useAsync(() => api.getIamPolicy(name), [name]);
+  const rows = (pol.data?.bindings || []).flatMap((b) => b.members.map((m) => ({ key: `${m}|${b.role}`, member: m, role: b.role })));
+  const writePolicy = async (bindings) => { await api.setIamPolicy(name, { ...pol.data, bindings }); pol.reload(); };
+
+  return (
+    <CapabilityContainer id="gcp.secret-manager.permissions" title="Permissions"
+      description="Principals with access to this secret."
+      actions={<>
+        <Button startIcon={<AddIcon />} onClick={() => setGrant(true)}>Grant access</Button>
+        <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={async () => {
+          const drop = new Set(sel);
+          const next = (pol.data?.bindings || []).map((b) => ({ ...b, members: b.members.filter((m) => !drop.has(`${m}|${b.role}`)) })).filter((b) => b.members.length);
+          await writePolicy(next); notify.success(`Removed ${sel.length} role binding${sel.length === 1 ? "" : "s"}`); setSel([]);
+        }}>Remove access</Button>
+      </>}>
+      {pol.error && <ErrorAlert error={pol.error} />}
+      <ResourceTable resourceName="principals" items={rows} rowKey={(r) => r.key} loading={pol.loading} selectable selected={sel} onSelectedChange={setSel} dense
+        filterPlaceholder="Filter principals"
+        columns={[
+          { id: "member", header: "Principal", sortField: "member", cell: (r) => r.member },
+          { id: "role", header: "Role", sortValue: (r) => roleName(r.role), cell: (r) => roleName(r.role) },
+        ]}
+        empty={<Typography variant="body2" color="text.secondary">No principals have been granted access to this secret.</Typography>} />
+      {grant && <GrantDialog onClose={() => setGrant(false)} onSave={async (member, role) => {
+        const bs = (pol.data?.bindings || []).map((b) => ({ ...b, members: [...b.members] }));
+        const hit = bs.find((b) => b.role === role);
+        if (hit) { if (!hit.members.includes(member)) hit.members.push(member); } else bs.push({ role, members: [member] });
+        await writePolicy(bs); notify.success(`Granted ${roleName(role)} to ${member}`);
+      }} />}
+    </CapabilityContainer>
+  );
+}
+
+function GrantDialog({ onClose, onSave }) {
+  const [member, setMember] = useState("");
+  const [role, setRole] = useState(ROLES[0][0]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const ok = /^(user|serviceAccount|group|domain):.+/.test(member);
+
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      if (!ok) throw new Error("Enter a valid principal.");
+      await onSave(member, role);
+      onClose();
+    } catch (e) { setError(e); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Dialog open onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth aria-labelledby="grant-access-title">
+      <DialogTitle id="grant-access-title">Grant access</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          {error && <Alert severity="error">{error.message}</Alert>}
+          <TextField label="New principals" value={member} onChange={(e) => setMember(e.target.value.trim())} inputProps={{ "aria-label": "New principals" }}
+            helperText="e.g. user:dev@example.com, serviceAccount:app@vyomi-project.iam.gserviceaccount.com" />
+          <FormControl><InputLabel id="role-l">Role</InputLabel>
+            <Select labelId="role-l" label="Role" value={role} onChange={(e) => setRole(e.target.value)}>
+              {ROLES.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" disabled={busy || !member} onClick={save}>{busy ? "Saving…" : "Save"}</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ── Logs ─────────────────────────────────────────────────────────────────────────────────
+const LOG_EVENT_LABEL = {
+  SECRET_CREATE: "Secret created", SECRET_UPDATE: "Secret updated", SECRET_DELETE: "Secret deleted",
+  SECRET_EXPIRE: "Secret auto-expired", SECRET_SET_IAM_POLICY: "IAM policy updated",
+  SECRET_VERSION_ADD: "Version added", SECRET_VERSION_ENABLE: "Version enabled",
+  SECRET_VERSION_DISABLE: "Version disabled", SECRET_VERSION_DESTROY: "Version destroyed",
+};
+
+function Logs({ name }) {
+  const { data = [], loading, error, reload } = useAsync(() => api.listLogs(name), [name]);
+  return (
+    <CapabilityContainer id="gcp.secret-manager.logs" title="Logs"
+      description="Cloud Logging entries written for this secret's lifecycle events."
+      actions={<Button startIcon={<RefreshIcon />} onClick={reload}>Refresh</Button>}>
+      {error && <ErrorAlert error={error} />}
+      <ResourceTable resourceName="log entries" items={data} rowKey={(e) => e.insertId} loading={loading} dense
+        filterPlaceholder="Filter log entries"
+        columns={[
+          { id: "timestamp", header: "Timestamp", sortField: "timestamp", cell: (e) => fmtDate(e.timestamp) },
+          { id: "severity", header: "Severity", sortField: "severity", cell: (e) => <Chip size="small" label={e.severity} /> },
+          { id: "event", header: "Event", cell: (e) => LOG_EVENT_LABEL[e.labels?.eventType] || e.labels?.eventType || "—" },
+          { id: "message", header: "Message", cell: (e) => e.textPayload || "—" },
+        ]}
+        empty={<Typography variant="body2" color="text.secondary">No log entries for this secret yet.</Typography>} />
+    </CapabilityContainer>
   );
 }

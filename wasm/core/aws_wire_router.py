@@ -31,6 +31,7 @@ Output is uniform: {"status": int, "headers": {str:str}, "body": bytes}.
 """
 from __future__ import annotations
 
+import base64
 import json
 import re
 from urllib.parse import parse_qsl
@@ -506,6 +507,32 @@ class AwsWireRouter:
         r = gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/%s:publish" % topic, {}, {}, json.dumps(msg).encode())
         return True if r.status < 300 else "Topic %s not found." % topic
 
+    def _secrets_notify(self, topic, event_type, secret_name):
+        """Secret Manager version lifecycle event -> a real Pub/Sub publish on the
+        configured topic (the SAME gcp_ps.dispatch seam Cloud Scheduler targets use)."""
+        msg = {"messages": [{
+            "data": base64.b64encode(json.dumps({"secretId": secret_name, "eventType": event_type}).encode()).decode(),
+            "attributes": {"eventType": event_type, "secretId": secret_name},
+        }]}
+        gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/%s:publish" % topic, {}, {}, json.dumps(msg).encode())
+
+    def _secrets_log(self, secret_name, event_type, message):
+        """Secret Manager lifecycle event -> a real Cloud Logging entry (the Logs tab
+        reads these back via entries:list, the same way the real console's audit logs do)."""
+        m = re.match(r"^projects/([^/]+)/secrets/([^/]+)$", secret_name)
+        if not m:
+            return
+        project, secret_id = m.groups()
+        entry = {
+            "logName": f"projects/{project}/logs/secretmanager.googleapis.com%2Factivity",
+            "resource": {"type": "secretmanager.googleapis.com/Secret",
+                        "labels": {"resource_container": f"projects/{project}", "secret_id": secret_id}},
+            "severity": "NOTICE",
+            "textPayload": message,
+            "labels": {"eventType": event_type},
+        }
+        gcp_logging.write_entries(self.gcp_logging, None, {"entries": [entry]})
+
     def _pam_grant(self, resource, role, member):
         """Privileged Access Manager activating a grant: add `member` to `role` on the
         project's real IAM policy (the same store the console's Allow tab reads)."""
@@ -733,6 +760,9 @@ class AwsWireRouter:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), resolver=self._iamc_resolve)
             elif svc == "gcp-cloudscheduler":   # a pubsub target publishes into the Pub/Sub core
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), invoker=self._sched_invoke)
+            elif svc == "gcp-secretmanager":   # version lifecycle -> real Pub/Sub publish + Cloud Logging entry
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
+                                  notifier=self._secrets_notify, logger=self._secrets_log)
             elif svc == "gcp-container" and re.search(r"/operations([/:]|$)", path):   # operations are shared with Memorystore
                 r = gcp_redis.dispatch_shared_operations(
                     self.gcp_redis, lambda *a: gcp_gke.dispatch(self.gcp_gke, *a), method, path, query or {}, headers or {}, bytes(body))

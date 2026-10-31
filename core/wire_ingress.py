@@ -233,7 +233,11 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         project = _project_of(path)
         if project and hasattr(st, "adopt"):
             st.adopt(project)            # pre-v4 Vault secrets / key index → this state (once)
-        resp = mod.dispatch(st, method, path, query, headers, body)
+        if service == "gcp_secrets":   # version lifecycle -> real Pub/Sub publish + Cloud Logging entry
+            resp = mod.dispatch(st, method, path, query, headers, body,
+                                notifier=r._secrets_notify, logger=r._secrets_log)
+        else:
+            resp = mod.dispatch(st, method, path, query, headers, body)
         hdrs = dict(resp.headers or {})
         hdrs.setdefault("content-type", resp.media_type or "application/json")
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}

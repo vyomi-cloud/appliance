@@ -115,7 +115,10 @@ export default function CreateSecret() {
 
         <Section title={<Stack direction="row" spacing={1} alignItems="center"><span>Rotation</span><CapabilityBadge id="gcp.secret-manager.rotation" /></Stack>}>
           <FormControlLabel control={<Checkbox checked={rotation} onChange={(e) => setRotation(e.target.checked)} />} label="Set rotation period" />
-          {rotation && <TextField size="small" type="number" label="Rotation period (days)" value={rotationDays} onChange={(e) => setRotationDays(e.target.value)} sx={{ ml: 4, width: 220 }} />}
+          {rotation && <Stack sx={{ ml: 4 }} spacing={0.5}>
+            <TextField size="small" type="number" label="Rotation period (days)" value={rotationDays} onChange={(e) => setRotationDays(e.target.value)} sx={{ width: 220 }} />
+            <Typography variant="caption" color="text.secondary">Requires at least one notification topic — add one below.</Typography>
+          </Stack>}
         </Section>
 
         <Section title={<Stack direction="row" spacing={1} alignItems="center"><span>Notifications</span><CapabilityBadge id="gcp.secret-manager.notifications" /></Stack>}>

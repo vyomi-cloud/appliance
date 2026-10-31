@@ -147,6 +147,131 @@ def run() -> int:
     pmiss = sm.dispatch(st, "PATCH", f"{base}/does-not-exist", {}, {}, json.dumps({"labels": {}}).encode())
     _check("patch unknown secret 404", pmiss.status == 404)
 
+    # 9. replication: structural validation + immutability (v4 DEPTH)
+    both = sm.dispatch(st, "POST", base, {"secretId": "rep-both"}, {},
+                       json.dumps({"replication": {"automatic": {}, "userManaged": {"replicas": [{"location": "us-east1"}]}}}).encode())
+    _check("replication both -> 400", both.status == 400)
+    empty_um = sm.dispatch(st, "POST", base, {"secretId": "rep-empty"}, {},
+                           json.dumps({"replication": {"userManaged": {"replicas": []}}}).encode())
+    _check("replication empty userManaged -> 400", empty_um.status == 400)
+    dup_loc = sm.dispatch(st, "POST", base, {"secretId": "rep-dup"}, {}, json.dumps({
+        "replication": {"userManaged": {"replicas": [{"location": "us-east1"}, {"location": "us-east1"}]}},
+    }).encode())
+    _check("replication duplicate location -> 400", dup_loc.status == 400)
+    bad_cmek = sm.dispatch(st, "POST", base, {"secretId": "rep-badcmek"}, {},
+                           json.dumps({"replication": {"automatic": {"customerManagedEncryption": {"kmsKeyName": "not-a-key"}}}}).encode())
+    _check("replication bad CMEK name -> 400", bad_cmek.status == 400)
+    mismatched_cmek = sm.dispatch(st, "POST", base, {"secretId": "rep-mismatch"}, {}, json.dumps({
+        "replication": {"userManaged": {"replicas": [{
+            "location": "us-east1",
+            "customerManagedEncryption": {"kmsKeyName": "projects/demo-project/locations/us-west1/keyRings/r/cryptoKeys/k"},
+        }]}},
+    }).encode())
+    _check("replication CMEK location mismatch -> 400", mismatched_cmek.status == 400)
+    good_rep = sm.dispatch(st, "POST", base, {"secretId": "rep-good"}, {}, json.dumps({
+        "replication": {"userManaged": {"replicas": [{
+            "location": "us-east1",
+            "customerManagedEncryption": {"kmsKeyName": "projects/demo-project/locations/us-east1/keyRings/r/cryptoKeys/k"},
+        }]}},
+    }).encode())
+    _check("replication valid userManaged+CMEK -> 200", good_rep.status == 200)
+    immut = sm.dispatch(st, "PATCH", f"{base}/rep-good", {}, {}, json.dumps({"replication": {"automatic": {}}}).encode())
+    _check("replication immutable on patch -> 400", immut.status == 400)
+
+    # 10. rotation: real pre-conditions (v4 DEPTH)
+    rot_no_topic = sm.dispatch(st, "POST", base, {"secretId": "rot-no-topic"}, {},
+                               json.dumps({"rotation": {"rotationPeriod": "604800s"}}).encode())
+    _check("rotation without topic -> 400", rot_no_topic.status == 400)
+    rot_short = sm.dispatch(st, "POST", base, {"secretId": "rot-short"}, {}, json.dumps({
+        "rotation": {"rotationPeriod": "60s"}, "topics": [{"name": "projects/demo-project/topics/t"}],
+    }).encode())
+    _check("rotation period < 1h -> 400", rot_short.status == 400)
+    rot_past = sm.dispatch(st, "POST", base, {"secretId": "rot-past"}, {}, json.dumps({
+        "rotation": {"nextRotationTime": "2000-01-01T00:00:00Z"}, "topics": [{"name": "projects/demo-project/topics/t"}],
+    }).encode())
+    _check("rotation nextRotationTime in the past -> 400", rot_past.status == 400)
+    rot_ok = sm.dispatch(st, "POST", base, {"secretId": "rot-ok"}, {}, json.dumps({
+        "rotation": {"rotationPeriod": "604800s"}, "topics": [{"name": "projects/demo-project/topics/t"}],
+    }).encode())
+    _check("rotation with topic + valid period -> 200", rot_ok.status == 200)
+    rot_drop_topic = sm.dispatch(st, "PATCH", f"{base}/rot-ok", {"updateMask": "topics"}, {},
+                                 json.dumps({"topics": []}).encode())
+    _check("dropping the last topic while rotation active -> 400", rot_drop_topic.status == 400)
+
+    # 11. expiration: a secret past expireTime is actually deleted on next read (v4 DEPTH)
+    sm.dispatch(st, "POST", base, {"secretId": "exp-secret"}, {}, json.dumps({"expireTime": "2000-01-01T00:00:00.000000Z"}).encode())
+    exp_get = sm.dispatch(st, "GET", f"{base}/exp-secret", {}, {}, b"")
+    _check("expired secret get -> 404 (auto-deleted)", exp_get.status == 404)
+    exp_list = sm.dispatch(st, "GET", base, {}, {}, b"")
+    _check("expired secret absent from list", not any(s["name"].endswith("/exp-secret") for s in _jbody(exp_list)["secrets"]))
+    recreate = sm.dispatch(st, "POST", base, {"secretId": "exp-secret"}, {}, json.dumps({}).encode())
+    _check("expired secret id can be recreated", recreate.status == 200)
+
+    # 12. version aliases resolve wherever a version number/"latest" is accepted (v4 DEPTH)
+    bad_alias = sm.dispatch(st, "POST", base, {"secretId": "alias-bad"}, {},
+                            json.dumps({"versionAliases": {"latest": 1}}).encode())
+    _check("alias named 'latest' -> 400", bad_alias.status == 400)
+    sm.dispatch(st, "POST", base, {"secretId": "aliased"}, {}, json.dumps({}).encode())
+    sm.dispatch(st, "POST", f"{base}/aliased:addVersion", {}, {}, json.dumps({"payload": {"data": _b64(b"v1")}}).encode())
+    sm.dispatch(st, "PATCH", f"{base}/aliased", {"updateMask": "versionAliases"}, {},
+               json.dumps({"versionAliases": {"stable": 1}}).encode())
+    via_alias = sm.dispatch(st, "GET", f"{base}/aliased/versions/stable:access", {}, {}, b"")
+    _check("access by alias", via_alias.status == 200 and base64.b64decode(_jbody(via_alias)["payload"]["data"]) == b"v1")
+    disable_alias = sm.dispatch(st, "POST", f"{base}/aliased/versions/stable:disable", {}, {}, b"")
+    _check("disable by alias", disable_alias.status == 200 and _jbody(disable_alias)["state"] == "DISABLED")
+    unknown_alias = sm.dispatch(st, "GET", f"{base}/aliased/versions/nope:access", {}, {}, b"")
+    _check("unknown alias -> 404", unknown_alias.status == 404)
+
+    # 13. permissions: a real, enforced per-secret IAM policy (v4 DEPTH) — unlike GCP KMS/
+    # Pub/Sub's store-only policy, this one actually denies.
+    sm.dispatch(st, "POST", base, {"secretId": "locked"}, {}, json.dumps({}).encode())
+    sm.dispatch(st, "POST", f"{base}/locked:addVersion", {}, {}, json.dumps({"payload": {"data": _b64(b"locked-v1")}}).encode())
+    default_pol = sm.dispatch(st, "GET", f"{base}/locked:getIamPolicy", {}, {}, b"")
+    _check("getIamPolicy default empty", default_pol.status == 200 and _jbody(default_pol)["bindings"] == [])
+    set_pol = sm.dispatch(st, "POST", f"{base}/locked:setIamPolicy", {}, {}, json.dumps({
+        "policy": {"bindings": [{"role": "roles/secretmanager.secretAccessor", "members": ["user:alice@example.com"]}]},
+    }).encode())
+    _check("setIamPolicy 200", set_pol.status == 200)
+    bad_pol = sm.dispatch(st, "POST", f"{base}/locked:setIamPolicy", {}, {},
+                          json.dumps({"policy": {"bindings": [{"role": "roles/x", "members": []}]}}).encode())
+    _check("setIamPolicy rejects empty members -> 400", bad_pol.status == 400)
+    denied = sm.dispatch(st, "GET", f"{base}/locked/versions/latest:access", {},
+                         {"X-Cloudlearn-Principal": "bob@example.com"}, b"")
+    _check("access denied for ungranted principal -> 403", denied.status == 403)
+    allowed = sm.dispatch(st, "GET", f"{base}/locked/versions/latest:access", {},
+                          {"X-Cloudlearn-Principal": "alice@example.com"}, b"")
+    _check("access allowed for granted principal", allowed.status == 200)
+    owner_bypass = sm.dispatch(st, "GET", f"{base}/locked/versions/latest:access", {}, {}, b"")
+    _check("access allowed with no principal header (owner bypass)", owner_bypass.status == 200)
+    test_perms = sm.dispatch(st, "POST", f"{base}/locked:testIamPermissions", {},
+                             {"X-Cloudlearn-Principal": "bob@example.com"},
+                             json.dumps({"permissions": ["secretmanager.versions.access", "secretmanager.secrets.delete"]}).encode())
+    _check("testIamPermissions narrows to granted set", _jbody(test_perms).get("permissions", []) == [])
+    test_perms_alice = sm.dispatch(st, "POST", f"{base}/locked:testIamPermissions", {},
+                                   {"X-Cloudlearn-Principal": "alice@example.com"},
+                                   json.dumps({"permissions": ["secretmanager.versions.access", "secretmanager.secrets.delete"]}).encode())
+    _check("testIamPermissions grants what alice holds", _jbody(test_perms_alice)["permissions"] == ["secretmanager.versions.access"])
+
+    # 14. notifier (Pub/Sub) + logger (Cloud Logging) callbacks — wired by core/aws_wire_router.py
+    # in production; the conformance test drives them directly with plain collectors.
+    notified, logged = [], []
+    notifier = lambda topic, event, name: notified.append((topic, event, name))
+    logger = lambda name, event, message: logged.append((name, event, message))
+    sm.dispatch(st, "POST", base, {"secretId": "notify-secret"}, {}, json.dumps({
+        "topics": [{"name": "projects/demo-project/topics/notify-me"}],
+    }).encode(), notifier=notifier, logger=logger)
+    sm.dispatch(st, "POST", f"{base}/notify-secret:addVersion", {}, {},
+               json.dumps({"payload": {"data": _b64(b"n1")}}).encode(), notifier=notifier, logger=logger)
+    sm.dispatch(st, "POST", f"{base}/notify-secret/versions/1:disable", {}, {}, b"", notifier=notifier, logger=logger)
+    _check("notifier fired on addVersion", ("projects/demo-project/topics/notify-me", "SECRET_VERSION_ADD", "projects/demo-project/secrets/notify-secret") in notified)
+    _check("notifier fired on disable", any(e == "SECRET_VERSION_DISABLE" for _, e, _ in notified))
+    _check("logger fired on create", any(e == "SECRET_CREATE" for _, e, _ in logged))
+    _check("logger fired on addVersion", any(e == "SECRET_VERSION_ADD" for _, e, _ in logged))
+    exp_logged = []
+    sm.dispatch(st, "POST", base, {"secretId": "exp-logged"}, {}, json.dumps({"expireTime": "2000-01-01T00:00:00.000000Z"}).encode())
+    sm.dispatch(st, "GET", f"{base}/exp-logged", {}, {}, b"", logger=lambda n, e, m: exp_logged.append(e))
+    _check("logger fired on auto-expire", "SECRET_EXPIRE" in exp_logged)
+
     print("\nGCP Secret Manager core conformance: ALL GREEN")
     return 0
 
