@@ -216,7 +216,8 @@ def _azure_service(path, lheaders, query):
         return "az-acr"
     v2segs = [s for s in p.split("/") if s]
     if len(v2segs) >= 3 and v2segs[0] == "v2" and (
-            v2segs[-2] == "manifests" or (v2segs[-2] == "tags" and v2segs[-1] == "list")):
+            v2segs[-2] == "manifests" or (v2segs[-2] == "tags" and v2segs[-1] == "list")
+            or v2segs[-2] == "blobs" or (len(v2segs) >= 4 and v2segs[-3] == "blobs" and v2segs[-2] == "uploads")):
         return "az-acr"
     apiv = ("api-version" in query) or ("api-version=" in path)
     # Key Vault (data plane): root /keys or /secrets WITH api-version (GCP secrets
