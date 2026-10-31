@@ -16,9 +16,11 @@ import json
 try:
     from core.iam_store import InMemoryIamStore
     from core import gcp_iam_core as giam
+    from core import gcp_resourcemanager_core as grm
 except ImportError:  # pragma: no cover - Pyodide flat layout
     from iam_store import InMemoryIamStore  # type: ignore
     import gcp_iam_core as giam  # type: ignore
+    import gcp_resourcemanager_core as grm  # type: ignore
 
 
 def _check(name, cond):
@@ -284,6 +286,50 @@ def run() -> int:
     _check("SA log most-recent-first", sa_log[0]["action"] == "GRANT")
     _check("SA log scoped to this SA only (project-level activity untouched)",
            all(e["resource"] == sa4_resource for e in sa_log))
+
+    # 17. org policy enforcement (depth: config_only -> limited) -------------
+    rm_st = grm.ResourceManagerStore()
+    proj17 = f"{project}-orgpol"
+    free = _jbody(giam.dispatch(st, "POST", f"/v1/projects/{proj17}/serviceAccounts", {}, {},
+                                json.dumps({"accountId": "svc-free"}).encode(), rm_store=rm_st))
+    _check("SA creation allowed with no org policy", free["email"].startswith("svc-free@"))
+    grm.dispatch(rm_st, "POST", f"/v3/projects/{proj17}/policies",
+                {"policyId": "constraints/iam.disableServiceAccountCreation"}, {},
+                json.dumps({"spec": {"rules": [{"enforce": True}]}}).encode())
+    blocked = giam.dispatch(st, "POST", f"/v1/projects/{proj17}/serviceAccounts", {}, {},
+                            json.dumps({"accountId": "svc-blocked"}).encode(), rm_store=rm_st)
+    _check("SA creation blocked by enforced org policy -> 412 FAILED_PRECONDITION",
+           blocked.status == 412 and _jbody(blocked)["error"]["status"] == "FAILED_PRECONDITION")
+    grm.dispatch(rm_st, "POST", f"/v3/projects/{proj17}/policies",
+                {"policyId": "constraints/iam.disableServiceAccountKeyCreation"}, {},
+                json.dumps({"spec": {"rules": [{"enforce": True}]}}).encode())
+    key_blocked = giam.dispatch(st, "POST", f"/v1/projects/{proj17}/serviceAccounts/{free['email']}/keys",
+                                {}, {}, b"{}", rm_store=rm_st)
+    _check("key creation blocked by enforced org policy", key_blocked.status == 412)
+    unaffected = giam.dispatch(st, "GET", f"/v1/projects/{proj17}/serviceAccounts/{free['email']}/keys",
+                               {}, {}, b"", rm_store=rm_st)
+    _check("reads (list keys) unaffected by the creation-only constraint", unaffected.status == 200)
+
+    # 18. Data Access audit log config taking effect (depth: config_only -> limited) ---
+    logged = []
+
+    def _logger(proj, log_type, message):
+        logged.append((proj, log_type, message))
+
+    proj18 = f"{project}-audit"
+    giam.dispatch(st, "GET", f"/v1/projects/{proj18}/serviceAccounts", {}, {}, b"", logger=_logger)
+    _check("no entry when ADMIN_READ is not configured", logged == [])
+    giam.dispatch(st, "POST", f"/v1/projects/{proj18}:setIamPolicy", {}, {},
+                 json.dumps({"policy": {"auditConfigs": [
+                     {"service": "iam.googleapis.com", "auditLogConfigs": [{"logType": "ADMIN_READ"}]}]}}).encode())
+    giam.dispatch(st, "GET", f"/v1/projects/{proj18}/serviceAccounts", {}, {}, b"", logger=_logger)
+    _check("ADMIN_READ enabled -> one entry logged", len(logged) == 1 and logged[0][0] == proj18
+           and logged[0][1] == "ADMIN_READ")
+    giam.dispatch(st, "POST", f"/v1/projects/{proj18}:setIamPolicy", {}, {},
+                 json.dumps({"policy": {"auditConfigs": [
+                     {"service": "iam.googleapis.com", "auditLogConfigs": [{"logType": "DATA_WRITE"}]}]}}).encode())
+    giam.dispatch(st, "GET", f"/v1/projects/{proj18}/serviceAccounts", {}, {}, b"", logger=_logger)
+    _check("DATA_WRITE toggle does not log a read", len(logged) == 1)
 
     print("\nGCP IAM-core conformance: ALL GREEN")
     return 0

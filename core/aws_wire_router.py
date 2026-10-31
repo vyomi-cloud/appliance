@@ -553,6 +553,20 @@ class AwsWireRouter:
         }
         gcp_logging.write_entries(self.gcp_logging, None, {"entries": [entry]})
 
+    def _iam_audit_log(self, project, log_type, message):
+        """IAM Data Access audit config (Audit logs page) taking effect: a read gated
+        by an enabled ADMIN_READ toggle for iam.googleapis.com -> a real Cloud Logging
+        entry (the same entries:list the gcp-logs console page and Cloud Logging API
+        read back)."""
+        entry = {
+            "logName": f"projects/{project}/logs/iam.googleapis.com%2Fdata_access",
+            "resource": {"type": "project", "labels": {"project_id": project}},
+            "severity": "NOTICE",
+            "textPayload": message,
+            "labels": {"logType": log_type},
+        }
+        gcp_logging.write_entries(self.gcp_logging, None, {"entries": [entry]})
+
     def _pam_grant(self, resource, role, member):
         """Privileged Access Manager activating a grant: add `member` to `role` on the
         project's real IAM policy (the same store the console's Allow tab reads)."""
@@ -793,6 +807,9 @@ class AwsWireRouter:
             elif svc == "gcp-pam":   # grant activation/expiry is a real project IAM policy change
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
                                   grant_fn=self._pam_grant, revoke_fn=self._pam_revoke)
+            elif svc == "gcp-iam":   # org policy enforcement + Data Access audit log emission
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
+                                  rm_store=self.gcp_rm, logger=self._iam_audit_log)
             else:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})

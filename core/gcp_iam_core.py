@@ -240,6 +240,60 @@ def _record_event(store: IamStore, resource: str, action: str, detail: str = "")
     del log[:max(0, len(log) - MAX_ACTIVITY)]
 
 
+def _project_of_resource(resource: str) -> str | None:
+    if resource.startswith("projects/"):
+        return resource.split("/", 2)[1]
+    return None
+
+
+def org_policy_enforced(rm_store, project: str, constraint_id: str) -> bool:
+    """Does an Org Policy v2 policy for `constraints/{constraint_id}` exist on the
+    project with its first rule enforced? Backs the two boolean constraints Vyomi
+    actually evaluates (iam.disableServiceAccountCreation,
+    iam.disableServiceAccountKeyCreation) — every other constraint remains
+    stored-but-not-evaluated, same as before. Public: shared with the offline
+    legacy service-account handler (providers/gcp_iam.py), which keeps its own
+    service-account state but must honour the same project's org policies."""
+    if rm_store is None:
+        return False
+    policies = getattr(rm_store, "org_policies", None) or {}
+    pol = policies.get(f"projects/{project}/policies/constraints/{constraint_id}")
+    if not pol:
+        return False
+    rules = (pol.get("spec") or {}).get("rules") or []
+    return bool(rules) and bool(rules[0].get("enforce", True))
+
+
+# Data Access audit log categories Vyomi actually evaluates for iam.googleapis.com —
+# ADMIN_READ on reads of service accounts / keys / custom roles / resource IAM
+# policies. DATA_READ / DATA_WRITE are stored and returned but produce no entries:
+# like real GCP, iam.googleapis.com has no data-plane payload to audit (creates/
+# deletes are Admin Activity, always written regardless of this config, and are not
+# modeled by this capability).
+_AUDIT_SERVICE = "iam.googleapis.com"
+
+
+def audit_log_enabled(policy: dict | None, service: str, log_type: str) -> bool:
+    """Does `policy.auditConfigs` enable `log_type` for `service`? Takes the raw
+    IAM-policy dict rather than a store, so it is reusable from the offline legacy
+    handler's own policy dict (providers/gcp_iam.py) as well as this core's."""
+    if not policy:
+        return False
+    for ac in policy.get("auditConfigs") or []:
+        if ac.get("service") == service:
+            return any(c.get("logType") == log_type for c in ac.get("auditLogConfigs") or [])
+    return False
+
+
+def _audit_log(logger, store, project: str | None, log_type: str, message: str) -> None:
+    if not logger or not project:
+        return
+    pol = _policy_ns(store).get(f"projects/{project}")
+    if not audit_log_enabled(pol, _AUDIT_SERVICE, log_type):
+        return
+    logger(project, log_type, message)
+
+
 def _sa_email(account_id: str, project: str) -> str:
     return f"{account_id}@{project}.iam.gserviceaccount.com"
 
@@ -259,7 +313,10 @@ def _sa_view(sa: dict) -> dict:
 
 
 # ── service-account operations ──────────────────────────────────────────────
-def _create_service_account(store, project, body) -> GcpIamResponse:
+def _create_service_account(store, project, body, rm_store=None) -> GcpIamResponse:
+    if org_policy_enforced(rm_store, project, "iam.disableServiceAccountCreation"):
+        return _err(412, "Operation denied by org policy: 'constraints/iam.disableServiceAccountCreation' "
+                         f"is enforced on 'projects/{project}'.", "FAILED_PRECONDITION")
     account_id = str(body.get("accountId", "")).strip()
     if not account_id:
         return _err(400, "accountId is required.", "INVALID_ARGUMENT")
@@ -284,19 +341,21 @@ def _create_service_account(store, project, body) -> GcpIamResponse:
     return _json(200, _sa_view(sa))
 
 
-def _get_service_account(store, project, ident) -> GcpIamResponse:
+def _get_service_account(store, project, ident, logger=None) -> GcpIamResponse:
     sas = _sa_ns(store)
     email = ident if "@" in ident else _sa_email(ident, project)
     sa = sas.get(email)
     if sa is None:
         return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
+    _audit_log(logger, store, project, "ADMIN_READ", f"iam.googleapis.com serviceAccounts.get {email}")
     return _json(200, _sa_view(sa))
 
 
-def _list_service_accounts(store, project) -> GcpIamResponse:
+def _list_service_accounts(store, project, logger=None) -> GcpIamResponse:
     sas = _sa_ns(store)
     accounts = [_sa_view(sa) for email, sa in sorted(sas.items())
                 if sa["projectId"] == project]
+    _audit_log(logger, store, project, "ADMIN_READ", f"iam.googleapis.com serviceAccounts.list on projects/{project}")
     return _json(200, {"accounts": accounts})
 
 
@@ -341,9 +400,11 @@ def _set_service_account_disabled(store, project, ident, disabled) -> GcpIamResp
 
 
 # ── resource IAM policy operations ──────────────────────────────────────────
-def _get_iam_policy(store, resource) -> GcpIamResponse:
+def _get_iam_policy(store, resource, logger=None) -> GcpIamResponse:
     policies = _policy_ns(store)
     pol = policies.get(resource)
+    _audit_log(logger, store, _project_of_resource(resource), "ADMIN_READ",
+               f"iam.googleapis.com getIamPolicy on {resource}")
     if pol is None:
         # GCP returns an empty policy (version 1, no bindings) for a resource
         # that has never had a policy set.
@@ -468,17 +529,19 @@ def _create_role(store, project, role_id, body) -> GcpIamResponse:
     return _json(200, _role_view(role))
 
 
-def _get_role(store, name) -> GcpIamResponse:
+def _get_role(store, name, logger=None) -> GcpIamResponse:
     role = _roles_ns(store).get(name)
     if role is None:
         return _err(404, f"Role {name} not found.", "NOT_FOUND")
+    _audit_log(logger, store, _project_of_resource(name), "ADMIN_READ", f"iam.googleapis.com roles.get {name}")
     return _json(200, _role_view(role))
 
 
-def _list_roles(store, project) -> GcpIamResponse:
+def _list_roles(store, project, logger=None) -> GcpIamResponse:
     roles = _roles_ns(store)
     out = [_role_view(r) for n, r in sorted(roles.items())
            if r.get("_project") == project and not r.get("deleted")]
+    _audit_log(logger, store, project, "ADMIN_READ", f"iam.googleapis.com roles.list on projects/{project}")
     return _json(200, {"roles": out})
 
 
@@ -516,7 +579,10 @@ def _key_view(k: dict) -> dict:
     return {kk: vv for kk, vv in k.items() if kk != "_email"}
 
 
-def _create_key(store, project, email, body) -> GcpIamResponse:
+def _create_key(store, project, email, body, rm_store=None) -> GcpIamResponse:
+    if org_policy_enforced(rm_store, project, "iam.disableServiceAccountKeyCreation"):
+        return _err(412, "Operation denied by org policy: 'constraints/iam.disableServiceAccountKeyCreation' "
+                         f"is enforced on 'projects/{project}'.", "FAILED_PRECONDITION")
     keys = _keys_ns(store).setdefault(email, {})
     kid = _key_id()
     now = _etag()  # not a real timestamp source available here; validAfterTime below uses a stable marker
@@ -542,18 +608,20 @@ def _create_key(store, project, email, body) -> GcpIamResponse:
     return _json(200, _key_view(key))
 
 
-def _list_keys(store, email) -> GcpIamResponse:
+def _list_keys(store, project, email, logger=None) -> GcpIamResponse:
     keys = _keys_ns(store).get(email, {})
     # listKey responses omit privateKeyData by default.
     out = [{k2: v2 for k2, v2 in _key_view(k).items() if k2 != "privateKeyData"}
            for k in sorted(keys.values(), key=lambda k: k["name"])]
+    _audit_log(logger, store, project, "ADMIN_READ", f"iam.googleapis.com keys.list for {email}")
     return _json(200, {"keys": out})
 
 
-def _get_key(store, email, kid) -> GcpIamResponse:
+def _get_key(store, project, email, kid, logger=None) -> GcpIamResponse:
     key = _keys_ns(store).get(email, {}).get(kid)
     if key is None:
         return _err(404, f"Key {kid} not found.", "NOT_FOUND")
+    _audit_log(logger, store, project, "ADMIN_READ", f"iam.googleapis.com keys.get {kid} for {email}")
     return _json(200, _key_view(key))
 
 
@@ -689,7 +757,7 @@ def _test_iam_permissions(store, resource, body) -> GcpIamResponse:
 # ── dispatch ────────────────────────────────────────────────────────────────
 def dispatch(store: IamStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"") -> GcpIamResponse:
+             body: bytes = b"", rm_store=None, logger=None) -> GcpIamResponse:
     """Single routing point for the native GCP IAM REST API — what unmodified
     google-cloud-iam / google-cloud-resource-manager clients speak."""
     query = query or {}
@@ -720,7 +788,7 @@ def dispatch(store: IamStore, method: str, path: str,
         if method != "POST":
             return _err(400, f"Method {method} not allowed for :{verb}", "INVALID_ARGUMENT")
         if verb == "getIamPolicy":
-            return _get_iam_policy(store, resource)
+            return _get_iam_policy(store, resource, logger=logger)
         if verb == "setIamPolicy":
             return _set_iam_policy(store, resource, _body())
         if verb == "testIamPermissions":
@@ -737,13 +805,13 @@ def dispatch(store: IamStore, method: str, path: str,
         project, email = segs[1], segs[3]
         if len(segs) == 5:
             if method == "POST":
-                return _create_key(store, project, email, _body())
+                return _create_key(store, project, email, _body(), rm_store=rm_store)
             if method == "GET":
-                return _list_keys(store, email)
+                return _list_keys(store, project, email, logger=logger)
             return _err(400, f"Unsupported method {method} on keys", "INVALID_ARGUMENT")
         kid = segs[5]
         if method == "GET":
-            return _get_key(store, email, kid)
+            return _get_key(store, project, email, kid, logger=logger)
         if method == "DELETE":
             return _delete_key(store, project, email, kid)
         return _err(400, f"Unsupported method {method} on key", "INVALID_ARGUMENT")
@@ -759,14 +827,14 @@ def dispatch(store: IamStore, method: str, path: str,
         project = segs[1]
         if len(segs) == 3:
             if method == "POST":
-                return _create_service_account(store, project, _body())
+                return _create_service_account(store, project, _body(), rm_store=rm_store)
             if method == "GET":
-                return _list_service_accounts(store, project)
+                return _list_service_accounts(store, project, logger=logger)
             return _err(400, f"Unsupported method {method} on serviceAccounts", "INVALID_ARGUMENT")
         # single service account (email may contain no slash)
         ident = segs[3]
         if method == "GET":
-            return _get_service_account(store, project, ident)
+            return _get_service_account(store, project, ident, logger=logger)
         if method == "PATCH":
             return _patch_service_account(store, project, ident, _body())
         if method == "DELETE":
@@ -792,11 +860,11 @@ def dispatch(store: IamStore, method: str, path: str,
             if method == "POST":
                 return _create_role(store, project, str(_body().get("roleId", "")).strip(), _body())
             if method == "GET":
-                return _list_roles(store, project)
+                return _list_roles(store, project, logger=logger)
             return _err(400, f"Unsupported method {method} on roles", "INVALID_ARGUMENT")
         name = f"projects/{project}/roles/{segs[3]}"
         if method == "GET":
-            return _get_role(store, name)
+            return _get_role(store, name, logger=logger)
         if method == "PATCH":
             return _patch_role(store, name, _body())
         if method == "DELETE":
