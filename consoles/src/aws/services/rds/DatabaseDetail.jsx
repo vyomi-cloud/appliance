@@ -14,9 +14,39 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { href, follow } from "../../../common/router.js";
 import { ErrorAlert, fmtDate, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { DeleteDatabaseModal, ModifyModal, SnapshotModal } from "./DatabaseActions.jsx";
 import { statusOf } from "./Databases.jsx";
 import * as api from "./api.js";
+
+function InstanceRecommendations({ arn }) {
+  const t = useAsync(async () => (await api.describeDBRecommendations()).filter((r) => r.ResourceArn === arn), [arn]);
+  return (
+    <Table variant="container" items={t.data || []} loading={t.loading} trackBy="RecommendationId"
+      header={<Header variant="h2" counter={`(${(t.data || []).length})`}>Recommendations</Header>}
+      columnDefinitions={[
+        { id: "severity", header: "Severity", cell: (r) => r.Severity },
+        { id: "detection", header: "Detection", cell: (r) => r.Detection },
+        { id: "reco", header: "Recommendation", cell: (r) => r.Recommendation },
+        { id: "impact", header: "Impact", cell: (r) => r.Impact },
+      ]}
+      empty={<Box textAlign="center" color="inherit"><b>No active recommendations</b></Box>} />
+  );
+}
+
+function InstanceIntegrations({ arn }) {
+  const t = useAsync(async () => (await api.describeIntegrations()).filter((r) => r.SourceArn === arn), [arn]);
+  return (
+    <Table variant="container" items={t.data || []} loading={t.loading} trackBy="IntegrationName"
+      header={<Header variant="h2" counter={`(${(t.data || []).length})`}>Zero-ETL integrations</Header>}
+      columnDefinitions={[
+        { id: "name", header: "Integration name", cell: (r) => r.IntegrationName },
+        { id: "status", header: "Status", cell: (r) => r.Status },
+        { id: "target", header: "Destination ARN", cell: (r) => r.TargetArn },
+      ]}
+      empty={<Box textAlign="center" color="inherit"><b>No zero-ETL integrations</b></Box>} />
+  );
+}
 
 function RecentEvents({ id }) {
   const t = useAsync(() => api.describeEvents(id), [id]);
@@ -87,11 +117,13 @@ export default function DatabaseDetail({ params, query }) {
   const [snapModal, setSnapModal] = useState(false);
   const [del, setDel] = useState(false);
   const t = useAsync(() => api.describeDBInstance(id), [id]);
+  const certs = useAsync(() => api.describeCertificates());
 
   if (t.loading) return <Box textAlign="center" padding="xxl"><Spinner size="large" /></Box>;
   if (t.error) return <ErrorAlert error={t.error} />;
   const d = t.data;
   if (!d) return <Box textAlign="center" padding="xxl"><b>Database not found</b></Box>;
+  const cert = (certs.data || []).find((c) => c.CertificateIdentifier === d.CACertificateIdentifier);
 
   return (
     <ContentLayout header={
@@ -137,17 +169,18 @@ export default function DatabaseDetail({ params, query }) {
                 <KeyValue title="Security" columns={3} items={[
                   ["VPC security groups", [].concat(d.VpcSecurityGroups?.VpcSecurityGroupMembership || []).map((g) => g.VpcSecurityGroupId).join(", ") || "sg-default"],
                   ["Publicly accessible", d.PubliclyAccessible === "true" ? "Yes" : "No"],
-                  ["Certificate authority", "rds-ca-rsa2048-g1"], ["Certificate authority date", "-"], ["DB instance certificate expiration date", "-"],
+                  ["Certificate authority", d.CACertificateIdentifier], ["Certificate authority date", cert?.ValidFrom || "-"],
+                  ["DB instance certificate expiration date", cert?.ValidTill || "-"],
                 ]} />
-                <NotSimulatedContainer title="Connected compute resources" feature="EC2 connected compute resources" />
-                <NotSimulatedContainer title="Security group rules" feature="VPC security group rule evaluation" />
-                <NotSimulatedContainer title="Replication" feature="Read replicas" />
+                <CapabilityContainer id="rds.replication" title="Connected compute resources" />
+                <CapabilityContainer id="rds.replication" title="Security group rules" />
+                <CapabilityContainer id="rds.replication" title="Replication" />
               </SpaceBetween>
             ),
           },
           {
             id: "monitoring", label: "Monitoring", content: (
-              <NotSimulatedContainer title="CloudWatch" feature="RDS CloudWatch metrics" note="Vyomi does not emit CPUUtilization/DatabaseConnections/IOPS metrics for RDS instances." />
+              <CapabilityContainer id="rds.monitoring" title="CloudWatch" />
             ),
           },
           {
@@ -155,7 +188,7 @@ export default function DatabaseDetail({ params, query }) {
               <SpaceBetween size="l">
                 <NotSimulatedContainer title="CloudWatch alarms" feature="RDS CloudWatch alarms" />
                 <RecentEvents id={id} />
-                <NotSimulatedContainer title="Logs" feature="RDS engine log files" />
+                <CapabilityContainer id="rds.logs" title="Logs" />
               </SpaceBetween>
             ),
           },
@@ -183,7 +216,7 @@ export default function DatabaseDetail({ params, query }) {
               </SpaceBetween>
             ),
           },
-          { id: "zero-etl", label: "Zero-ETL integrations", content: <NotSimulatedContainer title="Zero-ETL integrations" feature="RDS zero-ETL integrations" /> },
+          { id: "zero-etl", label: "Zero-ETL integrations", content: <InstanceIntegrations arn={d.DBInstanceArn} /> },
           {
             id: "maintenance", label: "Maintenance & backups", content: (
               <SpaceBetween size="l">
@@ -210,7 +243,7 @@ export default function DatabaseDetail({ params, query }) {
           },
           { id: "migrations", label: "Data migrations", content: <NotSimulatedContainer title="Data migrations" feature="AWS DMS data migrations" /> },
           { id: "tags", label: "Tags", content: <TagsTab d={d} reload={t.reload} /> },
-          { id: "recommendations", label: "Recommendations", content: <NotSimulatedContainer title="Recommendations" feature="RDS recommendations" /> },
+          { id: "recommendations", label: "Recommendations", content: <InstanceRecommendations arn={d.DBInstanceArn} /> },
         ]} />
       </SpaceBetween>
 

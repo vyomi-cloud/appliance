@@ -37,12 +37,14 @@ def _available(store, db_id="appdb"):
                                "db_instance_status": "available", "engine": "postgres"})
 
 
-async def _exec(store, sql, parameters=None, meta=False):
+async def _exec(store, sql, parameters=None, meta=False, transaction_id=None):
     body = {"resourceArn": ARN, "database": "appdb", "sql": sql}
     if parameters is not None:
         body["parameters"] = parameters
     if meta:
         body["includeResultMetadata"] = True
+    if transaction_id:
+        body["transactionId"] = transaction_id
     return await data.dispatch(store, "/Execute", body)
 
 
@@ -99,11 +101,53 @@ async def run_contract(store):
     _check("bad SQL → 400 BadRequestException",
            err.status == 400 and err.headers.get("x-amzn-errortype") == "BadRequestException")
 
-    # transaction ops are accepted with valid shapes (autocommit; see module docs)
+    # real cross-call transaction: statements that carry the same transactionId
+    # share ONE held-open connection (a later statement sees an earlier one's
+    # uncommitted write); nothing lands for callers outside the transaction until
+    # CommitTransaction.
     begin = await data.dispatch(store, "/BeginTransaction", {"resourceArn": ARN})
-    _check("BeginTransaction → transactionId", "transactionId" in begin.body)
-    commit = await data.dispatch(store, "/CommitTransaction", {"transactionId": begin.body["transactionId"]})
+    tx = begin.body.get("transactionId")
+    _check("BeginTransaction → transactionId", bool(tx))
+    await _exec(store, "INSERT INTO app (id, name) VALUES (:id, :name)",
+        [{"name": "id", "value": {"longValue": 42}}, {"name": "name", "value": {"stringValue": "intx"}}],
+        transaction_id=tx)
+    seen_in_tx = await _exec(store, "SELECT count(*) FROM app WHERE id = :id",
+                             [{"name": "id", "value": {"longValue": 42}}], transaction_id=tx)
+    _check("the transaction sees its own uncommitted write",
+           int(seen_in_tx.body["records"][0][0]["longValue"]) == 1)
+    commit = await data.dispatch(store, "/CommitTransaction", {"transactionId": tx})
     _check("CommitTransaction → status", commit.body.get("transactionStatus") == "Transaction Committed")
+    after_commit = await _exec(store, "SELECT count(*) FROM app WHERE id = :id",
+                               [{"name": "id", "value": {"longValue": 42}}])
+    _check("committed insert now visible outside the transaction",
+           int(after_commit.body["records"][0][0]["longValue"]) == 1)
+
+    # RollbackTransaction discards everything done through that transaction id.
+    begin2 = await data.dispatch(store, "/BeginTransaction", {"resourceArn": ARN})
+    tx2 = begin2.body.get("transactionId")
+    await _exec(store, "INSERT INTO app (id, name) VALUES (:id, :name)",
+        [{"name": "id", "value": {"longValue": 43}}, {"name": "name", "value": {"stringValue": "rolledback"}}],
+        transaction_id=tx2)
+    rollback = await data.dispatch(store, "/RollbackTransaction", {"transactionId": tx2})
+    _check("RollbackTransaction → status", rollback.body.get("transactionStatus") == "Rollback Complete")
+    after_rollback = await _exec(store, "SELECT count(*) FROM app WHERE id = :id",
+                                 [{"name": "id", "value": {"longValue": 43}}])
+    _check("rolled-back insert never lands", int(after_rollback.body["records"][0][0]["longValue"]) == 0)
+
+    # an unknown/expired transaction id is a real, typed rejection.
+    stale = await data.dispatch(store, "/CommitTransaction", {"transactionId": "tx-does-not-exist"})
+    _check("stale transactionId → TransactionNotFoundException",
+           stale.status == 400 and stale.headers.get("x-amzn-errortype") == "TransactionNotFoundException")
+
+    # max_connections (the instance's own DB parameter group) genuinely caps open
+    # transactions — this is ENFORCED, not just stored.
+    _available(store, "capped")
+    store.put_parameter_group("capped-pg", {"parameters": {"max_connections": {"parameter_value": "0"}}})
+    store.get_instance("capped")["db_parameter_group_name"] = "capped-pg"
+    capped_arn = "arn:aws:rds:us-east-1:123456789012:cluster:capped"
+    blocked = await data.dispatch(store, "/BeginTransaction", {"resourceArn": capped_arn})
+    _check("max_connections=0 blocks BeginTransaction",
+           blocked.status == 400 and "max_connections" in blocked.body.get("message", ""))
 
 
 async def run_pglite():

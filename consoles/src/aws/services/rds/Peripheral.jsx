@@ -161,7 +161,20 @@ const CURRENT_CA = "rds-ca-rsa2048-g1";
 export function CertificateUpdate() {
   const [sel, setSel] = useState([]);
   const notify = useNotify();
-  const t = useAsync(async () => (await api.describeDBInstances()).filter((d) => d.CACertificateIdentifier !== CURRENT_CA));
+  const t = useAsync(async () => {
+    const [dbs, certs] = await Promise.all([api.describeDBInstances(), api.describeCertificates()]);
+    const validTill = Object.fromEntries(certs.map((c) => [c.CertificateIdentifier, c.ValidTill]));
+    return dbs.filter((d) => d.CACertificateIdentifier !== CURRENT_CA)
+      .map((d) => ({ ...d, _caExpiration: validTill[d.CACertificateIdentifier] }));
+  });
+  const applyNow = async () => {
+    try {
+      await Promise.all(sel.map((d) => api.modifyDBInstance(d.DBInstanceIdentifier, { CACertificateIdentifier: CURRENT_CA })));
+      notify.success(`Certificate update applied to ${sel.length} database(s).`);
+      setSel([]);
+      t.reload();
+    } catch (e) { notify.error(e); }
+  };
   return (
     <ResourceTable
       resourceName="Databases requiring certificate update"
@@ -177,15 +190,15 @@ export function CertificateUpdate() {
       actions={
         <SpaceBetween direction="horizontal" size="xs">
           <Button onClick={() => notify.success("List exported.")}>Export list</Button>
-          <Button disabled={!sel.length}>Schedule update</Button>
-          <Button disabled={!sel.length}>Apply update now</Button>
+          <Button disabled={!sel.length} onClick={() => notify.info("Vyomi applies a certificate update immediately — there is no separate maintenance-window scheduler to defer it to.")}>Schedule update</Button>
+          <Button disabled={!sel.length} onClick={applyNow}>Apply update now</Button>
         </SpaceBetween>
       }
       columns={[
         { id: "id", header: "DB identifier", isRowHeader: true, cell: (d) => d.DBInstanceIdentifier },
         { id: "status", header: "Status", cell: (d) => d.DBInstanceStatus },
         { id: "ca", header: "Certificate authority", cell: (d) => d.CACertificateIdentifier || CURRENT_CA },
-        { id: "exp", header: "CA expiration date", cell: () => "-" },
+        { id: "exp", header: "CA expiration date", cell: (d) => d._caExpiration || "-" },
         { id: "role", header: "Role", cell: () => "Instance" },
         { id: "restart", header: "Restart required", cell: () => "No" },
         { id: "scheduled", header: "Scheduled changes", cell: () => "None" },

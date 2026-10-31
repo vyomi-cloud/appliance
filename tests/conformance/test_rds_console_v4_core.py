@@ -12,9 +12,18 @@ Run in Pyodide: loaded by the wasm/ harness (same file).
 try:
     from core.sql_store import InMemorySqlStore
     from core import rds_core as rds
+    from core.messaging_store import InMemoryMessagingStore
+    from core import sqs_core as sqs, sns_core as sns
+    from core.object_store import InMemoryObjectStore
+    from core import s3_object_core as s3c
 except ImportError:  # pragma: no cover - Pyodide flat layout
     from sql_store import InMemorySqlStore  # type: ignore
     import rds_core as rds  # type: ignore
+    from messaging_store import InMemoryMessagingStore  # type: ignore
+    import sqs_core as sqs  # type: ignore
+    import sns_core as sns  # type: ignore
+    from object_store import InMemoryObjectStore  # type: ignore
+    import s3_object_core as s3c  # type: ignore
 
 
 def _check(name, cond):
@@ -134,6 +143,36 @@ def run() -> int:
     gone_es = rds.dispatch(st, {"Action": "DescribeEventSubscriptions", "SubscriptionName": "v4-sub"})
     _check("deleted event subscription 404s", gone_es.status == 404)
 
+    # 9b. Event subscriptions REALLY publish to their SNS topic — fan-out through
+    # the same sns_core.publish_arn seam EventBridge targets use, to an SQS queue
+    # subscribed to that topic.
+    msg_store = InMemoryMessagingStore()
+    topic_arn = sns.dispatch(msg_store, {"Action": "CreateTopic", "Name": "rds-events"}).body
+    import re as _re
+    topic_arn = _re.search(r"<TopicArn>(.*?)</TopicArn>", topic_arn).group(1)
+    q_url = sqs.dispatch(msg_store, "AmazonSQS.CreateQueue", {"QueueName": "rds-events-q"}).body["QueueUrl"]
+    q_arn = sqs.dispatch(msg_store, "AmazonSQS.GetQueueAttributes", {"QueueUrl": q_url}).body["Attributes"]["QueueArn"]
+    sns.dispatch(msg_store, {"Action": "Subscribe", "TopicArn": topic_arn, "Protocol": "sqs", "Endpoint": q_arn})
+    rds.dispatch(st, {"Action": "CreateEventSubscription", "SubscriptionName": "v4-sub-real",
+                      "SnsTopicArn": topic_arn, "SourceType": "db-instance"},
+                msg_store=msg_store)
+    rds.dispatch(st, {"Action": "RebootDBInstance", "DBInstanceIdentifier": "v4db"}, msg_store=msg_store)
+    delivered = sqs.dispatch(msg_store, "AmazonSQS.ReceiveMessage", {"QueueUrl": q_url, "MaxNumberOfMessages": 10}).body
+    msgs = delivered.get("Messages") or []
+    _check("RDS event reaches the real SNS topic → SQS queue",
+           any("v4db" in m["Body"] for m in msgs))
+    # a DISABLED subscription on the same topic never fires — only the one still-
+    # enabled subscription ("v4-sub-real") delivers.
+    rds.dispatch(st, {"Action": "CreateEventSubscription", "SubscriptionName": "v4-sub-disabled",
+                      "SnsTopicArn": topic_arn, "SourceType": "db-instance", "Enabled": "false"},
+                msg_store=msg_store)
+    for m in msgs:
+        sqs.dispatch(msg_store, "AmazonSQS.DeleteMessage", {"QueueUrl": q_url, "ReceiptHandle": m["ReceiptHandle"]})
+    rds.dispatch(st, {"Action": "RebootDBInstance", "DBInstanceIdentifier": "v4db"}, msg_store=msg_store)
+    after_disable = sqs.dispatch(msg_store, "AmazonSQS.ReceiveMessage", {"QueueUrl": q_url, "MaxNumberOfMessages": 10}).body
+    _check("disabled subscription doesn't deliver (still exactly one message, from the enabled one)",
+           len(after_disable.get("Messages") or []) == 1)
+
     # 10. Automated backups derive from real instance state (backup_retention_period > 0).
     bk = rds.dispatch(st, {"Action": "DescribeDBInstanceAutomatedBackups", "DBInstanceIdentifier": "v4db"})
     _check("automated backup reflects the live instance (default retention 7)", "v4db" in bk.body)
@@ -147,11 +186,22 @@ def run() -> int:
     list_ri = rds.dispatch(st, {"Action": "DescribeReservedDBInstances"})
     _check("describe lists the purchased reservation", "v4-ri" in list_ri.body)
 
-    # 12. S3 export tasks: start + cancel round-trip.
+    # 12. S3 export tasks: a real object lands in the named bucket — a bucket that
+    # doesn't exist makes the task genuinely FAIL, not silently "succeed".
+    s3_store = InMemoryObjectStore()
+    no_bucket = rds.dispatch(st, {"Action": "StartExportTask", "ExportTaskIdentifier": "v4-export-nobucket",
+                                  "SourceArn": f"arn:aws:rds:us-east-1:{st.account_id}:snapshot:v4db-snap",
+                                  "S3BucketName": "v4-exports"}, s3_store=s3_store)
+    _check("export into a bucket that doesn't exist really fails",
+           no_bucket.status == 200 and "<Status>FAILED</Status>" in no_bucket.body
+           and "<FailureCause>" in no_bucket.body)
+    s3_store.create_bucket("v4-exports")
     exp = rds.dispatch(st, {"Action": "StartExportTask", "ExportTaskIdentifier": "v4-export",
                             "SourceArn": f"arn:aws:rds:us-east-1:{st.account_id}:snapshot:v4db-snap",
-                            "S3BucketName": "v4-exports"})
+                            "S3BucketName": "v4-exports"}, s3_store=s3_store)
     _check("start export task 200", exp.status == 200 and "<Status>COMPLETE</Status>" in exp.body)
+    _check("a real manifest object landed in the named bucket",
+           "v4-export/export_manifest.json" in s3_store.bucket_objects("v4-exports"))
     rds.dispatch(st, {"Action": "CancelExportTask", "ExportTaskIdentifier": "v4-export"})
     gone_exp = rds.dispatch(st, {"Action": "DescribeExportTasks", "ExportTaskIdentifier": "v4-export"})
     _check("cancelled export task 404s", gone_exp.status == 404)
@@ -186,6 +236,31 @@ def run() -> int:
                       "CACertificateIdentifier": "rds-ca-2019"})
     recs2 = rds.dispatch(st, {"Action": "DescribeDBRecommendations"})
     _check("outdated CA cert gets a certificate-update recommendation", "rec-cacert-v4-oldca" in recs2.body)
+    _check("an instance without deletion protection gets that recommendation too",
+           "rec-delprot-v4-singleaz" in recs2.body)
+    rds.dispatch(st, {"Action": "CreateDBInstance", "DBInstanceIdentifier": "v4-nobackup", "Engine": "postgres",
+                      "BackupRetentionPeriod": "0"})
+    recs3 = rds.dispatch(st, {"Action": "DescribeDBRecommendations"})
+    _check("an instance with automated backups disabled gets a recommendation",
+           "rec-nobackup-v4-nobackup" in recs3.body)
+    _check("an instance with backups enabled gets none", "rec-nobackup-v4-singleaz" not in recs3.body)
+
+    # 15. Certificate catalog: a real list of CA ids + validity windows, enforced
+    # on create/modify (not an arbitrary stored string).
+    certs = rds.dispatch(st, {"Action": "DescribeCertificates"})
+    _check("certificate catalog lists the default CA with a real expiration",
+           "<CertificateIdentifier>rds-ca-rsa2048-g1</CertificateIdentifier>" in certs.body
+           and "<ValidTill>2061-06-28T00:00:00Z</ValidTill>" in certs.body)
+    one_cert = rds.dispatch(st, {"Action": "DescribeCertificates", "CertificateIdentifier": "rds-ca-2019"})
+    _check("describe a single known certificate", one_cert.status == 200)
+    bad_cert = rds.dispatch(st, {"Action": "CreateDBInstance", "DBInstanceIdentifier": "v4-badca",
+                                 "Engine": "postgres", "CACertificateIdentifier": "not-a-real-ca"})
+    _check("an unknown CA is rejected on create, not silently stored",
+           bad_cert.status == 404 and "CertificateNotFound" in bad_cert.body)
+    bad_modify = rds.dispatch(st, {"Action": "ModifyDBInstance", "DBInstanceIdentifier": "v4db",
+                                   "CACertificateIdentifier": "not-a-real-ca"})
+    _check("an unknown CA is rejected on modify too",
+           bad_modify.status == 404 and "CertificateNotFound" in bad_modify.body)
 
     print("\nRESULT: PASS — RDS v4-console additions conform (native Query-protocol wire) on this substrate.")
     return 0
