@@ -485,6 +485,15 @@ class AwsWireRouter:
         r = gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/%s:publish" % topic, {}, {}, json.dumps(msg).encode())
         return True if r.status < 300 else "Topic %s not found." % topic
 
+    def _pam_grant(self, resource, role, member):
+        """Privileged Access Manager activating a grant: add `member` to `role` on the
+        project's real IAM policy (the same store the console's Allow tab reads)."""
+        gcp_iam.grant_member(self.gcp_iam, resource, role, member)
+
+    def _pam_revoke(self, resource, role, member):
+        """PAM grant ending (revoked/denied/expired): undo _pam_grant."""
+        gcp_iam.revoke_member(self.gcp_iam, resource, role, member)
+
     def _servicebus_service(self, method, path, lheaders):
         """Azure Service Bus (topics) — the pub/sub-fan-out peer of SNS/Pub-Sub.
         Distinct from Azure Storage (carries NO x-ms-* storage headers) and from
@@ -700,6 +709,9 @@ class AwsWireRouter:
                     self.gcp_redis, lambda *a: gcp_gke.dispatch(self.gcp_gke, *a), method, path, query or {}, headers or {}, bytes(body))
             elif svc == "gcp-firestore":   # exportDocuments/importDocuments read/write real GCS objects
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
+            elif svc == "gcp-pam":   # grant activation/expiry is a real project IAM policy change
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
+                                  grant_fn=self._pam_grant, revoke_fn=self._pam_revoke)
             else:
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})

@@ -82,18 +82,24 @@
   "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
  },
  "gcp.iam-admin.privileged-access-manager": {
-  "title": "Privileged Access Manager — Entitlements",
+  "title": "Privileged Access Manager — Entitlements, Grants & Approve grants",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_gcp_pam_core.py"]
+ },
+ "gcp.iam-admin.pam-audit-logs": {
+  "title": "PAM Audit Logs",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Entitlement create/list/delete is real and stateful. Requesting, approving and time-boxed activation of a grant (the Grants / Approve grants tabs) are not modeled."
+   "Shows the grant lifecycle events (requested, approved, denied, activated, expired, revoked) Vyomi's PAM core records; it does not aggregate the full Cloud Audit Log trail for entitlement changes made outside PAM."
   ],
   "tests": ["tests/conformance/test_gcp_pam_core.py"]
  },
- "gcp.iam-admin.pam-workflow": {
-  "title": "PAM Grants / Approve grants / Audit Logs / Settings tabs",
+ "gcp.iam-admin.pam-settings": {
+  "title": "PAM Settings",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "Requesting a grant, approving it and the resulting time-boxed privilege escalation aren't modeled — only entitlement definitions are real."
+   "Notification channels and default approval settings aren't modeled."
   ]
  },
  "gcp.iam-admin.essential-contacts": {
