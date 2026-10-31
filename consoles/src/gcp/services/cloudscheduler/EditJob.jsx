@@ -6,6 +6,7 @@ import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, PageHeader, Section } from "../../kit/common.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
 import { jobBody, RetryFields, ScheduleFields, stateFromJob, targetError, TargetFields } from "./JobFormFields.jsx";
@@ -48,7 +49,7 @@ function Form({ job }) {
       </Section>
       <Box sx={{ py: 1.5 }}><Divider /></Box>
 
-      <Section title="Configure the execution">
+      <Section title={<Stack direction="row" spacing={1} alignItems="center" component="span"><span>Configure the execution</span><CapabilityBadge id="gcp.cloudscheduler.jobs.targets" /></Stack>}>
         <Stack spacing={2.5}><TargetFields s={s} set={set} /></Stack>
       </Section>
       <Box sx={{ py: 1.5 }}><Divider /></Box>
