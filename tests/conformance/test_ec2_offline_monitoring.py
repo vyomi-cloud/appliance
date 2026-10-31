@@ -5,10 +5,12 @@ an alarm can evaluate against — see ec2.instances.monitoring / ec2.instances.a
 
     PYTHONPATH=. python3 -m pytest -q tests/conformance/test_ec2_offline_monitoring.py
 """
+
+from __future__ import annotations
+
 import sys
 
 import pytest
-from __future__ import annotations
 
 import json
 import os
