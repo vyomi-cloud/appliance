@@ -29,9 +29,14 @@ Honest scope (declared in core/capabilities/aws/lambda.json, not hidden):
     trigger ever actually invokes the function on its own. Only direct Invoke (Test tab /
     native API) runs code.
   * Code signing configurations are not modeled (no cryptographic signing pipeline).
-  * VPC / file-system config is stored and returned exactly as configured (config_only) —
-    Vyomi doesn't attach a real ENI or mount EFS. Async-invoke Destinations and the legacy
-    DeadLetterConfig DO deliver for real (SQS/SNS/Lambda targets) — see `_deliver_async_result`.
+  * VPC / file-system config is shape-validated for real: SubnetIds/SecurityGroupIds must be
+    given in pairs and look like real EC2 resource IDs, and an EFS access point's Arn and
+    LocalMountPath must be well-formed — see `_validate_network_config`. Vyomi has no VPC engine
+    on this seam, so a syntactically valid but nonexistent subnet/security group/file system is
+    still accepted, stored and returned exactly as configured; Vyomi never attaches a real ENI
+    or mounts EFS, so code never actually reaches either at Invoke time. Async-invoke
+    Destinations and the legacy DeadLetterConfig DO deliver for real (SQS/SNS/Lambda targets) —
+    see `_deliver_async_result`.
   * Reserved concurrency of 0 really throttles (TooManyRequestsException); a positive value
     is stored but not enforced (every Invoke is synchronous, so nothing runs concurrently).
   * "Recent invocations" / Metrics are Vyomi's own lightweight read of the last invocations
@@ -42,6 +47,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -308,6 +314,39 @@ class _BadInput(Exception):
     pass
 
 
+_EFS_ARN_RE = re.compile(r"^arn:aws:elasticfilesystem:[a-z0-9-]+:\d{12}:access-point/fsap-[0-9a-f]+$")
+_SUBNET_ID_RE = re.compile(r"^subnet-[0-9a-f]{8,17}$")
+_SG_ID_RE = re.compile(r"^sg-[0-9a-f]{8,17}$")
+
+
+def _validate_network_config(vpc_config, file_systems):
+    """VPC/EFS references are shape-validated for real (lambda.vpc-filesystems): SubnetIds and
+    SecurityGroupIds must both be given (or both omitted — detaching the VPC) and look like real
+    EC2 resource IDs, and an EFS access point's Arn/LocalMountPath must be well-formed — the same
+    validation real Lambda does before it ever reaches EC2 to check the referenced resources
+    actually exist (which Vyomi, with no shared VPC engine on this seam, does not check). Returns
+    an error message, or None."""
+    if vpc_config:
+        subnet_ids = list(vpc_config.get("SubnetIds") or [])
+        sg_ids = list(vpc_config.get("SecurityGroupIds") or [])
+        if subnet_ids or sg_ids:  # both empty == detach the VPC, same as real Lambda
+            if not subnet_ids or not sg_ids:
+                return "VpcConfig requires at least one subnet ID and one security group ID."
+            for sid in subnet_ids:
+                if not _SUBNET_ID_RE.match(sid):
+                    return f"Invalid subnet ID: '{sid}'"
+            for gid in sg_ids:
+                if not _SG_ID_RE.match(gid):
+                    return f"Invalid security group ID: '{gid}'"
+    for fsc in (file_systems or []):
+        arn = str(fsc.get("Arn", ""))
+        if not _EFS_ARN_RE.match(arn):
+            return f"Invalid file system ARN: {arn}"
+        if not str(fsc.get("LocalMountPath", "")).startswith("/mnt/"):
+            return "LocalMountPath must be an absolute path under /mnt/"
+    return None
+
+
 # ── control plane: functions ────────────────────────────────────────────────────────────
 def _create_function(store, body):
     name = str(body.get("FunctionName", "")).strip()
@@ -319,6 +358,9 @@ def _create_function(store, body):
                     "constraint: Member must satisfy regular expression pattern: [a-zA-Z0-9-_]+ (1-64 chars)")
     if name in _functions(store):
         return _err(409, "ResourceConflictException", f"Function already exist: {name}")
+    net_err = _validate_network_config(body.get("VpcConfig"), body.get("FileSystemConfigs"))
+    if net_err:
+        return _err(400, "InvalidParameterValueException", net_err)
     source = _extract_source(body.get("Code") or {}, str(body.get("Handler", "index.handler")))
     fn = {
         "name": name, "arn": _fn_arn(name), "runtime": str(body.get("Runtime", "python3.12")),
@@ -382,6 +424,9 @@ def _update_function_configuration(store, name, body):
         fn = _require_fn(store, name)
     except _NotFound as e:
         return _err(404, "ResourceNotFoundException", str(e))
+    net_err = _validate_network_config(body.get("VpcConfig"), body.get("FileSystemConfigs"))
+    if net_err:
+        return _err(400, "InvalidParameterValueException", net_err)
     for api_key, local_key in _CONFIG_FIELDS.items():
         if api_key in body and body[api_key] is not None:
             fn[local_key] = body[api_key]
@@ -392,7 +437,10 @@ def _update_function_configuration(store, name, body):
     if "Architectures" in body:
         fn["architectures"] = list(body["Architectures"] or ["x86_64"])
     if "VpcConfig" in body:
-        fn["vpc_config"] = body["VpcConfig"] or None
+        vc = body["VpcConfig"] or None
+        if vc and not vc.get("SubnetIds") and not vc.get("SecurityGroupIds"):
+            vc = None  # both empty == detach, same as real Lambda
+        fn["vpc_config"] = vc
     if "DeadLetterConfig" in body:
         fn["dead_letter_config"] = body["DeadLetterConfig"] or None
     if "FileSystemConfigs" in body:

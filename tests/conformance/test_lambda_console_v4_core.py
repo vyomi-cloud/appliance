@@ -225,6 +225,41 @@ def run(store=None):
     _check("ListApplications", any(x["Name"] == "uictest-app" for x in j(call("GET", "/2015-03-31/applications"))["Applications"]))
     _check("DeleteApplication", call("DELETE", "/2015-03-31/applications/uictest-app").status == 200)
 
+    # VPC config / EFS file systems — SubnetIds/SecurityGroupIds and EFS Arns are shape-validated
+    # for real, not just stored (lambda.vpc-filesystems).
+    good_subnet, good_sg = "subnet-0123456789abcdef0", "sg-0123456789abcdef0"
+
+    vpcfn = "vpcfn"
+    call("POST", F, {"FunctionName": vpcfn, "Code": {"Source": "def handler(e, c):\n    return {}\n"}})
+    r = call("PUT", f"{F}/{vpcfn}/configuration",
+            {"VpcConfig": {"SubnetIds": ["not-a-subnet-id"], "SecurityGroupIds": [good_sg]}})
+    _check("UpdateFunctionConfiguration rejects a malformed subnet ID",
+          r.status == 400 and json.loads(r.body)["error"]["code"] == "InvalidParameterValueException")
+    r = call("PUT", f"{F}/{vpcfn}/configuration",
+            {"VpcConfig": {"SubnetIds": [good_subnet], "SecurityGroupIds": ["not-a-sg-id"]}})
+    _check("UpdateFunctionConfiguration rejects a malformed security group ID", r.status == 400)
+    r = call("PUT", f"{F}/{vpcfn}/configuration", {"VpcConfig": {"SubnetIds": [good_subnet], "SecurityGroupIds": []}})
+    _check("UpdateFunctionConfiguration rejects subnets without any security groups", r.status == 400)
+    r = call("PUT", f"{F}/{vpcfn}/configuration",
+            {"VpcConfig": {"SubnetIds": [good_subnet], "SecurityGroupIds": [good_sg]}})
+    _check("UpdateFunctionConfiguration accepts a well-formed subnet + security group",
+          r.status == 200 and j(r)["VpcConfig"]["SubnetIds"] == [good_subnet])
+    _check("UpdateFunctionConfiguration detaches the VPC when both lists are empty",
+          j(call("PUT", f"{F}/{vpcfn}/configuration", {"VpcConfig": {"SubnetIds": [], "SecurityGroupIds": []}})).get("VpcConfig") is None)
+
+    r = call("PUT", f"{F}/{vpcfn}/configuration", {"FileSystemConfigs": [{"Arn": "arn:aws:s3:::not-an-efs-arn", "LocalMountPath": "/mnt/efs"}]})
+    _check("UpdateFunctionConfiguration rejects a malformed EFS access point ARN", r.status == 400)
+    r = call("PUT", f"{F}/{vpcfn}/configuration",
+            {"FileSystemConfigs": [{"Arn": "arn:aws:elasticfilesystem:us-east-1:123456789012:access-point/fsap-0123456789abcdef0", "LocalMountPath": "data"}]})
+    _check("UpdateFunctionConfiguration rejects a LocalMountPath not under /mnt/", r.status == 400)
+    good_fsc = {"Arn": "arn:aws:elasticfilesystem:us-east-1:123456789012:access-point/fsap-0123456789abcdef0", "LocalMountPath": "/mnt/efs"}
+    r = call("PUT", f"{F}/{vpcfn}/configuration", {"FileSystemConfigs": [good_fsc]})
+    _check("UpdateFunctionConfiguration accepts a well-formed EFS access point", r.status == 200 and j(r)["FileSystemConfigs"] == [good_fsc])
+
+    r = call("POST", F, {"FunctionName": "vpcfn-create", "Code": {"Source": "def handler(e, c):\n    return {}\n"},
+                         "VpcConfig": {"SubnetIds": ["bad-subnet"], "SecurityGroupIds": [good_sg]}})
+    _check("CreateFunction also rejects a malformed subnet ID", r.status == 400)
+
     _check("DeleteFunction", call("DELETE", f"{F}/{name}").status == 204)
     _check("deleted function's ESMs are gone too",
           len(j(call("GET", "/2015-03-31/event-source-mappings", q={"FunctionName": name}))["EventSourceMappings"]) == 0)
