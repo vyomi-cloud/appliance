@@ -33,6 +33,9 @@ page.on("pageerror", (e) => errors.push(e.message));
 // Native 404s / 403s / 412s are legitimate API answers (e.g. a retention-protected delete,
 // an org-policy-denied create), not page errors.
 page.on("console", (m) => m.type() === "error" && !/status of (40[34]|412)/.test(m.text()) && errors.push(m.text()));
+// Native 400/403/404s are legitimate API answers (e.g. a retention-protected delete, a
+// public-access-prevention rejection), not page errors.
+page.on("console", (m) => m.type() === "error" && !/status of 40[034]/.test(m.text()) && errors.push(m.text()));
 const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true });
 
 try {
@@ -116,7 +119,7 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
 
   // Tabs render (and Protection: remove the retention policy through the UI)
-  for (const [id, label] of [["configuration", "Configuration"], ["permissions", "Permissions"], ["protection", "Protection"], ["lifecycle", "Lifecycle"], ["observability", "Observability"]]) {
+  for (const [id, label] of [["configuration", "Configuration"], ["permissions", "Permissions"], ["protection", "Protection"], ["lifecycle", "Lifecycle"], ["observability", "Observability"], ["operations", "Operations"]]) {
     await page.getByRole("tab", { name: label }).click();
     await page.waitForTimeout(500);
     await shot(`08-tab-${id}`);
@@ -141,12 +144,39 @@ try {
   check("grant access via UI → getIamPolicy shows binding", (pol.bindings || []).some((x) => x.role === "roles/storage.objectViewer" && x.members.includes("user:dev@example.com")));
   await shot("09-permissions-granted");
 
+  // Public access prevention is ENFORCED: granting allUsers via the same dialog, on a
+  // bucket where PAP is enforced (see line 77-78), must fail with the native error and
+  // leave getIamPolicy unchanged — not silently succeed.
+  await page.getByRole("button", { name: "Grant access" }).click();
+  await page.getByLabel("New principals").fill("allUsers");
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByRole("dialog").getByText(/public access prevention/i).waitFor({ timeout: 10000 });
+  check("granting allUsers via UI → rejected by public access prevention", true);
+  const polAfter = await wjson(`/storage/v1/b/${B}/iam`);
+  check("rejected grant never reached getIamPolicy", !(polAfter.bindings || []).some((x) => (x.members || []).includes("allUsers")));
+  await shot("09b-permissions-pap-rejected");
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+
   // Configuration: label set over the wire appears in the UI
   await wire(`/storage/v1/b/${B}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ labels: { team: "core" } }) });
   await page.getByRole("tab", { name: "Configuration" }).click();
   await page.getByRole("button", { name: "Refresh" }).click();
   await page.getByText("team: core").waitFor({ timeout: 10000 });
   check("label patched over wire → shown in Configuration", true);
+
+  // CMEK: setting a Cloud KMS key via the UI validates the shape and really stamps every
+  // object created afterward with it (gcp.storage.encryption — see core/gcp_storage_core.py).
+  const KMS_KEY = "projects/vyomi-project/locations/us-central1/keyRings/smoke-ring/cryptoKeys/smoke-key";
+  await page.getByRole("button", { name: "Use a Cloud KMS key" }).click();
+  await page.getByRole("dialog").getByLabel("Cloud KMS key").fill(KMS_KEY);
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByText(KMS_KEY).waitFor({ timeout: 10000 });
+  const kmsBucket = await wjson(`/storage/v1/b/${B}`);
+  check("CMEK key set via UI → buckets.get shows it", kmsBucket.encryption?.defaultKmsKeyName === KMS_KEY);
+  await wire(`/upload/storage/v1/b/${B}/o?uploadType=media&name=cmek.txt`, { method: "POST", headers: { "content-type": "text/plain" }, body: "cmek" });
+  const cmekObj = await wjson(`/storage/v1/b/${B}/o/cmek.txt`);
+  check("object created over wire after CMEK set → stamped with the bucket's key", cmekObj.kmsKeyName === KMS_KEY);
+  await shot("09c-cmek-set");
 
   // Protection: remove retention, then delete the bucket from the list (UI)
   await page.getByRole("tab", { name: "Protection" }).click();
@@ -165,6 +195,21 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete bucket via UI → gone over native wire", (await wire(`/storage/v1/b/${B}`)).status === 404);
+
+  // Interoperability: creating an HMAC key for a service account via Settings really
+  // issues one over projects/{p}/hmacKeys (gcp.storage.interoperability).
+  await page.goto(UI + "#/storage/settings");
+  await page.getByRole("tab", { name: "Interoperability" }).click();
+  await page.getByRole("button", { name: "Create a key for a service account" }).click();
+  const HMAC_SA = `smoke-svc-${Date.now() % 100000}@vyomi-project.iam.gserviceaccount.com`;
+  await page.getByRole("dialog", { name: "Create a key for a service account" }).getByLabel("Service account").fill(HMAC_SA);
+  await page.getByRole("dialog", { name: "Create a key for a service account" }).getByRole("button", { name: "Create" }).click();
+  await page.getByRole("heading", { name: "HMAC key created" }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Done" }).click();
+  await page.getByText(HMAC_SA).waitFor({ timeout: 10000 });
+  const hmacKeys = await wjson("/storage/v1/projects/vyomi-project/hmacKeys");
+  check("create HMAC key via UI → listed over native wire", (hmacKeys.items || []).some((k) => k.serviceAccountEmail === HMAC_SA && k.state === "ACTIVE"));
+  await shot("10b-interoperability-hmac");
 
   // Artifact Registry: create repository via UI → native wire, push sample package
   // (Vyomi's own quickstart — no real AR method creates package data), settings, delete

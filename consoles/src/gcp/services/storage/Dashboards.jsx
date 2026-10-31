@@ -3,13 +3,20 @@
  * title and tabs render for real; individual sections that need telemetry, a separate
  * identity/billing concept or a separate product stay honest via CapabilityContainer. */
 import { useState } from "react";
-import { Box, Tab, Tabs, Typography } from "@mui/material";
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Tab, Tabs, TextField, Typography } from "@mui/material";
+import AddIcon from "@mui/icons-material/esm/Add.js";
+import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useAsync } from "../../../common/useAsync.js";
-import { fmtBytes, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
-import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { useNotify } from "../../../common/notify.jsx";
+import ResourceTable from "../../kit/ResourceTable.jsx";
+import DeleteDialog from "../../kit/DeleteDialog.jsx";
+import { ErrorAlert, fmtBytes, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
+import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+
+const DEV_USER_EMAIL = "dev@example.com";
 
 // ── Overview ────────────────────────────────────────────────────────────────────────────
 async function projectGlance() {
@@ -109,12 +116,111 @@ export function Settings() {
           <Section title="Request endpoint">
             <KeyValue items={[["Storage URI", "storage.vyomi.cloud"]]} />
           </Section>
-          <CapabilityContainer id="gcp.storage.interoperability" title="Service account HMAC" />
-          <CapabilityContainer id="gcp.storage.interoperability" title="User account HMAC" />
+          <ServiceAccountHmac project={project} />
+          <UserAccountHmac project={project} />
         </Box>
       )}
       {tab === "soft-delete" && <CapabilityContainer id="gcp.storage.soft-delete" title="Soft delete" />}
     </Box>
+  );
+}
+
+// ── Interoperability: HMAC keys (projects/{p}/hmacKeys) ────────────────────────────────
+function HmacSecretDialog({ secret, onClose }) {
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth aria-label="HMAC key created">
+      <DialogTitle>HMAC key created</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ mb: 1.5 }}>Copy this secret now — Vyomi only shows it once, same as the real API.</Typography>
+        <TextField fullWidth label="Secret" value={secret} InputProps={{ readOnly: true }} inputProps={{ "aria-label": "Secret" }} />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}><Button variant="contained" onClick={onClose}>Done</Button></DialogActions>
+    </Dialog>
+  );
+}
+
+function ServiceAccountHmac({ project }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listHmacKeys(project), [project]);
+  const [sel, setSel] = useState([]);
+  const [create, setCreate] = useState(false);
+  const [sa, setSa] = useState("");
+  const [secret, setSecret] = useState(null);
+  const keys = (data || []).filter((k) => k.serviceAccountEmail !== DEV_USER_EMAIL);
+  return (
+    <>
+      <Section title={<Stack component="span" direction="row" spacing={1} alignItems="center"><span>Service account HMAC</span><CapabilityBadge id="gcp.storage.interoperability" /></Stack>}
+        description="Access keys for service accounts"
+        actions={<Button startIcon={<AddIcon />} onClick={() => setCreate(true)}>Create a key for a service account</Button>}>
+        {error && <ErrorAlert error={error} />}
+        <ResourceTable resourceName="access keys" items={keys} rowKey={(k) => k.accessId} loading={loading} selectable selected={sel} onSelectedChange={setSel} dense
+          filterPlaceholder="Filter access keys"
+          columns={[
+            { id: "accessId", header: "Access key", cell: (k) => k.accessId },
+            { id: "secret", header: "Secret", cell: () => "•••••••••• (shown once, at creation)" },
+            { id: "sa", header: "Service account", cell: (k) => k.serviceAccountEmail },
+            { id: "state", header: "State", cell: (k) => k.state },
+          ]}
+          empty={<Typography variant="body2" color="text.secondary">No access keys for service accounts.</Typography>} />
+        {!!sel.length && <Button startIcon={<DeleteIcon />} sx={{ mt: 1 }} onClick={async () => {
+          try {
+            for (const id of sel) { await api.setHmacKeyState(project, id, "INACTIVE"); await api.deleteHmacKey(project, id); }
+            notify.success(`Deleted ${sel.length} access key${sel.length === 1 ? "" : "s"}`); setSel([]); reload();
+          } catch (e) { notify.error(e); }
+        }}>Remove access</Button>}
+      </Section>
+      {create && (
+        <Dialog open onClose={() => setCreate(false)} maxWidth="sm" fullWidth aria-label="Create a key for a service account">
+          <DialogTitle>Create a key for a service account</DialogTitle>
+          <DialogContent>
+            <TextField fullWidth autoFocus label="Service account" value={sa} onChange={(e) => setSa(e.target.value)}
+              helperText="e.g. app@vyomi-project.iam.gserviceaccount.com" sx={{ mt: 1 }} />
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button onClick={() => setCreate(false)}>Cancel</Button>
+            <Button variant="contained" disabled={!sa.includes("@")} onClick={async () => {
+              try { const r = await api.createHmacKey(project, sa); setCreate(false); setSa(""); setSecret(r.secret); reload(); }
+              catch (e) { notify.error(e); }
+            }}>Create</Button>
+          </DialogActions>
+        </Dialog>
+      )}
+      {secret && <HmacSecretDialog secret={secret} onClose={() => setSecret(null)} />}
+    </>
+  );
+}
+
+function UserAccountHmac({ project }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listHmacKeys(project), [project]);
+  const [del, setDel] = useState(null);
+  const [secret, setSecret] = useState(null);
+  const keys = (data || []).filter((k) => k.serviceAccountEmail === DEV_USER_EMAIL);
+  return (
+    <>
+      <Section title={<Stack component="span" direction="row" spacing={1} alignItems="center"><span>User account HMAC</span><CapabilityBadge id="gcp.storage.interoperability" /></Stack>}
+        actions={<Button startIcon={<AddIcon />} onClick={async () => {
+          try { const r = await api.createHmacKey(project, DEV_USER_EMAIL); setSecret(r.secret); reload(); }
+          catch (e) { notify.error(e); }
+        }}>Create a key</Button>}>
+        <KeyValue items={[["Default project for interoperable access", project]]} />
+        <ResourceTable resourceName="access keys" items={keys} rowKey={(k) => k.accessId} loading={loading} dense
+          columns={[
+            { id: "accessId", header: "Access key", cell: (k) => k.accessId },
+            { id: "secret", header: "Secret", cell: () => "•••••••••• (shown once, at creation)" },
+          ]}
+          empty={<Typography variant="body2" color="text.secondary">No rows to display.</Typography>} />
+        {error && <ErrorAlert error={error} />}
+        {keys.map((k) => (
+          <Button key={k.accessId} size="small" color="error" sx={{ mt: 1 }} onClick={() => setDel(k)}>Remove {k.accessId}</Button>
+        ))}
+      </Section>
+      {del && <DeleteDialog open onClose={() => setDel(null)} title={`Remove access key ${del.accessId}?`} actionLabel="Remove"
+        onConfirm={async () => { await api.setHmacKeyState(project, del.accessId, "INACTIVE"); await api.deleteHmacKey(project, del.accessId); notify.success("Access key removed"); reload(); }}>
+        <Typography variant="body2">This key will stop working immediately.</Typography>
+      </DeleteDialog>}
+      {secret && <HmacSecretDialog secret={secret} onClose={() => setSecret(null)} />}
+    </>
   );
 }
 

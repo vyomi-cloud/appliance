@@ -71,8 +71,35 @@ export default function BucketDetail({ params, query }) {
       {tab === "lifecycle" && b.data && <Lifecycle bucket={b.data} reload={b.reload} />}
       {tab === "observability" && <CapabilityContainer id="gcp.storage.observability" title="Monitoring" />}
       {tab === "inventory" && <CapabilityContainer id="gcp.storage.inventory-reports" title="Inventory reports" />}
-      {tab === "operations" && <CapabilityContainer id="gcp.storage.operations" title="Long-running bucket operations" />}
+      {tab === "operations" && <Operations bucket={bucket} />}
     </>
+  );
+}
+
+// ── Operations ──────────────────────────────────────────────────────────────────────────
+function Operations({ bucket }) {
+  const { data, loading, error, reload } = useAsync(() => api.listBucketOperations(bucket), [bucket]);
+  const ops = (data || []).map((o) => ({ ...o, key: o.name, id: o.name.split("/").pop() }));
+  return (
+    <Stack spacing={2}>
+      <Stack direction="row" alignItems="center" spacing={1}>
+        <Typography variant="h3" component="h2">Long-running bucket operations</Typography>
+        <CapabilityBadge id="gcp.storage.operations" />
+        <Box sx={{ flex: 1 }} />
+        <Button startIcon={<RefreshIcon />} onClick={reload}>Refresh</Button>
+      </Stack>
+      {error && <ErrorAlert error={error} />}
+      <ResourceTable resourceName="operations" items={ops} rowKey={(o) => o.key} loading={loading} dense
+        filterPlaceholder="Filter operations"
+        columns={[
+          { id: "id", header: "Operation ID", cell: (o) => o.id },
+          { id: "type", header: "Type", cell: (o) => o.metadata?.type },
+          { id: "status", header: "Status", cell: (o) => o.done ? "Done" : "Running" },
+          { id: "created", header: "Created", sortValue: (o) => o.metadata?.createTime || "", cell: (o) => fmtDate(o.metadata?.createTime) },
+          { id: "updated", header: "Updated", sortValue: (o) => o.metadata?.endTime || "", cell: (o) => fmtDate(o.metadata?.endTime) },
+        ]}
+        empty={<Typography variant="body2" color="text.secondary">No operations have run on this bucket yet — try switching Turbo replication on a dual-region bucket.</Typography>} />
+    </Stack>
   );
 }
 
@@ -184,6 +211,7 @@ function Configuration({ bucket, reload }) {
   const [editLabels, setEditLabels] = useState(false);
   const [editClass, setEditClass] = useState(false);
   const [editWebsite, setEditWebsite] = useState(false);
+  const [editKms, setEditKms] = useState(false);
   const ls = Object.entries(bucket.labels || {});
   const patch = async (body, msg) => { await api.patchBucket(bucket.name, body); notify.success(msg); reload(); };
   return (
@@ -205,8 +233,13 @@ function Configuration({ bucket, reload }) {
           ...(bucket.rpo ? [["Replication", bucket.rpo === "ASYNC_TURBO" ? "Turbo" : "Default"]] : []),
         ]} />
       </Section>
-      <CapabilityContainer id="gcp.storage.encryption" title="Data encryption">
-        <Typography variant="body2">Google-managed encryption key</Typography>
+      <CapabilityContainer id="gcp.storage.encryption" title="Data encryption"
+        actions={<Button variant="outlined" startIcon={bucket.encryption?.defaultKmsKeyName ? <EditIcon /> : <AddIcon />} onClick={() => setEditKms(true)}>
+          {bucket.encryption?.defaultKmsKeyName ? "Edit Cloud KMS key" : "Use a Cloud KMS key"}
+        </Button>}>
+        {bucket.encryption?.defaultKmsKeyName
+          ? <KeyValue items={[["Cloud KMS key", bucket.encryption.defaultKmsKeyName]]} />
+          : <Typography variant="body2">Google-managed encryption key</Typography>}
       </CapabilityContainer>
       <CapabilityContainer id="gcp.storage.cors" title="Cross-origin resource sharing (CORS)">
         {bucket.cors?.length
@@ -226,7 +259,21 @@ function Configuration({ bucket, reload }) {
       {editClass && <ClassDialog value={bucket.storageClass} onClose={() => setEditClass(false)} onSave={(v) => patch({ storageClass: v }, "Updated default storage class")} />}
       {editWebsite && <WebsiteDialog website={bucket.website} onClose={() => setEditWebsite(false)}
         onSave={(w) => patch({ website: w }, "Updated website configuration")} />}
+      {editKms && <KmsDialog current={bucket.encryption?.defaultKmsKeyName} onClose={() => setEditKms(false)}
+        onSave={(name) => patch({ encryption: name ? { defaultKmsKeyName: name } : null }, name ? "Cloud KMS key set" : "Reverted to Google-managed encryption")} />}
     </Stack>
+  );
+}
+
+function KmsDialog({ current, onClose, onSave }) {
+  const [name, setName] = useState(current || "");
+  const valid = !name || /^projects\/[^/]+\/locations\/[^/]+\/keyRings\/[^/]+\/cryptoKeys\/[^/]+$/.test(name);
+  return (
+    <SaveDialog title="Use a Cloud KMS key" onClose={onClose} disabled={!valid} onSave={() => onSave(name || null)}>
+      <Typography variant="body2" color="text.secondary">Vyomi validates the key's resource name and stamps it on every object written to this bucket from now on, but does not perform real envelope encryption with it.</Typography>
+      <TextField label="Cloud KMS key" value={name} onChange={(e) => setName(e.target.value)} error={!valid}
+        helperText={valid ? "Leave blank to revert to a Google-managed key." : "projects/P/locations/L/keyRings/R/cryptoKeys/K"} />
+    </SaveDialog>
   );
 }
 

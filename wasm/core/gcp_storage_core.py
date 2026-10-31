@@ -24,6 +24,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import struct
 import uuid
 from dataclasses import dataclass, field
@@ -96,9 +97,16 @@ def _json(status: int, obj: dict) -> GcsResponse:
 # that has no effect.
 _BUCKET_SETTABLE = ("labels", "iamConfiguration", "lifecycle", "retentionPolicy",
                     "rpo", "customPlacementConfig", "storageClass",
-                    "cors", "website", "billing", "objectRetention")
+                    "cors", "website", "billing", "objectRetention", "encryption")
 _MULTI_REGIONS = {"US", "EU", "ASIA"}
 _DUAL_REGIONS = {"NAM4", "EUR4", "EUR5", "EUR7", "EUR8", "ASIA1"}
+# Public members that bucket/project public access prevention (enforced) blocks a
+# setIamPolicy call from granting — the one PAP check Vyomi can make for real,
+# since it has no per-request authorization layer to also block anonymous reads.
+_PUBLIC_MEMBERS = {"allUsers", "allAuthenticatedUsers"}
+# Cloud KMS CryptoKey resource name shape (Vyomi validates the shape, not that the
+# key exists/is enabled — see gcp.storage.encryption in core/capabilities/gcp/storage.json).
+_KMS_KEY_RE = re.compile(r"^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$")
 
 
 def _location_type(loc: str) -> str:
@@ -165,6 +173,12 @@ def _apply_bucket_fields(meta: dict, body: dict, patch: bool) -> GcsResponse | N
         elif k == "objectRetention":
             mode = (v or {}).get("mode")
             meta[k] = {"mode": "Enabled" if mode == "Enabled" else "Disabled"}
+        elif k == "encryption":
+            key_name = (v or {}).get("defaultKmsKeyName")
+            if key_name and not _KMS_KEY_RE.match(key_name):
+                return _err(400, "invalid", "Invalid CMEK key: defaultKmsKeyName must be a full Cloud KMS "
+                            "CryptoKey resource name (projects/P/locations/L/keyRings/R/cryptoKeys/K).")
+            meta[k] = {"defaultKmsKeyName": key_name} if key_name else {}
         else:
             meta[k] = v
     return None
@@ -192,10 +206,14 @@ def _bucket_view(store: ObjectStore, name: str) -> dict:
     if view["rpo"] is None:
         view.pop("rpo")
     for k in ("labels", "lifecycle", "retentionPolicy", "customPlacementConfig",
-              "cors", "website", "billing", "objectRetention"):
+              "cors", "website", "billing", "objectRetention", "encryption"):
         if meta.get(k):
             view[k] = meta[k]
     return view
+
+
+def _bucket_kms_key(store: ObjectStore, bucket: str) -> str | None:
+    return (store.buckets.get(bucket, {}).get("encryption") or {}).get("defaultKmsKeyName")
 
 
 def _default_policy(store: ObjectStore, name: str) -> dict:
@@ -342,7 +360,7 @@ def _object_view(bucket: str, name: str, entry: dict) -> dict:
         **({"metadata": entry["metadata"]} if entry.get("metadata") else {}),
         **({"retention": entry["retention"]} if entry.get("retention") else {}),
         **{k: entry[k] for k in ("contentEncoding", "contentDisposition", "contentLanguage", "cacheControl",
-                                 "temporaryHold", "eventBasedHold", "customTime", "componentCount")
+                                 "temporaryHold", "eventBasedHold", "customTime", "componentCount", "kmsKeyName")
            if entry.get(k) not in (None, "")},
     }
 
@@ -363,13 +381,17 @@ def _entry_bytes(store: ObjectStore, bucket: str, name: str, entry: dict) -> byt
     return bytes(data or b"")
 
 
-def _new_entry(objs: dict, name: str, media: bytes, content_type: str, custom: dict, storage_class: str = "STANDARD") -> dict:
+def _new_entry(objs: dict, name: str, media: bytes, content_type: str, custom: dict, storage_class: str = "STANDARD",
+               kms_key: str | None = None) -> dict:
     gen = int(objs.get(name, {}).get("generation", "0") or 0) + 1
-    return {"data": media, "size": len(media), "contentType": content_type,
-            "timeCreated": objs.get(name, {}).get("timeCreated", _now()),
-            "updated": _now(), "md5Hash": _md5_b64(media), "crc32c": _crc32c_b64(media),
-            "etag": _etag(), "generation": gen, "metageneration": 1, "metadata": custom or {},
-            "storageClass": storage_class}
+    entry = {"data": media, "size": len(media), "contentType": content_type,
+             "timeCreated": objs.get(name, {}).get("timeCreated", _now()),
+             "updated": _now(), "md5Hash": _md5_b64(media), "crc32c": _crc32c_b64(media),
+             "etag": _etag(), "generation": gen, "metageneration": 1, "metadata": custom or {},
+             "storageClass": storage_class}
+    if kms_key:
+        entry["kmsKeyName"] = kms_key
+    return entry
 
 
 # Object metadata fields settable via objects.patch / objects.update.
@@ -402,7 +424,8 @@ def _compose(store: ObjectStore, bucket: str, dest: str, body: bytes) -> GcsResp
     first = objs.get(sources[0].get("name", ""), {})
     entry = _new_entry(objs, dest, media, dmeta.get("contentType") or first.get("contentType") or
                        "application/octet-stream", dmeta.get("metadata") or {},
-                       store.buckets.get(bucket, {}).get("storageClass", "STANDARD"))
+                       store.buckets.get(bucket, {}).get("storageClass", "STANDARD"),
+                       kms_key=_bucket_kms_key(store, bucket))
     entry["componentCount"] = len(sources)
     objs[dest] = entry
     store.mirror_put(bucket, dest, media, entry["contentType"], entry["metadata"])
@@ -527,9 +550,124 @@ def _insights_dataset_view(ds_id: str, ds: dict) -> dict:
             "sourceBucketPrefix": ds.get("sourceBucketPrefix", ""), "state": "ACTIVE", "createTime": ds["createTime"]}
 
 
+# ── Long-running bucket operations (Operations tab) ───────────────────────
+# Real GCS keeps this as a genuine async long-running-operation resource for
+# cross-location bucket moves and the Turbo replication switch; Vyomi's bucket
+# ops (buckets.patch) complete synchronously, so every operation Vyomi records
+# is already DONE at creation time — but it is a real, listable resource, not a
+# hand-written disclaimer.
+def _bucket_ops(store: ObjectStore) -> dict:
+    m = getattr(store, "_gcs_bucket_ops", None)
+    if m is None:
+        m = {}
+        store._gcs_bucket_ops = m
+    return m
+
+
+def _op_view(bucket: str, op_id: str, op: dict) -> dict:
+    return {"kind": "storage#operation", "name": f"projects/_/buckets/{bucket}/operations/{op_id}",
+            "done": True, "metadata": {"type": op["type"], "createTime": op["createTime"],
+                                        "endTime": op["createTime"], "requestedCancellation": False}}
+
+
+def _record_op(store: ObjectStore, bucket: str, op_type: str) -> None:
+    ops = _bucket_ops(store)
+    ops[uuid.uuid4().hex[:12]] = {"bucket": bucket, "type": op_type, "createTime": _now()}
+
+
+# ── Interoperability: HMAC keys for service/user accounts ─────────────────
+# Real resource: storage/v1/projects/{projectId}/hmacKeys. Issuance, listing,
+# the ACTIVE/INACTIVE state toggle and delete-when-INACTIVE round-trip for
+# real; Vyomi's wire layer never verifies an HMAC-signed request against the
+# secret (the separate S3-compatible XML endpoint these keys authenticate
+# against is not implemented) — see gcp.storage.interoperability.
+def _hmac_keys(store: ObjectStore) -> dict:
+    m = getattr(store, "_gcs_hmac_keys", None)
+    if m is None:
+        m = {}
+        store._gcs_hmac_keys = m
+    return m
+
+
+def _hmac_key_view(access_id: str, key: dict, with_secret: bool = False) -> dict:
+    meta = {"kind": "storage#hmacKeyMetadata", "accessId": access_id, "etag": "CAE=",
+            "id": f"{key['project']}/{access_id}", "projectId": key["project"],
+            "serviceAccountEmail": key["serviceAccountEmail"], "state": key["state"],
+            "timeCreated": key["timeCreated"], "updated": key["updated"]}
+    if with_secret:
+        return {"kind": "storage#hmacKey", "metadata": meta, "secret": key["secret"]}
+    return meta
+
+
+# ── CORS response headers ──────────────────────────────────────────────────
+# Real GCS relies on the browser, not the server, to enforce CORS: it always
+# serves the request and only ADDS Access-Control-* headers when the Origin
+# matches a configured rule, letting the browser block the response client-side
+# otherwise. Vyomi now does the same on OPTIONS preflights and on matching
+# object/bucket responses — see gcp.storage.cors.
+def _bucket_from_path(path: str) -> str | None:
+    p = path
+    for pre in ("/upload/storage/v1", "/download/storage/v1", "/storage/v1"):
+        if p.startswith(pre):
+            p = p[len(pre):]
+            break
+    p = p.split("?", 1)[0].rstrip("/")
+    segs = [s for s in p.split("/") if s != ""]
+    if len(segs) >= 2 and segs[0] == "b":
+        return unquote(segs[1])
+    return None
+
+
+def _cors_match(store: ObjectStore, bucket: str, origin: str) -> dict | None:
+    for rule in (store.buckets.get(bucket) or {}).get("cors") or []:
+        origins = rule.get("origin") or []
+        if "*" in origins or origin in origins:
+            return rule
+    return None
+
+
+def _cors_response_headers(rule: dict, origin: str) -> dict:
+    hdrs = {"access-control-allow-origin": origin, "vary": "Origin"}
+    if rule.get("method"):
+        hdrs["access-control-allow-methods"] = ",".join(rule["method"])
+    if rule.get("responseHeader"):
+        hdrs["access-control-expose-headers"] = ",".join(rule["responseHeader"])
+    if rule.get("maxAgeSeconds"):
+        hdrs["access-control-max-age"] = str(rule["maxAgeSeconds"])
+    return hdrs
+
+
+def _cors_preflight(store: ObjectStore, path: str, origin: str | None) -> GcsResponse:
+    bucket = _bucket_from_path(path)
+    rule = bucket and origin and _cors_match(store, bucket, origin)
+    if not rule:
+        return GcsResponse(status=200, headers={}, body=b"", media_type=None)
+    hdrs = _cors_response_headers(rule, origin)
+    hdrs["access-control-allow-headers"] = ",".join(rule.get("responseHeader") or ["*"])
+    return GcsResponse(status=200, headers=hdrs, body=b"", media_type=None)
+
+
 def dispatch(store: ObjectStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> GcsResponse:
+    """Public entry point: handles the CORS preflight/header concern (see the
+    `_cors_*` helpers above), then hands off to `_dispatch` for the real routing."""
+    headers = headers or {}
+    origin = next((v for k, v in headers.items() if (k or "").lower() == "origin"), None)
+    if method.upper() == "OPTIONS":
+        return _cors_preflight(store, path, origin)
+    resp = _dispatch(store, method, path, query, headers, body)
+    if origin:
+        bucket = _bucket_from_path(path)
+        rule = bucket and _cors_match(store, bucket, origin)
+        if rule:
+            resp.headers = {**(resp.headers or {}), **_cors_response_headers(rule, origin)}
+    return resp
+
+
+def _dispatch(store: ObjectStore, method: str, path: str,
+              query: dict | None = None, headers: dict | None = None,
+              body: bytes = b"") -> GcsResponse:
     query = query or {}
     headers = {(k or "").lower(): v for k, v in (headers or {}).items()}
     method = method.upper()
@@ -609,6 +747,52 @@ def dispatch(store: ObjectStore, method: str, path: str,
             return GcsResponse(status=204, body=b"", media_type=None)
         return _err(400, "invalid", f"Unsupported method {method} on a dataset config")
 
+    # /projects/{project}/hmacKeys[/{accessId}] — Interoperable access (see _hmac_keys above).
+    if len(segs) >= 3 and segs[0] == "projects" and segs[2] == "hmacKeys":
+        project = unquote(segs[1])
+        keys = _hmac_keys(store)
+        if len(segs) == 3:
+            if method == "POST":
+                try:
+                    req = json.loads(body.decode("utf-8")) if body else {}
+                except Exception:
+                    return _err(400, "parseError", "Parse Error")
+                sa = req.get("serviceAccountEmail") or query.get("serviceAccountEmail")
+                if not sa:
+                    return _err(400, "required", "serviceAccountEmail is required.")
+                access_id = "GOOG1" + uuid.uuid4().hex[:18].upper()
+                secret = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes).decode()
+                keys[access_id] = {"project": project, "serviceAccountEmail": sa, "secret": secret,
+                                   "state": "ACTIVE", "timeCreated": _now(), "updated": _now()}
+                return _json(200, _hmac_key_view(access_id, keys[access_id], with_secret=True))
+            if method == "GET":
+                items = [_hmac_key_view(i, k) for i, k in sorted(keys.items()) if k["project"] == project]
+                return _json(200, {"kind": "storage#hmacKeysMetadata", "items": items})
+            return _err(400, "invalid", f"Unsupported method {method} on hmacKeys")
+        access_id = unquote(segs[3])
+        key = keys.get(access_id)
+        if key is None or key["project"] != project:
+            return _err(404, "notFound", f"No such HMAC key: {access_id}")
+        if method == "GET":
+            return _json(200, _hmac_key_view(access_id, key))
+        if method in ("PUT", "PATCH"):
+            try:
+                req = json.loads(body.decode("utf-8")) if body else {}
+            except Exception:
+                return _err(400, "parseError", "Parse Error")
+            state = req.get("state")
+            if state not in ("ACTIVE", "INACTIVE"):
+                return _err(400, "invalid", "state must be ACTIVE or INACTIVE.")
+            key["state"] = state
+            key["updated"] = _now()
+            return _json(200, _hmac_key_view(access_id, key))
+        if method == "DELETE":
+            if key["state"] != "INACTIVE":
+                return _err(400, "invalid", "HMAC key must be in INACTIVE state before it can be deleted.")
+            keys.pop(access_id, None)
+            return GcsResponse(status=204, body=b"", media_type=None)
+        return _err(400, "invalid", f"Unsupported method {method} on an HMAC key")
+
     # /b            → buckets collection
     # /b/{bucket}   → one bucket
     # /b/{bucket}/o → objects collection
@@ -674,6 +858,8 @@ def dispatch(store: ObjectStore, method: str, path: str,
             bad = _apply_bucket_fields(staged, patch, patch=(method == "PATCH"))
             if bad:
                 return bad
+            if "rpo" in staged and staged.get("rpo") != bmeta.get("rpo"):
+                _record_op(store, bucket, "ChangeTurboReplication" if staged.get("rpo") == "ASYNC_TURBO" else "ChangeDefaultReplication")
             staged["metageneration"] = int(bmeta.get("metageneration", 1)) + 1
             staged["updated"] = _now()
             bmeta.clear()
@@ -681,6 +867,23 @@ def dispatch(store: ObjectStore, method: str, path: str,
             store.persist()
             return _json(200, _bucket_view(store, bucket))
         return _err(400, "invalid", f"Unsupported method {method} on bucket")
+
+    # ---- bucket long-running operations: /b/{bucket}/operations[/{id}] ----
+    if len(segs) >= 3 and segs[2] == "operations":
+        if not store.bucket_exists(bucket):
+            return _err(404, "notFound", f"The specified bucket does not exist.")
+        ops = {oid: o for oid, o in _bucket_ops(store).items() if o["bucket"] == bucket}
+        if len(segs) == 3:
+            if method == "GET":
+                return _json(200, {"kind": "storage#operations", "items": [_op_view(bucket, i, o) for i, o in sorted(ops.items())]})
+            return _err(400, "invalid", f"Unsupported method {method} on bucket operations")
+        op_id = unquote(segs[3])
+        op = ops.get(op_id)
+        if op is None:
+            return _err(404, "notFound", f"No such operation: {op_id}")
+        if method == "GET":
+            return _json(200, _op_view(bucket, op_id, op))
+        return _err(400, "invalid", f"Unsupported method {method} on a bucket operation")
 
     # ---- bucket IAM policy: /b/{bucket}/iam ----
     if len(segs) == 3 and segs[2] == "iam":
@@ -694,11 +897,17 @@ def dispatch(store: ObjectStore, method: str, path: str,
                 pol = json.loads(body.decode("utf-8")) if body else {}
             except Exception:
                 return _err(400, "parseError", "Parse Error")
+            pap_enforced = (bmeta.get("iamConfiguration") or {}).get("publicAccessPrevention") == "enforced"
             bindings = []
             for b in pol.get("bindings") or []:
                 if not isinstance(b, dict) or not b.get("role"):
                     return _err(400, "invalid", "Invalid policy binding.")
                 members = [str(m) for m in (b.get("members") or [])]
+                public = [m for m in members if m in _PUBLIC_MEMBERS]
+                if pap_enforced and public:
+                    return _err(400, "publicAccessPrevention",
+                                f"Public access prevention is enforced on bucket '{bucket}'; cannot grant "
+                                f"access to {', '.join(public)}.")
                 if members:
                     bindings.append({"role": str(b["role"]), "members": members})
             stored = {"kind": "storage#policy", "resourceId": f"projects/_/buckets/{bucket}",
@@ -728,7 +937,8 @@ def dispatch(store: ObjectStore, method: str, path: str,
                     return blocked
                 content_type = sess.get("content_type") or headers.get("content-type") or "application/octet-stream"
                 custom = sess.get("metadata") or {}
-                entry = _new_entry(objs, name, media, content_type, custom, store.buckets.get(bucket, {}).get("storageClass", "STANDARD"))
+                entry = _new_entry(objs, name, media, content_type, custom, store.buckets.get(bucket, {}).get("storageClass", "STANDARD"),
+                                   kms_key=_bucket_kms_key(store, bucket))
                 objs[name] = entry
                 store.mirror_put(bucket, name, media, content_type, custom)
                 _gcs_resumable(store).pop(query.get("upload_id"), None)
@@ -783,7 +993,8 @@ def dispatch(store: ObjectStore, method: str, path: str,
                 blocked = _retention_block(store, bucket, name, objs.get(name)) or _hold_block(bucket, name, objs.get(name))
                 if blocked:
                     return blocked
-                entry = _new_entry(objs, name, media, content_type, custom, store.buckets.get(bucket, {}).get("storageClass", "STANDARD"))
+                entry = _new_entry(objs, name, media, content_type, custom, store.buckets.get(bucket, {}).get("storageClass", "STANDARD"),
+                                   kms_key=_bucket_kms_key(store, bucket))
                 objs[name] = entry
                 store.mirror_put(bucket, name, media, content_type, custom)
                 store.persist()

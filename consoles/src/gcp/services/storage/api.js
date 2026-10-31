@@ -33,6 +33,26 @@ export async function listInsightsDatasets() {
 export const createInsightsDataset = (body) => restJson("POST", "/storage/v1/insightsDatasets", { body });
 export const deleteInsightsDataset = (id) => restJson("DELETE", `/storage/v1/insightsDatasets/${e(id)}`);
 
+/** Long-running bucket operations (e.g. the Turbo replication switch) — a real,
+ * listable resource; see core/gcp_storage_core.py's _bucket_ops. */
+export async function listBucketOperations(bucket) {
+  const r = await restJson("GET", `/storage/v1/b/${e(bucket)}/operations`);
+  return r.items || [];
+}
+
+/** Interoperability: HMAC keys for service accounts (projects/{p}/hmacKeys). The
+ * secret is only ever returned by createHmacKey, matching the real API. */
+export async function listHmacKeys(project) {
+  const r = await restJson("GET", `/storage/v1/projects/${e(project)}/hmacKeys`);
+  return r.items || [];
+}
+export const createHmacKey = (project, serviceAccountEmail) =>
+  restJson("POST", `/storage/v1/projects/${e(project)}/hmacKeys`, { body: { serviceAccountEmail } });
+export const setHmacKeyState = (project, accessId, state) =>
+  restJson("PUT", `/storage/v1/projects/${e(project)}/hmacKeys/${e(accessId)}`, { body: { state } });
+export const deleteHmacKey = (project, accessId) =>
+  restJson("DELETE", `/storage/v1/projects/${e(project)}/hmacKeys/${e(accessId)}`);
+
 /** One "directory" level: folders (prefixes) + objects directly under `prefix`. */
 export async function listLevel(bucket, prefix = "") {
   const r = await restJson("GET", `/storage/v1/b/${e(bucket)}/o`, { query: { prefix, delimiter: "/" } });
