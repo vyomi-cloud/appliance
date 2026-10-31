@@ -383,6 +383,48 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("heading", { name: "VPC networks" }).waitFor({ timeout: 10000 });
   check("delete VPC network via UI → gone over native wire", (await wire(`/compute/v1/projects/vyomi-project/global/networks/${NET}`)).status === 404);
+
+  // Connectivity Tests (Network Intelligence Center): create via the UI → visible over
+  // native wire (connectivityTests.get), result rendered; then rerun and delete.
+  const CT = `v4-gcp-ct-${Date.now() % 100000}`;
+  await page.goto(UI + "#/networking/connectivity-tests/add");
+  await page.getByLabel("Name").fill(CT);
+  await page.getByRole("radio", { name: "IP address" }).first().click();
+  await page.getByLabel("Source IP address").fill("203.0.113.9");
+  await page.getByLabel("Destination IP address").fill("203.0.113.10");
+  await page.getByLabel("Port").fill("443");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: CT }).waitFor({ timeout: 10000 });
+  const ct = await wjson(`/v1/projects/vyomi-project/locations/global/connectivityTests/${CT}`);
+  check("create connectivity test via UI → visible over native wire (connectivityTests.get)",
+    ct.source?.ipAddress === "203.0.113.9" && ct.destination?.ipAddress === "203.0.113.10" && ct.destination?.port === 443);
+  check("reachability result rendered in the UI matches the native wire result",
+    !!ct.reachabilityDetails && (await page.getByText(ct.reachabilityDetails.result === "REACHABLE" ? "Reachable" : "Unreachable").count()) > 0);
+  await shot("15-connectivity-test-detail");
+
+  // Connectivity test created over the wire (SDK direction) → shown in the UI list
+  const CT2 = `v4-gcp-ct2-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/locations/global/connectivityTests?testId=${CT2}`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ source: { ipAddress: "10.0.0.5" }, destination: { ipAddress: "10.0.0.6", port: 22 }, protocol: "TCP" }),
+  });
+  await page.goto(UI + "#/networking/connectivity-tests/list");
+  await page.getByRole("cell", { name: CT2, exact: true }).waitFor({ timeout: 10000 });
+  check("connectivity test created over wire → shown in UI list", true);
+
+  // Rerun from the detail page, then delete via the UI
+  await page.goto(UI + `#/networking/connectivity-tests/details/${CT}`);
+  await page.getByRole("button", { name: "Rerun" }).click();
+  await page.getByText("Connectivity test re-run").waitFor({ timeout: 10000 });
+  check("rerun connectivity test from the UI succeeds", true);
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(CT);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.waitForURL(/#\/networking\/connectivity-tests\/list$/, { timeout: 10000 });
+  check("delete connectivity test via UI → gone over native wire",
+    (await wire(`/v1/projects/vyomi-project/locations/global/connectivityTests/${CT}`)).status === 404);
+  await wire(`/v1/projects/vyomi-project/locations/global/connectivityTests/${CT2}`, { method: "DELETE" });
+
   // Compute Engine: create an instance via the UI → visible over the native wire (instances.list)
   const VM = `v4-gcp-smoke-vm-${Date.now() % 100000}`;
   await page.goto(UI + "#/compute/instances/create");

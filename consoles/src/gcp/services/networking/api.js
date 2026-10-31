@@ -93,3 +93,31 @@ export const validName = (n, what = "Name") => {
   if (!/^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$/.test(n)) return `${what} must start with a lowercase letter and contain only lowercase letters, numbers and hyphens.`;
   return null;
 };
+
+// ── connectivity tests (Network Intelligence Center, networkmanagement v1) ─────────────
+const ctBase = () => `/v1/projects/${e(getProject())}/locations/global/connectivityTests`;
+export async function listConnectivityTests() {
+  const r = await restJson("GET", ctBase());
+  return r.resources || [];
+}
+export const getConnectivityTest = (name) => restJson("GET", `${ctBase()}/${e(name)}`);
+export async function insertConnectivityTest(testId, body) {
+  const r = await restJson("POST", ctBase(), { query: { testId }, body });
+  return r.response;
+}
+export async function rerunConnectivityTest(name) {
+  const r = await restJson("POST", `${ctBase()}/${e(name)}:rerun`, { body: {} });
+  return r.response;
+}
+export const deleteConnectivityTest = (name) => restJson("DELETE", `${ctBase()}/${e(name)}`);
+
+export const ctId = (t) => nameOf(t.name);
+export const endpointLabel = (ep) => (ep?.instance ? nameOf(ep.instance) : (ep?.ipAddress || "—"));
+export const ctResult = (t) => t.reachabilityDetails?.result;
+
+const CT_STATE_LABEL = {
+  START_FROM_INSTANCE: "Initial state", START_FROM_INTERNET: "Initial state",
+  APPLY_INGRESS_FIREWALL_RULE: "Ingress firewall", APPLY_EGRESS_FIREWALL_RULE: "Egress firewall",
+  APPLY_ROUTE: "Route", NAT: "NAT", FORWARD: "Forward", DELIVER: "Deliver", DROP: "Drop",
+};
+export const ctStepLabel = (s) => CT_STATE_LABEL[s.state] || s.state;

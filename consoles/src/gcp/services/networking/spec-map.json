@@ -15,5 +15,8 @@
   "vpc-connectivity": { "route": "#/networking/vpc-connectivity" },
   "shared-vpc": { "route": "#/networking/shared-vpc" },
   "serverless-vpc-access": { "route": "#/networking/serverless-vpc-access" },
-  "packet-mirroring": { "route": "#/networking/packet-mirroring" }
+  "packet-mirroring": { "route": "#/networking/packet-mirroring" },
+  "connectivity-tests": { "route": "#/networking/connectivity-tests/list", "live": "live-connectivity-test" },
+  "create-connectivity-test": { "route": "#/networking/connectivity-tests/add" },
+  "connectivity-test-details": { "route": "#/networking/connectivity-tests/details/uic-ct", "fixtures": ["gcp-connectivity-test"], "vars": { "resource-name": "uic-ct" }, "live": "live-connectivity-test-detail" }
 }
