@@ -1451,7 +1451,6 @@
        service is up it STAYS visible as a green "Appliance is Ready" bar with a
        Details panel listing each backend + live status. Shared, self-mounting
        module (also used on the launch page) — see static/readiness-strip.js. -->
-  <div id="vyomi-readiness-mount"></div>
 
   <!-- v2.0.6 (#420): in-app update banner. Hidden until the JS at the
        bottom of this file polls /api/runtime/update-check and detects
@@ -1463,6 +1462,7 @@
     <a href="#" onclick="alert('Run \\`vyomi upgrade\\` in your terminal to pull the latest image.'); return false;" style="color:#fff; background:#374151; padding:4px 10px; border-radius:4px; margin-left:14px; text-decoration:none;">How to update</a>
     <button onclick="document.getElementById('update-banner').style.display='none'; sessionStorage.setItem('vyomi.update-banner-dismissed','1');" style="background:none; border:none; color:#9ca3af; margin-left:14px; cursor:pointer; font-size:14px;" aria-label="Dismiss">✕</button>
   </div>
+  <div id="vyomi-readiness-mount"></div>
   <nav class="top-bar">
     <button id="side-burger" type="button" onclick="toggleSidebar()" aria-label="Open menu" aria-controls="app-sidebar" aria-expanded="false"><span class="material-icons">menu</span></button>
     <a class="tb-brand" href="/clouds" onclick="showAppView('spaces');return false;" aria-label="vyomi"><img src="/assets/brand/vyomi-logo.png" alt="vyomi"></a>
