@@ -1164,7 +1164,7 @@ async function selectHome(){
   markActive("__home__");
   const main=document.getElementById("main");
   main.innerHTML="";
-  main.append(crumb(["Home"]), pageHead("dashboard","Azure (CloudLearn simulator)","All resources in resource group "+RG));
+  main.append(crumb(["Home"]), pageHead("dashboard","Azure (Vyomi simulator)","All resources in resource group "+RG));
   const wrap=el("div",{class:"wrap"});
   wrap.append(el("div",{style:"display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:14px;margin-bottom:16px;align-items:stretch"},   /* both cards share the row height */
     buildSavingsCard("azure", "Azure", "#0078d4"), buildConnectCard()));
