@@ -8,6 +8,7 @@ import { NetworkAcls } from "./NetworkAcls.jsx";
 import { SecurityGroups, SecurityGroupDetail, CreateSecurityGroup, EditInboundRules, EditOutboundRules } from "./SecurityGroups.jsx";
 import { ElasticIps, AllocateElasticIp } from "./ElasticIps.jsx";
 import { EgressOnlyInternetGateways, DhcpOptionSets, ManagedPrefixLists, PeeringConnections, RouteServers } from "./MiscResources.jsx";
+import { ReachabilityAnalyzer, ReachabilityAnalyzerDetail } from "./ReachabilityAnalyzer.jsx";
 import Settings from "./Settings.jsx";
 import * as Honest from "./HonestPages.jsx";
 
@@ -34,6 +35,10 @@ export default {
     { type: "section", text: "Security", items: [
       { type: "link", text: "Network ACLs", href: "#/vpc/network-acls" },
       { type: "link", text: "Security groups", href: "#/vpc/security-groups" },
+    ] },
+    { type: "section", text: "Network Analysis", items: [
+      { type: "link", text: "Reachability Analyzer", href: "#/vpc/reachability-analyzer" },
+      { type: "link", text: "Network Access Analyzer", href: "#/vpc/network-access-analyzer" },
     ] },
     { type: "section", text: "PrivateLink and Lattice", items: [
       { type: "link", text: "Getting started", href: "#/vpc/privatelink-getting-started" },
@@ -131,6 +136,10 @@ export default {
     { pattern: "/vpc/managed-prefix-lists", component: ManagedPrefixLists, crumbs: () => [crumb("VPC", ""), crumb("Managed prefix lists", "managed-prefix-lists")] },
     { pattern: "/vpc/peering-connections", component: PeeringConnections, crumbs: () => [crumb("VPC", ""), crumb("Peering connections", "peering-connections")] },
     { pattern: "/vpc/route-servers", component: RouteServers, crumbs: () => [crumb("VPC", ""), crumb("Route servers", "route-servers")] },
+
+    { pattern: "/vpc/reachability-analyzer", component: ReachabilityAnalyzer, crumbs: () => [crumb("VPC", ""), crumb("Reachability Analyzer", "reachability-analyzer")] },
+    { pattern: "/vpc/reachability-analyzer/:id", component: ReachabilityAnalyzerDetail, crumbs: (p) => [crumb("VPC", ""), crumb("Reachability Analyzer", "reachability-analyzer"), crumb(p.id, "reachability-analyzer", p.id)] },
+    { pattern: "/vpc/network-access-analyzer", component: Honest.NetworkAccessAnalyzer, crumbs: () => [crumb("VPC", ""), crumb("Network Access Analyzer", "network-access-analyzer")] },
 
     { pattern: "/vpc/privatelink-getting-started", component: Honest.PrivatelinkGettingStarted, crumbs: () => [crumb("VPC", ""), crumb("Getting started", "privatelink-getting-started")] },
     { pattern: "/vpc/endpoints", component: Honest.Endpoints, crumbs: () => [crumb("VPC", ""), crumb("Endpoints", "endpoints")] },

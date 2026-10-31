@@ -176,6 +176,16 @@ def run_resources(store=None):
     _check("route server round-trips", rs_id in call({"Action": "DescribeRouteServers"}))
     call({"Action": "DeleteRouteServer", "RouteServerId": rs_id})
 
+    fl_resp = call({"Action": "CreateFlowLogs", "ResourceType": "VPC", "ResourceId.1": vpc_id,
+                    "TrafficType": "ALL", "LogDestinationType": "cloud-watch-logs", "LogGroupName": "/vpc/flowlogs"})
+    fl_id = re.search(r"<flowLogIdSet><item>(.*?)</item>", fl_resp).group(1)
+    _check("CreateFlowLogs returns no unsuccessful entries", "<unsuccessful></unsuccessful>" in fl_resp)
+    _check("flow log round-trips with its resource and destination", vpc_id in call({"Action": "DescribeFlowLogs"}) and "/vpc/flowlogs" in call({"Action": "DescribeFlowLogs"}))
+    bad_fl = call({"Action": "CreateFlowLogs", "ResourceType": "VPC", "ResourceId.1": "vpc-doesnotexist"})
+    _check("flow log for an unknown resource is reported unsuccessful", "InvalidParameterValue" in bad_fl and "<flowLogIdSet></flowLogIdSet>" in bad_fl)
+    call({"Action": "DeleteFlowLogs", "FlowLogId.1": fl_id})
+    _check("flow log gone after delete", fl_id not in call({"Action": "DescribeFlowLogs"}))
+
     call({"Action": "DeleteSubnet", "SubnetId": subnet_id})
     call({"Action": "DeleteVpc", "VpcId": vpc_id})
     _check("VPC deletes once dependencies are gone", vpc_id not in s._vpc_model["vpcs"])

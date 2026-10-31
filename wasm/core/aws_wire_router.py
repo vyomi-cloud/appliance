@@ -345,6 +345,7 @@ _QUERY_ACTION = {
     "CreateVpcPeeringConnection": "vpc", "DescribeVpcPeeringConnections": "vpc",
     "AcceptVpcPeeringConnection": "vpc", "DeleteVpcPeeringConnection": "vpc",
     "CreateRouteServer": "vpc", "DescribeRouteServers": "vpc", "DeleteRouteServer": "vpc",
+    "CreateFlowLogs": "vpc", "DescribeFlowLogs": "vpc", "DeleteFlowLogs": "vpc",
     "RunInstances": "vpc", "DescribeInstances": "vpc", "StartInstances": "vpc",
     "StopInstances": "vpc", "TerminateInstances": "vpc", "RebootInstances": "vpc",
     "ModifyInstanceAttribute": "vpc", "MonitorInstances": "vpc", "UnmonitorInstances": "vpc",

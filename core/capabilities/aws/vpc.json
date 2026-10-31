@@ -107,10 +107,12 @@
  },
  "aws.vpc.flow-logs": {
   "title": "VPC/subnet Flow logs",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "CreateFlowLogs / DescribeFlowLogs and delivery to CloudWatch Logs or S3 are not implemented. Offline with netsim enforcement on, the enforcer does count real per-flow packets/bytes and core/netsim/flowlogs.py renders AWS v2 records from them, but that is not exposed through the EC2 API yet."
-  ]
+   "CreateFlowLogs / DescribeFlowLogs / DeleteFlowLogs manage real flow log resources (status, destination, format, tags) against a VPC, subnet or ENI, but Vyomi does not deliver records to CloudWatch Logs or S3 — the record stream is always empty here.",
+   "Offline with netsim enforcement on (VYOMI_NETSIM_ENFORCE=1|auto, Docker compute backend), the enforcer does count real per-flow packets/bytes and core/netsim/flowlogs.py can render AWS v2 records from them, but that collector is not wired to this EC2 API yet."
+  ],
+  "tests": ["tests/conformance/test_vpc_core.py"]
  },
  "aws.vpc.integrations": {
   "title": "VPC console third-party integrations (e.g. Transit Gateway Network Manager tiles)",
@@ -152,6 +154,13 @@
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
    "Virtual Private Gateway route propagation isn't modeled — see aws.vpc.vpn."
+  ]
+ },
+ "aws.vpc.network-access-analyzer": {
+  "title": "Network Access Analyzer (scopes, findings)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "A separate analysis engine from Reachability Analyzer: it evaluates a whole network's configuration against access scopes (e.g. \"internet-accessible resources\") and reports findings, rather than one source/destination path — not modeled; see aws.vpc.reachability-analyzer for the single-path analyzer Vyomi does run."
   ]
  },
  "aws.vpc.security-group-sharing": {

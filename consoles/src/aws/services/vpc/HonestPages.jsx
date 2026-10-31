@@ -14,6 +14,10 @@ const page = (title, id) => () => (
   </ContentLayout>
 );
 
+// Network Analysis — Network Access Analyzer is a separate finding-based engine from
+// Reachability Analyzer (see ReachabilityAnalyzer.jsx for the single-path analyzer Vyomi runs).
+export const NetworkAccessAnalyzer = page("Network Access Analyzer", "aws.vpc.network-access-analyzer");
+
 // PrivateLink and Lattice
 export const PrivatelinkGettingStarted = page("Getting started", "aws.vpc.privatelink");
 export const Endpoints = page("Endpoints", "aws.vpc.privatelink");

@@ -79,6 +79,20 @@
       ]
     },
     {
+      "label": "Network Analysis",
+      "expandable": true,
+      "children": [
+        {
+          "label": "Reachability Analyzer",
+          "page_id": "reachability-analyzer"
+        },
+        {
+          "label": "Network Access Analyzer",
+          "page_id": "network-access-analyzer"
+        }
+      ]
+    },
+    {
       "label": "PrivateLink and Lattice",
       "expandable": true,
       "children": [
@@ -2253,6 +2267,46 @@
         }
       ],
       "submit": "Create security group"
+    },
+    {
+      "id": "reachability-analyzer",
+      "kind": "list",
+      "title": "Reachability Analyzer",
+      "route": "/vpcconsole/home#ReachabilityAnalyzer:",
+      "breadcrumbs": [
+        "VPC",
+        "Reachability Analyzer"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "notes": "No live capture this run (private captures repo unavailable); reconstructed from general AWS product knowledge, kept thin like the other self-contained resources (route-servers, peering-connections) the capture only recorded as a bare nav entry."
+    },
+    {
+      "id": "reachability-analyzer-detail",
+      "kind": "detail",
+      "title": "{resource-name}",
+      "route": "/vpcconsole/home#NetworkPathDetails:networkInsightsPathId={resource-name}",
+      "breadcrumbs": [
+        "VPC",
+        "Reachability Analyzer",
+        "{resource-name}"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "notes": "No live capture this run; reconstructed from general AWS product knowledge."
+    },
+    {
+      "id": "network-access-analyzer",
+      "kind": "list",
+      "title": "Network Access Analyzer",
+      "route": "/vpcconsole/home#NetworkAccessAnalyzer:",
+      "breadcrumbs": [
+        "VPC",
+        "Network Access Analyzer"
+      ],
+      "provenance": "reference",
+      "confidence": "low",
+      "notes": "Outside Vyomi's VPC simulation scope (separate analysis engine from Reachability Analyzer's single source/destination evaluation); console declares the page only."
     },
     {
       "id": "elastic-ips",

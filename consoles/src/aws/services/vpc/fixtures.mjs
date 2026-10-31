@@ -83,4 +83,11 @@ export default {
     const body = await wire("POST", "/", Q("CreateRouteServer", { AmazonSideAsn: 65010 }));
     return xid(body, "routeServerId");
   },
+  "live-insights-path": async (wire) => {
+    const igw = await wire("POST", "/", Q("CreateInternetGateway"));
+    const body = await wire("POST", "/", Q("CreateNetworkInsightsPath", {
+      Source: xid(igw, "internetGatewayId"), DestinationIp: "203.0.113.5", Protocol: "tcp", DestinationPort: 443,
+    }));
+    return xid(body, "networkInsightsPathId");
+  },
 };

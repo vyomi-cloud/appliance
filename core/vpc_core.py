@@ -58,7 +58,7 @@ def _model(store) -> dict:
         m = {"vpcs": {}, "subnets": {}, "sgs": {}, "route_tables": {},
              "igws": {}, "nacls": {}, "nat_gateways": {}, "eigws": {},
              "dhcp_options": {}, "prefix_lists": {}, "peering_connections": {},
-             "route_servers": {},
+             "route_servers": {}, "flow_logs": {},
              # EC2 compute/storage/network resources (same account, same Query-protocol
              # wire — boto3's "ec2" client signs ALL of this under one service).
              "instances": {}, "images": {}, "volumes": {}, "snapshots": {},
@@ -1240,6 +1240,80 @@ def _delete_network_insights_analysis(store, params):
     return _envelope("DeleteNetworkInsightsAnalysis", f"<networkInsightsAnalysisId>{aid}</networkInsightsAnalysisId>")
 
 
+# ── VPC/subnet Flow Logs (config + lifecycle; see core/netsim/flowlogs.py for the
+#    real per-flow record renderer the offline Docker enforcer feeds — not wired to this
+#    EC2 API yet, so DescribeFlowLogs always answers with an empty record stream) ──
+_FLOW_RESOURCE_PREFIXES = {"VPC": ("vpc-", "vpcs"), "Subnet": ("subnet-", "subnets"), "NetworkInterface": ("eni-", "enis")}
+
+
+def _flow_log_xml(f: dict) -> str:
+    return ("<item>"
+            f"<flowLogId>{f['id']}</flowLogId><flowLogStatus>{f['status']}</flowLogStatus>"
+            f"<creationTime>{f['created']}</creationTime><resourceId>{f['resource_id']}</resourceId>"
+            f"<trafficType>{f['traffic_type']}</trafficType><logDestinationType>{f['log_destination_type']}</logDestinationType>"
+            + (f"<logGroupName>{_xml_escape(f['log_group_name'])}</logGroupName>" if f.get("log_group_name") else "")
+            + (f"<logDestination>{_xml_escape(f['log_destination'])}</logDestination>" if f.get("log_destination") else "")
+            + f"<logFormat>{_xml_escape(f['log_format'])}</logFormat>"
+            + f"<deliverLogsStatus>{f['deliver_logs_status']}</deliverLogsStatus>"
+            + (f"<deliverLogsPermissionArn>{_xml_escape(f['deliver_logs_permission_arn'])}</deliverLogsPermissionArn>" if f.get("deliver_logs_permission_arn") else "")
+            + f"<maxAggregationInterval>{f['max_aggregation_interval']}</maxAggregationInterval>"
+            + f"{_tags_xml(f.get('tags', {}))}</item>")
+
+
+def _create_flow_logs(store, params):
+    m = _model(store)
+    rtype = str(params.get("ResourceType", "VPC"))
+    if rtype not in _FLOW_RESOURCE_PREFIXES:
+        raise VpcError("InvalidParameterValue", f"ResourceType '{rtype}' is not supported")
+    prefix, coll_name = _FLOW_RESOURCE_PREFIXES[rtype]
+    rids = [v for k, v in sorted(params.items()) if k.startswith("ResourceId.") or k.startswith("ResourceIds.")]
+    if not rids:
+        raise VpcError("MissingParameter", "The request must contain the parameter ResourceId")
+    coll = m[coll_name]
+    ids, unsuccessful = [], []
+    for rid in rids:
+        if not str(rid).startswith(prefix) or rid not in coll:
+            unsuccessful.append((rid, "InvalidParameterValue", f"{rtype} '{rid}' does not exist"))
+            continue
+        fid = _rid("fl", 17)
+        m.setdefault("flow_logs", {})[fid] = {
+            "id": fid, "resource_id": rid, "resource_type": rtype, "status": "ACTIVE",
+            "traffic_type": str(params.get("TrafficType", "ALL")),
+            "log_destination_type": str(params.get("LogDestinationType", "cloud-watch-logs")),
+            "log_group_name": str(params.get("LogGroupName", "")), "log_destination": str(params.get("LogDestination", "")),
+            "log_format": str(params.get("LogFormat") or "${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status}"),
+            "deliver_logs_status": "SUCCESS", "deliver_logs_permission_arn": str(params.get("DeliverLogsPermissionArn", "")),
+            "max_aggregation_interval": int(params.get("MaxAggregationInterval", 600) or 600),
+            "created": _now(), "tags": _parse_tag_specifications(params).get("vpc-flow-log", {})}
+        ids.append(fid)
+    body = "<flowLogIdSet>" + "".join(f"<item>{i}</item>" for i in ids) + "</flowLogIdSet>"
+    body += "<unsuccessful>" + "".join(
+        f"<item><resourceId>{_xml_escape(str(rid))}</resourceId><error><code>{code}</code><message>{_xml_escape(msg)}</message></error></item>"
+        for rid, code, msg in unsuccessful) + "</unsuccessful>"
+    return _envelope("CreateFlowLogs", body)
+
+
+def _describe_flow_logs(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("FlowLogId.")]
+    rows = [f for f in m.get("flow_logs", {}).values() if not ids or f["id"] in ids]
+    return _envelope("DescribeFlowLogs", f"<flowLogSet>{''.join(_flow_log_xml(f) for f in rows)}</flowLogSet>")
+
+
+def _delete_flow_logs(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("FlowLogId.")]
+    unsuccessful = []
+    for fid in ids:
+        if fid in m.get("flow_logs", {}):
+            m["flow_logs"].pop(fid)
+        else:
+            unsuccessful.append(fid)
+    body = "<unsuccessful>" + "".join(
+        f"<item><resourceId>{fid}</resourceId><error><code>InvalidFlowLogId.NotFound</code><message>FlowLog '{fid}' does not exist</message></error></item>"
+        for fid in unsuccessful) + "</unsuccessful>"
+    return _envelope("DeleteFlowLogs", body)
+
 
 OWNER_ID = "123456789012"
 _AZS = ["us-east-1a", "us-east-1b", "us-east-1c"]
@@ -1347,7 +1421,8 @@ def _taggable_collections(m: dict) -> list:
     return [m["instances"], m["volumes"], m["snapshots"], m["images"], m["sgs"],
             m["addresses"], m["enis"], m["placement_groups"], m["launch_templates"], m["key_pairs"],
             m["vpcs"], m["subnets"], m["route_tables"], m["igws"], m["nacls"], m["nat_gateways"],
-            m["eigws"], m["dhcp_options"], m["prefix_lists"], m["peering_connections"], m["route_servers"]]
+            m["eigws"], m["dhcp_options"], m["prefix_lists"], m["peering_connections"], m["route_servers"],
+            m.get("flow_logs", {}), m.get("insights_paths", {}), m.get("insights_analyses", {})]
 
 
 def _find_resource(m: dict, rid: str):
@@ -2606,6 +2681,7 @@ _OPS = {
     "CreateRouteServer": _create_route_server, "DescribeRouteServers": _describe_route_servers,
     "DeleteRouteServer": _delete_route_server,
     "AnalyzeReachability": _analyze_reachability_action,
+    "CreateFlowLogs": _create_flow_logs, "DescribeFlowLogs": _describe_flow_logs, "DeleteFlowLogs": _delete_flow_logs,
     # instances
     "RunInstances": _run_instances, "DescribeInstances": _describe_instances,
     "StartInstances": lambda s, p: _instance_state_change(s, p, "start", "running"),
