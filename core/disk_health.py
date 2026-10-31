@@ -96,12 +96,49 @@ def _bridge_run(backend: str, args: list[str], timeout: int = 30) -> dict:
 
 # ── disk sampling ───────────────────────────────────────────────────────────
 
+def _usage(total: int, used: int, avail: int, pct: float, source: str) -> dict[str, Any]:
+    return {
+        "available": True,
+        "total_bytes": total,
+        "used_bytes": used,
+        "avail_bytes": avail,
+        "pct_used": pct,
+        "total_gb": round(total / 1024 ** 3, 2),
+        "used_gb": round(used / 1024 ** 3, 2),
+        "avail_gb": round(avail / 1024 ** 3, 2),
+        "source": source,
+    }
+
+
+def _sample_local_disk() -> Optional[dict[str, Any]]:
+    """Docker installs have no runtime bridge: measure the disk the simulator's
+    data volume lives on (/data — Docker's own disk, where images, volumes and
+    instances are stored), else the container root."""
+    for p in (os.environ.get("VYOMI_DATA_DIR") or "/data", "/"):
+        if not os.path.isdir(p):
+            continue
+        try:
+            u = shutil.disk_usage(p)
+        except OSError:
+            continue
+        if not u.total:
+            continue
+        # df's Use%: used over what non-root users can reach (used + available)
+        pct = round(u.used * 100.0 / max(1, u.used + u.free), 1)
+        return _usage(u.total, u.used, u.free, pct, "local:" + p)
+    return None
+
+
 def _sample_root_disk() -> dict[str, Any]:
     """Return the VM's root-filesystem usage. Asks the runtime bridge to
     run `df -B1 /` so the bytes reflect the multipass VM (not the
-    simulator container, which has its own overlay)."""
+    simulator container, which has its own overlay). Without a bridge
+    (every Docker install) it measures the data volume's disk directly."""
     r = _bridge_run("host", ["df", "-B1", "--output=size,used,avail,pcent", "/"], timeout=10)
     if r.get("returncode") != 0:
+        local = _sample_local_disk()
+        if local:
+            return local
         return {"available": False, "error": (r.get("stderr") or "")[:200]}
     lines = (r.get("stdout") or "").strip().splitlines()
     if len(lines) < 2:
@@ -114,16 +151,7 @@ def _sample_root_disk() -> dict[str, Any]:
         pct = float(parts[3].rstrip("%"))
     except Exception as e:
         return {"available": False, "error": f"parse_failed: {e}"}
-    return {
-        "available": True,
-        "total_bytes": total,
-        "used_bytes": used,
-        "avail_bytes": avail,
-        "pct_used": pct,
-        "total_gb": round(total / 1024 ** 3, 2),
-        "used_gb": round(used / 1024 ** 3, 2),
-        "avail_gb": round(avail / 1024 ** 3, 2),
-    }
+    return _usage(total, used, avail, pct, "bridge")
 
 
 def _sample_breakdown() -> dict[str, Any]:
