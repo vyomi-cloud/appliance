@@ -17,6 +17,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, navigate } from "../../../common/router.js";
 import { ErrorAlert } from "../../kit/common.jsx";
+import { CapabilityBadge, saveNotice } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 export default function CreateExternalKeyStore() {
@@ -58,13 +59,13 @@ export default function CreateExternalKeyStore() {
         XksProxyUriPath: pathPrefix || "/kms/xks/v1",
         XksProxyAuthenticationCredential: { AccessKeyId: accessKeyId, RawSecretAccessKey: secretKey },
       });
-      notify.success(`Created external key store "${name}".`);
+      notify.success(`Created external key store "${name}".${saveNotice("kms.custom-key-stores")}`);
       navigate("kms", "external-key-stores");
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
 
   return (
-    <ContentLayout header={<Header variant="h1">Create external key store</Header>}>
+    <ContentLayout header={<Header variant="h1" actions={<CapabilityBadge id="kms.custom-key-stores" />}>Create external key store</Header>}>
       <form onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <Form errorText={error && <ErrorAlert error={error} />} actions={
           <SpaceBetween direction="horizontal" size="xs">
