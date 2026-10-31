@@ -18,6 +18,11 @@ pushing it to the destination endpoint, retries and dead-lettering. Only the sub
 configuration (destination, filters, retry policy, dead-letter settings) round-trips; that gap
 is declared in ``core/capabilities/azure/eventgrid.json``.
 
+One piece of that configuration IS enforced without a delivery runtime: ``expirationTimeUtc``.
+Real Event Grid auto-deletes a subscription once it passes, so every dispatch here sweeps the
+topic's subscriptions for expired ones first (``_sweep_expired``) — a GET/list never sees one,
+the same as the real service.
+
 ``dispatch`` returns ``{"status", "headers", "body"}`` (``body`` is JSON-able or ``None``).
 """
 from __future__ import annotations
@@ -45,6 +50,26 @@ def _merge(base: dict, overlay: dict) -> dict:
     return out
 
 
+def _parse_iso(ts) -> "datetime.datetime | None":
+    if not ts:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _sweep_expired(state: dict, topic_rid: str) -> None:
+    """Drop every event subscription on this topic whose ``expirationTimeUtc`` has passed —
+    real Event Grid auto-deletes the subscription at that point, so a GET/list must not see it."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    parent = topic_rid.lower()
+    for key in [k for k, r in state.items() if r.get("_parent") == parent]:
+        exp = _parse_iso((state[key].get("properties") or {}).get("expirationTimeUtc"))
+        if exp is not None and exp <= now:
+            del state[key]
+
+
 def handles(chain) -> bool:
     """``chain`` is ``AzureArm._arm``'s split of everything after the FIRST
     ``providers/Microsoft.EventGrid/`` — e.g. for a subscription on topic "t1":
@@ -66,6 +91,7 @@ def dispatch(state: dict, method: str, sub: str, rg, chain, names, payload, quer
     topic_rid = f"/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.EventGrid/topics/{topic_name}"
     if topic_rid.lower() not in state:
         return _err(404, "ResourceNotFound", f"Topic '{topic_name}' was not found.")
+    _sweep_expired(state, topic_rid)
 
     rest = chain[4:]
     if not rest or rest[0].lower() != "eventsubscriptions":

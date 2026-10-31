@@ -147,6 +147,20 @@ def run() -> int:
     r = arm.handle("GET", lock_path("t1"), {"api-version": "2016-09-01"})
     check("lock gone after delete", r["body"]["value"] == [], r["body"])
 
+    # ── Expiration time: enforced even without a delivery runtime (real Event Grid
+    # auto-deletes a subscription once expirationTimeUtc passes) ───────────────────────
+    arm.handle("PUT", sub_path("t1", "es-future"), {"api-version": ESAV},
+               {"properties": {"destination": {"endpointType": "WebHook"}, "expirationTimeUtc": "2999-01-01T00:00:00.000Z"}})
+    r = arm.handle("PUT", sub_path("t1", "es-expired"), {"api-version": ESAV},
+                   {"properties": {"destination": {"endpointType": "WebHook"}, "expirationTimeUtc": "2000-01-01T00:00:00.000Z"}})
+    check("create with a past expirationTimeUtc still round-trips on the write itself", r["status"] == 201, r)
+    r = arm.handle("GET", sub_path("t1", "es-expired"), {"api-version": ESAV})
+    check("GET on an already-expired subscription -> 404 (auto-deleted)", r["status"] == 404, r)
+    r = arm.handle("GET", topic_path("t1") + "/providers/Microsoft.EventGrid/eventSubscriptions", {"api-version": ESAV})
+    names = sorted(x["name"] for x in r["body"]["value"])
+    check("list sweeps the expired subscription but keeps the future one and the unexpiring one",
+          names == ["es-future", "es1"], names)
+
     # ── Activity log: every PUT/DELETE above left a real event behind ──────────────────
     r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Insights/eventtypes/management/values",
                     {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{topic_path('t1')}'"})

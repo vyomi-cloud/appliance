@@ -32,9 +32,9 @@
   },
   "azure.eventgrid.eventsubscriptions.deliveryconfig": {
     "title": "Dead-lettering and retry policy (max delivery attempts, event TTL, expiration time)",
-    "level": { "nano": "config_only", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "not_simulated" },
     "limitations": [
-      "Vyomi stores and returns these settings exactly as configured (PUT/GET round-trip), but never enforces them — see azure.eventgrid.eventsubscriptions.delivery."
+      "Expiration time IS enforced: an event subscription past its expirationTimeUtc is swept (auto-deleted, same as real Event Grid) before any GET/list sees it. Max delivery attempts and event time-to-live round-trip (PUT/GET) but are never enforced, because there is no delivery runtime to retry against — see azure.eventgrid.eventsubscriptions.delivery."
     ],
     "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
   },
@@ -97,8 +97,11 @@
   },
   "azure.eventgrid.topic.iam": {
     "title": "Access control (IAM) on a topic",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Role assignments scoped to an individual resource are not modeled."]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), but the generic ARM list is subscription-wide (not scoped to this one topic), and 'Check access' / 'My access' evaluation is not modelled — Vyomi never denies a console action based on a role assignment."
+    ],
+    "tests": ["tests/conformance/test_azure_arm_core.py"]
   },
   "azure.eventgrid.topic.locks": {
     "title": "Resource locks",
@@ -120,7 +123,10 @@
   },
   "azure.eventgrid.topic.exporttemplate": {
     "title": "Export template (ARM template / Bicep / Terraform)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Generating an exportable ARM/Bicep/Terraform template for a resource is not modeled."]
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "The ARM Template tab renders this topic's own live resource JSON (type/apiVersion/properties), the same data as Overview's JSON View, in the standard ARM deployment-template envelope — real, not a static sample. Bicep and Terraform output, and the Add to library / Deploy / Visualize template actions, are not modeled."
+    ],
+    "tests": ["tests/conformance/test_azure_eventgrid_core.py"]
   }
 }
