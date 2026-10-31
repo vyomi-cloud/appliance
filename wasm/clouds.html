@@ -2580,6 +2580,26 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       if (window.loadSpaces) loadSpaces();
     }
 
+    // Keep the space cards' savings + resource count live (a console tab may be creating
+    // resources while this page stays open) — updated in place, without re-running loadSpaces.
+    async function refreshSpaceSavings() {
+      let provs = {};
+      try { provs = ((await (await fetch('/api/runtime/host-distribution')).json()) || {}).providers || {}; } catch (_) { return; }
+      const R = window.NANO_RATE || {};
+      document.querySelectorAll('#spaces-grid .space-card[data-provider]').forEach((card) => {
+        const p = card.getAttribute('data-provider'), v = provs[p] || {}, bs = v.by_service || {};
+        let m = 0; for (const k in bs) m += (Number(bs[k]) || 0) * (R.hasOwnProperty(k) ? R[k] : 1.0);
+        const n = Number(v.resources) || 0;
+        const amt = card.querySelector('.space-savings-amt');
+        if (amt) amt.innerHTML = '$' + m.toFixed(2) + '<span class="space-savings-unit">/mo saved</span>';
+        const top = card.querySelector('.space-savings-top'); let yr = card.querySelector('.space-savings-yr');
+        if (m > 0) { if (!yr && top) { yr = document.createElement('span'); yr.className = 'space-savings-yr'; top.append(yr); } if (yr) yr.textContent = '~$' + (m * 12).toFixed(0) + '/yr'; }
+        else if (yr) yr.remove();
+        const bar = card.querySelector('.space-savings-track i'); if (bar) bar.style.width = (m > 0 ? Math.max(6, Math.min(100, Math.round(m / 50 * 100))) : 0) + '%';
+        const meta = card.querySelector('.space-meta');
+        if (meta) { const dot = meta.querySelector('.dot'); if (dot && dot.nextSibling) dot.nextSibling.textContent = n + ' resource' + (n === 1 ? '' : 's'); }
+      });
+    }
     async function loadSpaces() {
       const grid = document.getElementById('spaces-grid');
       if (_ttlTimer) { clearInterval(_ttlTimer); _ttlTimer = null; }  // no leaked timers on re-render
@@ -2620,12 +2640,14 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         // live census savings (fresh only while a console is open), else $0.00.
         const _NANO_RATE = window.NANO_RATE || {};   // the shared table: wasm/nano-rates.js
         const _savingsByProvider = { aws: 0, gcp: 0, azure: 0 };
+        const _resByProvider = { aws: 0, gcp: 0, azure: 0 };   // live census resource counts
         const _byServiceByProvider = {};
         try {
           const hd = await (await fetch('/api/runtime/host-distribution')).json();
           const provs = hd.providers || {};
           for (const p of ['aws','gcp','azure']) {
             const bs = (provs[p] || {}).by_service || {};
+            _resByProvider[p] = Number((provs[p] || {}).resources) || 0;
             if (bs && Object.keys(bs).length) _byServiceByProvider[p] = bs;
             let m = 0; for (const k in bs) { m += (Number(bs[k])||0) * (_NANO_RATE.hasOwnProperty(k) ? _NANO_RATE[k] : 1.0); }
             _savingsByProvider[p] = m;
@@ -2646,7 +2668,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
             s.ec2_count, s.lambda_count, s.dynamodb_count, s.sqs_count, s.rds_count,
             s.gcp_count, s.gcp_functions_count, s.azure_count, s.azure_functionapp_count,
           ].filter(n => typeof n === 'number');
-          const totalRes = counts.reduce((a, b) => a + b, 0);
+          // Nano spaces carry no *_count fields: their live count is the census's.
+          const totalRes = counts.length ? counts.reduce((a, b) => a + b, 0) : (_resByProvider[provider] || 0);
           const consolePath = PROVIDER_PATHS[provider] || '/ui';
           const savings = _savingsByProvider[provider] || 0;
           const savingsBar = savings > 0 ? Math.max(6, Math.min(100, Math.round((savings / 50) * 100))) : 0;
@@ -3321,6 +3344,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       setInterval(() => {
         refreshHostStats();
         refreshProviderPies();
+        refreshSpaceSavings();
       }, 10000);
       checkForUpdates();
       // The persistent readiness strip is rendered by the shared, self-mounting

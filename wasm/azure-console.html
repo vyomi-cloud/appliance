@@ -1079,22 +1079,30 @@ function nanoComputeAndRender(bs, provider, accent, cloud, els, note){
 }
 // Load savings: prefer the LIVE census (and persist it per-account); on a cold
 // load with no live resources, fall back to the PERSISTED per-service estimate.
-// tries: on a fresh load the page publishes its first census a few seconds after the
-// home renders, so an empty census is re-checked (every 4 s, up to 5 times).
-function nanoLoadSavings(provider, accent, cloud, els, tries){
-  tries = tries == null ? 5 : tries;
+// Kept live: re-read every 5 s while the card is on screen. The census only exists once
+// this console's in-browser engine has booted (a first visit can take well over 20 s),
+// and it changes as resources are created here or through the tunnel/CLI.
+function nanoLoadSavings(provider, accent, cloud, els){
+  if (!els.live) {
+    els.live = setInterval(function(){
+      if (!document.body.contains(els.body)) { clearInterval(els.live); return; }
+      nanoLoadSavings(provider, accent, cloud, els);
+    }, 5000);
+  }
   fetch("/api/runtime/host-distribution").then(function(r){return r.json();}).then(function(d){
     var provs=d.providers||{}; var bs=((provs[provider])||{}).by_service||{};
     if (Object.keys(bs).length>0){
       nanoComputeAndRender(bs, provider, accent, cloud, els);
       try{ var bySvc={},byProv={},tot=0; for (var p in provs){ var pbs=(provs[p]||{}).by_service||{}; bySvc[p]=pbs; var m=Math.round(nanoSavingsFromByService(pbs)*100); byProv[p]=m; tot+=m; }
-        fetch("/api/nano/cost-estimate/push",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({monthly_cents:tot,by_provider:byProv,by_service:bySvc,rate_version:"2026.10"})}).catch(function(){}); }catch(_){}
+        var sig=JSON.stringify(bySvc); if (sig!==els.pushed){ els.pushed=sig;   // only when the footprint changed
+          fetch("/api/nano/cost-estimate/push",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({monthly_cents:tot,by_provider:byProv,by_service:bySvc,rate_version:"2026.10"})}).catch(function(){}); } }catch(_){}
     } else {
-      fetch("/api/nano/cost-estimate/pull").then(function(r){return r.json();}).then(function(pe){
-        var pbs=((pe&&pe.by_service)||{})[provider]||{};
-        nanoComputeAndRender(pbs, provider, accent, cloud, els, (Object.keys(pbs).length>0 && pe.updated_at) ? "last saved " + pe.updated_at : "");
-        if (tries > 0 && document.body.contains(els.body)) setTimeout(function(){ nanoLoadSavings(provider, accent, cloud, els, tries-1); }, 4000);
-      }).catch(function(){ nanoComputeAndRender({}, provider, accent, cloud, els); });
+      // No live census yet: show the last persisted estimate (fetched once, not every 5 s).
+      var shown=function(pe){ var pbs=((pe&&pe.by_service)||{})[provider]||{};
+        nanoComputeAndRender(pbs, provider, accent, cloud, els, (Object.keys(pbs).length>0 && pe.updated_at) ? "last saved " + pe.updated_at : ""); };
+      if (els.persisted !== undefined) shown(els.persisted);
+      else fetch("/api/nano/cost-estimate/pull").then(function(r){return r.json();}).then(function(pe){ els.persisted=pe||{}; shown(els.persisted); })
+        .catch(function(){ els.persisted={}; shown(els.persisted); });
     }
   }).catch(function(){});
 }
