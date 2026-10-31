@@ -52,7 +52,9 @@ def acr_path(path: str) -> bool:
         return True
     segs = [s for s in p.split("/") if s]
     if len(segs) >= 3 and segs[0] == "v2" and segs[1] not in ("projects", "entries", "policies"):
-        return segs[-2] == "manifests" or (segs[-2] == "tags" and segs[-1] == "list")
+        return (segs[-2] == "manifests" or (segs[-2] == "tags" and segs[-1] == "list")
+                or segs[-2] == "blobs"                                          # blobs/{digest}, blobs/uploads/
+                or (len(segs) >= 4 and segs[-3] == "blobs" and segs[-2] == "uploads"))   # blobs/uploads/{uuid}
     return False
 
 

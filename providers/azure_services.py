@@ -789,13 +789,14 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     rest_segs = segs[1:]
 
     # GET /subscriptions/{sub}, Microsoft.Subscription/rename and subscription-scope tags
-    # (Microsoft.Resources/tags/default) — the subscription blade's header + Tags panel —
+    # (Microsoft.Resources/tags/default) and subscription-scope locks — the subscription blade —
     # are the shared core ARM engine's, over the persisted per-subscription names/tags.
     low0 = [s.lower() for s in rest_segs]
     if (not rest_segs
             or (len(low0) >= 3 and low0[0] == "providers"
                 and ((low0[1] == "microsoft.subscription" and low0[2] == "rename")
-                     or (low0[1] == "microsoft.resources" and low0[2] == "tags")))):
+                     or (low0[1] == "microsoft.resources" and low0[2] == "tags")
+                     or (low0[1] == "microsoft.authorization" and low0[2] == "locks")))):
         return await _handle_core_arm(request, method, rest, base)
 
     # v4 C0f — resource groups themselves (collection / item with real tags + cascade
