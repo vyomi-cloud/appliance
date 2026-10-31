@@ -120,7 +120,8 @@ try {
   // sends the request for real, so point the job at a local listener the container can reach.
   hook = http.createServer((q, r) => { q.resume(); r.writeHead(200, { "Content-Length": "0" }); r.end(); });
   await new Promise((r) => hook.listen(0, "0.0.0.0", r));
-  const jobsApi = `${BASE}/v1/projects/demo/locations/us-central1/jobs/${newId}`;
+  const proj = (await (await fetch(`${BASE}/v1/projects`)).json()).projects[0].projectId;
+  const jobsApi = `${BASE}/v1/projects/${proj}/locations/us-central1/jobs/${newId}`;
   const pr = await fetch(`${jobsApi}?updateMask=httpTarget`, { method: "PATCH", headers: { "content-type": "application/json" },
     body: JSON.stringify({ httpTarget: { uri: `http://${process.env.HTTP_TARGET_HOST || "host.docker.internal"}:${hook.address().port}/hook`, httpMethod: "POST" } }) });
   check(pr.status < 300, "job target repointed at a reachable listener", `HTTP ${pr.status}`);
