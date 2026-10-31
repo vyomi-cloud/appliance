@@ -95,6 +95,11 @@ DEFAULT_SUBSCRIPTION = "00000000-0000-0000-0000-cloudlearn01"
 DEFAULT_RG = "cloudlearn-rg"
 DEFAULT_LOCATION = "eastus"
 
+# The one simulated subscription's offer — a fixed Pay-As-You-Go quota, same shape real ARM's
+# GET /subscriptions/{id} returns under subscriptionPolicies. The portal's Overview blade reads
+# "Offer"/"Offer ID" off quotaId through its own static offer-name catalog, not a separate field.
+SUBSCRIPTION_POLICIES = {"locationPlacementId": "Public_2014-09-01", "quotaId": "PayAsYouGo_2014-09-01", "spendingLimit": "Off"}
+
 _BY_TYPE = {(c["namespace"].lower(), c["type"].lower()): c for c in CATALOG}
 
 
@@ -423,7 +428,8 @@ class AzureArm:
         if not rest_segs:
             return _ok({"id": f"/subscriptions/{sub}", "subscriptionId": sub,
                         "displayName": self.sub_names.get(sub.lower(), "CloudLearn Subscription"),
-                        "state": "Enabled", "tags": self.sub_tags.get(sub.lower(), {})})
+                        "state": "Enabled", "tags": self.sub_tags.get(sub.lower(), {}),
+                        "subscriptionPolicies": SUBSCRIPTION_POLICIES})
 
         # resource groups
         if rest_segs[0].lower() == "resourcegroups" and len(rest_segs) <= 2:
@@ -495,7 +501,8 @@ class AzureArm:
             self.sub_names[sub.lower()] = name
             _record_activity(sub, "Update", f"Microsoft.Subscription rename to '{name}'")
             return _ok({"id": f"/subscriptions/{sub}", "subscriptionId": sub, "displayName": name,
-                        "state": "Enabled", "tags": self.sub_tags.get(sub.lower(), {})})
+                        "state": "Enabled", "tags": self.sub_tags.get(sub.lower(), {}),
+                        "subscriptionPolicies": SUBSCRIPTION_POLICIES})
 
         # Microsoft.Resources/tags/default: tags at subscription scope (Tags - CreateOrUpdateAtScope),
         # the subscription blade's Tags panel (Microsoft.Authorization/locks aside, subscriptions

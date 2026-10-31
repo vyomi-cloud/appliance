@@ -51,6 +51,8 @@ def run() -> int:
     # 1. Subscription probe
     r = arm.handle("GET", f"/subscriptions/{SUB}")
     _check("subscription 200", r["status"] == 200 and r["body"]["subscriptionId"] == SUB)
+    _check("subscription carries subscriptionPolicies.quotaId (Overview's Offer/Offer ID)",
+           r["body"]["subscriptionPolicies"]["quotaId"] == "PayAsYouGo_2014-09-01")
 
     # 2. Provider registration probes (ARM clients call these before CRUD)
     r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Storage")
@@ -229,6 +231,30 @@ def run() -> int:
     arm.handle("PUT", rd, {"api-version": "2022-04-01"}, {"properties": {"roleName": "Owner", "type": "BuiltInRole"}})
     r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleDefinitions", {"api-version": "2022-04-01"})
     _check("role definitions list has it", any(d["name"] == "owner" for d in r["body"]["value"]))
+
+    # 17f. checkAccess at the SUBSCRIPTION's own scope (rg=None) — the subscription blade's
+    # Access control (IAM) > Check access / My access, same decision algorithm as the
+    # resource-group-scoped case at #29 below (azure.subscriptions.access_control_iam).
+    subpath = f"/subscriptions/{SUB}"
+    subra = f"{subpath}/providers/Microsoft.Authorization/roleAssignments/sub-ra-1"
+    r = arm.handle("PUT", subra, {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "carol", "roleName": "Reader"}})
+    _check("subscription-scoped role assignment put 201 scoped to the subscription itself",
+           r["status"] == 201 and r["body"]["properties"]["scope"] == subpath)
+
+    def _sub_decision(principal, action):
+        resp = arm.handle("POST", f"{subpath}/providers/Microsoft.Authorization/checkAccess",
+                          {"api-version": "2022-04-01"}, {"principalId": principal, "action": action})
+        return resp["body"]["value"][0]["accessDecision"]
+
+    _check("checkAccess at subscription scope: Reader can read",
+           _sub_decision("carol", "Microsoft.Storage/storageAccounts/read") == "Allowed")
+    _check("checkAccess at subscription scope: Reader cannot write",
+           _sub_decision("carol", "Microsoft.Storage/storageAccounts/write") == "NotAllowed")
+    r = arm.handle("DELETE", subra, {"api-version": "2022-04-01"})
+    _check("subscription-scoped role assignment delete 200", r["status"] == 200)
+    _check("checkAccess at subscription scope reflects the deleted assignment immediately",
+           _sub_decision("carol", "Microsoft.Storage/storageAccounts/read") == "NotAllowed")
 
     # 18. Generic top-level "identity" block merges like tags/sku (any catalog resource type).
     topic = _p(RG, "Microsoft.EventGrid", "topics", "eg-identity")

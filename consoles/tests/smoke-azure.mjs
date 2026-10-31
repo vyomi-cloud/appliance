@@ -56,6 +56,7 @@ const SUBLOCK = `vysublock${n}`;   // subscription-scoped lock created through t
 const SUBRG = `vysubrg${n}`;       // resource group created over the wire (shown in the Subscription's Resource groups panel)
 const SUBSA = `vysubsa${n}`;       // storage account created over the wire, inside SUBRG (shown in the Subscription's Resources panel)
 const SUBDEP = `vysubdep${n}`;     // subscription-scoped deployment created over the wire
+const SUBPRINCIPAL = `vysubprincipal${n}@contoso.com`;  // role assignment added through the Subscription's own IAM page
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -655,12 +656,16 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Check access", exact: true }).click();
   await page.getByText("Allowed").waitFor({ timeout: 10000 });
   check("UI Check access → real decision reflects the role just assigned", true);
-  await page.getByRole("button", { name: "Close" }).click();
+  // Two "Close" buttons in this dialog (title's icon-only close + the footer button) — the
+  // footer one is last in DOM order.
+  await page.getByRole("button", { name: "Close" }).last().click();
 
   await page.getByRole("tab", { name: "Role assignments" }).click();
   await page.getByLabel(`Select ${RGPRINCIPAL}`, { exact: true }).check();
   await page.getByRole("button", { name: "Remove", exact: true }).click();
-  await page.getByText(RGPRINCIPAL).waitFor({ state: "detached", timeout: 10000 });
+  // Scoped to the checkbox (not getByText(RGPRINCIPAL)) — a success toast can still be
+  // showing the same principal text, which would otherwise make this a strict-mode violation.
+  await page.getByLabel(`Select ${RGPRINCIPAL}`, { exact: true }).waitFor({ state: "detached", timeout: 10000 });
   const raGone = await arm("GET", `/resourceGroups/${RGUI}/providers/Microsoft.Authorization/roleAssignments`);
   check("UI Remove role assignment → gone over native ARM",
     !(JSON.parse(raGone.text).value || []).some((r) => r.properties?.principalId === RGPRINCIPAL), raGone.text);
@@ -1690,6 +1695,41 @@ try {
   await page.waitForTimeout(500);
   const registered = await arm("GET", "/providers/Microsoft.Storage");
   check("UI register provider → ARM reflects Registered", JSON.parse(registered.text).registrationState === "Registered", registered.text);
+
+  // ── Access control (IAM): role assignment added through the UI, scoped to the subscription
+  // itself, then a real checkAccess decision, then removed ───────────────────────────────────
+  await openPanel("Access control (IAM)");
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByRole("toolbar", { name: "Access control commands" }).getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Role", { exact: true }).selectOption("Reader");
+  await page.getByLabel("Member", { exact: true }).fill(SUBPRINCIPAL);
+  await page.getByRole("button", { name: "Review + assign" }).click();
+  await page.getByText(SUBPRINCIPAL).first().waitFor({ timeout: 10000 });
+  const subRaGet = await arm("GET", "/providers/Microsoft.Authorization/roleAssignments");
+  const subRaList = JSON.parse(subRaGet.text).value || [];
+  const subRa = subRaList.find((r) => r.properties?.principalId === SUBPRINCIPAL);
+  check("UI Add role assignment → visible over native ARM, scoped to the subscription itself",
+    !!subRa && subRa.properties.scope === `/subscriptions/${SUB}`, JSON.stringify(subRa));
+
+  await page.getByRole("tab", { name: "Check access" }).click();
+  await page.getByRole("button", { name: "Check access", exact: true }).click();
+  await page.getByLabel("Find a user, group or service principal", { exact: true }).fill(SUBPRINCIPAL);
+  await page.getByRole("dialog").getByRole("button", { name: "Check access", exact: true }).click();
+  await page.getByText("Allowed").waitFor({ timeout: 10000 });
+  check("UI Check access → real decision reflects the role just assigned", true);
+  // Two "Close" buttons in this dialog (title's icon-only close + the footer button) — the
+  // footer one is last in DOM order.
+  await page.getByRole("button", { name: "Close" }).last().click();
+
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByLabel(`Select ${SUBPRINCIPAL}`, { exact: true }).check();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  // Scoped to the checkbox (not getByText(SUBPRINCIPAL)) — a success toast can still be
+  // showing the same principal text, which would otherwise make this a strict-mode violation.
+  await page.getByLabel(`Select ${SUBPRINCIPAL}`, { exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  const subRaGone = await arm("GET", "/providers/Microsoft.Authorization/roleAssignments");
+  check("UI Remove role assignment → gone over native ARM",
+    !(JSON.parse(subRaGone.text).value || []).some((r) => r.properties?.principalId === SUBPRINCIPAL), subRaGone.text);
 
   // ── Create a subscription (renames the one simulated subscription, the honest Vyomi gap) ──
   await page.goto(UI + "#/subscriptions/create");

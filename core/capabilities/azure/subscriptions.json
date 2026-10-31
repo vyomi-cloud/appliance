@@ -7,7 +7,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Vyomi simulates exactly one subscription — renaming it changes the one simulated subscription's display name rather than creating or listing an independent additional subscription. Offer, Offer ID, Parent management group and Secure score are not modeled."
+   "Vyomi simulates exactly one subscription — renaming it changes the one simulated subscription's display name rather than creating or listing an independent additional subscription. Offer/Offer ID are a fixed Pay-As-You-Go quotaId (subscriptionPolicies), matching how the real portal looks them up; Parent management group and Secure score are not modeled (no management-group hierarchy or Microsoft Defender scoring exist in Vyomi)."
   ],
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
@@ -41,16 +41,17 @@
   ]
  },
  "azure.subscriptions.access_control_iam": {
-  "title": "Access control (IAM) — role assignments and definitions",
+  "title": "Access control (IAM) — role assignments, roles and checkAccess",
   "level": {
    "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Role assignments/definitions are the generic ARM catalog store (Microsoft.Authorization/roleAssignments, roleDefinitions) and no access decisions are evaluated — every data-plane call succeeds regardless of what is assigned. Deny assignments and classic administrators are always empty."
+   "Role assignments are real ARM resources scoped to the subscription they were created under (list + checkAccess only see assignments at that scope, with the same wildcard, scope-inheritance and explicit-deny-wins semantics as the Entra RBAC engine), and the Roles tab + checkAccess cover the built-in Owner/Contributor/Reader/… roles plus any custom role definitions. But checkAccess is a standalone decision tool: no other ARM call in Vyomi consults it, so every other data-plane/control-plane operation still succeeds regardless of what is assigned. Deny assignments and classic administrators are always empty."
   ],
   "tests": [
-   "tests/conformance/test_azure_arm_core.py"
+   "tests/conformance/test_azure_arm_core.py",
+   "tests/conformance/test_azure_rbac_core.py"
   ]
  },
  "azure.subscriptions.resource_groups": {
@@ -93,7 +94,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Deployment creation stores whatever template/parameters/mode the client sends and returns Succeeded immediately — there is no template-language evaluation (no parameter/variable resolution, no dependsOn ordering) and nothing is actually provisioned from it; the underlying resources still need their own PUT calls. Cancel and Redeploy are not simulated."
+   "Deployment creation resolves `[parameters(...)]`/`[variables(...)]` to literal values and actually PUTs every resource listed in properties.template.resources through the same ARM dispatcher, so a deployment really provisions something — but no other ARM template function (concat/resourceId/reference/copy loops) or dependsOn ordering is evaluated, so templates using them fail at the dependent resource's own validation. Cancel always returns a conflict because every deployment completes synchronously before a Cancel call can arrive (the same conflict a real deployment that finished first returns); Redeploy re-runs the same stored template for real."
   ],
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
