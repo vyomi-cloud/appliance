@@ -1,63 +1,7 @@
 {
- "at": "2026-10-30T23:47:41+00:00",
+ "at": "2026-10-31T00:47:45+00:00",
  "baseline": false,
  "changes": [
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.start:1910d4526f14",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStartRequest",
-     "now": "SqlWorkloadCapturesStartRequest"
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.startReplay:2cfe2f793adc",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStartReplayRequest",
-     "now": "SqlWorkloadCapturesStartReplayRequest"
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stop:ee7fdfd4ca9e",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStopRequest",
-     "now": "SqlWorkloadCapturesStopRequest"
-    }
-   },
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "sqladmin/v1beta4",
-   "kind": "operation-flapping",
-   "key": "gcp:sqladmin/v1beta4:sql.workloadCaptures.stopReplay:fff14efd9e7d",
-   "title": "GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed",
-   "detail": {
-    "request": {
-     "was": "WorkloadCapturesStopReplayRequest",
-     "now": "SqlWorkloadCapturesStopReplayRequest"
-    }
-   },
-   "actionable": false
-  },
   {
    "cloud": "azure",
    "service": "storage",
@@ -95,17 +39,15 @@
    "actionable": true
   },
   {
-   "cloud": "aws",
-   "service": "CloudWatch",
+   "cloud": "gcp",
+   "service": "Cloud Storage",
    "kind": "announcement",
-   "key": "feed:aws:b6727a835dec",
-   "title": "Managed Prometheus collectors now support Amazon MSK consumer-group metrics",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/10/prometheus-collectors-msk-metrics/",
-   "detail": "Managed Prometheus collectors now support Amazon MSK consumer-group metrics for Amazon Managed Service for Prometheus and Amazon CloudWatch . The integration collects Kafka exporter metrics and consumer-group lag metrics from your Amazon MSK clusters. Managed Prometheus collectors discover and collect Prometheus metrics from your workloads, so you don't run and operate collection agents yourself. You ingest the collected metrics into an Amazon Managed Service for Prometheus workspace or into Amazon CloudWatch, where you query and analyze them. You monitor Kafka stream health and consumer perfo",
+   "key": "feed:gcp:d9310c07e34d",
+   "title": "Cloud Storage: Feature (October 30, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#October_30_2026",
+   "detail": "Security and compliance findings in Storage Intelligence advisor are available in Preview . You can use these findings to identify buckets with objects that violate default customer-managed encryption key (CMEK) policies or enforced encryption rules, and re-encrypt the affected objects. For more information, see the following resources: About Storage Intelligence advisor Re-encrypt objects that violate default CMEK bucket policies Re-encrypt objects that violate enforced encryption rules",
    "actionable": false
   }
  ],
- "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
- ]
+ "errors": []
 }
