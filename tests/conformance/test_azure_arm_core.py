@@ -41,6 +41,10 @@ def _p(rg, ns, typ, name):
     return f"/subscriptions/{SUB}/resourceGroups/{rg}/providers/{ns}/{typ}/{name}"
 
 
+def _rgpath(rg):
+    return f"/subscriptions/{SUB}/resourceGroups/{rg}"
+
+
 def run() -> int:
     arm = AzureArm()
 
@@ -201,7 +205,7 @@ def run() -> int:
     ev = arm.handle("GET", events_path, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{kv}'"})
     ops = [e["operationName"]["value"] for e in ev["body"]["value"]]
     _check("activity log records the vault create + the lock create, newest first",
-           ev["status"] == 200 and ops[0] == "Create lock" and "Create" in ops)
+           ev["status"] == 200 and ops[0] == "Create lock" and "Microsoft.KeyVault/vaults/write" in ops)
     ev2 = arm.handle("GET", events_path, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{kv2}'"})
     ops2 = [e["operationName"]["value"] for e in ev2["body"]["value"]]
     _check("activity log is scoped per vault (no cross-resource leakage)", "Create lock" not in ops2)
@@ -277,9 +281,11 @@ def run() -> int:
     r = arm.handle("GET", rg_lock2, {"api-version": "2020-05-01"})
     _check("resource-group-scoped lock cascades away when the group itself is deleted", r["status"] == 404)
 
-    # 26. Microsoft.Resources/deployments: a generic catalog resource (no template evaluation,
-    # see azure_arm_data.py) — enough to back a real "Deployments" history list + "View
-    # template" honestly. PUT is an LRO like any other top-level type.
+    # 26. Microsoft.Resources/deployments: a bounded but REAL template evaluator — every
+    # resource in properties.template.resources is actually PUT through this ARM dispatcher
+    # (literal [parameters('x')]/[variables('y')] substitution only), not just stored inert.
+    # Enough to back a real "Deployments" history list + "View template" honestly. PUT is an
+    # LRO like any other top-level type.
     dep = _p(RG, "Microsoft.Resources", "deployments", "uic-deployment")
     r = arm.handle("PUT", dep, {"api-version": "2021-04-01"},
                    {"properties": {"mode": "Incremental", "template": {"resources": []}, "timestamp": "2026-01-01T00:00:00Z"}})
@@ -292,6 +298,34 @@ def run() -> int:
     _check("deployment collection lists it", any(x["name"] == "uic-deployment" for x in r["body"]["value"]))
     r = arm.handle("DELETE", dep, {"api-version": "2021-04-01"})
     _check("deployment delete 200", r["status"] == 200)
+
+    tpl_dep = _p(RG, "Microsoft.Resources", "deployments", "uic-tpl-deployment")
+    template = {"parameters": {"saName": {"defaultValue": "uictplsa"}}, "variables": {"loc": "eastus"},
+               "resources": [{"type": "Microsoft.Storage/storageAccounts", "apiVersion": "2023-01-01",
+                              "name": "[parameters('saName')]", "location": "[variables('loc')]"}]}
+    r = arm.handle("PUT", tpl_dep, {"api-version": "2021-04-01"}, {"properties": {"mode": "Incremental", "template": template}})
+    _check("deployment with a template put 200", r["status"] == 200)
+    _check("deployment template evaluation actually provisions the listed resource",
+           r["body"]["properties"]["provisioningState"] == "Succeeded"
+           and r["body"]["properties"]["outputResources"][0]["resourceName"] == "uictplsa")
+    sa_from_tpl = _p(RG, "Microsoft.Storage", "storageAccounts", "uictplsa")
+    r = arm.handle("GET", sa_from_tpl, {"api-version": "2023-01-01"})
+    _check("the deployment's template resource is a real resource, GET-able on its own",
+           r["status"] == 200 and r["body"]["location"] == "eastus")
+
+    bad_tpl_dep = _p(RG, "Microsoft.Resources", "deployments", "uic-bad-tpl-deployment")
+    bad_template = {"resources": [{"type": "Microsoft.NotReal/widgets", "apiVersion": "2021-01-01", "name": "w1"}]}
+    r = arm.handle("PUT", bad_tpl_dep, {"api-version": "2021-04-01"}, {"properties": {"mode": "Incremental", "template": bad_template}})
+    _check("a template resource of an unsimulated type honestly fails the deployment",
+           r["body"]["properties"]["provisioningState"] == "Failed" and r["body"]["properties"]["error"]["details"])
+
+    cancel_url = tpl_dep + "/cancel"
+    r = arm.handle("POST", cancel_url, {"api-version": "2021-04-01"}, {})
+    _check("Cancel on an already-completed deployment is an honest 409 (every deployment here completes synchronously)",
+           r["status"] == 409 and r["body"]["error"]["code"] == "DeploymentNotCancellable")
+    redeploy_url = tpl_dep + "/redeploy"
+    r = arm.handle("POST", redeploy_url, {"api-version": "2021-04-01"}, {})
+    _check("Redeploy re-runs the stored template for real", r["status"] == 200 and r["body"]["properties"]["provisioningState"] == "Succeeded")
     # 21. Microsoft.ContainerRegistry/registries — generic catalog CRUD + the admin-credentials
     # POST actions (az acr credential show / renew) + nested child resources (webhooks).
     AV_ACR = "2023-07-01"
@@ -613,6 +647,78 @@ def run() -> int:
     # (a lock on a KeyVault vault — a different resource type — stays config_only, not
     # enforced: proven above at "locks cascade-deleted with resource", where DELETE
     # succeeded on `kv` despite its ReadOnly lock.)
+
+    # 28. A resource group's own Activity log (queried with the RG's own resourceUri, like
+    # the resource group blade does) aggregates every resource's lifecycle event inside it —
+    # not just the group's own create/update/delete — because every generic-catalog mutation
+    # now also lands a resourceGroupName-tagged eventtypes row (azure.resourcegroups.activity_log).
+    rg3 = "activity-rg"
+    arm.handle("PUT", _rgpath(rg3), {"api-version": "2021-04-01"}, {})
+    sa3 = _p(rg3, "Microsoft.Storage", "storageAccounts", "activitysa")
+    arm.handle("PUT", sa3, {"api-version": "2023-01-01"}, {"location": "eastus"})
+    arm.handle("DELETE", sa3, {"api-version": "2023-01-01"})
+    rg_events_url = f"/subscriptions/{SUB}/providers/Microsoft.Insights/eventtypes/management/values"
+    r = arm.handle("GET", rg_events_url, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{_rgpath(rg3)}'"})
+    rg_ops = [e["operationName"]["value"] for e in r["body"]["value"]]
+    _check("resource group activity log includes the RG's own create",
+           "Microsoft.Resources/resourceGroups/write" in rg_ops)
+    _check("resource group activity log aggregates a resource's create inside it",
+           "Microsoft.Storage/storageAccounts/write" in rg_ops)
+    _check("resource group activity log aggregates a resource's delete inside it",
+           "Microsoft.Storage/storageAccounts/delete" in rg_ops)
+    rg4 = "activity-rg-2"
+    arm.handle("PUT", _rgpath(rg4), {"api-version": "2021-04-01"}, {})
+    r = arm.handle("GET", rg_events_url, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{_rgpath(rg4)}'"})
+    rg4_ops = [e["operationName"]["value"] for e in r["body"]["value"]]
+    _check("activity log aggregation is scoped per resource group (no cross-group leakage)",
+           "Microsoft.Storage/storageAccounts/write" not in rg4_ops)
+    r = arm.handle("GET", f"/subscriptions/{SUB}/resources", {"api-version": "2021-04-01"})
+    _check("activity log eventtypes rows never leak into the generic resources list",
+           not any(x.get("type", "").lower() == "microsoft.insights/eventtypes" for x in r["body"]["value"]))
+
+    # 29. Access control (IAM): role assignments are real ARM resources scoped to the resource
+    # group they were PUT under (not a flat subscription-wide catalog), the Roles tab lists the
+    # built-in roles (never provisioned as catalog records) alongside any custom ones, and
+    # checkAccess evaluates a genuine decision (wildcard + scope-inheritance + notActions +
+    # explicit-deny) over exactly those assignments (azure.resourcegroups.access_control_iam).
+    iamrg1, iamrg2 = "iam-rg-1", "iam-rg-2"
+    arm.handle("PUT", _rgpath(iamrg1), {"api-version": "2021-04-01"}, {})
+    arm.handle("PUT", _rgpath(iamrg2), {"api-version": "2021-04-01"}, {})
+    roledefs_url = lambda rg: f"{_rgpath(rg)}/providers/Microsoft.Authorization/roleDefinitions"
+    r = arm.handle("GET", roledefs_url(iamrg1), {"api-version": "2022-04-01"})
+    roledef_names = {x["name"] for x in r["body"]["value"]}
+    _check("Roles tab lists the built-in roles with no custom roles ever created",
+           {"Owner", "Contributor", "Reader"} <= roledef_names)
+    ra1 = f"{_rgpath(iamrg1)}/providers/Microsoft.Authorization/roleAssignments/ra1"
+    r = arm.handle("PUT", ra1, {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "alice", "roleName": "Reader"}})
+    _check("role assignment put 201 scoped to the resource group it was created under",
+           r["status"] == 201 and r["body"]["properties"]["scope"] == _rgpath(iamrg1))
+    ra2 = f"{_rgpath(iamrg1)}/providers/Microsoft.Authorization/roleAssignments/ra2"
+    arm.handle("PUT", ra2, {"api-version": "2022-04-01"},
+               {"properties": {"principalId": "bob", "roleName": "Contributor"}})
+    r = arm.handle("GET", f"{_rgpath(iamrg1)}/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    _check("role assignments list scoped to the group that owns them", {x["name"] for x in r["body"]["value"]} == {"ra1", "ra2"})
+    r = arm.handle("GET", f"{_rgpath(iamrg2)}/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    _check("a sibling resource group's role assignments never leak in", r["body"]["value"] == [])
+
+    def _decision(rg, principal, action):
+        resp = arm.handle("POST", f"{_rgpath(rg)}/providers/Microsoft.Authorization/checkAccess",
+                          {"api-version": "2022-04-01"}, {"principalId": principal, "action": action})
+        return resp["body"]["value"][0]["accessDecision"]
+
+    _check("checkAccess: Reader can read in its own resource group",
+           _decision(iamrg1, "alice", "Microsoft.Storage/storageAccounts/read") == "Allowed")
+    _check("checkAccess: Reader cannot write",
+           _decision(iamrg1, "alice", "Microsoft.Storage/storageAccounts/write") == "NotAllowed")
+    _check("checkAccess: Contributor can write",
+           _decision(iamrg1, "bob", "Microsoft.Storage/storageAccounts/write") == "Allowed")
+    _check("checkAccess: scope isolation — Reader has no access in a sibling resource group",
+           _decision(iamrg2, "alice", "Microsoft.Storage/storageAccounts/read") == "NotAllowed")
+    r = arm.handle("DELETE", ra1, {"api-version": "2022-04-01"})
+    _check("role assignment delete 200", r["status"] == 200)
+    _check("checkAccess reflects the deleted assignment immediately",
+           _decision(iamrg1, "alice", "Microsoft.Storage/storageAccounts/read") == "NotAllowed")
 
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0

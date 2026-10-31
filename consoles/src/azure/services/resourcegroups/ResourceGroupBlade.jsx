@@ -16,6 +16,7 @@ import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { downloadCsv, Essentials, ErrorBar, Glyph, InfoBar, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
@@ -92,7 +93,7 @@ export default function ResourceGroupBlade({ params }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} name={name} />,
       activitylog: () => <ActivityLog name={name} />,
-      iam: () => <AccessControlIam />,
+      iam: () => <AccessControlIam name={name} />,
       tags: () => <Tags a={a} reload={reload} />,
       deployments: () => <Deployments name={name} />,
       locks: () => <Locks name={name} />,
@@ -293,22 +294,40 @@ function Tags({ a, reload }) {
   );
 }
 
-// ── Access control (IAM) — generic Microsoft.Authorization catalog, subscription scope ──
-function AccessControlIam() {
+// ── Access control (IAM) — role assignments are real ARM resources scoped to this resource
+// group (core/azure_arm_core.py stamps properties.scope from the containing resourceGroups
+// id); Check access / My access run the real checkAccess decision algorithm. ──
+const CURRENT_USER = "admin@vyomi.local";    // the one simulated signed-in identity (see web_engine._record_event)
+
+function AccessControlIam({ name }) {
+  const notify = useNotify();
   const [tab, setTab] = useState("check");
   const [dlg, setDlg] = useState(null);
-  const assignments = useAsync(() => api.listRoleAssignments(), []);
-  const definitions = useAsync(() => api.listRoleDefinitions(), []);
+  const [add, setAdd] = useState(false);
+  const [sel, setSel] = useState(new Set());
+  const assignments = useAsync(() => api.listRoleAssignments(name), [name]);
+  const definitions = useAsync(() => api.listRoleDefinitions(name), [name]);
+  const rows = assignments.data || [];
+  const roleNameOf = (r) => r.properties?.roleName || r.properties?.roleDefinitionId?.split("/").pop();
+  const toggle = (n) => setSel((s) => { const k = new Set(s); k.has(n) ? k.delete(n) : k.add(n); return k; });
+  const removeSelected = async () => {
+    for (const n of sel) await api.deleteRoleAssignment(name, n);
+    notify.success(`Removed ${sel.size} role assignment${sel.size === 1 ? "" : "s"}.`, "Remove succeeded");
+    setSel(new Set());
+    assignments.reload();
+  };
   return (
     <>
       <div className="vy-panel-title">Access control (IAM)</div>
       <div className="vy-cmdbar" role="toolbar" aria-label="Access control commands">
-        <ToolbarButton as="a" href="#/resourcegroups">Add</ToolbarButton>
-        <ToolbarButton onClick={() => {}}>Download role assignments</ToolbarButton>
-        <ToolbarButton onClick={() => {}}>Edit columns</ToolbarButton>
+        <ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add</ToolbarButton>
+        <ToolbarButton onClick={() => downloadCsv("role-assignments.csv",
+          [{ key: "principal", label: "Name" }, { key: "role", label: "Role" }, { key: "scope", label: "Scope" }],
+          rows.map((r) => ({ principal: r.properties?.principalId, role: roleNameOf(r), scope: r.properties?.scope })))}>
+          Download role assignments
+        </ToolbarButton>
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={() => { assignments.reload(); definitions.reload(); }}>Refresh</ToolbarButton>
-        <ToolbarButton disabled>Remove</ToolbarButton>
-        <ToolbarButton onClick={() => {}}>Feedback</ToolbarButton>
+        <ToolbarButton icon={<Delete20Regular />} disabled={!sel.size} onClick={removeSelected}>Remove</ToolbarButton>
       </div>
       <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control (IAM) tabs">
         <Tab value="check">Check access</Tab>
@@ -318,61 +337,155 @@ function AccessControlIam() {
         <Tab value="classic">Classic administrators</Tab>
       </TabList>
       {tab === "check" && (
-        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-          <section className="vy-section"><h3>My access</h3>
-            <Button onClick={() => setDlg("mine")}>View my access</Button>
-          </section>
-          <section className="vy-section"><h3>Check access</h3>
-            <Button onClick={() => setDlg("check")}>Check access</Button>
-          </section>
-        </div>
+        <CapabilityContainer id="azure.resourcegroups.access_control_iam" title="Check access">
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <section className="vy-section"><h3>My access</h3>
+              <p style={{ fontSize: 13 }}>The roles {CURRENT_USER} has on this resource group.</p>
+              <Button onClick={() => setDlg("mine")}>View my access</Button>
+            </section>
+            <section className="vy-section"><h3>Check access</h3>
+              <p style={{ fontSize: 13 }}>Check whether a specific user can perform a specific action on this resource group.</p>
+              <Button onClick={() => setDlg("check")}>Check access</Button>
+            </section>
+          </div>
+        </CapabilityContainer>
       )}
       {tab === "assignments" && (
-        <section className="vy-section" style={{ marginTop: 12 }}>
-          <h3>Role assignments</h3>
+        <CapabilityContainer id="azure.resourcegroups.access_control_iam" title="Role assignments">
           <Input size="small" style={{ margin: "8px 0", width: 260 }} placeholder="Search by name or email" aria-label="Search by name or email" />
-          <table className="vy-grid"><thead><tr><th>Name</th><th>Type</th><th>Role</th><th>Scope</th><th>Condition</th></tr></thead>
+          <table className="vy-grid"><thead><tr><th /><th>Name</th><th>Type</th><th>Role</th><th>Scope</th><th>Condition</th></tr></thead>
             <tbody>
-              {assignments.loading ? <tr><td colSpan={5}><Spinner size="tiny" /></td></tr> : (assignments.data || []).map((r) => (
-                <tr key={r.name}><td>{r.properties?.principalId}</td><td>{r.properties?.principalType}</td><td>{r.properties?.roleDefinitionId?.split("/").pop()}</td><td>{r.properties?.scope}</td><td>None</td></tr>
+              {assignments.loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.map((r) => (
+                <tr key={r.name}>
+                  <td><Checkbox checked={sel.has(r.name)} onChange={() => toggle(r.name)} aria-label={`Select ${r.properties?.principalId}`} /></td>
+                  <td>{r.properties?.principalId}</td><td>{r.properties?.principalType}</td>
+                  <td>{roleNameOf(r)}</td><td>{r.properties?.scope}</td><td>None</td>
+                </tr>
               ))}
-              {!assignments.loading && !(assignments.data || []).length && <tr><td colSpan={5} className="vy-muted">No role assignments found for this scope.</td></tr>}
+              {!assignments.loading && !rows.length && <tr><td colSpan={6} className="vy-muted">No role assignments found for this scope.</td></tr>}
             </tbody>
           </table>
-        </section>
+        </CapabilityContainer>
       )}
       {tab === "roles" && (
-        <section className="vy-section" style={{ marginTop: 12 }}>
-          <h3>Roles</h3>
+        <CapabilityContainer id="azure.resourcegroups.access_control_iam" title="Roles">
           <Input size="small" style={{ margin: "8px 0", width: 260 }} placeholder="Search by role name, description, permission, or ID" aria-label="Search by role name, description, permission, or ID" />
           <table className="vy-grid"><thead><tr><th>Name</th><th>Description</th><th>Type</th><th>Category</th><th>Details</th></tr></thead>
             <tbody>
               {definitions.loading ? <tr><td colSpan={5}><Spinner size="tiny" /></td></tr> : (definitions.data || []).map((r) => (
-                <tr key={r.name}><td>{r.name}</td><td /><td>{r.properties?.type}</td><td>General</td><td /></tr>
+                <tr key={r.name}><td>{r.name}</td><td>{r.properties?.description || "--"}</td><td>{r.properties?.type}</td><td>General</td><td>{r.assignmentCount} assignment{r.assignmentCount === 1 ? "" : "s"}</td></tr>
               ))}
-              {!definitions.loading && !(definitions.data || []).length && <tr><td colSpan={5} className="vy-muted">No custom roles defined.</td></tr>}
+              {!definitions.loading && !(definitions.data || []).length && <tr><td colSpan={5} className="vy-muted">No roles found.</td></tr>}
             </tbody>
           </table>
-        </section>
+        </CapabilityContainer>
       )}
       {tab === "deny" && (
-        <section className="vy-section" style={{ marginTop: 12 }}><h3>Deny assignments</h3>
+        <CapabilityContainer id="azure.resourcegroups.access_control_iam" title="Deny assignments">
           <table className="vy-grid"><thead><tr><th>Name</th><th>Description</th><th>Principal</th><th>Scope</th></tr></thead>
             <tbody><tr><td colSpan={4} className="vy-muted">No deny assignments found.</td></tr></tbody>
           </table>
-        </section>
+        </CapabilityContainer>
       )}
-      {tab === "classic" && <InfoBar>No classic administrators are configured for this subscription.</InfoBar>}
-      <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
-        <DialogSurface aria-label="Access check">
-          <DialogBody>
-            <DialogTitle>{dlg === "mine" ? "My access" : "Check access"}</DialogTitle>
-            <DialogContent><NotSimulated feature="Per-identity role-assignment resolution for this resource group" /></DialogContent>
-            <DialogActions><Button onClick={() => setDlg(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
+      {tab === "classic" && (
+        <CapabilityContainer id="azure.resourcegroups.access_control_iam" title="Classic administrators">
+          <InfoBar>No classic administrators are configured for this subscription.</InfoBar>
+        </CapabilityContainer>
+      )}
+      <AddRoleAssignmentDialog open={add} onClose={() => setAdd(false)} roles={definitions.data || []}
+        onCreate={async (roleName, principalId) => {
+          await api.putRoleAssignment(name, api.uid(), { properties: { roleName, principalId, principalType: "User" } });
+          assignments.reload();
+        }} />
+      <CheckAccessDialog open={!!dlg} mine={dlg === "mine"} onClose={() => setDlg(null)}
+        onCheck={(principalId, action) => api.checkAccess(name, principalId, action)} />
     </>
+  );
+}
+
+function AddRoleAssignmentDialog({ open, onClose, onCreate, roles }) {
+  const notify = useNotify();
+  const [roleName, setRoleName] = useState("");
+  const [principalId, setPrincipalId] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (open) { setRoleName(roles[0]?.name || ""); setPrincipalId(""); } }, [open, roles]);
+  const go = async () => {
+    setBusy(true);
+    try {
+      await onCreate(roleName, principalId);
+      notify.success(`'${roleName}' was assigned to '${principalId}'.`, "Add role assignment");
+      onClose();
+    } catch (e) { notify.error(e, "Failed to add role assignment"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Add role assignment">
+        <DialogBody>
+          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Add role assignment</DialogTitle>
+          <DialogContent>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Field label="Role" required>
+                <Select value={roleName} onChange={(_, d) => setRoleName(d.value)} aria-label="Role">
+                  {roles.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Member" required hint="A user, group or service principal name — Vyomi has no directory to search, so type the exact principal ID.">
+                <Input value={principalId} onChange={(_, d) => setPrincipalId(d.value)} aria-label="Member" placeholder="e.g. alice@contoso.com" />
+              </Field>
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={busy || !roleName || !principalId} onClick={go}>Review + assign</Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  );
+}
+
+function CheckAccessDialog({ open, mine, onClose, onCheck }) {
+  const [principalId, setPrincipalId] = useState("");
+  const [action, setAction] = useState("Microsoft.Resources/subscriptions/resourceGroups/read");
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!open) { setResult(null); return; }
+    if (mine) { setPrincipalId(CURRENT_USER); run(CURRENT_USER, action); } else { setPrincipalId(""); setResult(null); }
+  }, [open, mine]);
+  const run = async (pid, act) => {
+    setBusy(true);
+    try { setResult((await onCheck(pid, act))[0] || null); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label={mine ? "My access" : "Check access"}>
+        <DialogBody>
+          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>{mine ? "My access" : "Check access"}</DialogTitle>
+          <DialogContent>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {!mine && <Field label="Find a user, group or service principal" required>
+                <Input value={principalId} onChange={(_, d) => setPrincipalId(d.value)} aria-label="Find a user, group or service principal" placeholder="e.g. bob@contoso.com" />
+              </Field>}
+              <Field label="Action to check" required hint="An ARM operation ID, e.g. Microsoft.Storage/storageAccounts/write">
+                <Input value={action} onChange={(_, d) => setAction(d.value)} aria-label="Action to check" />
+              </Field>
+              <Button appearance="primary" disabled={busy || !principalId || !action} onClick={() => run(principalId, action)}>Check access</Button>
+              {busy && <Spinner size="tiny" />}
+              {result && (
+                <InfoBar intent={result.accessDecision === "Allowed" ? "success" : "warning"}>
+                  <b>{principalId}</b> is <b>{result.accessDecision}</b> to perform <code>{action}</code> on this resource group
+                  {result.roles?.length ? ` via: ${result.roles.join(", ")}` : ""}.
+                </InfoBar>
+              )}
+            </div>
+          </DialogContent>
+          <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
 }
 
@@ -472,17 +585,25 @@ function Deployments({ name }) {
   const notify = useNotify();
   const { data, loading, error, reload } = useAsync(() => api.listDeployments(name), [name]);
   const [tpl, setTpl] = useState(null);
-  const [gap, setGap] = useState(null); // "Cancel" | "Redeploy"
+  const [busy, setBusy] = useState(false);
   const rows = data || [];
+  const act = async (verb, fn, depName) => {
+    setBusy(true);
+    try {
+      await fn(name, depName);
+      notify.success(`${verb === "cancel" ? "Cancel" : "Redeploy"} of '${depName}' ${verb === "cancel" ? "requested" : "succeeded"}.`, verb === "cancel" ? "Cancel" : "Redeploy");
+    } catch (e) { notify.error(e, verb === "cancel" ? "Cancel failed" : "Redeploy failed"); }
+    finally { setBusy(false); reload(); }
+  };
   return (
     <>
-      <div className="vy-panel-title">Deployments</div>
+      <CapabilityContainer id="azure.resourcegroups.deployments" title="Deployments">
       <BrowseGrid
         resourceName="deployment" rowKey={(r) => r.name} filterPlaceholder="Filter by deployment name"
         items={rows} loading={loading} error={error} onRefresh={reload}
-        extraCommands={<>
-          <ToolbarButton onClick={() => setGap("Cancel")}>Cancel</ToolbarButton>
-          <ToolbarButton onClick={() => setGap("Redeploy")}>Redeploy</ToolbarButton>
+        extraCommands={(selected) => <>
+          <ToolbarButton disabled={busy || selected.length !== 1} onClick={() => act("cancel", api.cancelDeployment, selected[0]?.name)}>Cancel</ToolbarButton>
+          <ToolbarButton disabled={busy || selected.length !== 1} onClick={() => act("redeploy", api.redeployDeployment, selected[0]?.name)}>Redeploy</ToolbarButton>
         </>}
         onDelete={async (sel) => {
           for (const r of sel) await api.deleteDeployment(name, r.name);
@@ -500,23 +621,19 @@ function Deployments({ name }) {
           { key: "template", label: "", render: (r) => <Link as="button" onClick={() => setTpl(r)}>View template</Link> },
         ]}
       />
+      </CapabilityContainer>
       <Dialog open={!!tpl} onOpenChange={(_, d) => !d.open && setTpl(null)}>
         <DialogSurface aria-label="Template">
           <DialogBody>
             <DialogTitle>{tpl?.name}</DialogTitle>
             <DialogContent>
               <Textarea readOnly value={JSON.stringify(tpl?.properties?.template || {}, null, 2)} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
+              {tpl?.properties?.outputResources?.length > 0 && <>
+                <p style={{ marginTop: 12, fontWeight: 600 }}>Resources provisioned by this deployment</p>
+                <ul>{tpl.properties.outputResources.map((r) => <li key={r.id}>{r.resourceType}/{r.resourceName}</li>)}</ul>
+              </>}
             </DialogContent>
             <DialogActions><Button onClick={() => setTpl(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Not simulated"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={gap === "Cancel" ? "Cancelling an in-progress deployment" : "Redeploying a past deployment"} note="Every simulated deployment completes synchronously, so there is nothing in-flight to cancel or re-run." /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
           </DialogBody>
         </DialogSurface>
       </Dialog>

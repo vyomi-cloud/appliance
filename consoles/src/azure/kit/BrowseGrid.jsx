@@ -78,7 +78,7 @@ export default function BrowseGrid({
         </Menu>
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={onRefresh}>Refresh</ToolbarButton>
         <ToolbarButton icon={<ArrowDownload20Regular />} onClick={() => downloadCsv(csvName, shownCols, rows)} disabled={!rows.length}>Export to CSV</ToolbarButton>
-        {extraCommands}
+        {typeof extraCommands === "function" ? extraCommands(selected) : extraCommands}
         <span className="sep" />
         {onDelete && <ToolbarButton icon={<Delete20Regular />} disabled={!selected.length} onClick={() => setDel(true)}>Delete</ToolbarButton>}
       </div>

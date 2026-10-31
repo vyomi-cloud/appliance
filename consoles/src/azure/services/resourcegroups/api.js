@@ -2,8 +2,8 @@
  *   Control plane: PUT/GET/PATCH/DELETE /subscriptions/{sub}/resourceGroups/{name}
  *   Resources:     GET  .../resourceGroups/{name}/resources                           (every type, at once)
  *   Locks:         CRUD    .../resourceGroups/{name}/providers/Microsoft.Authorization/locks[/{n}]
- *   Deployments:   CRUD    .../resourceGroups/{name}/providers/Microsoft.Resources/deployments[/{n}]
- *   IAM:           list    .../providers/Microsoft.Authorization/roleAssignments|roleDefinitions (subscription scope)
+ *   Deployments:   CRUD + cancel/redeploy actions .../resourceGroups/{name}/providers/Microsoft.Resources/deployments[/{n}]
+ *   IAM:           CRUD + checkAccess .../resourceGroups/{name}/providers/Microsoft.Authorization/roleAssignments|roleDefinitions|checkAccess
  *   Cost:          POST/GET .../resourceGroups/{name}/providers/Microsoft.CostManagement|Consumption/…
  * Served by core/azure_arm_core.py (+ core/azure_cost_core.py for cost) on every substrate. */
 import { restJson } from "../../../common/wire.js";
@@ -13,6 +13,7 @@ const ARM_API_VERSION = "2021-04-01";
 const sub = () => `/subscriptions/${getSubscription()}`;
 const rgPath = (name) => `${sub()}/resourceGroups/${encodeURIComponent(name)}`;
 const armQ = { "api-version": ARM_API_VERSION };
+export const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `id${Date.now()}${Math.random().toString(16).slice(2)}`);
 
 export { listResourceGroups as listGroups };
 export const getGroup = (name) => restJson("GET", rgPath(name), { query: armQ });
@@ -38,18 +39,29 @@ export const listActivityLog = async (name) => {
   return (await restJson("GET", `${sub()}/providers/Microsoft.Insights/eventtypes/management/values`, { query })).value || [];
 };
 
-// ── Deployments (Microsoft.Resources/deployments — generic catalog entry, see azure_arm_data.py) ──
+// ── Deployments (Microsoft.Resources/deployments): a bounded but real template evaluator —
+// every resource in properties.template.resources is actually PUT; Cancel/Redeploy are real
+// actions (core/azure_arm_core.py AzureArm._execute_deployment / _deployment_action). ──
 const deploymentPath = (name, depName) => `${rgPath(name)}/providers/Microsoft.Resources/deployments${depName ? `/${encodeURIComponent(depName)}` : ""}`;
 export const listDeployments = async (name) => (await restJson("GET", deploymentPath(name), { query: armQ })).value || [];
 export const putDeployment = (name, depName, body) => restJson("PUT", deploymentPath(name, depName), { query: armQ, body });
 export const deleteDeployment = (name, depName) => restJson("DELETE", deploymentPath(name, depName), { query: armQ });
+export const cancelDeployment = (name, depName) => restJson("POST", `${deploymentPath(name, depName)}/cancel`, { query: armQ });
+export const redeployDeployment = (name, depName) => restJson("POST", `${deploymentPath(name, depName)}/redeploy`, { query: armQ });
 
-// ── Access control (IAM): generic ARM catalog store, subscription scope (same pattern the
-// Function App / Key vault blades use — Microsoft.Authorization/roleAssignments has no
-// resource-group-scoped list in this simulator). ──
+// ── Access control (IAM): role assignments are real ARM resources scoped to the resource
+// group they were PUT under (core/azure_arm_core.py stamps properties.scope from the
+// containing resource group); roleDefinitions lists the built-in Owner/Contributor/Reader/…
+// roles alongside any custom ones; checkAccess runs the real wildcard + scope-inheritance +
+// notActions + explicit-deny decision algorithm over those same assignments. ──
 const IAM_API_VERSION = "2022-04-01";
-export const listRoleAssignments = async () => (await restJson("GET", `${sub()}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": IAM_API_VERSION } })).value || [];
-export const listRoleDefinitions = async () => (await restJson("GET", `${sub()}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": IAM_API_VERSION } })).value || [];
+const roleAssignmentPath = (name, raName) => `${rgPath(name)}/providers/Microsoft.Authorization/roleAssignments${raName ? `/${encodeURIComponent(raName)}` : ""}`;
+export const listRoleAssignments = async (name) => (await restJson("GET", roleAssignmentPath(name), { query: { "api-version": IAM_API_VERSION } })).value || [];
+export const putRoleAssignment = (name, raName, body) => restJson("PUT", roleAssignmentPath(name, raName), { query: { "api-version": IAM_API_VERSION }, body });
+export const deleteRoleAssignment = (name, raName) => restJson("DELETE", roleAssignmentPath(name, raName), { query: { "api-version": IAM_API_VERSION } });
+export const listRoleDefinitions = async (name) => (await restJson("GET", `${rgPath(name)}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": IAM_API_VERSION } })).value || [];
+export const checkAccess = async (name, principalId, action) =>
+  (await restJson("POST", `${rgPath(name)}/providers/Microsoft.Authorization/checkAccess`, { query: { "api-version": IAM_API_VERSION }, body: { principalId, action } })).value || [];
 
 // ── Cost management, scoped to this resource group ──────────────────────────────────────
 const COST_API_VERSION = "2023-11-01";
