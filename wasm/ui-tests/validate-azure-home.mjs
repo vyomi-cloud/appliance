@@ -14,19 +14,30 @@ const check = (ok, what, note = "") => results.push({ ok, what, note });
 try {
   await bootConsole(page, base, "/azure-console.html");
   await sleep(3000);
-  const tiles = await page.evaluate(async () => {
-    const out = [];
-    for (const s of ((typeof CATALOG !== "undefined" && CATALOG?.services) || []).filter((x) => x.dataPlane)) {
-      const card = [...document.querySelectorAll("#main .card")].find((c) => (c.querySelector(".t")?.innerText || "").trim().endsWith(s.label));
+  // The portal-style Home lists every service in the "Azure services" row (More services
+  // expands it) and every resource, counted from each service's own list API, under Resources.
+  await page.evaluate(() => { const m = [...document.querySelectorAll("#main .az-svc")].find((a) => /More services/.test(a.innerText)); if (m) m.click(); });
+  await sleep(300);
+  const info = await page.evaluate(async () => {
+    const dps = ((typeof CATALOG !== "undefined" && CATALOG?.services) || []).filter((x) => x.dataPlane);
+    const names = [...document.querySelectorAll("#main .az-svc")].map((a) => (a.getAttribute("title") || a.innerText || "").trim());
+    let dpTotal = 0;
+    const tiles = [];
+    for (const s of dps) {
       let api = null;
       try { api = ((await (await fetch("/api/azure/" + s.key)).json()).items || []).length; } catch (_) {}
-      out.push({ label: s.label, shown: card ? card.querySelector(".n")?.innerText.trim() : null, api });
+      dpTotal += api || 0;
+      tiles.push({ label: s.label, present: names.includes(s.label), api });
     }
-    return out;
+    const more = document.querySelector("#main .az-more")?.innerText || "";
+    const m = /\((\d+)\)/.exec(more);
+    const empty = !!document.querySelector("#main .az-res .az-empty:not(:empty)") && /No resources yet/.test(document.querySelector("#main .az-res")?.innerText || "");
+    return { tiles, dpTotal, seeAll: m ? Number(m[1]) : (empty ? 0 : null) };
   });
   check(undefinedCalls.length === 0, "home makes no requests to .../undefined", undefinedCalls.slice(0, 2).join(", "));
-  check(tiles.length > 0, "data-plane services present on the home dashboard", `${tiles.length} found`);
-  for (const t of tiles) check(t.api !== null && t.shown === String(t.api), `tile "${t.label}" shows its real count`, `shown=${t.shown} api=${t.api}`);
+  check(info.tiles.length > 0, "data-plane services present on the home dashboard", `${info.tiles.length} found`);
+  for (const t of info.tiles) check(t.present && t.api !== null, `service "${t.label}" is on the Azure services row and its list API answers`, `present=${t.present} api=${t.api}`);
+  check(info.seeAll !== null && info.seeAll >= info.dpTotal, "Resources count includes every data-plane resource", `seeAll=${info.seeAll} dataPlane=${info.dpTotal}`);
 } catch (e) { check(false, "(boot)", String(e).split("\n")[0]); }
 await browser.close(); server.close();
 
