@@ -5,11 +5,12 @@ import SecretDetail from "./SecretDetail.jsx";
 
 export default {
   nav: [
-    { text: "Secret Manager", href: "#/security/secret-manager", icon: SecretIcon, match: ["#/security/secret-manager/create", "#/security/secret-manager/secret"] },
+    { text: "Secret Manager", href: "#/security/secret-manager", icon: SecretIcon, match: ["#/security/secret-manager/create", "#/security/secret-manager/secret", "#/security/secret-manager/regional"] },
   ],
   routes: [
     { pattern: "/security/secret-manager", component: Secrets },
     { pattern: "/security/secret-manager/create", component: CreateSecret },
     { pattern: "/security/secret-manager/secret/:name", component: SecretDetail },
+    { pattern: "/security/secret-manager/regional/:location/:name", component: SecretDetail },
   ],
 };

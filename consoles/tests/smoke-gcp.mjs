@@ -1390,6 +1390,51 @@ try {
     (await page.getByText("Version added").count()) === 2);
   await shot("15-secret-logs");
 
+  // Secret Manager DEPTH: Regional secrets — a distinct resource (projects/{p}/locations/
+  // {l}/secrets/...) addressed via its own tab + location picker, no replication policy.
+  // Create via UI → visible over the native REGIONAL wire; add a version over the wire →
+  // shown in the UI; delete via UI → gone over the wire.
+  const RSM = `v4-gcp-rsm-${Date.now() % 100000}`;
+  await page.goto(UI + "#/security/secret-manager");
+  await page.getByRole("tab", { name: "Regional secrets" }).click();
+  await page.getByLabel("Region").click();
+  await page.getByRole("option", { name: "us-east1" }).click();
+  // Both the header action and (while the region is still empty) the table's empty-state
+  // button say "Create secret" and open the same dialog — either is fine to click.
+  await page.getByRole("button", { name: "Create secret", exact: true }).first().click();
+  await page.getByRole("dialog").getByLabel("Name").fill(RSM);
+  await page.getByRole("dialog").getByLabel("Secret value").fill("regional-smoke-1");
+  await page.getByRole("dialog").getByRole("button", { name: "Create secret", exact: true }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  await page.getByRole("link", { name: RSM }).waitFor({ timeout: 10000 });
+  const rsec = await wjson(`/v1/projects/vyomi-project/locations/us-east1/secrets/${RSM}`);
+  check("create regional secret via UI → visible over native regional wire",
+    rsec.name?.endsWith(`/locations/us-east1/secrets/${RSM}`));
+  check("regional secret has no replication field (it IS the one location)", !("replication" in rsec));
+  const rv1 = await wjson(`/v1/projects/vyomi-project/locations/us-east1/secrets/${RSM}/versions/latest:access`);
+  check("regional initial value accessible over native wire",
+    Buffer.from(rv1.payload?.data || "", "base64").toString() === "regional-smoke-1");
+  await shot("15d-secret-regional");
+
+  await wire(`/v1/projects/vyomi-project/locations/us-east1/secrets/${RSM}:addVersion`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ payload: { data: Buffer.from("regional-smoke-2").toString("base64") } }),
+  });
+  await page.getByRole("link", { name: RSM }).click();
+  await page.getByRole("cell", { name: "2", exact: true }).waitFor({ timeout: 10000 });
+  check("version added over regional wire → shown in UI versions table", true);
+
+  await page.goto(UI + "#/security/secret-manager?tab=regional&location=us-east1");
+  await page.getByPlaceholder("Filter").first().fill(RSM);
+  await page.getByRole("link", { name: RSM }).waitFor({ timeout: 10000 });
+  await page.getByRole("checkbox", { name: `Select projects/vyomi-project/locations/us-east1/secrets/${RSM}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(RSM);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  check("delete regional secret via UI → gone over native wire",
+    (await wire(`/v1/projects/vyomi-project/locations/us-east1/secrets/${RSM}`)).status === 404);
+
   // Cloud SQL: create instance via UI → native Admin API, add a database over the wire →
   // shown in the UI, then delete the instance via UI → gone over the wire.
   const SQLI = `v4-gcp-sql-${Date.now() % 100000}`;
