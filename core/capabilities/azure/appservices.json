@@ -71,14 +71,14 @@
   "tests": ["tests/conformance/test_azure_webapp_core.py", "tests/conformance/test_azure_monitor_core.py"]
  },
  "azure.appservices.webapp.iam": {
-  "title": "Access control (IAM)",
+  "title": "Access control (IAM): role assignments and built-in role definitions over ARM",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Role assignments and role definitions are the generic subscription-scoped Microsoft.Authorization store (shared with every other Azure resource), not filtered to assignments scoped exactly to this Web App.",
-   "Deny assignments and classic administrators are always empty (Vyomi models neither)."
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions). The Role assignments list is ENFORCED scoped to this Web App (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view) instead of the whole subscription — the same engine the Cosmos DB account and VM blades use; Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too).",
+   "Assignments are still created at the subscription scope (az role assignment create); 'Check access' / 'My access' evaluation and Deny assignments / Classic administrators remain an honest gap."
   ],
-  "api": ["RoleAssignments_ListForSubscription", "RoleDefinitions_List"],
-  "tests": ["tests/conformance/test_azure_rbac_core.py"]
+  "api": ["RoleAssignments_ListForScope (resource-scoped)", "RoleDefinitions_List"],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.appservices.webapp.deploymentcenter": {
   "title": "Deployment Center (CI/CD source, FTPS credentials)",

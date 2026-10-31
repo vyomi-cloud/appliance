@@ -28,6 +28,8 @@ const TBL = `vysmoketbl${n}`;      // Table created through the UI
 const TBL2 = `vywiretbl${n}`;      // Table created over the wire (CLI → UI direction)
 const APP = `vysmokeapp${n}`;      // app service created through the UI
 const APP2 = `vywireapp${n}`;      // app service created over the wire (CLI → UI direction)
+const APPROLE = `00000000-0000-4000-b000-${String(n).padStart(12, "0")}`;  // role assignment GUID created over the wire, EXPLICITLY scoped to the App Service resource
+const APPPRINCIPAL = `vyappprincipal${n}`;  // principal of the App Service-scoped role assignment above
 const EGT = `vyegtopic${n}`;       // Event Grid topic created through the UI
 const EGT2 = `vyegwire${n}`;       // Event Grid topic created over the wire
 const ES = `vyeges${n}`;           // event subscription created over the wire
@@ -422,6 +424,21 @@ try {
   await page.waitForTimeout(600);
   const stopped = JSON.parse((await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP}`)).text);
   check("UI Stop → ARM state Stopped", stopped.properties?.state === "Stopped", stopped.properties?.state);
+
+  // ── Access control (IAM): a role assignment created over the wire, EXPLICITLY scoped to
+  // this App Service resource (not just the subscription) → read back on the Role
+  // assignments tab over the same generic Microsoft.Authorization engine the Cosmos DB/VM/NSG
+  // blades use (azure.appservices.webapp.iam) ────────────────────────────────────────────
+  const appId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Web/sites/${APP}`;
+  const appRoleRes = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments/${APPROLE}?api-version=2022-04-01`,
+    { method: "PUT", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ properties: { principalId: APPPRINCIPAL, roleName: "Owner", scope: appId } }) });
+  check("ARM PUT role assignment scoped to the App Service over wire", appRoleRes.status === 200 || appRoleRes.status === 201, `HTTP ${appRoleRes.status}`);
+  await page.goto(UI + `#/appservices/${RG}/${APP}/iam`);
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByText(APPPRINCIPAL).first().waitFor({ timeout: 10000 });
+  check("UI Access control (IAM) → Role assignments shows the App Service-scoped wire-created assignment", true);
+  await shot("20b-appservices-iam-role-assignments");
 
   // ── Environment variables → ARM config/appsettings round-trip ─────────────────────────
   await page.goto(UI + `#/appservices/${RG}/${APP}/envvars`);
