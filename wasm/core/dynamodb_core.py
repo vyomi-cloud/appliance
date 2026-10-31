@@ -23,7 +23,9 @@ TransactGetItems, TagResource/UntagResource/ListTagsOfResource,
 UpdateTimeToLive/DescribeTimeToLive (lazy expiry on read), UpdateContinuousBackups/
 DescribeContinuousBackups (PITR flag), CreateBackup/ListBackups/DescribeBackup/
 DeleteBackup/RestoreTableFromBackup (snapshot copies inside the store),
-ExecuteStatement (PartiQL: SELECT/INSERT/UPDATE/DELETE).
+ExportTableToPointInTime/DescribeExport/ListExports (real DynamoDB-JSON data +
+manifest written into the S3 store), ExecuteStatement (PartiQL:
+SELECT/INSERT/UPDATE/DELETE).
 
 Parity: items are kept as TYPED AttributeValues (record["av"]) — the source of
 truth for the wire — next to the legacy native projection (record["item"]) the
@@ -680,6 +682,107 @@ def _restore_table_from_backup(store: NoSqlStore, payload: dict[str, Any]) -> di
     store.mirror_create_table(target, restored)
     store.persist()
     return restored
+
+
+# ── exports to S3 (ExportTableToPointInTime writes REAL item data into the
+# simulator's own S3 store — a newline-delimited DynamoDB-JSON data file plus a
+# manifest, the same shape AWS writes — so a bucket that doesn't exist makes the
+# export genuinely FAIL, the way a bad bucket/IAM role does in AWS. Mirrors
+# rds_core._write_export_manifest/_start_export_task. Only FULL_EXPORT +
+# DYNAMODB_JSON are implemented; see core/capabilities/aws/dynamodb.json.) ─────
+_SUPPORTED_EXPORT_FORMATS = ("DYNAMODB_JSON",)
+_SUPPORTED_EXPORT_TYPES = ("FULL_EXPORT",)
+
+
+def _export_summary(exp: dict) -> dict:
+    return {"ExportArn": exp["export_arn"], "ExportStatus": exp["export_status"],
+            "ExportType": exp.get("export_type", "FULL_EXPORT")}
+
+
+def _export_description(exp: dict) -> dict:
+    d: dict[str, Any] = {
+        "ExportArn": exp["export_arn"], "ExportStatus": exp["export_status"],
+        "StartTime": exp["start_time"], "EndTime": exp.get("end_time", exp["start_time"]),
+        "TableArn": exp["table_arn"], "TableId": exp.get("table_id", ""),
+        "S3Bucket": exp["s3_bucket"], "S3Prefix": exp.get("s3_prefix", ""),
+        "S3SseAlgorithm": exp.get("s3_sse_algorithm", "AES256"),
+        "ExportFormat": exp.get("export_format", "DYNAMODB_JSON"),
+        "ExportType": exp.get("export_type", "FULL_EXPORT"),
+        "BilledSizeBytes": int(exp.get("billed_size_bytes", 0) or 0),
+        "ItemCount": int(exp.get("item_count", 0) or 0),
+        "ClientToken": exp.get("client_token", ""),
+    }
+    if exp.get("export_manifest"):
+        d["ExportManifest"] = exp["export_manifest"]
+    if exp.get("failure_code"):
+        d["FailureCode"] = exp["failure_code"]
+        d["FailureMessage"] = exp.get("failure_message", "")
+    return d
+
+
+def _export_table_name(payload: dict) -> str:
+    arn = str(payload.get("TableArn") or "").strip()
+    if ":table/" in arn:
+        return arn.split(":table/", 1)[1].split("/", 1)[0]
+    return str(payload.get("TableName") or "").strip()
+
+
+def _create_export_record(store: NoSqlStore, s3_store: Any, payload: dict[str, Any]) -> dict:
+    table_name = _export_table_name(payload)
+    table = _require_table(store, table_name)
+    bucket = str(payload.get("S3Bucket") or "").strip()
+    if not bucket:
+        raise _validation("S3Bucket is required.")
+    export_format = str(payload.get("ExportFormat") or "DYNAMODB_JSON").upper()
+    if export_format not in _SUPPORTED_EXPORT_FORMATS:
+        raise _validation(f"ExportFormat '{export_format}' is not supported; only DYNAMODB_JSON is implemented.")
+    export_type = str(payload.get("ExportType") or "FULL_EXPORT").upper()
+    if export_type not in _SUPPORTED_EXPORT_TYPES:
+        raise _validation(f"ExportType '{export_type}' is not supported; only FULL_EXPORT is implemented.")
+    prefix = str(payload.get("S3Prefix") or "").strip().strip("/")
+    _refresh_table_metrics(table)
+    export_id = f"{uuid.uuid4().hex[:14]}-{uuid.uuid4().hex[:8]}"
+    export_arn = f"{table['table_arn']}/export/{export_id}"
+    key_prefix = f"{prefix}/" if prefix else ""
+    data_key = f"{key_prefix}AWSDynamoDB/{export_id}/data/1.json"
+    manifest_key = f"{key_prefix}AWSDynamoDB/{export_id}/manifest-summary.json"
+    items = [_rec_av(r) for r in (table.get("items") or {}).values() if isinstance(r, dict)]
+    body = "".join(json.dumps({"Item": it}) + "\n" for it in items).encode()
+    record: dict[str, Any] = {
+        "export_arn": export_arn, "table_arn": table["table_arn"], "table_id": table.get("table_id", ""),
+        "table_name": table_name, "s3_bucket": bucket, "s3_prefix": prefix,
+        "s3_sse_algorithm": str(payload.get("S3SseAlgorithm") or "AES256"),
+        "export_format": export_format, "export_type": export_type,
+        "start_time": _now(), "item_count": len(items), "billed_size_bytes": len(body),
+        "client_token": str(payload.get("ClientToken") or ""),
+    }
+    if s3_store is None:
+        record["export_status"] = "FAILED"
+        record["failure_code"] = "S3AccessDenied"
+        record["failure_message"] = "No S3 store is configured for this request."
+    else:
+        try:
+            from core import s3_object_core as s3c
+        except ImportError:  # pragma: no cover - Pyodide flat layout
+            import s3_object_core as s3c  # type: ignore
+        r1 = s3c.put_object(s3_store, bucket, data_key, body, {"content-type": "application/json"})
+        if r1.status != 200:
+            record["export_status"] = "FAILED"
+            record["failure_code"] = "S3AccessDenied"
+            record["failure_message"] = f"Unable to write to s3://{bucket}/{data_key}: the bucket does not exist."
+        else:
+            manifest = {"version": "2020-06-30", "exportArn": export_arn, "startTime": record["start_time"],
+                        "tableArn": table["table_arn"], "tableId": table.get("table_id", ""),
+                        "exportFormat": export_format, "outputFormat": export_format,
+                        "billedSizeBytes": len(body), "itemCount": len(items)}
+            s3c.put_object(s3_store, bucket, manifest_key, json.dumps(manifest, indent=2).encode(),
+                           {"content-type": "application/json"})
+            record["export_status"] = "COMPLETED"
+            record["export_manifest"] = f"s3://{bucket}/{manifest_key}"
+    record["end_time"] = _now()
+    store.put_export(export_arn, record)
+    store.persist()
+    return record
 
 
 # ── typed item records ─────────────────────────────────────────────────────
@@ -1913,7 +2016,10 @@ def _set_tags(store: NoSqlStore, table: dict, tags: dict[str, str]) -> None:
 # unmodified aws-cli / boto3 client speaks. Shared by the Nano relay/bridge (tab
 # side) and the appliance's unified ingress. `target` is the raw X-Amz-Target
 # header, e.g. "DynamoDB_20120810.PutItem"; `payload` is the parsed JSON body.
-def dispatch(store: NoSqlStore, target: str, payload: dict | None = None) -> DdbResponse:
+# `s3_store` (optional) lets ExportTableToPointInTime write a real object —
+# omitting it keeps every other action working, just without that cross-service
+# write (e.g. conformance tests that construct a bare NoSqlStore).
+def dispatch(store: NoSqlStore, target: str, payload: dict | None = None, s3_store: Any = None) -> DdbResponse:
     payload = payload if isinstance(payload, dict) else {}
     action = target.rsplit(".", 1)[-1] if target else ""
     if not action:
@@ -2037,6 +2143,23 @@ def dispatch(store: NoSqlStore, target: str, payload: dict | None = None) -> Ddb
         if action == "RestoreTableToPointInTime":
             restored = _restore_table_to_point_in_time(store, payload)
             return _ok({"TableDescription": _table_view(store, restored, include_items=False)})
+
+        if action == "ExportTableToPointInTime":
+            exp = _create_export_record(store, s3_store, payload)
+            return _ok({"ExportDescription": _export_description(exp)})
+
+        if action == "DescribeExport":
+            arn = str(payload.get("ExportArn") or "").strip()
+            exp = store.get_export(arn)
+            if not exp:
+                raise DdbError("ExportNotFoundException", f"Export not found: {arn}", 400)
+            return _ok({"ExportDescription": _export_description(exp)})
+
+        if action == "ListExports":
+            tarn = str(payload.get("TableArn") or "").strip()
+            rows = [e for e in store.list_exports() if not tarn or e["table_arn"] == tarn]
+            rows.sort(key=lambda e: e["start_time"])
+            return _ok({"ExportSummaries": [_export_summary(e) for e in rows]})
 
         if action == "ExecuteStatement":
             return _execute_statement(store, payload)

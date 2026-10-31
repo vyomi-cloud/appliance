@@ -163,7 +163,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
-  "limitations": [],
+  "limitations": [
+   "DynamoDB Streams is a separate change-data-capture API (shard iterators, GetRecords, trim-horizon, Lambda event-source mapping) that Vyomi's single-process store does not model."
+  ],
   "probe": {
    "ddb_unknown": "DescribeStream"
   }
@@ -171,12 +173,29 @@
  "dynamodb.exports": {
   "title": "Exports to S3",
   "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Only ExportFormat=DYNAMODB_JSON and ExportType=FULL_EXPORT are implemented (Amazon Ion and incremental exports are rejected with ValidationException).",
+   "The export always reflects the table's current data — Vyomi keeps no change history, so a point-in-time export is really a full export (same limitation as RestoreTableToPointInTime).",
+   "Encryption key type is stored on the job record but has no effect; data is written to S3 in plain bytes."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_export_core.py"
+  ]
+ },
+ "dynamodb.imports": {
+  "title": "Imports from S3",
+  "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
-  "limitations": [],
+  "limitations": [
+   "ImportTable requires parsing multiple external file formats (CSV, DynamoDB JSON, Amazon Ion; optionally GZIP/ZSTD-compressed) from arbitrary S3 content, which Vyomi does not implement; only the export direction (ExportTableToPointInTime) is built."
+  ],
   "probe": {
-   "ddb_unknown": "ExportTableToPointInTime"
+   "ddb_unknown": "ImportTable"
   }
  },
  "dynamodb.kinesis": {
@@ -185,7 +204,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
-  "limitations": [],
+  "limitations": [
+   "Kinesis Data Streams for DynamoDB (change-data-capture into a Kinesis stream) is a separate streaming product Vyomi does not run."
+  ],
   "probe": {
    "ddb_unknown": "DescribeKinesisStreamingDestination"
   }
@@ -196,7 +217,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
-  "limitations": [],
+  "limitations": [
+   "Resource-based policies need the full cross-account IAM policy-evaluation engine (condition keys, principal matching) that Vyomi's single-tenant simulator does not implement."
+  ],
   "probe": {
    "ddb_unknown": "GetResourcePolicy"
   }
@@ -207,7 +230,9 @@
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
-  "limitations": []
+  "limitations": [
+   "CloudWatch is a separate monitoring product (its own metric pipeline and alarm-evaluation engine) that Vyomi does not run for any service."
+  ]
  },
  "dynamodb.global-tables": {
   "title": "Global tables",
