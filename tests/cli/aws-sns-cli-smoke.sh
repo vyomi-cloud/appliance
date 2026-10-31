@@ -158,7 +158,8 @@ cert.public_key().verify(base64.b64decode(env["Signature"]), text.encode(), padd
                          hashes.SHA256() if env["SignatureVersion"] == "2" else hashes.SHA1())
 print("verified")
 PY
-RPORT=$((20000 + SFX % 20000))
+# a free port: a fixed SFX-derived one collided with a busy port (EADDRINUSE) and the receiver never started
+RPORT=$(python3 -c "import socket; s=socket.socket(); s.bind(('0.0.0.0',0)); print(s.getsockname()[1])")
 RHOST="${SNS_RECEIVER_HOST:-$(hostname -I 2>/dev/null | awk '{print $1}')}"; RHOST="${RHOST:-172.17.0.1}"
 python3 "$RDIR/recv.py" "$RPORT" "$RDIR" & RPID=$!
 sleep 1
