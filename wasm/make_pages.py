@@ -353,7 +353,241 @@ def _footer_widget():
 </script>"""
 
 
-def _process(src_name, dst_name, inject, cloud=None):
+# ── Nano-only chrome the portal's live Nano carries (back-ported from portal
+# app/nano commits 7b9af7f, e5ba309, ca22cde, 1d8d434, 4359f3f) ──────────────
+# Kept HERE (not in static/) because it's portal-context behaviour: the signed-in
+# account comes from the portal's /api/auth/me and Sign out calls the portal's
+# /api/auth/logout. The offline appliance pages stay untouched.
+
+def _swap(html, old, new, page):
+    """Exact, single-occurrence replace — fail the build loudly if static/ moved
+    on, instead of silently shipping a page without the Nano chrome."""
+    n = html.count(old)
+    if n != 1:
+        raise SystemExit(f"make_pages: expected 1 occurrence in {page}, found {n}: {old[:70]!r}")
+    return html.replace(old, new, 1)
+
+
+# Side menu: thin-stroke line icons (no icon font), chevron collapse toggle ON the
+# sidebar/main separator, account menu at the foot. Overrides the appliance CSS.
+_DASH_CSS = """  <style>
+    /* Nano side menu (portal parity): line icons, separator chevron, account foot. */
+    #app-body { position: relative; }
+    #app-sidebar { overflow: visible; }
+    .side-collapse {
+      position: absolute; top: 16px; left: calc(216px - 13px); z-index: 60;
+      width: 26px; height: 26px; border-radius: 50%; padding: 0; margin: 0;
+      background: #121524; border: 1px solid #2b3350; color: #a7b0c4; cursor: pointer;
+      display: grid; place-items: center; box-shadow: 0 2px 10px rgba(0,0,0,.5);
+      transition: left .2s ease, color .12s, border-color .12s;
+    }
+    .side-collapse:hover { color: #fff; border-color: #6366f1; background: #161a2b; }
+    .side-collapse .material-icons { font-size: 18px; transition: transform .16s; }
+    body.side-collapsed .side-collapse .material-icons { transform: rotate(180deg); }
+    body.side-collapsed .side-collapse { left: calc(68px - 13px); padding: 0; }
+    .side-nav { flex: 1; overflow: hidden; }
+    .side-item .side-ic { width: 18px; height: 18px; flex: none; display: grid; place-items: center; color: #6b7488; }
+    .side-item:hover .side-ic { color: #e8ecf5; }
+    .side-item.active .side-ic { color: #818cf8; }
+    .side-item .side-ic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    #app-sidebar .side-foot { margin-top: auto; padding-top: 10px; border-top: 1px solid #20263a; }
+    .side-user-menu { position: relative; }
+    .side-user { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 9px; background: #121524; border: 1px solid #20263a; cursor: pointer; text-align: left; color: inherit; font-family: inherit; }
+    .side-user:hover { border-color: #6366f1; }
+    .side-user .av { width: 30px; height: 30px; border-radius: 50%; flex: none; overflow: hidden; background: #161a2b; display: grid; place-items: center; color: #e8ecf5; font-weight: 700; font-size: 12px; }
+    .side-user .av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .side-user .who { min-width: 0; flex: 1; }
+    .side-user .who b { display: block; font-size: 12.5px; color: #e8ecf5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .side-user .who span { display: block; font-size: 11px; color: #6b7488; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .side-user .chev { width: 15px; height: 15px; flex: none; color: #6b7488; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .16s; }
+    .side-user-menu.open .chev { transform: rotate(180deg); }
+    .side-user-dd { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); background: #0f121c; border: 1px solid #2b3350; border-radius: 10px; box-shadow: 0 20px 45px -25px rgba(0,0,0,.8); padding: 6px; display: none; z-index: 1000; }
+    .side-user-menu.open .side-user-dd { display: block; }
+    .side-user-dd a, .side-user-dd button { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 9px 11px; border-radius: 7px; font-size: 13px; color: #a7b0c4; background: none; border: 0; cursor: pointer; font-weight: 500; font-family: inherit; text-decoration: none; }
+    .side-user-dd a:hover, .side-user-dd button:hover { background: #121524; color: #e8ecf5; }
+    .side-user-dd .signout { color: #fca5a5; }
+    #app-sidebar .side-foot[hidden], .side-user-dd [hidden] { display: none !important; }
+    .side-user-dd svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    body.side-collapsed .side-user .who, body.side-collapsed .side-user .chev { display: none; }
+    body.side-collapsed .side-user { width: 56px; height: 56px; padding: 0; margin: 0 auto; justify-content: center; background: transparent; border-color: transparent; }
+    body.side-collapsed .side-user:hover { background: #121524; border-color: #6366f1; }
+    body.side-collapsed .side-user-dd { left: 8px; right: auto; width: 208px; }
+    /* SDK & CLI usage: exactly 2 cards per row (1 on phones). */
+    #view-usage .u-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    @media (max-width: 600px) { #view-usage .u-grid { grid-template-columns: 1fr; } }
+    /* The Spaces hero already carries "Activate appliance" — no second save CTA. */
+    #save-chip { display: none !important; }
+  </style>
+</head>"""
+
+_SIDE_ICONS = (
+    # (old icon+label, new icon+label, old title, new title)
+    ('<span class="material-icons">home</span><span class="side-label">Home</span>',
+     '<span class="side-ic"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span><span class="side-label">Spaces</span>',
+     'title="Home"', 'title="Spaces — your active spaces (home)"'),
+    ('<span class="material-icons">dashboard</span><span class="side-label">Dashboard</span>',
+     '<span class="side-ic"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="4" width="3" height="14"/></svg></span><span class="side-label">Health</span>',
+     'title="Dashboard"', 'title="Health — appliance at a glance"'),
+    ('<span class="material-icons">menu_book</span><span class="side-label">Knowledge Center</span>',
+     '<span class="side-ic"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><span class="side-label">Knowledge Center</span>',
+     None, None),
+    ('<span class="material-icons">terminal</span><span class="side-label">SDK &amp; CLI usage</span>',
+     '<span class="side-ic"><svg viewBox="0 0 24 24"><path d="M4 17l6-6-6-6M12 19h8"/></svg></span><span class="side-label">SDK &amp; CLI usage</span>',
+     None, None),
+    ('<span class="material-icons">api</span><span class="side-label">API (Swagger)</span>',
+     '<span class="side-ic"><svg viewBox="0 0 24 24"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></span><span class="side-label">API (Swagger)</span>',
+     None, None),
+)
+
+_OLD_COLLAPSE = """    <button class="side-collapse" type="button" onclick="toggleSidebar()" aria-label="Collapse menu" title="Collapse / expand">
+      <span class="material-icons">menu</span>
+    </button>
+"""
+
+# Account menu at the side menu's foot. Starts hidden: it only appears once the
+# portal answers /api/auth/me, so a bundle served without a portal (local dev,
+# a plain static server) shows no dead button.
+_SIDE_FOOT = """    <div class="side-foot" id="nanoSideFoot" hidden>
+      <div class="side-user-menu" id="nanoUsrMenu">
+        <div class="side-user-dd" id="nanoUsrDd">
+          <button class="signout" id="nanoSignout" type="button" onclick="nanoLogout()"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign out</button>
+          <a class="signin" id="nanoSignin" href="/dashboard?next=%2Fnano%2F" hidden><svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>Sign in</a>
+        </div>
+        <button class="side-user" id="nanoUsrBtn" type="button" aria-label="Account menu">
+          <div class="av" id="nanoAv">?</div>
+          <div class="who"><b id="nanoName">Account</b><span id="nanoRole">Personal account</span></div>
+          <svg class="chev" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+  <button class="side-collapse" type="button" onclick="toggleSidebar()" aria-label="Collapse / expand menu" title="Collapse / expand">
+    <span class="material-icons">chevron_left</span>
+  </button>"""
+
+_DASH_JS = r"""<script>
+/* Nano account menu (side-menu foot). XHR, not fetch: the base-path fetch shim
+   rewrites window.fetch('/api/*') into /nano/api/*, which the in-tab service
+   worker answers — so /api/auth/* would never reach the portal. XHR isn't
+   shimmed, and /api/auth/* is outside the SW's /nano/ scope.
+   - portal session  -> name + provider avatar, Sign out
+   - portal, signed out (session expired) -> "Guest", Sign in
+   - no portal (local dev / static server / non-JSON) -> the menu stays hidden */
+(function(){
+  var foot=document.getElementById('nanoSideFoot');
+  function paintAccount(d){
+    if(!d || typeof d.authenticated!=='boolean' || !foot) return;   // not the portal's /api/auth/me
+    var out=document.getElementById('nanoSignout'), inn=document.getElementById('nanoSignin');
+    var nm=document.getElementById('nanoName'), rl=document.getElementById('nanoRole'), av=document.getElementById('nanoAv');
+    if(!d.authenticated){
+      if(nm) nm.textContent='Guest'; if(rl) rl.textContent='Not signed in';
+      if(out) out.hidden=true;
+      if(inn){ inn.hidden=false; inn.href='/dashboard?next='+encodeURIComponent(location.pathname); }
+      foot.hidden=false; return;
+    }
+    var email=d.email||''; var handle=email.split('@')[0]||'account';
+    if(nm) nm.textContent=handle;
+    if(rl) rl.textContent=d.is_admin?'Admin':'Personal account';
+    if(av){
+      if(d.avatar_url){
+        av.textContent='';
+        var im=new Image(); im.src=d.avatar_url; im.alt=handle; im.referrerPolicy='no-referrer';
+        im.style.cssText='width:100%;height:100%;border-radius:inherit;object-fit:cover;display:block';
+        im.onerror=function(){ av.textContent=(email[0]||'?').toUpperCase(); };
+        av.appendChild(im);
+      } else { av.textContent=(email[0]||'?').toUpperCase(); }
+    }
+    foot.hidden=false;
+  }
+  try {
+    var _x=new XMLHttpRequest(); _x.open('GET','/api/auth/me',true); _x.withCredentials=true;
+    _x.onload=function(){ if(_x.status!==200) return; try{ paintAccount(JSON.parse(_x.responseText)); }catch(e){} };
+    _x.send();
+  } catch(e){}
+  var btn=document.getElementById('nanoUsrBtn'), menu=document.getElementById('nanoUsrMenu');
+  if(btn&&menu){
+    btn.addEventListener('click',function(e){ e.stopPropagation(); menu.classList.toggle('open'); });
+    document.addEventListener('click',function(){ menu.classList.remove('open'); });
+    menu.addEventListener('click',function(e){ e.stopPropagation(); });
+  }
+})();
+function nanoLogout(){
+  /* XHR (see above) so this reaches the portal and truly clears the cookie. */
+  try {
+    var l = new XMLHttpRequest();
+    l.open('POST', '/api/auth/logout', true); l.withCredentials = true;
+    l.onloadend = function(){ location.href = '/dashboard'; };
+    l.send();
+  } catch (e) { location.href = '/dashboard'; }
+}
+</script>
+<script>
+/* Nano install ping — RESILIENT. The launch page (/nano/ = index.html) redirects
+   here before it renders, and the ping needs the service worker controlling to
+   reach the portal (the SW forwards /api/install/register out of the /nano scope).
+   So fire it here and retry until the SW controls. Same device fingerprint as
+   index.html's nanoDeviceFp → the portal's idempotent upsert keeps one row per
+   machine; the once-per-browser guard latches only on success. */
+(function(){
+  function done(){ try{ return localStorage.getItem("nano_install_recorded")==="1"; }catch(_){ return true; } }
+  if(done()) return;
+  async function nanoFp(){
+    var gpu="";
+    try{ var c=document.createElement("canvas"); var gl=c.getContext("webgl")||c.getContext("experimental-webgl");
+      if(gl){ var e=gl.getExtension("WEBGL_debug_renderer_info"); if(e) gpu=gl.getParameter(e.UNMASKED_RENDERER_WEBGL)||""; } }catch(_){}
+    var parts=[navigator.platform||"", navigator.hardwareConcurrency||"", navigator.deviceMemory||"",
+      screen.width+"x"+screen.height+"x"+screen.colorDepth,
+      (Intl.DateTimeFormat().resolvedOptions().timeZone)||"", navigator.language||"", gpu];
+    try{ var buf=await crypto.subtle.digest("SHA-256", new TextEncoder().encode(parts.join("|")));
+      return "nano-fp-"+Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,"0");}).join("").slice(0,24); }
+    catch(_){ return null; }
+  }
+  var tries=0;
+  async function attempt(){
+    if(done()) return;
+    tries++;
+    try{
+      var id=await nanoFp(); if(!id) return;
+      var r=await fetch("/api/install/register",{method:"POST",keepalive:true,headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({install_id:id,channel:"nano",state:"DOWNLOADED",host_os:(navigator.platform||"").slice(0,32),webdriver:!!navigator.webdriver})});
+      if(r&&r.ok){ try{ localStorage.setItem("nano_install_recorded","1"); }catch(_){} return; }
+    }catch(_){}
+    if(tries<6) setTimeout(attempt, 3000);
+  }
+  try{ if(navigator.serviceWorker) navigator.serviceWorker.addEventListener("controllerchange", attempt); }catch(_){}
+  attempt();
+})();
+</script>
+"""
+
+
+def _nano_dashboard(html, page):
+    """clouds.html → the portal's live Nano dashboard chrome (see block comment)."""
+    html = _swap(html, "</head>", _DASH_CSS, page)
+    html = _swap(html, _OLD_COLLAPSE, "", page)
+    for old, new, t_old, t_new in _SIDE_ICONS:
+        html = _swap(html, old, new, page)
+        if t_old:   # the item's tooltip sits right before its (now swapped) icon
+            html = _swap(html, f'{t_old}>{new}', f'{t_new}>{new}', page)
+    html = _swap(html, "    </nav>\n  </aside>", "    </nav>\n" + _SIDE_FOOT, page)
+    html = _swap(html, '<div class="hero-eyebrow">Dashboard</div>', '<div class="hero-eyebrow">Health</div>', page)
+    html = _swap(html, "if (!APP_VIEWS[view]) view = 'workspace';", "if (!APP_VIEWS[view]) view = 'spaces';", page)
+    i = html.rfind("</body>")
+    return html[:i] + _DASH_JS + html[i:]
+
+
+def _hide_console_account(btn_id):
+    """aws/gcp consoles: hide the simulated header account button (it only toasts
+    "Account is set by the active simulator space") — the portal's live Nano hides
+    it (portal e5ba309); the signed-in account lives in the Spaces side menu."""
+    def post(html, page):
+        return _swap(html, '<script type="module" src="./nano-boot.js?v=4"></script>\n',
+                     '<script type="module" src="./nano-boot.js?v=4"></script>\n'
+                     f'<style>#{btn_id}{{display:none!important;}}</style>\n', page)
+    return post
+
+
+def _process(src_name, dst_name, inject, cloud=None, post=None):
     src = os.path.join(STATIC, src_name)
     with open(src) as f:
         html = f.read()
@@ -397,6 +631,8 @@ def _process(src_name, dst_name, inject, cloud=None):
     # the shared-worker endpoint so the tunnel persists across navigation.
     if "</body>" in html and 'id="nano-foot"' not in html:
         html = html.replace("</body>", _footer_widget() + "</body>", 1)
+    if post:
+        html = post(html, src_name)
     dst = os.path.join(HERE, dst_name)
     with open(dst, "w") as f:
         f.write(html)
@@ -407,10 +643,11 @@ def main():
     # Launch page -> the Nano landing (/nano/ = index.html), identical to Lite/Max/Pro.
     _process("pricing.html", "index.html", LAUNCH)
     # Workspaces dashboard (Appliance health / Host util / Spaces / KC) -> clouds.html.
-    _process("clouds.html", "clouds.html", SW)
+    # + the portal's Nano chrome: side-menu account / Sign out, line icons, install ping.
+    _process("clouds.html", "clouds.html", SW, post=_nano_dashboard)
     # The three SPA consoles, verbatim + Pyodide boot loader + per-cloud docs.
-    _process("aws-console.html", "aws-console.html", BOOT, cloud="aws")
-    _process("gcp-console.html", "gcp-console.html", BOOT, cloud="gcp")
+    _process("aws-console.html", "aws-console.html", BOOT, cloud="aws", post=_hide_console_account("acctBtn"))
+    _process("gcp-console.html", "gcp-console.html", BOOT, cloud="gcp", post=_hide_console_account("avatarBtn"))
     _process("azure-console.html", "azure-console.html", BOOT, cloud="azure")
     # Ship the readiness strip verbatim (kept in the Nano dashboard, see SW/_process).
     import shutil
