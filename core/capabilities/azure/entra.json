@@ -101,11 +101,13 @@
  "azure.entra.directory_settings": {
   "title": "User settings (default user role permissions, guest access, LinkedIn connections)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "These toggles are stored and returned exactly as set, but Vyomi does not enforce them — e.g. a 'No' on Users can register applications never blocks application creation."
+   "'Users can create security groups' = No really blocks POST /v1.0/groups for security groups (Microsoft 365 groups are unaffected); 'Users can register applications' = No really blocks POST /v1.0/applications — both return Graph's 403 Authorization_RequestDenied.",
+   "The real console only applies those two toggles to non-admin members; Vyomi has no signed-in-identity model to tell members from admins apart, so the toggle blocks every caller tenant-wide rather than just non-admins.",
+   "The remaining toggles (guest user access restrictions, restrict non-admin users from creating tenants, restrict access to the admin center, LinkedIn connections, show keep user signed in) are stored and returned exactly as set but not enforced — Vyomi has no tenant-creation flow, no separate admin-center surface, and no LinkedIn integration to gate."
   ],
   "tests": [
    "tests/conformance/test_azure_graph_core.py"

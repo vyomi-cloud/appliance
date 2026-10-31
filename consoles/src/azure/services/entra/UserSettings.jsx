@@ -1,5 +1,7 @@
-/* Default Directory | User settings — config_only (azure.entra.directory_settings):
- * Vyomi stores and returns these toggles exactly as set, but never enforces them. */
+/* Default Directory | User settings — limited (azure.entra.directory_settings):
+ * "Users can create security groups" and "Users can register applications" are really
+ * enforced on group/application creation (tenant-wide, since Vyomi has no signed-in
+ * identity to exempt admins). The rest are stored and returned exactly as set. */
 import { useState } from "react";
 import { Radio, RadioGroup, ToolbarButton } from "@fluentui/react-components";
 import { ArrowClockwise20Regular } from "@fluentui/react-icons";

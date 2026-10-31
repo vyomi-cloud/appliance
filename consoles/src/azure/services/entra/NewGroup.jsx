@@ -26,15 +26,17 @@ export default function NewGroup() {
   const validate = () => (name.trim() ? [] : ["Group name is required."]);
 
   const create = async () => {
-    const g = await api.createGroup({
-      displayName: name, description: description || undefined,
-      groupTypes: groupType === "Microsoft 365" ? ["Unified"] : [],
-      mailEnabled: groupType === "Microsoft 365", securityEnabled: groupType === "Security",
-      isAssignableToRole: assignableToRole === "Yes",
-    });
-    for (const u of [...owners, ...members]) await api.addMember(g.id, u.id);
-    notify.success(`Created group ${name}.`, "Group created");
-    navigate("entra", "groups", "all");
+    try {
+      const g = await api.createGroup({
+        displayName: name, description: description || undefined,
+        groupTypes: groupType === "Microsoft 365" ? ["Unified"] : [],
+        mailEnabled: groupType === "Microsoft 365", securityEnabled: groupType === "Security",
+        isAssignableToRole: assignableToRole === "Yes",
+      });
+      for (const u of [...owners, ...members]) await api.addMember(g.id, u.id);
+      notify.success(`Created group ${name}.`, "Group created");
+      navigate("entra", "groups", "all");
+    } catch (e) { notify.error(e, "Create group failed"); }
   };
 
   return (
@@ -50,7 +52,7 @@ export default function NewGroup() {
                   <Option value="Microsoft 365">Microsoft 365</Option>
                 </Dropdown>
               </FormRow>
-              <FormRow label="Group name" required><Input value={name} onChange={(_, d) => setName(d.value)} style={{ width: 300 }} /></FormRow>
+              <FormRow label="Group name" required htmlFor="group-name"><Input id="group-name" value={name} onChange={(_, d) => setName(d.value)} style={{ width: 300 }} /></FormRow>
               <FormRow label="Group description"><Textarea value={description} onChange={(_, d) => setDescription(d.value)} style={{ width: 360 }} /></FormRow>
               <FormRow label="Microsoft Entra roles can be assigned to the group">
                 <RadioGroup value={assignableToRole} onChange={(_, d) => setAssignableToRole(d.value)} layout="horizontal">
