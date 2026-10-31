@@ -1010,7 +1010,7 @@ try {
   await page.getByRole("button", { name: "Grant access" }).click();
   await page.getByLabel("New principals").fill("user:sm-smoke@example.com");
   await page.getByRole("button", { name: "Save" }).click();
-  await page.getByText("user:sm-smoke@example.com").waitFor({ timeout: 10000 });
+  await page.getByText("user:sm-smoke@example.com").first().waitFor({ timeout: 10000 });
   const deniedResp = await wire(`/v1/projects/vyomi-project/secrets/${SM2}/versions/latest:access`,
     { headers: { "X-Cloudlearn-Principal": "someone-else@example.com" } });
   const allowedResp = await wire(`/v1/projects/vyomi-project/secrets/${SM2}/versions/latest:access`,

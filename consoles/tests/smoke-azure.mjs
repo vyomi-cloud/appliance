@@ -670,7 +670,8 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Check access", exact: true }).click();
   await page.getByText("Allowed").waitFor({ timeout: 10000 });
   check("UI Check access → real decision reflects the role just assigned", true);
-  await page.getByRole("dialog").getByRole("button", { name: "Close" }).last().click();   // the dialog's own Close (not the X)
+  const checkClose = page.getByRole("dialog").getByRole("button", { name: "Close" }).last();   // the dialog's own Close (not the X)
+  if (await checkClose.isVisible().catch(() => false)) await checkClose.click();
   // Two "Close" buttons in this dialog (title's icon-only close + the footer button) — the
   // footer one is last in DOM order.
   await page.getByRole("button", { name: "Close" }).last().click();
