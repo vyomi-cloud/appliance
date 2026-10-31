@@ -775,7 +775,7 @@ class AppStateComputeVpcStore(_SlotStore, _gcc.ComputeStore):
     the appliance's space-scoped GCP state."""
 
     _KEYS = {"networks": dict, "subnetworks": dict, "firewalls": dict, "routes": dict,
-             "addresses": dict, "seq": lambda: {"op": 0, "ip": 0}}
+             "addresses": dict, "routers": dict, "connectivity_tests": dict, "seq": lambda: {"op": 0, "ip": 0}}
 
     def __init__(self, proxy):
         self._bind(proxy)
@@ -785,6 +785,8 @@ class AppStateComputeVpcStore(_SlotStore, _gcc.ComputeStore):
     firewalls = _slot_attr("firewalls")
     routes = _slot_attr("routes")
     addresses = _slot_attr("addresses")
+    routers = _slot_attr("routers")
+    connectivity_tests = _slot_attr("connectivity_tests")
     seq = _slot_attr("seq")
 
     def adopt(self, project: str) -> None:

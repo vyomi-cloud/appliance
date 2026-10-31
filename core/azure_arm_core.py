@@ -227,12 +227,19 @@ def _merge(base: dict, overlay: dict) -> dict:
     return out
 
 
+def _public_ip() -> str:
+    """A public IPv4 for a new Microsoft.Network/publicIPAddresses (Azure-ish 20.x range)."""
+    h = uuid.uuid4().int
+    return f"20.{(h >> 8) % 200 + 10}.{(h >> 16) % 254 + 1}.{(h >> 24) % 254 + 1}"
+
+
 def _expand_tokens(obj, name: str, base: str):
     if isinstance(obj, str):
         return (obj.replace("__UUID__", str(uuid.uuid4()))
                    .replace("__NAME__", name)
                    .replace("__BASE__", base)
-                   .replace("__NOW__", _now()))
+                   .replace("__NOW__", _now())
+                   .replace("__PUBLICIP__", _public_ip()))
     if isinstance(obj, dict):
         return {k: _expand_tokens(v, name, base) for k, v in obj.items()}
     if isinstance(obj, list):
@@ -691,6 +698,12 @@ class AzureArm:
         if namespace.lower() == "microsoft.app":
             return self._app(method, sub, rg, chain, payload, query)
 
+        # Network Watcher diagnostics → the shared netsim evaluator (same engine as Nano + enforcement)
+        if (method == "POST" and namespace.lower() == "microsoft.network" and len(chain) == 3
+                and chain[0].lower() == "networkwatchers" and chain[2].lower() in ("ipflowverify", "nexthop")):
+            if self.state.get(_canonical_id(sub, rg, type_chain[:2], names[:1]).lower()) is None:
+                return _err(404, "ResourceNotFound", f"Network watcher '{names[0]}' not found.")
+            return self._network_watcher(chain[2].lower(), payload or {})
         # POST action verbs (listKeys / start / powerOff / runCommand / …)
         if method == "POST" and is_collection and len(type_chain) >= 3 and names:
             parent_rid = _canonical_id(sub, rg, type_chain[:-1], names)
@@ -747,6 +760,8 @@ class AzureArm:
                 payload["properties"] = {**(payload.get("properties") or {}),
                                          "scope": asked if inside else path_scope}
             resp = self._upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
+            if resp["status"] >= 300:          # validation error from a type hook (e.g. NIC IP allocation)
+                return resp
             if full_type.lower() == "microsoft.resources/deployments":
                 # A bounded but REAL template evaluator (literal parameter/variable
                 # substitution only — no expression language, no dependsOn ordering, no
@@ -1269,8 +1284,127 @@ class AzureArm:
         # Overview "Created"/"Updated" fields some blades show read it back.
         rec["systemData"] = {"createdAt": rec.get("_created", _now()), "lastModifiedAt": _now()}
 
+        if full_type.lower() == "microsoft.network/networkinterfaces":
+            bad = self._nic_ips(key, rec)
+            if bad is not None:
+                if not existed:
+                    self.state.pop(key, None)
+                return bad
         self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)
+
+    # ── netsim: NIC private-IP allocation + Network Watcher (IP flow verify / next hop) ──
+    def _subnet_prefix(self, subnet_id: str):
+        sid = str(subnet_id or "").lower()
+        rec = self.state.get(sid)
+        if rec:
+            p = rec.get("properties") or {}
+            return p.get("addressPrefix") or (p.get("addressPrefixes") or [None])[0]
+        vnet_id, _, name = sid.rpartition("/subnets/")
+        vnet = self.state.get(vnet_id)
+        for s in ((vnet or {}).get("properties") or {}).get("subnets") or []:
+            if str(s.get("name", "")).lower() == name:
+                p = s.get("properties") or {}
+                return p.get("addressPrefix") or (p.get("addressPrefixes") or [None])[0]
+        return None
+
+    def _nic_ips(self, key: str, rec: dict):
+        """Azure allocates a NIC ipConfiguration's private IP from its subnet (first four and the
+        last address reserved); a Static address must be in the subnet and free."""
+        import ipaddress
+        used = {}
+        for k, other in self.state.items():
+            if k == key or "/providers/microsoft.network/networkinterfaces/" not in k or k.count("/") != 8:
+                continue
+            for ipc in (other.get("properties") or {}).get("ipConfigurations") or []:
+                p = ipc.get("properties") or {}
+                used.setdefault(str((p.get("subnet") or {}).get("id", "")).lower(), set()).add(p.get("privateIPAddress"))
+        for ipc in (rec.get("properties") or {}).get("ipConfigurations") or []:
+            p = ipc.setdefault("properties", {})
+            sid = str((p.get("subnet") or {}).get("id", "")).lower()
+            prefix = self._subnet_prefix(sid) if sid else None
+            if not prefix:
+                continue
+            net = ipaddress.ip_network(prefix, strict=False)
+            taken = used.setdefault(sid, set())
+            want = p.get("privateIPAddress")
+            static = str(p.get("privateIPAllocationMethod", "Dynamic")).lower() == "static"
+            if want and (static or ipaddress.ip_address(want) in net):
+                ip = ipaddress.ip_address(want)
+                if ip not in net or not (int(net.network_address) + 4 <= int(ip) <= int(net.broadcast_address) - 1):
+                    return _err(400, "PrivateIPAddressNotInSubnet",
+                                f"IP address {want} is not within the usable range of subnet {sid}.")
+                if want in taken:
+                    return _err(400, "PrivateIPAddressInUse", f"IP configuration {ipc.get('name')} is using the private IP "
+                                                              f"address {want} which is already allocated.")
+                taken.add(want)
+                p.setdefault("privateIPAllocationMethod", "Static" if static else "Dynamic")
+                continue
+            for n in range(int(net.network_address) + 4, int(net.broadcast_address)):
+                cand = str(ipaddress.ip_address(n))
+                if cand not in taken:
+                    p["privateIPAddress"], p["privateIPAllocationMethod"] = cand, "Dynamic"
+                    taken.add(cand)
+                    break
+            else:
+                return _err(400, "SubnetIsFull", f"Subnet {sid} has no free IP addresses.")
+            p.setdefault("privateIPAddressVersion", "IPv4")
+        return None
+
+    def _nw_target_iface(self, topo, payload: dict):
+        nic = str(payload.get("targetNicResourceId") or "").lower()
+        if nic and nic in topo.interfaces:
+            return topo.interfaces[nic]
+        target = str(payload.get("targetResourceId") or "").lower()
+        if target in topo.interfaces:
+            return topo.interfaces[target]
+        vm = self.state.get(target)
+        for n in (((vm or {}).get("properties") or {}).get("networkProfile") or {}).get("networkInterfaces") or []:
+            nid = str(n.get("id", "")).lower()
+            if nid in topo.interfaces:
+                return topo.interfaces[nid]
+        return None
+
+    def _network_watcher(self, verb: str, payload: dict):
+        try:
+            from core.netsim import evaluate as ev, from_azure as fz, model as nm
+        except ImportError:                              # pragma: no cover - flat layout
+            from netsim import evaluate as ev, from_azure as fz, model as nm   # type: ignore
+        topo = fz.from_azure(self.state)
+        iface = self._nw_target_iface(topo, payload or {})
+        if iface is None:
+            return _err(400, "InvalidTargetResource", "targetResourceId must be a virtual machine (or targetNicResourceId a NIC) "
+                                                      "with a network interface in a simulated subnet.")
+        if verb == "nexthop":
+            dst = str(payload.get("destinationIPAddress") or "")
+            r = ev.route_lookup(topo, topo.subnet_of(iface), dst, iface)
+            kind_map = {nm.LOCAL: "VnetLocal", nm.IGW: "Internet", nm.PEERING: "VNetPeering", nm.BLACKHOLE: "None",
+                        nm.INSTANCE: "VirtualAppliance", nm.NAT: "Internet"}
+            if r is None:
+                return _ok({"nextHopType": "None", "nextHopIpAddress": "", "routeTableId": "System Route"})
+            hop_ip = topo.interfaces[r.target].ip if r.kind == nm.INSTANCE and r.target in topo.interfaces else ""
+            rt = r.name.split("/routes/")[0] if r.origin == "user" and "/routes/" in r.name else "System Route"
+            return _ok({"nextHopType": kind_map.get(r.kind, "VirtualNetworkGateway"), "nextHopIpAddress": hop_ip,
+                        "routeTableId": rt})
+        # ipFlowVerify: NSG verdict (subnet NSG + NIC NSG) for one packet in one direction
+        direction = nm.INGRESS if str(payload.get("direction", "Inbound")).lower() == "inbound" else nm.EGRESS
+        proto = str(payload.get("protocol", "TCP")).lower()
+        lport, rport = str(payload.get("localPort", "")), str(payload.get("remotePort", ""))
+        remote = str(payload.get("remoteIPAddress") or "")
+        dport = int(lport if direction == nm.INGRESS else rport) if (lport if direction == nm.INGRESS else rport).isdigit() else None
+        sport = int(rport if direction == nm.INGRESS else lport) if (rport if direction == nm.INGRESS else lport).isdigit() else None
+        remote_iface = topo.iface_by_ip(remote)
+        v = ev.Verdict()
+        ok = ev._layers(topo, iface, direction, proto, dport, remote, remote_iface, True, v, sport)
+        rule_name = ""
+        hop = next((h for h in v.hops if h.decision == "deny"), None) if not ok else (v.hops[-1] if v.hops else None)
+        if hop is not None:
+            name = hop.detail.split(" ")[0]
+            rs = topo.rulesets.get(hop.id)
+            rule = next((r for r in (rs.rules if rs else []) if r.name == name), None)
+            if rule is not None:
+                rule_name = f"{'defaultSecurityRules' if rule.implied else 'securityRules'}/{name}"
+        return _ok({"access": "Allow" if ok else "Deny", "ruleName": rule_name})
 
     def _arm_action(self, action, type_chain, resource_name, parent_rid="", payload=None, sub=None, rg=None):
         ns = type_chain[0].lower() if type_chain else ""

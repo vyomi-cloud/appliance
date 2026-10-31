@@ -102,6 +102,10 @@ CORES = [
     "nano_persist.py",                              # store serialize/restore + cross-context sync (persistence + console↔SDK parity)
 ]
 
+# Core SUB-PACKAGES vendored as directories (wasm/core/<pkg>/…). Every file must also be listed in
+# the CORE_PKGS array of each JS loader (nano-boot.js + the relay loaders) — check_core_pkgs().
+CORE_PKGS = ['netsim/__init__.py', 'netsim/model.py', 'netsim/evaluate.py', 'netsim/from_aws.py', 'netsim/from_gcp.py', 'netsim/from_azure.py', 'netsim/flowlogs.py', 'netsim/enforce.py']
+
 # Cores vendored byte-for-byte (no GENERATED header): the service gate requires the
 # Nano copy of a new service's engine to be identical to core/.
 VERBATIM = {"gcp_monitoring_core.py", "cloudwatch_core.py", "apigatewayv2_core.py", "logs_core.py", "elbv2_core.py", "ssm_core.py", "stepfunctions_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_iamcredentials_core.py", "gcp_redis_core.py", "gcp_artifactregistry_core.py", "azure_app_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py", "azure_cost_core.py", "azure_webapp_core.py"}
@@ -184,6 +188,23 @@ def check_relay_cores():
     print("relay CORES lists are import-closed ✓")
 
 
+def check_core_pkgs():
+    """Every vendored sub-package file must be fetched by every Pyodide loader."""
+    problems = []
+    for loader in ["nano-boot.js"] + _RELAY_LOADERS:
+        path = os.path.join(HERE, loader)
+        if not os.path.exists(path):
+            continue
+        m = re.search(r"const CORE_PKGS\s*=\s*\[(.*?)\]", open(path).read(), re.S)
+        listed = set(re.findall(r'"([a-z0-9_/]+\.py)"', m.group(1))) if m else set()
+        problems += [f"  {loader}: CORE_PKGS lacks '{f}'" for f in CORE_PKGS if f not in listed]
+    if problems:
+        print("\nCORE_PKGS DRIFT — these loaders won't fetch a vendored sub-package file:")
+        print("\n".join(problems))
+        raise SystemExit(1)
+    print("CORE_PKGS lists are complete ✓")
+
+
 def _expansion_cores():
     """Cores of services built by the expansion agent (services/manifests/*.json).
     The service gate requires their Nano copy to be BYTE-IDENTICAL to core/, so they are
@@ -260,13 +281,22 @@ def main():
         with open(os.path.join(OUT, name), "w") as f:
             f.write(src if name in verbatim else HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
+    for name in CORE_PKGS:
+        with open(os.path.join(SRC, name)) as f:
+            src = f.read()
+        os.makedirs(os.path.dirname(os.path.join(OUT, name)), exist_ok=True)
+        with open(os.path.join(OUT, name), "w") as f:
+            f.write(HEADER + src)
+        print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
     check_relay_cores()   # fail loudly if a relay loader lags the cores
+    check_core_pkgs()
     write_nano_backends()
 
 
 if __name__ == "__main__":
     if "--check" in sys.argv:          # CI: verify the relay loaders + backend list, write nothing
         check_relay_cores()
+        check_core_pkgs()
         check_nano_backends()
     else:
         main()

@@ -131,6 +131,10 @@ const CORES = [
   // v4 /_wire/*: the relay's native-wire front door (+ its rds_data dep), imported lazily by wire_adapter.
   "rds_data_core.py", "aws_wire_router.py",
 ];
+// core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
+// lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS
+const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/enforce.py"];
+
 
 // Boot screen (wasm/nano-kernel.js): the page paints it first thing in <body>;
 // these steps report the real work + timings to it, then close it when ready.
@@ -182,6 +186,10 @@ async function bootBackend() {
   py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
   for (const c of CORES)
     py.FS.writeFile("/core/" + c, await (await fetch(BASE + "/core/" + c)).text());
+  for (const c of CORE_PKGS) {
+    try { py.FS.mkdir("/core/" + c.split("/")[0]); } catch (e) { /* exists */ }
+    py.FS.writeFile("/core/" + c, await (await fetch(BASE + "/core/" + c)).text());
+  }
   st.ok();
   st = K.step("kernel", "importing the engines and wiring the console router");
   py.runPython(`

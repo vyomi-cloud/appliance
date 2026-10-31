@@ -16,9 +16,10 @@
   "title": "Inbound and outbound security rules (Microsoft.Network/networkSecurityGroups/securityRules)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "The 3 default rules per direction (AllowVNetInBound, AllowAzureLoadBalancerInBound, DenyAllInBound, AllowVNetOutBound, AllowInternetOutBound, DenyAllOutBound) are fixed display rows, not stored ARM resources — they can't be edited or deleted, matching the real portal."
+   "The 3 default rules per direction (AllowVNetInBound, AllowAzureLoadBalancerInBound, DenyAllInBound, AllowVNetOutBound, AllowInternetOutBound, DenyAllOutBound) are fixed display rows, not stored ARM resources — they can't be edited or deleted, matching the real portal.",
+   "Behaviour comes from the shared netsim evaluator: subnet NSG then NIC NSG inbound (reverse outbound), priorities, the default rules, service tags VirtualNetwork / Internet / AzureLoadBalancer and ASGs — it answers Network Watcher IP flow verify. Azure VMs run on LXD/Multipass offline, not the Docker backend, so NSGs are evaluated, never packet-enforced offline today."
   ],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_netsim_core.py", "tests/netsim/test_azure.py"]
  },
  "azure.nsgs.locks": {
   "title": "Resource locks (Microsoft.Authorization/locks), scoped to this network security group",
@@ -54,12 +55,16 @@
  "azure.nsgs.tools": {
   "title": "Diagnose and solve problems, Tasks, Effective security rules, Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["These console tools require live network topology / traffic simulation Vyomi doesn't model."]
+  "limitations": [
+   "Diagnose and solve problems, Tasks, Effective security rules and Support blades are not built. Network Watcher's IP flow verify and Next hop ARE simulated as ARM actions (Microsoft.Network/networkWatchers/*/ipFlowVerify|nextHop) — no console blade for them yet."
+  ]
  },
  "azure.nsgs.monitoring": {
   "title": "Alerts, Diagnostic settings, Logs, NSG flow logs",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Azure Monitor alert rules/diagnostic settings/flow logs for network security groups are not modelled."]
+  "limitations": [
+   "Azure Monitor alert rules/diagnostic settings/flow logs for network security groups are not modelled."
+  ]
  },
  "azure.nsgs.associations": {
   "title": "Network interfaces, Subnets (NSG associations)",

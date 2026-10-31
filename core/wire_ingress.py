@@ -272,7 +272,7 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
             if project and hasattr(st, "adopt"):
                 st.adopt(project)        # pre-v4 VPC / Compute Engine records → this state (once)
         if _gcp_service(path) == "gcp-compute":
-            resp = gcp_compute_core.dispatch(r.gcp_compute, method, path, query, headers, body)
+            resp = gcp_compute_core.dispatch(r.gcp_compute, method, path, query, headers, body, vm_store=r.gcp_compute_vm)
         else:
             resp = gcp_compute_instances_core.dispatch(r.gcp_compute_vm, method, path, query, headers, body)
         hdrs = dict(resp.headers or {})

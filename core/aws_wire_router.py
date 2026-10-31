@@ -94,7 +94,7 @@ def _gcp_service(path):
     if path.startswith(("/compute/v1", "/compute/beta")):
         # VPC resources → the networking core; everything else (instances, disks, images,
         # templates, groups, health checks…) → the VM core.
-        if re.search(r"/(networks|subnetworks|firewalls|routes|addresses)(/|$|\?)", path):
+        if re.search(r"/(networks|subnetworks|firewalls|routes|addresses|routers)(/|$|\?|:)", path):
             return "gcp-compute"
         return "gcp-compute-vm"
     if path.startswith(("/sql/v1beta4", "/sql/v1")):
@@ -115,6 +115,8 @@ def _gcp_service(path):
     # Predefined roles catalog (no project scope): /v1/roles
     if path.startswith("/v1/roles"):
         return "gcp-iam"
+    if re.match(r"^/v1/projects/[^/]+/locations/global/connectivityTests([/:?]|$)", path):
+        return "gcp-compute"   # Network Intelligence Center Connectivity Tests → netsim via the VPC core
     if re.search(r"^/v1/projects/[^/]+/(dashboards|snoozes)([/:]|$)", path):   # Dashboards / Snoozes APIs (v1)
         return "gcp-monitoring"
     # The /v1/projects/* family — gate on /projects/ so Azure's root /secrets,
@@ -330,6 +332,9 @@ _QUERY_ACTION = {
     "CreateNetworkAcl": "vpc", "DescribeNetworkAcls": "vpc", "DeleteNetworkAcl": "vpc",
     "CreateNetworkAclEntry": "vpc", "DeleteNetworkAclEntry": "vpc",
     "AssociateNetworkAcl": "vpc", "ReplaceNetworkAclAssociation": "vpc", "AnalyzeReachability": "vpc",
+    "ModifySubnetAttribute": "vpc", "ModifyNetworkInterfaceAttribute": "vpc",
+    "CreateNetworkInsightsPath": "vpc", "DescribeNetworkInsightsPaths": "vpc", "DeleteNetworkInsightsPath": "vpc",
+    "StartNetworkInsightsAnalysis": "vpc", "DescribeNetworkInsightsAnalyses": "vpc", "DeleteNetworkInsightsAnalysis": "vpc",
     "CreateNatGateway": "vpc", "DescribeNatGateways": "vpc", "DeleteNatGateway": "vpc",
     "CreateEgressOnlyInternetGateway": "vpc", "DescribeEgressOnlyInternetGateways": "vpc",
     "DeleteEgressOnlyInternetGateway": "vpc",
@@ -731,6 +736,8 @@ class AwsWireRouter:
                     self.gcp_redis, lambda *a: gcp_gke.dispatch(self.gcp_gke, *a), method, path, query or {}, headers or {}, bytes(body))
             elif svc == "gcp-firestore":   # exportDocuments/importDocuments read/write real GCS objects
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), gcs_store=self.gcs)
+            elif svc == "gcp-compute":   # Connectivity Tests evaluate against the VMs too
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), vm_store=self.gcp_compute_vm)
             elif svc == "gcp-pam":   # grant activation/expiry is a real project IAM policy change
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body),
                                   grant_fn=self._pam_grant, revoke_fn=self._pam_revoke)

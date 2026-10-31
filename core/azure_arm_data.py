@@ -8,3 +8,24 @@ CATALOG = [{'key': 'vm', 'namespace': 'Microsoft.Compute', 'type': 'virtualMachi
 # list (filtered by properties.networkSecurityGroup.id). Re-add both if this file is re-dumped
 # from providers/azure_services.py.
 ROLES = [{'id': 'owner', 'name': 'Owner', 'properties': {'roleName': 'Owner', 'type': 'BuiltInRole', 'description': 'Full access to all resources', 'permissions': [{'actions': ['*'], 'notActions': []}]}}, {'id': 'contributor', 'name': 'Contributor', 'properties': {'roleName': 'Contributor', 'type': 'BuiltInRole', 'description': 'Create and manage all resources, but cannot grant access', 'permissions': [{'actions': ['*'], 'notActions': ['Microsoft.Authorization/*/Write', 'Microsoft.Authorization/*/Delete']}]}}, {'id': 'reader', 'name': 'Reader', 'properties': {'roleName': 'Reader', 'type': 'BuiltInRole', 'description': 'View all resources', 'permissions': [{'actions': ['*/read'], 'notActions': []}]}}, {'id': 'vm-contributor', 'name': 'Virtual Machine Contributor', 'properties': {'roleName': 'Virtual Machine Contributor', 'type': 'BuiltInRole', 'description': 'Manage VMs but not access', 'permissions': [{'actions': ['Microsoft.Compute/*'], 'notActions': []}]}}, {'id': 'storage-contributor', 'name': 'Storage Account Contributor', 'properties': {'roleName': 'Storage Account Contributor', 'type': 'BuiltInRole', 'description': 'Manage storage accounts', 'permissions': [{'actions': ['Microsoft.Storage/*'], 'notActions': []}]}}, {'id': 'sql-contributor', 'name': 'SQL DB Contributor', 'properties': {'roleName': 'SQL DB Contributor', 'type': 'BuiltInRole', 'description': 'Manage SQL databases', 'permissions': [{'actions': ['Microsoft.Sql/*'], 'notActions': []}]}}]
+# v4 netsim (hand-added): the Microsoft.Network types the network engine (core/netsim/from_azure.py)
+# needs to model real Azure routing/egress — UDR route tables, NAT gateways, public IPs, ASGs — and
+# Network Watcher, whose ipFlowVerify / nextHop actions are answered by core/netsim (azure_arm_core
+# _network_watcher). __PUBLICIP__ is expanded to an allocated public address on create.
+CATALOG += [
+    {'key': 'routetable', 'namespace': 'Microsoft.Network', 'type': 'routeTables', 'api_version': '2023-11-01',
+     'defaults': {'properties': {'provisioningState': 'Succeeded', 'routes': [], 'disableBgpRoutePropagation': False,
+                                 'resourceGuid': '__UUID__'}}},
+    {'key': 'natgateway', 'namespace': 'Microsoft.Network', 'type': 'natGateways', 'api_version': '2023-11-01',
+     'defaults': {'sku': {'name': 'Standard'}, 'properties': {'provisioningState': 'Succeeded', 'idleTimeoutInMinutes': 4,
+                                                              'resourceGuid': '__UUID__'}}},
+    {'key': 'publicip', 'namespace': 'Microsoft.Network', 'type': 'publicIPAddresses', 'api_version': '2023-11-01',
+     'defaults': {'sku': {'name': 'Standard', 'tier': 'Regional'},
+                  'properties': {'provisioningState': 'Succeeded', 'publicIPAllocationMethod': 'Static',
+                                 'publicIPAddressVersion': 'IPv4', 'ipAddress': '__PUBLICIP__', 'idleTimeoutInMinutes': 4,
+                                 'resourceGuid': '__UUID__'}}},
+    {'key': 'asg', 'namespace': 'Microsoft.Network', 'type': 'applicationSecurityGroups', 'api_version': '2023-11-01',
+     'defaults': {'properties': {'provisioningState': 'Succeeded', 'resourceGuid': '__UUID__'}}},
+    {'key': 'networkwatcher', 'namespace': 'Microsoft.Network', 'type': 'networkWatchers', 'api_version': '2023-11-01',
+     'defaults': {'properties': {'provisioningState': 'Succeeded'}}},
+]

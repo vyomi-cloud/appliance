@@ -14,7 +14,8 @@
    "networks.delete"
   ],
   "tests": [
-   "tests/conformance/test_gcp_compute_core.py"
+   "tests/conformance/test_gcp_compute_core.py",
+   "tests/conformance/test_gcp_netsim_core.py"
   ]
  },
  "gcp.networking.subnet.crud": {
@@ -42,7 +43,9 @@
    "offline": "full"
   },
   "limitations": [
-   "Hit count, last hit and Firewall Insights are observability features Vyomi does not compute — rules enforce nothing on live traffic, so these show as empty rather than simulated numbers."
+   "Hit count, last hit and Firewall Insights are not computed (empty rather than simulated numbers).",
+   "Behaviour comes from the shared netsim evaluator: stateful rules, lowest priority wins, deny wins a tie, implied allow-egress/deny-ingress, target tags / service accounts — it answers Connectivity Tests offline and on Nano.",
+   "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
   ],
   "api": [
    "firewalls.insert",
@@ -51,7 +54,9 @@
    "firewalls.delete"
   ],
   "tests": [
-   "tests/conformance/test_gcp_compute_core.py"
+   "tests/conformance/test_gcp_compute_core.py",
+   "tests/conformance/test_gcp_netsim_core.py",
+   "tests/netsim/test_gcp.py"
   ]
  },
  "gcp.networking.route.crud": {
@@ -61,7 +66,8 @@
    "offline": "full"
   },
   "limitations": [
-   "Effective routes are computed from the project's static routes only — dynamic routes learned from Cloud Router/VPN peering are not modeled, since BGP peering itself is not simulated."
+   "Every new network gets its default route (0.0.0.0/0 → default-internet-gateway). Static routes (priority, instance tags, next hop gateway/instance/IP) are evaluated; dynamic routes from Cloud Router BGP / VPN are not modeled. Internet egress needs an external IP or Cloud NAT.",
+   "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
   ],
   "api": [
    "routes.insert",
@@ -70,7 +76,9 @@
    "routes.delete"
   ],
   "tests": [
-   "tests/conformance/test_gcp_compute_core.py"
+   "tests/conformance/test_gcp_compute_core.py",
+   "tests/conformance/test_gcp_netsim_core.py",
+   "tests/netsim/test_gcp.py"
   ]
  },
  "gcp.networking.address.crud": {
@@ -98,11 +106,15 @@
  "gcp.networking.peering": {
   "title": "VPC network peering",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Peering connects two independent VPCs' route tables; Vyomi's Compute core does not model cross-network route exchange. Peering requests are not accepted."
+   "networks.addPeering / removePeering are real: a peering is ACTIVE only once both networks peer, subnet routes are exchanged (non-transitive) and Connectivity Tests route across it. Custom-route import/export flags are stored but not applied; offline packet enforcement across peered networks is compiled but not covered by the real-packet test."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_netsim_core.py",
+   "tests/netsim/test_gcp.py"
   ]
  },
  "gcp.networking.private-service-connection": {
@@ -132,7 +144,7 @@
    "offline": "not_simulated"
   },
   "limitations": [
-   "Flow Logs requires the Network Management API exporting real packet samples; Vyomi has no data plane to sample traffic from, so no log records are produced."
+   "No VPC Flow Logs export. Offline with netsim enforcement on, real per-flow counters exist and core/netsim/flowlogs.py renders GCP flow records from them, but nothing writes them to Cloud Logging yet."
   ]
  },
  "gcp.networking.internal-ranges": {
@@ -193,6 +205,34 @@
   },
   "limitations": [
    "Mirroring clones live packets to a collector; Vyomi has no data plane producing real packets to mirror."
+  ]
+ },
+ "gcp.networking.cloud-nat": {
+  "title": "Cloud Router + Cloud NAT (regions/*/routers)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Routers and their NAT configs are real resources (insert/get/list/patch/delete); a NAT covering a subnet gives its external-IP-less VMs internet egress in Connectivity Tests and, offline with enforcement on, real masquerade. BGP sessions, NAT IP allocation/ports and logging are not modeled.",
+   "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_netsim_core.py",
+   "tests/netsim/test_gcp.py"
+  ]
+ },
+ "gcp.networking.connectivity-tests": {
+  "title": "Network Intelligence Center — Connectivity Tests (networkmanagement v1)",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Create / get / list / patch / delete / rerun; reachabilityDetails come from the shared netsim evaluator with START/firewall/route/NAT/DELIVER/DROP steps and drop causes. Round-trip, load balancer, GKE, Cloud SQL and hybrid endpoints are not traced."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_netsim_core.py"
   ]
  }
 }
