@@ -86,6 +86,8 @@ class CloudFormationStore:
         self.stack_set_instances: dict[str, list] = {}
         self.stack_refactors: dict[str, dict] = {}
         self.drift_detections: dict[str, dict] = {}
+        self.resource_scans: dict[str, dict] = {}
+        self.generated_templates: dict[str, dict] = {}
         self.account_id = account_id
 
     def persist(self) -> None:
@@ -1915,6 +1917,243 @@ def _describe_type(store, params, stores):
     return _envelope("DescribeType", body)
 
 
+# ── IaC generator: scan the account's real resources, generate a template from a
+# selection of them. Scans are synchronous (this is a simulator, not an async job
+# queue) and cover exactly the resource types RESOURCE_TYPES provisions — the same
+# set CreateStack/UpdateStack support — so a generated template always round-trips
+# back through CreateStack.
+def _managed_physical_ids(store) -> dict:
+    ids: dict[str, set] = {}
+    for stack in store.stacks.values():
+        if stack["status"] in TERMINAL_DELETED:
+            continue
+        for rec in stack.get("resources", {}).values():
+            ids.setdefault(rec["ResourceType"], set()).add(rec["PhysicalResourceId"])
+    return ids
+
+
+def _scan_resources(store, stores) -> list:
+    managed = _managed_physical_ids(store)
+    found = []
+
+    def add(rtype, physical_id, identifier):
+        found.append({"ResourceType": rtype, "PhysicalId": physical_id, "Identifier": identifier,
+                      "ManagedByStack": physical_id in managed.get(rtype, set())})
+
+    s3 = stores.get("s3")
+    if s3 is not None:
+        for name in sorted(s3.buckets):
+            add("AWS::S3::Bucket", name, {"BucketName": name})
+    ddb = stores.get("ddb")
+    if ddb is not None:
+        for name in sorted(ddb.tables):
+            add("AWS::DynamoDB::Table", name, {"TableName": name})
+    msg = stores.get("msg")
+    if msg is not None:
+        for arn, t in sorted(msg.topics.items()):
+            add("AWS::SNS::Topic", arn, {"TopicName": t.get("name") or arn.rsplit(":", 1)[-1]})
+        for name in sorted(msg.queues):
+            add("AWS::SQS::Queue", name, {"QueueName": name})
+    iam_store = stores.get("iam")
+    if iam_store is not None:
+        for name in sorted(iam_store.roles):
+            add("AWS::IAM::Role", name, {"RoleName": name})
+    logs_store = stores.get("logs")
+    if logs_store is not None:
+        for name in sorted(logs_store.log_groups):
+            add("AWS::Logs::LogGroup", name, {"LogGroupName": name})
+    return found
+
+
+def _find_scanned_resource(store, stores, rtype, identifier):
+    for r in _scan_resources(store, stores):
+        if r["ResourceType"] == rtype and r["Identifier"] == identifier:
+            return r
+    return None
+
+
+def _identifier_xml(identifier: dict) -> str:
+    entries = "".join(f"<entry>{_el('key', k)}{_el('value', v)}</entry>" for k, v in identifier.items())
+    return f"<ResourceIdentifier>{entries}</ResourceIdentifier>"
+
+
+def _resource_identifier_params(params: dict, prefix: str) -> dict:
+    out, i = {}, 1
+    while f"{prefix}.entry.{i}.key" in params:
+        out[_p(params, f"{prefix}.entry.{i}.key")] = _p(params, f"{prefix}.entry.{i}.value")
+        i += 1
+    return out
+
+
+def _generated_template_resource_defs(params: dict) -> list:
+    out, i = [], 1
+    while f"Resources.member.{i}.ResourceType" in params:
+        out.append({
+            "ResourceType": _p(params, f"Resources.member.{i}.ResourceType"),
+            "ResourceIdentifier": _resource_identifier_params(params, f"Resources.member.{i}.ResourceIdentifier"),
+            "LogicalResourceId": _p(params, f"Resources.member.{i}.LogicalResourceId"),
+        })
+        i += 1
+    return out
+
+
+def _generated_properties(rtype: str, identifier: dict, physical_id: str, stores: dict) -> dict:
+    prov = RESOURCE_TYPES.get(rtype) or {}
+    name_prop = prov.get("name_prop")
+    props = {name_prop: identifier[name_prop]} if name_prop and identifier.get(name_prop) else {}
+    read = prov.get("read")
+    if read:
+        for k, v in (read(stores, physical_id) or {}).items():
+            if v not in (None, "", {}):
+                props[k] = v
+    return props
+
+
+def _sanitize_logical_id(raw: str, fallback: str) -> str:
+    s = re.sub(r"[^A-Za-z0-9]", "", raw or "")
+    if not s or not s[0].isalpha():
+        s = fallback + s
+    return s[0].upper() + s[1:]
+
+
+def _start_resource_scan(store, params, stores):
+    resources = _scan_resources(store, stores)
+    scan_id = f"arn:aws:cloudformation:{REGION}:{DEFAULT_ACCOUNT_ID}:resourceScan/{uuid.uuid4()}"
+    now = _now_iso()
+    store.resource_scans[scan_id] = {
+        "ResourceScanId": scan_id, "Status": "COMPLETE", "StartTime": now, "EndTime": now,
+        "PercentageCompleted": 100.0, "ResourceTypes": sorted({r["ResourceType"] for r in resources}),
+        "Resources": resources,
+    }
+    store.persist()
+    return _envelope("StartResourceScan", _el("ResourceScanId", scan_id))
+
+
+def _require_scan(store, scan_id):
+    scan = store.resource_scans.get(scan_id)
+    if not scan:
+        raise CfnError("ResourceScanNotFoundException", f"Resource scan {scan_id} not found", 400)
+    return scan
+
+
+def _describe_resource_scan(store, params, stores):
+    scan = _require_scan(store, _p(params, "ResourceScanId"))
+    types_xml = "".join(_el("member", t) for t in scan["ResourceTypes"])
+    body = (_el("ResourceScanId", scan["ResourceScanId"]) + _el("Status", scan["Status"]) +
+            _el("StartTime", scan["StartTime"]) + _el("EndTime", scan["EndTime"]) +
+            _el("PercentageCompleted", scan["PercentageCompleted"]) +
+            f"<ResourceTypes>{types_xml}</ResourceTypes>" +
+            _el("ResourcesScanned", len(scan["Resources"])) + _el("ResourcesRead", len(scan["Resources"])))
+    return _envelope("DescribeResourceScan", body)
+
+
+def _list_resource_scans(store, params, stores):
+    scans = sorted(store.resource_scans.values(), key=lambda s: s["StartTime"], reverse=True)
+    body = "<ResourceScanSummaries>" + "".join(
+        "<member>" + _el("ResourceScanId", s["ResourceScanId"]) + _el("Status", s["Status"]) +
+        _el("StartTime", s["StartTime"]) + _el("EndTime", s["EndTime"]) +
+        _el("PercentageCompleted", s["PercentageCompleted"]) + "</member>" for s in scans) + "</ResourceScanSummaries>"
+    return _envelope("ListResourceScans", body)
+
+
+def _list_resource_scan_resources(store, params, stores):
+    scan = _require_scan(store, _p(params, "ResourceScanId"))
+    type_prefix = _p(params, "ResourceTypePrefix")
+    resources = scan["Resources"]
+    if type_prefix:
+        resources = [r for r in resources if r["ResourceType"].startswith(type_prefix)]
+    body = "<Resources>" + "".join(
+        "<member>" + _el("ResourceType", r["ResourceType"]) + _identifier_xml(r["Identifier"]) +
+        _el("ManagedByStack", "true" if r["ManagedByStack"] else "false") + "</member>"
+        for r in resources) + "</Resources>"
+    return _envelope("ListResourceScanResources", body)
+
+
+def _create_generated_template(store, params, stores):
+    name = _p(params, "GeneratedTemplateName")
+    if not name:
+        raise CfnError("ValidationError", "GeneratedTemplateName is required", 400)
+    if name in store.generated_templates:
+        raise CfnError("AlreadyExistsException", f"Generated template {name} already exists", 400)
+    defs = _generated_template_resource_defs(params)
+    if not defs:
+        raise CfnError("ValidationError", "At least one resource is required.", 400)
+    resources_tpl, resource_recs, used_ids = {}, [], set()
+    for d in defs:
+        rtype = d["ResourceType"]
+        if rtype not in RESOURCE_TYPES:
+            raise CfnError("ValidationError",
+                            f"Resource type {rtype} is not supported by Vyomi's CloudFormation simulation.", 400)
+        found = _find_scanned_resource(store, stores, rtype, d["ResourceIdentifier"])
+        if not found:
+            raise CfnError("ResourceNotFoundException",
+                            f"No {rtype} resource matching {d['ResourceIdentifier']} was found to scan.", 400)
+        props = _generated_properties(rtype, d["ResourceIdentifier"], found["PhysicalId"], stores)
+        name_prop = RESOURCE_TYPES[rtype].get("name_prop")
+        base = d["LogicalResourceId"] or (name_prop and d["ResourceIdentifier"].get(name_prop)) or rtype.rsplit("::", 1)[-1]
+        lid = _sanitize_logical_id(base, rtype.rsplit("::", 1)[-1])
+        n = 2
+        while lid in used_ids:
+            lid = f"{lid}{n}"
+            n += 1
+        used_ids.add(lid)
+        resources_tpl[lid] = {"Type": rtype, "Properties": props}
+        resource_recs.append({"LogicalResourceId": lid, "ResourceType": rtype,
+                              "ResourceIdentifier": d["ResourceIdentifier"], "ResourceStatus": "COMPLETE"})
+    template_id = f"arn:aws:cloudformation:{REGION}:{DEFAULT_ACCOUNT_ID}:generatedtemplate/{uuid.uuid4()}"
+    now = _now_iso()
+    store.generated_templates[name] = {
+        "GeneratedTemplateId": template_id, "GeneratedTemplateName": name, "Status": "COMPLETE", "StatusReason": "",
+        "CreationTime": now, "LastUpdatedTime": now, "Resources": resource_recs,
+        "TemplateBody": json.dumps({"Resources": resources_tpl}, indent=1),
+    }
+    store.persist()
+    return _envelope("CreateGeneratedTemplate", _el("GeneratedTemplateId", template_id))
+
+
+def _require_generated_template(store, params):
+    name = _p(params, "GeneratedTemplateName")
+    gt = store.generated_templates.get(name)
+    if not gt:
+        raise CfnError("GeneratedTemplateNotFoundException", f"Generated template {name} not found", 400)
+    return gt
+
+
+def _describe_generated_template(store, params, stores):
+    gt = _require_generated_template(store, params)
+    res_xml = "".join(
+        "<member>" + _el("LogicalResourceId", r["LogicalResourceId"]) + _el("ResourceType", r["ResourceType"]) +
+        _identifier_xml(r["ResourceIdentifier"]) + _el("ResourceStatus", r["ResourceStatus"]) + "</member>"
+        for r in gt["Resources"])
+    body = (_el("GeneratedTemplateId", gt["GeneratedTemplateId"]) + _el("GeneratedTemplateName", gt["GeneratedTemplateName"]) +
+            _el("Status", gt["Status"]) + _el("StatusReason", gt["StatusReason"]) +
+            _el("CreationTime", gt["CreationTime"]) + _el("LastUpdatedTime", gt["LastUpdatedTime"]) +
+            f"<Resources>{res_xml}</Resources>" + _el("TotalWarnings", "0"))
+    return _envelope("DescribeGeneratedTemplate", body)
+
+
+def _get_generated_template(store, params, stores):
+    gt = _require_generated_template(store, params)
+    return _envelope("GetGeneratedTemplate", _el("Status", gt["Status"]) + _el("TemplateBody", gt["TemplateBody"]))
+
+
+def _list_generated_templates(store, params, stores):
+    body = "<Summaries>" + "".join(
+        "<member>" + _el("GeneratedTemplateId", g["GeneratedTemplateId"]) + _el("GeneratedTemplateName", g["GeneratedTemplateName"]) +
+        _el("Status", g["Status"]) + _el("CreationTime", g["CreationTime"]) + _el("LastUpdatedTime", g["LastUpdatedTime"]) +
+        _el("NumberOfResources", len(g["Resources"])) + "</member>"
+        for g in store.generated_templates.values()) + "</Summaries>"
+    return _envelope("ListGeneratedTemplates", body)
+
+
+def _delete_generated_template(store, params, stores):
+    name = _p(params, "GeneratedTemplateName")
+    if store.generated_templates.pop(name, None) is None:
+        raise CfnError("GeneratedTemplateNotFoundException", f"Generated template {name} not found", 400)
+    store.persist()
+    return _envelope("DeleteGeneratedTemplate")
+
+
 # ── dispatch ──────────────────────────────────────────────────────────────────
 _ACTIONS = {
     "CreateStack": _create_stack, "UpdateStack": _update_stack, "DeleteStack": _delete_stack,
@@ -1936,6 +2175,11 @@ _ACTIONS = {
     "CreateStackRefactor": _create_stack_refactor, "DescribeStackRefactor": _describe_stack_refactor,
     "ExecuteStackRefactor": _execute_stack_refactor,
     "ListTypes": _list_types, "DescribeType": _describe_type,
+    "StartResourceScan": _start_resource_scan, "DescribeResourceScan": _describe_resource_scan,
+    "ListResourceScans": _list_resource_scans, "ListResourceScanResources": _list_resource_scan_resources,
+    "CreateGeneratedTemplate": _create_generated_template, "DescribeGeneratedTemplate": _describe_generated_template,
+    "GetGeneratedTemplate": _get_generated_template, "ListGeneratedTemplates": _list_generated_templates,
+    "DeleteGeneratedTemplate": _delete_generated_template,
 }
 
 

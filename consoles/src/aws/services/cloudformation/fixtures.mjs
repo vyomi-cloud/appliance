@@ -45,6 +45,26 @@ export default {
     return uniq;
   },
 
+  // Scans the account's real resources (an IAM role from a freshly created stack among
+  // them) then generates a template from that role, so the Templates tab shows a real,
+  // non-empty generated template — not a static list.
+  "live-iac-generator": async (wire, uniq) => {
+    const roleName = `${uniq}-role`;
+    await wire("POST", "/", Q("CreateStack", {
+      StackName: `${uniq}-stack`,
+      "Capabilities.member.1": "CAPABILITY_NAMED_IAM",
+      TemplateBody: JSON.stringify({ Resources: { R: { Type: "AWS::IAM::Role", Properties: { RoleName: roleName } } } }),
+    }));
+    await wire("POST", "/", Q("StartResourceScan", {}));
+    await wire("POST", "/", Q("CreateGeneratedTemplate", {
+      GeneratedTemplateName: uniq,
+      "Resources.member.1.ResourceType": "AWS::IAM::Role",
+      "Resources.member.1.ResourceIdentifier.entry.1.key": "RoleName",
+      "Resources.member.1.ResourceIdentifier.entry.1.value": roleName,
+    }));
+    return uniq;
+  },
+
   // Moves a resource from one freshly created stack into another via CreateStackRefactor +
   // ExecuteStackRefactor, so the Stack refactors list shows a real, non-empty refactor.
   "live-stack-refactor": async (wire, uniq) => {

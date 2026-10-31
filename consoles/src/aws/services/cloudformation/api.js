@@ -148,6 +148,57 @@ export async function describeStackRefactor(id) {
 }
 export const executeStackRefactor = (id) => call("ExecuteStackRefactor", { StackRefactorId: id });
 
+// ── IaC generator (resource scans + generated templates) ──────────────────────
+function identifierToMap(ri) {
+  return Object.fromEntries(asList(ri?.entry).map((e) => [e.key, e.value]));
+}
+function identifierParams(map, prefix) {
+  const out = {};
+  Object.entries(map).forEach(([k, v], i) => {
+    out[`${prefix}.entry.${i + 1}.key`] = k;
+    out[`${prefix}.entry.${i + 1}.value`] = v;
+  });
+  return out;
+}
+export async function startResourceScan() {
+  return result(await call("StartResourceScan"), "StartResourceScan").ResourceScanId;
+}
+export async function listResourceScans() {
+  const r = result(await call("ListResourceScans"), "ListResourceScans");
+  return asList(r.ResourceScanSummaries?.member);
+}
+export async function describeResourceScan(scanId) {
+  const r = result(await call("DescribeResourceScan", { ResourceScanId: scanId }), "DescribeResourceScan");
+  return { ...r, ResourceTypes: asList(r.ResourceTypes?.member) };
+}
+export async function listResourceScanResources(scanId, typePrefix) {
+  const r = result(await call("ListResourceScanResources", { ResourceScanId: scanId, ...(typePrefix ? { ResourceTypePrefix: typePrefix } : {}) }), "ListResourceScanResources");
+  return asList(r.Resources?.member).map((m) => ({
+    ResourceType: m.ResourceType, Identifier: identifierToMap(m.ResourceIdentifier), ManagedByStack: m.ManagedByStack === "true",
+  }));
+}
+export async function createGeneratedTemplate(name, resources = []) {
+  const params = { GeneratedTemplateName: name };
+  resources.forEach((res, i) => {
+    params[`Resources.member.${i + 1}.ResourceType`] = res.ResourceType;
+    Object.assign(params, identifierParams(res.Identifier, `Resources.member.${i + 1}.ResourceIdentifier`));
+  });
+  const r = result(await call("CreateGeneratedTemplate", params), "CreateGeneratedTemplate");
+  return r.GeneratedTemplateId;
+}
+export async function listGeneratedTemplates() {
+  const r = result(await call("ListGeneratedTemplates"), "ListGeneratedTemplates");
+  return asList(r.Summaries?.member);
+}
+export async function describeGeneratedTemplate(name) {
+  const r = result(await call("DescribeGeneratedTemplate", { GeneratedTemplateName: name }), "DescribeGeneratedTemplate");
+  return { ...r, Resources: asList(r.Resources?.member) };
+}
+export async function getGeneratedTemplate(name) {
+  return result(await call("GetGeneratedTemplate", { GeneratedTemplateName: name }), "GetGeneratedTemplate").TemplateBody || "";
+}
+export const deleteGeneratedTemplate = (name) => call("DeleteGeneratedTemplate", { GeneratedTemplateName: name });
+
 // ── registry (extensions) ────────────────────────────────────────────────────
 export async function listTypes() {
   const r = result(await call("ListTypes", { Visibility: "PUBLIC", Type: "RESOURCE" }), "ListTypes");

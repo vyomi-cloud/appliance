@@ -292,6 +292,66 @@ def run():
     r = call("ListStackRefactors")
     _check("executed refactor listed", f"<StackRefactorId>{refactor_id}</StackRefactorId>" in r.body and "<ExecutionStatus>EXECUTE_COMPLETE</ExecutionStatus>" in r.body)
 
+    # ── IaC generator: scan real resources, generate a template from a selection ──
+    call("CreateStack", StackName="iacgen-managed", TemplateBody=json.dumps(
+        {"Resources": {"Q": {"Type": "AWS::SQS::Queue", "Properties": {"QueueName": "cfn-iacgen-managed-q"}}}}))
+    r = call("CreateStack", StackName="iacgen-unmanaged", TemplateBody=json.dumps(
+        {"Resources": {"R": {"Type": "AWS::IAM::Role", "Properties": {
+            "RoleName": "cfn-iacgen-role", "Description": "scan me"}}}},
+    ), **{"Capabilities.member.1": "CAPABILITY_NAMED_IAM"})
+    _check("iacgen role stack created", r.status == 200)
+
+    r = call("StartResourceScan")
+    _check("start resource scan 200", r.status == 200)
+    scan_id = _v(r.body, "ResourceScanId")
+    _check("scan id shaped", scan_id.startswith("arn:aws:cloudformation:"))
+    r = call("DescribeResourceScan", ResourceScanId=scan_id)
+    _check("scan complete", "<Status>COMPLETE</Status>" in r.body)
+    _check("scan found resources", int(_v(r.body, "ResourcesScanned")) >= 2)
+    r = call("ListResourceScans")
+    _check("scan listed", f"<ResourceScanId>{scan_id}</ResourceScanId>" in r.body)
+    r = call("ListResourceScanResources", ResourceScanId=scan_id, ResourceTypePrefix="AWS::IAM::")
+    _check("scan resources filtered to IAM roles", "<ResourceType>AWS::IAM::Role</ResourceType>" in r.body
+           and "<key>RoleName</key>" in r.body and "<value>cfn-iacgen-role</value>" in r.body)
+    _check("role resource scanned as managed by its stack", "<ManagedByStack>true</ManagedByStack>" in r.body)
+    r = call("ListResourceScanResources", ResourceScanId=scan_id, ResourceTypePrefix="AWS::SQS::")
+    _check("unrelated prefix filter excludes other types", "<ResourceType>" not in r.body or "AWS::SQS::Queue" in r.body)
+
+    r = call("CreateGeneratedTemplate", GeneratedTemplateName="iacgen-tpl",
+             **{"Resources.member.1.ResourceType": "AWS::IAM::Role",
+                "Resources.member.1.ResourceIdentifier.entry.1.key": "RoleName",
+                "Resources.member.1.ResourceIdentifier.entry.1.value": "cfn-iacgen-role"})
+    _check("create generated template 200", r.status == 200)
+    template_arn = _v(r.body, "GeneratedTemplateId")
+    _check("generated template id shaped", "generatedtemplate" in template_arn)
+    _check("duplicate generated template name rejected",
+           err(call("CreateGeneratedTemplate", GeneratedTemplateName="iacgen-tpl",
+                     **{"Resources.member.1.ResourceType": "AWS::IAM::Role",
+                        "Resources.member.1.ResourceIdentifier.entry.1.key": "RoleName",
+                        "Resources.member.1.ResourceIdentifier.entry.1.value": "cfn-iacgen-role"}), "AlreadyExistsException"))
+    _check("scanning a resource that doesn't exist fails honestly",
+           err(call("CreateGeneratedTemplate", GeneratedTemplateName="iacgen-tpl-missing",
+                     **{"Resources.member.1.ResourceType": "AWS::IAM::Role",
+                        "Resources.member.1.ResourceIdentifier.entry.1.key": "RoleName",
+                        "Resources.member.1.ResourceIdentifier.entry.1.value": "no-such-role"}), "ResourceNotFoundException"))
+
+    r = call("DescribeGeneratedTemplate", GeneratedTemplateName="iacgen-tpl")
+    _check("describe generated template complete", "<Status>COMPLETE</Status>" in r.body)
+    _check("describe shows the logical id", "<LogicalResourceId>Cfniacgenrole</LogicalResourceId>" in r.body)
+    r = call("GetGeneratedTemplate", GeneratedTemplateName="iacgen-tpl")
+    _check("get generated template returns real live properties, not just the name",
+           "AWS::IAM::Role" in r.body and "cfn-iacgen-role" in r.body and "scan me" in r.body)
+    # the generated template really round-trips back through CreateStack
+    body = json.loads(_v(r.body, "TemplateBody"))
+    _check("generated template Resources block is well-formed", "Cfniacgenrole" in body["Resources"])
+    r = call("ListGeneratedTemplates")
+    _check("generated template listed", "<GeneratedTemplateName>iacgen-tpl</GeneratedTemplateName>" in r.body
+           and "<NumberOfResources>1</NumberOfResources>" in r.body)
+    r = call("DeleteGeneratedTemplate", GeneratedTemplateName="iacgen-tpl")
+    _check("delete generated template 200", r.status == 200)
+    _check("deleted generated template gone",
+           err(call("DescribeGeneratedTemplate", GeneratedTemplateName="iacgen-tpl"), "GeneratedTemplateNotFoundException"))
+
     print("\nRESULT: PASS — CloudFormation core conforms.")
     return 0
 
