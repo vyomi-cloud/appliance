@@ -95,7 +95,8 @@
       "metering-policies",
       "mirror-sessions",
       "mirror-targets",
-      "mirror-filters"
+      "mirror-filters",
+      "network-access-analyzer"
     ]
   },
   "_planned": {
@@ -118,7 +119,8 @@
   },
   "_backlog": {
     "aws.eventbridge": "connections + api-destinations are core EventBridge features worth building on eventbridge_core (CreateConnection / CreateApiDestination); allowlisted for v4.0.0 only",
-    "aws.vpc": "VPC endpoints (gateway/interface) + endpoint services are common in real apps — worth modelling on vpc_core; allowlisted for v4.0.0 with PrivateLink/Lattice/Network Firewall/VPN/TGW/Verified Access/Traffic Mirroring (separate products)"
+    "aws.vpc": "VPC endpoints (gateway/interface) + endpoint services are common in real apps — worth modelling on vpc_core; allowlisted for v4.0.0 with PrivateLink/Lattice/Network Firewall/VPN/TGW/Verified Access/Traffic Mirroring (separate products)",
+    "aws.vpc.network-access-analyzer": "Network Access Scopes/Analyses are buildable on core/netsim (enumerate paths matching a scope with netsim.reach over every interface pair); allowlisted 2026-10-31 so wave-4 VPC (Flow Logs + Reachability Analyzer console) could merge"
   },
   "_reference": {
     "aws": {
