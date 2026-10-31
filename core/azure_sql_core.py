@@ -22,6 +22,15 @@ editor's own statement log, detects WHERE-equality lookups that need a table sca
 (via the SAME engine's `EXPLAIN QUERY PLAN`, not a guess) and proposes/creates
 indexes — applied on request, or automatically when the database's
 `automaticTuning.options.createIndex` is "On" (mirroring the real feature's name).
+
+DEPTH PASS (wave 5): transparent data encryption's customer-managed key (BYOK)
+protector now takes real effect. When a database's `transparentDataEncryption`
+points at a Key Vault key (`keyVaultKeyUri`), the query data plane requires BOTH
+a system-assigned managed identity on the database (the real precondition Azure
+enforces before trusting a CMK protector) AND an enabled key in Key Vault — same
+read-only-snapshot pattern, `aws_wire_router.py` also passes the Key Vault keys
+core's store as `kv_store=`. Revoke the identity or disable the key and the
+database goes the same "protector unavailable" route real Azure SQL does.
 """
 from __future__ import annotations
 
@@ -29,6 +38,7 @@ import json
 import re
 from dataclasses import dataclass, field
 
+from core import azure_keyvault_keys_core as kv_keys
 from core.sql_store import SqlStore
 
 
@@ -83,6 +93,56 @@ def _server_props(arm_state: dict | None, server: str) -> dict:
 def _database_props(arm_state: dict | None, server: str, database: str) -> dict:
     rec = _arm_record(arm_state, "microsoft.sql/servers/databases", f"servers/{server}/databases/{database}")
     return (rec or {}).get("properties", {}) or {}
+
+
+def _database_record(arm_state: dict | None, server: str, database: str) -> dict:
+    return _arm_record(arm_state, "microsoft.sql/servers/databases", f"servers/{server}/databases/{database}") or {}
+
+
+def _parse_kv_key_uri(uri: str) -> tuple[str, str | None]:
+    """'https://vault.vault.azure.net/keys/{name}[/{version}]' -> (name, version|None)."""
+    parts = [p for p in str(uri or "").split("/") if p]
+    try:
+        i = parts.index("keys")
+    except ValueError:
+        return uri, None
+    name = parts[i + 1] if len(parts) > i + 1 else uri
+    version = parts[i + 2] if len(parts) > i + 2 else None
+    return name, version
+
+
+def _tde_protector_error(arm_state: dict | None, kv_store, server: str, database: str) -> AzureSqlResponse | None:
+    """Customer-managed-key TDE (BYOK): a Key Vault-backed protector requires the database's
+    OWN system-assigned managed identity (real Azure precondition) and a real, enabled key —
+    both checked at connection time, same as the networking/size gates above. Service-managed
+    keys (the default; no keyVaultKeyUri) and TDE turned Off are always available."""
+    rec = _database_record(arm_state, server, database)
+    tde = (rec.get("properties") or {}).get("transparentDataEncryption") or {}
+    if tde.get("state") == "Disabled":
+        return None
+    key_uri = tde.get("keyVaultKeyUri")
+    if not key_uri:
+        return None
+    identity = rec.get("identity") or {}
+    if identity.get("type") != "SystemAssigned" or not identity.get("principalId"):
+        return _err(403, "TdeProtectorUnavailable",
+                    f"Database '{database}' uses a customer-managed Key Vault key for its "
+                    "transparent data encryption protector, which requires a system-assigned "
+                    "managed identity; none is configured, so the protector is unavailable.")
+    if kv_store is None:
+        return None
+    name, version = _parse_kv_key_uri(key_uri)
+    status = kv_keys.key_enabled(kv_store, name, version)
+    if status is False:
+        return _err(403, "TdeProtectorUnavailable",
+                    f"The Key Vault key protecting database '{database}' with transparent "
+                    "data encryption is disabled; the database is inaccessible until the key "
+                    "is re-enabled or the protector is switched back to service-managed.")
+    if status is None:
+        return _err(403, "TdeProtectorUnavailable",
+                    f"The Key Vault key configured as database '{database}'s transparent data "
+                    "encryption protector was not found.")
+    return None
 
 
 # ── control plane ───────────────────────────────────────────────────────────
@@ -172,7 +232,7 @@ def _db_size_bytes(store: SqlStore, db_id: str) -> int:
 
 
 def _query(store: SqlStore, server: str, database: str, body: bytes,
-          arm_state: dict | None = None) -> AzureSqlResponse:
+          arm_state: dict | None = None, kv_store=None) -> AzureSqlResponse:
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}
     except Exception:
@@ -185,6 +245,10 @@ def _query(store: SqlStore, server: str, database: str, body: bytes,
         return _err(403, "PublicNetworkAccessDisabled",
                     f"Cannot connect to server '{server}.database.windows.net': "
                     "public network access is disabled.")
+
+    tde_err = _tde_protector_error(arm_state, kv_store, server, database)
+    if tde_err is not None:
+        return tde_err
 
     db_id = _db_id(server, database)
     if _WRITE_SQL_RE.match(sql) and store.instance_exists(db_id):
@@ -306,7 +370,7 @@ def _auto_tune(store: SqlStore, arm_state: dict | None, server: str, database: s
 # ── dispatch ────────────────────────────────────────────────────────────────
 def dispatch(store: SqlStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
-             body: bytes = b"", arm_state: dict | None = None) -> AzureSqlResponse:
+             body: bytes = b"", arm_state: dict | None = None, kv_store=None) -> AzureSqlResponse:
     """Native-ish Azure SQL REST wire:
         PUT    /servers/{server}                                   create server
         PUT    /servers/{server}/databases/{db}                     create database
@@ -318,7 +382,10 @@ def dispatch(store: SqlStore, method: str, path: str,
 
     `arm_state` is the Azure ARM core's resource map (read-only snapshot, same
     contract as azure_blob_core's CORS/lifecycle lookup) — it is how publicNetworkAccess,
-    maxSizeBytes and automaticTuning reach this data plane.
+    maxSizeBytes, automaticTuning and the TDE protector's identity/key reference reach
+    this data plane. `kv_store` is the Key Vault keys core's store (same contract) — it
+    is how a customer-managed TDE protector's enabled/disabled state reaches this data
+    plane.
     """
     method = (method or "GET").upper()
     segs = [s for s in path.split("?", 1)[0].split("/") if s != ""]
@@ -344,7 +411,7 @@ def dispatch(store: SqlStore, method: str, path: str,
                 return _delete_database(store, server, database)
             return _err(405, "MethodNotAllowed", f"Unsupported method {method} on database")
         if len(segs) == 5 and segs[4] == "query" and method == "POST":
-            return _query(store, server, database, body, arm_state)
+            return _query(store, server, database, body, arm_state, kv_store)
         if len(segs) == 5 and segs[4] == "recommendations" and method == "GET":
             db_id = _db_id(server, database)
             if not store.instance_exists(db_id):
