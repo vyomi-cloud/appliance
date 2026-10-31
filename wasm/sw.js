@@ -137,11 +137,13 @@ const STUBS = {
 // Nano's backend services for the readiness ribbon + Service status cards: the engine
 // stores core/nano_registry.py builds, listed in fixtures/nano-backends.json by
 // wasm/build_cores.py (CI fails if it's stale), plus the Pyodide runtime.
-let _NANO_BACKENDS = null;
+// Re-read every 30 s (not once per worker lifetime), so a new bundle's list shows up on
+// the next poll instead of only after the browser restarts this long-lived worker.
+let _NANO_BACKENDS = null, _NANO_BACKENDS_AT = 0;
 async function nanoBackends() {
-  if (!_NANO_BACKENDS) {
-    try { _NANO_BACKENDS = await (await fetch(FIX + "/nano-backends.json", { cache: "no-store" })).json(); }
-    catch (_) { return []; }
+  if (!_NANO_BACKENDS || Date.now() - _NANO_BACKENDS_AT > 30000) {
+    try { _NANO_BACKENDS = await (await fetch(FIX + "/nano-backends.json", { cache: "no-store" })).json(); _NANO_BACKENDS_AT = Date.now(); }
+    catch (_) { if (!_NANO_BACKENDS) return []; }
   }
   return _NANO_BACKENDS;
 }
