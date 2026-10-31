@@ -155,6 +155,35 @@ try {
   check("Management: lifecycle rule created (native GetBucketLifecycleConfiguration)", /v4-smoke-rule/.test(lcXml) && /logs\//.test(lcXml), lcXml.slice(0, 200));
   await shot("05c-s3-lifecycle-created");
 
+  // WAVE 5 DEPTH: Object Lock DefaultRetention is now ENFORCED (stamped onto every new
+  // object version), not just stored — create a bucket with Object Lock enabled, set a
+  // default retention rule through the UI, then prove a freshly uploaded object actually
+  // inherits it (DeleteObject on its version id is rejected).
+  const LB = `v4-smoke-lock-${Date.now() % 100000}`;
+  await wire(`/${LB}`, { method: "PUT", headers: { authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=0", "x-amz-bucket-object-lock-enabled": "true" } });
+  await page.goto(UI + `#/s3/buckets/${LB}`);
+  await page.getByRole("heading", { name: LB }).waitFor({ timeout: 10000 });
+  await page.getByRole("tab", { name: "Properties" }).click();
+  await page.getByRole("button", { name: "Edit default retention" }).click();
+  await page.getByRole("dialog").getByRole("radio", { name: "Enabled" }).check();
+  await page.getByRole("dialog").getByRole("radio", { name: "Governance mode" }).check();
+  await page.getByRole("dialog").locator('input[type=number]').fill("10");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.getByText("GOVERNANCE mode, 10 days").waitFor({ timeout: 10000 });
+  const lockXml = await wire(`/${LB}?object-lock=`);
+  check("Properties: Object Lock default retention saved (native GetObjectLockConfiguration)", /<Mode>GOVERNANCE<\/Mode>/.test(lockXml) && /<Days>10<\/Days>/.test(lockXml), lockXml.slice(0, 200));
+  // Done from Node (not page.evaluate) — a deliberately-403ing fetch inside the page logs a
+  // browser devtools network warning that the "no page errors" check below would catch.
+  const lockedPut = await fetch(`${WIRE}/${LB}/locked.txt`, { method: "PUT", body: "locked" });
+  const lockedVid = lockedPut.headers.get("x-amz-version-id");
+  const lockedDelete = await (await fetch(`${WIRE}/${LB}/locked.txt?versionId=${lockedVid}`, { method: "DELETE" })).text();
+  check("Object Lock default retention is enforced on a newly uploaded object (DELETE rejected)", /AccessDenied/.test(lockedDelete), lockedDelete.slice(0, 200));
+  await shot("05e-s3-object-lock-default-retention");
+
+  // Back to bucket B — the rest of the S3 flow continues on it.
+  await page.goto(UI + `#/s3/buckets/${B}`);
+  await page.getByRole("heading", { name: B }).waitFor({ timeout: 10000 });
+
   // DEPTH pass 2: Requester pays (config_only — stored+returned, UI → native wire).
   await page.getByRole("tab", { name: "Properties" }).click();
   await editIn("Requester pays");

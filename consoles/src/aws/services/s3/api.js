@@ -224,12 +224,27 @@ export const putObjectAcl = (b, key, canned) => s3("PUT", `/${b}/${enc(key)}`, {
 export async function getObjectLock(b) {
   try {
     const r = await s3("GET", `/${b}`, { query: { "object-lock": "" } });
-    return { enabled: r.ObjectLockConfiguration?.ObjectLockEnabled === "Enabled" };
+    const rule = r.ObjectLockConfiguration?.Rule?.DefaultRetention;
+    return {
+      enabled: r.ObjectLockConfiguration?.ObjectLockEnabled === "Enabled",
+      defaultRetention: rule ? { mode: rule.Mode, days: rule.Days, years: rule.Years } : null,
+    };
   } catch (e) {
     if (e.status === 404) return { enabled: false };
     return { error: e };
   }
 }
+
+export const putObjectLockDefaultRetention = (b, mode, period, unit) => s3("PUT", `/${b}`, {
+  query: { "object-lock": "" },
+  body: xml(`<ObjectLockConfiguration ${NS}><ObjectLockEnabled>Enabled</ObjectLockEnabled><Rule><DefaultRetention>`
+    + `<Mode>${mode}</Mode><${unit}>${period}</${unit}></DefaultRetention></Rule></ObjectLockConfiguration>`),
+});
+
+export const clearObjectLockDefaultRetention = (b) => s3("PUT", `/${b}`, {
+  query: { "object-lock": "" },
+  body: xml(`<ObjectLockConfiguration ${NS}><ObjectLockEnabled>Enabled</ObjectLockEnabled></ObjectLockConfiguration>`),
+});
 
 export async function getLegalHold(b, key) {
   try {

@@ -160,11 +160,11 @@
  "s3.bucket.lifecycle": {
   "title": "Lifecycle rules",
   "level": {
-   "nano": "limited",
-   "offline": "limited"
+   "nano": "full",
+   "offline": "full"
   },
   "limitations": [
-   "Expiration rules are enforced, evaluated lazily on list/get/head: Date-based rules fire deterministically once the date has passed; Days-based rules use the real elapsed wall-clock (not accelerated), as in real S3. In a versioned bucket, expiration inserts a delete marker rather than destroying history. NoncurrentVersionExpiration, storage-class Transition actions and AbortIncompleteMultipartUpload are stored and returned but not yet enforced."
+   "All rule actions are enforced, evaluated lazily on list/get/head rather than by a background scheduler: Date-based rules fire deterministically once the date has passed; Days-based rules (Expiration, NoncurrentVersionExpiration, Transition, AbortIncompleteMultipartUpload) use the real elapsed wall-clock, as in real S3. In a versioned bucket, Expiration inserts a delete marker rather than destroying history. Transition flips the current version's reported storage class (no physical tiering of bytes, matching what GetObject/HeadObject can actually observe in real S3 too)."
   ],
   "api": [
    "PutBucketLifecycleConfiguration",
@@ -176,7 +176,8 @@
    "doc": "<LifecycleConfiguration><Rule><ID>r1</ID><Status>Enabled</Status><Filter><Prefix>logs/</Prefix></Filter><Expiration><Days>30</Days></Expiration></Rule></LifecycleConfiguration>"
   },
   "tests": [
-   "tests/conformance/test_s3_depth_core.py"
+   "tests/conformance/test_s3_depth_core.py",
+   "tests/conformance/test_s3_depth3_core.py"
   ]
  },
  "s3.bucket.cors": {
@@ -245,11 +246,11 @@
  "s3.bucket.object-lock": {
   "title": "Object Lock",
   "level": {
-   "nano": "limited",
-   "offline": "limited"
+   "nano": "full",
+   "offline": "full"
   },
   "limitations": [
-   "Object Lock can only be enabled at bucket creation (as in real S3) — PutObjectLockConfiguration on a bucket created without it returns InvalidBucketState. Legal hold (Put/GetObjectLegalHold) and retention (Put/GetObjectRetention, GOVERNANCE/COMPLIANCE) are enforced: DeleteObject for a held/retained version id is rejected, GOVERNANCE can be overridden with x-amz-bypass-governance-retention, COMPLIANCE cannot. A bucket-level default-retention rule is not yet stored."
+   "Object Lock can only be enabled at bucket creation (as in real S3) — PutObjectLockConfiguration on a bucket created without it returns InvalidBucketState. Legal hold (Put/GetObjectLegalHold) and retention (Put/GetObjectRetention, GOVERNANCE/COMPLIANCE) are enforced: DeleteObject for a held/retained version id is rejected, GOVERNANCE can be overridden with x-amz-bypass-governance-retention, COMPLIANCE cannot. A bucket-level DefaultRetention rule (Mode + Days/Years) is now stored and stamped onto every new object version (PutObject/CopyObject/CompleteMultipartUpload) that doesn't carry its own explicit x-amz-object-lock-* headers."
   ],
   "api": [
    "PutObjectLockConfiguration",
@@ -260,7 +261,8 @@
    "GetObjectRetention"
   ],
   "tests": [
-   "tests/conformance/test_s3_depth_core.py"
+   "tests/conformance/test_s3_depth_core.py",
+   "tests/conformance/test_s3_depth3_core.py"
   ]
  },
  "s3.bucket.website": {
@@ -288,11 +290,11 @@
  "s3.bucket.logging": {
   "title": "Server access logging",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Put/GetBucketLogging store and return the target bucket/prefix verbatim, but server access logging periodically writes delivery-log objects (one per time window) into that target bucket from S3's internal request-logging pipeline; Vyomi has no request-log writer producing those objects."
+   "Server access logging is enforced: once PutBucketLogging names a target bucket, every GET/PUT/HEAD/DELETE/CopyObject on the source bucket writes a real log-line object (bucket, timestamp, operation, key, status, bytes) into the target bucket under TargetPrefix. The one divergence from real S3: delivery is immediate and per-request in this simulator, not the batched/delayed delivery (every few minutes, pooled into one object per window) real S3's internal logging pipeline uses."
   ],
   "api": [
    "PutBucketLogging",
@@ -303,7 +305,8 @@
    "doc": "<BucketLoggingStatus><LoggingEnabled><TargetBucket>log-dest</TargetBucket><TargetPrefix>logs/</TargetPrefix></LoggingEnabled></BucketLoggingStatus>"
   },
   "tests": [
-   "tests/conformance/test_s3_depth2_core.py"
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth3_core.py"
   ]
  },
  "s3.bucket.notification": {
@@ -335,7 +338,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "PutBucketReplication requires source-bucket Versioning Enabled (as real S3 does). Enabled rules are enforced SYNCHRONOUSLY on PutObject/CopyObject/CompleteMultipartUpload — a matching key is copied into its destination bucket immediately (no async replication-time delay), and the source version's GetObject/HeadObject response carries x-amz-replication-status: COMPLETED. Only destination buckets that exist in this same Vyomi appliance are reachable — real cross-account/cross-region destinations outside it are not. NoncurrentVersionReplication, delete-marker replication, RTC/metrics and replica-modification-sync are not yet enforced."
+   "PutBucketReplication requires source-bucket Versioning Enabled (as real S3 does). Enabled rules are enforced SYNCHRONOUSLY on PutObject/CopyObject/CompleteMultipartUpload — a matching key is copied into its destination bucket immediately (no async replication-time delay), and the source version's GetObject/HeadObject response carries x-amz-replication-status: COMPLETED. A rule with DeleteMarkerReplication Enabled also propagates a plain DeleteObject's delete marker to the destination. Only destination buckets that exist in this same Vyomi appliance are reachable — real cross-account/cross-region destinations outside it are not. RTC/metrics and replica-modification-sync (bi-directional metadata sync) are not yet enforced."
   ],
   "api": [
    "PutBucketReplication",
@@ -348,7 +351,8 @@
    "doc": "<ReplicationConfiguration><Role>arn:aws:iam::123456789012:role/repl</Role><Rule><ID>cap-rule</ID><Status>Enabled</Status><Filter><Prefix>cap/</Prefix></Filter><Destination><Bucket>arn:aws:s3:::cap-replication-dest</Bucket></Destination></Rule></ReplicationConfiguration>"
   },
   "tests": [
-   "tests/conformance/test_s3_depth2_core.py"
+   "tests/conformance/test_s3_depth2_core.py",
+   "tests/conformance/test_s3_depth3_core.py"
   ]
  },
  "s3.bucket.accelerate": {
