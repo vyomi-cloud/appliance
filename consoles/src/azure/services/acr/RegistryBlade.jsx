@@ -1,7 +1,9 @@
 /* Container registry resource blade: left resource menu + panels. Overview, Tags, Access
  * keys, Repositories (+ repository detail), Webhooks, Locks, Properties, Access control (IAM)
- * and Export template are backed by real native calls (ARM control plane + the registry's own
- * OCI/ACR REST data plane); everything else in the menu is an honest NotSimulated panel. */
+ * (Role assignments/Roles real; Deny assignments/Classic administrators honest), Diagnostic
+ * settings and Export template (ARM/Bicep/Terraform) are backed by real native calls (ARM
+ * control plane + the registry's own OCI/ACR REST data plane); everything else in the menu is
+ * an honest NotSimulated panel. */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -16,7 +18,7 @@ import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
-import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, fmtDate } from "../../kit/common.jsx";
+import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
@@ -39,11 +41,10 @@ export const MENU = [
   { group: "Help", items: [{ id: "support", label: "Support + Troubleshooting" }] },
 ];
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
-// Blade menu items with no detail captured in the spec beyond their title — one shared
-// capability id per console grouping (core/capabilities/azure/acr.json), never a hand-written
-// disclaimer. "monitoring" is its own id (matches the Monitoring nav group); everything else
-// not otherwise wired falls under the broader "tools" id.
-const MONITORING_PANELS = new Set(["insights", "alerts", "metrics", "diagnosticsettings", "logs"]);
+// Blade menu items with no detail captured in the spec beyond their title fall under the
+// shared "tools" capability id (core/capabilities/azure/acr.json) — never a hand-written
+// disclaimer. Diagnostic settings is wired for real (azure.acr.monitoring); the other
+// Monitoring-group items (Insights, Alerts, Metrics, Logs) stay an explicit honest gap.
 
 export default function RegistryBlade({ params, query }) {
   const { rg, name } = params;
@@ -69,11 +70,16 @@ export default function RegistryBlade({ params, query }) {
       webhooks: () => <Webhooks a={a} />,
       activitylog: () => <ActivityLog a={a} />,
       exporttemplate: () => <ExportTemplate a={a} />,
+      diagnosticsettings: () => <DiagnosticSettings a={a} />,
+      insights: () => <NotSimulatedContainer title={`${name} | Insights`} feature="Insights" />,
+      alerts: () => <NotSimulatedContainer title={`${name} | Alerts`} feature="Alerts" />,
+      metrics: () => <NotSimulatedContainer title={`${name} | Metrics`} feature="Metrics" />,
+      logs: () => <NotSimulatedContainer title={`${name} | Logs`} feature="Logs" />,
     }[panel];
     body = P ? P() : (
       <>
         <div className="vy-panel-title">{LABEL[panel] || panel}</div>
-        <CapabilityContainer id={MONITORING_PANELS.has(panel) ? "azure.acr.monitoring" : "azure.acr.tools"} title={LABEL[panel] || panel} />
+        <CapabilityContainer id="azure.acr.tools" title={LABEL[panel] || panel} />
       </>
     );
   }
@@ -175,10 +181,16 @@ function PropertyList({ a }) {
   );
 }
 
-// ── Access control (IAM) ──────────────────────────────────────────────────────────────
+// ── Access control (IAM) — Role assignments and Roles are real, scoped to this registry
+// (plus its subscription/resource-group ancestors, real Azure's "inherited access" view) over
+// the same generic Microsoft.Authorization/roleAssignments extension-resource engine the
+// VM/NSG/Cosmos blades use (azure.acr.iam); assignments are still created at the subscription
+// scope. Check access / My access / Deny assignments / Classic administrators stay honest gaps. ──
 function AccessControlIam({ a }) {
   const [tab, setTab] = useState("check");
   const [dlg, setDlg] = useState(null);
+  const assignments = useAsync(() => api.listRoleAssignments(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const roles = useAsync(() => api.listRoleDefinitions(), []);
   return (
     <>
       <div className="vy-panel-title">Access control (IAM)</div>
@@ -201,23 +213,37 @@ function AccessControlIam({ a }) {
       )}
       {tab === "assignments" && (
         <div style={{ marginTop: 12 }}>
-          <div className="vy-panel-title">Role assignments</div>
-          <CapabilityContainer id="azure.acr.iam" title="Role assignments" />
+          <CapabilityContainer id="azure.acr.iam" title="Role assignments">
+            <BrowseGrid resourceName="role assignment" rowKey={(r) => r.id} filterPlaceholder="Search by name or email"
+              items={assignments.data || []} loading={assignments.loading} error={assignments.error} onRefresh={assignments.reload}
+              columns={[
+                { key: "name", label: "Name", value: (r) => r.properties?.principalId },
+                { key: "type", label: "Type", value: (r) => r.properties?.principalType || "--" },
+                { key: "role", label: "Role", value: (r) => r.properties?.roleDefinitionId?.split("/").pop() || r.properties?.roleName },
+                { key: "scope", label: "Scope", value: (r) => r.properties?.scope || "/" },
+                { key: "condition", label: "Condition", value: () => "None" },
+              ]}
+            />
+          </CapabilityContainer>
         </div>
       )}
       {tab === "roles" && (
         <div style={{ marginTop: 12 }}>
-          <div className="vy-panel-title">Roles</div>
-          <CapabilityContainer id="azure.acr.iam" title="Roles" />
+          <CapabilityContainer id="azure.acr.iam" title="Roles">
+            <BrowseGrid resourceName="role" rowKey={(r) => r.id || r.name} filterPlaceholder="Search by role name, description, permission, or ID"
+              items={roles.data || []} loading={roles.loading} error={roles.error} onRefresh={roles.reload}
+              columns={[
+                { key: "name", label: "Name", value: (r) => r.properties?.roleName || r.name },
+                { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
+                { key: "type", label: "Type", value: (r) => r.properties?.type || "BuiltInRole" },
+                { key: "category", label: "Category", value: () => "General" },
+              ]}
+            />
+          </CapabilityContainer>
         </div>
       )}
-      {tab === "deny" && (
-        <div style={{ marginTop: 12 }}>
-          <div className="vy-panel-title">Deny assignments</div>
-          <CapabilityContainer id="azure.acr.iam" title="Deny assignments" />
-        </div>
-      )}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.acr.iam" title="Classic administrators" /></div>}
+      {tab === "deny" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>}
+      {tab === "classic" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators" /></div>}
       <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
         <DialogSurface aria-label="Access check">
           <DialogBody>
@@ -564,6 +590,67 @@ function AddWebhookDialog({ open, onClose, onCreate }) {
   );
 }
 
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension
+// resource scoped to this registry) — the same generic mechanism the NSG/VM/Cosmos lenses
+// use. Logs/metrics are stored and validated exactly as the real resource requires, but never
+// delivered anywhere (core/capabilities/azure/acr.json azure.acr.monitoring). ──────────────
+const DIAG_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9-._]{0,255}$/;
+function DiagnosticSettings({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listDiagnosticSettings(a.id), [a.id]);
+  const workspaces = useAsync(() => api.listWorkspaces(), []);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [workspace, setWorkspace] = useState("");
+  const ws = workspaces.data || [];
+  return (
+    <CapabilityContainer id="azure.acr.monitoring" title={`${a.name} | Diagnostic settings`}>
+      <BrowseGrid
+        resourceName="diagnostic setting" rowKey={(r) => r.name} filterPlaceholder="Search diagnostic settings"
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => { setAdd(true); setWorkspace(ws[0]?.id || ""); }}>Add diagnostic setting</ToolbarButton>}
+        onDelete={async (sel) => {
+          for (const r of sel) await api.deleteDiagnosticSetting(a.id, r.name);
+          notify.success(`Deleted ${sel.length} diagnostic setting${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+          reload();
+        }}
+        csvName="diagnostic-settings.csv"
+        columns={[
+          { key: "name", label: "Diagnostic setting name" },
+          { key: "dest", label: "Destination details", value: (r) => (r.properties?.workspaceId ? "Log Analytics workspace" : r.properties?.storageAccountId ? "Storage account" : r.properties?.eventHubAuthorizationRuleId ? "Event hub" : "--") },
+          { key: "logs", label: "Log categories", value: (r) => (r.properties?.logs || []).filter((l) => l.enabled).length },
+          { key: "metrics", label: "Metric categories", value: (r) => (r.properties?.metrics || []).filter((m) => m.enabled).length },
+        ]}
+      />
+      {add && (
+        <section className="vy-section" style={{ marginTop: 16 }}>
+          <h3>Add diagnostic setting</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 480 }}>
+            <Field label="Diagnostic setting name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Diagnostic setting name" /></Field>
+            <Field label="Log Analytics workspace">
+              {ws.length ? (
+                <Select value={workspace} onChange={(_, d) => setWorkspace(d.value)} aria-label="Log Analytics workspace">
+                  {ws.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </Select>
+              ) : <p style={{ margin: 0 }}>No Log Analytics workspace yet. Create one in the Monitor service first.</p>}
+            </Field>
+          </div>
+          <div className="vy-cmdbar" style={{ marginTop: 12 }}>
+            <Button appearance="primary" disabled={!DIAG_ID_RE.test(name) || !workspace} onClick={async () => {
+              await api.putDiagnosticSetting(a.id, name, {
+                properties: { workspaceId: workspace, logs: [{ categoryGroup: "allLogs", enabled: true }], metrics: [{ category: "AllMetrics", enabled: true }] },
+              });
+              notify.success(`Diagnostic setting '${name}' was created.`, "Create succeeded");
+              setAdd(false); setName(""); reload();
+            }}>Save</Button>
+            <Button onClick={() => setAdd(false)}>Cancel</Button>
+          </div>
+        </section>
+      )}
+    </CapabilityContainer>
+  );
+}
+
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this registry) ──
 const ACTIVITY_LOG_GAPS = ["Activity", "Edit columns", "Export Activity Logs", "Download as CSV", "Insights", "Feedback", "Pin current filters", "Reset filters"];
 
@@ -606,7 +693,8 @@ function ActivityLog({ a }) {
   );
 }
 
-// ── Export template ────────────────────────────────────────────────────────────────────
+// ── Export template (ARM/Bicep/Terraform all generated client-side from this registry's own
+// live resource — same approach as the Storage account/VM blades' Export template) ─────────
 function ExportTemplate({ a }) {
   const [tab, setTab] = useState("arm");
   const [params, setParams] = useState(true);
@@ -616,11 +704,16 @@ function ExportTemplate({ a }) {
     ...(params ? { parameters: { registryName: { type: "string", defaultValue: a.name } } } : {}),
     resources: [{ type: "Microsoft.ContainerRegistry/registries", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('registryName')]" : a.name, location: a.location, sku: a.sku, properties: a.properties }],
   };
-  const text = JSON.stringify(template, null, 2);
+  const p = a.properties || {};
+  const bicepName = a.name.replace(/[^a-zA-Z0-9]/g, "");
+  const bicep = `resource ${bicepName} 'Microsoft.ContainerRegistry/registries@${api.ARM.apiVersion}' = {\n  name: '${a.name}'\n  location: '${a.location}'\n  sku: {\n    name: '${api.skuLabel(a.sku)}'\n  }\n  properties: {\n    adminUserEnabled: ${!!p.adminUserEnabled}\n    publicNetworkAccess: '${p.publicNetworkAccess || "Enabled"}'\n    zoneRedundancy: '${p.zoneRedundancy || "Disabled"}'\n  }\n}\n`;
+  const terraform = `resource "azurerm_container_registry" "${a.name.replace(/[^a-zA-Z0-9]/g, "_")}" {\n  name                = "${a.name}"\n  resource_group_name = "${a.resourceGroup}"\n  location            = "${a.location}"\n  sku                 = "${api.skuLabel(a.sku)}"\n  admin_enabled       = ${!!p.adminUserEnabled}\n  public_network_access_enabled = ${p.publicNetworkAccess !== "Disabled"}\n}\n`;
+  const text = tab === "arm" ? JSON.stringify(template, null, 2) : tab === "bicep" ? bicep : terraform;
+  const ext = tab === "arm" ? "json" : tab === "bicep" ? "bicep" : "tf";
   const download = () => {
     const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    el.download = `${a.name}.json`;
+    el.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    el.download = `${a.name}.${ext}`;
     document.body.appendChild(el); el.click(); el.remove();
   };
   return (
@@ -638,9 +731,8 @@ function ExportTemplate({ a }) {
         <Tab value="terraform">Terraform</Tab>
       </TabList>
       <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
-        <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
-        {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <CapabilityContainer id="azure.acr.exporttemplate_formats" title={tab === "bicep" ? "Bicep" : "Terraform"} />}
+        {tab === "arm" && <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />}
+        <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
       </section>
     </>
   );

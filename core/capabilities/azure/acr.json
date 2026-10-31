@@ -58,9 +58,12 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.acr.iam": {
-  "title": "Access control (IAM) on a registry",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Role assignments, the built-in/custom role catalog, deny assignments and classic administrators scoped to an individual resource are not modeled."]
+  "title": "Access control (IAM): role assignments and built-in role definitions over ARM",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions). The Role assignments list is ENFORCED scoped to this registry (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view) instead of the whole subscription — the same engine the VM/NSG/Cosmos DB blades use; Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too). Assignments are still created at the subscription scope (az role assignment create), and 'Check access' / 'My access' evaluation and Deny assignments / Classic administrators remain an honest gap."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.acr.overview_tabs": {
   "title": "Overview Monitoring, Capabilities and Recommendations tabs",
@@ -69,13 +72,19 @@
  },
  "azure.acr.monitoring": {
   "title": "Insights, Alerts, Metrics, Diagnostic settings and Logs",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Metrics charts, alert rules, diagnostic-setting log routing, Log Analytics queries and the registry insights workbook are not modeled."]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Diagnostic settings (Microsoft.Insights/diagnosticSettings) is a real ARM extension resource scoped to this registry: logs/metrics are stored and validated exactly as the real resource requires, but never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline. Insights, Alerts, Metrics and Logs for container registries remain an honest gap."
+  ],
+  "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
  },
  "azure.acr.exporttemplate_formats": {
-  "title": "Export template — Bicep and Terraform formats",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["The ARM Template tab is generated from the live resource; Bicep and Terraform generation are not modeled."]
+  "title": "Export template — ARM, Bicep and Terraform formats, generated client-side from this registry",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Download, Add to library, Deploy and Visualize template are honest 'Not simulated' actions — only template generation (ARM/Bicep/Terraform) from the registry's current ARM properties is real."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.acr.create_fields": {
   "title": "Domain name label scope and Role assignment permissions mode (create wizard)",
