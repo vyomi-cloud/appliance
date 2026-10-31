@@ -34,17 +34,31 @@
     if (document.getElementById('vyomi-readiness-style')) return;
     var st = document.createElement('style');
     st.id = 'vyomi-readiness-style';
-    st.textContent = '@keyframes vyrspin{to{transform:rotate(360deg)}}';
+    st.textContent = '@keyframes vyrspin{to{transform:rotate(360deg)}}' +
+      // Collapsed: a thin status-coloured rail across the top with a centred tab hanging from
+      // it ( ----\\____/---- ); expanded: the full banner drops down over the header and the
+      // tab hangs under it. Floats over the page, so the layout never shifts.
+      '#vyomi-readiness-strip{position:relative;height:3px;z-index:300}' +
+      '#vyomi-readiness-strip .vyr-drop{position:absolute;left:0;right:0;top:3px}' +
+      '#vyomi-readiness-strip .vyr-panel{display:none;box-shadow:0 8px 24px rgba(16,24,40,.18)}' +
+      '#vyomi-readiness-strip.open .vyr-panel{display:block}' +
+      '#vyomi-readiness-strip .vyr-tab{display:flex;align-items:center;gap:8px;margin:0 auto;width:max-content;max-width:calc(100vw - 32px);' +
+        'padding:3px 26px 5px;border:0;color:#fff;font:600 12px/18px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;cursor:pointer;' +
+        'clip-path:polygon(0 0,100% 0,calc(100% - 14px) 100%,14px 100%);filter:drop-shadow(0 2px 3px rgba(16,24,40,.18))}' +
+      '#vyomi-readiness-strip .vyr-tab:focus-visible{outline:2px solid #fff;outline-offset:-4px}' +
+      '#vyomi-readiness-strip .vyr-chev{font-size:10px;opacity:.9}';
     document.head.appendChild(st);
   }
 
   function buildStrip() {
     var wrap = document.createElement('div');
     wrap.id = 'vyomi-readiness-strip';
-    wrap.style.cssText =
-      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;' +
-      'color:#fff; background:' + GRAD_LOADING + '; box-shadow:inset 0 -1px 0 rgba(0,0,0,.12);';
+    wrap.style.cssText = 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:#fff; background:' + GRAD_LOADING + ';';
+    var open = false; try { open = localStorage.getItem('vyomi.readiness.open') === '1'; } catch (_) {}
+    if (open) wrap.classList.add('open');
     wrap.innerHTML = [
+      '<div class="vyr-drop">',
+      '<div class="vyr-panel" id="vyr-panel">',
       '<div style="max-width:1180px; margin:0 auto; padding:10px 18px; display:flex; align-items:center; gap:14px; font-size:13.5px;">',
       '  <span id="vyr-icon" style="display:inline-flex; flex:none;"></span>',
       '  <span id="vyr-title" style="font-weight:600">Appliance is getting ready</span>',
@@ -58,8 +72,22 @@
       '</div>',
       '<div id="vyr-detail" style="display:none; background:rgba(0,0,0,.18); padding:12px 18px;">',
       '  <div id="vyr-list" style="max-width:1180px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:8px 16px; font-size:12.5px;"></div>',
+      '</div>',
+      '</div>',
+      '<button type="button" class="vyr-tab" id="vyr-tab" aria-controls="vyr-panel" aria-expanded="' + open + '">',
+      '  <span id="vyr-tab-ic" style="display:inline-flex"></span><span id="vyr-tab-txt">Starting…</span>',
+      '  <span class="vyr-chev" id="vyr-chev">' + (open ? '&#9650;' : '&#9660;') + '</span>',
+      '</button>',
       '</div>'
     ].join('');
+    // The banner's colour lives on the rail, the panel and the tab alike.
+    var tab = wrap.querySelector('#vyr-tab');
+    tab.addEventListener('click', function () {
+      var o = wrap.classList.toggle('open');
+      tab.setAttribute('aria-expanded', String(o));
+      wrap.querySelector('#vyr-chev').innerHTML = o ? '&#9650;' : '&#9660;';
+      try { localStorage.setItem('vyomi.readiness.open', o ? '1' : '0'); } catch (_) {}
+    });
     var btn = wrap.querySelector('#vyr-details-btn');
     btn.addEventListener('click', function () {
       var p = wrap.querySelector('#vyr-detail');
@@ -97,7 +125,17 @@
     var rc = (j.ready_count != null) ? j.ready_count : 0;
     var tc = (j.total_count != null) ? j.total_count : 0;
 
-    strip.style.background = ready ? GRAD_READY : GRAD_LOADING;
+    var grad = ready ? GRAD_READY : GRAD_LOADING;
+    strip.style.background = grad;
+    strip.querySelector('#vyr-panel').style.background = grad;
+    strip.querySelector('#vyr-tab').style.background = grad;
+    var idleNow = j.status === 'idle';
+    strip.querySelector('#vyr-tab-ic').innerHTML = ready ? checkHTML() : (idleNow ? '' : spinnerHTML());
+    strip.querySelector('#vyr-tab-txt').textContent = ready ? 'Ready · ' + rc + '/' + tc
+      : idleNow ? 'Engines idle · 0/' + tc : 'Starting · ' + rc + '/' + tc + ' · ' + (j.overall_pct || 0) + '%';
+    strip.querySelector('#vyr-tab').title = (ready ? 'Appliance is Ready — all ' + tc + ' services running'
+      : idleNow ? 'Engines not running — they start when you open a console' : 'Appliance is getting ready — ' + rc + '/' + tc + ' backends ready')
+      + ' (click to ' + (strip.classList.contains('open') ? 'collapse' : 'expand') + ')';
     strip.querySelector('#vyr-icon').innerHTML = ready ? checkHTML() : (j.status === 'idle' ? '' : spinnerHTML());
     strip.querySelector('#vyr-title').textContent = ready ? 'Appliance is Ready'
       : j.status === 'idle' ? 'Engines not running' : 'Appliance is getting ready';
