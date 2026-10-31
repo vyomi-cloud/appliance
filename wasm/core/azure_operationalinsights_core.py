@@ -15,11 +15,23 @@ ARM REST of the ``operationalinsights`` resource provider (azure-rest-api-specs
     .../workspaces/{ws}/savedSearches/{id}                         CreateOrUpdate / Get / Delete / List
     .../workspaces/{ws}/tables/{table}                             CreateOrUpdate / Update / Get / Delete / ListByWorkspace
     .../workspaces/{ws}/dataSources/{name}                         CreateOrUpdate / Get / Delete / ListByWorkspace (?$filter=kind eq '…')
+    .../workspaces/{ws}/api/query                                   POST {query} — the SAME ARM pass-through the
+                                                                     Azure Portal's Logs blade uses when it has no
+                                                                     data-plane token (real path/shape, api-version
+                                                                     2017-10-01); see ``_run_query`` for the small
+                                                                     KQL subset understood (table name, where,
+                                                                     project, sort by/order by, take/limit, count).
 
 Workspaces live in the shared ARM state map (offline ``azure_services._state``; Nano ``az_arm``), keyed by the
 lower-cased resource id; their child collections live INSIDE the workspace record under underscore keys
 (never serialised to ARM clients), so they are space-scoped and persisted by the same seams as the rest of ARM.
-Not modelled: the KQL query data plane (api.loganalytics.io), data export, linked services/storage insights,
+Query results are real for the built-in ``AzureActivity`` table (the SAME ``Microsoft.Insights/eventtypes`` rows
+the Activity log feed reads, filtered to this subscription) and always empty for every other table (Heartbeat,
+Perf, Syslog, Event, Usage, AzureDiagnostics, any custom ``_CL``/``_RST`` table) — there is no agent/telemetry
+ingestion pipeline to populate them, and no per-workspace Activity Log export gating (every workspace's
+AzureActivity table sees the whole subscription feed).
+Not modelled: the api.loganalytics.io data-plane host directly (``azure-monitor-query`` / ``LogsQueryClient``
+calls that host, not ARM, so they do not reach this module), data export, linked services/storage insights,
 clusters, purge and conditional headers (If-Match / If-None-Match).
 
 ``dispatch`` returns ``{"status","headers","body","lro","rid","verb"}`` (``body`` is a JSON-able object or ``None``).
@@ -57,10 +69,14 @@ BASE_TABLES = {
     "Perf": ["TimeGenerated", "Computer", "ObjectName", "CounterName", "CounterValue"],
     "Syslog": ["TimeGenerated", "Computer", "Facility", "SeverityLevel", "SyslogMessage"],
     "Event": ["TimeGenerated", "Computer", "EventLog", "EventID", "RenderedDescription"],
-    "AzureActivity": ["TimeGenerated", "OperationName", "Caller", "Level", "ResourceGroup"],
+    "AzureActivity": ["TimeGenerated", "OperationName", "Caller", "Level", "ResourceGroup", "ResourceId"],
     "Usage": ["TimeGenerated", "DataType", "Quantity", "IsBillable", "Solution"],
     "AzureDiagnostics": ["TimeGenerated", "ResourceId", "Category", "OperationName", "ResultType"],
 }
+BASE_TABLES_LOWER = {n.lower(): n for n in BASE_TABLES}
+# ARM table-schema column type → the KQL/Log Analytics Query API type name for the same value.
+_ARM_TO_KQL_TYPE = {"string": "string", "int": "int", "long": "long", "real": "real", "boolean": "bool",
+                    "datetime": "datetime", "guid": "guid", "dynamic": "dynamic"}
 MAX_SAVED = 500
 MAX_TABLES = 500
 _WS_NAME = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{2,61}[A-Za-z0-9])$")
@@ -294,7 +310,7 @@ def _pack_view(rec):
     return [{"name": p, "enabled": bool(rec["_packs"].get(p, False))} for p in PACKS]
 
 
-def _workspace_ops(rec, rest, method, payload):
+def _workspace_ops(state, sub, rec, rest, method, payload):
     op = rest[0].lower()
     if op in ("sharedkeys", "getsharedkeys"):
         if method != "POST":
@@ -322,7 +338,121 @@ def _workspace_ops(rec, rest, method, payload):
             else:
                 rec["_packs"][pack] = True
             return _ok(None, 200)
+    if op == "api" and len(rest) == 2 and rest[1].lower() == "query":
+        return _run_query(state, sub, rec, method, payload)
     return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
+
+
+# ═══════════════════════════ logs query (KQL subset) ═════════════════════════════
+# A small, real subset of KQL — enough to prove a genuine query engine runs over real data,
+# never enough to silently accept syntax it does not understand (unsupported ops/operators
+# raise the same ARM-shaped error every other validation failure in this module does).
+def _default_col_type(name):
+    return "datetime" if name == "TimeGenerated" else "string"
+
+
+def _table_schema(rec, table):
+    """[(column name, KQL type)] for `table` in this workspace, or None if unknown."""
+    low = table.lower()
+    if low in BASE_TABLES_LOWER:
+        return [(c, _default_col_type(c)) for c in BASE_TABLES[BASE_TABLES_LOWER[low]]]
+    t = rec["_tables"].get(low)
+    if t is not None:
+        return [(c["name"], _ARM_TO_KQL_TYPE.get(c.get("type", "string"), "string")) for c in t["properties"]["schema"]["columns"]]
+    return None
+
+
+def _activity_rows(state, sub):
+    """AzureActivity rows: the real Microsoft.Insights/eventtypes feed this subscription's
+    Activity log page reads, reshaped to [TimeGenerated, OperationName, Caller, Level,
+    ResourceGroup, ResourceId] (BASE_TABLES["AzureActivity"])."""
+    events = [r for r in state.values()
+              if str(r.get("_type", "")).lower() == "microsoft.insights/eventtypes" and r.get("_sub") == sub]
+    events.sort(key=lambda e: (e.get("eventTimestamp") or "", e.get("_seq", 0)), reverse=True)
+    rows = []
+    for e in events:
+        op = e.get("operationName")
+        op = op.get("value") if isinstance(op, dict) else op
+        rows.append([e.get("eventTimestamp"), op, e.get("caller"), e.get("level"), e.get("resourceGroupName"), e.get("resourceId")])
+    return rows
+
+
+def _col_index(schema, name):
+    for i, (n, _) in enumerate(schema):
+        if n.lower() == name.lower():
+            return i
+    raise _bad(f"The name '{name}' does not refer to any column, table, variable or function.")
+
+
+def _apply_op(seg, schema, rows):
+    seg = seg.strip()
+    low = seg.lower()
+    m = re.match(r"^where\s+(\w+)\s*(==|!=|contains|startswith)\s*(.+)$", seg, re.I)
+    if m:
+        col, op, val = m.group(1), m.group(2).lower(), m.group(3).strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in "'\"":
+            val = val[1:-1]
+        idx = _col_index(schema, col)
+
+        def keep(r, _op=op, _val=val, _idx=idx):
+            cell = "" if r[_idx] is None else str(r[_idx])
+            if _op == "==":
+                return cell.lower() == _val.lower()
+            if _op == "!=":
+                return cell.lower() != _val.lower()
+            if _op == "contains":
+                return _val.lower() in cell.lower()
+            return cell.lower().startswith(_val.lower())   # startswith
+        return schema, [r for r in rows if keep(r)]
+    if low.startswith("project "):
+        names = [c.strip() for c in seg[len("project "):].split(",") if c.strip()]
+        if not names:
+            raise _bad("The 'project' operator needs at least one column name.")
+        idxs = [_col_index(schema, n) for n in names]
+        new_schema = [schema[i] for i in idxs]
+        return new_schema, [[r[i] for i in idxs] for r in rows]
+    m = re.match(r"^(?:sort by|order by)\s+(\w+)(?:\s+(asc|desc))?$", seg, re.I)
+    if m:
+        idx = _col_index(schema, m.group(1))
+        desc = (m.group(2) or "desc").lower() != "asc"
+        return schema, sorted(rows, key=lambda r: (r[idx] is None, r[idx]), reverse=desc)
+    m = re.match(r"^(?:take|limit)\s+(\d+)$", seg, re.I)
+    if m:
+        return schema, rows[: int(m.group(1))]
+    if low == "count":
+        return [("Count", "long")], [[len(rows)]]
+    raise _bad(f"Unsupported query operator: '{seg}'. Vyomi's KQL subset understands "
+               "where (==/!=/contains/startswith), project, sort by/order by, take/limit and count.")
+
+
+def _execute_kql(query, state, sub, rec):
+    parts = [p.strip() for p in query.split("|")]
+    table = parts[0] if parts else ""
+    if not table or not re.fullmatch(r"[A-Za-z_]\w{0,63}", table):
+        raise _bad("A query must start with a table name.")
+    schema = _table_schema(rec, table)
+    if schema is None:
+        raise _bad(f"'{table}' does not refer to any known table, tabular variable or function.")
+    rows = _activity_rows(state, sub) if table.lower() == "azureactivity" else []
+    for seg in parts[1:]:
+        if not seg:
+            raise _bad("A query cannot contain an empty pipe stage.")
+        schema, rows = _apply_op(seg, schema, rows)
+    return schema, rows
+
+
+def _run_query(state, sub, rec, method, payload):
+    if method != "POST":
+        return _err(405, "MethodNotAllowed", "POST required.")
+    q = (payload or {}).get("query")
+    if not isinstance(q, str) or not q.strip():
+        return _err(400, "BadRequest", "The property 'query' is required.")
+    try:
+        schema, rows = _execute_kql(q, state, sub, rec)
+    except _E as e:
+        return _err(e.status, e.code, e.message)
+    return _ok({"tables": [{"name": "PrimaryResult",
+                            "columns": [{"name": n, "type": t} for n, t in schema], "rows": rows}]})
 
 
 # ═══════════════════════════ saved searches ══════════════════════════════════════
@@ -509,7 +639,7 @@ def _dispatch(state, method, sub, rg, chain, payload, query):
             if len(rest) > 2:
                 return _err(404, "ResourceTypeNotSupported", f"The resource type '{WS_TYPE}/{'/'.join(rest)}' is not supported.")
             return _collection(rec, rest[0], rest[1] if len(rest) == 2 else None, method, payload, query)
-        return _workspace_ops(rec, rest, method, payload)
+        return _workspace_ops(state, sub, rec, rest, method, payload)
     if method == "GET":
         if rec is None:
             raise _not_found(name, rg)

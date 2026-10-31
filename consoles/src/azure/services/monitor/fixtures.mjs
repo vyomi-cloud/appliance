@@ -66,6 +66,16 @@ async function createDiagnosticSetting(wire, uniq) {
   return name;
 }
 
+/** Ensures a Log Analytics workspace exists (so the Logs page has a scope to query), then
+ * creates a uniquely named resource — the same real Activity log write `createResource`
+ * proves elsewhere — so AzureActivity | take 20 (azure.monitor.log_query) shows ResourceId
+ * containing this run's unique name. */
+async function createActivityForLogsQuery(wire, uniq) {
+  await wire("PUT", `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.OperationalInsights/workspaces/uiclogsws?api-version=2022-10-01`,
+    { svc: null, body: { location: "eastus", properties: {} } });
+  return createResource(wire, uniq);
+}
+
 export default {
   "az-activity-resource": createResource,
   "az-metric-alert": createMetricAlert,
@@ -75,4 +85,5 @@ export default {
   "az-dce": createDataCollectionEndpoint,
   "az-privatelinkscope": createPrivateLinkScope,
   "az-diagnostic-setting": createDiagnosticSetting,
+  "az-logs-query": createActivityForLogsQuery,
 };

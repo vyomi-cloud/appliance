@@ -6,7 +6,7 @@
   "monitor-metrics": { "route": "#/monitor/metrics" },
   "monitor-observability-agents-preview": { "route": "#/monitor/observabilityagents" },
   "monitor-issues": { "route": "#/monitor/issues" },
-  "monitor-logs": { "route": "#/monitor/logs" },
+  "monitor-logs": { "route": "#/monitor/logs", "live": "az-logs-query", "expand": ["role=button[name=\"Run\"]"] },
   "monitor-health-models": { "route": "#/monitor/healthmodels" },
   "monitor-change-analysis": { "route": "#/monitor/changeanalysis", "live": "az-activity-resource" },
   "monitor-service-health": { "route": "#/monitor/servicehealth" },

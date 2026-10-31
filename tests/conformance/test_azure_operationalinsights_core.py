@@ -67,6 +67,32 @@ check("data sources filter by kind", len(cp(st, "GET", D[:3], query={"$filter": 
 
 check("delete returns 200 + LRO, then 204", cp(st, "DELETE", ["workspaces", "law-one"])["lro"] and cp(st, "DELETE", ["workspaces", "law-one"])["status"] == 204)
 
+# ── logs query (KQL subset over .../workspaces/{ws}/api/query) ──────────────────────────
+mk(st, "law-query")
+Q = ["workspaces", "law-query", "api", "query"]
+check("query needs a 'query' property", cp(st, "POST", Q, {})["status"] == 400)
+check("query on unknown table → 400", cp(st, "POST", Q, {"query": "NoSuchTable"})["status"] == 400)
+check("AzureActivity starts empty (nothing recorded yet)", cp(st, "POST", Q, {"query": "AzureActivity | take 10"})["body"]["tables"][0]["rows"] == [])
+check("other built-in tables are always empty", cp(st, "POST", Q, {"query": "Heartbeat | take 5"})["body"]["tables"][0]["rows"] == [])
+st["sub1/__event__/e1"] = {"_type": "Microsoft.Insights/eventtypes", "_sub": "sub1", "_seq": 1,
+                           "eventTimestamp": "2026-01-01T00:00:00.000000Z",
+                           "operationName": {"value": "Microsoft.Storage/storageAccounts/write"},
+                           "caller": "tester@vyomi.local", "level": "Informational", "resourceGroupName": "rg1"}
+st["sub1/__event__/e2"] = {"_type": "Microsoft.Insights/eventtypes", "_sub": "sub-other", "_seq": 2,
+                           "eventTimestamp": "2026-01-02T00:00:00.000000Z",
+                           "operationName": {"value": "Microsoft.Storage/storageAccounts/delete"},
+                           "caller": "other@vyomi.local", "level": "Informational", "resourceGroupName": "rg9"}
+r = cp(st, "POST", Q, {"query": "AzureActivity | where OperationName == 'Microsoft.Storage/storageAccounts/write' "
+                                "| project TimeGenerated, OperationName | take 5"})
+t = r["body"]["tables"][0]
+check("where+project: real rows, right columns, other subscription excluded",
+      [c["name"] for c in t["columns"]] == ["TimeGenerated", "OperationName"]
+      and t["rows"] == [["2026-01-01T00:00:00.000000Z", "Microsoft.Storage/storageAccounts/write"]], t)
+check("count", cp(st, "POST", Q, {"query": "AzureActivity | count"})["body"]["tables"][0]["rows"] == [[1]])
+check("unsupported operator → 400 (not a silent success)", cp(st, "POST", Q, {"query": "AzureActivity | summarize count() by Caller"})["status"] == 400)
+check("unknown column in where → 400", cp(st, "POST", Q, {"query": "AzureActivity | where NoSuchColumn == 'x'"})["status"] == 400)
+check("GET not allowed on the query action", cp(st, "GET", Q)["status"] == 405)
+
 arm = AzureArm()
 resp = arm.handle("PUT", "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/law-arm",
                   {"api-version": "2022-10-01"}, {"location": "eastus", "properties": {}})

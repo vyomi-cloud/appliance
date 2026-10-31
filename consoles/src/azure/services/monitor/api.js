@@ -82,6 +82,12 @@ export const putWorkspace = (rg, name, body) => WORKSPACES.put(rg, name, body);
 export const deleteWorkspace = (rg, name) => WORKSPACES.remove(rg, name);
 export const WORKSPACE_SKUS = ["PerGB2018", "Free", "Standalone", "PerNode", "Standard", "Premium", "CapacityReservation"];
 
+// ── Logs query (.../workspaces/{ws}/api/query) — the same ARM pass-through path the
+// Azure Portal's Logs blade uses, carrying a small real KQL subset (core/azure_operationalinsights_core.py).
+export const LOG_QUERY_API_VERSION = "2017-10-01";
+export const runLogQuery = (rg, name, query) =>
+  restJson("POST", `${WORKSPACES.path(rg, name)}/api/query`, { query: { "api-version": LOG_QUERY_API_VERSION }, body: { query } });
+
 // ── workbooks (Microsoft.Insights/workbooks) ────────────────────────────────────────
 export const listWorkbooks = async () => (await WORKBOOKS.list()).map(withRg);
 export const putWorkbook = (rg, name, body) => WORKBOOKS.put(rg, name, body);

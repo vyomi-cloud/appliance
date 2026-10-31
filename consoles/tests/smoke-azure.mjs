@@ -1209,6 +1209,24 @@ try {
   await page.getByText("Enabled (1)").first().waitFor({ timeout: 10000 });
   check("diagnostic settings picker shows the resource's Diagnostics status as Enabled", true);
 
+  // ── Monitor depth: Logs — the KQL subset (azure.monitor.log_query) reads back a real
+  // wire-created resource's Activity log row through AzureActivity (native ARM → UI query) ──
+  const LOGSWS = `vysmokelogsws${n}`;
+  const logsWsPut = await wire(`/subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.OperationalInsights/workspaces/${LOGSWS}?api-version=2022-10-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ location: "eastus", properties: {} }) });
+  check("ARM PUT Log Analytics workspace for Logs query over wire", logsWsPut.status === 200 || logsWsPut.status === 201, `HTTP ${logsWsPut.status}`);
+  const LOGSA = `vysmokelogsa${n}`;
+  const logSaPut = await wire(`/subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.Storage/storageAccounts/${LOGSA}?api-version=2023-01-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ location: "eastus" }) });
+  check("ARM PUT storage account for Logs query over wire", logSaPut.status === 200 || logSaPut.status === 201, `HTTP ${logSaPut.status}`);
+  await page.goto(UI + "#/monitor/logs");
+  await page.getByLabel("Log Analytics workspace").selectOption({ label: LOGSWS });
+  await page.getByLabel("KQL query").fill("AzureActivity\n| take 50");
+  await page.getByRole("button", { name: "Run" }).click();
+  await page.getByText(LOGSA, { exact: false }).first().waitFor({ timeout: 10000 });
+  check("UI Logs KQL query shows the wire-created resource's real Activity log row", true);
+  await shot("25-monitor-logs-query");
+
   // ── SQL: server + database created through the wizard → visible over native ARM ───────
   const sqlArm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2023-08-01`,
     { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
