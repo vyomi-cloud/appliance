@@ -835,6 +835,42 @@ try {
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete secret via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/secrets/${SM}`)).status === 404);
 
+  // Secret Manager DEPTH: Permissions is a real, ENFORCED per-secret IAM policy (unlike KMS/
+  // Pub/Sub's store-only policy) — grant access via the UI, then prove the native wire
+  // actually denies an ungranted principal and allows the granted one. Logs is real too: an
+  // addVersion event over the wire shows up as a log entry in the Logs tab.
+  const SM2 = `v4-gcp-sm2-${Date.now() % 100000}`;
+  await page.goto(UI + "#/security/secret-manager/create");
+  await page.getByLabel("Name").fill(SM2);
+  await page.getByRole("button", { name: "Create secret", exact: true }).click();
+  await page.getByRole("heading", { name: SM2 }).waitFor({ timeout: 10000 });
+  await wire(`/v1/projects/vyomi-project/secrets/${SM2}:addVersion`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ payload: { data: Buffer.from("smoke-value").toString("base64") } }),
+  });
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  await page.getByRole("button", { name: "Grant access" }).click();
+  await page.getByLabel("New principals").fill("user:sm-smoke@example.com");
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByText("user:sm-smoke@example.com").waitFor({ timeout: 10000 });
+  const deniedResp = await wire(`/v1/projects/vyomi-project/secrets/${SM2}/versions/latest:access`,
+    { headers: { "X-Cloudlearn-Principal": "someone-else@example.com" } });
+  const allowedResp = await wire(`/v1/projects/vyomi-project/secrets/${SM2}/versions/latest:access`,
+    { headers: { "X-Cloudlearn-Principal": "sm-smoke@example.com" } });
+  check("grant access via UI → native wire denies an ungranted principal", deniedResp.status === 403);
+  check("grant access via UI → native wire allows the granted principal", allowedResp.status === 200);
+  await shot("14-secret-permissions");
+
+  await wire(`/v1/projects/vyomi-project/secrets/${SM2}:addVersion`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ payload: { data: Buffer.from("smoke-value").toString("base64") } }),
+  });
+  await page.getByRole("tab", { name: "Logs" }).click();
+  await page.getByText("Version added").first().waitFor({ timeout: 10000 });
+  check("version added over native wire → shown as a real log entry in the Logs tab",
+    (await page.getByText("Version added").count()) === 2);
+  await shot("15-secret-logs");
+
   // Cloud SQL: create instance via UI → native Admin API, add a database over the wire →
   // shown in the UI, then delete the instance via UI → gone over the wire.
   const SQLI = `v4-gcp-sql-${Date.now() % 100000}`;
