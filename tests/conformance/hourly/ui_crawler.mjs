@@ -363,9 +363,14 @@ async function crawlConsole(browser, base, con, needsSW) {
       await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, RAIL_SEL, { timeout: 120000, polling: 500 });
     }
     drain(); // boot noise is reported once below, not per service
-    const services = await page.evaluate((sel) => [...document.querySelectorAll(sel)]
-      .map((e, i) => ({ i, label: (e.innerText || e.title || e.getAttribute("data-key") || e.getAttribute("data-service") || "").trim().split("\n").pop() }))
-      .filter((x) => x.label && !/^home$/i.test(x.label)), RAIL_SEL);
+    // The side nav also holds chrome that is not a service (hamburger, close,
+    // the Console Home title, collapsible section headers): not crawled.
+    const NAV_CHROME = "nav-open nav-x nav-title nav-sec-h";
+    const services = await page.evaluate(([sel, chrome]) => [...document.querySelectorAll(sel)]
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => !chrome.split(" ").some((c) => e.classList.contains(c)))
+      .map(({ e, i }) => ({ i, label: (e.innerText || e.title || e.getAttribute("data-key") || e.getAttribute("data-service") || "").trim().split("\n").pop() }))
+      .filter((x) => x.label && !/^home$/i.test(x.label)), [RAIL_SEL, NAV_CHROME]);
     // Opening a service swaps #rail for that service's own sidebar (EC2 →
     // Events, Instances, …), so the service list's indexes stop matching.
     // Go back to the console home whenever the rail entry isn't this service.
