@@ -1184,6 +1184,65 @@
     /* Headings + strong text → light. */
     h1, h2, h3, h4, h5, h6, .sc-title h2, .kct h3, header.hero h1,
     .stat-value, .pc-val, .space-name, .modal h3 { color: #e4e4e7 !important; }
+
+    /* ── Space cards in each cloud's own (light) console theme ─────────────────────────
+       AWS = Cloudscape container, Google Cloud = Material card, Azure = Fluent card.
+       Scoped by data-provider; beats the page's dark tile rules above. */
+    #spaces-grid .space-card[data-provider] { background: #fff !important; box-shadow: none; transform: none; }
+    #spaces-grid .space-card[data-provider] .space-meta .dot { opacity: .5; }
+    #spaces-grid .space-card[data-provider] .space-savings-unit, #spaces-grid .space-card[data-provider] .space-savings-yr { font-weight: 400; }
+    #spaces-grid .space-card[data-provider] .ttl-btn { color: inherit; opacity: .7; }
+
+    /* AWS — Cloudscape: white container, 16px corners, soft shadow, Amazon Ember, ink #000716 */
+    #spaces-grid .space-card[data-provider="aws"] {
+      border: none !important; border-radius: 16px;
+      box-shadow: 0 1px 1px 0 rgba(0,28,36,.30), 1px 1px 1px 0 rgba(0,28,36,.15), -1px 1px 1px 0 rgba(0,28,36,.15) !important;
+      font-family: "Amazon Ember", "Helvetica Neue", Roboto, Arial, sans-serif; color: #000716;
+    }
+    #spaces-grid .space-card[data-provider="aws"]:hover { background: #fff !important; box-shadow: 0 4px 20px 1px rgba(0,7,22,.10), 0 1px 1px 0 rgba(0,28,36,.30) !important; }
+    #spaces-grid .space-card[data-provider="aws"].active { box-shadow: 0 0 0 2px #0972d3, 0 1px 1px 0 rgba(0,28,36,.30) !important; }
+    #spaces-grid .space-card[data-provider="aws"] .space-logo svg path[fill="#fff"] { fill: #232f3e; }   /* "aws" wordmark: dark on white */
+    #spaces-grid .space-card[data-provider="aws"] .space-name { color: #000716 !important; font-size: 16px; font-weight: 700; }
+    #spaces-grid .space-card[data-provider="aws"] .space-meta { color: #5f6b7a; font-size: 14px; }
+    #spaces-grid .space-card[data-provider="aws"] .space-savings .material-icons { color: #037f0c; }
+    #spaces-grid .space-card[data-provider="aws"] .space-savings-amt { color: #000716; font-size: 16px; }
+    #spaces-grid .space-card[data-provider="aws"] .space-savings-unit, #spaces-grid .space-card[data-provider="aws"] .space-savings-yr { color: #5f6b7a; font-size: 12px; }
+    #spaces-grid .space-card[data-provider="aws"] .space-savings-track { background: #e9ebed; height: 4px; border-radius: 4px; }
+    #spaces-grid .space-card[data-provider="aws"] .space-savings-track i { background: #ff9900; border-radius: 4px; }
+    #spaces-grid .space-card[data-provider="aws"] .space-active-pill { color: #037f0c; background: #f2fcf3; border: 1px solid #037f0c; border-radius: 4px; text-transform: none; letter-spacing: 0; font-weight: 700; }
+
+    /* Google Cloud — Material: white card, 1px #dadce0, 8px corners, Google Sans, #202124 / #5f6368 */
+    #spaces-grid .space-card[data-provider="gcp"] {
+      border: 1px solid #dadce0 !important; border-radius: 8px;
+      font-family: "Google Sans", Roboto, Arial, sans-serif; color: #202124;
+    }
+    #spaces-grid .space-card[data-provider="gcp"]:hover { background: #fff !important; border-color: #dadce0 !important; box-shadow: 0 1px 2px 0 rgba(60,64,67,.30), 0 1px 3px 1px rgba(60,64,67,.15) !important; }
+    #spaces-grid .space-card[data-provider="gcp"].active { border-color: #1a73e8 !important; box-shadow: inset 0 0 0 1px #1a73e8 !important; }
+    #spaces-grid .space-card[data-provider="gcp"] .space-name { color: #202124 !important; font-size: 16px; font-weight: 500; }
+    #spaces-grid .space-card[data-provider="gcp"] .space-meta { color: #5f6368; font-size: 13px; font-family: Roboto, Arial, sans-serif; }
+    #spaces-grid .space-card[data-provider="gcp"] .space-savings .material-icons { color: #188038; }
+    #spaces-grid .space-card[data-provider="gcp"] .space-savings-amt { color: #202124; font-size: 16px; font-weight: 500; }
+    #spaces-grid .space-card[data-provider="gcp"] .space-savings-unit, #spaces-grid .space-card[data-provider="gcp"] .space-savings-yr { color: #5f6368; font-size: 12px; }
+    #spaces-grid .space-card[data-provider="gcp"] .space-savings-track { background: #e8f0fe; height: 4px; border-radius: 0; }
+    #spaces-grid .space-card[data-provider="gcp"] .space-savings-track i { background: #1a73e8; border-radius: 0; }
+    #spaces-grid .space-card[data-provider="gcp"] .space-active-pill { color: #137333; background: #e6f4ea; border-radius: 16px; text-transform: none; letter-spacing: .1px; font-weight: 500; }
+
+    /* Azure — Fluent: white card, 2px corners, depth-4 shadow, Segoe UI, #323130 / #605e5c */
+    #spaces-grid .space-card[data-provider="azure"] {
+      border: none !important; border-radius: 2px;
+      box-shadow: 0 1.6px 3.6px 0 rgba(0,0,0,.132), 0 .3px .9px 0 rgba(0,0,0,.108) !important;
+      font-family: "Segoe UI", "Segoe UI Web (West European)", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif; color: #323130;
+    }
+    #spaces-grid .space-card[data-provider="azure"]:hover { background: #fff !important; box-shadow: 0 6.4px 14.4px 0 rgba(0,0,0,.132), 0 1.2px 3.6px 0 rgba(0,0,0,.108) !important; }
+    #spaces-grid .space-card[data-provider="azure"].active { box-shadow: inset 0 0 0 2px #0078d4, 0 1.6px 3.6px 0 rgba(0,0,0,.132) !important; }
+    #spaces-grid .space-card[data-provider="azure"] .space-name { color: #323130 !important; font-size: 15px; font-weight: 600; }
+    #spaces-grid .space-card[data-provider="azure"] .space-meta { color: #605e5c; font-size: 12px; }
+    #spaces-grid .space-card[data-provider="azure"] .space-savings .material-icons { color: #107c10; }
+    #spaces-grid .space-card[data-provider="azure"] .space-savings-amt { color: #323130; font-size: 15px; font-weight: 600; }
+    #spaces-grid .space-card[data-provider="azure"] .space-savings-unit, #spaces-grid .space-card[data-provider="azure"] .space-savings-yr { color: #605e5c; font-size: 12px; }
+    #spaces-grid .space-card[data-provider="azure"] .space-savings-track { background: #edebe9; height: 2px; border-radius: 0; }
+    #spaces-grid .space-card[data-provider="azure"] .space-savings-track i { background: #0078d4; border-radius: 0; }
+    #spaces-grid .space-card[data-provider="azure"] .space-active-pill { color: #107c10; background: #dff6dd; border-radius: 2px; text-transform: none; letter-spacing: 0; font-weight: 600; }
     /* Body / muted text → mid-light. */
     p, .sc-desc, header.hero p, .stat-sub, .pc-sub, .kct p, .kct-sub, .stat-label,
     .pie-label, .kc-sec-label, .empty-spaces, .filter-empty, .modal .modal-sub {
