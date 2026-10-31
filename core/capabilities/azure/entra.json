@@ -126,11 +126,16 @@
  "azure.entra.security_defaults": {
   "title": "Security defaults / Access management for Azure resources",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Conditional-access-style tenant security policy is not modelled; the toggle is not stored and nothing is enforced."
+   "'Access management for Azure resources' = Yes really grants a tenant-root (scope \"/\") 'User Access Administrator' role assignment over the same Azure RBAC checkAccess engine every subscription's Access control (IAM) page uses — the real console's elevateAccess action. It is modelled for the single caller identity Vyomi has (no signed-in-admin model), not per-signed-in-user.",
+   "'Security defaults' (Manage security defaults) is a real Graph policy document (policies/identitySecurityDefaultsEnforcementPolicy) stored and returned exactly as set, but not enforced — Vyomi has no interactive sign-in flow to require MFA or block legacy authentication against."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_rbac_core.py",
+   "tests/conformance/test_azure_graph_core.py"
   ]
  },
  "azure.entra.devices": {

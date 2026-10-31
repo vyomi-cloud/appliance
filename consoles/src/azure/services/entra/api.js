@@ -63,6 +63,10 @@ export const updateDirectorySettings = (body) => graph("PATCH", "/settings/direc
 export const listAuditLogs = async () => (await graph("GET", "/auditLogs/directoryAudits")).value || [];
 export const listSignInLogs = async () => (await graph("GET", "/auditLogs/signIns")).value || [];
 
+// ── Security defaults (Properties | "Manage security defaults" panel) ─────────────────
+export const getSecurityDefaults = () => graph("GET", "/policies/identitySecurityDefaultsEnforcementPolicy");
+export const updateSecurityDefaults = (body) => graph("PATCH", "/policies/identitySecurityDefaultsEnforcementPolicy", { body });
+
 // ── Roles and administrators (Azure RBAC core, tenant-root scope) ─────────────────────
 export const listRoleDefinitions = async () => (await restJson("GET", `${AUTH}/roleDefinitions`)).value || [];
 export const listRoleAssignments = async () => (await restJson("GET", `${AUTH}/roleAssignments`)).value || [];
@@ -74,6 +78,11 @@ export const deleteRoleDefinition = (roleName) => restJson("DELETE", `${AUTH}/ro
 export const assignRole = (roleName, principalId, scope = "/") =>
   restJson("PUT", `${AUTH}/roleAssignments/${uid()}`, { body: { properties: { roleName, principalId, scope } } });
 export const deleteRoleAssignment = (name) => restJson("DELETE", `${AUTH}/roleAssignments/${encodeURIComponent(name)}`);
+
+// "Access management for Azure resources" (Properties page): whether the single caller
+// identity Vyomi models holds a real tenant-root "User Access Administrator" assignment.
+export const ELEVATED_ADMIN_PRINCIPAL = "global-admin";
+export const ELEVATE_ROLE_NAME = "User Access Administrator";
 
 // ── form helpers ──────────────────────────────────────────────────────────────────────
 export const DEFAULT_DOMAIN = "vyomilearn.onmicrosoft.com";

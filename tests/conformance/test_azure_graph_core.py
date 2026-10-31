@@ -106,6 +106,14 @@ def run(store=None):
     _check("application registration allowed again once the toggle is back on",
            call("POST", "/v1.0/applications", {"displayName": "Re-Allowed App"}).status == 201)
 
+    # Security defaults (Properties | "Manage security defaults" panel) — real Graph
+    # policy document, stored and returned exactly as set (azure.entra.security_defaults).
+    sd = body(call("GET", "/v1.0/policies/identitySecurityDefaultsEnforcementPolicy"))
+    _check("security defaults policy defaults to enabled", sd["isEnabled"] is True)
+    _check("disable security defaults", call("PATCH", "/v1.0/policies/identitySecurityDefaultsEnforcementPolicy", {"isEnabled": False}).status == 204)
+    _check("security defaults setting round-trips",
+           body(call("GET", "/v1.0/policies/identitySecurityDefaultsEnforcementPolicy"))["isEnabled"] is False)
+
     # Directory audit log — every mutation above should have appended an entry.
     audits = body(call("GET", "/v1.0/auditLogs/directoryAudits"))["value"]
     _check("directory audit log recorded the mutations", len(audits) >= 8)

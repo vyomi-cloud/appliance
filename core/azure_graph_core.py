@@ -36,6 +36,8 @@ check runs, so it can never collide with ARM / Blob / Cosmos / Key Vault paths.
   GET               /v1.0/organization                             -> {"value": [the one tenant]}
   GET               /v1.0/auditLogs/directoryAudits                real, appended on every mutation
   GET               /v1.0/auditLogs/signIns                        honestly empty (no sign-in flow)
+  GET/PATCH         /v1.0/policies/identitySecurityDefaultsEnforcementPolicy
+                                                                     stored/returned as set, not enforced
 
 Errors: Graph-shaped JSON {"error": {"code": ..., "message": ...}} with the matching HTTP
 status (400 Request_BadRequest, 403 Authorization_RequestDenied, 404 Request_ResourceNotFound,
@@ -128,6 +130,16 @@ class GraphStore:
         }
         self.audit_logs: list[dict] = []
         self.sign_in_logs: list[dict] = []
+        # Security defaults (Entra ID | Properties' "Manage security defaults" panel,
+        # azure.entra.security_defaults): a real Graph policy document, stored and
+        # returned exactly as set — Vyomi has no interactive sign-in flow to enforce the
+        # MFA/legacy-auth requirements it describes against.
+        self.security_defaults: dict = {
+            "id": "00000000-0000-0000-0000-securitydflt",
+            "displayName": "Security Defaults",
+            "description": "Security defaults is a set of basic identity security mechanisms recommended by Microsoft.",
+            "isEnabled": True,
+        }
 
     def persist(self) -> None:
         """Write-through hook (no-op in-memory; a backed subclass overrides it)."""
@@ -503,6 +515,18 @@ def _patch_directory_settings(store: GraphStore, body: dict) -> Response:
     return Response(status=204)
 
 
+# ── security defaults policy (Properties | Security defaults panel) ──────────
+def _get_security_defaults(store: GraphStore) -> Response:
+    return _json(200, store.security_defaults)
+
+
+def _patch_security_defaults(store: GraphStore, body: dict) -> Response:
+    if "isEnabled" in body:
+        store.security_defaults["isEnabled"] = bool(body["isEnabled"])
+    store.audit("Update security defaults", "Policy", "Security Defaults")
+    return Response(status=204)
+
+
 # ── audit / sign-in logs ───────────────────────────────────────────────────────
 def _list_audit_logs(store: GraphStore) -> Response:
     return _collection(store.audit_logs)
@@ -612,6 +636,12 @@ def dispatch(store: GraphStore, method: str, path: str,
             return _get_directory_settings(store)
         if method == "PATCH":
             return _patch_directory_settings(store, payload)
+
+    if head == "policies" and len(segs) == 2 and segs[1].lower() == "identitysecuritydefaultsenforcementpolicy":
+        if method == "GET":
+            return _get_security_defaults(store)
+        if method == "PATCH":
+            return _patch_security_defaults(store, payload)
 
     if head == "auditlogs" and len(segs) == 2:
         if segs[1].lower() == "directoryaudits" and method == "GET":
