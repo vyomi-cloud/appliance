@@ -1041,12 +1041,19 @@ def _get_credential_report(store, params):
 
 
 # ── policy evaluation (the decision path) ─────────────────────────────────────
-def _resolve_policy_docs(store, principal: str) -> tuple[dict, list[dict]]:
-    """Resolve a principal (name or ARN) to its identity context + effective policy
-    documents (attached managed + inline + group-attached)."""
+def _resolve_policy_docs(store, principal: str) -> tuple[dict, list[dict], dict | None]:
+    """Resolve a principal (name or ARN) to its identity context, its effective policy
+    documents (attached managed + inline + group-attached), and its permissions-boundary
+    document (None if it has none, or the boundary policy no longer exists)."""
     ref = (principal or "").strip()
     name = ref.split("/")[-1] if ":" in ref else ref
     docs: list[dict] = []
+
+    def boundary_doc(rec: dict) -> dict | None:
+        arn = rec.get("permissions_boundary")
+        p = store.get_policy(arn) if arn else None
+        return p["document"] if p else None
+
     u = store.get_user(name)
     if u:
         for arn in u["attached_policies"]:
@@ -1062,7 +1069,7 @@ def _resolve_policy_docs(store, principal: str) -> tuple[dict, list[dict]]:
                     if p:
                         docs.append(p["document"])
                 docs.extend(g.get("inline_policies", {}).values())
-        return ({"arn": u["arn"], "type": "user", "name": u["user_name"]}, docs)
+        return ({"arn": u["arn"], "type": "user", "name": u["user_name"]}, docs, boundary_doc(u))
     r = store.get_role(name)
     if r:
         for arn in r["attached_policies"]:
@@ -1070,8 +1077,20 @@ def _resolve_policy_docs(store, principal: str) -> tuple[dict, list[dict]]:
             if p:
                 docs.append(p["document"])
         docs.extend(r["inline_policies"].values())
-        return ({"arn": r["arn"], "type": "role", "name": r["role_name"]}, docs)
-    return ({"arn": ref, "type": "unknown", "name": name}, [])
+        return ({"arn": r["arn"], "type": "role", "name": r["role_name"]}, docs, boundary_doc(r))
+    return ({"arn": ref, "type": "unknown", "name": name}, [], None)
+
+
+def _apply_boundary(store, boundary_doc: dict | None, decision: str, action: str, resource: str, ctx: dict) -> str:
+    """A permissions boundary clips what the identity policies allow: the effective
+    permission is the INTERSECTION of the identity decision and the boundary decision
+    (real AWS semantics) — an explicit deny from either side wins; otherwise both sides
+    must allow. Boundaries never WIDEN access, so a non-"allowed" identity decision is
+    returned unchanged."""
+    if boundary_doc is None or decision != "allowed":
+        return decision
+    b_decision, _ = store.engine.evaluate([boundary_doc], action, resource, ctx)
+    return b_decision if b_decision != "allowed" else "allowed"
 
 
 def _simulate_principal_policy(store, params):
@@ -1080,7 +1099,7 @@ def _simulate_principal_policy(store, params):
         raise IamError("ValidationError", "PolicySourceArn is required.", 400)
     actions = _members(params, "ActionNames")
     resources = _members(params, "ResourceArns") or ["*"]
-    identity, docs = _resolve_policy_docs(store, source)
+    identity, docs, boundary = _resolve_policy_docs(store, source)
     ctx = {"aws:PrincipalArn": identity["arn"], "aws:PrincipalType": identity["type"],
            "aws:username": identity["name"], "aws:RequestedRegion": "us-east-1"}
     results = []
@@ -1088,6 +1107,7 @@ def _simulate_principal_policy(store, params):
         for resource in resources:
             ctx_r = dict(ctx, **{"aws:ResourceArn": resource})
             decision, _ = store.engine.evaluate(docs, action, resource, ctx_r)
+            decision = _apply_boundary(store, boundary, decision, action, resource, ctx_r)
             results.append("<member>" + _el("EvalActionName", action)
                            + _el("EvalResourceName", resource)
                            + _el("EvalDecision", decision) + "</member>")
@@ -1266,11 +1286,14 @@ def is_authorized(store: IamStore, principal: str, action: str, resource: str,
                   context: dict | None = None) -> dict:
     """Convenience authorization probe used by in-tab enforcement / the console —
     the analogue of server.py's _iam_authorize. Returns {allowed, decision, reason}."""
-    identity, docs = _resolve_policy_docs(store, principal)
+    identity, docs, boundary = _resolve_policy_docs(store, principal)
     ctx = {"aws:PrincipalArn": identity["arn"], "aws:PrincipalType": identity["type"],
            "aws:username": identity["name"], "aws:RequestedRegion": "us-east-1",
            "aws:ResourceArn": resource}
     if context:
         ctx.update({k: str(v) for k, v in context.items()})
     decision, reason = store.engine.evaluate(docs, action, resource, ctx)
+    decision = _apply_boundary(store, boundary, decision, action, resource, ctx)
+    if decision != "allowed" and reason == "":
+        reason = f"permissions boundary clips {action} on {resource}"
     return {"allowed": decision == "allowed", "decision": decision, "reason": reason}

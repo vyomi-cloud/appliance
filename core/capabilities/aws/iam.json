@@ -78,9 +78,9 @@
  },
  "iam.permissions-boundary": {
   "title": "Permissions boundaries",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "A permissions boundary ARN is stored on the user/role and reflected in ListEntitiesForPolicy, but Vyomi does not clip the effective permissions to it — SimulatePrincipalPolicy and policy enforcement ignore the boundary."
+   "SimulatePrincipalPolicy and the in-tab authorization check (is_authorized) clip the effective permission to the intersection of the identity policy and the boundary, explicit deny on either side winning — real AWS semantics. This doesn't change whether other services' native API calls are actually gated on IAM at all (see iam.enforcement)."
   ],
   "tests": ["tests/conformance/test_iam_core.py"]
  },

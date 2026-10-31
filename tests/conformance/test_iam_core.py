@@ -228,11 +228,27 @@ def run() -> int:
     iam.dispatch(st, {"Action": "ListAttachedRolePolicies", "RoleName": "AppRole"})
     iam.dispatch(st, {"Action": "DetachRolePolicy", "RoleName": "AppRole", "PolicyArn": policy_arn})
 
-    # 20. Permissions boundaries (stored + reflected in ListEntitiesForPolicy, not enforced)
+    # 20. Permissions boundaries — stored, reflected in ListEntitiesForPolicy, AND enforced by
+    # SimulatePrincipalPolicy / is_authorized: the boundary (S3ReadOnly: s3:Get* on data/*)
+    # clips bob's identity grant (AllowAllS3, minus DenyDelete) down to its intersection.
     iam.dispatch(st, {"Action": "PutUserPermissionsBoundary", "UserName": "bob", "PermissionsBoundary": policy_arn})
     lep = iam.dispatch(st, {"Action": "ListEntitiesForPolicy", "PolicyArn": policy_arn}).body
     _check("boundary user listed", "<PolicyBoundaryUsers><member><UserName>bob</UserName></member>" in lep)
+    simc = iam.dispatch(st, {"Action": "SimulatePrincipalPolicy", "PolicySourceArn": "bob",
+                             "ActionNames.member.1": "s3:GetObject", "ActionNames.member.2": "s3:PutObject",
+                             "ActionNames.member.3": "s3:DeleteObject",
+                             "ResourceArns.member.1": "arn:aws:s3:::data/report.csv"})
+    decc = _decisions(simc.body)
+    _check("boundary: in-scope action stays allowed (identity allow ∩ boundary allow)", decc.get("s3:GetObject") == "allowed")
+    _check("boundary: out-of-boundary action clipped to implicit deny", decc.get("s3:PutObject") == "implicitDeny")
+    _check("boundary: identity's explicit deny still wins regardless of the boundary", decc.get("s3:DeleteObject") == "explicitDeny")
+    _check("boundary enforced by is_authorized too",
+           iam.is_authorized(st, "bob", "s3:PutObject", "arn:aws:s3:::data/report.csv")["allowed"] is False)
     iam.dispatch(st, {"Action": "DeleteUserPermissionsBoundary", "UserName": "bob"})
+    _check("boundary removed restores the unclipped grant",
+           _decisions(iam.dispatch(st, {"Action": "SimulatePrincipalPolicy", "PolicySourceArn": "bob",
+                                        "ActionNames.member.1": "s3:PutObject",
+                                        "ResourceArns.member.1": "arn:aws:s3:::data/report.csv"}).body).get("s3:PutObject") == "allowed")
 
     # 21. Managed policy versions
     v2 = iam.dispatch(st, {"Action": "CreatePolicyVersion", "PolicyArn": policy_arn,
