@@ -56,4 +56,27 @@ export default {
     await wire("PUT", lockPath(SVC, uniq), { svc: null, body: { properties: { level: "ReadOnly", notes: "uic" } } });
     return uniq;
   },
+
+  "live-apitag": async (wire, uniq) => {
+    await ensureService(wire);
+    await wire("PUT", subPath(SVC, "tags", uniq), { svc: null, body: { properties: { displayName: uniq } } });
+    return uniq;
+  },
+
+  "live-policyfragment": async (wire, uniq) => {
+    await ensureService(wire);
+    await wire("PUT", subPath(SVC, "policyFragments", uniq), { svc: null,
+      body: { properties: { format: "xml", value: "<fragment><base /></fragment>", description: uniq } } });
+    return uniq;
+  },
+
+  "live-diagnosticsetting": async (wire, uniq) => {
+    await ensureService(wire);
+    await wire("PUT", `${servicePath(SVC).split("?")[0]}/providers/Microsoft.Insights/diagnosticSettings/${uniq}?api-version=2021-05-01-preview`,
+      { svc: null, body: { properties: {
+        storageAccountId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/uicdiagsa`,
+        logs: [{ categoryGroup: "allLogs", enabled: true }],
+      } } });
+    return uniq;
+  },
 };

@@ -87,33 +87,69 @@
   "title": "Activity log",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the timespan picker are not modeled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering is not modeled, and `caller` is a fixed placeholder identity rather than the real signed-in principal. The timespan picker IS enforced — it maps to a real `eventTimestamp ge/le` $filter."
   ],
   "api": ["ActivityLogs_List"],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.apim.iam": {
-  "title": "Access control (IAM) on a service",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Role assignments scoped to an individual resource are not modeled."]
+  "title": "Access control (IAM) on a service: role assignments and built-in role definitions over ARM",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), but the generic ARM list is subscription-wide (not scoped to this one service), and 'Check access' / 'My access' evaluation, Deny assignments and Classic administrators are not modeled — Vyomi never denies a console action based on a role assignment."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.apim.developerportal": {
   "title": "Developer portal (overview, settings, Users, Groups, Identities, Delegation)",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": ["The developer portal CMS, its user/group/identity-provider directory, and delegation are not modeled."]
  },
+ "azure.apim.diagnosticsettings": {
+  "title": "Diagnostic settings (Microsoft.Insights/diagnosticSettings, scoped to this service)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Logs/metrics are never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline, so the setting is stored and validated exactly as the real resource requires but nothing flows.",
+   "Vyomi has no catalog of APIM's real log/metric category names (GET .../diagnosticSettingsCategories is not modeled) — the create form offers the 'allLogs' category group and 'AllMetrics' rather than APIM's specific category picker."
+  ],
+  "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
+ },
  "azure.apim.monitoring": {
-  "title": "Application Insights, Alerts, Metrics, Diagnostic settings, Logs, Analytics",
+  "title": "Application Insights, Alerts, Metrics, Logs, Analytics",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Metrics charts, alert rules, diagnostic-setting log routing, Log Analytics queries and API analytics are not modeled."]
+  "limitations": ["Metrics charts, alert rules, Log Analytics queries and API analytics are not modeled."]
+ },
+ "azure.apim.scaletier": {
+  "title": "Scale out and up, Pricing tier (post-creation sku.name/sku.capacity over ARM)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Vyomi does not enforce per-tier unit/capacity limits (e.g. Consumption has no scale units, Developer caps at 1) or multi-region/zone scale-out — the tier name and unit count you set are stored and reflected in Overview and every other blade exactly as configured."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.apim.deployment": {
-  "title": "Network, Custom domains, Locations, Scale out and up, Pricing tier (post-creation), Managed identities (user-assigned), Certificates, Gateways, Self-hosted gateways, Defender for Cloud",
+  "title": "Network, Custom domains, Locations, Managed identities (user-assigned), Certificates, Gateways, Self-hosted gateways, Defender for Cloud",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Multi-region deployment, VNet/custom-domain/certificate configuration, scale units, managed/self-hosted gateways and Defender for Cloud are not modeled."]
+  "limitations": ["Multi-region deployment, VNet/custom-domain/certificate configuration, managed/self-hosted gateways and Defender for Cloud are not modeled."]
+ },
+ "azure.apim.apitags.crud": {
+  "title": "API Tags (Microsoft.ApiManagement/service/tags) — create, get, list, delete",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Associating a tag with a specific API (apiTagResources) is not modeled; this page manages the service-wide tag catalog only, same as named values/backends."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.apim.policyfragments.crud": {
+  "title": "Policy fragments (Microsoft.ApiManagement/service/policyFragments) — create, get, list, delete",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "Vyomi stores the fragment's XML exactly as configured but never evaluates or injects it into a live request pipeline — Vyomi's gateway does not execute policies."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.apim.tools": {
-  "title": "Diagnose and solve problems, Events, MCP Servers, API Tags, Policy fragments, Workspaces, Credential manager, Tasks, Support + Troubleshooting",
+  "title": "Diagnose and solve problems, Events, MCP Servers, Workspaces, Credential manager, Tasks, Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": ["These portal troubleshooting, catalog and support tools are not modeled."]
  },

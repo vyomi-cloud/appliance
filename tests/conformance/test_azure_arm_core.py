@@ -164,6 +164,68 @@ def run() -> int:
     r = arm.handle("GET", pol, {"api-version": "2023-05-01-preview"})
     _check("apim saved policy persists", r["body"]["properties"]["value"] == "<policies><inbound /></policies>")
 
+    # 17a. APIM API Tags (Microsoft.ApiManagement/service/tags) — generic nested ARM
+    # sub-resource, the SAME mechanism as named values/backends (AzureArm._upsert): no
+    # service-specific backend code, just the type/name alternation one level deeper.
+    tag = apim + "/tags/env-prod"
+    r = arm.handle("PUT", tag, {"api-version": "2023-05-01-preview"}, {"properties": {"displayName": "env-prod"}})
+    _check("apim tag put 201", r["status"] == 201 and r["body"]["name"] == "env-prod")
+    r = arm.handle("GET", apim + "/tags", {"api-version": "2023-05-01-preview"})
+    _check("apim tags list has it", [t["name"] for t in r["body"]["value"]] == ["env-prod"])
+    r = arm.handle("DELETE", tag, {"api-version": "2023-05-01-preview"})
+    _check("apim tag delete 200", r["status"] == 200)
+
+    # 17b. APIM Policy fragments (Microsoft.ApiManagement/service/policyFragments) — same
+    # generic nested mechanism; the XML round-trips exactly as configured (never executed).
+    frag = apim + "/policyFragments/rate-limit"
+    r = arm.handle("PUT", frag, {"api-version": "2023-05-01-preview"},
+                   {"properties": {"format": "xml",
+                                    "value": "<fragment><rate-limit calls=\"10\" renewal-period=\"60\" /></fragment>",
+                                    "description": "Shared rate limit"}})
+    _check("apim policy fragment put 201", r["status"] == 201 and r["body"]["properties"]["description"] == "Shared rate limit")
+    r = arm.handle("GET", apim + "/policyFragments", {"api-version": "2023-05-01-preview"})
+    _check("apim policy fragments list has it", [f["name"] for f in r["body"]["value"]] == ["rate-limit"])
+    r = arm.handle("DELETE", frag, {"api-version": "2023-05-01-preview"})
+    _check("apim policy fragment delete 200", r["status"] == 200)
+
+    # 17c. Scale out and up / Pricing tier (post-creation): sku.capacity and sku.name PATCH
+    # generically (any catalog resource type), reflected back on GET — real for APIM's
+    # Overview "Tier" field and every other blade that reads a.sku.
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"capacity": 3}})
+    _check("apim scale-out patch", r["status"] == 200 and r["body"]["sku"]["capacity"] == 3)
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"name": "Premium"}})
+    _check("apim pricing tier patch keeps capacity",
+           r["body"]["sku"]["name"] == "Premium" and r["body"]["sku"]["capacity"] == 3)
+
+    # 17d. Activity log Timespan picker: eventTimestamp ge/le $filter predicates actually
+    # narrow the feed (core/azure_arm_core._filter_by_timespan + azure_monitor_core's own copy).
+    feed = f"/subscriptions/{SUB}/providers/Microsoft.Insights/eventtypes/management/values"
+    r = arm.handle("GET", feed, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{apim}'"})
+    all_ts = [e["eventTimestamp"] for e in r["body"]["value"]]
+    _check("apim activity log has entries before timespan filter", len(all_ts) >= 3)
+    future = "2999-01-01T00:00:00.000000Z"
+    r = arm.handle("GET", feed, {"api-version": "2015-04-01",
+                                  "$filter": f"resourceUri eq '{apim}' and eventTimestamp ge '{future}'"})
+    _check("timespan ge in the future excludes everything", r["body"]["value"] == [])
+    past = "1999-01-01T00:00:00.000000Z"
+    r = arm.handle("GET", feed, {"api-version": "2015-04-01",
+                                  "$filter": f"resourceUri eq '{apim}' and eventTimestamp ge '{past}'"})
+    _check("timespan ge in the past keeps everything", [e["eventTimestamp"] for e in r["body"]["value"]] == all_ts)
+
+    # 17e. Microsoft.Authorization/roleAssignments + roleDefinitions — generic top-level
+    # catalog types (subscription-wide), backing every Azure lens service's "Access control
+    # (IAM)" Role assignments/Roles tabs (core/azure_arm_data.py CATALOG keys 'rbac'/'role_definition').
+    ra = f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleAssignments/11111111-1111-1111-1111-111111111111"
+    r = arm.handle("PUT", ra, {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "user-1", "roleDefinitionId": "owner", "principalType": "User"}})
+    _check("role assignment put 201", r["status"] == 201 and r["body"]["properties"]["principalId"] == "user-1")
+    r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    _check("role assignments list has it", any(a["name"] == "11111111-1111-1111-1111-111111111111" for a in r["body"]["value"]))
+    rd = f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleDefinitions/owner"
+    arm.handle("PUT", rd, {"api-version": "2022-04-01"}, {"properties": {"roleName": "Owner", "type": "BuiltInRole"}})
+    r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleDefinitions", {"api-version": "2022-04-01"})
+    _check("role definitions list has it", any(d["name"] == "owner" for d in r["body"]["value"]))
+
     # 18. Generic top-level "identity" block merges like tags/sku (any catalog resource type).
     topic = _p(RG, "Microsoft.EventGrid", "topics", "eg-identity")
     r = arm.handle("PUT", topic, {"api-version": "2024-06-01-preview"}, {"location": "eastus",

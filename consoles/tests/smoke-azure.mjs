@@ -38,6 +38,10 @@ const RGWIRE = `vyrgwire${n}`;     // resource group created over the wire (CLI 
 const RGLOCK = `vyrglock${n}`;     // resource-group-scoped lock created through the UI
 const APIM = `vyapim${n}`;         // API Management service created through the UI
 const APIM2 = `vyapimwire${n}`;    // API Management service created over the wire
+const APIMROLE = `00000000-0000-4000-9000-${String(n).padStart(12, "0")}`;  // role assignment GUID created over the wire, read back on the APIM service's Access control (IAM) tab
+const APIMTAG = `vyapimtag${n}`;   // API Tag created through the UI
+const APIMFRAG = `vyapimfrag${n}`; // Policy fragment created through the UI
+const APIMDIAG = `vyapimdiag${n}`; // diagnostic setting created over the wire, read back in the UI (CLI → UI direction)
 const AKS = `vysmokeaks${n}`;      // AKS cluster created through the UI
 const AKS2 = `vywireaks${n}`;      // AKS cluster created over the wire
 const POOL = `pool${n}`;           // node pool created through the UI (AKS pool names are short: <=12 chars)
@@ -632,6 +636,65 @@ try {
   const apimLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/providers/Microsoft.Authorization/locks/${APIMLOCK}?api-version=2020-05-01`);
   check("UI create lock → visible over native ARM (extension resource)", apimLockGet.status === 200, `HTTP ${apimLockGet.status}`);
   await shot("28-apim-locks");
+
+  // ── API Tag created through the UI → visible over native ARM (nested sub-resource) ─────
+  await openPanel("API Tags");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill(APIMTAG);
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByText(APIMTAG, { exact: true }).waitFor({ timeout: 10000 });
+  const apimTagGot = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/tags/${APIMTAG}`);
+  check("UI create API Tag → visible over native ARM (nested sub-resource)", apimTagGot.status === 200, `HTTP ${apimTagGot.status}`);
+  await shot("28b-apim-apitags");
+
+  // ── Policy fragment created through the UI → visible over native ARM, XML stored as-is ──
+  await openPanel("Policy fragments");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill(APIMFRAG);
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByText(APIMFRAG, { exact: true }).waitFor({ timeout: 10000 });
+  const apimFragGot = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/policyFragments/${APIMFRAG}`);
+  check("UI create policy fragment → visible over native ARM, XML round-trips",
+    apimFragGot.status === 200 && JSON.parse(apimFragGot.text).properties?.value?.includes("<fragment>"), `HTTP ${apimFragGot.status}`);
+  await shot("28c-apim-policyfragments");
+
+  // ── Scale out and up / Pricing tier: UI sku PATCH → visible over native ARM, reflected
+  // in Overview's "Tier" field (same sku merge the create wizard writes) ──────────────────
+  await openPanel("Scale out and up");
+  await page.getByLabel("Units", { exact: true }).fill("3");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText("Units: 3", { exact: false }).waitFor({ timeout: 10000 });
+  await openPanel("Pricing tier");
+  await page.getByLabel("Pricing tier", { exact: true }).selectOption("Premium");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText("Tier updated").first().waitFor({ timeout: 10000 }).catch(() => {});
+  const apimSkuGot = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}`);
+  const apimSku = apimSkuGot.status === 200 ? JSON.parse(apimSkuGot.text).sku : {};
+  check("UI scale + pricing tier → visible over native ARM", apimSku?.capacity === 3 && apimSku?.name === "Premium", JSON.stringify(apimSku));
+  await openPanel("Overview");
+  await page.getByText("Premium", { exact: true }).first().waitFor({ timeout: 10000 });
+  check("Overview Tier field reflects the ARM-patched sku", true);
+  await shot("28d-apim-scale-tier");
+
+  // ── Diagnostic setting created over the wire → visible in the UI (CLI → UI direction) ──
+  const apimDiagRes = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/providers/Microsoft.Insights/diagnosticSettings/${APIMDIAG}?api-version=2021-05-01-preview`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties: { storageAccountId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/apimsmokesa`, logs: [{ categoryGroup: "allLogs", enabled: true }] } }) });
+  check("ARM PUT diagnostic setting over wire", apimDiagRes.status === 200 || apimDiagRes.status === 201, `HTTP ${apimDiagRes.status}`);
+  await openPanel("Diagnostic settings");
+  await page.getByText(APIMDIAG, { exact: true }).waitFor({ timeout: 10000 });
+  check("UI Diagnostic settings shows the wire-created setting", true);
+  await shot("28e-apim-diagnosticsettings");
+
+  // ── Access control (IAM): a role assignment created over the wire (subscription-wide,
+  // same honest scoping as the Event Grid / Cosmos DB blades) is read back on this tab ─────
+  const apimRoleRes = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments/${APIMROLE}?api-version=2022-04-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties: { principalId: "apim-smoke-principal", roleDefinitionId: `/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions/owner`, principalType: "User" } }) });
+  check("ARM PUT role assignment over wire", apimRoleRes.status === 200 || apimRoleRes.status === 201, `HTTP ${apimRoleRes.status}`);
+  await openPanel("Access control (IAM)");
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByText("apim-smoke-principal").first().waitFor({ timeout: 10000 });
+  check("UI Access control (IAM) → Role assignments shows the wire-created assignment", true);
+  await shot("28f-apim-iam");
 
   // ── API Management service created over the wire → visible in the UI (CLI → UI) ────────
   const apimPut = await apimWire("PUT", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM2}`, { location: "eastus", properties: { publisherEmail: "a@b.com", publisherName: "CLI" } });

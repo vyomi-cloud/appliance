@@ -111,10 +111,24 @@ def _record_activity(resource_name: str, action: str, detail: str = "") -> None:
         pass
 
 
+def _filter_by_timespan(rows, filt: str, ts_of):
+    """Apply the Activity log Timespan picker's ``eventTimestamp ge/le '{iso}'`` OData
+    predicates (ISO-8601 UTC strings sort lexicographically, so plain string comparison
+    is correct). Either bound may be absent."""
+    ge = re.search(r"eventTimestamp\s+ge\s+'([^']*)'", filt)
+    le = re.search(r"eventTimestamp\s+le\s+'([^']*)'", filt)
+    if ge:
+        rows = [r for r in rows if str(ts_of(r)) >= ge.group(1)]
+    if le:
+        rows = [r for r in rows if str(ts_of(r)) <= le.group(1)]
+    return rows
+
+
 def _activity_log_query(query: dict) -> dict:
     """GET /subscriptions/{sub}/providers/Microsoft.Insights/eventtypes/management/values —
     the real ARM activity-log read API every resource's "Activity log" blade calls, scoped
-    via an OData $filter containing ``resourceUri eq '{id}'``. Only that scoping predicate is
+    via an OData $filter containing ``resourceUri eq '{id}'`` and, from the Timespan picker,
+    ``eventTimestamp ge '{iso}' and eventTimestamp le '{iso}'``. Only those predicates are
     understood (not the full OData grammar); with no resourceUri filter the unfiltered feed
     (every resource) is returned, matching the subscription-wide Activity log page."""
     try:
@@ -128,6 +142,7 @@ def _activity_log_query(query: dict) -> dict:
     m = re.search(r"resourceUri\s+eq\s+'([^']*)'", filt)
     resource = (m.group(1).rstrip("/").split("/")[-1]) if m else None
     events = nano_events.list_events(resource=resource)
+    events = _filter_by_timespan(events, filt, lambda e: e["ts"])
     value = [{
         "eventName": {"value": e["action"], "localizedValue": e["action"]},
         "operationName": {"value": e["action"], "localizedValue": f"{e['action']}: {e['detail']}" if e["detail"] else e["action"]},
