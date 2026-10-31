@@ -651,9 +651,9 @@ def main():
     _process("azure-console.html", "azure-console.html", BOOT, cloud="azure")
     # Ship the readiness strip verbatim (kept in the Nano dashboard, see SW/_process).
     import shutil
-    shutil.copyfile(os.path.join(STATIC, "readiness-strip.js"),
-                    os.path.join(HERE, "readiness-strip.js"))
-    print(f"{'readiness-strip.js':24} <- static/readiness-strip.js (copied)")
+    # wasm/readiness-strip.js is Nano's OWN copy now (idle "engines not running" state, cloud
+    # marks in the Health view) — never overwritten from static/ (the offline appliance's).
+    print(f"{'readiness-strip.js':24}    kept (Nano-owned; not copied from static/)")
 
 
 if __name__ == "__main__":
