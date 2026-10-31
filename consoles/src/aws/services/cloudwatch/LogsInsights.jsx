@@ -73,13 +73,103 @@ function LogsTab() {
   );
 }
 
+function GroupPicker({ selected, setSelected }) {
+  const groups = useAsync(() => api.describeLogGroups({}), []);
+  return (
+    <FormField label="Selection criteria">
+      <Multiselect placeholder="Select log groups" selectedOptions={selected} onChange={({ detail }) => setSelected(detail.selectedOptions)}
+        options={(groups.data || []).map((g) => ({ label: g.logGroupName, value: g.logGroupName }))} ariaLabel="Selection criteria" />
+    </FormField>
+  );
+}
+
+function PatternsTab() {
+  const [selected, setSelected] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [rows, setRows] = useState(null);
+
+  const run = async () => {
+    if (!selected.length) { setError(new Error("Select at least one log group.")); return; }
+    setBusy(true); setError(null);
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const queryId = await api.startQuery({ logGroupNames: selected.map((o) => o.value), startTime: now - 3600, endTime: now, queryString: "pattern @message" });
+      const r = await api.getQueryResults(queryId);
+      setRows((r.results || []).map((row) => Object.fromEntries(row.map((c) => [c.field, c.value]))));
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+
+  return (
+    <CapabilityContainer id="aws.cloudwatch.logs.patterns-visualization" title="Patterns"
+      actions={<Button onClick={run} loading={busy} variant="primary">Run</Button>}>
+      <SpaceBetween size="l">
+        {error && <ErrorAlert error={error} />}
+        <GroupPicker selected={selected} setSelected={setSelected} />
+        <Table
+          items={rows || []}
+          columnDefinitions={[
+            { id: "severity", header: "Severity", cell: (r) => r["@severityLabel"] },
+            { id: "pattern", header: "Pattern", cell: (r) => r["@pattern"] },
+            { id: "count", header: "Count", cell: (r) => r["@sampleCount"] },
+            { id: "ratio", header: "% of total", cell: (r) => `${(Number(r["@ratio"]) * 100).toFixed(1)}%` },
+          ]}
+          empty={<Box textAlign="center" color="inherit">Run the pattern analysis over the last hour of the selected log groups.</Box>}
+          header={<Header variant="h3" counter={rows ? `(${rows.length})` : undefined}>Patterns</Header>}
+        />
+      </SpaceBetween>
+    </CapabilityContainer>
+  );
+}
+
+function VisualizationTab() {
+  const [selected, setSelected] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [points, setPoints] = useState(null);
+
+  const run = async () => {
+    if (!selected.length) { setError(new Error("Select at least one log group.")); return; }
+    setBusy(true); setError(null);
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const queryId = await api.startQuery({ logGroupNames: selected.map((o) => o.value), startTime: now - 3600, endTime: now, queryString: "stats count(*) by bin(5m)" });
+      const r = await api.getQueryResults(queryId);
+      setPoints((r.results || []).map((row) => { const m = Object.fromEntries(row.map((c) => [c.field, c.value])); return { t: m["bin(5m)"], v: Number(m["count(*)"]) }; }));
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+
+  const max = Math.max(1, ...(points || []).map((p) => p.v));
+
+  return (
+    <CapabilityContainer id="aws.cloudwatch.logs.patterns-visualization" title="Visualization"
+      actions={<Button onClick={run} loading={busy} variant="primary">Run</Button>}>
+      <SpaceBetween size="l">
+        {error && <ErrorAlert error={error} />}
+        <GroupPicker selected={selected} setSelected={setSelected} />
+        {points && (points.length ? (
+          <SpaceBetween size="xs">
+            {points.map((p) => (
+              <SpaceBetween key={p.t} direction="horizontal" size="xs" alignItems="center">
+                <Box fontSize="body-s" color="text-body-secondary" variant="span">{p.t}</Box>
+                <div style={{ background: "#0972d3", height: 14, width: `${(p.v / max) * 300}px` }} />
+                <Box fontSize="body-s" variant="span">{p.v}</Box>
+              </SpaceBetween>
+            ))}
+          </SpaceBetween>
+        ) : <Box textAlign="center" color="inherit">No events in the last hour.</Box>)}
+      </SpaceBetween>
+    </CapabilityContainer>
+  );
+}
+
 export default function LogsInsights() {
   return (
     <ContentLayout header={<Header variant="h1">Logs Insights</Header>}>
       <Tabs tabs={[
         { id: "logs", label: "Logs", content: <LogsTab /> },
-        { id: "patterns", label: "Patterns", content: <CapabilityContainer id="aws.cloudwatch.logs.patterns-visualization" title="Patterns" /> },
-        { id: "visualization", label: "Visualization", content: <CapabilityContainer id="aws.cloudwatch.logs.patterns-visualization" title="Visualization" /> },
+        { id: "patterns", label: "Patterns", content: <PatternsTab /> },
+        { id: "visualization", label: "Visualization", content: <VisualizationTab /> },
       ]} />
     </ContentLayout>
   );

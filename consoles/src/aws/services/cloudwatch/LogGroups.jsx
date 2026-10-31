@@ -18,8 +18,12 @@ export default function LogGroups() {
   const notify = useNotify();
   const t = useAsync(async () => {
     const groups = await api.describeLogGroups({});
-    const subs = await Promise.all(groups.map((g) => api.describeSubscriptionFilters(g.logGroupName).catch(() => [])));
-    return groups.map((g, i) => ({ ...g, subscriptionFilterCount: subs[i].length }));
+    const [subs, rules] = await Promise.all([
+      Promise.all(groups.map((g) => api.describeSubscriptionFilters(g.logGroupName).catch(() => []))),
+      api.describeInsightRules({}),
+    ]);
+    const ruleCount = (name) => rules.filter((r) => { try { return JSON.parse(r.Definition).LogGroupNames?.includes(name); } catch { return false; } }).length;
+    return groups.map((g, i) => ({ ...g, subscriptionFilterCount: subs[i].length, insightRuleCount: ruleCount(g.logGroupName) }));
   }, []);
   const [selected, setSelected] = useState([]);
   const [deleting, setDeleting] = useState(false);
@@ -59,11 +63,11 @@ export default function LogGroups() {
                   { id: "name", header: "Log group", isRowHeader: true, sortingField: "logGroupName", cell: (g) => <Link href={href("cloudwatch", "logs", g.logGroupName)} onFollow={follow}>{g.logGroupName}</Link> },
                   { id: "class", header: "Log class", cell: (g) => ({ STANDARD: "Standard", INFREQUENT_ACCESS: "Infrequent Access", DELIVERY: "Delivery" }[g.logGroupClass] || g.logGroupClass) },
                   { id: "anomaly", header: "Anomaly detection", cell: () => "-" },
-                  { id: "protect", header: "Data protection", cell: () => "-" },
-                  { id: "sensitive", header: "Sensitive data count", cell: () => 0 },
+                  { id: "protect", header: "Data protection", cell: (g) => ({ mask: "Activated (masking)", audit: "Activated (audit only)" }[g.dataProtectionMode] || "Deactivated") },
+                  { id: "sensitive", header: "Sensitive data count", cell: (g) => g.dataProtectionFindings || 0 },
                   { id: "retention", header: "Retention", cell: (g) => (g.retentionInDays ? `${g.retentionInDays} days` : "Never expire") },
                   { id: "metricFilters", header: "Metric filters", cell: (g) => g.metricFilterCount ?? 0 },
-                  { id: "ci", header: "Contributor Insights", cell: () => "-" },
+                  { id: "ci", header: "Contributor Insights", cell: (g) => g.insightRuleCount },
                   { id: "subFilters", header: "Subscription filters", cell: (g) => g.subscriptionFilterCount },
                   { id: "kms", header: "KMS key ID", cell: (g) => g.kmsKeyId || "Not associated" },
                 ]}
