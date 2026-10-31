@@ -30,8 +30,9 @@ const browser = await pw.chromium.launch();
 page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
-// Native 404s / 403s are legitimate API answers (e.g. a retention-protected delete), not page errors.
-page.on("console", (m) => m.type() === "error" && !/status of 40[34]/.test(m.text()) && errors.push(m.text()));
+// Native 404s / 403s / 412s are legitimate API answers (e.g. a retention-protected delete,
+// an org-policy-denied create), not page errors.
+page.on("console", (m) => m.type() === "error" && !/status of (40[34]|412)/.test(m.text()) && errors.push(m.text()));
 const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true });
 
 try {
@@ -555,6 +556,48 @@ try {
   await page.getByRole("row", { name: /Service accounts/ }).getByText(String(saCountWire), { exact: true }).waitFor({ timeout: 10000 });
   check("Quotas & System Limits shows the real service-account count from the native wire", true);
   await shot("13c-quotas");
+
+  // Organization policies: enforcing the predefined iam.disableServiceAccountCreation
+  // constraint via the UI really blocks serviceAccounts.create afterwards — not a
+  // config-only toggle. Then Audit logs: enabling Admin Read for iam.googleapis.com
+  // makes a later read write a real Cloud Logging entry.
+  await page.goto(UI + "#/iam-admin/orgpolicies");
+  await page.getByRole("button", { name: "Enforce predefined constraint" }).click();
+  await page.getByRole("combobox", { name: "Constraint" }).click();
+  await page.getByRole("option", { name: "Disable service account creation" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  await shot("13d-org-policy-enforced");
+
+  await page.goto(UI + "#/iam-admin/serviceaccounts/create");
+  await page.getByLabel("Service account ID").fill(`smoke-blocked-${Date.now() % 100000}`);
+  await page.getByRole("button", { name: "Done" }).click();
+  await page.getByText(/org policy/i).first().waitFor({ timeout: 10000 });
+  check("org policy (disableServiceAccountCreation) enforced via UI → create blocked with a native error", true);
+  // Lift it again so later service-account creations in this run (and any later tooling
+  // reusing this backend process, e.g. ui-conformance.mjs's own fixtures) aren't blocked.
+  await wire("/v2/projects/vyomi-project/policies/constraints/iam.disableServiceAccountCreation", { method: "DELETE" });
+
+  const iamPolForAudit = await wjson("/v1/projects/vyomi-project:getIamPolicy", { method: "POST", body: "{}" });
+  await wire("/v1/projects/vyomi-project:setIamPolicy", { method: "POST", body: JSON.stringify({ policy: {
+    ...iamPolForAudit, auditConfigs: [{ service: "iam.googleapis.com", auditLogConfigs: [{ logType: "ADMIN_READ" }] }],
+  } }) });
+  await page.goto(UI + "#/iam-admin/audit");
+  const auditCheckbox = page.getByRole("checkbox", { name: "Admin read for iam.googleapis.com" });
+  let auditChecked = false;
+  for (let i = 0; i < 20 && !auditChecked; i++) {
+    await auditCheckbox.waitFor({ state: "visible", timeout: 10000 });
+    auditChecked = await auditCheckbox.isChecked();
+    if (!auditChecked) await page.waitForTimeout(250);
+  }
+  check("audit config set over native wire → Admin Read checkbox shown checked in UI", auditChecked);
+  const entriesBefore = (await wjson("/v2/entries:list", { method: "POST", body: JSON.stringify({ resourceNames: ["projects/vyomi-project"] }) })).entries || [];
+  await page.goto(UI + "#/iam-admin/serviceaccounts");
+  await page.getByText(SA_EMAIL).first().waitFor({ timeout: 10000 });
+  const entriesAfter = (await wjson("/v2/entries:list", { method: "POST", body: JSON.stringify({ resourceNames: ["projects/vyomi-project"] }) })).entries || [];
+  check("Data Access audit log Admin Read toggle enabled → a real Cloud Logging entry for an iam.googleapis.com read",
+    entriesAfter.filter((e) => (e.logName || "").includes("iam.googleapis.com%2Fdata_access")).length >
+    entriesBefore.filter((e) => (e.logName || "").includes("iam.googleapis.com%2Fdata_access")).length);
 
   // Privileged Access Manager: requesting a grant on an auto-approved entitlement via the
   // UI activates it immediately and really adds the IAM binding (cross-checked over the

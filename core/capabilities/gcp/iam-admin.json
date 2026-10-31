@@ -75,19 +75,19 @@
  },
  "gcp.iam-admin.audit-logs-config": {
   "title": "Data Access audit logs configuration",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Admin Read / Data Read / Data Write toggles and exempted principals are stored and returned exactly as configured, but Vyomi does not gate or emit audit log entries based on them."
+   "Admin Read toggles for iam.googleapis.com are enforced: when enabled, reading service accounts, keys, custom roles or the project's IAM policy writes a real Cloud Logging entry (readable back via entries:list, e.g. the gcp-logs console); disabled writes none. Data Read / Data Write toggles are stored and returned but produce no entries for iam.googleapis.com — this service has no data-plane payload to audit (same as real GCP; mutations are Admin Activity, always written and not configurable). Toggles for every other listed service (storage, pubsub, …) are stored only — gating those services' own operations is outside this service's scope."
   ],
   "tests": ["tests/conformance/test_gcp_iam_core.py"]
  },
  "gcp.iam-admin.organization-policies": {
   "title": "Organization policy constraints",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Policy constraints (predefined or custom) are created, listed and deleted for real, but Vyomi does not enforce them — a call that would violate a constraint in real GCP still succeeds here."
+   "Two predefined boolean constraints are enforced for real on both substrates: constraints/iam.disableServiceAccountCreation blocks serviceAccounts.create, and constraints/iam.disableServiceAccountKeyCreation blocks serviceAccounts.keys.create, whenever a policy with rules[0].enforce=true exists on the project (create one from 'Enforce predefined constraint' on this page). Every other predefined or custom constraint is created, listed and deleted for real but not evaluated against calls."
   ],
-  "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
+  "tests": ["tests/conformance/test_gcp_iam_core.py", "tests/conformance/test_gcp_resourcemanager_core.py"]
  },
  "gcp.iam-admin.privileged-access-manager": {
   "title": "Privileged Access Manager — Entitlements, Grants & Approve grants",

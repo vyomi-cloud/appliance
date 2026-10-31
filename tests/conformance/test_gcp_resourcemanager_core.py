@@ -75,6 +75,20 @@ check("delete org policy 200", s == 200)
 s, lst2 = call(st, "GET", f"/v2/projects/{project}/policies")
 check("deleted org policy dropped", lst2["policies"] == [])
 
+# predefined constraints are named "constraints/x" — a policyId with a slash in it; get/delete
+# must address the WHOLE suffix, not just the first segment after "policies/" (core/gcp_iam_core's
+# org_policy_enforced() looks up this exact name for the two constraints it evaluates).
+s, pol2 = call(st, "POST", f"/v2/projects/{project}/policies", {"spec": {"rules": [{"enforce": True}]}},
+              query={"policyId": "constraints/iam.disableServiceAccountCreation"})
+check("create predefined constraint 200", s == 200
+      and pol2["name"] == f"projects/{project}/policies/constraints/iam.disableServiceAccountCreation", pol2)
+s, got2 = call(st, "GET", f"/v2/{pol2['name']}")
+check("get predefined constraint by its full (slash-containing) name", s == 200 and got2["name"] == pol2["name"])
+s, _ = call(st, "DELETE", f"/v2/{pol2['name']}")
+check("delete predefined constraint by its full (slash-containing) name", s == 200)
+s, got3 = call(st, "GET", f"/v2/{pol2['name']}")
+check("deleted predefined constraint is gone", s == 404)
+
 print(f"{PASS} passed, {FAIL} failed")
 
 
