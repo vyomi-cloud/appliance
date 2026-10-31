@@ -600,6 +600,9 @@ class AzureArm:
             blocked = self._servicebus_tier_block(type_chain, names, payload, sub, rg)
             if blocked:
                 return blocked
+            blocked = self._aks_stopped_block(type_chain, names, sub, rg)
+            if blocked:
+                return blocked
             resp = self._upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
             if lro:
                 resp["status"] = 200
@@ -610,6 +613,9 @@ class AzureArm:
             return resp
         if method == "DELETE":
             blocked = self._lock_block(rid, full_type, for_delete=True)
+            if blocked:
+                return blocked
+            blocked = self._aks_stopped_block(type_chain, names, sub, rg)
             if blocked:
                 return blocked
             rec = self.state.pop(key, None)
@@ -675,6 +681,20 @@ class AzureArm:
             if props.get("requiresDuplicateDetection"):
                 return _err(400, "BadRequest",
                             "Duplicate detection is not supported on a Basic-tier Service Bus namespace.")
+        return None
+
+    def _aks_stopped_block(self, type_chain, names, sub, rg):
+        # Real AKS rejects node-pool create/scale/upgrade/delete while the cluster itself is
+        # Stopped ("start the cluster before performing this operation") — Vyomi now ENFORCES
+        # that instead of letting agentPools writes silently succeed against a stopped cluster
+        # (azure.aks.cluster.power / azure.aks.node_pools.crud).
+        if len(type_chain) != 3 or type_chain[0].lower() != "microsoft.containerservice" \
+                or type_chain[1].lower() != "managedclusters" or type_chain[2].lower() != "agentpools":
+            return None
+        cluster = self.state.get(_canonical_id(sub, rg, type_chain[:-1], names[:-1]).lower())
+        if (cluster or {}).get("properties", {}).get("powerState", {}).get("code") == "Stopped":
+            return _err(409, "ClusterNotRunning",
+                        "The cluster is stopped. Start the cluster before performing operations on its node pools.")
         return None
 
     def _locks(self, method, sub, rg, namespace, chain, marker, payload):
@@ -977,6 +997,9 @@ class AzureArm:
             return _ok({"status": "Succeeded", "action": action, "powerState": props["powerState"],
                         "note": "metadata-only (no node VMs backing this cluster in-browser); logical state updated"})
         if action == "runcommand":
+            if props.get("powerState", {}).get("code") == "Stopped":
+                return _err(409, "ClusterNotRunning",
+                            "The cluster is stopped. Start the cluster before running a command against it.")
             command = (payload or {}).get("command", "")
             return _ok({"id": str(uuid.uuid4()), "provisioningState": "Succeeded",
                         "exitCode": 0, "startedAt": _now(), "finishedAt": _now(),
