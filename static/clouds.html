@@ -1460,6 +1460,8 @@
     #view-kc .kct, #view-kc .kct.kct-pack, #view-usage .u-card,
     #view-api .api-op, #view-api .api-op:hover, #view-api .api-detail,
     #spaces-grid .space-card[data-provider], #spaces-grid .space-card[data-provider]:hover { border-color: transparent !important; }
+    /* …and so are the gray panels that hold them (their header rule stays) */
+    #spaces-card, #stats-card, #host-util-card, #svc-status-card, #view-kc .kc-panel, #view-usage .u-panel, #view-api .api-group { border-color: transparent !important; }
     #view-api .api-op-wrap.open .api-op, #view-api .api-op-wrap.open .api-detail { border-color: #84adff !important; }
     #spaces-grid .space-card[data-provider="aws"].active   { border-color: #0972d3 !important; }
     #spaces-grid .space-card[data-provider="gcp"].active   { border-color: #1a73e8 !important; }
