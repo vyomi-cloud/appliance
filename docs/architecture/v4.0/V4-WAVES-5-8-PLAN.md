@@ -32,8 +32,7 @@ simulator can model, lift `limited` labels that are only missing engine coverage
   OpenTelemetry Collector gateway on 5723 with mTLS and agents in on-prem LAN containers over the
   hybrid network. No Microsoft SCOM / SQL Server / Windows is shipped; management packs, the
   Operations console and the Windows agent stay honestly labelled.
-- Vyomi Copilot (local LLM): spike in progress (llama.cpp offline, WebLLM / wllama on Nano,
-  retrieval over Vyomi docs + read-only tools); ships as an optional download if approved.
+- (Vyomi Copilot moved to wave 9 — see below.)
 
 ## Wave 7 — consoles for services whose backend already exists
 AWS: Kinesis Data Streams, Step Functions, Systems Manager (Parameter Store), EC2 Load
@@ -44,6 +43,14 @@ App Configuration, DNS, AI services (Cognitive Services), Log Analytics workspac
 AWS: ECS, ECR, EKS, ElastiCache, Route 53, Cognito, SES. GCP: Cloud DNS, BigQuery (DuckDB).
 Azure: Event Hubs, Cache for Redis, Application Insights, Managed Identities (revisit the
 open expansion PRs #222/#225/#226/#227 against the v4 bar).
+
+## Wave 9 — Vyomi Copilot (local LLM, optional download), after waves 5–8
+Spike result: viable only with app-orchestrated grounding (BM25 over the capability registry,
+ui-spec, api.js and curated docs; the app decides read-only tool calls; "is it simulated?"
+answered from the registry; generated CLI/Terraform/Bicep validated before display). Models
+(Apache-2.0): appliance Granite-4.0-1B or Qwen3.5-2B via llama.cpp (~2.4–2.8 GB RSS, opt-in
+`vyomi copilot enable`); Nano Qwen3.5-2B via WebLLM in a Web Worker, WebGPU only, self-hosted
+weights (~1.1 GB). ~3 weeks. Scheduled after backend integration so the grounding corpus is stable.
 
 ## Stays honestly labelled (no backend possible / by decision)
 Payment methods; Marketplace / Community AMIs, CloudFormation public extensions, partner
