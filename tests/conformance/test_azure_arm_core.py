@@ -146,6 +146,45 @@ def run() -> int:
                    {"api-version": AV})
     _check("start rejected on non-vm", r["status"] == 400)
 
+    # 14a. Auto-shutdown (azure.vms.auto_shutdown) is ENFORCED lazily on read: a schedule still
+    # ahead of the real wall clock today leaves the VM's own power state alone; one whose local
+    # time has already passed flips it to stopped with no real scheduler; a manual Start after
+    # that sticks for the rest of the calendar day (no immediate re-stop on the next GET).
+    import datetime as _dt
+    asvm = _p(RG, "Microsoft.Compute", "virtualMachines", "asvm")
+    arm.handle("PUT", asvm, {"api-version": AV}, {"location": "eastus", "properties": {"hardwareProfile": {"vmSize": "Standard_B1s"}}})
+    arm.handle("POST", asvm + "/start", {"api-version": AV})
+    future = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(hours=2)).strftime("%H:%M")
+    arm.handle("PATCH", asvm, {"api-version": AV}, {"properties": {"autoShutdown": {"enabled": True, "time": future, "timeZone": "UTC"}}})
+    r = arm.handle("GET", asvm, {"api-version": AV})
+    _check("auto-shutdown schedule still ahead today leaves the VM's power state alone",
+           r["body"]["properties"]["powerState"] == "PowerState/running")
+    past = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(minutes=5)).strftime("%H:%M")
+    arm.handle("PATCH", asvm, {"api-version": AV}, {"properties": {"autoShutdown": {"enabled": True, "time": past, "timeZone": "UTC"}}})
+    r = arm.handle("GET", asvm, {"api-version": AV})
+    _check("auto-shutdown schedule already past today is ENFORCED on read (no real scheduler)",
+           r["body"]["properties"]["powerState"] == "PowerState/stopped")
+    arm.handle("POST", asvm + "/start", {"api-version": AV})
+    r = arm.handle("GET", asvm, {"api-version": AV})
+    _check("a manual Start after the scheduled auto-off sticks for the rest of today",
+           r["body"]["properties"]["powerState"] == "PowerState/running")
+    pstvm = _p(RG, "Microsoft.Compute", "virtualMachines", "pstvm")
+    arm.handle("PUT", pstvm, {"api-version": AV}, {"location": "eastus", "properties": {"hardwareProfile": {"vmSize": "Standard_B1s"}}})
+    arm.handle("POST", pstvm + "/start", {"api-version": AV})
+    local_pst_now = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(hours=8)
+    past_pst = (local_pst_now - _dt.timedelta(minutes=5)).strftime("%H:%M")
+    arm.handle("PATCH", pstvm, {"api-version": AV},
+               {"properties": {"autoShutdown": {"enabled": True, "time": past_pst, "timeZone": "(UTC-08:00) Pacific Time (US & Canada)"}}})
+    r = arm.handle("GET", pstvm, {"api-version": AV})
+    _check("auto-shutdown honors a non-UTC Azure-style timezone offset",
+           r["body"]["properties"]["powerState"] == "PowerState/stopped")
+    disvm = _p(RG, "Microsoft.Compute", "virtualMachines", "disvm")
+    arm.handle("PUT", disvm, {"api-version": AV}, {"location": "eastus", "properties": {"hardwareProfile": {"vmSize": "Standard_B1s"}}})
+    arm.handle("POST", disvm + "/start", {"api-version": AV})
+    r = arm.handle("GET", disvm, {"api-version": AV})
+    _check("auto-shutdown disabled by default never touches power state",
+           r["body"]["properties"]["powerState"] == "PowerState/running")
+
     # 15. Non-ARM path → 404
     r = arm.handle("GET", "/not/an/arm/path")
     _check("non-arm 404", r["status"] == 404)

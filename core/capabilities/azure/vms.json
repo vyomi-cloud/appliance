@@ -37,10 +37,10 @@
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.vms.networking": {
-  "title": "Networking (network interface, inbound/outbound port rules)",
+  "title": "Networking (network interface, public IP, inbound/outbound port rules)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "The virtual machine's network interface (Microsoft.Network/networkInterfaces) and, when a network security group is attached, its inbound/outbound rules (Microsoft.Network/networkSecurityGroups/securityRules) are real ARM resources and real CRUD — the same engine the Network security groups console uses. Load balancing, Application security groups and Network manager are an honest gap (this lens does not model those resource types), and Public IP address is not modelled (always '--')."
+   "The virtual machine's network interface (Microsoft.Network/networkInterfaces), its public IP address (Microsoft.Network/publicIPAddresses, when requested at create time — the create wizard's 'Public IP' field is real, not a stub) and, when a network security group is attached, its inbound/outbound rules (Microsoft.Network/networkSecurityGroups/securityRules) are real ARM resources and real CRUD — the same engine the Network security groups console uses. Load balancing, Application security groups and Network manager are an honest gap (this lens does not model those resource types), and attaching a public IP to an EXISTING virtual machine after creation is not modelled (real Azure itself requires a NIC swap for that)."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
@@ -48,7 +48,7 @@
   "title": "Connect (SSH command)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "The displayed SSH command is built from the virtual machine's real admin username and its network interface's private IP address, but Vyomi does not open a real SSH session, and Bastion is not modelled (no public IP address is modelled either, matching azure.vms.networking)."
+   "The displayed SSH command is built from the virtual machine's real admin username and its public IP address when one was requested at create time (else its network interface's private IP address), but Vyomi does not open a real SSH session, and Bastion is not modelled."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
@@ -62,9 +62,9 @@
  },
  "azure.vms.auto_shutdown": {
   "title": "Auto-shutdown schedule",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "The schedule, time zone and notification settings are stored on the virtual machine and returned exactly as configured, but Vyomi never runs a scheduler — the virtual machine is not actually powered off at the scheduled time."
+   "ENFORCED lazily: Vyomi has no real background scheduler, but once the configured local time (any Azure-style '(UTC±HH:MM) …' zone, or plain 'UTC') has passed today, the virtual machine's own power state really does flip to stopped the next time it is read (console load, GET, or list) — not necessarily at the exact minute if nothing reads it sooner. A manual Start after that sticks for the rest of the calendar day. The notification settings (time zone label aside) round-trip as configured but are not acted on — Vyomi never sends the pre-shutdown notification email or webhook."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },

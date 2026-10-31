@@ -1,11 +1,14 @@
 /* Virtual machines over the native Azure wire.
  *   Control plane: ARM  /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{name}
  *   Power actions: POST .../start | restart | powerOff | deallocate (metadata-only power state —
- *   see core/azure_arm_core.py's generic VM action handler).
- *   Network interface + (optional) network security group + its security rules are real, separate
- *   ARM resources this service also creates at VM-create time (Microsoft.Network/networkInterfaces,
- *   Microsoft.Network/networkSecurityGroups/securityRules) — the same engine the Network security
- *   groups console (../nsgs/) uses, so a rule added here or there round-trips identically.
+ *   see core/azure_arm_core.py's generic VM action handler). Auto-shutdown is ENFORCED lazily on
+ *   read (core/azure_arm_core.py's _apply_auto_shutdown): no real scheduler runs, but once the
+ *   configured local time has passed today the VM's own powerState really does flip to stopped.
+ *   Network interface + (optional) public IP address + network security group + its security
+ *   rules are real, separate ARM resources this service also creates at VM-create time
+ *   (Microsoft.Network/networkInterfaces, publicIPAddresses, networkSecurityGroups/securityRules)
+ *   — the same engine the Network security groups console (../nsgs/) uses, so a rule added here
+ *   or there round-trips identically.
  *   Disks (OS + data) are embedded on the VM's own properties.storageProfile, the same shape the
  *   create wizard writes — Azure VMs don't have a standalone Microsoft.Compute/disks resource in
  *   this lens (see core/capabilities/azure/vms.json: azure.vms.disks). */
@@ -15,6 +18,7 @@ import { armType, getSubscription, parseId } from "../../kit/arm.js";
 export const ARM = armType("Microsoft.Compute", "virtualMachines", "2023-09-01");
 const NIC_ARM = armType("Microsoft.Network", "networkInterfaces", "2023-11-01");
 const NSG_ARM = armType("Microsoft.Network", "networkSecurityGroups", "2023-11-01");
+const PIP_ARM = armType("Microsoft.Network", "publicIPAddresses", "2023-11-01");
 const RULE_API_VERSION = "2023-11-01";
 const LOCK_API_VERSION = "2020-05-01";
 
@@ -37,6 +41,18 @@ export function pseudoIp(seed) {
   let h = 0;
   for (const c of String(seed)) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
   return `10.0.0.${(h % 250) + 2}`;
+}
+
+// ── Public IP address (Microsoft.Network/publicIPAddresses), requested at VM-create time ───
+// only — a real, separate ARM resource (the same catalog type core/netsim's NAT/public-IP
+// engine uses), referenced from the NIC's ipConfigurations[0].properties.publicIPAddress.id
+// exactly like the real control plane; attaching one to an EXISTING VM post-create is an
+// honest gap (azure.vms.networking — real Azure itself requires a NIC swap for that).
+export const publicIpNameFor = (vmName) => `${vmName}-ip`;
+export const getPublicIp = (rg, name) => PIP_ARM.get(rg, name);
+export const putPublicIp = (rg, name, body) => PIP_ARM.put(rg, name, body);
+export function toPublicIpBody(f) {
+  return { location: f.location, sku: { name: "Standard", tier: "Regional" }, properties: { publicIPAllocationMethod: "Static" } };
 }
 
 // ── Network security group attached to the VM's NIC (Microsoft.Network/networkSecurityGroups) ──
@@ -128,11 +144,15 @@ export function toVmBody(f) {
 export function toNicBody(f) {
   const vnetName = (f.vnet || "vnet").replace(/^\(new\)\s*/, "").trim() || "vnet";
   const subnetId = `/subscriptions/${getSubscription()}/resourceGroups/${f.resourceGroup}/providers/Microsoft.Network/virtualNetworks/${vnetName}/subnets/${f.subnet || "default"}`;
+  const ipcProps = { privateIPAllocationMethod: "Dynamic", privateIPAddress: pseudoIp(f.name), subnet: { id: subnetId } };
+  if (f.publicIp && f.publicIp !== "None") {
+    ipcProps.publicIPAddress = { id: PIP_ARM.path(f.resourceGroup, publicIpNameFor(f.name)) };
+  }
   return {
     location: f.location,
     properties: {
       enableAcceleratedNetworking: !!f.acceleratedNetworking,
-      ipConfigurations: [{ name: "ipconfig1", properties: { privateIPAllocationMethod: "Dynamic", privateIPAddress: pseudoIp(f.name), subnet: { id: subnetId } } }],
+      ipConfigurations: [{ name: "ipconfig1", properties: ipcProps }],
     },
   };
 }
