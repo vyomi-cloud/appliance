@@ -7,7 +7,7 @@
  *   Resource providers:   GET .../providers[/{ns}], POST .../providers/{ns}/register|unregister
  *   Deployments:          CRUD .../providers/Microsoft.Resources/deployments[/{n}]       (Settings > Deployments)
  *   Locks:                CRUD .../providers/Microsoft.Authorization/locks[/{n}]         (Settings > Resource locks)
- *   IAM:                  list .../providers/Microsoft.Authorization/roleAssignments|roleDefinitions
+ *   IAM:                  CRUD + checkAccess .../providers/Microsoft.Authorization/roleAssignments|roleDefinitions|checkAccess
  *   Activity log:         GET .../providers/Microsoft.Insights/eventtypes/management/values (no $filter = subscription-wide)
  *   Cost:                 POST/GET .../providers/Microsoft.CostManagement|Consumption/…
  * Served by core/azure_arm_core.py (+ core/azure_cost_core.py for cost) on every substrate. */
@@ -52,10 +52,19 @@ export const listLocks = async (s) => (await restJson("GET", lockPath(s), { quer
 export const putLock = (s, name, body) => restJson("PUT", lockPath(s, name), { query: { "api-version": LOCK_API_VERSION }, body });
 export const deleteLock = (s, name) => restJson("DELETE", lockPath(s, name), { query: { "api-version": LOCK_API_VERSION } });
 
-// ── Access control (IAM): generic ARM catalog store, subscription scope ────────────────
+// ── Access control (IAM): generic ARM catalog store, subscription scope — role assignments
+// created here are real ARM resources scoped to this subscription; checkAccess runs the real
+// wildcard + scope-inheritance + notActions/deny algorithm against them (see azure_arm_core's
+// _check_access, shared helpers with core/azure_iam_core.py). ───────────────────────────────
 const IAM_API_VERSION = "2022-04-01";
-export const listRoleAssignments = async (s) => (await restJson("GET", `${sub(s)}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": IAM_API_VERSION } })).value || [];
+const roleAssignmentPath = (s, raName) => `${sub(s)}/providers/Microsoft.Authorization/roleAssignments${raName ? `/${encodeURIComponent(raName)}` : ""}`;
+export const listRoleAssignments = async (s) => (await restJson("GET", roleAssignmentPath(s), { query: { "api-version": IAM_API_VERSION } })).value || [];
+export const putRoleAssignment = (s, raName, body) => restJson("PUT", roleAssignmentPath(s, raName), { query: { "api-version": IAM_API_VERSION }, body });
+export const deleteRoleAssignment = (s, raName) => restJson("DELETE", roleAssignmentPath(s, raName), { query: { "api-version": IAM_API_VERSION } });
 export const listRoleDefinitions = async (s) => (await restJson("GET", `${sub(s)}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": IAM_API_VERSION } })).value || [];
+export const checkAccess = async (s, principalId, action) =>
+  (await restJson("POST", `${sub(s)}/providers/Microsoft.Authorization/checkAccess`, { query: { "api-version": IAM_API_VERSION }, body: { principalId, action } })).value || [];
+export const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `id${Date.now()}${Math.random().toString(16).slice(2)}`);
 
 // ── Activity log (subscription-wide — no $filter) ───────────────────────────────────────
 export const listActivityLog = async (s) => {
