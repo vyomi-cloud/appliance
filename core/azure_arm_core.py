@@ -86,6 +86,18 @@ try:                                              # checkAccess decision algorit
 except ImportError:                               # ARM resources scoped to a resource group (this module's own store,
     import azure_iam_core as iam_engine            # type: ignore   not azure_iam_core's separate directory-role store).
 
+try:                                              # Microsoft Defender for Cloud (Microsoft.Security), live over this state
+    from core import azure_security_core as security_engine
+except ImportError:
+    import azure_security_core as security_engine  # type: ignore
+
+try:                                              # AKS Kubernetes object store + kubectl (runCommand)
+    from core import azure_aks_k8s_core as k8s_engine
+    from core import kubescape_core as kubescape_engine
+except ImportError:
+    import azure_aks_k8s_core as k8s_engine        # type: ignore
+    import kubescape_core as kubescape_engine      # type: ignore
+
 try:                                              # VM size catalog (vcpu/ram/family per real Azure size name)
     from core import instance_catalog
 except ImportError:
@@ -476,7 +488,8 @@ class AzureArm:
                 return _err(405, "MethodNotAllowed", "Use GET to list resources in a resource group.")
             items = [_view(r) for r in self.state.values()
                      if r.get("_sub") == sub and (r.get("_rg") or "").lower() == rg.lower()
-                     and r.get("_type", "").lower() not in ("microsoft.resources/resourcegroups", web_engine.EVENT_TYPE)]
+                     and r.get("_type", "").lower() not in ("microsoft.resources/resourcegroups", web_engine.EVENT_TYPE)
+                     and not r.get("_type", "").lower().startswith(security_engine.TYPE_PREFIX)]
             return _ok({"value": items})
 
         # GET /subscriptions/{sub}/resources — every resource across every resource group in
@@ -487,7 +500,8 @@ class AzureArm:
                 return _err(405, "MethodNotAllowed", "Use GET to list resources in a subscription.")
             items = [_view(r) for r in self.state.values()
                      if r.get("_sub") == sub
-                     and r.get("_type", "").lower() not in ("microsoft.resources/resourcegroups", web_engine.EVENT_TYPE)]
+                     and r.get("_type", "").lower() not in ("microsoft.resources/resourcegroups", web_engine.EVENT_TYPE)
+                     and not r.get("_type", "").lower().startswith(security_engine.TYPE_PREFIX)]
             return _ok({"value": items})
 
         if idx >= len(rest_segs) or rest_segs[idx].lower() != "providers":
@@ -615,6 +629,21 @@ class AzureArm:
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "Collection supports GET only.")
             return self._role_definitions_list(sub)
+
+        # Microsoft Defender for Cloud (Microsoft.Security): subscription / resource-group scope,
+        # computed live over this state (core/azure_security_core.py).
+        if namespace.lower() == "microsoft.security":
+            return self._security(method, sub, rg, chain, payload, query, None)
+        # ...and resource-scoped (.../{type}/{name}/providers/Microsoft.Security/assessments[/…]).
+        sec_marker = security_engine.find_marker(chain)
+        if sec_marker is not None:
+            stc, snames = [namespace], []
+            for n, token in enumerate(chain[:sec_marker]):
+                (stc if n % 2 == 0 else snames).append(token)
+            scope_rid = _canonical_id(sub, rg, stc, snames)
+            if self.state.get(scope_rid.lower()) is None:
+                return _err(404, "ResourceNotFound", f"Resource '{scope_rid}' not found.")
+            return self._security(method, sub, rg, chain[sec_marker + 2:], payload, query, scope_rid)
 
         # Microsoft.Authorization/locks: a real ARM extension resource scoped to ANY other
         # resource's own id (the chain re-enters "providers", like Event Grid's event
@@ -968,6 +997,13 @@ class AzureArm:
                 return _err(400, "BadRequest",
                             "properties.locations.failoverPriority must be a 0-based, gap-free sequence with exactly one region at priority 0.")
         return None
+
+    def _security(self, method, sub, rg, chain, payload, query, scope_rid):
+        r = security_engine.dispatch(self.state, method, sub, rg, chain, payload or {}, query or {}, scope_rid)
+        if r["status"] < 300 and method in ("PUT", "PATCH") and chain[:1] and chain[0].lower() == "pricings":
+            self._record_activity(f"/subscriptions/{sub}/providers/Microsoft.Security/pricings/{chain[1] if len(chain) > 1 else ''}",
+                                  "Microsoft.Security/pricings/write", sub)
+        return {"status": r["status"], "headers": r.get("headers") or {}, "body": r["body"]}
 
     def _locks(self, method, sub, rg, namespace, chain, marker, payload):
         # Replay the SAME type/name alternation the main dispatcher uses (see `_arm` above)
@@ -1569,8 +1605,9 @@ class AzureArm:
     def _aks_action(self, action, cluster_name, parent_rid, payload):
         """POST actions on Microsoft.ContainerService/managedClusters/{name}/<action> — start/stop
         (metadata-only power state, same convention as VM start/poweroff), runCommand (the AKS
-        `az aks command invoke` action: no live kubelet in-browser, so it returns an honest
-        canned acknowledgement rather than real command output) and the two
+        `az aks command invoke` action: kubectl against the cluster's Kubernetes object store in
+        core/azure_aks_k8s_core.py — objects are stored, never scheduled; an object change triggers
+        a Kubescape rescan for Defender for Cloud when its Containers plan is on) and the two
         listCluster*Credential actions (a deterministic, clearly-fake kubeconfig — enough for the
         "Connect" blade to show *something* shaped like the real response)."""
         rec = self.state.get(parent_rid.lower()) if parent_rid else None
@@ -1586,11 +1623,22 @@ class AzureArm:
                 return _err(409, "ClusterNotRunning",
                             "The cluster is stopped. Start the cluster before running a command against it.")
             command = (payload or {}).get("command", "")
-            return _ok({"id": str(uuid.uuid4()), "provisioningState": "Succeeded",
-                        "exitCode": 0, "startedAt": _now(), "finishedAt": _now(),
-                        "logs": (f"$ {command}\n" if command else "") +
-                                "Vyomi does not run a real kubelet, so runCommand is simulated: "
-                                "the command was accepted but not executed against a live API server."})
+            if not str(command).strip():
+                return _err(400, "InvalidParameter", "The value of parameter command is invalid: it must not be empty.")
+            # kubectl against the cluster's Kubernetes object store (core/azure_aks_k8s_core.py):
+            # objects are stored, never scheduled — no kubelet or container runtime runs.
+            started = _now()
+            res = k8s_engine.run_command(rec, str(command), (payload or {}).get("context"))
+            if res["changed"]:
+                sub = parent_rid.split("/")[2] if parent_rid.count("/") >= 2 else DEFAULT_SUBSCRIPTION
+                if security_engine.plan_on(self.state, sub, "Containers"):
+                    kubescape_engine.on_objects_changed(rec, rec.get("id") or parent_rid)
+            rid = str(uuid.uuid4()).replace("-", "")
+            result = {"provisioningState": "Succeeded", "exitCode": res["exitCode"], "startedAt": started,
+                      "finishedAt": _now(), "logs": res["logs"], "reason": "" if res["exitCode"] == 0 else "CommandFailed"}
+            # RunCommandResult ({id, properties}) as az aks command invoke reads it, plus the flat
+            # fields earlier Vyomi clients read.
+            return _ok({"id": rid, "properties": result, **result})
         if action in ("listclusterusercredential", "listclusteradmincredential"):
             user = "clusterUser" if action == "listclusterusercredential" else "clusterAdmin"
             fqdn = props.get("fqdn") or f"{cluster_name}.hcp.azmk8s.io"

@@ -47,4 +47,28 @@ export default {
       { svc: null, body: { properties: { level: "ReadOnly", notes: "uic" } } });
     return uniq;
   },
+
+  // Kubernetes objects: applied with kubectl through the native runCommand action (the same call
+  // `az aks command invoke` makes) — a uniquely named object the Workloads / Services and ingresses
+  // / Configuration blades must then list.
+  "live-workload": async (wire, uniq) => {
+    await ensureCluster(wire);
+    const y = `apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: ${uniq}\n  namespace: default\nspec:\n  selector:\n    matchLabels: {app: ${uniq}}\n  template:\n    metadata:\n      labels: {app: ${uniq}}\n    spec:\n      containers:\n      - name: c\n        image: nginx:1.25\n`;
+    await wire("POST", `${clusterPath(CLUSTER).split("?")[0]}/runCommand?api-version=${AV}`, { svc: null, body: { command: `kubectl apply -f - <<EOF\n${y}EOF` } });
+    return uniq;
+  },
+
+  "live-service": async (wire, uniq) => {
+    await ensureCluster(wire);
+    const y = `apiVersion: v1\nkind: Service\nmetadata:\n  name: ${uniq}\n  namespace: default\nspec:\n  ports:\n  - port: 80\n`;
+    await wire("POST", `${clusterPath(CLUSTER).split("?")[0]}/runCommand?api-version=${AV}`, { svc: null, body: { command: `kubectl apply -f - <<EOF\n${y}EOF` } });
+    return uniq;
+  },
+
+  "live-configmap": async (wire, uniq) => {
+    await ensureCluster(wire);
+    await wire("POST", `${clusterPath(CLUSTER).split("?")[0]}/runCommand?api-version=${AV}`,
+      { svc: null, body: { command: `kubectl apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ${uniq}\n  namespace: default\ndata:\n  k: v\nEOF` } });
+    return uniq;
+  },
 };

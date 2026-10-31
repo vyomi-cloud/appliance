@@ -22,6 +22,7 @@ import { ErrorBar, Essentials, fmtDate, Glyph, InfoBar, KV, Loading, NotSimulate
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 const ROLE_ASSIGNMENTS = armType("Microsoft.Authorization", "roleAssignments", "2022-04-01");
 const ROLE_DEFINITIONS = armType("Microsoft.Authorization", "roleDefinitions", "2022-04-01");
@@ -58,7 +59,6 @@ export const MENU = [
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 const NS_NOTES = {
   "diagnose-and-solve-problems": "Diagnose and solve problems",
-  "microsoft-defender-for-cloud": "Microsoft Defender for Cloud",
   "events-preview": "Event Grid subscriptions on function app events (Events (preview))",
   "log-stream": "Live log streaming (Log stream)",
   "resource-visualizer": "The resource visualizer",
@@ -101,6 +101,7 @@ export default function FunctionAppBlade({ params }) {
     const a = site.data, reload = site.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
+      "microsoft-defender-for-cloud": () => <ResourceRecommendations resourceId={a.id} />,
       tags: () => <Tags a={a} reload={reload} />,
       "app-keys": () => <AppKeys a={a} />,
       "environment-variables": () => <EnvironmentVariables a={a} />,

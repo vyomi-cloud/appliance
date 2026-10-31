@@ -1,0 +1,786 @@
+"""AKS Kubernetes object store + the `kubectl` subset behind runCommand (substrate-free).
+
+Real AKS answers `az aks command invoke` (ARM POST .../managedClusters/{c}/runCommand) by running
+the command in a pod against the cluster's API server. Vyomi runs no API server, kubelet or
+container runtime — but it CAN hold the Kubernetes objects a user applies, exactly as an API
+server's etcd would, so that the cluster's Workloads / Services and ingresses blades and the
+Kubescape posture scan (Microsoft Defender for Cloud) see real objects. This module is that store:
+
+  * objects live ON the cluster's ARM record (``rec["_k8s"]``) — persisted with the rest of the
+    ARM state on both substrates (Nano IndexedDB snapshot / offline kernel state store), JSON-only,
+    and deleted with the cluster;
+  * namespaces stay ONE truth: ``properties.namespaces`` (what the Namespaces blade edits over
+    ARM) — `kubectl apply` of a Namespace adds to it, deleting one removes it and cascades its
+    objects, like the real namespace controller;
+  * nothing is scheduled: workload ``status`` says so (0 ready replicas, Pods ``Pending`` with a
+    ``PodScheduled=False`` condition whose message is "Not scheduled — Vyomi doesn't run
+    containers"), Services get a ClusterIP from the cluster's serviceCidr and LoadBalancers stay
+    ``<pending>`` (no cloud load balancer is provisioned).
+
+Supported kubectl: apply / create -f (files from the runCommand ``context`` zip, `-f -` with a
+heredoc or `cat <<EOF |` pipe), create namespace, get (table, -o json|yaml|name|wide, -A, -n,
+-l), describe (YAML view), delete (-f or kind/name), scale, version, api-resources. Anything
+else — logs, exec, port-forward, rollout, helm, … — fails with exit code 1 and an honest reason
+(there is no running container or API server to talk to), never a fake success.
+
+Kinds: Namespace, Pod, Deployment, ReplicaSet, StatefulSet, DaemonSet, Job, CronJob, Service,
+ConfigMap, Secret (``stringData`` folded into base64 ``data`` like the real API server),
+ServiceAccount, Role, ClusterRole, RoleBinding, ClusterRoleBinding, NetworkPolicy, Ingress.
+"""
+from __future__ import annotations
+
+import base64
+import binascii
+import copy
+import datetime
+import io
+import ipaddress
+import json
+import re
+import shlex
+import uuid
+import zipfile
+import zlib
+
+try:
+    from core import k8s_yaml
+except ImportError:                     # Pyodide flat layout
+    import k8s_yaml                     # type: ignore
+
+# kind -> (group, versions, plural, short names, namespaced)
+KINDS = {
+    "Namespace":          ("", ["v1"], "namespaces", ["ns"], False),
+    "Pod":                ("", ["v1"], "pods", ["po"], True),
+    "Service":            ("", ["v1"], "services", ["svc"], True),
+    "ConfigMap":          ("", ["v1"], "configmaps", ["cm"], True),
+    "Secret":             ("", ["v1"], "secrets", [], True),
+    "ServiceAccount":     ("", ["v1"], "serviceaccounts", ["sa"], True),
+    "Deployment":         ("apps", ["v1"], "deployments", ["deploy"], True),
+    "ReplicaSet":         ("apps", ["v1"], "replicasets", ["rs"], True),
+    "StatefulSet":        ("apps", ["v1"], "statefulsets", ["sts"], True),
+    "DaemonSet":          ("apps", ["v1"], "daemonsets", ["ds"], True),
+    "Job":                ("batch", ["v1"], "jobs", [], True),
+    "CronJob":            ("batch", ["v1"], "cronjobs", ["cj"], True),
+    "Role":               ("rbac.authorization.k8s.io", ["v1"], "roles", [], True),
+    "ClusterRole":        ("rbac.authorization.k8s.io", ["v1"], "clusterroles", [], False),
+    "RoleBinding":        ("rbac.authorization.k8s.io", ["v1"], "rolebindings", [], True),
+    "ClusterRoleBinding": ("rbac.authorization.k8s.io", ["v1"], "clusterrolebindings", [], False),
+    "NetworkPolicy":      ("networking.k8s.io", ["v1"], "networkpolicies", ["netpol"], True),
+    "Ingress":            ("networking.k8s.io", ["v1"], "ingresses", ["ing"], True),
+}
+WORKLOAD_KINDS = ("Deployment", "ReplicaSet", "StatefulSet", "DaemonSet", "Job", "CronJob", "Pod")
+NOT_SCHEDULED = "Not scheduled — Vyomi doesn't run containers"
+
+_ALIASES = {}
+for _k, (_g, _v, _plural, _short, _ns) in KINDS.items():
+    for _a in [_k.lower(), _plural, _plural.rstrip("s") if _plural.endswith("s") else _plural, *_short]:
+        _ALIASES[_a] = _k
+    if _g:
+        _ALIASES[f"{_plural}.{_g}"] = _k
+        _ALIASES[f"{_k.lower()}.{_g}"] = _k
+_ALIASES.update({"ingress": "Ingress", "networkpolicy": "NetworkPolicy", "policy": "NetworkPolicy"})
+
+
+class KubectlError(Exception):
+    pass
+
+
+def _now() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _store(rec: dict) -> dict:
+    st = rec.setdefault("_k8s", {})
+    st.setdefault("objects", {})
+    st.setdefault("rv", 0)
+    return st
+
+
+def version(rec: dict) -> str:
+    """Change stamp of everything a scan reads: the object store's counter + the namespace list
+    (which the Namespaces blade edits over ARM, outside kubectl). Drives scan staleness."""
+    nss = json.dumps([[n.get("name"), n.get("labels") or {}] for n in ((rec.get("properties") or {}).get("namespaces") or [])],
+                     sort_keys=True)
+    return f"{int((rec.get('_k8s') or {}).get('rv', 0))}-{zlib.crc32(nss.encode()) & 0xffffffff:08x}"
+
+
+def _prune(rec: dict) -> None:
+    """Objects of a namespace removed over ARM (Namespaces blade) go with it — the namespace
+    controller's cascade."""
+    st = rec.get("_k8s") or {}
+    objs = st.get("objects") or {}
+    live = {n.get("name") for n in ((rec.get("properties") or {}).get("namespaces") or [])}
+    gone = [k for k, o in objs.items() if KINDS.get(o.get("kind"), ("", [], "", [], False))[4]
+            and (o.get("metadata") or {}).get("namespace") not in live]
+    for k in gone:
+        del objs[k]
+    if gone:
+        st["rv"] = int(st.get("rv", 0)) + 1
+
+
+def _key(kind: str, ns: str, name: str) -> str:
+    return f"{kind}/{ns or ''}/{name}"
+
+
+def _namespaces(rec: dict) -> list:
+    return rec.setdefault("properties", {}).setdefault("namespaces", [])
+
+
+def _ns_exists(rec: dict, ns: str) -> bool:
+    return any(n.get("name") == ns for n in _namespaces(rec))
+
+
+def _age(ts) -> str:
+    try:
+        t = datetime.datetime.strptime(str(ts)[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=datetime.timezone.utc)
+    except Exception:
+        return "<unknown>"
+    s = max(0, int((datetime.datetime.now(datetime.timezone.utc) - t).total_seconds()))
+    if s < 120:
+        return f"{s}s"
+    if s < 7200:
+        return f"{s // 60}m"
+    if s < 172800:
+        return f"{s // 3600}h"
+    return f"{s // 86400}d"
+
+
+# ── object model ─────────────────────────────────────────────────────────────────────────
+def namespace_object(entry: dict, created: str = "") -> dict:
+    md = {"name": entry.get("name"), "creationTimestamp": entry.get("createdAt") or entry.get("creationTimestamp") or created or "",
+          "uid": entry.get("uid") or str(uuid.uuid5(uuid.NAMESPACE_URL, "ns/" + str(entry.get("name"))))}
+    labels = dict(entry.get("labels") or {})
+    labels.setdefault("kubernetes.io/metadata.name", entry.get("name"))
+    md["labels"] = labels
+    if entry.get("annotations"):
+        md["annotations"] = dict(entry["annotations"])
+    return {"apiVersion": "v1", "kind": "Namespace", "metadata": md,
+            "spec": {"finalizers": ["kubernetes"]}, "status": {"phase": entry.get("status") or "Active"}}
+
+
+def list_objects(rec: dict, kind: str | None = None, namespace: str | None = None) -> list:
+    _prune(rec)
+    out = []
+    if kind in (None, "Namespace"):
+        if namespace is None:
+            out += [namespace_object(n, str(rec.get("_created") or "")) for n in _namespaces(rec)]
+    for obj in _store(rec)["objects"].values():
+        if kind and obj.get("kind") != kind:
+            continue
+        if namespace is not None and KINDS[obj["kind"]][4] and obj["metadata"].get("namespace") != namespace:
+            continue
+        if namespace is not None and not KINDS[obj["kind"]][4]:
+            continue
+        out.append(obj)
+    out.sort(key=lambda o: (o["kind"], o["metadata"].get("namespace") or "", o["metadata"]["name"]))
+    return out
+
+
+def export_objects(rec: dict) -> list:
+    """Every object in the cluster (namespaces included), as a Kubernetes API list would return —
+    the input a Kubescape scan gets."""
+    return copy.deepcopy(list_objects(rec))
+
+
+def _service_ip(rec: dict, taken: set) -> str:
+    cidr = ((rec.get("properties") or {}).get("networkProfile") or {}).get("serviceCidr") or "10.0.0.0/16"
+    try:
+        net = ipaddress.ip_network(cidr, strict=False)
+    except ValueError:
+        net = ipaddress.ip_network("10.0.0.0/16")
+    dns = ((rec.get("properties") or {}).get("networkProfile") or {}).get("dnsServiceIP")
+    for i, host in enumerate(net.hosts()):
+        if i < 1:
+            continue                     # .1 is the kubernetes service in a real cluster
+        ip = str(host)
+        if ip != dns and ip not in taken:
+            return ip
+        if i > 65000:
+            break
+    raise KubectlError("error: the Service's ClusterIP range is exhausted")
+
+
+def _validate(doc, default_ns: str, rec: dict, pending_ns: set) -> dict:
+    if not isinstance(doc, dict):
+        raise KubectlError("error: error validating data: the object is not a Kubernetes object (expected a mapping)")
+    av, kind = doc.get("apiVersion"), doc.get("kind")
+    md = doc.get("metadata") or {}
+    if not av or not kind:
+        raise KubectlError("error: error validating data: [apiVersion not set, kind not set]" if not av and not kind
+                           else f"error: error validating data: {'apiVersion' if not av else 'kind'} not set")
+    spec = KINDS.get(kind)
+    group, ver = (av.split("/", 1) if "/" in av else ("", av))
+    if spec is None or group != spec[0] or ver not in spec[1]:
+        raise KubectlError(f'error: resource mapping not found for name: "{md.get("name", "")}" namespace: "{md.get("namespace", "")}" '
+                           f'from "STDIN": no matches for kind "{kind}" in version "{av}"\n'
+                           f"ensure CRDs are installed first (Vyomi's object store holds the built-in kinds listed in "
+                           f"`kubectl api-resources`; custom resources are not simulated)")
+    name = md.get("name")
+    if not name or not re.match(r"^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$", str(name)):
+        raise KubectlError(f'The {kind} "{name or ""}" is invalid: metadata.name: Invalid value: "{name or ""}": a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, \'-\' or \'.\'')
+    obj = copy.deepcopy(doc)
+    obj["metadata"] = dict(md)
+    if spec[4]:
+        ns = md.get("namespace") or default_ns
+        if not _ns_exists(rec, ns) and ns not in pending_ns:
+            raise KubectlError(f'Error from server (NotFound): error when creating "STDIN": namespaces "{ns}" not found')
+        obj["metadata"]["namespace"] = ns
+    else:
+        obj["metadata"].pop("namespace", None)
+    if kind == "Secret":
+        data = dict(obj.get("data") or {})
+        for k, v in (obj.pop("stringData", None) or {}).items():
+            data[k] = base64.b64encode(str(v).encode()).decode()
+        for k, v in data.items():
+            try:
+                base64.b64decode(str(v), validate=True)
+            except (binascii.Error, ValueError):
+                raise KubectlError(f'Error from server (BadRequest): error when creating "STDIN": Secret in version "v1" cannot be handled as a Secret: illegal base64 data at input byte 0 (key "{k}")')
+        obj["data"] = data
+        obj.setdefault("type", "Opaque")
+    return obj
+
+
+def _decorate(rec: dict, obj: dict, prev: dict | None, rv: int, applied: dict | None):
+    md = obj["metadata"]
+    md["uid"] = (prev or {}).get("metadata", {}).get("uid") or str(uuid.uuid4())
+    md["creationTimestamp"] = (prev or {}).get("metadata", {}).get("creationTimestamp") or _now()
+    md["resourceVersion"] = str(rv)
+    gen = int((prev or {}).get("metadata", {}).get("generation", 0))
+    if prev is None or json.dumps(prev.get("spec"), sort_keys=True) != json.dumps(obj.get("spec"), sort_keys=True):
+        gen += 1
+    if obj["kind"] in WORKLOAD_KINDS or obj["kind"] in ("Service", "Ingress", "NetworkPolicy"):
+        md["generation"] = max(gen, 1)
+    if applied is not None:
+        ann = dict(md.get("annotations") or {})
+        ann["kubectl.kubernetes.io/last-applied-configuration"] = json.dumps(applied, separators=(",", ":"), sort_keys=True) + "\n"
+        md["annotations"] = ann
+    kind = obj["kind"]
+    spec = obj.setdefault("spec", {}) if kind not in ("ConfigMap", "Secret", "ServiceAccount", "Role", "ClusterRole",
+                                                      "RoleBinding", "ClusterRoleBinding") else None
+    cond = {"type": "Available", "status": "False", "reason": "VyomiNotScheduled", "message": NOT_SCHEDULED,
+            "lastTransitionTime": md["creationTimestamp"]}
+    if kind in ("Deployment", "ReplicaSet", "StatefulSet"):
+        desired = spec.get("replicas", 1) if isinstance(spec.get("replicas", 1), int) else 1
+        spec.setdefault("replicas", desired)
+        obj["status"] = {"observedGeneration": md.get("generation", 1), "replicas": 0, "readyReplicas": 0,
+                         "availableReplicas": 0, "updatedReplicas": 0,
+                         **({"unavailableReplicas": desired} if kind == "Deployment" else {}),
+                         "conditions": [cond]}
+    elif kind == "DaemonSet":
+        obj["status"] = {"observedGeneration": md.get("generation", 1), "currentNumberScheduled": 0,
+                         "desiredNumberScheduled": 0, "numberReady": 0, "numberAvailable": 0, "numberMisscheduled": 0,
+                         "conditions": [cond]}
+    elif kind == "Job":
+        obj["status"] = {"active": 0, "succeeded": 0, "failed": 0,
+                         "conditions": [{**cond, "type": "Complete"}]}
+    elif kind == "CronJob":
+        obj["status"] = {"active": [], "lastScheduleTime": None}
+    elif kind == "Pod":
+        obj["status"] = {"phase": "Pending", "qosClass": _qos(spec),
+                         "conditions": [{"type": "PodScheduled", "status": "False", "reason": "Unschedulable",
+                                         "message": NOT_SCHEDULED, "lastTransitionTime": md["creationTimestamp"]}]}
+    elif kind == "Service":
+        stype = spec.get("type") or "ClusterIP"
+        spec["type"] = stype
+        if stype != "ExternalName" and spec.get("clusterIP") != "None":
+            prev_ip = ((prev or {}).get("spec") or {}).get("clusterIP")
+            if not spec.get("clusterIP"):
+                taken = {(o.get("spec") or {}).get("clusterIP") for o in _store(rec)["objects"].values() if o.get("kind") == "Service"}
+                spec["clusterIP"] = prev_ip or _service_ip(rec, taken)
+            spec["clusterIPs"] = [spec["clusterIP"]]
+        for p in spec.get("ports") or []:
+            if isinstance(p, dict):
+                p.setdefault("protocol", "TCP")
+                p.setdefault("targetPort", p.get("port"))
+        obj["status"] = {"loadBalancer": {}}
+    elif kind == "Ingress":
+        obj["status"] = {"loadBalancer": {}}
+
+
+def _qos(spec: dict) -> str:
+    cs = (spec or {}).get("containers") or []
+    if cs and all(((c or {}).get("resources") or {}).get("limits") for c in cs):
+        return "Guaranteed"
+    if any(((c or {}).get("resources") or {}) for c in cs):
+        return "Burstable"
+    return "BestEffort"
+
+
+def _put(rec: dict, obj: dict, mode: str, applied=None) -> str:
+    """Store one validated object. mode: apply | create | replace. Returns kubectl's verb."""
+    st = _store(rec)
+    kind, md = obj["kind"], obj["metadata"]
+    if kind == "Namespace":
+        nss = _namespaces(rec)
+        cur = next((n for n in nss if n.get("name") == md["name"]), None)
+        if cur is not None and mode == "create":
+            raise KubectlError(f'Error from server (AlreadyExists): error when creating "STDIN": namespaces "{md["name"]}" already exists')
+        if cur is None:
+            nss.append({"name": md["name"], "status": "Active", "createdAt": _now(),
+                        "uid": str(uuid.uuid4()), "labels": dict(md.get("labels") or {})})
+            st["rv"] += 1
+            return "created"
+        changed = dict(md.get("labels") or {}) != dict(cur.get("labels") or {})
+        cur["labels"] = dict(md.get("labels") or {})
+        if changed:
+            st["rv"] += 1
+        return "configured" if changed else "unchanged"
+    key = _key(kind, md.get("namespace"), md["name"])
+    prev = st["objects"].get(key)
+    if prev is not None and mode == "create":
+        raise KubectlError(f'Error from server (AlreadyExists): error when creating "STDIN": {KINDS[kind][2]}{"." + KINDS[kind][0] if KINDS[kind][0] else ""} "{md["name"]}" already exists')
+    if prev is not None:
+        def _cmp(o):
+            o = copy.deepcopy(o)
+            o.pop("status", None)
+            m = o.get("metadata") or {}
+            for f in ("uid", "creationTimestamp", "resourceVersion", "generation"):
+                m.pop(f, None)
+            (m.get("annotations") or {}).pop("kubectl.kubernetes.io/last-applied-configuration", None)
+            if not m.get("annotations"):
+                m.pop("annotations", None)
+            if o.get("kind") == "Service":
+                for f in ("clusterIP", "clusterIPs"):
+                    (o.get("spec") or {}).pop(f, None)
+                for p in (o.get("spec") or {}).get("ports") or []:
+                    if isinstance(p, dict):
+                        p.pop("protocol", None); p.pop("targetPort", None)
+                (o.get("spec") or {}).pop("type", None) if (o.get("spec") or {}).get("type") == "ClusterIP" else None
+            if o.get("kind") in ("Deployment", "ReplicaSet", "StatefulSet") and (o.get("spec") or {}).get("replicas") == 1:
+                o["spec"].pop("replicas", None)
+            if o.get("kind") == "Secret" and o.get("type") == "Opaque":
+                o.pop("type", None)
+            return json.dumps(o, sort_keys=True)
+        if _cmp(prev) == _cmp(obj):
+            return "unchanged"
+    st["rv"] += 1
+    _decorate(rec, obj, prev, st["rv"], applied)
+    st["objects"][key] = obj
+    return "configured" if prev is not None else "created"
+
+
+def _delete(rec: dict, kind: str, ns: str | None, name: str) -> bool:
+    st = _store(rec)
+    if kind == "Namespace":
+        nss = _namespaces(rec)
+        if not any(n.get("name") == name for n in nss):
+            return False
+        if name in ("default", "kube-system", "kube-public", "kube-node-lease"):
+            raise KubectlError(f'Error from server (Forbidden): namespaces "{name}" is forbidden: this namespace may not be deleted')
+        rec["properties"]["namespaces"] = [n for n in nss if n.get("name") != name]
+        for k in [k for k, o in st["objects"].items() if KINDS[o["kind"]][4] and o["metadata"].get("namespace") == name]:
+            del st["objects"][k]
+        st["rv"] += 1
+        return True
+    key = _key(kind, ns if KINDS[kind][4] else None, name)
+    if key in st["objects"]:
+        del st["objects"][key]
+        st["rv"] += 1
+        return True
+    return False
+
+
+# ── kubectl ──────────────────────────────────────────────────────────────────────────────
+def _resource_label(kind: str) -> str:
+    g = KINDS[kind][0]
+    return f"{kind.lower()}.{g}" if g else kind.lower()
+
+
+def _resolve_kind(token: str) -> str:
+    k = _ALIASES.get(token.lower())
+    if not k:
+        raise KubectlError(f'error: the server doesn\'t have a resource type "{token}"')
+    return k
+
+
+def _split_commands(command: str):
+    """Shell-ish split: heredocs become stdin, `cat <<EOF | kubectl …` pipes, && / ; / newlines."""
+    lines = command.replace("\r\n", "\n").split("\n")
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        i += 1
+        if not line.strip() or line.strip().startswith("#"):
+            continue
+        stdin, at = None, -1
+        m = re.search(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1", line)
+        if m:
+            delim, body = m.group(2), []
+            while i < len(lines) and lines[i].strip() != delim:
+                body.append(lines[i]); i += 1
+            i += 1                                   # the delimiter line
+            stdin, at = "\n".join(body) + "\n", m.start()
+            line = line[:m.start()] + line[m.end():]
+        pos = 0
+        for sep in list(re.finditer(r"\s*(?:&&|;)\s*", line)) + [None]:
+            end = sep.start() if sep else len(line)
+            part = line[pos:end].strip()
+            if part:                                 # the heredoc feeds the segment it was written on
+                out.append((part, stdin if pos <= at <= end else None))
+            pos = sep.end() if sep else end
+    return out
+
+
+def _flags(args: list):
+    pos, fl = [], {"f": [], "n": None, "A": False, "o": None, "l": None, "replicas": None, "R": False}
+    i = 0
+    while i < len(args):
+        a = args[i]
+        def val():
+            nonlocal i
+            if "=" in a:
+                return a.split("=", 1)[1]
+            i += 1
+            if i >= len(args):
+                raise KubectlError(f"error: flag needs an argument: {a}")
+            return args[i]
+        if a in ("-f", "--filename") or a.startswith("--filename=") or (a.startswith("-f") and len(a) > 2 and not a.startswith("--")):
+            fl["f"].append(a[2:] if a.startswith("-f") and len(a) > 2 and not a.startswith("--") else val())
+        elif a in ("-n", "--namespace") or a.startswith("--namespace="):
+            fl["n"] = val()
+        elif a.startswith("-n") and len(a) > 2 and not a.startswith("--"):
+            fl["n"] = a[2:]
+        elif a in ("-A", "--all-namespaces"):
+            fl["A"] = True
+        elif a in ("-o", "--output") or a.startswith("--output="):
+            fl["o"] = val()
+        elif a.startswith("-o") and len(a) > 2 and not a.startswith("--"):
+            fl["o"] = a[2:]
+        elif a in ("-l", "--selector") or a.startswith("--selector="):
+            fl["l"] = val()
+        elif a.startswith("--replicas"):
+            fl["replicas"] = val()
+        elif a in ("-R", "--recursive"):
+            fl["R"] = True
+        elif a.startswith("--"):
+            if "=" not in a and i + 1 < len(args) and not args[i + 1].startswith("-") and a in ("--context", "--kubeconfig", "--field-manager", "--timeout", "--grace-period", "--dry-run"):
+                i += 1
+        else:
+            pos.append(a)
+        i += 1
+    return pos, fl
+
+
+def _read_files(names: list, files: dict, stdin: str | None) -> list:
+    docs = []
+    for name in names:
+        if name == "-":
+            if stdin is None:
+                raise KubectlError("error: no objects passed to apply (stdin is empty — use a heredoc: kubectl apply -f - <<EOF … EOF)")
+            src = stdin
+            docs += _parse(src, "STDIN")
+            continue
+        if re.match(r"^https?://", name):
+            raise KubectlError(f'error: unable to read URL "{name}": runCommand in Vyomi has no outbound network access — attach the file instead (az aks command invoke --file)')
+        n = name[2:] if name.startswith("./") else name
+        hits = [k for k in sorted(files) if k == n or (k.startswith(n.rstrip("/") + "/") and k.endswith((".yaml", ".yml", ".json")))]
+        if not hits:
+            raise KubectlError(f'error: the path "{name}" does not exist')
+        for k in hits:
+            docs += _parse(files[k], k)
+    return docs
+
+
+def _parse(src: str, where: str) -> list:
+    try:
+        docs = k8s_yaml.load_all(src)
+    except k8s_yaml.YAMLError as e:
+        raise KubectlError(f'error: error parsing {where}: {e}')
+    out = []
+    for d in docs:
+        if isinstance(d, dict) and d.get("kind") == "List" and isinstance(d.get("items"), list):
+            out += d["items"]
+        else:
+            out.append(d)
+    return out
+
+
+def _unzip(context_b64: str | None) -> dict:
+    if not context_b64:
+        return {}
+    try:
+        raw = base64.b64decode(context_b64)
+        z = zipfile.ZipFile(io.BytesIO(raw))
+        return {n.lstrip("./"): z.read(n).decode("utf-8") for n in z.namelist() if not n.endswith("/")}
+    except Exception as e:
+        raise KubectlError(f"error: the runCommand context is not a valid base64-encoded zip archive ({type(e).__name__})")
+
+
+def _match_labels(obj: dict, selector: str | None) -> bool:
+    if not selector:
+        return True
+    labels = (obj.get("metadata") or {}).get("labels") or {}
+    for term in selector.split(","):
+        term = term.strip()
+        if "!=" in term:
+            k, v = term.split("!=", 1)
+            if labels.get(k.strip()) == v.strip():
+                return False
+        elif "=" in term:
+            k, v = term.split("==" if "==" in term else "=", 1)
+            if labels.get(k.strip()) != v.strip():
+                return False
+        elif term.startswith("!"):
+            if term[1:] in labels:
+                return False
+        elif term not in labels:
+            return False
+    return True
+
+
+def _ports(spec: dict) -> str:
+    ps = []
+    for p in spec.get("ports") or []:
+        s = str(p.get("port"))
+        if p.get("nodePort"):
+            s += f":{p['nodePort']}"
+        ps.append(f"{s}/{p.get('protocol') or 'TCP'}")
+    return ",".join(ps) or "<none>"
+
+
+def _row(kind: str, o: dict, wide: bool):
+    md, spec, status = o.get("metadata") or {}, o.get("spec") or {}, o.get("status") or {}
+    age = _age(md.get("creationTimestamp"))
+    if kind == "Pod":
+        n = len(spec.get("containers") or [])
+        return [md["name"], f"0/{n}", "Pending", "0", age] + (["<none>", "<none>"] if wide else [])
+    if kind == "Deployment":
+        r = spec.get("replicas", 1)
+        return [md["name"], f"0/{r}", "0", "0", age]
+    if kind in ("StatefulSet",):
+        return [md["name"], f"0/{spec.get('replicas', 1)}", age]
+    if kind == "ReplicaSet":
+        return [md["name"], str(spec.get("replicas", 1)), "0", "0", age]
+    if kind == "DaemonSet":
+        sel = ",".join(f"{k}={v}" for k, v in (((spec.get("template") or {}).get("spec") or {}).get("nodeSelector") or {}).items()) or "<none>"
+        return [md["name"], "0", "0", "0", "0", "0", sel, age]
+    if kind == "Job":
+        return [md["name"], "Pending", "0/1", "", age]
+    if kind == "CronJob":
+        return [md["name"], str(spec.get("schedule")), "<none>", str(bool(spec.get("suspend", False))), "0", "<none>", age]
+    if kind == "Service":
+        ext = "<pending>" if spec.get("type") == "LoadBalancer" else (spec.get("externalName") or ",".join(spec.get("externalIPs") or []) or "<none>")
+        return [md["name"], spec.get("type") or "ClusterIP", spec.get("clusterIP") or "None", ext, _ports(spec), age]
+    if kind == "ConfigMap":
+        return [md["name"], str(len(o.get("data") or {}) + len(o.get("binaryData") or {})), age]
+    if kind == "Secret":
+        return [md["name"], o.get("type") or "Opaque", str(len(o.get("data") or {})), age]
+    if kind == "ServiceAccount":
+        return [md["name"], str(len(o.get("secrets") or [])), age]
+    if kind == "Namespace":
+        return [md["name"], status.get("phase") or "Active", age]
+    if kind in ("Role", "ClusterRole"):
+        return [md["name"], md.get("creationTimestamp") or ""]
+    if kind in ("RoleBinding", "ClusterRoleBinding"):
+        rr = o.get("roleRef") or {}
+        return [md["name"], f"{rr.get('kind')}/{rr.get('name')}", age]
+    if kind == "NetworkPolicy":
+        sel = ",".join(f"{k}={v}" for k, v in ((spec.get("podSelector") or {}).get("matchLabels") or {}).items()) or "<none>"
+        return [md["name"], sel, age]
+    if kind == "Ingress":
+        hosts = ",".join(r.get("host") for r in (spec.get("rules") or []) if r.get("host")) or "*"
+        return [md["name"], spec.get("ingressClassName") or "<none>", hosts, "", "443" if spec.get("tls") else "80", age]
+    return [md["name"], age]
+
+
+_HEADERS = {
+    "Pod": ["NAME", "READY", "STATUS", "RESTARTS", "AGE"], "Deployment": ["NAME", "READY", "UP-TO-DATE", "AVAILABLE", "AGE"],
+    "StatefulSet": ["NAME", "READY", "AGE"], "ReplicaSet": ["NAME", "DESIRED", "CURRENT", "READY", "AGE"],
+    "DaemonSet": ["NAME", "DESIRED", "CURRENT", "READY", "UP-TO-DATE", "AVAILABLE", "NODE SELECTOR", "AGE"],
+    "Job": ["NAME", "STATUS", "COMPLETIONS", "DURATION", "AGE"],
+    "CronJob": ["NAME", "SCHEDULE", "TIMEZONE", "SUSPEND", "ACTIVE", "LAST SCHEDULE", "AGE"],
+    "Service": ["NAME", "TYPE", "CLUSTER-IP", "EXTERNAL-IP", "PORT(S)", "AGE"], "ConfigMap": ["NAME", "DATA", "AGE"],
+    "Secret": ["NAME", "TYPE", "DATA", "AGE"], "ServiceAccount": ["NAME", "SECRETS", "AGE"], "Namespace": ["NAME", "STATUS", "AGE"],
+    "Role": ["NAME", "CREATED AT"], "ClusterRole": ["NAME", "CREATED AT"], "RoleBinding": ["NAME", "ROLE", "AGE"],
+    "ClusterRoleBinding": ["NAME", "ROLE", "AGE"], "NetworkPolicy": ["NAME", "POD-SELECTOR", "AGE"],
+    "Ingress": ["NAME", "CLASS", "HOSTS", "ADDRESS", "PORTS", "AGE"],
+}
+
+
+def _table(rows: list) -> str:
+    w = [max(len(str(r[i])) for r in rows) for i in range(len(rows[0]))]
+    return "\n".join("   ".join(str(c).ljust(w[i]) for i, c in enumerate(r)).rstrip() for r in rows) + "\n"
+
+
+def _get(rec: dict, pos: list, fl: dict, describe=False) -> str:
+    if not pos:
+        raise KubectlError("error: you must specify the type of resource to get. Use \"kubectl api-resources\" for a complete list of supported resources.")
+    first = pos[0]
+    if "/" in first:                                   # kind/name form
+        kinds, names = [_resolve_kind(first.split("/", 1)[0])], [first.split("/", 1)[1]] + pos[1:]
+    elif first == "all":
+        kinds, names = ["Pod", "Service", "DaemonSet", "Deployment", "ReplicaSet", "StatefulSet", "Job", "CronJob"], pos[1:]
+    else:
+        kinds, names = [_resolve_kind(t) for t in first.split(",") if t], pos[1:]
+    ns = None if fl["A"] else (fl["n"] or "default")
+    items = []
+    for kind in kinds:
+        for o in list_objects(rec, kind, ns if KINDS[kind][4] else None):
+            if names and o["metadata"]["name"] not in names:
+                continue
+            if not _match_labels(o, fl["l"]):
+                continue
+            items.append(o)
+    if names:
+        found = {o["metadata"]["name"] for o in items}
+        missing = [n for n in names if n not in found]
+        if missing:
+            raise KubectlError("\n".join(f'Error from server (NotFound): {KINDS[kinds[0]][2]}{"." + KINDS[kinds[0]][0] if KINDS[kinds[0]][0] else ""} "{n}" not found' for n in missing))
+    out = fl["o"]
+    if describe or out == "yaml":
+        if len(items) == 1 and names:
+            return k8s_yaml.dump(items[0])
+        return k8s_yaml.dump({"apiVersion": "v1", "items": items, "kind": "List", "metadata": {"resourceVersion": ""}})
+    if out == "json":
+        if len(items) == 1 and names:
+            return json.dumps(items[0], indent=4) + "\n"
+        return json.dumps({"apiVersion": "v1", "items": items, "kind": "List", "metadata": {"resourceVersion": ""}}, indent=4) + "\n"
+    if out == "name":
+        return "".join(f"{_resource_label(o['kind'])}/{o['metadata']['name']}\n" for o in items)
+    if out not in (None, "wide"):
+        raise KubectlError(f'error: unable to match a printer suitable for the output format "{out}", allowed formats are: json,name,wide,yaml')
+    if not items:
+        if fl["A"] or not any(KINDS[k][4] for k in kinds):
+            return "No resources found\n"
+        return f"No resources found in {ns} namespace.\n"
+    chunks = []
+    for kind in kinds:
+        ks = [o for o in items if o["kind"] == kind]
+        if not ks:
+            continue
+        head = list(_HEADERS.get(kind, ["NAME", "AGE"])) + (["IP", "NODE"] if kind == "Pod" and out == "wide" else [])
+        prefix = len(kinds) > 1
+        rows = [(["NAMESPACE"] if fl["A"] and KINDS[kind][4] else []) + head]
+        for o in ks:
+            r = _row(kind, o, out == "wide")
+            if prefix:
+                r[0] = f"{_resource_label(kind)}/{r[0]}"
+            rows.append(([o["metadata"].get("namespace", "")] if fl["A"] and KINDS[kind][4] else []) + r)
+        chunks.append(_table(rows))
+    return "\n".join(chunks)
+
+
+def _api_resources() -> str:
+    rows = [["NAME", "SHORTNAMES", "APIVERSION", "NAMESPACED", "KIND"]]
+    for kind, (g, vs, plural, short, nsd) in sorted(KINDS.items(), key=lambda kv: kv[1][2]):
+        rows.append([plural, ",".join(short), f"{g}/{vs[0]}" if g else vs[0], str(nsd).lower(), kind])
+    return _table(rows)
+
+
+def _kubectl(rec: dict, args: list, files: dict, stdin: str | None, k8s_version: str) -> str:
+    if not args:
+        raise KubectlError("kubectl controls the Kubernetes cluster manager.\nerror: no command given")
+    verb, rest = args[0], args[1:]
+    pos, fl = _flags(rest)
+    if verb in ("apply", "create", "replace") and fl["f"]:
+        docs = _read_files(fl["f"], files, stdin)
+        if not docs:
+            raise KubectlError("error: no objects passed to " + verb)
+        default_ns = fl["n"] or "default"
+        pending = {d.get("metadata", {}).get("name") for d in docs if isinstance(d, dict) and d.get("kind") == "Namespace"}
+        validated = [_validate(d, default_ns, rec, pending) for d in docs]   # all-or-nothing validation
+        out = []
+        for d, obj in zip(docs, validated):
+            res = _put(rec, obj, "create" if verb == "create" else "apply", applied=d if verb == "apply" else None)
+            if verb == "create":
+                res = "created"
+            out.append(f"{_resource_label(obj['kind'])}/{obj['metadata']['name']} {res}")
+        return "\n".join(out) + "\n"
+    if verb == "create" and pos[:1] in (["namespace"], ["ns"]) and len(pos) == 2:
+        obj = _validate({"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": pos[1]}}, "default", rec, set())
+        _put(rec, obj, "create")
+        return f"namespace/{pos[1]} created\n"
+    if verb in ("get",):
+        return _get(rec, pos, fl)
+    if verb == "describe":
+        return _get(rec, pos, fl, describe=True)
+    if verb == "delete":
+        targets = []
+        if fl["f"]:
+            for d in _read_files(fl["f"], files, stdin):
+                if not isinstance(d, dict) or d.get("kind") not in KINDS:
+                    continue
+                md = d.get("metadata") or {}
+                targets.append((d["kind"], md.get("namespace") or fl["n"] or "default", md.get("name")))
+        elif pos:
+            if "/" in pos[0]:
+                for p in pos:
+                    k, n = p.split("/", 1)
+                    targets.append((_resolve_kind(k), fl["n"] or "default", n))
+            else:
+                kind = _resolve_kind(pos[0])
+                if len(pos) < 2:
+                    raise KubectlError("error: resource(s) were provided, but no name was specified")
+                targets += [(kind, fl["n"] or "default", n) for n in pos[1:]]
+        else:
+            raise KubectlError("error: You must provide one or more resources by argument or filename.")
+        out = []
+        for kind, ns, name in targets:
+            if _delete(rec, kind, ns, name):
+                out.append(f'{_resource_label(kind)} "{name}" deleted')
+            else:
+                raise KubectlError("\n".join(out + [f'Error from server (NotFound): {KINDS[kind][2]}{"." + KINDS[kind][0] if KINDS[kind][0] else ""} "{name}" not found']))
+        return "\n".join(out) + "\n"
+    if verb == "scale":
+        if fl["replicas"] is None or not pos:
+            raise KubectlError("error: --replicas=COUNT is required, and you must specify a resource")
+        kind, name = (_resolve_kind(pos[0].split("/", 1)[0]), pos[0].split("/", 1)[1]) if "/" in pos[0] else (_resolve_kind(pos[0]), pos[1] if len(pos) > 1 else "")
+        if kind not in ("Deployment", "ReplicaSet", "StatefulSet"):
+            raise KubectlError(f"error: cannot scale a {kind}")
+        key = _key(kind, fl["n"] or "default", name)
+        obj = _store(rec)["objects"].get(key)
+        if obj is None:
+            raise KubectlError(f'Error from server (NotFound): {KINDS[kind][2]}.{KINDS[kind][0]} "{name}" not found')
+        new = copy.deepcopy(obj)
+        new["spec"]["replicas"] = int(fl["replicas"])
+        _put(rec, new, "replace")
+        return f"{_resource_label(kind)}/{name} scaled\n"
+    if verb == "version":
+        v = str(k8s_version or "")
+        return (f"Client Version: v{v}\nKustomize Version: v5.0.4\nServer Version: v{v}\n"
+                if v else "Client Version: unknown\n")
+    if verb == "api-resources":
+        return _api_resources()
+    if verb in ("logs", "exec", "attach", "port-forward", "cp", "top", "debug", "proxy", "run", "rollout", "auth", "events", "wait"):
+        raise KubectlError(f"error: 'kubectl {verb}' needs running containers or a live API server — Vyomi stores Kubernetes "
+                           f"objects but doesn't run containers, so there is nothing for '{verb}' to act on")
+    raise KubectlError(f"error: 'kubectl {verb}' is not simulated by Vyomi (supported: apply, create, get, describe, delete, "
+                       f"scale, version, api-resources)")
+
+
+def run_command(rec: dict, command: str, context_b64: str | None = None) -> dict:
+    """Execute a runCommand `command` against this cluster's object store.
+    -> {exitCode, logs, changed} (changed = the object store moved; drives a posture rescan)."""
+    before = version(rec)
+    try:
+        files = _unzip(context_b64)
+    except KubectlError as e:
+        return {"exitCode": 1, "logs": str(e) + "\n", "changed": False}
+    k8s_version = (rec.get("properties") or {}).get("currentKubernetesVersion") or (rec.get("properties") or {}).get("kubernetesVersion")
+    logs, code = [], 0
+    for line, stdin in _split_commands(command or ""):
+        # `cat <<EOF | kubectl …` → the heredoc is the kubectl's stdin
+        if "|" in line:
+            left, right = [s.strip() for s in line.split("|", 1)]
+            if left.startswith("cat") and not left[3:].strip():
+                line = right
+            else:
+                logs.append(f"sh: pipelines other than `cat <<EOF | kubectl …` are not simulated by Vyomi: {line}\n"); code = 1
+                break
+        try:
+            args = shlex.split(line)
+        except ValueError as e:
+            logs.append(f"sh: syntax error: {e}\n"); code = 2
+            break
+        if not args:
+            continue
+        if args[0] != "kubectl":
+            logs.append(f"sh: {args[0]}: command not found (Vyomi's runCommand simulates kubectl object operations only)\n"); code = 127
+            break
+        try:
+            logs.append(_kubectl(rec, args[1:], files, stdin, k8s_version))
+        except KubectlError as e:
+            logs.append(str(e).rstrip("\n") + "\n"); code = 1
+            break
+    return {"exitCode": code, "logs": "".join(logs), "changed": version(rec) != before}

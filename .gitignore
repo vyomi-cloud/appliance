@@ -76,3 +76,6 @@ docker-compose.unified.yml
 
 # Pyodide runtime vendored for Nano by wasm/fetch_pyodide.py (binaries; not committed)
 wasm/vendor/pyodide/
+
+# Kubescape framework artifacts downloaded once by providers/kubescape_runner.py (appliance data)
+kubescape-artifacts/

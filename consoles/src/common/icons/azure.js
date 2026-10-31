@@ -39,6 +39,8 @@ export const AZURE_ICONS = {
   // Virtual network: three linked nodes inside a boundary
   vnets: `<rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="${A}" stroke-width="1.6"/>${line("M8 9.5h8M8 9.5l4 6.5M16 9.5l-4 6.5", C, 1.3)}<circle cx="8" cy="9.5" r="2.1" fill="${A}"/><circle cx="16" cy="9.5" r="2.1" fill="${A}"/><circle cx="12" cy="16" r="2.1" fill="${L}"/>`,
   // NSG: a two-tone shield with a check
+  // Defender for Cloud: a shield carrying a posture gauge (arc + needle) — original Vyomi glyph
+  defender: `<path d="M12 2.6 20 5.6v5.8c0 4.7-3.3 8.5-8 10.4-4.7-1.9-8-5.7-8-10.4V5.6z" fill="${C}"/><path d="M7.4 14.2a4.6 4.6 0 0 1 9.2 0" fill="none" stroke="${L}" stroke-width="1.8" stroke-linecap="round"/>${line("M12 14.2l2.6-3.1", W, 1.6)}<circle cx="12" cy="14.2" r="1.1" fill="${W}"/><rect x="9.2" y="6.4" width="5.6" height="1.6" rx=".8" fill="${M}"/>`,
   nsgs: `<path d="M12 2.8 19.5 5.7v5.6c0 4.5-3.1 8.1-7.5 10-4.4-1.9-7.5-5.5-7.5-10V5.7z" fill="${A}"/><path d="M12 2.8v18.5c4.4-1.9 7.5-5.5 7.5-10V5.7z" fill="${C}"/>${line("M8.6 12.1l2.4 2.4 4.6-4.8", W, 1.7)}`,
   // resource group: a dashed boundary holding four resources
   resourcegroups: `<rect x="3" y="3" width="18" height="18" rx="2.4" fill="none" stroke="${A}" stroke-width="1.5" stroke-dasharray="3 2"/><rect x="6.5" y="6.5" width="4.8" height="4.8" rx=".9" fill="${A}"/><rect x="12.7" y="6.5" width="4.8" height="4.8" rx=".9" fill="${L}"/><rect x="6.5" y="12.7" width="4.8" height="4.8" rx=".9" fill="${M}"/><rect x="12.7" y="12.7" width="4.8" height="4.8" rx=".9" fill="${C}"/>`,

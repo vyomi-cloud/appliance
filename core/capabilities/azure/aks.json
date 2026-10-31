@@ -62,16 +62,18 @@
   ]
  },
  "azure.aks.run_command": {
-  "title": "Run command (az aks command invoke)",
+  "title": "Run command (az aks command invoke) — kubectl against the cluster's Kubernetes objects",
   "level": {
    "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Vyomi does not run a real kubelet or API server, so runCommand accepts and echoes the submitted command in its response but never actually executes it against a live cluster. It IS rejected (409 ClusterNotRunning) while the cluster's powerState is Stopped, matching the real requirement for a running API server."
+   "Vyomi runs no API server, kubelet or containers: kubectl apply / create / get / describe / delete / scale / version / api-resources work against the objects the cluster stores (manifests from a heredoc, a `cat <<EOF |` pipe or the --file context zip); commands that need running containers or a live API server (logs, exec, port-forward, rollout, top, …) and non-kubectl tools fail with an explanation and a non-zero exit code.",
+   "It IS rejected (409 ClusterNotRunning) while the cluster's powerState is Stopped, matching the real requirement for a running API server."
   ],
   "tests": [
-   "tests/conformance/test_azure_aks_core.py"
+   "tests/conformance/test_azure_aks_core.py",
+   "tests/conformance/test_azure_aks_k8s_core.py"
   ]
  },
  "azure.aks.connect_credentials": {
@@ -100,14 +102,28 @@
    "tests/conformance/test_azure_aks_core.py"
   ]
  },
+ "azure.aks.workloads": {
+  "title": "Kubernetes objects: Workloads, Services and ingresses, Configuration (Deployments, Pods, Replica/Stateful/Daemon sets, Jobs, Cron jobs, Services, Ingresses, Config maps, Secrets)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "The objects are real and stored per cluster (applied with kubectl through Run command, or the Apply a YAML dialog, which uses it), listed and deleted for real — but nothing is scheduled: Vyomi doesn't run containers, so controllers create no Pods, workloads report 0 ready replicas, Pods stay Pending (PodScheduled=False) and LoadBalancer Services / Ingresses get no external address.",
+   "Roles, ClusterRoles, bindings, ServiceAccounts, NetworkPolicies and Namespaces are stored too (and scanned by Defender for Cloud's Kubescape posture check) but have no dedicated blade; NetworkPolicies are not enforced."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_aks_k8s_core.py"
+  ]
+ },
  "azure.aks.kubernetes_objects": {
-  "title": "Live Kubernetes objects (Workloads, Services and ingresses, Storage, Configuration, Custom resources, Events)",
+  "title": "Storage (persistent volumes, storage classes), Custom resources, Events",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "These panels proxy kubectl/the Kubernetes API server of the cluster itself (not ARM) — Vyomi does not run a kubelet or API server in-browser, so pods, deployments, services and other live cluster objects are not simulated."
+   "Persistent volumes / claims / storage classes and custom resource definitions are not kinds Vyomi's Kubernetes object store holds, and with no controllers or kubelet running there are no Kubernetes events to show."
   ]
  },
  "azure.aks.locks": {
@@ -137,6 +153,20 @@
   ],
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
+  ]
+ },
+ "azure.aks.defender": {
+  "title": "Microsoft Defender for Cloud (this cluster's recommendations, from Kubescape)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Shows this cluster's live Defender for Cloud recommendations: Kubescape findings over the Kubernetes objects it stores, while the Containers plan is on — see azure.defender.kubernetes for what each substrate evaluates."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_security_core.py",
+   "tests/conformance/test_kubescape_core.py"
   ]
  }
 }

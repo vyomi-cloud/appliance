@@ -101,6 +101,11 @@ const CORES = [
   "azure_webapp_core.py",   // Azure App Service engine (Microsoft.Web: web apps + function apps, plans) — loaded before azure_arm_core which delegates to it
   "azure_eventgrid_core.py",   // Azure Event Grid event subscriptions (Microsoft.EventGrid, topic-scoped) — loaded before azure_arm_core which delegates to it
   "azure_locks_core.py",   // Management locks (Microsoft.Authorization/locks, scoped to ANY resource) — loaded before azure_arm_core which delegates to it
+  "k8s_yaml.py",   // YAML reader for Kubernetes manifests — azure_aks_k8s_core imports it
+  "azure_aks_k8s_core.py",   // AKS Kubernetes object store + kubectl (runCommand) — loaded before azure_arm_core
+  "kubescape_catalog.py",   // Kubescape control metadata (generated) — kubescape_core imports it
+  "kubescape_core.py",   // Kubescape results + scanner seam (calls the OPA-wasm evaluator) — loaded before azure_arm_core
+  "azure_security_core.py",   // Microsoft Defender for Cloud (Microsoft.Security) — loaded before azure_arm_core which delegates to it
   "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane (native /subscriptions/* wire)
   // GCP conformance cores — the gcp_core_adapter data-plane (console CRUD).
   "gcp_storage_core.py", "gcp_firestore_core.py", "gcp_kms_core.py",
@@ -171,6 +176,13 @@ async function bootBackend() {
   // sqlite3 is a separate Pyodide package (vendored by wasm/fetch_pyodide.py): the SQL data
   // planes (Azure SQL query editor, RDS Data API) need it — the relay worker loads it too.
   try { await py.loadPackage("sqlite3"); } catch (e) { console.warn("[nano] sqlite3 load skipped:", e); }
+  // Kubernetes posture for Defender for Cloud: the regolibrary (Kubescape) Rego controls compiled to
+  // WebAssembly with OPA (wasm/kubescape/). kubescape_core calls globalThis.__vyomi_kubescape_eval
+  // synchronously; if this fails to load, Defender reports the scanner as unavailable (never fakes).
+  try {
+    const { installKubescape } = await import(BASE + "/kubescape/ks-eval.mjs");
+    await installKubescape(new URL(BASE + "/kubescape/", location.origin).href);
+  } catch (e) { console.warn("[nano] Kubescape evaluator unavailable:", e); }
   st = K.step("fs", "mounting /wasm: " + MODULES.length + " console modules");
   py.FS.mkdir("/wasm"); py.FS.mkdir("/wasm/backends"); py.FS.mkdir("/wasm/providers");
   py.FS.writeFile("/wasm/__init__.py", "");

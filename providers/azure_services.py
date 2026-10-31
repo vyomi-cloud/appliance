@@ -800,6 +800,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             or (len(low0) >= 3 and low0[0] == "providers"
                 and ((low0[1] == "microsoft.subscription" and low0[2] == "rename")
                      or (low0[1] == "microsoft.resources" and low0[2] == "tags")
+                     or low0[1] == "microsoft.security"      # Defender for Cloud (core/azure_security_core.py)
                      or (low0[1] == "microsoft.authorization"
                          and low0[2] in ("locks", "roleassignments", "roledefinitions", "checkaccess"))))):
         return await _handle_core_arm(request, method, rest, base)
@@ -814,7 +815,8 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             len(low) <= 2
             or (len(low) == 3 and low[2] == "resources")
             or (len(low) >= 5 and low[2] == "providers" and low[3] == "microsoft.authorization"
-                and low[4] in ("locks", "roleassignments", "roledefinitions", "checkaccess"))):
+                and low[4] in ("locks", "roleassignments", "roledefinitions", "checkaccess"))
+            or (len(low) >= 4 and low[2] == "providers" and low[3] == "microsoft.security")):
         if method == "DELETE" and len(low) == 2:
             for rec in [r for r in list(_state.values())
                         if isinstance(r, dict) and r.get("_sub") == sub and (r.get("_rg") or "").lower() == low[1]]:
@@ -875,7 +877,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     # control (IAM) blade lists the assignments at its own scope plus inherited ones).
     lowc = [c.lower() for c in chain]
     for i in range(1, len(lowc) - 1):
-        if lowc[i] == "providers" and lowc[i + 1] == "microsoft.authorization" and i % 2 == 0:
+        if lowc[i] == "providers" and lowc[i + 1] in ("microsoft.authorization", "microsoft.security") and i % 2 == 0:
             return await _handle_core_arm(request, method, rest, base)
 
     # Microsoft.Compute/.../vmSizes (azure.vms.size): a derived read (location- or VM-scoped),
@@ -1241,6 +1243,11 @@ def core_arm():
     arm.sub_names = _subscription_meta("names")   # Microsoft.Subscription/rename
     arm.sub_tags = _subscription_meta("tags")     # Microsoft.Resources/tags/default at subscription scope
     arm.providers = _subscription_meta("providers")   # resource provider (un)registration
+    try:                                          # Defender for Cloud's Kubernetes posture: the real Kubescape
+        from providers import kubescape_runner    # CLI container, debounced in the background (never blocks)
+        kubescape_runner.install()
+    except Exception:
+        pass
     return arm
 
 
@@ -1265,7 +1272,7 @@ async def _handle_core_arm(request: Request, method: str, rest: str, base: str):
     if status < 300 and method in ("PUT", "PATCH", "DELETE") and "providers" in [s.lower() for s in segs]:
         i = [s.lower() for s in segs].index("providers")
         after = segs[i + 1:]
-        if len(after) == 3:
+        if len(after) == 3 and after[0].lower() != "microsoft.security":   # Defender plans aren't inventory
             full_type, leaf = f"{after[0]}/{after[1]}", after[2]
             rid = "/subscriptions/" + "/".join(segs)
             _record_usage(f"azure.{'delete' if method == 'DELETE' else method.lower()}",

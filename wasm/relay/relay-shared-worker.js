@@ -37,6 +37,7 @@ const CORES = [
   "azure_sql_core.py", "azure_iam_core.py", "azure_acr_core.py", "azure_graph_core.py",
   "azure_app_core.py", "azure_webapp_core.py", "azure_appconfiguration_core.py", "azure_cognitiveservices_core.py", "azure_dns_core.py", "azure_monitor_core.py", "azure_operationalinsights_core.py",
   "azure_eventgrid_core.py", "azure_locks_core.py",
+  "k8s_yaml.py", "azure_aks_k8s_core.py", "kubescape_catalog.py", "kubescape_core.py", "azure_security_core.py",   // AKS objects + Defender for Cloud
   "cost_model.py", "azure_cost_core.py", "azure_arm_data.py", "azure_arm_core.py",   // Azure ARM control plane — nano_registry imports it
   "aws_wire_router.py",
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)
@@ -121,6 +122,10 @@ async function bootPyodide() {
     try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
     const hasPg = await installPGlite();
     py.globals.set("_USE_PGLITE", hasPg);
+    try {   // Kubescape (OPA-wasm) evaluator for Defender for Cloud's Kubernetes posture — optional
+      const { installKubescape } = await import(new URL("../kubescape/ks-eval.mjs", import.meta.url).href);
+      await installKubescape(new URL("../kubescape/", import.meta.url).href);
+    } catch (e) { log("Kubescape evaluator unavailable: " + e, "dim"); }
     py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
     for (const f of CORES)
       py.FS.writeFile("/core/" + f, await (await fetch(CORE_BASE + "/" + f)).text());

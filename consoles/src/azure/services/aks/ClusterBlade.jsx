@@ -1,8 +1,11 @@
 /* Kubernetes service (AKS cluster) resource blade: left resource menu + panels. Overview,
  * Activity log, Access control (IAM), Tags, Namespaces, Run command, Node pools, Cluster
  * configuration, Locks, Properties and Export template are backed by native ARM calls;
- * everything else in the menu (live Kubernetes object browsing, Azure Monitor/Advisor/GitOps
- * integrations that are genuinely out of scope) is an honest NotSimulated panel. */
+ * Workloads, Services and ingresses and Configuration list the Kubernetes objects the cluster
+ * really holds (kubectl through runCommand — stored, never scheduled); Microsoft Defender for
+ * Cloud shows this cluster's live recommendations (Kubescape). Everything else in the menu
+ * (Storage, Custom resources, Events, Azure Monitor/Advisor/GitOps integrations) is an honest
+ * NotSimulated panel. */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -20,6 +23,8 @@ import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedCon
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { ResourceRecommendations } from "../defender/Pages.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -52,9 +57,7 @@ export const MENU = [
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 const NS_NOTES = {
   diagnose: "Diagnose and solve problems",
-  defender: "Microsoft Defender for Cloud",
   storage: "Kubernetes persistent volumes / storage classes",
-  configuration: "Kubernetes ConfigMaps and Secrets",
   customresources: "Kubernetes custom resource definitions",
   applicationscaling: "KEDA-based application scaling",
   networking: "Cluster networking settings (configured at create time; see the create wizard's Networking tab)",
@@ -91,8 +94,10 @@ export default function ClusterBlade({ params, query }) {
       iam: () => <AccessControlIam a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       namespaces: () => <Namespaces a={a} />,
-      workloads: () => <Workloads />,
-      servicesingresses: () => <ServicesIngresses />,
+      workloads: () => <Workloads a={a} />,
+      servicesingresses: () => <ServicesIngresses a={a} />,
+      configuration: () => <Configuration a={a} />,
+      defender: () => <ResourceRecommendations resourceId={a.id} />,
       runcommand: () => <RunCommand a={a} />,
       nodepools: () => <NodePools a={a} />,
       clusterconfiguration: () => <ClusterConfiguration a={a} reload={reload} />,
@@ -400,36 +405,123 @@ function CreateNamespaceDialog({ open, onClose, onCreate }) {
   );
 }
 
-// ── Workloads / Services and ingresses — live Kubernetes objects: honestly not simulated ──
-function Workloads() {
-  const [tab, setTab] = useState("deployments");
+// ── Workloads / Services and ingresses / Configuration — the cluster's stored Kubernetes objects ──
+// Read with `kubectl get … -A -o json` and written with `kubectl apply` / `kubectl delete`, all
+// through the native runCommand action. Vyomi stores objects but runs no containers: the status
+// columns say so instead of inventing readiness.
+const ageOf = (o) => fmtDate(o.metadata?.creationTimestamp);
+const ready = (o) => `${o.status?.readyReplicas ?? 0}/${o.spec?.replicas ?? 1}`;
+const K8S_TABS = {
+  deployments: { kind: "deployments", label: "Deployments", columns: [
+    { key: "ready", label: "Ready", value: ready }, { key: "uptodate", label: "Up-to-date", value: (o) => o.status?.updatedReplicas ?? 0 },
+    { key: "available", label: "Available", value: (o) => o.status?.availableReplicas ?? 0 }] },
+  pods: { kind: "pods", label: "Pods", columns: [
+    { key: "ready", label: "Ready", value: (o) => `0/${(o.spec?.containers || []).length}` },
+    { key: "phase", label: "Phase", value: (o) => o.status?.phase || "Pending" }, { key: "restarts", label: "Restart count", value: () => 0 },
+    { key: "image", label: "Images", value: (o) => (o.spec?.containers || []).map((c) => c.image).join(", ") }] },
+  replicasets: { kind: "replicasets", label: "Replica sets", columns: [{ key: "ready", label: "Ready", value: ready }] },
+  statefulsets: { kind: "statefulsets", label: "Stateful sets", columns: [{ key: "ready", label: "Ready", value: ready }] },
+  daemonsets: { kind: "daemonsets", label: "Daemon sets", columns: [
+    { key: "desired", label: "Desired", value: (o) => o.status?.desiredNumberScheduled ?? 0 }, { key: "current", label: "Current", value: (o) => o.status?.currentNumberScheduled ?? 0 },
+    { key: "ready", label: "Ready", value: (o) => o.status?.numberReady ?? 0 }] },
+  jobs: { kind: "jobs", label: "Jobs", columns: [{ key: "completions", label: "Completions", value: (o) => `${o.status?.succeeded ?? 0}/${o.spec?.completions ?? 1}` }] },
+  cronjobs: { kind: "cronjobs", label: "Cron jobs", columns: [{ key: "schedule", label: "Schedule", value: (o) => o.spec?.schedule }, { key: "suspend", label: "Suspend", value: (o) => String(!!o.spec?.suspend) }] },
+  services: { kind: "services", label: "Services", columns: [
+    { key: "type", label: "Type", value: (o) => o.spec?.type || "ClusterIP" }, { key: "clusterip", label: "Cluster IP", value: (o) => o.spec?.clusterIP },
+    { key: "external", label: "External IP", value: (o) => (o.spec?.type === "LoadBalancer" ? "Pending — Vyomi doesn't provision a load balancer" : (o.spec?.externalIPs || []).join(", ") || "-") },
+    { key: "ports", label: "Ports", value: (o) => (o.spec?.ports || []).map((p) => `${p.port}/${p.protocol || "TCP"}`).join(", ") }] },
+  ingresses: { kind: "ingresses", label: "Ingresses", columns: [
+    { key: "class", label: "Class", value: (o) => o.spec?.ingressClassName || "-" },
+    { key: "hosts", label: "Hosts", value: (o) => (o.spec?.rules || []).map((r) => r.host).filter(Boolean).join(", ") || "*" },
+    { key: "address", label: "Address", value: () => "Pending — no ingress controller runs in Vyomi" }] },
+  configmaps: { kind: "configmaps", label: "Config maps", columns: [{ key: "data", label: "Data", value: (o) => Object.keys(o.data || {}).length }] },
+  secrets: { kind: "secrets", label: "Secrets", columns: [{ key: "type", label: "Type", value: (o) => o.type }, { key: "data", label: "Data", value: (o) => Object.keys(o.data || {}).length }] },
+};
+const SCHEDULED = new Set(["deployments", "pods", "replicasets", "statefulsets", "daemonsets", "jobs", "cronjobs"]);
+
+function K8sTabs({ a, title, tabs, capId }) {
+  const [tab, setTab] = useState(tabs[0]);
+  const [apply, setApply] = useState(false);
+  const notify = useNotify();
+  const t = K8S_TABS[tab];
+  const { data, loading, error, reload } = useAsync(() => api.listK8s(a.resourceGroup, a.name, t.kind), [a.resourceGroup, a.name, tab]);
   return (
     <>
-      <div className="vy-panel-title">Workloads</div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Workloads tabs">
-        <Tab value="deployments">Deployments</Tab><Tab value="pods">Pods</Tab><Tab value="replicasets">Replica sets</Tab>
-        <Tab value="statefulsets">Stateful sets</Tab><Tab value="daemonsets">Daemon sets</Tab><Tab value="jobs">Jobs</Tab><Tab value="cronjobs">Cron jobs</Tab>
+      <div className="vy-panel-title">{title}</div>
+      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label={`${title} tabs`}>
+        {tabs.map((k) => <Tab key={k} value={k}>{K8S_TABS[k].label}</Tab>)}
       </TabList>
       <div style={{ marginTop: 12 }}>
-        <NotSimulatedContainer feature="Live Kubernetes workload objects" note="Deployments, Pods, Replica sets, Stateful sets, Daemon sets, Jobs and Cron jobs are read from the cluster's own Kubernetes API server (kubectl get …), not ARM — Vyomi does not run a kubelet or API server, so this view has no live cluster to read." />
+        <CapabilityContainer id={capId} title={t.label}>
+          <BrowseGrid
+            resourceName={t.label.toLowerCase().replace(/s$/, "")} rowKey={(o) => `${o.metadata.namespace}/${o.metadata.name}`}
+            items={(data || []).map((o) => ({ ...o, name: o.metadata.name }))} loading={loading} error={error} onRefresh={reload} onCreate={() => setApply(true)}
+            onDelete={async (sel) => {
+              for (const o of sel) await api.deleteK8s(a.resourceGroup, a.name, t.kind, o.metadata.namespace, o.metadata.name);
+              notify.success(`Deleted ${sel.length} object${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+              reload();
+            }}
+            csvName={`${t.kind}.csv`} filterPlaceholder="Filter by name or namespace"
+            pills={[{ key: "ns", label: "Namespace", value: (o) => o.metadata.namespace }]}
+            columns={[
+              { key: "name", label: "Name", value: (o) => o.metadata.name },
+              { key: "namespace", label: "Namespace", value: (o) => o.metadata.namespace },
+              ...(SCHEDULED.has(tab) ? [{ key: "status", label: "Status", value: () => "Not scheduled — Vyomi doesn't run containers" }] : []),
+              ...t.columns,
+              { key: "age", label: "Age", value: ageOf },
+            ]}
+          />
+        </CapabilityContainer>
       </div>
+      <ApplyYamlDialog a={a} open={apply} onClose={() => setApply(false)} onApplied={reload} />
     </>
   );
 }
 
-function ServicesIngresses() {
-  const [tab, setTab] = useState("services");
+function ApplyYamlDialog({ a, open, onClose, onApplied }) {
+  const notify = useNotify();
+  const [yaml, setYaml] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [out, setOut] = useState("");
+  const go = async () => {
+    setBusy(true); setOut("");
+    try {
+      const logs = await api.applyYaml(a.resourceGroup, a.name, yaml);
+      setOut(logs); notify.success(logs.trim().split("\n").slice(0, 3).join("; "), "Applied");
+      onApplied && onApplied();
+    } catch (e) { setOut(e.message); notify.error(e, "Apply failed"); }
+    finally { setBusy(false); }
+  };
   return (
-    <>
-      <div className="vy-panel-title">Services and ingresses</div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Services and ingresses tabs">
-        <Tab value="services">Services</Tab><Tab value="ingresses">Ingresses</Tab>
-      </TabList>
-      <div style={{ marginTop: 12 }}>
-        <NotSimulatedContainer feature="Live Kubernetes Services and Ingresses" note="Read from the cluster's own Kubernetes API server, not ARM — Vyomi does not run a kubelet or API server, so this view has no live cluster to read." />
-      </div>
-    </>
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Apply a YAML" style={{ maxWidth: 820 }}>
+        <DialogBody>
+          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Apply a YAML</DialogTitle>
+          <DialogContent>
+            <p style={{ fontSize: 12, marginTop: 0 }}>Runs <code>kubectl apply -f -</code> against the cluster through Run command. Objects are stored and listed; nothing is scheduled, because Vyomi doesn't run containers.</p>
+            <Textarea value={yaml} onChange={(_, d) => setYaml(d.value)} aria-label="YAML" placeholder={"apiVersion: apps/v1\nkind: Deployment\n..."} style={{ width: "100%", minHeight: 280, fontFamily: "monospace" }} />
+            {out && <Textarea readOnly value={out} aria-label="kubectl output" style={{ width: "100%", minHeight: 90, fontFamily: "monospace", marginTop: 8 }} />}
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={!yaml.trim() || busy} onClick={go}>Apply</Button>
+            <Button onClick={onClose}>Close</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
+}
+
+function Workloads({ a }) {
+  return <K8sTabs a={a} title="Workloads" capId="azure.aks.workloads" tabs={["deployments", "pods", "replicasets", "statefulsets", "daemonsets", "jobs", "cronjobs"]} />;
+}
+
+function ServicesIngresses({ a }) {
+  return <K8sTabs a={a} title="Services and ingresses" capId="azure.aks.workloads" tabs={["services", "ingresses"]} />;
+}
+
+function Configuration({ a }) {
+  return <K8sTabs a={a} title="Configuration" capId="azure.aks.workloads" tabs={["configmaps", "secrets"]} />;
 }
 
 // ── Run command ────────────────────────────────────────────────────────────────────────
