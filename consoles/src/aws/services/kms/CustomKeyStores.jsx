@@ -6,6 +6,7 @@ import Button from "@cloudscape-design/components/button";
 import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import ResourceTable from "../../kit/ResourceTable.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
@@ -23,6 +24,7 @@ export function AwsCloudHsmKeyStores() {
       error={t.error}
       onRefresh={t.reload}
       trackBy="CustomKeyStoreId"
+      actions={<CapabilityBadge id="kms.custom-key-stores" />}
       empty={{ title: "You don't have any custom key stores in your account." }}
       columns={[
         { id: "n", header: "Custom key store name", isRowHeader: true, cell: (x) => x.CustomKeyStoreName },
@@ -58,6 +60,8 @@ export function ExternalKeyStores() {
       ]}
       actions={
         <>
+          <CapabilityBadge id="kms.custom-key-stores" />
+          {" "}
           <ButtonDropdown
             items={[
               { id: "connect", text: "Connect", disabled: sel.length !== 1 },

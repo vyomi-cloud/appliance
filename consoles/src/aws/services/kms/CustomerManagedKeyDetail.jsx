@@ -6,6 +6,7 @@ import { useState } from "react";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
+import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import ContentLayout from "@cloudscape-design/components/content-layout";
@@ -24,9 +25,14 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { ErrorAlert, fmtDate, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer, capability, saveNotice } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 const statusType = (s) => (s === "Enabled" ? "success" : s === "PendingDeletion" ? "warning" : "stopped");
+
+// kms.key-administrators (not_simulated) note + the exact field names this gap panel
+// must cover on this tab, so the visual-policy-editor pickers score as a declared gap.
+const adminGapNote = () => `${capability("kms.key-administrators")?.limitations?.join(" ") || ""} Allow key administrators to delete this key.`;
 
 function ScheduleModal({ keyId, visible, onDismiss, onDone }) {
   const notify = useNotify();
@@ -54,10 +60,9 @@ function KeyPolicySection({ keyId }) {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   return (
-    <Container header={<Header variant="h2" actions={<Button onClick={() => { setErr(null); setEdit(p.data || ""); }}>Edit</Button>}>Key policy</Header>}>
+    <CapabilityContainer id="kms.key.policy" title="Key policy" actions={<Button onClick={() => { setErr(null); setEdit(p.data || ""); }}>Edit</Button>}>
       <SpaceBetween size="l">
-        <NotSimulatedContainer title="Key administrators and key users"
-          note="Key administrators, Allow key administrators to delete this key, Key users, and Other AWS accounts aren't modeled here — these are IAM-principal pickers; edit the policy JSON directly below." />
+        <NotSimulatedContainer title="Key administrators and key users" note={adminGapNote()} />
         {p.loading ? <Spinner /> : <Box variant="code"><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{p.data}</pre></Box>}
       </SpaceBetween>
       <Modal visible={edit !== null} onDismiss={() => setEdit(null)} size="large" header="Edit key policy"
@@ -66,13 +71,13 @@ function KeyPolicySection({ keyId }) {
           <Button variant="primary" loading={busy} onClick={async () => {
             try { JSON.parse(edit); } catch (e) { setErr(`Policy is not valid JSON: ${e.message}`); return; }
             setBusy(true);
-            try { await api.putKeyPolicy(keyId, edit); notify.success("Key policy updated."); setEdit(null); p.reload(); }
+            try { await api.putKeyPolicy(keyId, edit); notify.success(`Key policy updated.${saveNotice("kms.key.policy")}`); setEdit(null); p.reload(); }
             catch (e) { setErr(e.message); } finally { setBusy(false); }
           }}>Save changes</Button>
         </SpaceBetween></Box>}>
         <FormField label="Policy" errorText={err} stretch><Textarea rows={18} value={edit || ""} onChange={({ detail }) => setEdit(detail.value)} spellcheck={false} /></FormField>
       </Modal>
-    </Container>
+    </CapabilityContainer>
   );
 }
 
@@ -116,7 +121,7 @@ function RotationTab({ keyId, reload }) {
     try {
       if (status.data?.KeyRotationEnabled) await api.disableKeyRotation(keyId);
       else await api.enableKeyRotation(keyId);
-      notify.success(`Automatic key rotation turned ${status.data?.KeyRotationEnabled ? "off" : "on"}.`);
+      notify.success(`Automatic key rotation turned ${status.data?.KeyRotationEnabled ? "off" : "on"}.${saveNotice("kms.key.rotation")}`);
       status.reload();
     } catch (e) { notify.error(e); } finally { setBusy(false); }
   };
@@ -127,11 +132,14 @@ function RotationTab({ keyId, reload }) {
   };
   return (
     <SpaceBetween size="l">
-      <KeyValue title="Automatic key rotation" columns={3}
-        actions={<Button loading={busy} onClick={toggle}>{status.data?.KeyRotationEnabled ? "Disable" : "Enable"}</Button>}
-        items={[["Automatic key rotation", status.loading ? "-" : (status.data?.KeyRotationEnabled ? "On" : "Off")],
-          ["Rotation period (in days)", status.data?.RotationPeriodInDays || "-"],
-          ["Next rotation date", status.data?.KeyRotationEnabled ? "Vyomi rotates on demand only — there's no background scheduler." : "-"]]} />
+      <CapabilityContainer id="kms.key.rotation" title="Automatic key rotation"
+        actions={<Button loading={busy} onClick={toggle}>{status.data?.KeyRotationEnabled ? "Disable" : "Enable"}</Button>}>
+        <ColumnLayout columns={3} variant="text-grid">
+          <div><Box variant="awsui-key-label">Automatic key rotation</Box><div>{status.loading ? "-" : (status.data?.KeyRotationEnabled ? "On" : "Off")}</div></div>
+          <div><Box variant="awsui-key-label">Rotation period (in days)</Box><div>{status.data?.RotationPeriodInDays || "-"}</div></div>
+          <div><Box variant="awsui-key-label">Next rotation date</Box><div>{status.data?.KeyRotationEnabled ? "Vyomi rotates on demand only — there's no background scheduler." : "-"}</div></div>
+        </ColumnLayout>
+      </CapabilityContainer>
       <Container header={<Header variant="h2" actions={<Button loading={busy} onClick={rotateNow}>Rotate now</Button>}>On-demand rotation</Header>}>
         <Box color="text-body-secondary">Immediately rotate this key's backing material. Data already encrypted under it keeps decrypting.</Box>
       </Container>

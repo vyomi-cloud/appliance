@@ -18,7 +18,8 @@ import Box from "@cloudscape-design/components/box";
 import TagEditor from "@cloudscape-design/components/tag-editor";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
-import { ErrorAlert, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
+import { CapabilityContainer, capability } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 const ASYMMETRIC_SPECS = ["RSA_2048", "RSA_3072", "RSA_4096", "ECC_NIST_P256", "ECC_NIST_P384", "ECC_NIST_P521", "ECC_SECG_P256K1", "ML_DSA_44", "ML_DSA_65", "ML_DSA_87"];
@@ -58,7 +59,7 @@ function ConfigureKeyStep({ s, set }) {
               { value: "CLOUDHSM", label: "AWS CloudHSM key store", disabled: true, description: "Requires a connected custom key store." },
               { value: "XKS", label: "External key store", disabled: true, description: "Requires a connected custom key store." },
             ]} />
-            {(s.origin === "CLOUDHSM" || s.origin === "XKS") && <NotSimulated feature="Custom key stores" note="Connecting a custom key store always fails in Vyomi — there's no real CloudHSM cluster or external XKS proxy to reach." />}
+            {(s.origin === "CLOUDHSM" || s.origin === "XKS") && <NotSimulated feature="Custom key stores" note={capability("kms.custom-key-stores")?.limitations?.join(" ")} />}
           </FormField>
           <FormField label="Regionality">
             <Tiles value={s.regionality} onChange={({ detail }) => set({ regionality: detail.value })} columns={1} items={[
@@ -97,7 +98,7 @@ function LabelsStep({ s, set, aliasErr }) {
 function AdminPermissionsStep({ s, set }) {
   return (
     <SpaceBetween size="l">
-      <NotSimulatedContainer title="Key administrators" feature="IAM key-administrator picker" note="Select IAM users and roles who can administer this key — not modeled; manage via the policy JSON in the Edit-key-policy step that follows." />
+      <CapabilityContainer id="kms.key-administrators" title="Key administrators" />
       <Container header={<Header variant="h2">Key deletion</Header>}>
         <Checkbox checked disabled>Allow key administrators to delete this key</Checkbox>
       </Container>
@@ -108,8 +109,8 @@ function AdminPermissionsStep({ s, set }) {
 function UsagePermissionsStep() {
   return (
     <SpaceBetween size="l">
-      <NotSimulatedContainer title="This account" feature="Key users" note="Select IAM users and roles who can use this key — not modeled; manage via the policy JSON in the Edit-key-policy step that follows." />
-      <NotSimulatedContainer title="Other AWS accounts" feature="Other AWS accounts" />
+      <CapabilityContainer id="kms.key-administrators" title="This account" />
+      <CapabilityContainer id="kms.key-administrators" title="Other AWS accounts" />
     </SpaceBetween>
   );
 }
