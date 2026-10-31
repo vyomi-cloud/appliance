@@ -142,11 +142,31 @@ def _tar(files: dict) -> bytes:
     return buf.getvalue()
 
 
+_REAPED = False
+
+
+def _reap_orphans() -> None:
+    """Once per process: remove scan containers a previous appliance process left behind when it
+    was stopped mid-scan (its `finally: docker rm -f` never ran)."""
+    global _REAPED
+    if _REAPED:
+        return
+    _REAPED = True
+    try:
+        p = _docker(["ps", "-aq", "--filter", "name=^vyomi-ks-scan-", "--filter", "name=^vyomi-ks-download-"], timeout=20)
+        ids = p.stdout.decode().split()
+        if ids:
+            _docker(["rm", "-f", *ids], timeout=60)
+    except Exception:
+        pass
+
+
 def scan_objects(objects: list) -> tuple[dict | None, str]:
     """Run one Kubescape scan over `objects` -> (report json, "") or (None, reason)."""
     reason = preflight()
     if reason:
         return None, "unavailable:" + reason
+    _reap_orphans()
     if not objects:
         objects = []
     manifest = "".join("---\n" + k8s_yaml.dump(o) for o in objects) or "---\n"
