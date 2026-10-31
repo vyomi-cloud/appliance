@@ -9,6 +9,8 @@ import { armType, getSubscription, parseId } from "../../kit/arm.js";
 export const ARM = armType("Microsoft.Network", "virtualNetworks", "2023-11-01");
 const NSG_ARM = armType("Microsoft.Network", "networkSecurityGroups", "2023-11-01");
 const NIC_ARM = armType("Microsoft.Network", "networkInterfaces", "2023-11-01");
+const ROUTE_TABLE_ARM = armType("Microsoft.Network", "routeTables", "2023-11-01");
+const NAT_GATEWAY_ARM = armType("Microsoft.Network", "natGateways", "2023-11-01");
 const CHILD_API_VERSION = "2023-11-01";
 
 const shape = (v) => ({ ...v, resourceGroup: parseId(v.id).resourceGroup });
@@ -87,6 +89,13 @@ export const listActivityLog = async (rg, name) => {
 
 // ── Network security groups — for the Subnets "Network security group" picker ──────────
 export const listNsgs = async () => (await NSG_ARM.list()).map(shape);
+
+// ── Route tables / NAT gateways — Microsoft.Network/routeTables and natGateways, real ARM
+// resource types the shared network engine (core/netsim) evaluates for subnet egress and
+// UDR behaviour. No dedicated console creates one yet (same as NSGs' earlier state): a route
+// table or NAT gateway created over ARM/CLI shows up here for the Subnets pickers. ──────────
+export const listRouteTables = async () => (await ROUTE_TABLE_ARM.list()).map(shape);
+export const listNatGateways = async () => (await NAT_GATEWAY_ARM.list()).map(shape);
 
 // ── Connected devices — any Microsoft.Network/networkInterfaces resource in the
 // subscription whose ipConfigurations[].subnet.id points at one of this vnet's subnets
