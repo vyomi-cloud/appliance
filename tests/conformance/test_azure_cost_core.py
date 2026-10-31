@@ -106,10 +106,58 @@ check("unsupported BillingBenefits type → 404", cost.dispatch_billingbenefits(
 check("delete savings plan → 200, then 204", cost.dispatch_billingbenefits(ST, "DELETE", SUB, ["savingsPlanOrders", "sp2"], {}, {})["status"] == 200
       and cost.dispatch_billingbenefits(ST, "DELETE", SUB, ["savingsPlanOrders", "sp2"], {}, {})["status"] == 204)
 
+# ── Hybrid Benefit (licenseType discount on VM cost) ────────────────────────────
+arm.handle("PUT", f"{P}/Microsoft.Compute/virtualMachines/vm-win", {}, {"location": "eastus",
+    "properties": {"hardwareProfile": {"vmSize": "Standard_D2s_v5"}, "licenseType": "Windows_Server"}})
+win_row = next(r for r in cost._collect_resource_rows(ST, SUB) if r["name"] == "vm-win")
+check("Hybrid Benefit discounts the VM's monthly cost", win_row["hybrid_benefit"] is True
+      and win_row["monthly_usd"] == round(vm_row["monthly_usd"] * 0.8, 2), win_row)
+
+# ── Microsoft.Capacity/reservationOrders ────────────────────────────────────────
+r = cost.dispatch_capacity(ST, "PUT", SUB, ["reservationOrders", "res1"],
+                            {"properties": {"skuName": "Standard_D2s_v5", "quantity": 0.0001}}, {})
+check("create reservation → 201 with utilization", r["status"] == 201 and "utilization" in r["body"]["properties"], r["body"])
+check("tiny reservation vs real VM spend of the same sku → ~100% utilized", r["body"]["properties"]["utilization"] == 100.0, r["body"])
+check("defaults filled in (term/scope/renew/expiry)", r["body"]["properties"]["term"] == "P1Y"
+      and r["body"]["properties"]["appliedScopeType"] == "Shared" and r["body"]["properties"]["renew"] is False
+      and r["body"]["properties"]["expiryDateTime"], r["body"])
+r = cost.dispatch_capacity(ST, "PUT", SUB, ["reservationOrders", "res2"],
+                            {"properties": {"skuName": "Standard_D2s_v5", "quantity": 1000000}}, {})
+check("huge reservation vs real VM spend of the same sku → ~0% utilized", r["body"]["properties"]["utilization"] == 0.0, r["body"])
+r = cost.dispatch_capacity(ST, "PUT", SUB, ["reservationOrders", "res-other-sku"],
+                            {"properties": {"skuName": "Standard_B2s", "quantity": 1}}, {})
+check("reservation for a sku with no matching VMs → 0% utilized", r["body"]["properties"]["utilization"] == 0.0, r["body"])
+check("list reservations", len(cost.dispatch_capacity(ST, "GET", SUB, ["reservationOrders"], {}, {})["body"]["value"]) == 3)
+check("get missing reservation → 404", cost.dispatch_capacity(ST, "GET", SUB, ["reservationOrders", "none"], {}, {})["status"] == 404)
+check("create requires skuName/quantity", cost.dispatch_capacity(ST, "PUT", SUB, ["reservationOrders", "bad"], {"properties": {}}, {})["status"] == 400)
+check("unsupported Capacity type → 404", cost.dispatch_capacity(ST, "GET", SUB, ["bogus"], {}, {})["status"] == 404)
+check("delete reservation → 200, then 204", cost.dispatch_capacity(ST, "DELETE", SUB, ["reservationOrders", "res2"], {}, {})["status"] == 200
+      and cost.dispatch_capacity(ST, "DELETE", SUB, ["reservationOrders", "res2"], {}, {})["status"] == 204)
+
+# ── Microsoft.CostManagement/costAllocationRules (enforced in a grouped query) ──
+P2 = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg2/providers"
+arm.handle("PUT", f"{P2}/Microsoft.Storage/storageAccounts/uicstorage2", {}, {"location": "eastus"})
+before = {row[1]: row[0] for row in cost.run_cost_query(ST, SUB, None, {"dataset": {"grouping": [{"name": "ResourceGroupName"}]}}, NOW)["properties"]["rows"]}
+check("before any rule, rg1 carries its own real cost", before.get("rg1", 0) > 0, before)
+r = cost.dispatch_allocationrules(ST, "PUT", SUB, ["alloc1"], {"properties": {"details": {
+    "sourceResources": [{"name": "rg1"}], "targetResources": [{"name": "rg2", "allocation": 100}]}}}, {})
+check("create allocation rule → 201 with defaults", r["status"] == 201 and r["body"]["properties"]["status"] == "Active"
+      and r["body"]["properties"]["details"]["allocationType"] == "Fixed", r["body"])
+after = {row[1]: row[0] for row in cost.run_cost_query(ST, SUB, None, {"dataset": {"grouping": [{"name": "ResourceGroupName"}]}}, NOW)["properties"]["rows"]}
+check("rule moves rg1's cost onto rg2", "rg1" not in after and after.get("rg2", 0) == round(before["rg1"] + before.get("rg2", 0), 6), after)
+check("a scoped query (single RG) is unaffected by allocation rules", any(row[1] == "rg1" for row in
+      cost.run_cost_query(ST, SUB, "rg1", {"dataset": {"grouping": [{"name": "ResourceGroupName"}]}}, NOW)["properties"]["rows"]))
+check("list allocation rules", len(cost.dispatch_allocationrules(ST, "GET", SUB, [], {}, {})["body"]["value"]) == 1)
+check("get missing allocation rule → 404", cost.dispatch_allocationrules(ST, "GET", SUB, ["none"], {}, {})["status"] == 404)
+check("create requires source/target resources", cost.dispatch_allocationrules(ST, "PUT", SUB, ["bad"], {"properties": {"details": {}}}, {})["status"] == 400)
+check("delete allocation rule → 200, then 204", cost.dispatch_allocationrules(ST, "DELETE", SUB, ["alloc1"], {}, {})["status"] == 200
+      and cost.dispatch_allocationrules(ST, "DELETE", SUB, ["alloc1"], {}, {})["status"] == 204)
+
 # ── through the Nano ARM wire end to end ────────────────────────────────────────
 CM = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/providers/Microsoft.CostManagement"
 CO = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/providers/Microsoft.Consumption"
 BB = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/providers/Microsoft.BillingBenefits"
+CAP = "/subscriptions/00000000-0000-0000-0000-cloudlearn01/providers/Microsoft.Capacity"
 r = arm.handle("PUT", f"{CO}/budgets/nano-budget", {}, {"properties": {"amount": 500}})
 check("Nano ARM: budget create", r["status"] == 201, r)
 r = arm.handle("POST", f"{CM}/query", {}, {"dataset": {}})
@@ -122,6 +170,15 @@ r = arm.handle("PUT", f"{BB}/savingsPlanOrders/nano-sp", {}, {"properties": {"co
 check("Nano ARM: savings plan create", r["status"] == 201, r)
 r = arm.handle("GET", f"{BB}/savingsPlanOrders", {}, None)
 check("Nano ARM: list savings plans", r["status"] == 200 and any(v["name"] == "nano-sp" for v in r["body"]["value"]), r)
+r = arm.handle("PUT", f"{CAP}/reservationOrders/nano-res", {}, {"properties": {"skuName": "Standard_D2s_v5", "quantity": 1}})
+check("Nano ARM: reservation create", r["status"] == 201, r)
+r = arm.handle("GET", f"{CAP}/reservationOrders", {}, None)
+check("Nano ARM: list reservations", r["status"] == 200 and any(v["name"] == "nano-res" for v in r["body"]["value"]), r)
+r = arm.handle("PUT", f"{CM}/costAllocationRules/nano-alloc", {}, {"properties": {"details": {
+    "sourceResources": [{"name": "rg1"}], "targetResources": [{"name": "rg2", "allocation": 100}]}}})
+check("Nano ARM: allocation rule create", r["status"] == 201, r)
+r = arm.handle("GET", f"{CM}/costAllocationRules", {}, None)
+check("Nano ARM: list allocation rules", r["status"] == 200 and any(v["name"] == "nano-alloc" for v in r["body"]["value"]), r)
 
 print(f"{PASS} passed, {FAIL} failed")
 assert FAIL == 0

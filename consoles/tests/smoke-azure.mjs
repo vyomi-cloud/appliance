@@ -237,6 +237,42 @@ try {
   await page.getByText(CR, { exact: true }).first().waitFor({ timeout: 10000 });
   check("wire-created resource shown in Advisor recommendations", true);
   await shot("20-advisor-recommendations");
+
+  // ── Reservation purchased through the UI → visible over native Capacity wire; Azure
+  //    Hybrid Benefit toggled for a VM already in inventory → licenseType set over native ARM ──
+  const RES = `vysmokeres${n}`;
+  const AHBVM = `vyahbvm${n}`;
+  await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${AHBVM}`,
+    { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_D2s_v5" } } });
+  await page.goto(UI + "#/cost/reservations");
+  await page.getByRole("button", { name: "Purchase" }).click();
+  await page.getByLabel("Reservation name").fill(RES);
+  await page.getByLabel("Quantity").fill("1");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(RES, { exact: true }).first().waitFor({ timeout: 10000 });
+  await shot("20a-reservation-created");
+  const resWire = await wire(`/subscriptions/${SUB}/providers/Microsoft.Capacity/reservationOrders/${RES}?api-version=2023-11-01`);
+  check("UI purchase reservation → visible over native Capacity wire", resWire.status === 200, `HTTP ${resWire.status}`);
+
+  await page.getByRole("row", { name: new RegExp(AHBVM) }).getByRole("switch").click();
+  await page.waitForTimeout(500);
+  const ahbWire = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${AHBVM}`);
+  check("UI toggle Hybrid Benefit → licenseType set over native ARM", JSON.parse(ahbWire.text).properties?.licenseType === "Windows_Server", ahbWire.text.slice(0, 160));
+  await shot("20b-hybrid-benefit-toggled");
+
+  // ── Cost allocation rule created through the UI → visible over native CostManagement wire ──
+  const ALLOC = `vysmokealloc${n}`;
+  await page.goto(UI + "#/cost/allocation");
+  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Rule name").fill(ALLOC);
+  await page.getByLabel("Source resource group").selectOption({ label: RG });
+  await page.getByLabel("Target resource group").selectOption({ label: RG });
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByText(ALLOC, { exact: true }).first().waitFor({ timeout: 10000 });
+  await shot("20c-allocation-rule-created");
+  const allocWire = await wire(`/subscriptions/${SUB}/providers/Microsoft.CostManagement/costAllocationRules/${ALLOC}?api-version=2023-11-01`);
+  check("UI create cost allocation rule → visible over native CostManagement wire", allocWire.status === 200, `HTTP ${allocWire.status}`);
+
   // ── Function App created through the wizard → visible over native ARM ─────────────────
   const FA = `vysmokefn${n}`;
   const FARG = "cloudlearn-rg";                   // the Function App wizard's default resource group

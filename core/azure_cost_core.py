@@ -42,10 +42,18 @@ except ImportError:                               # Pyodide: cores are flat on s
 COST_NS = "Microsoft.CostManagement"
 CONSUMPTION_NS = "Microsoft.Consumption"
 BENEFITS_NS = "Microsoft.BillingBenefits"
+CAPACITY_NS = "Microsoft.Capacity"
 BUDGET_TYPE = "budgets"
 SAVINGSPLAN_TYPE = "savingsPlanOrders"
+RESERVATION_TYPE = "reservationOrders"
+ALLOCRULE_TYPE = "costAllocationRules"
 QUERY_API_VERSION = "2023-11-01"
 _TERM_MONTHS = {"P1Y": 12, "P3Y": 36}
+# Azure Hybrid Benefit removes a Windows Server license cost already baked into the VM's
+# on-demand rate. Vyomi's pricing tables (core/cost_model.py) don't split license vs. compute,
+# so this models the saving as a flat approximate share of list price rather than a per-SKU one.
+_HYBRID_BENEFIT_DISCOUNT = 0.20
+_HYBRID_BENEFIT_LICENSE_TYPES = {"windows_server", "windows_server_perpetual"}
 
 
 class _E(Exception):
@@ -135,11 +143,17 @@ def _collect_resource_rows(state, sub, rg=None):
         if full_type == "microsoft.compute/virtualmachines":
             instance_type = ((rec.get("properties") or {}).get("hardwareProfile") or {}).get("vmSize", "")
         monthly = cost_model.estimate_resource_cost("azure", service, kind, instance_type)["monthly_usd"]
+        license_type = str((rec.get("properties") or {}).get("licenseType") or "").lower()
+        hybrid_benefit = full_type == "microsoft.compute/virtualmachines" and license_type in _HYBRID_BENEFIT_LICENSE_TYPES
+        if hybrid_benefit:
+            monthly = round(monthly * (1 - _HYBRID_BENEFIT_DISCOUNT), 2)
         rows.append({
             "name": rec.get("name", ""), "full_type": full_type,
             "service": _SERVICE_LABEL.get(full_type, full_type),
             "location": rec.get("location") or "global",
             "resource_group": rec.get("_rg") or "",
+            "instance_type": instance_type,
+            "hybrid_benefit": hybrid_benefit,
             "monthly_usd": monthly,
         })
     return rows
@@ -190,6 +204,8 @@ def run_cost_query(state, sub, rg, payload, now=None):
         for r in rows:
             k = key_fn(r)
             agg[k] = round(agg.get(k, 0.0) + r["cost"], 6)
+        if dim.lower() == "resourcegroupname" and rg is None:
+            _apply_allocation_rules(state, sub, agg)
         items = sorted(agg.items(), key=lambda kv: -kv[1])
         columns = [{"name": "Cost", "type": "Number"}, {"name": dim, "type": "String"}, {"name": "Currency", "type": "String"}]
         out_rows = [[v, k, "USD"] for k, v in items]
@@ -489,6 +505,178 @@ def dispatch_billingbenefits(state, method, sub, chain, payload, query, base="")
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
 
+# ═══════════════ VM reservations (Microsoft.Capacity/reservationOrders) ══════════
+# A reservation commits to a VM size + quantity for a term in exchange for a discount —
+# modelled exactly like a savings plan order (persisted record, live-derived utilization),
+# but matched against real compute spend for the SAME VM size rather than compute spend
+# overall. Purchasing against a real payment method is out of scope, same as savings plans;
+# the order is created directly with the sku/quantity instead.
+def _reservation_rid(sub, name):
+    return f"/subscriptions/{sub}/providers/{CAPACITY_NS}/{RESERVATION_TYPE}/{name}"
+
+
+def _reservations_for(state, sub):
+    ft = f"{CAPACITY_NS}/{RESERVATION_TYPE}".lower()
+    return [r for r in state.values() if str(r.get("_type", "")).lower() == ft and r.get("_sub") == sub]
+
+
+def reservation_utilization(state, rec, now=None):
+    """% of the reserved VM-size capacity actually matched by real running VMs of that same
+    size (capped at 100%) — the reservation analogue of a savings plan's utilization."""
+    props = rec.get("properties") or {}
+    sku = str(props.get("skuName") or "")
+    quantity = float(props.get("quantity") or 0)
+    if quantity <= 0 or not sku:
+        return 0.0
+    reserved_hourly = cost_model.vm_hourly_rate("azure", sku) * quantity
+    if reserved_hourly <= 0:
+        return 0.0
+    rows = _collect_resource_rows(state, rec["_sub"])
+    matched_hourly = sum(r["monthly_usd"] for r in rows
+                         if r["full_type"] == "microsoft.compute/virtualmachines" and r["instance_type"].lower() == sku.lower()) / (24 * 30)
+    return round(min(100.0, (matched_hourly / reserved_hourly) * 100), 1)
+
+
+def _reservation_view(state, rec, now=None):
+    out = _view(rec)
+    props = dict(rec["properties"])
+    props["utilization"] = reservation_utilization(state, rec, now)
+    out["properties"] = props
+    return out
+
+
+def dispatch_capacity(state, method, sub, chain, payload, query, base=""):
+    """Handle one ``Microsoft.Capacity`` request (``chain`` = tokens after the namespace)."""
+    method = (method or "GET").upper()
+    payload = payload if isinstance(payload, dict) else {}
+    now = datetime.now(timezone.utc)
+    if not chain or chain[0].lower() != RESERVATION_TYPE.lower():
+        return _err(404, "ResourceTypeNotSupported", f"'{CAPACITY_NS}/{chain[0] if chain else ''}' is not supported. Supported: {RESERVATION_TYPE}.")
+    rest = chain[1:]
+    if not rest:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        items = sorted(_reservations_for(state, sub), key=lambda r: r["name"].lower())
+        return _ok({"value": [_reservation_view(state, r, now) for r in items]})
+    name = rest[0]
+    rid = _reservation_rid(sub, name)
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        if not rec:
+            return _err(404, "ResourceNotFound", f"The reservation order '{name}' could not be found.")
+        return _ok(_reservation_view(state, rec, now))
+    if method in ("PUT", "PATCH"):
+        existed = key in state
+        if method == "PATCH" and not existed:
+            return _err(404, "ResourceNotFound", f"The reservation order '{name}' could not be found.")
+        props = payload.get("properties") or {}
+        if method == "PUT" and (not props.get("skuName") or not props.get("quantity")):
+            return _err(400, "BadRequest", "properties.skuName and properties.quantity are required.")
+        rec = state.get(key) or {"id": rid, "name": name, "type": f"{CAPACITY_NS}/{RESERVATION_TYPE}",
+                                  "_type": f"{CAPACITY_NS}/{RESERVATION_TYPE}", "_sub": sub, "_rg": None,
+                                  "properties": {}, "_created": now.isoformat()}
+        merged = dict(rec["properties"])
+        merged.update(props)
+        merged.setdefault("term", "P1Y")
+        merged.setdefault("appliedScopeType", "Shared")
+        merged.setdefault("provisioningState", "Succeeded")
+        merged.setdefault("renew", False)
+        merged.setdefault("quantity", 1)
+        merged.setdefault("benefitStartTime", now.isoformat())
+        months = _TERM_MONTHS.get(merged["term"], 12)
+        start = datetime.fromisoformat(merged["benefitStartTime"].replace("Z", "+00:00"))
+        expiry_year, expiry_month = start.year + (start.month - 1 + months) // 12, (start.month - 1 + months) % 12 + 1
+        merged.setdefault("expiryDateTime", start.replace(year=expiry_year, month=expiry_month).isoformat())
+        rec["properties"] = merged
+        rec["eTag"] = str(uuid.uuid4())
+        state[key] = rec
+        return _ok(_reservation_view(state, rec, now), status=200 if existed else 201)
+    if method == "DELETE":
+        existed = state.pop(key, None) is not None
+        return _ok(None, status=200 if existed else 204)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+# ═══════════ cost allocation rules (Microsoft.CostManagement/costAllocationRules) ═════════
+# A rule redistributes one or more "source" resource groups' cost onto a set of "target"
+# resource groups (shared infra cost split onto the teams that consume it). Applied for real
+# — not just stored — against a ResourceGroupName-grouped query: _apply_allocation_rules zeroes
+# each source's bucket and adds its amount onto the targets, in `order`.
+def _allocrule_rid(sub, name):
+    return f"/subscriptions/{sub}/providers/{COST_NS}/{ALLOCRULE_TYPE}/{name}"
+
+
+def _allocrules_for(state, sub):
+    ft = f"{COST_NS}/{ALLOCRULE_TYPE}".lower()
+    return [r for r in state.values() if str(r.get("_type", "")).lower() == ft and r.get("_sub") == sub]
+
+
+def _apply_allocation_rules(state, sub, agg):
+    rules = sorted((r for r in _allocrules_for(state, sub) if (r.get("properties") or {}).get("status", "Active") != "Inactive"),
+                    key=lambda r: (r.get("properties") or {}).get("order", 100))
+    for rule in rules:
+        details = (rule.get("properties") or {}).get("details") or {}
+        sources = [str(s.get("name", "")) for s in (details.get("sourceResources") or []) if s.get("name")]
+        targets = [t for t in (details.get("targetResources") or []) if t.get("name")]
+        if not sources or not targets:
+            continue
+        lower_keys = {k.lower(): k for k in agg}
+        source_total = 0.0
+        for s in sources:
+            k = lower_keys.get(s.lower())
+            if k is not None:
+                source_total += agg.pop(k)
+        if source_total <= 0:
+            continue
+        total_pct = sum(float(t.get("allocation") or 0) for t in targets)
+        for t in targets:
+            name = t["name"]
+            pct = float(t.get("allocation") or 0) / total_pct if total_pct > 0 else 1.0 / len(targets)
+            agg[name] = round(agg.get(name, 0.0) + source_total * pct, 6)
+
+
+def dispatch_allocationrules(state, method, sub, rest, payload, query):
+    method = (method or "GET").upper()
+    payload = payload if isinstance(payload, dict) else {}
+    if not rest:
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+        items = sorted(_allocrules_for(state, sub), key=lambda r: r["name"].lower())
+        return _ok({"value": [_view(r) for r in items]})
+    name = rest[0]
+    rid = _allocrule_rid(sub, name)
+    key = rid.lower()
+    if method == "GET":
+        rec = state.get(key)
+        if not rec:
+            return _err(404, "ResourceNotFound", f"The cost allocation rule '{name}' could not be found.")
+        return _ok(_view(rec))
+    if method in ("PUT", "PATCH"):
+        existed = key in state
+        if method == "PATCH" and not existed:
+            return _err(404, "ResourceNotFound", f"The cost allocation rule '{name}' could not be found.")
+        props = payload.get("properties") or {}
+        details = props.get("details") or {}
+        if method == "PUT" and (not details.get("sourceResources") or not details.get("targetResources")):
+            return _err(400, "BadRequest", "properties.details.sourceResources and targetResources are required.")
+        rec = state.get(key) or {"id": rid, "name": name, "type": f"{COST_NS}/{ALLOCRULE_TYPE}",
+                                  "_type": f"{COST_NS}/{ALLOCRULE_TYPE}", "_sub": sub, "_rg": None, "properties": {}}
+        merged = dict(rec["properties"])
+        merged.update(props)
+        merged.setdefault("status", "Active")
+        merged.setdefault("order", 100)
+        merged.setdefault("details", {}).setdefault("allocationType", "Fixed")
+        rec["properties"] = merged
+        rec["eTag"] = str(uuid.uuid4())
+        state[key] = rec
+        return _ok(_view(rec), status=200 if existed else 201)
+    if method == "DELETE":
+        existed = state.pop(key, None) is not None
+        return _ok(None, status=200 if existed else 204)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
 # ═══════════════════════════ dispatch ═════════════════════════════════════════════
 def dispatch_costmanagement(state, method, sub, rg, chain, payload, query, base=""):
     """Handle one ``Microsoft.CostManagement`` request (``chain`` = tokens after the namespace)."""
@@ -506,10 +694,13 @@ def dispatch_costmanagement(state, method, sub, rg, chain, payload, query, base=
             return dispatch_alerts(state, method, sub, chain[1:], payload, query)
         if op == "exports":
             return dispatch_exports(state, method, sub, rg, chain[1:], payload, query)
+        if op == "costallocationrules":
+            return dispatch_allocationrules(state, method, sub, chain[1:], payload, query)
     except _E as e:
         return _err(e.status, e.code, e.message)
-    return _err(404, "ResourceTypeNotSupported", f"'{COST_NS}/{chain[0]}' is not supported. Supported: query, alerts, exports.")
+    return _err(404, "ResourceTypeNotSupported",
+                f"'{COST_NS}/{chain[0]}' is not supported. Supported: query, alerts, exports, costAllocationRules.")
 
 
 def handles(namespace):
-    return namespace.lower() in (COST_NS.lower(), CONSUMPTION_NS.lower(), BENEFITS_NS.lower())
+    return namespace.lower() in (COST_NS.lower(), CONSUMPTION_NS.lower(), BENEFITS_NS.lower(), CAPACITY_NS.lower())
