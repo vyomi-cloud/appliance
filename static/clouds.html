@@ -755,24 +755,32 @@
     .btn-create-space .material-icons { font-size: 17px; vertical-align: -4px; margin-right: 4px; }
 
     /* ── v2.3.0 left collapsible nav pane — sits below the top logo bar ──── */
-    #app-body { display: flex; align-items: stretch; }
+    #app-body { display: flex; align-items: stretch; position: relative; }   /* the collapse button sits on the menu's edge */
     /* Side menu — UX matched to Vyomi Nano: thin-stroke gray icons (no chip),
        softer item padding, indigo active state. */
     #app-sidebar {
       flex: none; width: 216px; z-index: 40;
       background: #0f121c; border-right: 1px solid #20263a; color: #c7cbe0; display: flex; flex-direction: column;
-      padding: 14px 10px; gap: 4px; overflow: hidden; transition: width .2s ease;
+      padding: 14px 10px; gap: 4px; overflow: visible; transition: width .2s ease;
       min-height: calc(100vh - 104px);          /* fill the viewport below the top bar */
     }
     body.side-collapsed #app-sidebar { width: 68px; padding-left: 6px; padding-right: 6px; }
+    /* Collapse toggle — chevron button ON the separator (matches the enterprise console). */
     .side-collapse {
-      background: none; border: 0; color: #a7b0c4; cursor: pointer; display: flex;
-      align-items: center; gap: 11px; padding: 8px 10px; border-radius: 8px; margin-bottom: 8px;
+      position: absolute; top: 16px; left: calc(216px - 13px); z-index: 60;
+      width: 26px; height: 26px; border-radius: 50%; padding: 0; margin: 0;
+      background: #121524; border: 1px solid #2b3350; color: #a7b0c4; cursor: pointer;
+      display: grid; place-items: center; box-shadow: 0 2px 10px rgba(0,0,0,.5);
+      transition: left .2s ease, color .12s, border-color .12s;
     }
-    .side-collapse:hover { background: #121524; color: #fff; }
+    .side-collapse:hover { color: #fff; border-color: #6366f1; background: #161a2b; }
+    .side-collapse .material-icons { font-size: 18px; transition: transform .16s; }
+    /* Collapsed: a hamburger to open the menu; expanded: menu_open to collapse it. */
+    .side-collapse .ic-collapsed, body.side-collapsed .side-collapse .ic-expanded { display: none; }
+    body.side-collapsed .side-collapse .ic-collapsed { display: inline; }
     .side-brand { height: 22px; margin: 2px 6px 12px; opacity: .95; }
     body.side-collapsed .side-brand { display: none; }
-    .side-nav { display: flex; flex-direction: column; gap: 4px; }
+    .side-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; overflow: hidden; }
     .side-item {
       display: flex; align-items: center; gap: 11px; padding: 8px 12px; border-radius: 8px;
       background: none; border: 0; color: #a7b0c4; cursor: pointer; text-decoration: none;
@@ -780,18 +788,38 @@
     }
     .side-item:hover { background: #121524; color: #e8ecf5; }
     .side-item.active { background: rgba(99,102,241,.14); color: #fff; }
-    /* Icons matched to Nano: gray thin glyphs, no gradient chip. */
-    .side-item .material-icons {
-      font-size: 20px; flex: none; color: #6b7488; background: none; border-radius: 0;
-      width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
-      transition: color .12s;
-    }
-    .side-item:hover .material-icons { color: #e8ecf5; }
-    .side-item.active .material-icons { color: #818cf8; }
+    /* Icons identical to the enterprise console: thin-stroke line icons, no chip. */
+    .side-item .side-ic { width: 18px; height: 18px; flex: none; display: grid; place-items: center; color: #6b7488; }
+    .side-item:hover .side-ic { color: #e8ecf5; }
+    .side-item.active .side-ic { color: #818cf8; }
+    .side-item .side-ic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    /* Portal user menu (bottom-left, opens upward) — identical to the enterprise console. */
+    #app-sidebar .side-foot { margin-top: auto; padding-top: 10px; border-top: 1px solid #20263a; }
+    .side-user-menu { position: relative; }
+    .side-user { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 9px; background: #121524; border: 1px solid #20263a; cursor: pointer; text-align: left; color: inherit; font-family: inherit; }
+    .side-user:hover { border-color: #6366f1; }
+    .side-user .av { width: 30px; height: 30px; border-radius: 50%; flex: none; overflow: hidden; background: #161a2b; display: grid; place-items: center; color: #e8ecf5; font-weight: 700; font-size: 12px; }
+    .side-user .av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .side-user .who { min-width: 0; flex: 1; }
+    .side-user .who b { display: block; font-size: 12.5px; color: #e8ecf5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .side-user .who span { display: block; font-size: 11px; color: #6b7488; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .side-user .chev { width: 15px; height: 15px; flex: none; color: #6b7488; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .16s; }
+    .side-user-menu.open .chev { transform: rotate(180deg); }
+    .side-user-dd { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); background: #0f121c; border: 1px solid #2b3350; border-radius: 10px; box-shadow: 0 20px 45px -25px rgba(0,0,0,.8); padding: 6px; display: none; z-index: 1000; }
+    .side-user-menu.open .side-user-dd { display: block; }
+    .side-user-dd a, .side-user-dd button { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 9px 11px; border-radius: 7px; font-size: 13px; color: #a7b0c4; background: none; border: 0; cursor: pointer; font-weight: 500; font-family: inherit; text-decoration: none; }
+    .side-user-dd a:hover, .side-user-dd button:hover { background: #121524; color: #e8ecf5; }
+    .side-user-dd .signout { color: #fca5a5; }
+    .side-user-dd svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    body.side-collapsed .side-user .who, body.side-collapsed .side-user .chev { display: none; }
+    body.side-collapsed .side-user { width: 56px; height: 56px; padding: 0; margin: 0 auto; justify-content: center; background: transparent; border-color: transparent; }
+    body.side-collapsed .side-user:hover { background: #121524; border-color: #6366f1; }
+    body.side-collapsed .side-user-dd { left: 8px; right: auto; width: 208px; }
     body.side-collapsed .side-label { display: none; }
-    /* Collapsed rail: each item becomes a centred square. */
+    /* Collapsed rail: each item becomes a centred square so the active/hover
+       shade has EQUAL padding around the 40px icon chip on every side. */
     body.side-collapsed .side-item { width: 56px; height: 56px; padding: 0; justify-content: center; margin: 0 auto; }
-    body.side-collapsed .side-collapse { justify-content: center; padding: 8px; align-self: center; }
+    body.side-collapsed .side-collapse { left: calc(68px - 13px); }
     #app-main { flex: 1; min-width: 0; }
     /* Menu toggle: a hamburger when collapsed. Small screens: no icon rail — the menu is a
        drawer opened by the hamburger, over a dimmed page (tap outside / Esc / pick closes). */
@@ -1416,7 +1444,7 @@
     #spaces-grid .space-card[data-provider="azure"].active { border-color: #0078d4 !important; box-shadow: 0 0 0 1px #0078d4 !important; }
   </style>
 </head>
-<body class="side-collapsed">
+<body>
   <div id="app-topbar">
   <!-- v2.0.8: persistent appliance readiness / diagnostics strip. While the
        backends are cold-starting it shows weighted pull progress; once every
@@ -1445,17 +1473,17 @@
   <div id="app-body">
   <!-- v2.3.0: collapsible left nav pane — sits below the top logo bar. -->
   <aside id="app-sidebar">
-    <button class="side-collapse" type="button" onclick="toggleSidebar()" aria-label="Collapse menu" title="Collapse / expand">
-      <span class="material-icons">menu</span>
-    </button>
     <nav class="side-nav">
-      <button class="side-item active" type="button" data-view="spaces" onclick="showAppView('spaces')" title="Home"><span class="material-icons">home</span><span class="side-label">Home</span></button>
-      <button class="side-item" type="button" data-view="workspace" onclick="showAppView('workspace')" title="Dashboard"><span class="material-icons">dashboard</span><span class="side-label">Dashboard</span></button>
-      <button class="side-item" type="button" data-view="kc" onclick="showAppView('kc')" title="Knowledge Center"><span class="material-icons">menu_book</span><span class="side-label">Knowledge Center</span></button>
-      <button class="side-item" type="button" data-view="usage" onclick="showAppView('usage')" title="SDK &amp; CLI usage — per-service samples pointed at your endpoint"><span class="material-icons">terminal</span><span class="side-label">SDK &amp; CLI usage</span></button>
-      <button class="side-item" type="button" data-view="api" onclick="showAppView('api')" title="API reference — interactive Swagger for every REST endpoint"><span class="material-icons">api</span><span class="side-label">API (Swagger)</span></button>
+      <button class="side-item active" type="button" data-view="spaces" onclick="showAppView('spaces')" title="Spaces — your active spaces (home)"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span><span class="side-label">Spaces</span></button>
+      <button class="side-item" type="button" data-view="workspace" onclick="showAppView('workspace')" title="Health — appliance at a glance"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="4" width="3" height="14"/></svg></span><span class="side-label">Health</span></button>
+      <button class="side-item" type="button" data-view="kc" onclick="showAppView('kc')" title="Knowledge Center"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><span class="side-label">Knowledge Center</span></button>
+      <button class="side-item" type="button" data-view="usage" onclick="showAppView('usage')" title="SDK &amp; CLI usage — per-service samples pointed at your endpoint"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M4 17l6-6-6-6M12 19h8"/></svg></span><span class="side-label">SDK &amp; CLI usage</span></button>
+      <button class="side-item" type="button" data-view="api" onclick="showAppView('api')" title="API reference — interactive Swagger for every REST endpoint"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></span><span class="side-label">API (Swagger)</span></button>
     </nav>
   </aside>
+  <button class="side-collapse" type="button" onclick="toggleSidebar()" aria-label="Collapse / expand menu" title="Collapse / expand">
+    <span class="material-icons ic-expanded">menu_open</span><span class="material-icons ic-collapsed">menu</span>
+  </button>
   <div id="side-scrim" onclick="closeSideDrawer()"></div>
   <div id="app-main">
 
@@ -2591,7 +2619,7 @@
     function _applySideMode() {
       closeSideDrawer();
       if (_sideMQ.matches) { document.body.classList.remove('side-collapsed'); return; }
-      var c = true; try { c = localStorage.getItem('vyomi.sidecollapsed') !== '0'; } catch (_) {}
+      var c = true; try { c = localStorage.getItem('vyomi.sidecollapsed') === '1'; } catch (_) {}
       document.body.classList.toggle('side-collapsed', c);
     }
     if (_sideMQ.addEventListener) _sideMQ.addEventListener('change', _applySideMode); else _sideMQ.addListener(_applySideMode);
@@ -2602,9 +2630,7 @@
       if (_sideMQ.matches) _applySideMode();
     })();
     (function () {
-      // Sidebar is collapsed by DEFAULT (set on <body>); only expand if the
-      // user explicitly expanded it before (stored '0').
-      try { if (localStorage.getItem('vyomi.sidecollapsed') === '0') document.body.classList.remove('side-collapsed'); } catch (_) {}
+      try { if (localStorage.getItem('vyomi.sidecollapsed') === '1') document.body.classList.add('side-collapsed'); } catch (_) {}
       // A URL hash (e.g. clouds.html#spaces from a console "back to spaces" link) wins over the last-used view.
       var hv = (location.hash || '').replace('#', '');
       if (APP_VIEWS[hv]) { showAppView(hv); return; }
