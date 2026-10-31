@@ -2209,6 +2209,7 @@ def gcp_pubsub_store() -> AppStatePubsubStore:
 # ── Whole-store slots: Microsoft Graph (Entra ID) + Cosmos DB data plane ──────────────
 from core.azure_graph_core import GraphStore as _GraphStore   # noqa: E402
 from core.azure_cosmos_core import CosmosStore as _CosmosStore   # noqa: E402
+from core.azure_table_core import AzureTableStore as _TableStore   # noqa: E402
 
 
 class _AzureSlotStore:
@@ -2260,6 +2261,21 @@ def graph_store() -> AppStateGraphStore:
     if _GRAPH is None:
         _GRAPH = AppStateGraphStore()
     return _GRAPH
+
+
+class AppStateTableStore(_AzureSlotStore, _TableStore):
+    """Azure Table storage (core/azure_table_core.py) over the Azure space's persisted slot."""
+    _BASE, _SLOT, _FIELDS = _TableStore, "azure_table", tuple(vars(_TableStore()).keys())
+
+
+_TABLE = None
+
+
+def table_store() -> AppStateTableStore:
+    global _TABLE
+    if _TABLE is None:
+        _TABLE = AppStateTableStore()
+    return _TABLE
 
 
 def cosmos_store() -> AppStateCosmosStore:
