@@ -243,7 +243,7 @@ try {
   const RES = `vysmokeres${n}`;
   const AHBVM = `vyahbvm${n}`;
   await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${AHBVM}`,
-    { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_D2s_v5" } } });
+    { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_B1s" } } });   // within the Free tier's size cap offline
   await page.goto(UI + "#/cost/reservations");
   await page.getByRole("button", { name: "Purchase" }).click();
   await page.getByLabel("Reservation name").fill(RES);
@@ -1473,6 +1473,7 @@ try {
   await page.goto(UI + "#/vms/create");
   await page.getByLabel("Virtual machine name", { exact: true }).fill(VM);
   await page.getByLabel("Username", { exact: true }).fill("azureuser");
+  await page.getByLabel("Size", { exact: true }).selectOption("Standard_B1s");   // within the offline Free tier's size cap
   await page.getByRole("button", { name: "Review + create" }).click();
   await page.getByText("Validation passed").waitFor({ timeout: 5000 });
   await shot("29-vm-create-review");
@@ -1493,7 +1494,7 @@ try {
 
   // ── Virtual machine created over the wire → visible in the UI (CLI → UI) ──────────────
   const vmPut = await arm("PUT", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM2}`,
-    { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_B2s" }, osProfile: { computerName: VM2, adminUsername: "azureuser" }, storageProfile: { osDisk: { osType: "Linux" } } } });
+    { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_B1s" }, osProfile: { computerName: VM2, adminUsername: "azureuser" }, storageProfile: { osDisk: { osType: "Linux" } } } });
   check("ARM PUT virtual machine over wire", vmPut.status === 200 || vmPut.status === 201, `HTTP ${vmPut.status}`);
   await page.goto(UI + "#/vms");
   await page.getByRole("link", { name: VM2, exact: true }).waitFor({ timeout: 10000 });

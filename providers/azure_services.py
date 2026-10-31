@@ -793,6 +793,10 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     # are the shared core ARM engine's, over the persisted per-subscription names/tags.
     low0 = [s.lower() for s in rest_segs]
     if (not rest_segs
+            or low0 == ["resources"]                   # the subscription's generic resource list
+            or low0 == ["providers"]                   # resource providers: list / get / (un)register
+            or (len(low0) == 2 and low0[0] == "providers")
+            or (len(low0) == 3 and low0[0] == "providers" and low0[2] in ("register", "unregister"))
             or (len(low0) >= 3 and low0[0] == "providers"
                 and ((low0[1] == "microsoft.subscription" and low0[2] == "rename")
                      or (low0[1] == "microsoft.resources" and low0[2] == "tags")
@@ -1204,6 +1208,7 @@ def core_arm():
     arm.operations = _operations
     arm.sub_names = _subscription_meta("names")   # Microsoft.Subscription/rename
     arm.sub_tags = _subscription_meta("tags")     # Microsoft.Resources/tags/default at subscription scope
+    arm.providers = _subscription_meta("providers")   # resource provider (un)registration
     return arm
 
 
@@ -1211,7 +1216,7 @@ def _subscription_meta(key: str) -> dict:
     """Per-subscription display names / tags, persisted in the Azure space (not in the ARM
     resource map, whose values every consumer iterates as resources)."""
     from core.appliance_stores import _proxy
-    return _proxy("azure_subscription_meta", lambda: {"names": {}, "tags": {}}, key)._target()
+    return _proxy("azure_subscription_meta", lambda: {"names": {}, "tags": {}, "providers": {}}, key)._target()
 
 
 async def _handle_core_arm(request: Request, method: str, rest: str, base: str):
