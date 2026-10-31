@@ -268,7 +268,11 @@ export default function StoreSecret() {
     setBusy(true); setError(null);
     try {
       await api.createSecret({
-        Name: s.name, Description: s.description, SecretString: secretValue(), KmsKeyId: s.kmsKeyId,
+        Name: s.name, Description: s.description, SecretString: secretValue(),
+        // The default "aws/secretsmanager" option means "use the account's implicit
+        // default key" — real CreateSecret calls omit KmsKeyId for that; only a
+        // customer-picked alias (resolved to its "alias/..." wire form) is sent.
+        KmsKeyId: s.kmsKeyId === "aws/secretsmanager" ? undefined : `alias/${s.kmsKeyId}`,
         Tags: s.tags.filter((t) => !t.markedForRemoval && t.key).map((t) => ({ Key: t.key, Value: t.value || "" })),
       });
       if (s.resourcePolicy) await api.putResourcePolicy(s.name, s.resourcePolicy);

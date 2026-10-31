@@ -47,8 +47,9 @@ const browser = await pw.chromium.launch();
 page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
-// Native 404s ("no tag set", "no encryption config") are expected answers, not page errors.
-page.on("console", (m) => m.type() === "error" && !/status of 404/.test(m.text()) && errors.push(m.text()));
+// Native 404s ("no tag set", "no encryption config") and the deliberate 400 from
+// GetSecretValue against a disabled CMK (below) are expected answers, not page errors.
+page.on("console", (m) => m.type() === "error" && !/status of (400|404)/.test(m.text()) && errors.push(m.text()));
 const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true });
 
 try {
@@ -335,6 +336,35 @@ try {
   check("Secrets Manager: detail page Resource permissions editor → PutResourcePolicy over native wire",
     putPolicy.ResourcePolicy === policyText, JSON.stringify(putPolicy));
   await shot("16b-secretsmanager-rotation-policy");
+
+  // Secrets Manager (DEPTH wave 5): a customer KMS key really encrypts the secret —
+  // create a CMK + alias over the wire, pick it in the Store-a-secret wizard, confirm the
+  // value still round-trips, then prove it's genuinely encrypted under that key (not just
+  // labeled with it) by disabling the key and watching GetSecretValue fail over the wire.
+  const kmsAlias = `v4smoke-sm-cmk-${Date.now() % 100000}`;
+  const smKeyId = (await kms("CreateKey", {})).KeyMetadata.KeyId;
+  await kms("CreateAlias", { AliasName: `alias/${kmsAlias}`, TargetKeyId: smKeyId });
+  const S4 = `v4smoke-secret4-${Date.now() % 100000}`;
+  await page.goto(UI + "#/secretsmanager/newsecret");
+  await page.getByRole("radio", { name: "Other type of secret", exact: true }).check();
+  await page.getByRole("button", { name: "Plaintext", exact: true }).click();
+  await page.getByRole("textbox", { name: "Plaintext", exact: true }).fill("v4-smoke-cmk-value");
+  await page.getByLabel("Encryption key", { exact: true }).click();
+  await page.getByRole("option", { name: kmsAlias }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByLabel("Secret name", { exact: true }).fill(S4);
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Store" }).click();
+  await page.getByRole("heading", { name: S4 }).waitFor({ timeout: 10000 });
+  const cmkVal = await sm("GetSecretValue", { SecretId: S4 });
+  check("Secrets Manager: CMK-encrypted secret (UI wizard) → readable over native wire",
+    cmkVal.SecretString === "v4-smoke-cmk-value", JSON.stringify(cmkVal));
+  await kms("DisableKey", { KeyId: smKeyId });
+  const blockedCmk = await sm("GetSecretValue", { SecretId: S4 });
+  check("Secrets Manager: disabling the CMK really blocks GetSecretValue over native wire",
+    blockedCmk.__type === "InvalidRequestException", JSON.stringify(blockedCmk));
+  await shot("16c-secretsmanager-cmk-encryption");
 
   // SQS: create a queue through the UI, verify over native wire (UI → CLI direction)
   const Q = `v4smoke-queue-${Date.now() % 100000}`;
