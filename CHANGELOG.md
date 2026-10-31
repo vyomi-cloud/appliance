@@ -4,6 +4,138 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.36] — 2026-10-31
+
+Daily conformance release. **68 product fixes** (AWS 12, GCP 6, Azure 2, all clouds 48); 59 reach Nano and 60 reach the offline appliance; 20 test and harness improvements.
+
+### Highlights
+
+- **A redesigned console, on Nano and offline.** The appliance has a new vyomi wordmark, a light theme, rounded panels and cards, and a side menu that is now the same on Nano and offline. Refreshing the page also keeps you on the current view instead of sending you back to Spaces.
+- **Active spaces and the appliance overview are rebuilt.** Space cards follow each cloud's own look, the cloud filter and Create Space sit together in the header, and Service status shows green ticks and red crosses with native service icons.
+- **Cloud consoles look more like the real ones.** AWS has its own side navigation, Services menu and Resources widget, GCP has a Resources card and a minimized menu that keeps its icons, and Azure Home follows the portal's layout. Azure also has a new resource group detail page.
+- **SDK and CLI usage now has a snippet for every service.** There are copy-paste SDK, CLI and curl cards for 57 services, with AWS, Google Cloud and Azure as tabs. On Nano, 47 of 48 checked snippets run as pasted through the tunnel. Every console home also shows cost savings by service and a Connect your SDK or CLI card, and Nano's savings and space cards no longer get stuck at $0.00.
+- **More AWS behavior now works.** The offline appliance supports DynamoDB backups and point-in-time recovery, plus KMS key policies, grants and alias updates over the CLI. EventBridge targets keep their input settings and can deliver to SNS. HEAD requests keep the declared Content-Length, so aws-cli 2.38 no longer writes empty downloads.
+- **12 conformance fixes across AWS, GCP and Azure.** They cover EventBridge, EC2 security groups, RDS, API Gateway, Pub/Sub, Cloud Monitoring and API Management. GCP Metrics tabs now chart measured per-resource requests instead of a seeded curve.
+- **Host utilization is real.** Nano shows actual CPU, memory and storage for its in-browser engines, and Docker installs show real disk usage.
+
+### Fixes — AWS
+
+- **[Nano + offline]** Header search stretches across the bar — no empty strip after the region (Nano + offline)
+- **[Nano + offline]** AWS | Google Cloud | Azure as tabs on SDK & CLI usage (Nano + offline)
+- **[Nano + offline]** Console Home service tiles -> the AWS Resources widget (Nano + offline)
+- **[Nano + offline]** The header Services menu, in the AWS console's design (Nano + offline)
+- **[Nano + offline]** Left navigation in the AWS console's own style (Cloudscape side navigation; Nano + offline)
+- **[Nano + offline]** AWS / GCP / Azure logos in the Appliance health distribution legends (Nano + offline)
+- **[Nano + offline]** EventBridge targets keep Input/InputPath/InputTransformer and apply them on delivery (#171, partial)
+- **[Nano + offline]** EventBridge delivers to SNS rule targets (fan-out to subscribers); test_eventbridge_core covers it (refs #171)
+- **[offline]** DynamoDB backups and point-in-time recovery over the CLI wire (Create/List/Describe/DeleteBackup, Describe/UpdateContinuousBackups) — DynamoDB Local has neither
+- **[offline]** KMS key policies, grants and alias updates over the CLI wire (GetKeyPolicy / PutKeyPolicy / ListKeyPolicies, CreateGrant / ListGrants / RevokeGrant / RetireGrant, DeleteAlias / UpdateAlias)
+- **[offline]** EC2 DescribeSecurityGroups emits <groupDescription> (was <description>, so SDK/CLI Description was null and the console's SG Description cells showed -); CLI smoke added (fails before, passes after)
+- **[offline]** RDS places instances in the default VPC (an empty custom VPC left Connectivity with no subnets); API Gateway Deployments check polls instead of a fixed sleep
+
+### Fixes — GCP
+
+- **[Nano + offline]** Left menu no longer expands then collapses on load (Nano + offline)
+- **[Nano + offline]** Dashboard service cards -> the Google Cloud Resources card (Nano + offline)
+- **[Nano + offline]** Minimized left menu keeps its icons, like the Google Cloud console (Nano + offline)
+- **[Nano + offline]** GCP Nano API Gateway Configs tab was unreachable (camelCase SUBRESOURCE_TABS keys never matched the lowercased lookup; also fixes VPC Subnets, Functions env vars) and Logs now lists this resource's recorded events instead of a SIMULATED stream; Cloud Monitoring Documentation tab shows policy id/subject/format; validate-gcp-apigw-monitoring-tabs
+- **[offline]** GCP Pub/Sub detail tabs 404'd for topics created under the account-number project (tabs now map the project like create); test added
+- **[offline]** Gcp console Metrics/Network metrics tabs chart the measured per-resource requests from /api/metrics/series instead of a seeded curve; add offline-ui-gcp-metrics-tab
+
+### Fixes — Azure
+
+- **[Nano + offline]** Home in the Azure portal's design — Azure services row, Resources, Navigate (Nano + offline)
+- **[Nano + offline]** Azure resource group detail page (properties + the group's resources) on both consoles; adds ARM GET resourceGroups/{rg}/resources
+
+### Fixes — all clouds
+
+- **[Nano + offline]** Refresh stays on the current view instead of jumping to Spaces (Nano + offline)
+- **[Nano + offline]** Gray outer panels are borderless too (Nano + offline)
+- **[Nano + offline]** Activate appliance + GitHub community move to the header, right-aligned, on every view (Nano + offline)
+- **[Nano + offline]** Internal white cards are borderless (Nano + offline)
+- **[Nano + offline]** Panels light gray, their tiles white; Swagger tag groups as panel cards (Nano + offline)
+- **[Nano + offline]** The view next to the side menu is a white rounded sheet on the gray page (Nano + offline)
+- **[Nano]** Drop the ⋯ More menu from the relay tunnel bar
+- **[Nano]** Local Vyomi tunnel set-up on the SDK & CLI usage page
+- **[Nano + offline]** 'vyomi | <cloud>' co-branding in the AWS / Google Cloud / Azure headers (Nano + offline)
+- **[Nano + offline]** Collapsed side menu keeps the expanded spacing (Nano + offline)
+- **[Nano + offline]** Side menu and Nano tunnel bar line up at the bottom (Nano + offline)
+- **[Nano]** Vendor the bundle's brand images to the portal
+- **[Nano + offline]** Readiness banner as a pull-down tab over the header (Nano + offline)
+- **[Nano + offline]** The new vyomi wordmark across the appliance (Nano + offline)
+- **[Nano]** Service status picks up a new backend list without restarting the worker
+- **[Nano]** Service status rows name the backend only, like offline
+- **[offline]** Remove the 'Connect apps' floating pill and its pop-up
+- **[offline]** Offline side menu identical to Nano's — icons, labels, collapse button and behaviour
+- **[Nano + offline]** Drop the expand icon from the SDK & CLI usage cards (Nano + offline)
+- **[Nano + offline]** Identical rounded border on every space card (Nano + offline)
+- **[Nano + offline]** The appliance console page is light (Nano + offline)
+- **[Nano + offline]** Space cards in each cloud's native light console theme (Nano + offline)
+- **[Nano + offline]** SDK / CLI / curl cards for every service in scope — 57 services, verified as pasted
+- **[Nano + offline]** Drop the Endpoint / 'start the tunnel' bar from SDK & CLI usage (Nano + offline)
+- **[Nano + offline]** Docs, guides & references in the Active spaces card design (Nano + offline)
+- **[Nano + offline]** Host utilization on Nano — real CPU, memory and storage of the in-browser engines
+- **[offline]** Host utilization Disk shows real usage on Docker installs
+- **[Nano + offline]** Every SDK / CLI / curl snippet runs as pasted on Nano (through the tunnel) — 47/48 verified
+- **[Nano + offline]** SDK & CLI usage view in the console's Connect-your-SDK card design (Nano + offline)
+- **[Nano + offline]** Side menu is sticky and window-tall, so Account / Sign out stays visible in every view
+- **[Nano + offline]** Native service icons on every service-status row; Nano tunnel bar starts right of the side menu
+- **[Nano + offline]** Small-screen menu drawer opens below the logo bar; hamburger sits in the logo bar (Nano + offline)
+- **[Nano + offline]** Side menu — hamburger when collapsed; on small screens no icon rail, a hamburger drawer (Nano + offline)
+- **[Nano + offline]** CPU / Mem toggle sits in the Service status header, right-aligned (Nano + offline)
+- **[Nano + offline]** Service status shows a green tick / red cross instead of READY / NOT RUNNING; two tiles per row (Nano + offline)
+- **[Nano + offline]** Appliance at a glance uses the Active spaces design — rounded shadowed panels, edge-to-edge header line, Create Space-fill tiles without borders (Nano + offline)
+- **[Nano]** Console savings card and space cards stay live — no more stuck $0.00 / "0 resources"
+- **[Nano]** Space card and console show the same savings — one shared rate table; retire make_pages.py
+- **[Nano + offline]** Cost savings and Connect cards share the row height (GCP / Azure)
+- **[Nano + offline]** Cost savings by service + "Connect your SDK or CLI" on every console home
+- **[Nano + offline]** Space cards use the Create Space fill (#1f2937), no border; lighter on hover (Nano + offline)
+- **[Nano + offline]** Cloud filter is a dropdown next to Create Space, both right-aligned in the Active spaces header (Nano + offline)
+- **[Nano + offline]** Cloud filter pills in the Active spaces header; Create Space right above the cards (Nano + offline)
+- **[Nano + offline]** Active spaces header line runs to the panel border (Nano + offline)
+- **[Nano + offline]** Active spaces sits in one panel — rounded border + soft shadow (Nano + offline)
+- **[Nano]** Drop the old landing + spaces UI from the appliance copy — take the portal's current pages
+- **[Nano + offline]** HEAD keeps the declared Content-Length (aws-cli 2.38 wrote empty downloads)
+- **[Nano + offline]** API Management 'Application Insights' tab shows the service's real App Insights loggers (was a duplicate of Metrics)
+
+<details><summary>Platform and release pipeline (3)</summary>
+
+- Report Nano files edited in the portal but not the appliance
+- CloudWatch alarm check no longer races the minute boundary
+- The CLI check waits for the release's Docker images
+
+</details>
+
+<details><summary>Test and harness improvements (20)</summary>
+
+- Crawler skips side-nav chrome (menu/close/Console Home/section headers) so AWS services are crawled, not CRAWL_ERROR
+- Azure-home validator follows the portal-style Home (services row + Resources) — harness was looking for removed count tiles
+- Azure Nano validators wait for the service page text instead of a fixed sleep (CI-only flake in app/dns/monitor/operationalinsights)
+- Nano half of #149 — scheduler pubsubTarget run is pulled from the subscription (validate-gcp-scheduler-pubsub, registered)
+- Azure appconfiguration Nano validator waits for the service banner (grid renders after the ARM list call; check raced it)
+- Aws real-tabs IAM identity-provider check retries reopening the tab instead of one fixed sleep (flaky under load; harness only waits longer, still asserts the ARN)
+- Real gcloud test that a Cloud Scheduler pubsub job's message is pulled by gcloud pubsub (offline; #149 already works, Nano half pending)
+- AWS VPC UI validators filter the list by name before opening the new VPC (10/page list on a shared stack hid the row, click timed out)
+- Azure VM runCommand action + NSG/NIC back-reference ops covered over the ARM wire (new offline-sdk-python-azure-vm-runcommand suite)
+- SNS CLI smoke picks a free receiver port (SFX-derived port hit EADDRINUSE, 6 push-delivery checks failed; harness flake, 76/76 on re-run)
+- Cover the VM runCommand action (failed without guest runtime, missing script, missing VM, with runtime) in the Azure blades core test
+- EventBridge TestEventPattern check polls for the result instead of a fixed 1.2s sleep (harness flake; passed on re-run)
+- GCP SDK/API test beds use the space's real project (vyomi-project); old default ids (gcp-dev, cloudlearn, java-*-proj) are rejected as other projects since 536b64d5 — 17 suites red -> green
+- Crawler no longer discounts a tab's own fetch when the previous tab called the same path (Azure Storage/Cosmos Metrics falsely STATIC_TAB; harness bug, re-crawl clean)
+- Savings check creates the GCP bucket in the space's real project (harness bug: hardcoded gcp-dev now 403s)
+- Nano EC2 row check reads security_group_ids (the field the API returns; harness bug)
+- SNS UI checks type a message body before Publish (the tab, like AWS, rejects an empty body; harness bug)
+- Step Functions UI checks read the Definition textarea value (innerText never includes it; harness bug)
+- Gcp Cloud SQL users test sends the required password and keeps the default admin user; Artifact Registry flow waits for a stable grid before counting rows
+- Nano azure savings/app validators use the space's one subscription (ARM PUT was 404 SubscriptionNotFound)
+
+</details>
+
+### How to upgrade
+
+- **Offline appliance:** `vyomi update` (Homebrew installs older than 3.0.24: run `brew trust vyomi-cloud/tap && brew upgrade vyomi-docker` once first). Docker: `docker pull vyomi/appliance:3.0.36`.
+- **Nano** ([vyomi.cloud](https://vyomi.cloud)): updates with this release; close all Nano tabs and reopen to load it.
+
 ## [3.0.35] — 2026-10-30
 
 Daily conformance release. **5 product fixes** (GCP 2, all clouds 3); 5 reach Nano and 5 reach the offline appliance.
