@@ -35,5 +35,4 @@ export const PrincipalAccessBoundary = gap("Principal Access Boundary", "gcp.iam
 export const ManagedWorkloadIdentities = gap("Managed Workload Identities", "gcp.iam-admin.managed-workload-identities");
 export const AssetInventory = gap("Asset Inventory", "gcp.iam-admin.asset-inventory");
 export const SecurityInsights = gap("Security Insights", "gcp.iam-admin.security-insights");
-export const QuotasSystemLimits = gap("Quotas & System Limits", "gcp.iam-admin.quotas-system-limits");
 export const IdentityAwareProxy = gap("Identity-Aware Proxy", "gcp.iam-admin.identity-aware-proxy");

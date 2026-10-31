@@ -39,9 +39,10 @@ import EssentialContacts from "./EssentialContacts.jsx";
 import PolicyTroubleshooter from "./PolicyTroubleshooter.jsx";
 import PolicyAnalyzer from "./PolicyAnalyzer.jsx";
 import WorkloadIdentity from "./WorkloadIdentity.jsx";
+import QuotasSystemLimits from "./QuotasSystemLimits.jsx";
 import {
   AssetInventory, Groups, IdentityAwareProxy, IdentityOrganization, ManagedWorkloadIdentities,
-  PrincipalAccessBoundary, PrivacySecurity, QuotasSystemLimits, SecurityInsights, WorkforceIdentityFederation,
+  PrincipalAccessBoundary, PrivacySecurity, SecurityInsights, WorkforceIdentityFederation,
 } from "./InfoPages.jsx";
 
 const IamAllow = () => <Iam tab="allow" />;

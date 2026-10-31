@@ -230,6 +230,16 @@ def _list_activity(store: IamStore, resource: str) -> GcpIamResponse:
     return _json(200, {"activity": entries})
 
 
+def _record_event(store: IamStore, resource: str, action: str, detail: str = "") -> None:
+    """Record a non-binding admin-activity event (key create/delete, disable/enable,
+    display-name update) against `resource` — same log the per-service-account 'Logs'
+    tab reads (console ServiceAccountDetail), keyed the same way as _record_activity."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    log = _activity_ns(store)
+    log.append({"id": uuid.uuid4().hex[:12], "resource": resource, "action": action, "role": "", "member": detail, "time": now})
+    del log[:max(0, len(log) - MAX_ACTIVITY)]
+
+
 def _sa_email(account_id: str, project: str) -> str:
     return f"{account_id}@{project}.iam.gserviceaccount.com"
 
@@ -314,6 +324,7 @@ def _patch_service_account(store, project, ident, body) -> GcpIamResponse:
             sa[field] = spec[field]
     sa["etag"] = _etag()
     store.persist()
+    _record_event(store, sa["name"], "UPDATE")
     return _json(200, _sa_view(sa))
 
 
@@ -325,6 +336,7 @@ def _set_service_account_disabled(store, project, ident, disabled) -> GcpIamResp
         return _err(404, f"Unknown service account: {ident}", "NOT_FOUND")
     sa["disabled"] = disabled
     store.persist()
+    _record_event(store, sa["name"], "DISABLE" if disabled else "ENABLE")
     return _json(200, {})
 
 
@@ -526,6 +538,7 @@ def _create_key(store, project, email, body) -> GcpIamResponse:
     }
     keys[kid] = key
     store.persist()
+    _record_event(store, f"projects/{project}/serviceAccounts/{email}", "CREATE_KEY", kid)
     return _json(200, _key_view(key))
 
 
@@ -544,12 +557,13 @@ def _get_key(store, email, kid) -> GcpIamResponse:
     return _json(200, _key_view(key))
 
 
-def _delete_key(store, email, kid) -> GcpIamResponse:
+def _delete_key(store, project, email, kid) -> GcpIamResponse:
     keys = _keys_ns(store).get(email, {})
     if kid not in keys:
         return _err(404, f"Key {kid} not found.", "NOT_FOUND")
     del keys[kid]
     store.persist()
+    _record_event(store, f"projects/{project}/serviceAccounts/{email}", "DELETE_KEY", kid)
     return _json(200, {})
 
 
@@ -731,8 +745,14 @@ def dispatch(store: IamStore, method: str, path: str,
         if method == "GET":
             return _get_key(store, email, kid)
         if method == "DELETE":
-            return _delete_key(store, email, kid)
+            return _delete_key(store, project, email, kid)
         return _err(400, f"Unsupported method {method} on key", "INVALID_ARGUMENT")
+
+    # ---- per-service-account admin-activity log: .../serviceAccounts/{email}/policyActivity ----
+    if len(segs) == 5 and segs[0] == "projects" and segs[2] == "serviceAccounts" and segs[4] == "policyActivity":
+        if method == "GET":
+            return _list_activity(store, f"projects/{segs[1]}/serviceAccounts/{segs[3]}")
+        return _err(400, f"Unsupported method {method} on policyActivity", "INVALID_ARGUMENT")
 
     # ---- service accounts: projects/{p}/serviceAccounts[/{email}] ----
     if len(segs) >= 3 and segs[0] == "projects" and segs[2] == "serviceAccounts":

@@ -31,7 +31,7 @@ export default function ServiceAccountDetail({ params, query }) {
       {tab === "principals" && <Principals email={email} />}
       {tab === "keys" && <Keys email={email} />}
       {tab === "metrics" && <Box sx={{ pt: 1 }}><CapabilityContainer id="gcp.iam-admin.service-account-metrics-logs" title="Metrics" /></Box>}
-      {tab === "logs" && <Box sx={{ pt: 1 }}><CapabilityContainer id="gcp.iam-admin.service-account-metrics-logs" title="Logs" /></Box>}
+      {tab === "logs" && <Logs email={email} />}
     </>
   );
 }
@@ -127,6 +127,29 @@ function GrantPanel({ onClose, onSave }) {
         <Button variant="contained" disabled={!ok} onClick={async () => { await onSave(member, role); onClose(); }}>Save</Button>
         <Button onClick={onClose}>Cancel</Button>
       </Stack>
+    </Box>
+  );
+}
+
+const SA_LOG_ACTION_LABEL = {
+  GRANT: "Granted role", REVOKE: "Revoked role", CREATE_KEY: "Created key", DELETE_KEY: "Deleted key",
+  DISABLE: "Disabled service account", ENABLE: "Enabled service account", UPDATE: "Updated service account",
+};
+
+function Logs({ email }) {
+  const list = useAsync(() => api.listServiceAccountActivity(email), [email]);
+  return (
+    <Box sx={{ pt: 1 }}>
+      <CapabilityContainer id="gcp.iam-admin.service-account-logs" title="Logs">
+        <ErrorAlert error={list.error} title="Failed to load logs" />
+        <ResourceTable resourceName="log entries" items={list.data || []} rowKey={(ev) => ev.id} loading={list.loading} onRetry={list.reload}
+          filterPlaceholder="Filter" empty="No admin activity recorded for this service account yet"
+          columns={[
+            { id: "time", header: "Time", sortField: "time", cell: (ev) => fmtDate(ev.time) },
+            { id: "event", header: "Event", cell: (ev) => SA_LOG_ACTION_LABEL[ev.action] || ev.action },
+            { id: "detail", header: "Detail", cell: (ev) => ev.role ? `${api.roleTitle(ev.role)} → ${ev.member}` : ev.member || "—" },
+          ]} />
+      </CapabilityContainer>
     </Box>
   );
 }
