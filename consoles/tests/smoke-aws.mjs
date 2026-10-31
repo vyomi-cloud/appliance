@@ -870,6 +870,20 @@ try {
     await ec2("DeleteNetworkInsightsAnalysis", { NetworkInsightsAnalysisId: aid });
   if (NIPID) await ec2("DeleteNetworkInsightsPath", { NetworkInsightsPathId: NIPID });
 
+  // VPC: subnet CIDR reservation created over the wire, verify it shows on the subnet
+  // detail's CIDR reservations tab (CLI → UI direction), then delete it through the UI.
+  const scrSubnetXml = vpcId ? await ec2("CreateSubnet", { VpcId: vpcId, CidrBlock: "10.0.9.0/24" }) : "";
+  const SCRSUBNET = xtag(scrSubnetXml, "subnetId");
+  const scrXml = SCRSUBNET ? await ec2("CreateSubnetCidrReservation", { SubnetId: SCRSUBNET, Cidr: "10.0.9.4/30", ReservationType: "explicit", Description: "v4-smoke-scr" }) : "";
+  const SCRID = xtag(scrXml, "subnetCidrReservationId");
+  await page.goto(UI + `#/vpc/subnets/${SCRSUBNET}`);
+  await page.getByRole("tab", { name: "CIDR reservations" }).click();
+  await page.getByText("10.0.9.4/30").first().waitFor({ timeout: 10000 });
+  check("VPC subnet CIDR reservation created over wire → shown on subnet detail tab", true, SCRID);
+  await shot("19d-vpc-cidr-reservations");
+  if (SCRID) await ec2("DeleteSubnetCidrReservation", { SubnetCidrReservationId: SCRID });
+  if (SCRSUBNET) await ec2("DeleteSubnet", { SubnetId: SCRSUBNET });
+
   // VPC: clean up over the wire.
   if (rtId) await ec2("DeleteRouteTable", { RouteTableId: rtId });
   if (vpcId) await ec2("DeleteVpc", { VpcId: vpcId });

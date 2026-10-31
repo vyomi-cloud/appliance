@@ -15,6 +15,8 @@ import Link from "@cloudscape-design/components/link";
 import Table from "@cloudscape-design/components/table";
 import Box from "@cloudscape-design/components/box";
 import Spinner from "@cloudscape-design/components/spinner";
+import Modal from "@cloudscape-design/components/modal";
+import RadioGroup from "@cloudscape-design/components/radio-group";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { useAsync } from "../../../common/useAsync.js";
@@ -91,6 +93,79 @@ export function Subnets() {
   );
 }
 
+function CreateCidrReservationModal({ subnetId, onDismiss, onCreated }) {
+  const notify = useNotify();
+  const [cidr, setCidr] = useState("");
+  const [type, setType] = useState("explicit");
+  const [description, setDescription] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const create = async () => {
+    setBusy(true); setError(null);
+    try {
+      await api.createSubnetCidrReservation(subnetId, cidr, type, description);
+      notify.success(`CIDR reservation for ${cidr} created.`);
+      onCreated();
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Modal visible onDismiss={onDismiss} header="Create CIDR reservation"
+      footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+        <Button onClick={onDismiss}>Cancel</Button>
+        <Button variant="primary" loading={busy} disabled={!cidr} onClick={create}>Create CIDR reservation</Button>
+      </SpaceBetween></Box>}>
+      <Form errorText={error && <ErrorAlert error={error} />}>
+        <SpaceBetween size="l">
+          <FormField label="CIDR" description="Must fall within the subnet's CIDR block.">
+            <Input value={cidr} onChange={({ detail }) => setCidr(detail.value)} placeholder="10.0.0.0/28" />
+          </FormField>
+          <FormField label="Reservation type">
+            <RadioGroup value={type} onChange={({ detail }) => setType(detail.value)} items={[
+              { value: "prefix", label: "Prefix" }, { value: "explicit", label: "Explicit" },
+            ]} />
+          </FormField>
+          <FormField label="Description - optional">
+            <Input value={description} onChange={({ detail }) => setDescription(detail.value)} />
+          </FormField>
+        </SpaceBetween>
+      </Form>
+    </Modal>
+  );
+}
+
+function CidrReservationsTab({ subnetId }) {
+  const notify = useNotify();
+  const t = useAsync(() => api.getSubnetCidrReservations(subnetId), [subnetId]);
+  const [creating, setCreating] = useState(false);
+  const [sel, setSel] = useState([]);
+  const rows = t.data || [];
+  return (
+    <SpaceBetween size="m">
+      <Table variant="container" items={rows} selectionType="multi" selectedItems={sel}
+        onSelectionChange={({ detail }) => setSel(detail.selectedItems)}
+        trackBy="SubnetCidrReservationId" loading={t.loading}
+        header={<Header variant="h2" counter={`(${rows.length})`} actions={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button disabled={!sel.length} onClick={async () => {
+              for (const r of sel) await api.deleteSubnetCidrReservation(r.SubnetCidrReservationId);
+              notify.success(`${sel.length} CIDR reservation(s) deleted.`); setSel([]); t.reload();
+            }}>Delete</Button>
+            <Button variant="primary" onClick={() => setCreating(true)}>Create CIDR reservation</Button>
+          </SpaceBetween>
+        }>CIDR reservations</Header>}
+        columnDefinitions={[
+          { id: "cidr", header: "CIDR", cell: (r) => r.Cidr },
+          { id: "type", header: "Type", cell: (r) => (r.ReservationType === "prefix" ? "Prefix" : "Explicit") },
+          { id: "desc", header: "Description", cell: (r) => r.Description || "-" },
+          { id: "id", header: "Reservation ID", cell: (r) => r.SubnetCidrReservationId },
+        ]}
+        empty={<Box textAlign="center" color="inherit">No CIDR reservations</Box>} />
+      {creating && <CreateCidrReservationModal subnetId={subnetId} onDismiss={() => setCreating(false)}
+        onCreated={() => { setCreating(false); t.reload(); }} />}
+    </SpaceBetween>
+  );
+}
+
 export function SubnetDetail({ params }) {
   const notify = useNotify();
   const t = useAsync(() => api.describeSubnet(params.id), [params.id]);
@@ -128,7 +203,7 @@ export function SubnetDetail({ params }) {
               ]}
               empty={<Box textAlign="center" color="inherit">Default network ACL (allow all)</Box>} />
           ) },
-          { id: "cidr", label: "CIDR reservations", content: <CapabilityContainer id="aws.vpc.cidr-reservations" title="CIDR reservations" /> },
+          { id: "cidr", label: "CIDR reservations", content: <CidrReservationsTab subnetId={s.SubnetId} /> },
           { id: "share", label: "Sharing", content: <CapabilityContainer id="aws.vpc.resource-sharing" title="Sharing" /> },
           { id: "tags", label: "Tags", content: (
             <Table variant="container" items={Object.entries(s.Tags || {}).map(([k, v]) => ({ k, v }))}

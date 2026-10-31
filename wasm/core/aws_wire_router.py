@@ -334,6 +334,7 @@ _QUERY_ACTION = {
     "CreateRoute": "vpc", "DeleteRoute": "vpc",
     "DescribeVpcs": "vpc", "DeleteVpc": "vpc", "ModifyVpcAttribute": "vpc", "DescribeVpcAttribute": "vpc",
     "DescribeSubnets": "vpc", "DeleteSubnet": "vpc",
+    "CreateSubnetCidrReservation": "vpc", "GetSubnetCidrReservations": "vpc", "DeleteSubnetCidrReservation": "vpc",
     "CreateRouteTable": "vpc", "DescribeRouteTables": "vpc", "DeleteRouteTable": "vpc",
     "AssociateRouteTable": "vpc", "DisassociateRouteTable": "vpc", "ReplaceRouteTableAssociation": "vpc",
     "CreateNetworkAcl": "vpc", "DescribeNetworkAcls": "vpc", "DeleteNetworkAcl": "vpc",

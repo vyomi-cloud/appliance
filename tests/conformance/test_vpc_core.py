@@ -186,6 +186,19 @@ def run_resources(store=None):
     call({"Action": "DeleteFlowLogs", "FlowLogId.1": fl_id})
     _check("flow log gone after delete", fl_id not in call({"Action": "DescribeFlowLogs"}))
 
+    scr_id = xid(call({"Action": "CreateSubnetCidrReservation", "SubnetId": subnet_id, "Cidr": "10.9.1.4/30",
+                       "ReservationType": "explicit", "Description": "uic-test"}), "subnetCidrReservationId")
+    _check("CIDR reservation round-trips via GetSubnetCidrReservations", scr_id in call({"Action": "GetSubnetCidrReservations", "SubnetId": subnet_id}))
+    bad = vpc.dispatch(s, {"Action": "RunInstances", "MinCount": "1", "MaxCount": "1", "SubnetId": subnet_id, "PrivateIpAddress": "10.9.1.5"})
+    _check("explicit private IP inside a reservation is rejected", bad.status != 200 and "reserved" in bad.body.lower())
+    inst_resp = call({"Action": "RunInstances", "MinCount": "1", "MaxCount": "1", "SubnetId": subnet_id})
+    inst_id = xid(inst_resp, "instanceId")
+    inst_ip = xid(inst_resp, "privateIpAddress")
+    _check("auto-allocated private IP avoids the reserved CIDR", inst_ip not in ("10.9.1.4", "10.9.1.5", "10.9.1.6", "10.9.1.7"))
+    call({"Action": "TerminateInstances", "InstanceId.1": inst_id})
+    call({"Action": "DeleteSubnetCidrReservation", "SubnetCidrReservationId": scr_id})
+    _check("CIDR reservation gone after delete", scr_id not in call({"Action": "GetSubnetCidrReservations", "SubnetId": subnet_id}))
+
     call({"Action": "DeleteSubnet", "SubnetId": subnet_id})
     call({"Action": "DeleteVpc", "VpcId": vpc_id})
     _check("VPC deletes once dependencies are gone", vpc_id not in s._vpc_model["vpcs"])
