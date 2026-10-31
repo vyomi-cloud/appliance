@@ -74,8 +74,9 @@ const browser = await pw.chromium.launch();
 page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
-// Native 404s (e.g. a deleted resource's GET) are expected answers, not page errors.
-page.on("console", (m) => m.type() === "error" && !/status of 404/.test(m.text()) && errors.push(m.text()));
+// Native 404s (e.g. a deleted resource's GET) and 409s (e.g. a locked resource's blocked
+// write/delete) are expected answers, not page errors.
+page.on("console", (m) => m.type() === "error" && !/status of (404|409)/.test(m.text()) && errors.push(m.text()));
 const shot = (name) => page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
 const openPanel = async (label) => { await page.getByRole("navigation", { name: "Resource menu" }).getByRole("link", { name: label, exact: true }).click(); await page.waitForTimeout(500); };
 
@@ -285,6 +286,29 @@ try {
   await page.getByRole("cell", { name: "default" }).first().waitFor({ timeout: 10000 });
   check("App keys panel lists the default host key", await page.getByRole("cell", { name: "default" }).first().isVisible());
   await shot("22-app-keys");
+
+  // ── Locks: a CanNotDelete lock added through the UI really blocks delete over native ARM ──
+  const FALOCK = `vyfnlock${n}`;
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}/locks`);
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByLabel("Lock name").fill(FALOCK);
+  await page.getByRole("button", { name: "OK" }).click();
+  await page.getByRole("cell", { name: FALOCK, exact: true }).waitFor({ timeout: 10000 });
+  const lockedDelete = await armWeb("DELETE", `/resourceGroups/${FARG}/providers/Microsoft.Web/sites/${FA}`);
+  check("locked function app rejects delete over native ARM", lockedDelete.status === 409, `HTTP ${lockedDelete.status}`);
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(FA);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByText("ScopeLocked").waitFor({ timeout: 10000 });
+  check("UI delete is blocked by the lock and shows the ScopeLocked error", true);
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}/locks`);
+  await page.getByRole("row", { name: new RegExp(FALOCK) }).getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(FALOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("cell", { name: FALOCK, exact: true }).waitFor({ state: "detached", timeout: 10000 });
 
   // ── Delete through Overview → gone over ARM ────────────────────────────────────────────
   await page.goto(UI + `#/functionapp/${FARG}/${FA}`);

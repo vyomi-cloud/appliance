@@ -109,11 +109,12 @@
  "azure.functionapp.locks": {
   "title": "Resource locks",
   "level": {
-   "nano": "limited",
-   "offline": "limited"
+   "nano": "full",
+   "offline": "full"
   },
   "limitations": [
-   "Modelled as a function-app sub-resource (create/list/delete round-trip) rather than the real Microsoft.Authorization/locks extension resource path, and not enforced — Vyomi does not block delete/write operations on a locked site."
+   "Enforcement is scoped to the exact locked resource (the function app itself) — a lock does not cascade to block writes/deletes the way a resource-group- or subscription-scoped lock would in real ARM.",
+   "Locks are only simulated at the resource scope (this function app); the Locks blade's Subscription/Resource group scope buttons are an honest 'Not simulated' gap."
   ],
   "api": [
    "ManagementLocks_CreateOrUpdateAtResourceLevel",

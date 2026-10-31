@@ -66,7 +66,21 @@ lk = call(st, "PUT", ["sites", "fn1", "locks", "no-delete"], {"properties": {"le
 check("lock created", lk["body"]["properties"]["level"] == "CanNotDelete")
 check("bad lock level rejected", call(st, "PUT", ["sites", "fn1", "locks", "x"], {"properties": {"level": "Nope"}})["status"] == 400)
 check("locks listed", len(call(st, "GET", ["sites", "fn1", "locks"])["body"]["value"]) == 1)
+
+# lock ENFORCEMENT: a CanNotDelete lock blocks delete but not writes; a ReadOnly lock blocks both
+blocked_del = call(st, "DELETE", ["sites", "fn1"])
+check("CanNotDelete lock blocks site delete", blocked_del["status"] == 409 and blocked_del["body"]["error"]["code"] == "ScopeLocked", blocked_del["body"])
+ok_write = call(st, "PATCH", ["sites", "fn1"], {"tags": {"env": "prod"}})
+check("CanNotDelete lock does not block a write", ok_write["status"] == 200 and ok_write["body"]["tags"]["env"] == "prod", ok_write["body"])
+call(st, "PUT", ["sites", "fn1", "locks", "ro"], {"properties": {"level": "ReadOnly"}})
+blocked_write = call(st, "PATCH", ["sites", "fn1"], {"tags": {"env": "blocked"}})
+check("ReadOnly lock blocks a write too", blocked_write["status"] == 409 and blocked_write["body"]["error"]["code"] == "ScopeLocked", blocked_write["body"])
 check("lock deleted", call(st, "DELETE", ["sites", "fn1", "locks", "no-delete"])["status"] == 200)
+check("delete still blocked by the remaining ReadOnly lock", call(st, "DELETE", ["sites", "fn1"])["status"] == 409)
+check("lock deleted (ReadOnly)", call(st, "DELETE", ["sites", "fn1", "locks", "ro"])["status"] == 200)
+check("delete now succeeds once both locks are removed", call(st, "DELETE", ["sites", "fn1"])["status"] == 200)
+# recreate fn1 — the rest of the suite (stop/start/publish/scale/delete) expects it to exist
+call(st, "PUT", ["sites", "fn1"], SITE)
 
 # start/stop/restart + publish profile
 check("stop → state Stopped", call(st, "POST", ["sites", "fn1", "stop"])["status"] == 200

@@ -551,6 +551,10 @@ def _site_ops(state, sub, rg, chain, method, payload):
         if method == "PATCH" and not existed:
             raise _not_found("sites", name, rg)
         if existed:
+            _migrate_locks(state, rec)
+            blocked = _lock_block(state, rec, for_delete=False)
+            if blocked:
+                return blocked
             _ensure(rec)
             _update_site(state, rec, payload, method)
         else:
@@ -561,6 +565,11 @@ def _site_ops(state, sub, rg, chain, method, payload):
         _log_site_call(state, rec, [], method, resp, existed)
         return resp
     if method == "DELETE":
+        if rec is not None:
+            _migrate_locks(state, rec)
+            blocked = _lock_block(state, rec, for_delete=True)
+            if blocked:
+                return blocked
         state.pop(rid.lower(), None)
         resp = _ok(None, 200 if rec is not None else 204, rid=rid, verb="delete")
         if rec is not None:
@@ -669,6 +678,24 @@ def _migrate_locks(state, rec):
     for name, lk in old.items():
         props = lk.get("properties", lk) if isinstance(lk, dict) else {}
         _locks_engine().upsert(state, rec["id"], name, {"properties": {"level": props.get("level"), "notes": props.get("notes", "")}})
+
+
+def _lock_block(state, rec, for_delete):
+    """Enforce a CanNotDelete/ReadOnly lock on this site — the same semantics and error shape
+    as the generic ARM engine's Service Bus namespace lock enforcement (azure_arm_core.py's
+    ``_lock_block``): blocks DELETE outright, and blocks PUT/PATCH only under a ReadOnly lock.
+    Scoped to this site's own id; it does not cascade from a resource-group/subscription lock
+    (those scopes are an honest 'Not simulated' gap, same as the Locks blade's scope buttons)."""
+    levels = {(r.get("properties") or {}).get("level")
+              for r in state.values() if r.get("_lock_scope") == rec["id"].lower()}
+    if not levels:
+        return None
+    if for_delete or "ReadOnly" in levels:
+        verb = "delete" if for_delete else "write"
+        return _err(409, "ScopeLocked",
+                    f"The scope '{rec['id']}' cannot perform {verb} operation because the "
+                    f"following scope(s) are locked: '{rec['id']}'. Please remove the lock and try again.")
+    return None
 
 
 def _lock_ops(state, rec, rest, method, payload):
