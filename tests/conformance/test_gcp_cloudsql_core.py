@@ -203,6 +203,8 @@ def run() -> int:
     _check("get single operation 200", opget.status == 200)
 
     # 12. read replica: masterInstanceName creates a replica instance
+    csql.dispatch(st, "POST", PROJ + "/shopdb/databases", {}, {"content-type": "application/json"},
+                  json.dumps({"name": "billing"}).encode())
     rep = csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
                         json.dumps({"name": "shopdb-replica", "masterInstanceName": "shopdb"}).encode())
     _check("insert replica 200", rep.status == 200)
@@ -213,6 +215,56 @@ def run() -> int:
     rep_missing_master = csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
                                        json.dumps({"name": "x", "masterInstanceName": "ghost"}).encode())
     _check("replica of missing master 404", rep_missing_master.status == 404)
+
+    # 12b. replica seeded from the primary's CURRENT databases at creation time
+    rep_dbs = sorted(d["name"] for d in _jbody(
+        csql.dispatch(st, "GET", PROJ + "/shopdb-replica/databases", {}, {}, b"")).get("items", []))
+    _check("replica seeded with primary's existing database", rep_dbs == ["billing"])
+
+    # 12c. a database created on the primary AFTER the replica exists mirrors across
+    csql.dispatch(st, "POST", PROJ + "/shopdb/databases", {}, {"content-type": "application/json"},
+                  json.dumps({"name": "catalog"}).encode())
+    rep_dbs2 = sorted(d["name"] for d in _jbody(
+        csql.dispatch(st, "GET", PROJ + "/shopdb-replica/databases", {}, {}, b"")).get("items", []))
+    _check("database added on primary mirrors to replica", rep_dbs2 == ["billing", "catalog"])
+
+    # 12d. a user created on the primary mirrors across too; deletes mirror as well
+    csql.dispatch(st, "POST", PROJ + "/shopdb/users", {}, {"content-type": "application/json"},
+                  json.dumps({"name": "repluser", "host": "%"}).encode())
+    rep_users = _jbody(csql.dispatch(st, "GET", PROJ + "/shopdb-replica/users", {}, {}, b"")).get("items", [])
+    _check("user added on primary mirrors to replica", any(u["name"] == "repluser" for u in rep_users))
+    csql.dispatch(st, "DELETE", PROJ + "/shopdb/databases/catalog", {}, {}, b"")
+    rep_dbs3 = sorted(d["name"] for d in _jbody(
+        csql.dispatch(st, "GET", PROJ + "/shopdb-replica/databases", {}, {}, b"")).get("items", []))
+    _check("database deleted on primary mirrors to replica", rep_dbs3 == ["billing"])
+
+    # 12e. a primary with live replicas can't be deleted until they are deleted first
+    blocked = csql.dispatch(st, "DELETE", PROJ + "/shopdb", {}, {}, b"")
+    _check("delete primary with replicas 400", blocked.status == 400
+           and _jbody(blocked)["error"]["status"] == "FAILED_PRECONDITION")
+    csql.dispatch(st, "DELETE", PROJ + "/shopdb-replica", {}, {}, b"")
+
+    # 13. backupRuns capture a snapshot of databases/users; restoreBackup replays it
+    csql.dispatch(st, "POST", PROJ + "/shopdb/databases", {},
+                  {"content-type": "application/json"}, json.dumps({"name": "willbegone"}).encode())
+    bk = _jbody(csql.dispatch(st, "POST", PROJ + "/shopdb/backupRuns", {},
+                              {"content-type": "application/json"},
+                              json.dumps({"description": "pre-delete"}).encode()))
+    csql.dispatch(st, "DELETE", PROJ + "/shopdb/databases/willbegone", {}, {}, b"")
+    gone = sorted(d["name"] for d in _jbody(
+        csql.dispatch(st, "GET", PROJ + "/shopdb/databases", {}, {}, b"")).get("items", []))
+    _check("database gone before restore", "willbegone" not in gone)
+    restore = csql.dispatch(st, "POST", PROJ + "/shopdb:restoreBackup", {}, {"content-type": "application/json"},
+                            json.dumps({"restoreBackupContext": {"backupRunId": bk["id"]}}).encode())
+    _check("restoreBackup 200", restore.status == 200)
+    _check("restoreBackup op kind/type", _jbody(restore)["kind"] == "sql#operation"
+           and _jbody(restore)["operationType"] == "RESTORE_VOLUME")
+    restored = sorted(d["name"] for d in _jbody(
+        csql.dispatch(st, "GET", PROJ + "/shopdb/databases", {}, {}, b"")).get("items", []))
+    _check("restoreBackup brings back the deleted database", "willbegone" in restored)
+    bad_restore = csql.dispatch(st, "POST", PROJ + "/shopdb:restoreBackup", {}, {"content-type": "application/json"},
+                                json.dumps({"restoreBackupContext": {"backupRunId": "999999"}}).encode())
+    _check("restoreBackup unknown backup 404", bad_restore.status == 404)
 
     print("\nRESULT: PASS — GCP Cloud SQL control-plane core conforms "
           "(native Cloud SQL Admin REST wire) on this substrate.")

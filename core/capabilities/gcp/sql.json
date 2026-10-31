@@ -24,10 +24,10 @@
     "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
   },
   "gcp.sql.backups": {
-    "title": "Backups (on-demand backupRuns: create, list, delete)",
-    "level": { "nano": "limited", "offline": "limited" },
+    "title": "Backups (on-demand backupRuns: create, list, delete, restore)",
+    "level": { "nano": "full", "offline": "full" },
     "limitations": [
-      "A backupRun is recorded as SUCCESSFUL immediately; it does not capture an actual point-in-time copy of the instance's data, so restoring from one is not supported.",
+      "A backupRun snapshots the control-plane metadata this core manages (databases, users) and instances.restoreBackup replays that snapshot back onto the instance; it does not capture an actual point-in-time copy of table row data (the separate SQL data plane, out of scope for this core).",
       "Automated (scheduled) backups are not taken in the background — only on-demand backupRuns created from the console or API exist."
     ],
     "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
@@ -50,9 +50,10 @@
   },
   "gcp.sql.replicas": {
     "title": "Read replicas",
-    "level": { "nano": "limited", "offline": "limited" },
+    "level": { "nano": "full", "offline": "full" },
     "limitations": [
-      "A read replica is a real instance created with masterInstanceName and listed from the same instances collection, but Vyomi has no replication engine: it does not mirror the primary's data, and Replication lag always reads \"—\"."
+      "A read replica is a real instance created with masterInstanceName; it mirrors the primary's databases and users — the control-plane metadata this core manages — synchronously on every write, so Replication lag always reads \"0s\" rather than modeling real async replication delay. Table row data (the separate SQL data plane) isn't mirrored, and promoting a replica to a standalone primary (instances.promoteReplica) isn't modeled.",
+      "A primary instance can't be deleted while it has live replicas (matching the native API), but a replica can still be written to directly — Vyomi doesn't enforce the real engine's read-only restriction on replicas."
     ],
     "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
   },

@@ -855,6 +855,35 @@ try {
   await page.getByText(SQLDB, { exact: true }).waitFor({ timeout: 10000 });
   check("database created over wire → shown in Databases UI", true);
 
+  // Read replica created via UI mirrors the primary's existing database immediately
+  // (gcp.sql.replicas: control-plane metadata mirrors on every primary write).
+  const SQLREP = `${SQLI}-rep`;
+  await page.goto(UI + `#/sql/instances/${SQLI}/replicas`);
+  await page.getByRole("button", { name: "Create read replica" }).click();
+  await page.getByLabel("Replica instance ID").fill(SQLREP);
+  await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("link", { name: SQLREP }).waitFor({ timeout: 10000 });
+  const repDbs = await wjson(`/sql/v1beta4/projects/vyomi-project/instances/${SQLREP}/databases`);
+  check("replica created via UI → seeded with primary's database over native wire", (repDbs.items || []).some((d) => d.name === SQLDB));
+  await shot("15b-sql-replica");
+
+  // Backup via UI → delete the database over the wire → Restore via UI brings it back
+  // (gcp.sql.backups: backupRun snapshot + instances.restoreBackup).
+  await page.goto(UI + `#/sql/instances/${SQLI}/backups`);
+  await page.getByRole("button", { name: "Create backup" }).click();
+  await page.getByText("Just now").waitFor({ timeout: 10000 });
+  await wire(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}/databases/${SQLDB}`, { method: "DELETE" });
+  await page.getByRole("button", { name: "Restore", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Restore", exact: true }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  const restoredDbs = await wjson(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}/databases`);
+  check("restore backup via UI → deleted database reappears over native wire", (restoredDbs.items || []).some((d) => d.name === SQLDB));
+  await shot("15c-sql-restore");
+
+  // A primary can't be deleted while it has live replicas (native restriction) —
+  // delete the replica over the wire first, then the primary via the UI below.
+  await wire(`/sql/v1beta4/projects/vyomi-project/instances/${SQLREP}`, { method: "DELETE" });
+
   await page.goto(UI + `#/sql/instances/${SQLI}/overview`);
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByLabel("Confirm deletion").fill(SQLI);

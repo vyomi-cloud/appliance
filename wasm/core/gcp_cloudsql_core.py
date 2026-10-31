@@ -159,6 +159,24 @@ def _backup_key(project: str, instance: str, backup_id: str) -> str:
     return f"cloudsql-backup:{project}/{instance}/{backup_id}"
 
 
+def _replicas_of(store: SqlStore, project: str, master: str) -> list[dict]:
+    return [r for r in _list_instances(store, project) if r.get("masterInstanceName") == master]
+
+
+def _mirror_to_replicas(store: SqlStore, project: str, master: str) -> None:
+    """Read replicas mirror the primary's control-plane metadata (databases, users) —
+    the state this core manages — synchronously on every write, so a replica never
+    lags behind on them (see gcp.sql.replicas in core/capabilities/gcp/sql.json)."""
+    rec = _get_instance(store, project, master)
+    if not rec:
+        return
+    dbs = {k: dict(v) for k, v in rec.get("databases", {}).items()}
+    users = {k: dict(v) for k, v in rec.get("users", {}).items()}
+    for rep in _replicas_of(store, project, master):
+        rep["databases"] = {k: dict(v) for k, v in dbs.items()}
+        rep["users"] = {k: dict(v) for k, v in users.items()}
+
+
 def _operation(instance: str, op_type: str) -> dict:
     return {"kind": "sql#operation", "name": uuid.uuid4().hex, "operationType": op_type,
             "status": "DONE", "targetId": instance, "insertTime": "", "endTime": ""}
@@ -209,6 +227,8 @@ def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlRespo
         rec["instanceType"] = "READ_REPLICA_INSTANCE"
     op = _log_op(rec, "CREATE_REPLICA" if master else "CREATE")
     store.put_instance(_key(project, name), rec)
+    if master:
+        _mirror_to_replicas(store, project, master)  # seed the new replica from the primary's current state
     store.persist()
     return _json(200, _operation_view(op, project, name))   # native instances.insert → Operation
 
@@ -287,6 +307,9 @@ def _delete_instance(store: SqlStore, project: str, instance: str) -> CloudSqlRe
     rec = _get_instance(store, project, instance)
     if not rec:
         return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    if _replicas_of(store, project, instance):
+        return _err(400, "FAILED_PRECONDITION",
+                    f"The instance cannot be deleted because it has read replicas. Instance: {instance}")
     for bid in _list_backup_ids(store, project, instance):
         store.snapshots.pop(_backup_key(project, instance, bid), None)
     store.drop_instance(_key(project, instance))
@@ -315,6 +338,7 @@ def _insert_database(store: SqlStore, project: str, instance: str,
         "collation": str(body.get("collation", "en_US.UTF8")),
         "etag": _etag(),
     }
+    _mirror_to_replicas(store, project, instance)
     store.persist()
     return _json(200, _database_view(project, instance, dbs[name]))
 
@@ -340,6 +364,7 @@ def _delete_database(store: SqlStore, project: str, instance: str,
     if database not in dbs:
         return _not_found(f"The database does not exist. Database: {database}")
     dbs.pop(database, None)
+    _mirror_to_replicas(store, project, instance)
     store.persist()
     return _json(200, {"kind": "sql#operation", "operationType": "DELETE_DATABASE",
                        "status": "DONE", "name": str(uuid.uuid4()),
@@ -372,6 +397,7 @@ def _insert_user(store: SqlStore, project: str, instance: str, body: dict) -> Cl
     users[key] = {"name": name, "host": host, "type": body.get("type", "BUILT_IN"),
                  "password": body.get("password", ""), "etag": _etag()}
     _log_op(rec, "CREATE_USER")
+    _mirror_to_replicas(store, project, instance)
     store.persist()
     return _json(200, _user_view(project, instance, users[key]))
 
@@ -401,6 +427,7 @@ def _update_user(store: SqlStore, project: str, instance: str, name: str,
         users[key]["password"] = body["password"]
     users[key]["etag"] = _etag()
     _log_op(rec, "UPDATE_USER")
+    _mirror_to_replicas(store, project, instance)
     store.persist()
     return _json(200, {"kind": "sql#operation", "operationType": "UPDATE_USER",
                        "status": "DONE", "name": str(uuid.uuid4()), "targetId": instance})
@@ -416,6 +443,7 @@ def _delete_user(store: SqlStore, project: str, instance: str, name: str, host: 
         return _not_found(f"The user does not exist. User: {name}")
     users.pop(key, None)
     _log_op(rec, "DELETE_USER")
+    _mirror_to_replicas(store, project, instance)
     store.persist()
     return _json(200, {"kind": "sql#operation", "operationType": "DELETE_USER",
                        "status": "DONE", "name": str(uuid.uuid4()), "targetId": instance})
@@ -443,7 +471,12 @@ def _insert_backup(store: SqlStore, project: str, instance: str, body: dict) -> 
         return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
     backup_id = str(uuid.uuid4().int % 10_000_000_000)
     b = {"id": backup_id, "project": project, "instance": instance, "type": "ON_DEMAND",
-         "description": str(body.get("description", ""))}
+         "description": str(body.get("description", "")),
+         # Point-in-time snapshot of the control-plane metadata this core manages, restored
+         # by instances.restoreBackup. Row-level SQL data lives in the separate SQL data
+         # plane (see module docstring) and isn't captured here.
+         "snapshot": {"databases": {k: dict(v) for k, v in rec.get("databases", {}).items()},
+                      "users": {k: dict(v) for k, v in rec.get("users", {}).items()}}}
     store.put_snapshot(_backup_key(project, instance, backup_id), b)
     _log_op(rec, "BACKUP_VOLUME")
     store.persist()
@@ -480,6 +513,28 @@ def _delete_backup(store: SqlStore, project: str, instance: str, backup_id: str)
     store.persist()
     return _json(200, {"kind": "sql#operation", "operationType": "DELETE_BACKUP",
                        "status": "DONE", "name": str(uuid.uuid4()), "targetId": instance})
+
+
+def _restore_backup(store: SqlStore, project: str, instance: str, body: dict) -> CloudSqlResponse:
+    """instances.restoreBackup — replaces the target instance's databases/users with the
+    backupRun's snapshot (native restoreBackupContext.backupRunId[/instanceId])."""
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    ctx = body.get("restoreBackupContext") or {}
+    backup_id = str(ctx.get("backupRunId", "")).strip()
+    source_instance = str(ctx.get("instanceId", "") or instance).strip()
+    b = store.get_snapshot(_backup_key(project, source_instance, backup_id))
+    if not b:
+        return _not_found(f"The backupRun does not exist. BackupRun: {backup_id}")
+    snap = b.get("snapshot") or {}
+    rec["databases"] = {k: dict(v) for k, v in snap.get("databases", {}).items()}
+    rec["users"] = {k: dict(v) for k, v in snap.get("users", {}).items()}
+    rec["etag"] = _etag()
+    op = _log_op(rec, "RESTORE_VOLUME")
+    _mirror_to_replicas(store, project, instance)
+    store.persist()
+    return _json(200, _operation_view(op, project, instance))
 
 
 # ── native-wire dispatcher (REST path + method → operation) ────────────────
@@ -543,6 +598,8 @@ def dispatch(store: SqlStore, method: str, path: str,
     if len(segs) == 4:
         if verb == "restart" and method == "POST":
             return _restart_instance(store, project, instance)
+        if verb == "restoreBackup" and method == "POST":
+            return _restore_backup(store, project, instance, payload)
         if method == "GET":
             return _get_instance_resp(store, project, instance)
         if method == "PATCH":

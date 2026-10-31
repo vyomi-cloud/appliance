@@ -1,7 +1,8 @@
 /* Replicas — read replicas are real Cloud SQL instances (instances.insert with
  * masterInstanceName, core/gcp_cloudsql_core.py), listed from the same instances
- * collection filtered to this instance's master. Replication lag isn't modeled (see
- * core/capabilities/gcp/sql.json: gcp.sql.replicas is "limited" — no replication engine). */
+ * collection filtered to this instance's master. The primary's databases/users mirror to
+ * every replica synchronously on write, so lag is always "0s" (see
+ * core/capabilities/gcp/sql.json: gcp.sql.replicas). */
 import { useState } from "react";
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
@@ -39,7 +40,7 @@ export default function Replicas({ params }) {
             { id: "name", header: "Instance ID", sortField: "name", cell: (i) => <Link href={instanceHref(i.name)}>{i.name}</Link> },
             { id: "type", header: "Type", cell: () => "Read replica" },
             { id: "region", header: "Region", sortField: "region", cell: (i) => i.region },
-            { id: "lag", header: "Replication lag", cell: () => "—" },
+            { id: "lag", header: "Replication lag", cell: () => "0s" },
             { id: "status", header: "Status", cell: (i) => api.stateLabel(i.state) },
           ]}
           empty={<Typography variant="body2" color="text.secondary">This instance has no read replicas.</Typography>}
