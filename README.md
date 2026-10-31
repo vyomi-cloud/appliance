@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-10-31 01:38 UTC · refreshes after every pipeline run_
+_Updated 2026-10-31 01:42 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -8,17 +8,17 @@ _Updated 2026-10-31 01:38 UTC · refreshes after every pipeline run_
 - **Building now:** nothing
 - **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS CloudFormation (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
-- **Consoles really implemented:** offline 87% · Nano 90%
-- **Hourly tests:** 200 of 225 suites passing (run 23:27 UTC)
+- **Consoles really implemented:** offline 93% · Nano 95%
+- **Hourly tests:** 202 of 225 suites passing (run 01:29 UTC)
 - **Upstream watch:** 61 open changes from the real clouds to adopt
 
 ## By cloud
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 19 | 0 | 9 | 17 | 77% · 84% |
-| GCP | 18 | 0 | 6 | 12 | 95% · 98% |
-| Azure | 18 | 0 | 6 | 12 | 91% · 90% |
+| AWS | 19 | 0 | 9 | 17 | 86% · 87% |
+| GCP | 18 | 0 | 6 | 12 | 95% · 99% |
+| Azure | 18 | 0 | 6 | 12 | 99% · 99% |
 
 ## In progress
 
@@ -83,18 +83,18 @@ _Updated 2026-10-31 01:38 UTC · refreshes after every pipeline run_
 | S3 | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ✅ watched | before gate |
 | IAM | — | not audited | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
 | RDS | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ✅ watched | before gate |
-| DynamoDB | — | not audited | 🧩 11/19 · 🧩 14/19 | 2 · 2 | ✅ watched | before gate |
-| SQS | — | not audited | 🧩 6/13 · 🧩 9/13 | 0 · 0 | ✅ watched | before gate |
+| DynamoDB | — | not audited | 🧩 15/19 · 🧩 15/19 | 3 · 3 | ✅ watched | before gate |
+| SQS | — | not audited | 🧩 12/13 · 🧩 12/13 | 0 · 0 | ✅ watched | before gate |
 | Lambda | — | not audited | 🧩 13/16 · 🧩 13/16 | 0 · 0 | ✅ watched | before gate |
-| API Gateway | caddy · Lite | not audited | 🧩 13/15 · 🧩 11/15 | 1 · 3 | ✅ watched | before gate |
-| VPC | — | not audited | 🧩 10/14 · ✅ 14/14 | 4 · 0 | ✅ watched | before gate |
-| EventBridge | nats · Lite | 🟡 rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered | 🧩 12/14 · 🧩 12/14 | 1 · 1 | ✅ watched | before gate |
-| Secrets Manager | — | not audited | 🧩 9/15 · 🧩 12/15 | 0 · 0 | ✅ watched | before gate |
-| KMS | — | not audited | 🧩 8/16 · 🧩 14/16 | 0 · 0 | ✅ watched | before gate |
+| API Gateway | caddy · Lite | not audited | 🧩 13/15 · 🧩 11/15 | 0 · 0 | ✅ watched | before gate |
+| VPC | — | not audited | 🧩 10/14 · ✅ 14/14 | 2 · 0 | ✅ watched | before gate |
+| EventBridge | nats · Lite | 🟡 rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered | 🧩 12/14 · 🧩 12/14 | 0 · 0 | ✅ watched | before gate |
+| Secrets Manager | — | not audited | 🧩 13/15 · 🧩 13/15 | 1 · 1 | ✅ watched | before gate |
+| KMS | — | not audited | 🧩 14/16 · 🧩 14/16 | 1 · 1 | ✅ watched | before gate |
 | CloudWatch Logs | logstore · in-process · + fluent-bit agent | ✅ in-process engine, SQLite store; filter + Insights queries | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | [v3.0.11](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.11) |
 | Elastic Load Balancing | caddy · Lite | ⚪ no traffic forwarded (Caddy not wired) | 🧩 7/8 · 🧩 7/8 | 0 · 0 | ✅ watched | [v3.0.10](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.10) |
-| Systems Manager | in-process | 🟡 Parameter Store real; Run Command reports Success without running | 🧩 6/10 · 🧩 6/10 | 0 · 0 | ✅ watched | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
-| Step Functions | workflow-engine · in-process · + temporal engine | ✅ ASL interpreter runs executions and calls Lambda; Wait doesn't sleep | 🧩 9/12 · 🧩 9/12 | 0 · 0 | ✅ watched | [v3.0.13](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.13) |
+| Systems Manager | in-process | 🟡 Parameter Store real; Run Command reports Success without running | 🧩 8/10 · 🧩 8/10 | 1 · 1 | ✅ watched | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
+| Step Functions | workflow-engine · in-process · + temporal engine | ✅ ASL interpreter runs executions and calls Lambda; Wait doesn't sleep | 🧩 11/12 · 🧩 11/12 | 0 · 0 | ✅ watched | [v3.0.13](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.13) |
 | API Gateway V2 | caddy · Lite | not audited | 🧩 12/13 · 🧩 12/13 | 0 · 0 | ✅ watched | [v3.0.25](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.25) |
 | Amazon CloudWatch | victoriametrics · Lite · + vmalert agent | not audited | — | – · – | ✅ watched | [v3.0.26](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.26) |
 | Amazon SNS | nats · Lite | not audited | 🧩 9/10 · 🧩 9/10 | 0 · 0 | ✅ watched | [v3.0.28](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.28) |
@@ -103,13 +103,13 @@ _Updated 2026-10-31 01:38 UTC · refreshes after every pipeline run_
 
 | Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|---|---|
-| Compute Engine | — | not audited | ✅ 18/18 · ✅ 18/18 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+compute/v1) | before gate |
+| Compute Engine | — | not audited | ✅ 18/18 · 🧩 17/18 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+compute/v1) | before gate |
 | Cloud Storage | — | not audited | 🧩 13/14 · ✅ 14/14 | 0 · 0 | ✅ watched | before gate |
 | Cloud SQL | — | not audited | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ⚠️ 50 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+sqladmin/v1beta4) | before gate |
-| Pub/Sub | — | not audited | 🧩 7/13 · ✅ 13/13 | 6 · 0 | ✅ watched | before gate |
+| Pub/Sub | — | not audited | 🧩 7/13 · ✅ 13/13 | 0 · 0 | ✅ watched | before gate |
 | Firestore | — | not audited | ✅ 13/13 · ✅ 13/13 | 0 · 0 | ✅ watched | before gate |
 | Cloud Functions | — | not audited | 🧩 14/15 · ✅ 15/15 | 0 · 0 | ✅ watched | before gate |
-| API Gateway | caddy · Lite | not audited | ✅ 12/12 · 🧩 10/12 | 0 · 0 | ✅ watched | before gate |
+| API Gateway | caddy · Lite | not audited | ✅ 12/12 · ✅ 12/12 | 0 · 0 | ✅ watched | before gate |
 | VPC Network | — | not audited | 🧩 12/13 · ✅ 13/13 | 0 · 0 | ✅ watched | before gate |
 | IAM & Admin | — | not audited | ✅ 9/9 · ✅ 9/9 | 0 · 0 | ✅ watched | before gate |
 | Eventarc | — | not audited | ✅ 12/12 · ✅ 12/12 | 0 · 0 | ✅ watched | before gate |
@@ -120,26 +120,26 @@ _Updated 2026-10-31 01:38 UTC · refreshes after every pipeline run_
 | IAM Service Account Credentials | in-process | ✅ real RS256-signed tokens, JWTs and blobs | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | [v3.0.16](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.16) |
 | Memorystore for Redis | valkey · Lite | 🟡 one shared 64 MB Valkey; port not published, no per-instance AUTH | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | [v3.0.17](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.17) |
 | Artifact Registry | registry · Lite | not audited | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | [v3.0.29](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.29) |
-| Cloud Monitoring | victoriametrics · Lite · + vmalert agent | not audited | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | [v3.0.30](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.30) |
+| Cloud Monitoring | victoriametrics · Lite · + vmalert agent | not audited | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | [v3.0.30](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.30) |
 
 ### Azure
 
 | Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|---|---|
 | Virtual Machines | — | not audited | ✅ 22/22 · 🧩 21/22 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+compute) | before gate |
-| Storage accounts | — | not audited | 🧩 15/22 · 🧩 15/22 | 0 · 0 | ✅ watched | before gate |
-| SQL servers | — | not audited | 🧩 17/22 · 🧩 15/22 | 0 · 0 | ✅ watched | before gate |
+| Storage accounts | — | not audited | 🧩 21/22 · 🧩 21/22 | 1 · 1 | ✅ watched | before gate |
+| SQL servers | — | not audited | ✅ 22/22 · ✅ 22/22 | 0 · 0 | ✅ watched | before gate |
 | Service Bus | messaging-core · in-process · + nats agent · + amqp protocol | 🟡 REST management + messaging only; native SDKs need AMQP (in PRs #35-#45, not merged) | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ✅ watched | before gate |
-| Cosmos DB | — | not audited | 🧩 16/20 · 🧩 15/20 | 0 · 0 | ✅ watched | before gate |
+| Cosmos DB | — | not audited | 🧩 19/20 · 🧩 19/20 | 1 · 1 | ✅ watched | before gate |
 | Function apps | — | not audited | ✅ 23/23 · ✅ 23/23 | 0 · 0 | ✅ watched | before gate |
 | API Management | caddy · Lite | not audited | 🧩 19/20 · ✅ 20/20 | 0 · 0 | ✅ watched | before gate |
-| Virtual networks | — | not audited | 🧩 12/17 · 🧩 13/17 | 0 · 0 | ✅ watched | before gate |
+| Virtual networks | — | not audited | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ✅ watched | before gate |
 | Network Security Group | — | not audited | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
-| Event Grid topics | — | not audited | 🧩 15/16 · 🧩 14/16 | 0 · 0 | ✅ watched | before gate |
-| Key vaults | — | not audited | 🧩 14/17 · 🧩 14/17 | 0 · 0 | ✅ watched | before gate |
+| Event Grid topics | — | not audited | ✅ 16/16 · ✅ 16/16 | 0 · 0 | ✅ watched | before gate |
+| Key vaults | — | not audited | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ✅ watched | before gate |
 | Entra ID / RBAC | — | not audited | ✅ 6/6 · ✅ 6/6 | 0 · 0 | ✅ watched | before gate |
 | Container Apps | docker · Pro · + caddy gateway | 🟡 real containers on Pro/Max only; no ingress URL | ✅ 17/17 · ✅ 17/17 | 0 · 0 | ✅ watched | [v3.0.18](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.18) |
-| App Configuration | in-process | ✅ real key-value data plane | ✅ 16/16 · 🧩 15/16 | 0 · 0 | ✅ watched | [v3.0.19](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.19) |
+| App Configuration | in-process | ✅ real key-value data plane | ✅ 16/16 · ✅ 16/16 | 0 · 0 | ✅ watched | [v3.0.19](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.19) |
 | Azure AI services | ollama · Max | ⚪ no model inference (Ollama not wired) | ✅ 16/16 · ✅ 16/16 | 0 · 0 | ✅ watched | [v3.0.20](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.20) |
 | DNS zones | coredns · Lite | ⚪ no DNS server answers (CoreDNS not wired) | ✅ 14/14 · ✅ 14/14 | 0 · 0 | ✅ watched | [v3.0.21](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.21) |
 | Monitor alerts | victoriametrics · Lite · + vmalert agent | ⚪ alert rules stored, never evaluated or fired (vmalert not wired) | ✅ 15/15 · ✅ 15/15 | 0 · 0 | ✅ watched | [v3.0.22](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.22) |
@@ -855,7 +855,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 </details>
 
-<details><summary>Console parts not live yet — AWS (105)</summary>
+<details><summary>Console parts not live yet — AWS (69)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -871,19 +871,9 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | RDS | offline | tab: Tags | static |
 | DynamoDB | offline | create: create with defaults | partial |
 | DynamoDB | offline | detail: resource detail | partial |
+| DynamoDB | offline | tab: Overview | partial |
 | DynamoDB | offline | tab: Tags | static |
-| DynamoDB | offline | tab: Query/Scan | static |
-| DynamoDB | offline | tab: Read/write capacity | static |
-| DynamoDB | offline | tab: Encryption at rest | static |
-| DynamoDB | offline | tab: Time to live | static |
-| DynamoDB | offline | tab: Permissions | static |
 | SQS | offline | tab: Tags | static |
-| SQS | offline | tab: Send and receive messages | static |
-| SQS | offline | tab: Purge messages | static |
-| SQS | offline | tab: Configuration | static |
-| SQS | offline | tab: Dead-letter queue | static |
-| SQS | offline | tab: Encryption | static |
-| SQS | offline | tab: Access policy | static |
 | Amazon SNS | offline | tab: Tags | static |
 | API Gateway | offline | tab: Tags | static |
 | API Gateway | offline | tab: Settings | partial |
@@ -891,8 +881,6 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | EventBridge | offline | tab: Tags | static |
 | EventBridge | offline | tab: Rule details | partial |
 | Step Functions | offline | tab: Tags | static |
-| Step Functions | offline | tab: Definition | static |
-| Step Functions | offline | tab: Properties | static |
 | Kinesis | offline | tab: Tags | static |
 | VPC | offline | page: VPC | partial |
 | VPC | offline | create: create with defaults | partial |
@@ -900,27 +888,13 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | VPC | offline | tab: Route tables | partial |
 | Elastic Load Balancing | offline | tab: Tags | static |
 | Secrets Manager | offline | tab: Tags | static |
-| Secrets Manager | offline | tab: Secret value | static |
-| Secrets Manager | offline | tab: Replication | static |
-| Secrets Manager | offline | tab: Resource policy | static |
-| Secrets Manager | offline | tab: Properties | static |
-| Secrets Manager | offline | tab: Permissions | static |
+| Secrets Manager | offline | tab: Secret value | partial |
 | KMS | offline | tab: Tags | static |
-| KMS | offline | tab: General configuration | static |
-| KMS | offline | tab: Key rotation | static |
-| KMS | offline | tab: Key users | static |
-| KMS | offline | tab: Key administrators | static |
-| KMS | offline | tab: Grants | static |
-| KMS | offline | tab: Properties | static |
-| KMS | offline | tab: Permissions | static |
+| KMS | offline | tab: General configuration | partial |
 | CloudWatch Logs | offline | tab: Tags | static |
 | Systems Manager | offline | tab: Tags | static |
-| Systems Manager | offline | tab: Value | static |
 | Systems Manager | offline | tab: History | partial |
-| Systems Manager | offline | tab: Properties | static |
 | CloudWatch | offline | tab: Tags | static |
-| CloudWatch | offline | tab: Actions | static |
-| CloudWatch | offline | tab: Permissions | static |
 | EC2 | nano | tab: Tags | static |
 | EC2 | nano | tab: Details | partial |
 | EC2 | nano | tab: Networking | partial |
@@ -932,13 +906,9 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | RDS | nano | tab: Tags | static |
 | DynamoDB | nano | create: create with defaults | partial |
 | DynamoDB | nano | detail: resource detail | partial |
+| DynamoDB | nano | tab: Overview | partial |
 | DynamoDB | nano | tab: Tags | static |
-| DynamoDB | nano | tab: Query/Scan | static |
-| DynamoDB | nano | tab: Properties | static |
 | SQS | nano | tab: Tags | static |
-| SQS | nano | tab: Send and receive messages | static |
-| SQS | nano | tab: Configuration | static |
-| SQS | nano | tab: Dead-letter queue | static |
 | Amazon SNS | nano | tab: Tags | static |
 | API Gateway | nano | tab: Tags | static |
 | API Gateway | nano | tab: Stages | partial |
@@ -948,26 +918,20 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | EventBridge | nano | tab: Tags | static |
 | EventBridge | nano | tab: Rule details | partial |
 | Step Functions | nano | tab: Tags | static |
-| Step Functions | nano | tab: Definition | static |
-| Step Functions | nano | tab: Properties | static |
 | Kinesis | nano | tab: Tags | static |
 | Elastic Load Balancing | nano | tab: Tags | static |
 | Secrets Manager | nano | tab: Tags | static |
-| Secrets Manager | nano | tab: Secret value | static |
-| Secrets Manager | nano | tab: Properties | static |
+| Secrets Manager | nano | tab: Secret value | partial |
 | KMS | nano | tab: Tags | static |
-| KMS | nano | tab: General configuration | static |
+| KMS | nano | tab: General configuration | partial |
 | CloudWatch Logs | nano | tab: Tags | static |
 | Systems Manager | nano | tab: Tags | static |
-| Systems Manager | nano | tab: Value | static |
 | Systems Manager | nano | tab: History | partial |
-| Systems Manager | nano | tab: Properties | static |
 | CloudWatch | nano | tab: Tags | static |
-| CloudWatch | nano | tab: Actions | static |
 
 </details>
 
-<details><summary>Console parts not live yet — GCP (14)</summary>
+<details><summary>Console parts not live yet — GCP (11)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
@@ -981,73 +945,20 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | Pub/Sub | offline | tab: Encryption | unimplemented |
 | Pub/Sub | offline | tab: Properties | static |
 | Cloud KMS | offline | tab: Metrics | static |
-| Cloud Monitoring | offline | tab: Documentation | static |
-| API Gateway | nano | tab: Configs | static |
-| API Gateway | nano | tab: Logs | static |
-| Cloud Monitoring | nano | tab: Documentation | static |
+| Compute Engine | nano | page: Compute Engine | static |
 
 </details>
 
-<details><summary>Console parts not live yet — Azure (56)</summary>
+<details><summary>Console parts not live yet — Azure (6)</summary>
 
 | Service | Console | Part | State |
 |---|---|---|---|
-| Storage accounts | offline | tab: File shares | unimplemented |
-| Storage accounts | offline | tab: Tables | unimplemented |
-| Storage accounts | offline | tab: Encryption | static |
-| Storage accounts | offline | tab: Access keys | static |
-| Storage accounts | offline | tab: Shared access signature | unimplemented |
-| Storage accounts | offline | tab: Lifecycle management | unimplemented |
-| Storage accounts | offline | tab: Geo-replication | unimplemented |
-| SQL servers | offline | tab: Deleted databases | unimplemented |
-| SQL servers | offline | tab: Failover groups | unimplemented |
-| SQL servers | offline | tab: Transparent data encryption | unimplemented |
-| SQL servers | offline | tab: Auditing | unimplemented |
-| SQL servers | offline | tab: Microsoft Defender for Cloud | unimplemented |
-| Cosmos DB | offline | tab: Replicate data globally | static |
-| Cosmos DB | offline | tab: Default consistency | unimplemented |
-| Cosmos DB | offline | tab: Backup & Restore | static |
-| Cosmos DB | offline | tab: Microsoft Defender | unimplemented |
+| Storage accounts | offline | tab: Metrics | static |
+| Cosmos DB | offline | tab: Metrics | static |
 | API Management | offline | tab: Metrics | static |
-| Virtual networks | offline | tab: Address space | static |
-| Virtual networks | offline | tab: Subnets | static |
-| Virtual networks | offline | tab: DNS servers | unimplemented |
-| Virtual networks | offline | tab: DDoS protection | unimplemented |
-| Virtual networks | offline | tab: Diagnostic settings | unimplemented |
-| Event Grid topics | offline | tab: Topic types | unimplemented |
-| Key vaults | offline | tab: Certificates | unimplemented |
-| Key vaults | offline | tab: Access policies | static |
-| Key vaults | offline | tab: Access configuration | unimplemented |
 | Virtual Machines | nano | page: Virtual Machines | static |
-| Storage accounts | nano | tab: File shares | static |
-| Storage accounts | nano | tab: Tables | static |
-| Storage accounts | nano | tab: Encryption | static |
-| Storage accounts | nano | tab: Access keys | static |
-| Storage accounts | nano | tab: Shared access signature | static |
-| Storage accounts | nano | tab: Lifecycle management | unimplemented |
-| Storage accounts | nano | tab: Geo-replication | static |
-| SQL servers | nano | tab: Pricing tier | static |
-| SQL servers | nano | tab: Deleted databases | static |
-| SQL servers | nano | tab: Failover groups | static |
-| SQL servers | nano | tab: Transparent data encryption | static |
-| SQL servers | nano | tab: Auditing | static |
-| SQL servers | nano | tab: Microsoft Defender for Cloud | static |
-| SQL servers | nano | tab: Identity | unimplemented |
-| Cosmos DB | nano | tab: Throughput (RU/s) | static |
-| Cosmos DB | nano | tab: Replicate data globally | static |
-| Cosmos DB | nano | tab: Backup & Restore | static |
-| Cosmos DB | nano | tab: Identity | unimplemented |
-| Cosmos DB | nano | tab: Microsoft Defender | static |
-| Virtual networks | nano | tab: Subnets | static |
-| Virtual networks | nano | tab: Connected devices | static |
-| Virtual networks | nano | tab: DDoS protection | static |
-| Virtual networks | nano | tab: Diagnostic settings | static |
-| Event Grid topics | nano | tab: Topic types | static |
-| Event Grid topics | nano | tab: Identity | static |
-| Key vaults | nano | tab: Certificates | static |
-| Key vaults | nano | tab: Access policies | static |
-| Key vaults | nano | tab: Access configuration | static |
-| App Configuration | nano | tab: Identity | static |
+| Storage accounts | nano | tab: Metrics | static |
+| Cosmos DB | nano | tab: Metrics | static |
 
 </details>
 
@@ -1055,7 +966,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 
 | Suite | Result | Checks |
 |---|---|---|
-| offline-ui-crawl | ❌ | 53/58 |
+| offline-ui-crawl | ❌ | 51/58 |
 | offline-console-actions | ✅ | 371/371 |
 | offline-api-ec2-instance-detail | ✅ | 3/3 |
 | offline-api-s3-bucket-creation-date | ✅ | 3/3 |
@@ -1079,12 +990,12 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-sdk-java-aws | ✅ | 29/29 |
 | offline-sdk-java-gcp | ❌ | 0/6 |
 | offline-sdk-java-azure | ✅ | 5/5 |
-| offline-cost-savings | ❌ | 8/9 |
+| offline-cost-savings | ✅ | 11/11 |
 | offline-cli-aws | ✅ | 15/15 |
 | offline-cli-gcp | ✅ | 6/6 |
 | offline-cli-azure | ✅ | 6/6 |
 | offline-ui-core | ✅ | 9/9 |
-| nano-ui-crawl | ❌ | 60/63 |
+| nano-ui-crawl | ❌ | 57/63 |
 | nano-cores | ✅ | 344/344 |
 | nano-aws-iam-detail | ✅ | 8/8 |
 | nano-aws-ec2-launch | ✅ | 13/13 |
@@ -1110,18 +1021,18 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | nano-ui-aws-compute-savings | ✅ | 6/6 |
 | nano-ui-aws-ec2-detail-tabs | ✅ | 5/5 |
 | offline-ui-aws-ec2-detail-tabs | ✅ | 5/5 |
-| offline-api-aws-detail-tabs | ❌ | 199/200 |
+| offline-api-aws-detail-tabs | ✅ | 200/200 |
 | nano-core-aws-detail-tabs | ✅ | 104/104 |
 | nano-ui-aws-real-tabs | ✅ | 59/59 |
-| offline-ui-aws-real-tabs | ❌ | 57/59 |
+| offline-ui-aws-real-tabs | ❌ | 58/59 |
 | offline-ui-aws-sqs-dlq-tab | ✅ | 2/2 |
 | nano-ui-aws-sqs-dlq-tab | ✅ | 2/2 |
 | nano-ui-aws-rds-connectivity-tabs | ✅ | 3/3 |
 | offline-ui-aws-rds-connectivity-tabs | ✅ | 3/3 |
 | nano-ui-aws-vpc-details-tab | ✅ | 2/2 |
-| offline-ui-aws-vpc-details-tab | ✅ | 2/2 |
+| offline-ui-aws-vpc-details-tab | ❌ | 0/1 |
 | nano-ui-aws-vpc-sg-iam-cells | ✅ | 3/3 |
-| offline-ui-aws-vpc-sg-iam-cells | ✅ | 3/3 |
+| offline-ui-aws-vpc-sg-iam-cells | ❌ | 1/2 |
 | offline-api-gcp-pubsub-savings | ✅ | 11/11 |
 | offline-api-gcp-apigateway-savings | ✅ | 5/5 |
 | offline-api-gcp-console-next | ✅ | 28/28 |
@@ -1215,7 +1126,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-sdk-go-azure-dns | ✅ | 31/31 |
 | offline-cli-azure-dns | ✅ | 24/24 |
 | offline-ui-azure-dns | ✅ | 30/30 |
-| nano-ui-azure-dns | ❌ | 27/28 |
+| nano-ui-azure-dns | ✅ | 28/28 |
 | offline-sdk-java-azure-monitor | ✅ | 20/20 |
 | offline-sdk-go-azure-monitor | ✅ | 30/30 |
 | offline-cli-azure-monitor | ✅ | 21/21 |
@@ -1225,7 +1136,7 @@ AMQP isn't the common protocol: only Azure Service Bus/Event Hubs and Amazon MQ 
 | offline-sdk-go-azure-operationalinsights | ✅ | 33/33 |
 | offline-cli-azure-operationalinsights | ✅ | 20/20 |
 | offline-ui-azure-operationalinsights | ✅ | 34/34 |
-| nano-ui-azure-operationalinsights | ❌ | 32/33 |
+| nano-ui-azure-operationalinsights | ✅ | 33/33 |
 | nano-ui-aws-lambda-row | ✅ | 4/4 |
 | nano-ui-aws-ec2-row | ✅ | 6/6 |
 | nano-ui-aws-apigw-row | ✅ | 6/6 |
