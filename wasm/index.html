@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <style>/* login-gated landing redirects to the Spaces console (see install-then-redirect below); hide marketing content to avoid a flash */ #app-main{visibility:hidden}</style>
   <script>
   (function(){
     var base = location.pathname.replace(/\/[^\/]*$/, "");
@@ -61,7 +62,7 @@
       gap: 16px;
     }
     .top-bar .tb-brand { display: flex; align-items: center; }
-    .top-bar .tb-brand img { height: 32px; width: auto; display: block; }
+    .top-bar .tb-brand img { height: 44px; width: auto; display: block; }  /* match the enterprise console logo (.logo-full 44px) */
     .top-bar .tb-actions { display: flex; align-items: center; gap: 10px; }
     .top-bar .tb-btn {
       padding: 9px 18px; border-radius: 8px; font-size: 13.5px; font-weight: 600;
@@ -1020,37 +1021,68 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
   <style>
     /* v2.3.0 left collapsible nav pane — shared with the workspaces page. */
-    #app-body { display: flex; align-items: stretch; }
+    #app-body { display: flex; align-items: stretch; position: relative; }
     #app-sidebar {
-      flex: none; width: 216px; z-index: 40; background: #0b0e28; color: #c7cbe0;
+      flex: none; width: 216px; z-index: 40; background: #0f121c; color: #c7cbe0;
+      border-right: 1px solid #20263a;
       display: flex; flex-direction: column; padding: 14px 10px; gap: 4px;
-      overflow: hidden; transition: width .2s ease; min-height: calc(100vh - 104px);
+      overflow: visible; transition: width .2s ease; min-height: calc(100vh - 104px);
     }
     body.side-collapsed #app-sidebar { width: 68px; padding-left: 6px; padding-right: 6px; }
+    /* Collapse toggle — chevron button ON the sidebar/main separator (matches the
+       enterprise console). Follows the divider; the chevron flips < → > on collapse. */
     .side-collapse {
-      background: none; border: 0; color: #8b8fb3; cursor: pointer; display: flex;
-      align-items: center; gap: 14px; padding: 8px 10px; border-radius: 9px; margin-bottom: 8px;
+      position: absolute; top: 16px; left: calc(216px - 13px); z-index: 60;
+      width: 26px; height: 26px; border-radius: 50%; padding: 0; margin: 0;
+      background: #121524; border: 1px solid #2b3350; color: #a7b0c4; cursor: pointer;
+      display: grid; place-items: center; box-shadow: 0 2px 10px rgba(0,0,0,.5);
+      transition: left .2s ease, color .12s, border-color .12s;
     }
-    .side-collapse:hover { background: #171b3d; color: #fff; }
-    .side-collapse .material-icons { font-size: 24px; }
-    .side-nav { display: flex; flex-direction: column; gap: 4px; }
+    .side-collapse:hover { color: #fff; border-color: #6366f1; background: #161a2b; }
+    .side-collapse .material-icons { font-size: 18px; transition: transform .16s; }
+    body.side-collapsed .side-collapse .material-icons { transform: rotate(180deg); }
+    .side-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; overflow: hidden; }
     .side-item {
-      display: flex; align-items: center; gap: 14px; padding: 11px 10px; border-radius: 9px;
-      background: none; border: 0; color: #c7cbe0; cursor: pointer; text-decoration: none;
-      font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; width: 100%;
+      display: flex; align-items: center; gap: 11px; padding: 8px 12px; border-radius: 8px;
+      background: none; border: 0; color: #a7b0c4; cursor: pointer; text-decoration: none;
+      font: inherit; font-size: 13.5px; font-weight: 500; white-space: nowrap; width: 100%;
     }
-    .side-item:hover { background: #171b3d; color: #fff; }
-    .side-item.active { background: #1f2550; color: #fff; }
-    .side-item .material-icons {   /* large icons on a brand-gradient chip */
-      font-size: 24px; flex: none; color: #fff; border-radius: 9px;
-      width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
-      background: linear-gradient(135deg, #4d8cf3 0%, #7c3aed 100%);
-    }
+    .side-item:hover { background: #121524; color: #e8ecf5; }
+    .side-item.active { background: rgba(99,102,241,.14); color: #fff; }
+    /* Icons identical to the enterprise console: thin-stroke line icons, no chip. */
+    .side-item .side-ic { width: 18px; height: 18px; flex: none; display: grid; place-items: center; color: #6b7488; }
+    .side-item:hover .side-ic { color: #e8ecf5; }
+    .side-item.active .side-ic { color: #818cf8; }
+    .side-item .side-ic svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    /* Portal user menu (bottom-left, opens upward) — identical to the enterprise console. */
+    #app-sidebar .side-foot { margin-top: auto; padding-top: 10px; border-top: 1px solid #20263a; }
+    .side-user-menu { position: relative; }
+    .side-user { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 9px; background: #121524; border: 1px solid #20263a; cursor: pointer; text-align: left; color: inherit; font-family: inherit; }
+    .side-user:hover { border-color: #6366f1; }
+    .side-user .av { width: 30px; height: 30px; border-radius: 50%; flex: none; overflow: hidden; background: #161a2b; display: grid; place-items: center; color: #e8ecf5; font-weight: 700; font-size: 12px; }
+    .side-user .av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .side-user .who { min-width: 0; flex: 1; }
+    .side-user .who b { display: block; font-size: 12.5px; color: #e8ecf5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .side-user .who span { display: block; font-size: 11px; color: #6b7488; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .side-user .chev { width: 15px; height: 15px; flex: none; color: #6b7488; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .16s; }
+    .side-user-menu.open .chev { transform: rotate(180deg); }
+    .side-user-dd { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); background: #0f121c; border: 1px solid #2b3350; border-radius: 10px; box-shadow: 0 20px 45px -25px rgba(0,0,0,.8); padding: 6px; display: none; z-index: 1000; }
+    .side-user-menu.open .side-user-dd { display: block; }
+    .side-user-dd a, .side-user-dd button { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 9px 11px; border-radius: 7px; font-size: 13px; color: #a7b0c4; background: none; border: 0; cursor: pointer; font-weight: 500; font-family: inherit; text-decoration: none; }
+    .side-user-dd a:hover, .side-user-dd button:hover { background: #121524; color: #e8ecf5; }
+    .side-user-dd .signout { color: #fca5a5; }
+    .side-user-dd svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    body.side-collapsed .side-user .who, body.side-collapsed .side-user .chev { display: none; }
+    body.side-collapsed .side-user { width: 56px; height: 56px; padding: 0; margin: 0 auto; justify-content: center; background: transparent; border-color: transparent; }
+    body.side-collapsed .side-user:hover { background: #121524; border-color: #6366f1; }
+    body.side-collapsed .side-user-dd { left: 8px; right: auto; width: 208px; }
+    /* Login/activation moved to the bottom-left avatar menu → hide the right-side pill. */
+    #tb-activate-slot { display: none !important; }
     body.side-collapsed .side-label { display: none; }
     /* Collapsed rail: each item becomes a centred square so the active/hover
        shade has EQUAL padding around the 40px icon chip on every side. */
     body.side-collapsed .side-item { width: 56px; height: 56px; padding: 0; justify-content: center; margin: 0 auto; }
-    body.side-collapsed .side-collapse { justify-content: center; padding: 8px; align-self: center; }
+    body.side-collapsed .side-collapse { left: calc(68px - 13px); }
     #app-main { flex: 1; min-width: 0; }
 
     /* ═══════════ v2.3.0 dark theme — matches the portal ═══════════
@@ -1193,18 +1225,29 @@
   <div id="app-body">
   <!-- v2.3.0: collapsible left nav pane — sits below the top logo bar. -->
   <aside id="app-sidebar">
-    <button class="side-collapse" type="button" onclick="toggleSidebar()" aria-label="Collapse menu" title="Collapse / expand">
-      <span class="material-icons">menu</span>
-    </button>
     <nav class="side-nav">
-      <a class="side-item active" href="./" title="Home"><span class="material-icons">home</span><span class="side-label">Home</span></a>
-      <a class="side-item" href="clouds.html" onclick="try{localStorage.setItem('vyomi.appview','workspace')}catch(_){}" title="Dashboard"><span class="material-icons">dashboard</span><span class="side-label">Dashboard</span></a>
-      <a class="side-item" href="clouds.html" onclick="try{localStorage.setItem('vyomi.appview','spaces')}catch(_){}" title="Active spaces"><span class="material-icons">workspaces</span><span class="side-label">Spaces</span></a>
-      <a class="side-item" href="clouds.html" onclick="try{localStorage.setItem('vyomi.appview','kc')}catch(_){}" title="Knowledge Center"><span class="material-icons">menu_book</span><span class="side-label">Knowledge Center</span></a>
-      <a class="side-item" href="clouds.html" onclick="try{localStorage.setItem('vyomi.appview','usage')}catch(_){}" title="SDK &amp; CLI usage"><span class="material-icons">terminal</span><span class="side-label">SDK &amp; CLI usage</span></a>
-      <a class="side-item" href="clouds.html" onclick="try{localStorage.setItem('vyomi.appview','api')}catch(_){}" title="API (Swagger)"><span class="material-icons">api</span><span class="side-label">API (Swagger)</span></a>
+      <a class="side-item active" href="clouds.html" onclick="try{localStorage.setItem('vyomi.appview','spaces')}catch(_){}" title="Spaces — your active spaces (home)"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></span><span class="side-label">Spaces</span></a>
+      <a class="side-item" href="clouds.html" onclick="try{localStorage.setItem('vyomi.appview','workspace')}catch(_){}" title="Health — appliance at a glance"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="4" width="3" height="14"/></svg></span><span class="side-label">Health</span></a>
+      <a class="side-item" href="clouds.html" onclick="try{localStorage.setItem('vyomi.appview','kc')}catch(_){}" title="Knowledge Center"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span><span class="side-label">Knowledge Center</span></a>
+      <a class="side-item" href="clouds.html" onclick="try{localStorage.setItem('vyomi.appview','usage')}catch(_){}" title="SDK &amp; CLI usage"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M4 17l6-6-6-6M12 19h8"/></svg></span><span class="side-label">SDK &amp; CLI usage</span></a>
+      <a class="side-item" href="clouds.html" onclick="try{localStorage.setItem('vyomi.appview','api')}catch(_){}" title="API (Swagger)"><span class="side-ic"><svg viewBox="0 0 24 24"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg></span><span class="side-label">API (Swagger)</span></a>
     </nav>
+    <div class="side-foot">
+      <div class="side-user-menu" id="nanoUsrMenu">
+        <div class="side-user-dd" id="nanoUsrDd">
+          <button class="signout" onclick="nanoLogout()"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign out</button>
+        </div>
+        <button class="side-user" id="nanoUsrBtn" aria-label="Account menu">
+          <div class="av" id="nanoAv">?</div>
+          <div class="who"><b id="nanoName">Account</b><span id="nanoRole">Personal account</span></div>
+          <svg class="chev" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>
+        </button>
+      </div>
+    </div>
   </aside>
+  <button class="side-collapse" type="button" onclick="toggleSidebar()" aria-label="Collapse / expand menu" title="Collapse / expand">
+    <span class="material-icons">chevron_left</span>
+  </button>
   <div id="app-main">
 
   <!-- ── v2.0.6 (#426) Community dropdown styles ─────────────────────
@@ -2209,7 +2252,7 @@
           const fp = await nanoDeviceFp(); if (!fp) return;
           const cc = await nanoEdgeCountry();   // Cloudflare edge geo (best-effort)
           const r = await fetch("/api/install/register", {
-            method: "POST", headers: { "Content-Type": "application/json" },
+            method: "POST", keepalive: true, headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ install_id: fp, channel: "nano", state: "DOWNLOADED",
               host_os: (navigator.platform || "").slice(0, 32), webdriver: !!navigator.webdriver,
               cc: cc || undefined }),
@@ -2219,7 +2262,13 @@
           if (r && r.ok) localStorage.setItem("nano_install_recorded", "1");
         } catch (_) {}
       }
-      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", record); else record();
+      // Fire the per-machine install ping, THEN send the signed-in user into their
+      // Spaces console — this login-gated landing is not a place to sit, and the
+      // sidebar already defaults to "Spaces". Bounded so a slow ping never strands
+      // the page; keepalive (above) lets the ping finish after navigation.
+      function _spaces(){ if (_spaces.done) return; _spaces.done = true; try { location.replace((window.__NANO_BASE || "") + "/clouds.html#spaces"); } catch (e) { location.replace("clouds.html#spaces"); } }
+      function _recGo(){ Promise.resolve().then(record).catch(function(){}).finally(_spaces); setTimeout(_spaces, 1200); }
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", _recGo); else _recGo();
     })();
 
     // -------- license activation (Phase 5 — single-flow, 1-click) ------
@@ -2684,6 +2733,34 @@
   }
 })();
 </script><script>
+(function(){
+  fetch('/api/auth/me',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
+    if(!d||!d.authenticated) return;
+    var email=d.email||''; var handle=email.split('@')[0]||'account';
+    var nm=document.getElementById('nanoName'); if(nm) nm.textContent=handle;
+    var av=document.getElementById('nanoAv'); if(av) av.textContent=(email[0]||'?').toUpperCase();
+    var rl=document.getElementById('nanoRole'); if(rl) rl.textContent=d.is_admin?'Admin':'Personal account';
+  }).catch(function(){});
+  var btn=document.getElementById('nanoUsrBtn'), menu=document.getElementById('nanoUsrMenu');
+  if(btn&&menu){
+    btn.addEventListener('click',function(e){ e.stopPropagation(); menu.classList.toggle('open'); });
+    document.addEventListener('click',function(){ menu.classList.remove('open'); });
+    menu.addEventListener('click',function(e){ e.stopPropagation(); });
+  }
+})();
+function nanoLogout(){
+  /* XHR (not fetch): the Nano fetch-shim rewrites window.fetch('/api/*') into
+     /nano/api/* → the in-tab service worker swallows it and the cookie is never
+     cleared. XHR is not shimmed, so this reaches the portal and truly logs out. */
+  try {
+    var l = new XMLHttpRequest();
+    l.open('POST', '/api/auth/logout', true); l.withCredentials = true;
+    l.onloadend = function(){ location.href = '/dashboard'; };
+    l.send();
+  } catch (e) { location.href = '/dashboard'; }
+}
+</script>
+<script>
 /* Live released-service count from the portal (/api/service-catalog, which
    follows the appliance's latest release). Fills every [data-svc-total]. */
 (function () {
