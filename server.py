@@ -5475,7 +5475,7 @@ def _ec2_instance_xml(instance: dict) -> ET.Element:
     _ec2_sub(placement, "groupName", "")
     _ec2_sub(placement, "tenancy", "default")
     monitoring = _ec2_sub(item, "monitoring")
-    _ec2_sub(monitoring, "state", "disabled")
+    _ec2_sub(monitoring, "state", "enabled" if instance.get("monitoring") else "disabled")
     _ec2_sub(item, "subnetId", instance.get("subnet_id", ""))
     _ec2_sub(item, "vpcId", instance.get("vpc_id", ""))
     _ec2_sub(item, "privateIpAddress", instance.get("private_ip", ""))
@@ -13188,8 +13188,33 @@ def _ec2_query_cancel_capacity_reservation_fleets(params: dict[str, Any]) -> Res
     return _ec2_success_response("CancelCapacityReservationFleetsResponse", build)
 
 
+_EC2_STATUS_METRICS = ("StatusCheckFailed", "StatusCheckFailed_Instance", "StatusCheckFailed_System")
+
+
+def _ec2_push_status_metric(instance: dict) -> None:
+    """Real CloudWatch datapoints derived from the instance's own lifecycle state (see
+    ec2.instances.monitoring / ec2.instances.alarms-metrics capabilities): a running instance
+    always passes, so each point is 0. 'Detailed monitoring' only changes how often a poll is
+    allowed to record a fresh point (1 vs 5 minutes, AWS's basic/detailed granularity) — there's
+    no background ticker, so a point lands only when DescribeInstanceStatus is actually called."""
+    if instance.get("state") != "running":
+        return
+    period = 60.0 if instance.get("monitoring") else 300.0
+    now = time.time()
+    if now - (instance.get("_cw_metric_ts") or 0.0) < period:
+        return
+    instance["_cw_metric_ts"] = now
+    from core import cloudwatch_core as _cw
+    store = aws_cloudwatch.get_store()
+    dims = [{"Name": "InstanceId", "Value": instance["instance_id"]}]
+    for name in _EC2_STATUS_METRICS:
+        _cw.ingest_internal_metric(store, "AWS/EC2", name, dims, 0.0, unit="Count", ts=now)
+
+
 def _ec2_query_describe_instance_status(params: dict[str, Any]) -> Response:
     instances = _ec2_query_filter_instances(params)
+    for instance in instances:
+        _ec2_push_status_metric(instance)
 
     def build(root: ET.Element) -> None:
         status_set = _ec2_sub(root, "instanceStatusSet")
@@ -13388,6 +13413,7 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
         # consistent with the GCP query path, which already queues the start.
         # The start is async (non-blocking), so the SDK response isn't delayed.
         instance = api_ec2_create_instance(req, auto_start=True)
+        instance["monitoring"] = str(params.get("Monitoring.Enabled", "")).lower() == "true"
         launched.append(instance)
 
     def build(root: ET.Element) -> None:
@@ -14224,6 +14250,24 @@ async def api_ec2_query(request: Request):
                     _terminate_simulated_instance(instance)
                 changes.append((instance, previous, "shutting-down"))
             return _ec2_query_state_change_response("TerminateInstancesResponse", changes)
+        if action in ("MonitorInstances", "UnmonitorInstances"):
+            enabled = action == "MonitorInstances"
+            touched: list[dict] = []
+            for instance_id in _ec2_parse_instance_ids(params):
+                instance = ec2_state["instances"].get(instance_id)
+                if not instance:
+                    raise HTTPException(404, detail=f"InvalidInstanceID.NotFound: {instance_id}")
+                instance["monitoring"] = enabled
+                touched.append(instance)
+
+            def build(root: ET.Element) -> None:
+                items = _ec2_sub(root, "instancesSet")
+                for instance in touched:
+                    item = _ec2_sub(items, "item")
+                    _ec2_sub(item, "instanceId", instance["instance_id"])
+                    monitoring = _ec2_sub(item, "monitoring")
+                    _ec2_sub(monitoring, "state", "enabled" if enabled else "disabled")
+            return _ec2_success_response(f"{action}Response", build)
     except HTTPException as exc:
         code = str(exc.detail).split(":", 1)[0]
         message = str(exc.detail)
@@ -14234,7 +14278,9 @@ async def api_ec2_query(request: Request):
     # model in the active space's persisted slot — so e.g. CreateKeyPair works offline too.
     from core import vpc_core as _vpc_core
     if action in _vpc_core._OPS:
-        r = _vpc_core.dispatch(_Ec2CoreSpaceStore(), dict(params))
+        vpc_store = _Ec2CoreSpaceStore()
+        vpc_store.cw_store = aws_cloudwatch.get_store()
+        r = _vpc_core.dispatch(vpc_store, dict(params))
         if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
             _persist_state()
             if "NetworkInsights" not in action:
@@ -14289,7 +14335,9 @@ def api_vpc_core_query(params: dict) -> Response:
     """EC2 Query VPC actions → core/vpc_core (same engine as Nano), legacy readers kept in sync."""
     from core import vpc_core as _vpc_core
     action = str(params.get("Action", "")).strip()
-    r = _vpc_core.dispatch(_Ec2CoreSpaceStore(), dict(params))
+    vpc_store = _Ec2CoreSpaceStore()
+    vpc_store.cw_store = aws_cloudwatch.get_store()
+    r = _vpc_core.dispatch(vpc_store, dict(params))
     if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
         try:
             _vpc_mirror_from_core()

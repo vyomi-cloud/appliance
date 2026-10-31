@@ -25,14 +25,16 @@
  "ec2.instances.monitoring": {
   "title": "Detailed monitoring flag",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Enabling detailed monitoring is stored and returned from DescribeInstances, but Vyomi has no CloudWatch metrics pipeline for EC2 — no CPU/network data points are actually collected."
+   "Enforced for the one metric Vyomi actually publishes (StatusCheckFailed, from the instance's real status-check state): enabling it lets a fresh datapoint land every 1 minute instead of every 5.",
+   "CPU utilization (%), Network in (bytes), Network out (bytes), Network packets in (count), Network packets out (count), CPU credit usage (count) and CPU credit balance (count) still aren't collected — Vyomi has no CloudWatch metrics pipeline for those."
   ],
   "tests": [
-   "tests/conformance/test_ec2_console_v4_core.py"
+   "tests/conformance/test_ec2_console_v4_core.py",
+   "tests/conformance/test_ec2_offline_monitoring.py"
   ]
  },
  "ec2.instances.status-checks": {
@@ -51,12 +53,17 @@
  "ec2.instances.alarms-metrics": {
   "title": "CloudWatch alarms and instance metrics",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "CloudWatch alarms for an instance aren't modeled; there is no alarm evaluation backend.",
-   "No CloudWatch metrics are collected: CPU utilization (%), Network in (bytes), Network out (bytes), Network packets in (count), Network packets out (count), Status check failed (any) (count), CPU credit usage (count), CPU credit balance (count)."
+   "Real: a CloudWatch alarm on this instance's StatusCheckFailed / StatusCheckFailed_Instance / StatusCheckFailed_System really evaluates against the instance's own status-check state (DescribeInstanceStatus), through the same alarm engine the CloudWatch console uses.",
+   "CPU utilization, network, and CPU-credit metrics aren't collected, so alarms can't be created on them."
+  ],
+  "tests": [
+   "tests/conformance/test_ec2_console_v4_core.py",
+   "tests/conformance/test_ec2_offline_monitoring.py",
+   "tests/conformance/test_cloudwatch_core.py"
   ]
  },
  "ec2.instances.connect": {

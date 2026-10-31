@@ -6,13 +6,16 @@ wire, so they share one store/model — see vpc_core.py's module docstring).
 Run on host:    PYTHONPATH=. python3 tests/conformance/test_ec2_console_v4_core.py
 Run in Pyodide: loaded by the wasm/ harness (same file).
 """
+import json
 import re
 import types
 
 try:
     from core import vpc_core as vpc
+    from core import cloudwatch_core as cw
 except ImportError:  # pragma: no cover - Pyodide flat layout
     import vpc_core as vpc  # type: ignore
+    import cloudwatch_core as cw  # type: ignore
 
 
 def _check(name, cond):
@@ -199,6 +202,31 @@ def run() -> int:
     stopped_status = call({"Action": "DescribeInstanceStatus", "InstanceId.1": iid, "IncludeAllInstances": "true"})
     _check("stopped instance included with IncludeAllInstances shows not-applicable", "<status>not-applicable</status>" in stopped_status)
     call({"Action": "StartInstances", "InstanceId.1": iid})
+
+    # 11e. Detailed monitoring sets the real status-check poll granularity, and the metric it
+    #      publishes (StatusCheckFailed) is real enough for an actual CloudWatch alarm to
+    #      evaluate against — see ec2.instances.monitoring / ec2.instances.alarms-metrics.
+    s.cw_store = cw.CloudWatchStore()
+    call({"Action": "MonitorInstances", "InstanceId.1": iid})
+    _check("MonitorInstances enables detailed monitoring",
+           "<monitoring><state>enabled</state></monitoring>" in call({"Action": "DescribeInstances", "InstanceId.1": iid}))
+    call({"Action": "DescribeInstanceStatus", "InstanceId.1": iid})
+    series_key = f"AWS/EC2\x1fStatusCheckFailed\x1f{json.dumps([['InstanceId', iid]], separators=(',', ':'))}"
+    series = s.cw_store.metrics.get(series_key)
+    _check("DescribeInstanceStatus really publishes a StatusCheckFailed=0 datapoint",
+           series is not None and series["points"][-1][1] == 0.0)
+    npoints = len(series["points"])
+    call({"Action": "DescribeInstanceStatus", "InstanceId.1": iid})
+    _check("a second poll inside the 1-minute detailed-monitoring window adds no extra point", len(series["points"]) == npoints)
+    cw.op_put_metric_alarm(s.cw_store, {
+        "AlarmName": "v4-ec2-statuscheck", "Namespace": "AWS/EC2", "MetricName": "StatusCheckFailed",
+        "Dimensions": [{"Name": "InstanceId", "Value": iid}], "Statistic": "Maximum", "Period": 60,
+        "EvaluationPeriods": 1, "Threshold": 1, "ComparisonOperator": "GreaterThanOrEqualToThreshold"})
+    _check("a real CloudWatch alarm on the EC2 status-check metric evaluates OK",
+           s.cw_store.alarms["v4-ec2-statuscheck"]["StateValue"] == "OK")
+    call({"Action": "UnmonitorInstances", "InstanceId.1": iid})
+    _check("UnmonitorInstances disables detailed monitoring",
+           "<monitoring><state>disabled</state></monitoring>" in call({"Action": "DescribeInstances", "InstanceId.1": iid}))
 
     # 12. EBS encryption-by-default: an account setting that actually changes new-volume behavior.
     call({"Action": "EnableEbsEncryptionByDefault"})

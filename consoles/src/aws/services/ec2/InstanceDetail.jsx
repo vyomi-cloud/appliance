@@ -5,14 +5,17 @@ import Tabs from "@cloudscape-design/components/tabs";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
+import FormField from "@cloudscape-design/components/form-field";
+import Input from "@cloudscape-design/components/input";
 import Modal from "@cloudscape-design/components/modal";
+import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
 import TagEditor from "@cloudscape-design/components/tag-editor";
 import Spinner from "@cloudscape-design/components/spinner";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
-import { ErrorAlert, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { ErrorAlert, KeyValue, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { navigate } from "../../../common/router.js";
 import { StateBadge, nameOf } from "./Instances.jsx";
@@ -59,7 +62,7 @@ export default function InstanceDetail({ params }) {
         <Tabs tabs={[
           { id: "details", label: "Details", content: <DetailsTab i={i} /> },
           { id: "status", label: "Status and alarms", content: <StatusTab i={i} /> },
-          { id: "monitoring", label: "Monitoring", content: <MonitoringTab /> },
+          { id: "monitoring", label: "Monitoring", content: <MonitoringTab i={i} /> },
           { id: "security", label: "Security", content: <SecurityTab i={i} /> },
           { id: "networking", label: "Networking", content: <NetworkingTab i={i} /> },
           { id: "storage", label: "Storage", content: <StorageTab i={i} /> },
@@ -110,13 +113,92 @@ function StatusTab({ i }) {
           ["Attached EBS status checks", st.loading ? "-" : label(sys)],
         ]} />
       </CapabilityContainer>
-      <CapabilityContainer id="ec2.instances.alarms-metrics" title="Alarms" />
+      <AlarmsSection i={i} />
     </SpaceBetween>
   );
 }
 
-function MonitoringTab() {
-  return <CapabilityContainer id="ec2.instances.alarms-metrics" title="Monitoring" />;
+function AlarmsSection({ i }) {
+  const notify = useNotify();
+  const alarms = useAsync(() => api.describeStatusCheckAlarms(i.instanceId), [i.instanceId]);
+  const [open, setOpen] = useState(false);
+  const [metricName, setMetricName] = useState(api.STATUS_CHECK_METRICS[0]);
+  const [threshold, setThreshold] = useState("1");
+  const [evaluationPeriods, setEvaluationPeriods] = useState("3");
+  const [snsArn, setSnsArn] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const create = async () => {
+    setBusy(true);
+    try {
+      const alarmName = `${i.instanceId}-${metricName}`;
+      await api.putStatusCheckAlarm(i.instanceId, {
+        alarmName, metricName, comparison: "GreaterThanOrEqualToThreshold",
+        threshold: Number(threshold), evaluationPeriods: Math.max(1, Number(evaluationPeriods) || 1), snsArn,
+      });
+      notify.success(`Alarm ${alarmName} was created.`);
+      setOpen(false);
+      alarms.reload();
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <CapabilityContainer id="ec2.instances.alarms-metrics" title="Alarms" actions={<Button onClick={() => setOpen(true)}>Manage CloudWatch alarms</Button>}>
+      <Table variant="embedded" items={alarms.data || []}
+        columnDefinitions={[
+          { id: "name", header: "Name", cell: (a) => a.AlarmName },
+          { id: "state", header: "State", cell: (a) => a.StateValue },
+          { id: "updated", header: "Last state update", cell: (a) => (a.StateUpdatedTimestamp ? new Date(a.StateUpdatedTimestamp * 1000).toLocaleString() : "-") },
+          { id: "cond", header: "Conditions", cell: (a) => `${a.MetricName} >= ${a.Threshold}` },
+        ]}
+        empty={<Box textAlign="center" color="inherit">No alarms configured for this instance's status checks.</Box>} />
+      <Modal visible={open} onDismiss={() => setOpen(false)} header="Create status check alarm"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button variant="primary" loading={busy} onClick={create}>Create alarm</Button>
+        </SpaceBetween></Box>}>
+        <SpaceBetween size="l">
+          <FormField label="Metric">
+            <Select selectedOption={{ label: metricName, value: metricName }} ariaLabel="Metric"
+              onChange={({ detail }) => setMetricName(detail.selectedOption.value)}
+              options={api.STATUS_CHECK_METRICS.map((m) => ({ label: m, value: m }))} />
+          </FormField>
+          <FormField label="Threshold" description="Alarm when the metric is >= this value for the evaluation periods below.">
+            <Input type="number" value={threshold} onChange={({ detail }) => setThreshold(detail.value)} ariaLabel="Threshold" />
+          </FormField>
+          <FormField label="Evaluation periods (1 minute each)">
+            <Input type="number" value={evaluationPeriods} onChange={({ detail }) => setEvaluationPeriods(detail.value)} ariaLabel="Evaluation periods" />
+          </FormField>
+          <FormField label="SNS topic ARN - optional" description="Vyomi really publishes to this topic when the alarm transitions, through the same SNS engine the console's SNS pages use.">
+            <Input value={snsArn} onChange={({ detail }) => setSnsArn(detail.value)} placeholder="arn:aws:sns:us-east-1:123456789012:my-topic" ariaLabel="SNS topic ARN" />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+    </CapabilityContainer>
+  );
+}
+
+function MonitoringTab({ i }) {
+  const metric = useAsync(() => api.getStatusCheckMetric(i.instanceId, "StatusCheckFailed"), [i.instanceId]);
+  const points = metric.data || [];
+  return (
+    <CapabilityContainer id="ec2.instances.monitoring" title="Monitoring">
+      <SpaceBetween size="l">
+        <Box variant="p">
+          Detailed monitoring is <b>{i.monitoring?.state === "enabled" ? "enabled (1-minute granularity)" : "disabled (5-minute granularity)"}</b>.
+        </Box>
+        <Table variant="embedded" items={[...points].reverse().slice(0, 10)}
+          header={<Header variant="h3" counter={`(${points.length})`}>Status check failed (any) (count)</Header>}
+          columnDefinitions={[
+            { id: "t", header: "Timestamp", cell: (p) => new Date(p.Timestamp * 1000).toLocaleString() },
+            { id: "v", header: "Maximum", cell: (p) => p.Maximum },
+          ]}
+          empty={<Box textAlign="center" color="inherit">No datapoints yet — open the Status and alarms tab to poll a status check.</Box>} />
+        <NotSimulated feature="CPU and network metrics"
+          note="CPU utilization (%), Network in (bytes), Network out (bytes), Network packets in (count), Network packets out (count), CPU credit usage (count), CPU credit balance (count) aren't collected — Vyomi has no CloudWatch metrics pipeline for EC2 beyond the real status-check metric above." />
+      </SpaceBetween>
+    </CapabilityContainer>
+  );
 }
 
 function SecurityTab({ i }) {

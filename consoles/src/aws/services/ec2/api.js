@@ -2,7 +2,7 @@
  * EC2 and VPC share one AWS service ("ec2" credential scope) and one backend
  * core (core/vpc_core.py) — this file only covers the compute/storage/network
  * resource surface the v4 EC2 console needs. */
-import { awsQuery, asList } from "../../../common/wire.js";
+import { awsQuery, awsJson, asList } from "../../../common/wire.js";
 
 /** Flatten a JS object/array into the Query wire's dotted-index form:
  * {InstanceId: ["i-1"]} -> {"InstanceId.1": "i-1"}
@@ -202,3 +202,30 @@ export const modifyEbsDefaultKmsKeyId = (kmsKeyId) => call("ModifyEbsDefaultKmsK
 export const resetEbsDefaultKmsKeyId = () => call("ResetEbsDefaultKmsKeyId");
 
 export const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
+
+// ── the one real CloudWatch metric (StatusCheckFailed) + alarms on it ───
+// Real AWS's EC2 console calls straight into CloudWatch for this tab; Vyomi does the same
+// native call rather than duplicating CloudWatch's engine (core/cloudwatch_core.py).
+const CW = (op, payload = {}) => awsJson("monitoring", `GraniteServiceVersion20100801.${op}`, payload);
+export const STATUS_CHECK_METRICS = ["StatusCheckFailed", "StatusCheckFailed_Instance", "StatusCheckFailed_System"];
+const statusCheckDims = (instanceId) => [{ Name: "InstanceId", Value: instanceId }];
+
+export const describeStatusCheckAlarms = (instanceId) =>
+  Promise.all(STATUS_CHECK_METRICS.map((m) => CW("DescribeAlarmsForMetric", { Namespace: "AWS/EC2", MetricName: m, Dimensions: statusCheckDims(instanceId) })
+    .then((r) => r.MetricAlarms || []))).then((lists) => lists.flat());
+
+export const getStatusCheckMetric = (instanceId, metricName, minutes = 30) => {
+  const end = new Date(), start = new Date(end - minutes * 60_000);
+  return CW("GetMetricStatistics", {
+    Namespace: "AWS/EC2", MetricName: metricName, Dimensions: statusCheckDims(instanceId),
+    StartTime: start.toISOString(), EndTime: end.toISOString(), Period: 60, Statistics: ["Maximum"],
+  }).then((r) => (r.Datapoints || []).sort((a, b) => new Date(a.Timestamp) - new Date(b.Timestamp)));
+};
+
+export const putStatusCheckAlarm = (instanceId, { alarmName, metricName, comparison, threshold, evaluationPeriods, snsArn }) =>
+  CW("PutMetricAlarm", {
+    AlarmName: alarmName, Namespace: "AWS/EC2", MetricName: metricName, Dimensions: statusCheckDims(instanceId),
+    Statistic: "Maximum", Period: 60, EvaluationPeriods: evaluationPeriods, DatapointsToAlarm: evaluationPeriods,
+    Threshold: threshold, ComparisonOperator: comparison, AlarmActions: snsArn ? [snsArn] : [],
+  });
+export const deleteStatusCheckAlarms = (names) => CW("DeleteAlarms", { AlarmNames: names });
