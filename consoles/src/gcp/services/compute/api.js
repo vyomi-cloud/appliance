@@ -120,6 +120,16 @@ export const addGroupInstances = (zone, name, instances) =>
 export const removeGroupInstances = (zone, name, instances) =>
   restJson("POST", `${base()}/zones/${e(zone)}/instanceGroups/${e(name)}:removeInstances`, { body: { instances: instances.map((i) => ({ instance: i })) } });
 
+// ── instance groups (managed) ─────────────────────────────────────────────────
+export async function listInstanceGroupManagersAllZones() {
+  const r = await restJson("GET", `${base()}/aggregated/instanceGroupManagers`);
+  return Object.entries(r.items || {}).flatMap(([scope, v]) => (v.instanceGroupManagers || []).map((g) => ({ ...g, _zoneScope: scope.replace("zones/", "") })));
+}
+export const insertInstanceGroupManager = (zone, body) => restJson("POST", `${base()}/zones/${e(zone)}/instanceGroupManagers`, { body });
+export const deleteInstanceGroupManager = (zone, name) => restJson("DELETE", `${base()}/zones/${e(zone)}/instanceGroupManagers/${e(name)}`);
+export const resizeInstanceGroupManager = (zone, name, size) =>
+  restJson("POST", `${base()}/zones/${e(zone)}/instanceGroupManagers/${e(name)}:resize`, { query: { size } });
+
 // ── health checks ─────────────────────────────────────────────────────────────
 export const listHealthChecks = async () => (await restJson("GET", `${base()}/global/healthChecks`)).items || [];
 export const insertHealthCheck = (body) => restJson("POST", `${base()}/global/healthChecks`, { body });

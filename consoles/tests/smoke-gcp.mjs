@@ -320,6 +320,55 @@ try {
   check("disk created over wire → shown in Disks UI", true);
   await shot("14-disks");
 
+  // Managed instance group: create an instance template via the UI, then a managed group
+  // off it with 2 instances → the group manager really stamps out 2 instances from the
+  // template over the native wire. Resize down to 1 deletes one; delete the group cascades.
+  const MIG_TPL = `v4-gcp-mig-tpl-${Date.now() % 100000}`;
+  const MIG_NAME = `v4-gcp-mig-${Date.now() % 100000}`;
+  await page.goto(UI + "#/compute/instance-templates");
+  await page.getByRole("button", { name: "Create instance template" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(MIG_TPL);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("cell", { name: MIG_TPL, exact: true }).waitFor({ timeout: 10000 });
+
+  await page.goto(UI + "#/compute/instance-groups");
+  await page.getByRole("button", { name: "Create instance group" }).click();
+  await page.getByRole("radio", { name: "New managed instance group" }).check();
+  await page.getByLabel("Name", { exact: true }).fill(MIG_NAME);
+  await page.getByRole("combobox", { name: "Instance template" }).click();
+  await page.getByRole("option", { name: MIG_TPL }).click();
+  await page.getByLabel("Number of instances").fill("2");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("cell", { name: MIG_NAME, exact: true }).waitFor({ timeout: 10000 });
+
+  const migAgg1 = await wjson("/compute/v1/projects/vyomi-project/aggregated/instanceGroupManagers");
+  const mig1 = Object.values(migAgg1.items || {}).flatMap((v) => v.instanceGroupManagers || []).find((m) => m.name === MIG_NAME);
+  check("create managed instance group via UI → visible over native wire (instanceGroupManagers.get)", mig1?.targetSize === 2);
+  const instAgg1 = await wjson("/compute/v1/projects/vyomi-project/aggregated/instances");
+  const migMembers1 = Object.values(instAgg1.items || {}).flatMap((v) => v.instances || []).filter((i) => i.name.startsWith(`${MIG_NAME}-`));
+  check("managed group stamped out real instances from the template", migMembers1.length === 2);
+  await shot("15-managed-instance-group");
+
+  await page.getByRole("button", { name: `Actions for ${MIG_NAME}` }).click();
+  await page.getByRole("menuitem", { name: "Edit group size" }).click();
+  await page.getByLabel("Number of instances").fill("1");
+  await page.getByRole("button", { name: "Resize", exact: true }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  const instAgg2 = await wjson("/compute/v1/projects/vyomi-project/aggregated/instances");
+  const migMembers2 = Object.values(instAgg2.items || {}).flatMap((v) => v.instances || []).filter((i) => i.name.startsWith(`${MIG_NAME}-`));
+  check("resize via UI → one member instance deleted over native wire", migMembers2.length === 1);
+
+  await page.getByRole("checkbox", { name: `Select us-central1-a/${MIG_NAME}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(MIG_NAME);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  check("delete managed instance group via UI → gone over native wire",
+    (await wire(`/compute/v1/projects/vyomi-project/zones/us-central1-a/instanceGroupManagers/${MIG_NAME}`)).status === 404);
+  const instAgg3 = await wjson("/compute/v1/projects/vyomi-project/aggregated/instances");
+  check("deleting managed instance group deletes its member instances too",
+    !Object.values(instAgg3.items || {}).flatMap((v) => v.instances || []).some((i) => i.name.startsWith(`${MIG_NAME}-`)));
+
   // Delete the instance via the detail page → gone over the native wire
   await page.goto(UI + `#/compute/instances/us-central1-a/${VM}`);
   await page.getByRole("button", { name: "Delete", exact: true }).click();
