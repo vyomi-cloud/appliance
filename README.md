@@ -1,17 +1,17 @@
 # Release checks — v3.0.35
 
-Generated 2026-10-30 22:18 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/41136276280) for tag `v3.0.35`.
+Generated 2026-10-31 00:46 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/41151281731) for tag `v3.0.35`.
 
 | Package / check | Platform | Result |
 |---|---|---|
 | DEB: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | ✅ passed |
 | RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | ✅ passed |
 | Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | ✅ passed |
-| CLI: aws / gcloud / az suites + CLI ↔ console both ways (73/74 checks passed) | Linux, release images | ❌ failure |
-| Nano CLI: aws / gcloud / az through the tunnel + CLI ↔ console both ways (73/74 checks passed) | Chromium, release wasm bundle | ❌ failure |
+| CLI: aws / gcloud / az suites + CLI ↔ console both ways (74/74 checks passed) | Linux, release images | ✅ passed |
+| Nano CLI: aws / gcloud / az through the tunnel + CLI ↔ console both ways (74/74 checks passed) | Chromium, release wasm bundle | ✅ passed |
 | MSI: install, upgrade, uninstall (+ signing) | Windows (GitHub) | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/41127943844)) |
 | Startup: all services + UI status | Linux, release images | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/41128763273)) |
-| Windows E2E: MSI → vyomi up → services + UI | Windows laptop (private runner) | ❌ failure |
+| Windows E2E: MSI → vyomi up → services + UI | Windows laptop (private runner) | ✅ passed |
 
 ## DEB
 
@@ -19,7 +19,7 @@ Generated 2026-10-30 22:18 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi_3.0.35_all.deb | 12s |
+| ✅ | install vyomi_3.0.35_all.deb | 5s |
 | ✅ | package manager reports version 3.0.35 | found '3.0.35' |
 | ✅ | bundled VERSION is 3.0.35 | /usr/share/vyomi/packaging/common/VERSION = 3.0.35 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -41,7 +41,7 @@ Generated 2026-10-30 22:18 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker_3.0.35_all.deb | 3s |
+| ✅ | install vyomi-docker_3.0.35_all.deb | 2s |
 | ✅ | package manager reports version 3.0.35 | found '3.0.35' |
 | ✅ | ships docker-compose.cloudlite.yml | /usr/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -57,7 +57,7 @@ Generated 2026-10-30 22:18 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.35 | exit 0; compose v3.0.35; ==> Vyomi 3.0.35 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.35 (SHA256-checked) | exit 0; cached compose v3.0.35 |
-| ✅ | after update, vyomi runs the cached v3.0.35 |   compose   : v3.0.35 (/tmp/tmp.GflUPREJdz/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.35 |   compose   : v3.0.35 (/tmp/tmp.sxJb57EbCB/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Removing vyomi-docker (3.0.35) ... |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -68,7 +68,7 @@ Generated 2026-10-30 22:18 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-3.0.35-1.noarch.rpm | 1s |
+| ✅ | install vyomi-3.0.35-1.noarch.rpm | 2s |
 | ✅ | package manager reports version 3.0.35 | found '3.0.35' |
 | ✅ | bundled VERSION is 3.0.35 | /usr/lib/cloud-learn/VERSION = 3.0.35 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -106,7 +106,7 @@ Generated 2026-10-30 22:18 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.35 | exit 0; compose v3.0.35; ==> Vyomi 3.0.35 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.35 (SHA256-checked) | exit 0; cached compose v3.0.35 |
-| ✅ | after update, vyomi runs the cached v3.0.35 |   compose   : v3.0.35 (/tmp/tmp.yRI0nwquo7/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.35 |   compose   : v3.0.35 (/tmp/tmp.IFmdUjatxb/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Complete! |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -117,7 +117,7 @@ Generated 2026-10-30 22:18 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi | 8s |
+| ✅ | install vyomi | 13s |
 | ✅ | package manager reports version 3.0.35 | found '3.0.35' |
 | ✅ | bundled VERSION is 3.0.35 | /opt/homebrew/opt/vyomi/libexec/VERSION = 3.0.35 |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -140,7 +140,7 @@ Generated 2026-10-30 22:18 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker | 6s |
+| ✅ | install vyomi-docker | 5s |
 | ✅ | package manager reports version 3.0.35 | found '3.0.35' |
 | ✅ | ships docker-compose.cloudlite.yml | /opt/homebrew/opt/vyomi-docker/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -156,7 +156,7 @@ Generated 2026-10-30 22:18 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v3.0.35 | exit 0; compose v3.0.35; ==> Vyomi 3.0.35 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v3.0.35 (SHA256-checked) | exit 0; cached compose v3.0.35 |
-| ✅ | after update, vyomi runs the cached v3.0.35 |   compose   : v3.0.35 (/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/tmp.7zH33zEb2q/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v3.0.35 |   compose   : v3.0.35 (/var/folders/n6/hn37q6pj7sj_9dmqqc2113800000gn/T/tmp.CkMdYVSUAr/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | brew test vyomi-docker | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi-docker/3.0.35/bin/vyomi --help[0m |
 | ✅ | uninstall vyomi-docker | Uninstalling /opt/homebrew/Cellar/vyomi-docker/3.0.35... (8 files, 322.2KB) |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
@@ -164,7 +164,7 @@ Generated 2026-10-30 22:18 UTC by [Release checks report](https://github.com/vyo
 
 ## CLI (aws / gcloud / az) and CLI ↔ console
 
-**73/74 checks passed** against `http://localhost:9000`.
+**74/74 checks passed** against `http://localhost:9000`.
 
 ### CLIs (4/4)
 
@@ -232,17 +232,17 @@ Generated 2026-10-30 22:18 UTC by [Release checks report](https://github.com/vyo
 | ✅ | Azure: virtual network created in the console |  |
 | ✅ | Azure: virtual network created in the console shows in the CLI |  |
 
-### CLI suites, each on its own (22/23)
+### CLI suites, each on its own (23/23)
 
 | | Check | Detail |
 |---|---|---|
 | ✅ | aws-apigatewayv2: 40 passed, 0 failed |  |
 | ✅ | aws: 15 passed, 0 failed |  |
-| ❌ | aws-cloudwatch: 29 passed, 2 failed | alarm evaluated against existing data → ALARM; describe-alarm-history |
+| ✅ | aws-cloudwatch: 31 passed, 0 failed |  |
 | ✅ | aws-elbv2: 27 passed, 0 failed |  |
 | ✅ | aws-kinesis: 20 passed, 0 failed |  |
 | ✅ | aws-logs: 19 passed, 0 failed |  |
-| ✅ | aws-sns: 76 passed, 0 failed |  |
+| ✅ | aws-sns: 60 passed, 0 failed |  |
 | ✅ | aws-ssm: 34 passed, 0 failed |  |
 | ✅ | aws-stepfunctions: 26 passed, 0 failed |  |
 | ✅ | azure-app: 23 passed, 0 failed |  |
@@ -267,7 +267,7 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 
 ## Nano CLI through the tunnel and CLI ↔ console
 
-**73/74 checks passed** against Nano through the relay tunnel `http://127.0.0.1:8090`.
+**74/74 checks passed** against Nano through the relay tunnel `http://127.0.0.1:8090`.
 
 ### CLIs (4/4)
 
@@ -335,13 +335,13 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 | ✅ | Azure: virtual network created in the console |  |
 | ✅ | Azure: virtual network created in the console shows in the CLI |  |
 
-### CLI suites, each on its own (22/23)
+### CLI suites, each on its own (23/23)
 
 | | Check | Detail |
 |---|---|---|
 | ✅ | aws-apigatewayv2: 40 passed, 0 failed |  |
 | ✅ | aws: 15 passed, 0 failed |  |
-| ❌ | aws-cloudwatch: 29 passed, 2 failed | alarm evaluated against existing data → ALARM; describe-alarm-history |
+| ✅ | aws-cloudwatch: 31 passed, 0 failed |  |
 | ✅ | aws-elbv2: 27 passed, 0 failed |  |
 | ✅ | aws-kinesis: 20 passed, 0 failed |  |
 | ✅ | aws-logs: 19 passed, 0 failed |  |
@@ -414,34 +414,39 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 
 ## Windows E2E
 
-### Vyomi 3.0.8 startup — 26/26 checks passed
+### Vyomi 3.0.35 startup — 31/31 checks passed
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | simulator answers /healthz | 4s |
-| ✅ | readiness reports every service ready | 12/12 ready, 100% |
-| ✅ | service Vyomi simulator ready | ready after 6s |
-| ✅ | service PostgreSQL ready | ready after 6s |
-| ✅ | service MySQL ready | ready after 356s |
-| ✅ | service Vault (KMS / secrets) ready | ready after 7s |
-| ✅ | service MinIO (S3) ready | ready after 7s |
-| ✅ | service DynamoDB ready | ready after 7s |
-| ✅ | service NATS (EventBridge) ready | ready after 7s |
-| ✅ | service ElasticMQ (SQS) ready | ready after 7s |
-| ✅ | service fake-gcs-server ready | ready after 7s |
-| ✅ | service Pub/Sub emulator ready | ready after 7s |
-| ✅ | service Firestore emulator ready | ready after 7s |
-| ✅ | service CloudSim Plus ready | ready after 7s |
+| ✅ | simulator answers /healthz | 1s |
+| ✅ | readiness reports every service ready | 17/17 ready, 100% |
+| ✅ | service Vyomi simulator ready | ready after 1s |
+| ✅ | service PostgreSQL ready | ready after 1s |
+| ✅ | service MySQL ready | ready after 1s |
+| ✅ | service Vault (KMS / secrets) ready | ready after 1s |
+| ✅ | service MinIO (S3) ready | ready after 1s |
+| ✅ | service DynamoDB ready | ready after 1s |
+| ✅ | service NATS (EventBridge) ready | ready after 1s |
+| ✅ | service ElasticMQ (SQS) ready | ready after 1s |
+| ✅ | service fake-gcs-server ready | ready after 1s |
+| ✅ | service Pub/Sub emulator ready | ready after 1s |
+| ✅ | service Firestore emulator ready | ready after 1s |
+| ✅ | service CloudSim Plus ready | ready after 1s |
+| ✅ | service VictoriaMetrics (CloudWatch metrics) ready | ready after 1s |
+| ✅ | service Caddy gateway (API Gateway V2) ready | ready after 1s |
+| ✅ | service Valkey (Memorystore) ready | ready after 1s |
+| ✅ | service OCI registry (Artifact Registry) ready | ready after 1s |
+| ✅ | service Azurite (Blob / Queue) ready | ready after 1s |
 | ✅ | /clouds status banner says 'Appliance is Ready' | Appliance is Ready |
-| ✅ | /clouds banner counts every service | — all 12 services running |
-| ✅ | running version is 3.0.8 | reports 3.0.8 |
-| ✅ | AWS console loads its service rail | 12 rail items |
+| ✅ | /clouds banner counts every service | — all 17 services running |
+| ✅ | running version is 3.0.35 | reports 3.0.35 |
+| ✅ | AWS console loads its service rail | 20 rail items |
 | ✅ | AWS console has no page errors |  |
 | ✅ | AWS console has no 5xx API calls |  |
-| ✅ | GCP console loads its service rail | 12 rail items |
+| ✅ | GCP console loads its service rail | 18 rail items |
 | ✅ | GCP console has no page errors |  |
 | ✅ | GCP console has no 5xx API calls |  |
-| ✅ | AZURE console loads its service rail | 15 rail items |
+| ✅ | AZURE console loads its service rail | 21 rail items |
 | ✅ | AZURE console has no page errors |  |
 | ✅ | AZURE console has no 5xx API calls |  |
 
