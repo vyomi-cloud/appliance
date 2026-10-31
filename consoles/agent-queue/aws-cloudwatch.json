@@ -14,7 +14,7 @@
   "Register any NEW core in wasm/build_cores.py + wasm/nano-boot.js (own line, never inside a // comment) + core/nano_registry.py + core/nano_persist.py — tests/conformance/test_nano_core_manifest.py checks this",
   "Use unique variable names in consoles/tests/smoke-aws.mjs (other blocks already use R, RDB, ROLE, …); write 'Vyomi' as plain text; commit your source"
  ],
- "attempt": 3,
+ "attempt": 4,
  "phase": "depth",
  "depth_targets": [
   {

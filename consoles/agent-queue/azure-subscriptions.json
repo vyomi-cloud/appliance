@@ -13,7 +13,7 @@
   "Capability feature ids MUST start with 'azure.' (e.g. 'azure.subscriptions.<section>') — ids share one namespace with the AWS registry",
   "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
  ],
- "attempt": 4,
+ "attempt": 5,
  "phase": "depth",
  "depth_targets": [
   {

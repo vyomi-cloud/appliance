@@ -13,7 +13,7 @@
   "Capability feature ids MUST start with 'gcp.' (e.g. 'gcp.logs.<section>') — ids share one namespace with the AWS registry",
   "Read the 'Cloud lenses' section of consoles/AGENT-UI.md first — use this cloud's kit, not Cloudscape"
  ],
- "attempt": 3,
+ "attempt": 4,
  "phase": "depth",
  "depth_targets": [
   {
