@@ -60,7 +60,7 @@ def _model(store) -> dict:
         m = {"vpcs": {}, "subnets": {}, "sgs": {}, "route_tables": {},
              "igws": {}, "nacls": {}, "nat_gateways": {}, "eigws": {},
              "dhcp_options": {}, "prefix_lists": {}, "peering_connections": {},
-             "route_servers": {}, "flow_logs": {},
+             "route_servers": {}, "flow_logs": {}, "subnet_cidr_reservations": {},
              # EC2 compute/storage/network resources (same account, same Query-protocol
              # wire — boto3's "ec2" client signs ALL of this under one service).
              "instances": {}, "images": {}, "volumes": {}, "snapshots": {},
@@ -276,7 +276,7 @@ def _delete_subnet(store, params):
     sn = m["subnets"].get(subnet_id)
     if sn is None:
         raise VpcError("InvalidSubnetID.NotFound", f"The subnet '{subnet_id}' does not exist.")
-    if any(i.get("subnet_id") == subnet_id for i in m["instances"].values()):
+    if any(i.get("subnet_id") == subnet_id and i.get("state") != "terminated" for i in m["instances"].values()):
         raise VpcError("DependencyViolation", f"The subnet '{subnet_id}' has dependencies and cannot be deleted.")
     rt = m["route_tables"].get(sn.get("route_table"))
     if rt and subnet_id in rt["subnets"]:
@@ -284,6 +284,8 @@ def _delete_subnet(store, params):
     nacl = m["nacls"].get(sn.get("nacl"))
     if nacl and subnet_id in nacl["subnets"]:
         nacl["subnets"].remove(subnet_id)
+    for rid in [r["id"] for r in m["subnet_cidr_reservations"].values() if r["subnet_id"] == subnet_id]:
+        m["subnet_cidr_reservations"].pop(rid)
     m["subnets"].pop(subnet_id)
     return _envelope("DeleteSubnet", "<return>true</return>")
 
@@ -1002,6 +1004,64 @@ def _describe_subnets(store, params):
     return _envelope("DescribeSubnets", f"<subnetSet>{items}</subnetSet>")
 
 
+# ── subnet CIDR reservations ────────────────────────────────────────────────
+# AWS carves out a piece of a subnet's CIDR (e.g. for an on-prem range mapped into the
+# subnet) so EC2 never auto-assigns an address from it; _allocate_private_ip enforces that.
+def _scr_xml(r: dict) -> str:
+    return ("<item>"
+            f"<subnetCidrReservationId>{_xml_escape(r['id'])}</subnetCidrReservationId>"
+            f"<subnetId>{_xml_escape(r['subnet_id'])}</subnetId><cidr>{_xml_escape(r['cidr'])}</cidr>"
+            f"<reservationType>{_xml_escape(r['reservation_type'])}</reservationType>"
+            f"<ownerId>{OWNER_ID}</ownerId><description>{_xml_escape(r.get('description', ''))}</description>"
+            "</item>")
+
+
+def _create_subnet_cidr_reservation(store, params):
+    m = _model(store)
+    subnet_id = str(params.get("SubnetId", ""))
+    sn = m["subnets"].get(subnet_id)
+    if sn is None:
+        raise VpcError("InvalidSubnetID.NotFound", f"The subnet '{subnet_id}' does not exist.")
+    cidr = str(params.get("Cidr", ""))
+    subnet_net = ipaddress.ip_network(sn["cidr"], strict=False)
+    try:
+        res_net = ipaddress.ip_network(cidr, strict=False)
+    except ValueError:
+        raise VpcError("InvalidParameterValue", f"Invalid CIDR: {cidr}")
+    if not (res_net.network_address >= subnet_net.network_address and res_net.broadcast_address <= subnet_net.broadcast_address):
+        raise VpcError("InvalidParameterValue", f"CIDR {cidr} is not within the subnet's CIDR block {sn['cidr']}")
+    used = _used_ips(m, subnet_id)
+    if any(ipaddress.ip_address(ip) in res_net for ip in used if ip):
+        raise VpcError("InvalidParameterValue", f"CIDR {cidr} overlaps an address already in use in subnet {subnet_id}")
+    for other in m["subnet_cidr_reservations"].values():
+        if other["subnet_id"] == subnet_id and res_net.overlaps(ipaddress.ip_network(other["cidr"], strict=False)):
+            raise VpcError("InvalidParameterValue", f"CIDR {cidr} overlaps an existing reservation ({other['cidr']})")
+    r_id = _rid("scr")
+    reservation_type = str(params.get("ReservationType") or "explicit")
+    r = {"id": r_id, "subnet_id": subnet_id, "cidr": cidr, "reservation_type": reservation_type,
+         "description": str(params.get("Description", ""))}
+    m["subnet_cidr_reservations"][r_id] = r
+    return _envelope("CreateSubnetCidrReservation", f"<subnetCidrReservation>{_scr_xml(r)[len('<item>'):-len('</item>')]}</subnetCidrReservation>")
+
+
+def _get_subnet_cidr_reservations(store, params):
+    m = _model(store)
+    subnet_id = str(params.get("SubnetId", ""))
+    rows = [r for r in m["subnet_cidr_reservations"].values() if r["subnet_id"] == subnet_id]
+    items = "".join(_scr_xml(r) for r in rows)
+    return _envelope("GetSubnetCidrReservations", f"<subnetIpv4CidrReservationSet>{items}</subnetIpv4CidrReservationSet><subnetIpv6CidrReservationSet></subnetIpv6CidrReservationSet>")
+
+
+def _delete_subnet_cidr_reservation(store, params):
+    m = _model(store)
+    r_id = str(params.get("SubnetCidrReservationId", ""))
+    r = m["subnet_cidr_reservations"].get(r_id)
+    if r is None:
+        raise VpcError("InvalidParameterValue", f"The subnet CIDR reservation '{r_id}' does not exist.")
+    m["subnet_cidr_reservations"].pop(r_id)
+    return _envelope("DeleteSubnetCidrReservation", f"<deletedSubnetCidrReservation>{_scr_xml(r)[len('<item>'):-len('</item>')]}</deletedSubnetCidrReservation>")
+
+
 # ── data plane: reachability analyzer ──────────────────────────────────────
 # ── reachability: ONE evaluator (core/netsim) for the analyzer verb, Reachability Analyzer
 #    (Network Insights paths/analyses) and the offline packet enforcer ─────────────────────
@@ -1492,6 +1552,8 @@ def _allocate_private_ip(m: dict, subnet_id: str, requested: str = "") -> str:
         return requested or _pseudo_ip(len(m["instances"]))
     net = ipaddress.ip_network(sn["cidr"], strict=False)
     used = _used_ips(m, subnet_id)
+    reserved = [ipaddress.ip_network(r["cidr"], strict=False) for r in m["subnet_cidr_reservations"].values()
+                if r["subnet_id"] == subnet_id]
     first, last = int(net.network_address) + 4, int(net.broadcast_address) - 1
     if requested:
         try:
@@ -1502,12 +1564,15 @@ def _allocate_private_ip(m: dict, subnet_id: str, requested: str = "") -> str:
             raise VpcError("InvalidParameterValue", f"Address {requested} does not fall within the subnet's address range")
         if not first <= int(ip) <= last:
             raise VpcError("InvalidParameterValue", f"Address {requested} is reserved by AWS in subnet {subnet_id}")
+        if any(ip in r for r in reserved):
+            raise VpcError("InvalidParameterValue", f"Address {requested} is in a reserved CIDR block in subnet {subnet_id}")
         if requested in used:
             raise VpcError("InvalidIPAddress.InUse", f"Address {requested} is in use.")
         return requested
     for n in range(first, last + 1):
-        cand = str(ipaddress.ip_address(n))
-        if cand not in used:
+        cand_ip = ipaddress.ip_address(n)
+        cand = str(cand_ip)
+        if cand not in used and not any(cand_ip in r for r in reserved):
             return cand
     raise VpcError("InsufficientFreeAddressesInSubnet", f"There are not enough free addresses in subnet '{subnet_id}' to satisfy the requested number of instances.")
 
@@ -2656,6 +2721,9 @@ _OPS = {
     "DescribeVpcs": _describe_vpcs, "DeleteVpc": _delete_vpc,
     "ModifyVpcAttribute": _modify_vpc_attribute, "DescribeVpcAttribute": _describe_vpc_attribute,
     "DescribeSubnets": _describe_subnets, "DeleteSubnet": _delete_subnet,
+    "CreateSubnetCidrReservation": _create_subnet_cidr_reservation,
+    "GetSubnetCidrReservations": _get_subnet_cidr_reservations,
+    "DeleteSubnetCidrReservation": _delete_subnet_cidr_reservation,
     "CreateRouteTable": _create_route_table, "DescribeRouteTables": _describe_route_tables,
     "DeleteRouteTable": _delete_route_table,
     "AssociateRouteTable": _associate_route_table, "DisassociateRouteTable": _disassociate_route_table,

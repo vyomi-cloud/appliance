@@ -56,6 +56,19 @@ export const describeSubnet = (id) => describeSubnets({ SubnetId: [id] }).then((
 export const createSubnet = (vpcId, cidrBlock, az, tags) => call("CreateSubnet", { VpcId: vpcId, CidrBlock: cidrBlock, AvailabilityZone: az, TagSpecification: tagSpec("subnet", tags) }).then((r) => subnetFromXml(r.subnet));
 export const deleteSubnet = (id) => call("DeleteSubnet", { SubnetId: id });
 
+// ── subnet CIDR reservations ────────────────────────────────────────────
+const scrFromXml = (x) => ({
+  SubnetCidrReservationId: x.subnetCidrReservationId, SubnetId: x.subnetId, Cidr: x.cidr,
+  ReservationType: x.reservationType, OwnerId: x.ownerId, Description: x.description || "",
+});
+export const createSubnetCidrReservation = (subnetId, cidr, reservationType, description) =>
+  call("CreateSubnetCidrReservation", { SubnetId: subnetId, Cidr: cidr, ReservationType: reservationType, Description: description }).then((r) => scrFromXml(r.subnetCidrReservation));
+export async function getSubnetCidrReservations(subnetId) {
+  const r = await call("GetSubnetCidrReservations", { SubnetId: subnetId });
+  return asList(r.subnetIpv4CidrReservationSet?.item).map(scrFromXml);
+}
+export const deleteSubnetCidrReservation = (id) => call("DeleteSubnetCidrReservation", { SubnetCidrReservationId: id });
+
 // ── route tables ────────────────────────────────────────────────────────
 const routeFromXml = (x) => ({ DestinationCidrBlock: x.destinationCidrBlock, GatewayId: x.gatewayId, State: x.state });
 const rtAssocFromXml = (x) => ({ RouteTableAssociationId: x.routeTableAssociationId, RouteTableId: x.routeTableId, SubnetId: x.subnetId, Main: x.main === "true" });

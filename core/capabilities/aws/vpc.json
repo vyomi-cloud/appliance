@@ -130,9 +130,10 @@
  },
  "aws.vpc.cidr-reservations": {
   "title": "Subnet CIDR reservations",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": [
-   "Subnet CIDR reservations aren't modeled."
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_vpc_core.py"
   ]
  },
  "aws.vpc.resource-sharing": {
