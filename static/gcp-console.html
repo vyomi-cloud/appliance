@@ -106,7 +106,12 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
      ============================================================ */
   .body{display:flex;min-height:calc(100vh - 56px)}  /* matches header height */
   aside#rail{width:256px;background:#fff;border-right:1px solid var(--line);overflow-y:auto;transition:width .15s;flex-shrink:0}
-  aside#rail.collapsed{width:0;overflow:hidden;border-right:none}
+  /* Minimized: an icon-only strip, as the Google Cloud console does — labels hide, group
+     names become thin dividers, each icon names its product on hover. */
+  aside#rail.collapsed{width:56px;overflow-x:hidden}
+  aside#rail.collapsed .rail-h,aside#rail.collapsed a.item .lbl{display:none}
+  aside#rail.collapsed .group{font-size:0;line-height:0;padding:0;margin:8px 12px;border-top:1px solid var(--line)}
+  aside#rail.collapsed a.item{justify-content:center;gap:0;padding:10px 0}
   aside#rail .rail-h{padding:14px 18px 8px;font-size:14px;font-weight:500;font-family:'Google Sans',sans-serif;color:var(--ink);border-bottom:1px solid var(--line)}
   aside#rail .group{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--sub);padding:14px 18px 6px;font-weight:500}
   aside#rail a.item{display:flex;align-items:center;gap:12px;padding:9px 18px;color:var(--ink);font-size:13px;cursor:pointer;text-decoration:none;border-left:3px solid transparent}
@@ -542,8 +547,10 @@ async function boot(){
 
 function wireHeader(){
   document.getElementById("hambBtn").addEventListener("click", () => {
-    document.getElementById("rail").classList.toggle("collapsed");
+    const c = document.getElementById("rail").classList.toggle("collapsed");
+    try { localStorage.setItem("vyomi.gcp.railcollapsed", c ? "1" : "0"); } catch (_) {}
   });
+  try { if (localStorage.getItem("vyomi.gcp.railcollapsed") === "1") document.getElementById("rail").classList.add("collapsed"); } catch (_) {}
   document.getElementById("cloudShellBtn").addEventListener("click", () =>
     toast("Cloud Shell drawer is wired in GCP-E (planned). Use /api/gcp/compute/...:console endpoints for now.", "ok"));
   document.getElementById("notifBtn").addEventListener("click", e => {
@@ -659,7 +666,7 @@ function renderRail(){
     keys.forEach(k => {
       const s = svcByKey(k); if (!s) return;
       const isActive = STATE.service === k;
-      rail.append(el("a",{class:"item"+(isActive?" active":""),
+      rail.append(el("a",{class:"item"+(isActive?" active":""), title:s.label, "aria-label":s.label,
         onclick:()=>navigate({view:"list", service:k, item:null})},
         el("span",{class:"material-symbols-outlined ic"}, s.icon),
         el("span",{class:"lbl"}, s.label)));
