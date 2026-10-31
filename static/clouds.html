@@ -881,6 +881,16 @@
     #view-usage .u-logo { display: inline-flex; align-items: center; }
     #view-usage .u-logo svg { height: 18px; width: 18px; display: block; }
     #view-usage .u-logo.aws svg { width: 30px; }
+    /* Cloud switch in the panel header: tabs styled like the panel titles (blue underline when on). */
+    #view-usage .u-cloud-tabs { display: flex; gap: 6px; }
+    #view-usage .u-cloud-tab { display: inline-flex; align-items: center; gap: 10px; border: 0; background: none; cursor: pointer;
+      padding: 0 12px 10px; margin-bottom: -1px; font: inherit; font-size: 18px; font-weight: 700; color: #8b8ba7;
+      border-bottom: 2px solid transparent; }
+    #view-usage .u-cloud-tab:hover { color: #e4e4e7; }
+    #view-usage .u-cloud-tab.on { color: #e4e4e7; border-bottom-color: #2563eb; }
+    #view-usage .u-cloud-tab .u-logo { opacity: .7; }
+    #view-usage .u-cloud-tab.on .u-logo, #view-usage .u-cloud-tab:hover .u-logo { opacity: 1; }
+    @media (max-width: 600px) { #view-usage .u-cloud-tab { font-size: 15px; padding: 0 8px 10px; gap: 7px; } }
     #view-usage .u-panel > .sc-desc { margin: 12px 0 16px; font-size: 13px; color: #a1a1aa; }
     #view-usage .u-card { background: #1f2937; border-radius: 14px; padding: 16px 18px 18px; min-width: 0; display: flex; flex-direction: column; }
     #view-usage .u-card .u-head { margin-bottom: 4px; }
@@ -1783,7 +1793,7 @@
     <header class="hero">
       <div class="hero-eyebrow">Developer tools</div>
       <h1>SDK &amp; CLI usage.</h1>
-      <p>Point any AWS SDK, CLI or tool at your endpoint — no code changes, just one URL. Copy a ready-to-run snippet for each service.</p>
+      <p>Point any AWS, Google Cloud or Azure SDK, CLI or tool at your endpoint — no code changes, just one URL. Copy a ready-to-run snippet for each service.</p>
     </header>
 
     <div id="usage-cards"></div>
@@ -2217,6 +2227,7 @@
       }
       // Each card keeps its own tab (CLI / SDK / curl), like the console's Connect card.
       var picked = {};
+      var cloudPick = 'aws'; try{ cloudPick = localStorage.getItem('vyomi.usage.cloud') || 'aws'; }catch(_){}
       var SVC_IC = { 'aws-s3':'s3', 'aws-dynamodb':'dynamodb', 'aws-kms':'kms', 'aws-secrets':'secretsmanager', 'aws-sqs':'sqs',
                      'aws-sns':'sns', 'aws-iam':'iam', 'aws-rds':'rds', 'az-blob':'storage', 'az-queue':'storage',
                      'az-cosmos':'cosmos', 'az-keyvault':'keyvaults' ,
@@ -2243,18 +2254,30 @@
       }
       function render(){
         if(grid){
-          grid.innerHTML = CLOUDS.map(function(c){
-            var svcs = SERVICES.filter(function(s){ return s.cloud===c.id; });
-            if(!svcs.length) return '';
-            // Setup hint + (on Nano) the in-browser caveat live as right-aligned
-            // icons on the cloud header; clicking one shows its note as a tooltip.
-            var icons = '';
-            if(c.setup) icons += '<button class="u-ibtn" type="button" data-tt="Setup" data-tip="'+escAttr(sub(c.setup))+'" title="Setup" aria-label="Setup"><span class="material-icons">terminal</span></button>';
-            return '<section class="u-panel"><div class="sc-head"><div class="sc-title"><h2>'+cloudLogo(c.id)+c.name+'</h2></div>'
-              + (icons ? '<span class="u-info">'+icons+'</span>' : '') + '</div>'
-              + '<p class="sc-desc">'+svcs.length+' services · pick CLI, SDK or curl on each card and copy the snippet.</p>'
-              + '<div class="u-grid">' + svcs.map(cardHtml).join('') + '</div></section>';
-          }).join('');
+          // One panel; its header is the cloud switch — AWS | Google Cloud | Azure tabs (the
+          // choice is remembered). The setup hint for the chosen cloud sits on the right.
+          var clouds = CLOUDS.filter(function(c){ return SERVICES.some(function(s){ return s.cloud===c.id; }); });
+          if(!clouds.some(function(c){ return c.id===cloudPick; })) cloudPick = clouds.length ? clouds[0].id : 'aws';
+          var c = clouds.filter(function(x){ return x.id===cloudPick; })[0] || clouds[0];
+          var svcs = SERVICES.filter(function(s){ return s.cloud===c.id; });
+          var icons = '';
+          if(c.setup) icons += '<button class="u-ibtn" type="button" data-tt="Setup" data-tip="'+escAttr(sub(c.setup))+'" title="Setup" aria-label="Setup"><span class="material-icons">terminal</span></button>';
+          grid.innerHTML = '<section class="u-panel"><div class="sc-head"><div class="u-cloud-tabs" role="tablist" aria-label="Cloud">'
+            + clouds.map(function(x){
+                var on = x.id===c.id;
+                return '<button type="button" role="tab" class="u-cloud-tab'+(on?' on':'')+'" data-cloud="'+x.id+'" aria-selected="'+on+'">'
+                  + cloudLogo(x.id) + x.name + '</button>';
+              }).join('')
+            + '</div>' + (icons ? '<span class="u-info">'+icons+'</span>' : '') + '</div>'
+            + '<p class="sc-desc">'+svcs.length+' services · pick CLI, SDK or curl on each card and copy the snippet.</p>'
+            + '<div class="u-grid">' + svcs.map(cardHtml).join('') + '</div></section>';
+          grid.querySelectorAll('.u-cloud-tab').forEach(function(t){
+            t.onclick = function(){
+              cloudPick = t.dataset.cloud;
+              try{ localStorage.setItem('vyomi.usage.cloud', cloudPick); }catch(_){}
+              render();
+            };
+          });
           grid.querySelectorAll('.u-card').forEach(function(card){
             var s = SERVICES.filter(function(x){ return x.key===card.dataset.c; })[0]; if(!s) return;
             var codeEl = card.querySelector('pre.u-code code'), cp = card.querySelector('.u-cp');
