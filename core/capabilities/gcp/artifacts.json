@@ -62,11 +62,11 @@
  "gcp.artifacts.iam": {
   "title": "Permissions (IAM policy)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "getIamPolicy/setIamPolicy/testIamPermissions store and return the policy exactly as configured; Vyomi does not authenticate requests or enforce the bindings."
+   "getIamPolicy/setIamPolicy/testIamPermissions store a real per-repository policy that IS enforced (repository update/delete/setIamPolicy, package/version/tag deletion and pushSample are denied for a principal the policy doesn't grant); it covers a curated set of predefined roles (reader/writer/repoAdmin/admin) and a single X-Cloudlearn-Principal header rather than Google's full role catalog and credential model."
   ],
   "api": [
    "repositories.getIamPolicy",

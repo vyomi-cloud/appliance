@@ -432,10 +432,13 @@ def _list_repos(store, project, loc, query) -> GcpResponse:
     return _json(200, _with_page("repositories", repos, query))
 
 
-def _patch_repo(store, name, query, body) -> GcpResponse:
+def _patch_repo(store, name, query, body, headers=None) -> GcpResponse:
     repo = store.repos.get(name)
     if repo is None:
         return _err(404, f"Repository \"{name}\" not found.")
+    denied = _require(store, name, headers, "artifactregistry.repositories.update")
+    if denied:
+        return denied
     mask = [m.strip() for m in (query.get("updateMask") or "").split(",") if m.strip()]
     fields = [m.split(".")[0] for m in mask] if mask else [k for k in _MUTABLE if k in body]
     project, loc = _pl(name)
@@ -460,27 +463,98 @@ def _patch_repo(store, name, query, body) -> GcpResponse:
     return _json(200, _repo_view(repo))
 
 
-def _delete_repo(store, project, loc, name) -> GcpResponse:
+def _delete_repo(store, project, loc, name, headers=None) -> GcpResponse:
     if name not in store.repos:
         return _err(404, f"Repository \"{name}\" not found.")
+    denied = _require(store, name, headers, "artifactregistry.repositories.delete")
+    if denied:
+        return denied
     del store.repos[name]
     store.iam.pop(name, None)
     store.persist()
     return _json(200, _operation(store, project, loc, "Empty", None))
 
 
-# ── IAM ───────────────────────────────────────────────────────────────────
+# ── IAM — a real, ENFORCED per-repository policy (like Secret Manager's, not GCP KMS/Pub/
+# Sub's store-only one): repository update/delete/setIamPolicy, package/version/tag
+# deletion and pushSample are denied for a principal the policy doesn't grant. ────────────
 def _etag(policy: dict) -> str:
     return hashlib.sha1(json.dumps(policy.get("bindings", []), sort_keys=True).encode()).hexdigest()[:8]
 
 
-def _iam(store, method, name, verb, body) -> GcpResponse:
+_OWNER_PRINCIPALS = {"", "root", "owner", "admin"}
+
+_ROLE_PERMS: dict[str, list[str]] = {
+    "roles/artifactregistry.admin": ["*"],
+    "roles/artifactregistry.repoAdmin": [
+        "artifactregistry.repositories.get", "artifactregistry.repositories.list",
+        "artifactregistry.repositories.update", "artifactregistry.repositories.delete",
+        "artifactregistry.repositories.getIamPolicy", "artifactregistry.repositories.setIamPolicy",
+        "artifactregistry.repositories.downloadArtifacts", "artifactregistry.repositories.uploadArtifacts",
+        "artifactregistry.repositories.deleteArtifacts",
+    ],
+    "roles/artifactregistry.writer": [
+        "artifactregistry.repositories.get", "artifactregistry.repositories.list",
+        "artifactregistry.repositories.downloadArtifacts", "artifactregistry.repositories.uploadArtifacts",
+    ],
+    "roles/artifactregistry.reader": [
+        "artifactregistry.repositories.get", "artifactregistry.repositories.list",
+        "artifactregistry.repositories.downloadArtifacts",
+    ],
+}
+
+
+def _header(headers: dict | None, name: str) -> str:
+    for k, v in (headers or {}).items():
+        if k.lower() == name:
+            return str(v)
+    return ""
+
+
+def _principal(headers: dict | None) -> str:
+    return _header(headers, "x-cloudlearn-principal").strip().lower()
+
+
+def _granted(policy: dict, principal: str) -> set[str]:
+    perms: set[str] = set()
+    for b in (policy or {}).get("bindings") or []:
+        role = str(b.get("role") or "")
+        for m in b.get("members") or []:
+            ms = str(m)
+            if ms in ("allUsers", "allAuthenticatedUsers") or ms.split(":", 1)[-1].lower() == principal:
+                perms.update(_ROLE_PERMS.get(role, []))
+                break
+    return perms
+
+
+def _authorized(policy: dict, principal: str, permission: str) -> bool:
+    if not principal or principal in _OWNER_PRINCIPALS:
+        return True
+    bindings = (policy or {}).get("bindings") or []
+    if not bindings:
+        return True   # no policy configured yet: nothing to deny against
+    granted = _granted(policy, principal)
+    return permission in granted or "*" in granted
+
+
+def _require(store, name: str, headers, permission: str) -> GcpResponse | None:
+    principal = _principal(headers)
+    if _authorized(store.iam.get(name) or {}, principal, permission):
+        return None
+    return _err(403, f"Permission '{permission}' denied on resource '{name}' "
+                     f"for principal '{principal}' (or it may not exist).")
+
+
+def _iam(store, method, name, verb, body, headers=None) -> GcpResponse:
     if name not in store.repos:
         return _err(404, f"Repository \"{name}\" not found.")
     if verb == "getIamPolicy":
         pol = store.iam.get(name) or {"version": 1, "etag": "ACAB"}
         return _json(200, pol)
     if verb == "setIamPolicy":
+        denied = _require(store, name, headers, "artifactregistry.repositories.setIamPolicy")
+        if denied:
+            return denied
         pol = dict(body.get("policy") or {})
         pol.setdefault("bindings", [])
         pol["version"] = pol.get("version") or 1
@@ -488,7 +562,12 @@ def _iam(store, method, name, verb, body) -> GcpResponse:
         store.iam[name] = pol
         store.persist()
         return _json(200, pol)
-    return _json(200, {"permissions": list(body.get("permissions") or [])})   # testIamPermissions
+    # testIamPermissions: narrow the requested list to what the caller's policy actually grants.
+    principal = _principal(headers)
+    policy = store.iam.get(name) or {}
+    requested = list(body.get("permissions") or [])
+    allowed = [p for p in requested if _authorized(policy, principal, p)]
+    return _json(200, {"permissions": allowed})
 
 
 # ── data plane hook: what a push creates ──────────────────────────────────
@@ -580,7 +659,7 @@ def _virtual_packages(store, repo, rest, query) -> GcpResponse:
     return _err(404, "Unknown path.")
 
 
-def _packages(store, method, repo_name, rest, query, body) -> GcpResponse:
+def _packages(store, method, repo_name, rest, query, body, headers=None) -> GcpResponse:
     """rest = segments after .../packages"""
     repo, _, err = _find(store, repo_name)
     if err:
@@ -602,15 +681,18 @@ def _packages(store, method, repo_name, rest, query, body) -> GcpResponse:
         if method == "GET":
             return _json(200, _pkg_view(pkg))
         if method == "DELETE":
+            denied = _require(store, repo_name, headers, "artifactregistry.repositories.deleteArtifacts")
+            if denied:
+                return denied
             del repo["packages"][pkey]
             store.persist()
             return _json(200, _operation(store, *_pl(repo_name), "Empty", None))
         if method == "PATCH":
             return _json(200, _pkg_view(pkg))    # packages have no mutable fields in v1
     if rest[1] == "versions":
-        return _versions(store, method, repo_name, repo, pkg, rest[2:], query, body)
+        return _versions(store, method, repo_name, repo, pkg, rest[2:], query, body, headers)
     if rest[1] == "tags":
-        return _tags(store, method, pkg, rest[2:], query, body)
+        return _tags(store, method, pkg, rest[2:], query, body, headers)
     return _err(404, "Unknown path.")
 
 
@@ -619,13 +701,16 @@ def _pl(repo_name: str):
     return p[1], p[3]
 
 
-def _versions(store, method, repo_name, repo, pkg, rest, query, body) -> GcpResponse:
+def _versions(store, method, repo_name, repo, pkg, rest, query, body, headers=None) -> GcpResponse:
     if not rest:
         if method == "GET":
             items = [_ver_view(v) for _, v in sorted(pkg["versions"].items())]
             return _json(200, _with_page("versions", items, query))
         return _err(400, f"Unsupported method {method} on versions collection.")
     if rest[0] == "batchDelete" and method == "POST":
+        denied = _require(store, repo_name, headers, "artifactregistry.repositories.deleteArtifacts")
+        if denied:
+            return denied
         for vn in body.get("names") or []:
             vid = vn.rsplit("/", 1)[-1]
             if vid not in pkg["versions"]:
@@ -641,6 +726,9 @@ def _versions(store, method, repo_name, repo, pkg, rest, query, body) -> GcpResp
     if method == "GET":
         return _json(200, _ver_view(ver))
     if method == "DELETE":
+        denied = _require(store, repo_name, headers, "artifactregistry.repositories.deleteArtifacts")
+        if denied:
+            return denied
         _drop_version(repo, pkg, vid)
         store.persist()
         return _json(200, _operation(store, *_pl(repo_name), "Empty", None))
@@ -658,11 +746,15 @@ def _drop_version(repo: dict, pkg: dict, vid: str) -> None:
         repo["packages"].pop(pkg["name"].rsplit("/", 1)[-1], None)
 
 
-def _tags(store, method, pkg, rest, query, body) -> GcpResponse:
+def _tags(store, method, pkg, rest, query, body, headers=None) -> GcpResponse:
+    repo_name = pkg["name"].rsplit("/packages/", 1)[0]
     if not rest:
         if method == "GET":
             return _json(200, _with_page("tags", [_tag_view(t) for _, t in sorted(pkg["tags"].items())], query))
         if method == "POST":
+            denied = _require(store, repo_name, headers, "artifactregistry.repositories.uploadArtifacts")
+            if denied:
+                return denied
             tid = query.get("tagId") or query.get("tag_id") or ""
             if not tid:
                 return _err(400, "tagId is required (query parameter).")
@@ -682,12 +774,18 @@ def _tags(store, method, pkg, rest, query, body) -> GcpResponse:
     if method == "GET":
         return _json(200, _tag_view(t))
     if method == "DELETE":
+        denied = _require(store, repo_name, headers, "artifactregistry.repositories.deleteArtifacts")
+        if denied:
+            return denied
         for v in pkg["versions"].values():
             v["_tags"] = [x for x in v.get("_tags", []) if x["name"] != t["name"]]
         del pkg["tags"][tid]
         store.persist()
         return _json(200, {})
     if method == "PATCH":
+        denied = _require(store, repo_name, headers, "artifactregistry.repositories.uploadArtifacts")
+        if denied:
+            return denied
         ver = _tag_target(pkg, body)
         if ver is None:
             return _err(404, f"Version \"{body.get('version', '')}\" not found.")
@@ -874,13 +972,17 @@ def console_children(store: ArtifactRegistryStore, name: str, kind: str) -> list
     return out
 
 
-def console_push_sample(store: ArtifactRegistryStore, name: str, body: dict | None = None) -> dict:
+def console_push_sample(store: ArtifactRegistryStore, name: str, body: dict | None = None, headers=None) -> dict:
     full, repo = console_find(store, name)
     if repo is None:
         return {"ok": False, "code": "NotFound", "name": name}
     if repo["mode"] == "VIRTUAL_REPOSITORY":
         return {"ok": False, "code": "FailedPrecondition", "name": name,
                 "message": "Virtual repositories aggregate their upstream repositories; they can't be pushed to directly."}
+    denied = _require(store, full, headers, "artifactregistry.repositories.uploadArtifacts")
+    if denied:
+        return {"ok": False, "code": "PermissionDenied", "name": name,
+                "message": json.loads(denied.body)["error"]["message"]}
     body = body or {}
     if repo["format"] == "DOCKER":
         ver = ingest_image(store, full, str(body.get("image") or "sample-app"), str(body.get("tag") or "latest"))
@@ -961,23 +1063,25 @@ def dispatch(store: ArtifactRegistryStore, method: str, path: str,
     rest = segs[6:]
     if not rest:
         if verb in ("getIamPolicy", "setIamPolicy", "testIamPermissions"):
-            return _iam(store, method, rname, verb, payload)
+            return _iam(store, method, rname, verb, payload, headers)
         if verb == "pushSample":
-            res = console_push_sample(store, rname, payload)
+            res = console_push_sample(store, rname, payload, headers)
             if not res["ok"]:
                 if res["code"] == "FailedPrecondition":
                     return _err(400, res["message"], "FAILED_PRECONDITION")
+                if res["code"] == "PermissionDenied":
+                    return _err(403, res["message"])
                 return _err(404, f"Repository \"{rname}\" not found.")
             return _json(200, {"name": res["name"], "version": res["version"]})
         if method == "GET":
             return _get_repo(store, rname)
         if method == "PATCH":
-            return _patch_repo(store, rname, query, payload)
+            return _patch_repo(store, rname, query, payload, headers)
         if method == "DELETE":
-            return _delete_repo(store, project, loc, rname)
+            return _delete_repo(store, project, loc, rname, headers)
         return _err(400, f"Unsupported method {method} on repository.")
     if rest[0] == "packages":
-        return _packages(store, method, rname, rest[1:], query, payload)
+        return _packages(store, method, rname, rest[1:], query, payload, headers)
     if rest[0] == "dockerImages":
         return _images(store, method, rname, rest[1:], query)
     if rest[0] == "files":
