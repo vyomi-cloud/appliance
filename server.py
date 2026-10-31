@@ -5407,7 +5407,7 @@ def _ec2_security_group_xml(group_id: str, group: dict) -> ET.Element:
     item = _ec2_xml("item")
     _ec2_sub(item, "groupId", group_id)
     _ec2_sub(item, "groupName", group.get("group_name", group_id))
-    _ec2_sub(item, "description", group.get("description", "CloudLearn security group"))
+    _ec2_sub(item, "groupDescription", group.get("description", "CloudLearn security group"))
     _ec2_sub(item, "ownerId", AWS_ACCOUNT_ID)
     _ec2_sub(item, "vpcId", group.get("vpc_id", ""))
     ip_permissions = _ec2_sub(item, "ipPermissions")

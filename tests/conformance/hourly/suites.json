@@ -1735,6 +1735,14 @@
       "timeout": 600
     },
     {
+      "id": "offline-cli-aws-ec2-sg-description",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "cli",
+      "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/aws-ec2-sg-description-cli-smoke.sh",
+      "timeout": 120
+    },
+    {
       "id": "offline-cli-aws-sns",
       "target": "offline",
       "cloud": "aws",
