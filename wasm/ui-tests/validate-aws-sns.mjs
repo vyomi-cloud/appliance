@@ -120,6 +120,7 @@ try {
   page.on("response", (r) => { if (r.request().method() === "POST" && /\/topics\/MyTopic\/publish$/.test(r.url())) published = r.status(); });
   // The message body is required (as in the AWS console); fill it like a user would.
   await page.locator("#main textarea").first().fill("{\"hello\":\"world\"}");
+  await page.locator("[data-testid=sns-message]").fill("hello from the conformance check");
   await page.locator("#main button").filter({ hasText: /Publish message/ }).last().click();
   for (let i = 0; i < 20 && published === null; i++) await page.waitForTimeout(400);
   check(published === 200, "Publish message from the tab returns 200", `HTTP ${published}`);

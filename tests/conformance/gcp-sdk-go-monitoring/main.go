@@ -47,7 +47,7 @@ func ts(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
 func main() {
 	endpoint := env("ENDPOINT", "http://127.0.0.1:9000")
-	project := env("PROJECT", "go-mon-proj")
+	project := env("PROJECT", "vyomi-project")
 	fmt.Printf("== google.golang.org/api/monitoring/v3 (Go) against %s project=%s ==\n", endpoint, project)
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()

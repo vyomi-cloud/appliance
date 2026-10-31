@@ -46,7 +46,7 @@ func httpCode(err error) int {
 
 func main() {
 	endpoint := env("ENDPOINT", "http://127.0.0.1:9000")
-	project := env("PROJECT", "go-gke-proj")
+	project := env("PROJECT", "vyomi-project")
 	region := "us-central1"
 	fmt.Printf("== cloud.google.com/go/container (Go) against %s project=%s ==\n", endpoint, project)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)

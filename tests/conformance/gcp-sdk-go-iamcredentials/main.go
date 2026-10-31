@@ -93,7 +93,7 @@ func httpDo(method, url string, body interface{}) (int, []byte) {
 
 func main() {
 	endpoint := env("ENDPOINT", "http://127.0.0.1:9000")
-	project := env("PROJECT", "go-iamc-proj")
+	project := env("PROJECT", "vyomi-project")
 	suffix := fmt.Sprintf("%d", time.Now().Unix()%1000000)
 	fmt.Printf("== cloud.google.com/go/iam/credentials (Go) against %s project=%s ==\n", endpoint, project)
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)

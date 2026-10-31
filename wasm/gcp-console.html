@@ -1673,10 +1673,17 @@ const TAB_TEMPLATES = {
   encryption: { defaultKmsKeyName: "projects/demo/locations/global/keyRings/demo/cryptoKeys/key1" },
   versioning: { enabled: true },
 };
+// SUBRESOURCE_TABS keys keep the catalog's camelCase tab keys (apiConfigs, subnetsList,
+// envVars): match them case-insensitively.
+let _subresourceLower = null;
+function _subresourceCfg(k){
+  if (!_subresourceLower) { _subresourceLower = {}; Object.keys(SUBRESOURCE_TABS).forEach(x => { _subresourceLower[x.toLowerCase()] = SUBRESOURCE_TABS[x]; }); }
+  return _subresourceLower[String(k).toLowerCase()];
+}
 function renderGenericTab(host, svc, item, sub){
   // Real sub-resource tabs (Pub/Sub subscriptions, Cloud SQL databases, Secret/KMS
   // versions): fetch the live list from the core instead of the empty-state.
-  const subCfg = SUBRESOURCE_TABS[(svc.key||"") + ":" + (sub.key||"").toLowerCase()];
+  const subCfg = _subresourceCfg((svc.key||"") + ":" + (sub.key||""));
   if (subCfg) { renderSubResourceTab(host, svc, item, sub, subCfg); return; }
   const key = (sub.key||"").toLowerCase(), label = sub.label || sub.key || "Settings";
   const desc = TAB_DESC[key] || TAB_DESC[label.toLowerCase()]
@@ -1854,32 +1861,30 @@ function renderIamTab(host, svc, item){
 // Logs / Query-Insights / Flow-logs tab — a clearly-labelled SIMULATED stream so
 // the pane is never blank. (Simulated, session-only — real log ingestion is out
 // of scope for the in-browser sim.)
-function renderLogsTab(host, svc, item, sub){
+async function renderLogsTab(host, svc, item, sub){
   const name = String((item && item.name) || getPath(item, svc.name_field) || "");
   const label = sub.label || "Logs";
   host.append(el("div",{style:"font-size:12.5px;color:var(--sub,#5f6368);margin:-4px 0 14px"},
-    label + " for " + name + " — SIMULATED sample stream (illustrative, session-only)."));
-  const now = Date.now();
-  let seed = 0; for (const c of (name+svc.key)) seed = (seed*31 + c.charCodeAt(0)) & 0xffff;
-  const rnd = () => { seed = (seed*1103515245 + 12345) & 0x7fffffff; return seed % 1000; };
-  const sevs = ["INFO","INFO","INFO","DEBUG","WARNING","INFO","ERROR","INFO"];
-  const msgs = svc.key === "cloudsql"
-    ? ["connection accepted","checkpoint complete","slow query 1.2s","autovacuum: db demo","replication lag 0ms"]
-    : svc.key === "functions"
-    ? ["function execution started","execution took 42ms","cold start","200 OK","finished with status: ok"]
-    : ["request served 200","health check ok","config reloaded","backend latency 18ms","cache hit"];
+    label + " for " + name + " — requests recorded for this resource (Cloud Logging entries)."));
   const box = el("pre",{style:"background:#1e1e1e;color:#d4d4d4;padding:14px;border-radius:6px;font-family:'Google Sans Mono',monospace;font-size:12px;line-height:1.7;max-height:380px;overflow:auto;margin:0"});
-  for (let i=18;i>=0;i--){
-    const sev = sevs[rnd()%sevs.length], m = msgs[rnd()%msgs.length];
-    const t = new Date(now - i*47000).toISOString().replace("T"," ").slice(0,19);
-    const col = sev==="ERROR"?"#f48771":sev==="WARNING"?"#dcdcaa":sev==="DEBUG"?"#808080":"#4fc1ff";
-    const line = el("div",{});
-    line.append(el("span",{style:"color:#6a9955"}, t+"  "));
-    line.append(el("span",{style:"color:"+col+";font-weight:600"}, sev.padEnd(7)));
-    line.append(el("span",{}, "  "+name+": "+m));
-    box.append(line);
-  }
   host.append(box);
+  let events = [];
+  try {
+    const qs = "resource=" + encodeURIComponent(name) + "&provider=gcp&service=" + encodeURIComponent(svc.key || "") + "&limit=200";
+    const r = await api("GET", "/api/cloudsim/events?" + qs);
+    if (r.ok && r.json && Array.isArray(r.json.events)) events = r.json.events;
+  } catch(_){}
+  if (!events.length) { box.textContent = "No log entries for " + name + " yet. Calls to this resource (console, SDK or CLI) are logged here."; return; }
+  events.forEach(e => {
+    const ok = String(e.status||"").toLowerCase() === "ok" || e.status === "success" || e.status === true;
+    const sev = ok ? "INFO" : "ERROR", col = ok ? "#4fc1ff" : "#f48771";
+    let t = e.ts; try { t = new Date(e.ts).toISOString().replace("T"," ").slice(0,19); } catch(_){}
+    const line = el("div",{});
+    line.append(el("span",{style:"color:#6a9955"}, String(t||"")+"  "));
+    line.append(el("span",{style:"color:"+col+";font-weight:600"}, sev.padEnd(7)));
+    line.append(el("span",{}, "  "+name+": "+String(e.action||"")+(e.detail ? " "+(typeof e.detail === "object" ? JSON.stringify(e.detail) : String(e.detail)) : "")));
+    box.append(line);
+  });
 }
 // ── Metrics tab — REAL, LIVE in-browser metrics (no fabricated telemetry) ─────
 // Every number here is sourced from actual data served by in-tab Pyodide via the

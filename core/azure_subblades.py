@@ -215,7 +215,7 @@ _APIM_SUB = [
         *_settings_props_locks(),
     ]},
     {"group": "Monitoring", "items": [
-        {"key": "appInsights",  "label": "Application Insights", "icon": "insights", "type": "metrics"},
+        {"key": "appInsights",  "label": "Application Insights", "icon": "insights", "type": "apimAppInsights"},
         {"key": "metrics",      "label": "Metrics",           "icon": "show_chart",   "type": "metrics"},
     ]},
 ]

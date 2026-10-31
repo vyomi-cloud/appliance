@@ -2,7 +2,7 @@
 // simulator. Proves whether an UNMODIFIED Google Go client works pointed at the
 // simulator. Set STORAGE_EMULATOR_HOST=<host:port> (no scheme) to route both
 // read and upload traffic at the simulator's /storage/v1 + /upload/storage/v1.
-// PROJECT defaults to gcp-dev.
+// PROJECT defaults to vyomi-project.
 package main
 
 import (
@@ -24,7 +24,7 @@ func env(k, d string) string {
 }
 
 func main() {
-	project := env("PROJECT", "gcp-dev")
+	project := env("PROJECT", "vyomi-project")
 	fmt.Printf("== cloud.google.com/go/storage against STORAGE_EMULATOR_HOST=%s project=%s ==\n",
 		os.Getenv("STORAGE_EMULATOR_HOST"), project)
 
