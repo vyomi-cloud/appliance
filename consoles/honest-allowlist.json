@@ -151,6 +151,9 @@
     "entra": [
       "entra-sign-in-logs"
     ],
+    "storage": [
+      "storage-account-file-shares"
+    ],
     "monitor": [
       "monitor-dashboards-with-grafana",
       "monitor-managed-prometheus",
