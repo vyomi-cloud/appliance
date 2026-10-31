@@ -1,5 +1,7 @@
-/* APIs panel: "Add API" quick-start tiles (HTTP is real; every other creation path is an
- * honest gap) + the APIs grid (real ARM sub-resource of the service). */
+/* APIs panel: "Add API" quick-start tiles — HTTP/WebSocket/GraphQL/gRPC are real (the same
+ * wizard, parameterized by apiType — CreateHttpApi.jsx); importing from a definition file or
+ * an Azure resource, and restricting an API to specific gateways, are honest gaps — + the
+ * APIs grid (real ARM sub-resource of the service). */
 import { useState } from "react";
 import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Input, ToolbarButton } from "@fluentui/react-components";
 import { Add20Regular, ArrowClockwise20Regular, Delete20Regular } from "@fluentui/react-icons";
@@ -13,6 +15,7 @@ const QUICK_START = [
   { group: "Create from definition", items: ["OpenAPI", "WSDL", "WADL"] },
   { group: "Create from Azure resource", items: ["API App", "Function App", "Container App", "Logic App"] },
 ];
+const REAL_TYPES = { HTTP: "http", WebSocket: "websocket", GraphQL: "graphql", gRPC: "grpc" };
 
 export default function Apis({ rg, svc, self }) {
   const notify = useNotify();
@@ -28,8 +31,8 @@ export default function Apis({ rg, svc, self }) {
         <section key={g.group} className="vy-section" style={{ marginBottom: 8 }}>
           <h3>{g.group}</h3>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {g.items.map((it) => it === "HTTP"
-              ? <Button key={it} as="a" href={`${self}/apis/create`}>{it}</Button>
+            {g.items.map((it) => REAL_TYPES[it]
+              ? <Button key={it} as="a" href={`${self}/apis/create${REAL_TYPES[it] === "http" ? "" : `/${REAL_TYPES[it]}`}`}>{it}</Button>
               : <Button key={it} onClick={() => setGap(it)}>{it}</Button>)}
           </div>
         </section>
@@ -42,12 +45,13 @@ export default function Apis({ rg, svc, self }) {
       <ErrorBar error={error} />
       {loading ? <Loading /> : (
         <table className="vy-grid" style={{ width: "100%" }}>
-          <thead><tr><th>Name</th><th>Display name</th><th>Revision</th><th>API URL suffix</th><th /></tr></thead>
+          <thead><tr><th>Name</th><th>Display name</th><th>Type</th><th>Revision</th><th>API URL suffix</th><th /></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.name}>
                 <td>{r.name}</td>
                 <td>{r.properties?.displayName}</td>
+                <td>{r.properties?.apiType || "http"}</td>
                 <td>{r.properties?.apiRevision || "1"}</td>
                 <td>{r.properties?.path}</td>
                 <td><Button appearance="subtle" size="small" icon={<Delete20Regular />} aria-label={`Delete ${r.name}`} onClick={async () => {

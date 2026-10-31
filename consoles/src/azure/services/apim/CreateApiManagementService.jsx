@@ -85,11 +85,14 @@ export default function CreateApiManagementService() {
       </FormSection>
       <FormSection title="Pricing tier">
         <FormRow label="Pricing tier" required htmlFor="apim-tier">
-          <Select id="apim-tier" value={f.pricingTier} onChange={set("pricingTier")} aria-label="Pricing tier">
+          {/* Developer has no scale-out (always exactly 1 unit) and Consumption has no scale
+              units at all — ENFORCED on the ARM PUT/PATCH (azure_arm_core._apim_tier_block,
+              azure.apim.scaletier), so the Units control mirrors that here. */}
+          <Select id="apim-tier" value={f.pricingTier} onChange={(e, d) => setF((x) => ({ ...x, pricingTier: d.value, units: d.value === "Developer (no SLA)" ? 1 : x.units }))} aria-label="Pricing tier">
             {PRICING_TIERS.map((t) => <option key={t} value={t}>{t}</option>)}
           </Select>
         </FormRow>
-        {f.pricingTier !== "Consumption" && (
+        {f.pricingTier !== "Consumption" && f.pricingTier !== "Developer (no SLA)" && (
           <FormRow label="Units" htmlFor="apim-units">
             <Input id="apim-units" type="number" min={1} max={10} value={String(f.units)} onChange={(_, d) => setF((x) => ({ ...x, units: Number(d.value) || 1 }))} aria-label="Units" />
           </FormRow>

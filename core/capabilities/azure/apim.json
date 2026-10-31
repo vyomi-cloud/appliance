@@ -34,10 +34,11 @@
  },
  "azure.apim.apis.createflows": {
   "title": "Creating an API from WebSocket, GraphQL, gRPC, OpenAPI, WSDL, WADL, or an Azure resource (API App / Function App / Container App / Logic App); restricting a new API to specific gateways",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Only the HTTP creation flow (display name, name, web service URL, API URL suffix, description, URL scheme, product) is modeled. Every other creation source, and per-API gateway restriction, is not simulated — new APIs are always reachable on the managed gateway."
-  ]
+   "HTTP, WebSocket, GraphQL and gRPC are modeled (display name, name, backend URL, API URL suffix, description, product — properties.apiType round-trips through ARM exactly like real APIM). Importing from a definition file (OpenAPI/WSDL/WADL) or an Azure resource (API App/Function App/Container App/Logic App), and per-API gateway restriction, are not simulated — new APIs are always reachable on the managed gateway."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.apim.products.crud": {
   "title": "Products (create, get, list, delete) and product↔API association — real ARM sub-resources of the service",
@@ -63,10 +64,11 @@
  },
  "azure.apim.namedvalues.keyvaultref": {
   "title": "Named values of type Key Vault",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "The Key Vault secret identifier round-trips through ARM exactly as configured, but Vyomi never resolves it against a live Key Vault secret — matching the real portal, which also never displays the resolved value in this grid."
+   "The secret identifier only resolves against a Key Vault secret created in this SAME Vyomi space (the simulator's one Key Vault secrets store) — it can't reach an external vault, same as every other cross-service reference in Vyomi."
   ],
+  "api": ["NamedValue_ListValue"],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.apim.backends.crud": {
@@ -96,7 +98,7 @@
   "title": "Access control (IAM) on a service: role assignments and built-in role definitions over ARM",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), but the generic ARM list is subscription-wide (not scoped to this one service), and 'Check access' / 'My access' evaluation, Deny assignments and Classic administrators are not modeled — Vyomi never denies a console action based on a role assignment."
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions). The Role assignments list IS scoped to this one service (plus its subscription/resource-group ancestors, matching real inherited access) — but 'Check access' / 'My access' evaluation, Deny assignments and Classic administrators are not modeled, and Vyomi never denies a console action based on a role assignment."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
@@ -123,7 +125,7 @@
   "title": "Scale out and up, Pricing tier (post-creation sku.name/sku.capacity over ARM)",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Vyomi does not enforce per-tier unit/capacity limits (e.g. Consumption has no scale units, Developer caps at 1) or multi-region/zone scale-out — the tier name and unit count you set are stored and reflected in Overview and every other blade exactly as configured."
+   "The Consumption (no scale units) and Developer (capped at exactly 1 unit) capacity limits ARE enforced on every PUT/PATCH. Other tiers' maximum unit counts and multi-region/zone scale-out are not — the tier name and unit count you set are stored and reflected in Overview and every other blade exactly as configured."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
@@ -155,8 +157,8 @@
  },
  "azure.apim.exporttemplate": {
   "title": "Export template",
-  "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["The ARM Template tab is generated from the live resource; Bicep and Terraform export are not modeled."],
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": ["All three tabs (ARM Template, Bicep, Terraform) are generated from the live resource's own known shape, not a general decompiler for arbitrary resources."],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  }
 }

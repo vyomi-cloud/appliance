@@ -821,16 +821,35 @@ try {
     apimFragGot.status === 200 && JSON.parse(apimFragGot.text).properties?.value?.includes("<fragment>"), `HTTP ${apimFragGot.status}`);
   await shot("28c-apim-policyfragments");
 
+  // ── Named value created through the UI, type Key Vault → "Show value" resolves against
+  // the REAL secret created earlier over the Key Vault Secrets wire (azure.apim.namedvalues.keyvaultref) ──
+  await openPanel("Named values");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  const APIMNV = `smoke-apimnv-${n}`;
+  await page.getByLabel("Name", { exact: true }).fill(APIMNV);
+  await page.getByRole("radiogroup", { name: "Type" }).getByRole("radio", { name: "Key Vault" }).check();
+  await page.getByLabel("Key Vault secret identifier", { exact: true }).fill(`https://${KV}.vault.azure.net/secrets/${SECRET}`);
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByText(APIMNV, { exact: true }).waitFor({ timeout: 10000 });
+  const apimNvGot = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/namedValues/${APIMNV}`);
+  check("UI create named value (Key Vault) → visible over native ARM", apimNvGot.status === 200, `HTTP ${apimNvGot.status}`);
+  await page.getByRole("button", { name: "Show value" }).click();
+  await page.getByText("s3cr3t", { exact: true }).waitFor({ timeout: 10000 });
+  check("UI 'Show value' resolves the real Key Vault secret", true);
+  await shot("28ca-apim-namedvalues");
+
   // ── Scale out and up / Pricing tier: UI sku PATCH → visible over native ARM, reflected
-  // in Overview's "Tier" field (same sku merge the create wizard writes) ──────────────────
-  await openPanel("Scale out and up");
-  await page.getByLabel("Units", { exact: true }).fill("3");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await page.getByText("Units: 3", { exact: false }).waitFor({ timeout: 10000 });
+  // in Overview's "Tier" field (same sku merge the create wizard writes). Pricing tier first:
+  // Developer (the create default) has a fixed unit count — ENFORCED (azure.apim.scaletier) —
+  // so Units can't be scaled until the tier allows it. ───────────────────────────────────
   await openPanel("Pricing tier");
   await page.getByLabel("Pricing tier", { exact: true }).selectOption("Premium");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByText("Tier updated").first().waitFor({ timeout: 10000 }).catch(() => {});
+  await openPanel("Scale out and up");
+  await page.getByLabel("Units", { exact: true }).fill("3");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText("Units: 3", { exact: false }).waitFor({ timeout: 10000 });
   const apimSkuGot = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}`);
   const apimSku = apimSkuGot.status === 200 ? JSON.parse(apimSkuGot.text).sku : {};
   check("UI scale + pricing tier → visible over native ARM", apimSku?.capacity === 3 && apimSku?.name === "Premium", JSON.stringify(apimSku));
@@ -848,8 +867,9 @@ try {
   check("UI Diagnostic settings shows the wire-created setting", true);
   await shot("28e-apim-diagnosticsettings");
 
-  // ── Access control (IAM): a role assignment created over the wire (subscription-wide,
-  // same honest scoping as the Event Grid / Cosmos DB blades) is read back on this tab ─────
+  // ── Access control (IAM): a role assignment created over the wire at the SUBSCRIPTION
+  // scope is read back on this tab too — the resource-scoped list includes its subscription/
+  // resource-group ancestors (real inherited access), same pattern as Event Grid / Cosmos DB ──
   const apimRoleRes = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments/${APIMROLE}?api-version=2022-04-01`,
     { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties: { principalId: "apim-smoke-principal", roleDefinitionId: `/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions/owner`, principalType: "User" } }) });
   check("ARM PUT role assignment over wire", apimRoleRes.status === 200 || apimRoleRes.status === 201, `HTTP ${apimRoleRes.status}`);
