@@ -175,12 +175,14 @@
     "limitations": ["SCOM managed instance is out of scope for a simulator."]
   },
   "azure.monitor.diagnostic_settings": {
-    "title": "Diagnostic settings",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "title": "Diagnostic settings (per-resource logs/metrics routing: resource picker + create/list/delete)",
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Diagnostic settings (resource-scoped extension resources that route platform logs/metrics) are not modelled.",
-      "Grid columns would be Name, Resource type, Resource group, Diagnostics status."
-    ]
+      "Logs/metrics are never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline, so the setting is stored and validated exactly as the real resource requires but nothing flows.",
+      "Vyomi has no catalog of a resource type's real log/metric category names (GET .../diagnosticSettingsCategories is not modelled) — the create form offers the 'allLogs' category group and 'AllMetrics' rather than a resource-specific category picker."
+    ],
+    "api": ["DiagnosticSettings.CreateOrUpdate", "DiagnosticSettings.List", "DiagnosticSettings.Get", "DiagnosticSettings.Delete"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
   "azure.monitor.data_collection_rules": {
     "title": "Data Collection Rules (create, list, delete)",
@@ -193,9 +195,13 @@
     "tests": ["tests/conformance/test_azure_monitor_core.py"]
   },
   "azure.monitor.data_collection_endpoints": {
-    "title": "Data Collection Endpoints",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Microsoft.Insights/dataCollectionEndpoints is not modelled."]
+    "title": "Data Collection Endpoints (create, list, delete)",
+    "level": { "nano": "full", "offline": "full" },
+    "limitations": [
+      "The logs/metrics/configuration ingestion endpoint URLs are generated and stable across updates, the same shape the real resource returns; nothing is ever sent to them (no agent fleet)."
+    ],
+    "api": ["DataCollectionEndpoints.CreateOrUpdate", "DataCollectionEndpoints.List", "DataCollectionEndpoints.Delete"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
   "azure.monitor.pipelines": {
     "title": "Azure Monitor pipelines",
@@ -203,9 +209,13 @@
     "limitations": ["Azure Monitor pipelines (on-premises collector fleet management) are out of scope for a simulator."]
   },
   "azure.monitor.private_link_scopes": {
-    "title": "Private Link Scopes",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
-    "limitations": ["Private networking/Private Link is not modelled anywhere in Vyomi."]
+    "title": "Azure Monitor Private Link Scopes (create, list, delete, access mode settings)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": [
+      "The scope resource and its query/ingestion access-mode settings are real and round-trip exactly as configured; private endpoint connections and scoped-resource associations (linking workspaces/App Insights components into the scope) are not modelled — Vyomi has no private networking stack."
+    ],
+    "api": ["PrivateLinkScopes.CreateOrUpdate", "PrivateLinkScopes.List", "PrivateLinkScopes.Delete"],
+    "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
   },
   "azure.monitor.new_support_request": {
     "title": "New support request (file a Microsoft support ticket)",

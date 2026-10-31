@@ -4,8 +4,8 @@
  * (appliance: providers/azure_services.handle_arm; Nano + dev server: core/azure_arm_core.AzureArm),
  * so whatever the console creates an azure-mgmt-monitor / azure-mgmt-loganalytics SDK or `az`
  * CLI sees, and the reverse.
- * Not modelled by the backend (core/azure_monitor_core.py docstring): diagnostic settings,
- * metric definitions/values, scheduled query rules. Pages for those stay honest. */
+ * Not modelled by the backend (core/azure_monitor_core.py docstring): metric definitions/values,
+ * scheduled query rules. Pages for those stay honest. */
 import { restJson } from "../../../common/wire.js";
 import { armType, getSubscription, parseId } from "../../kit/arm.js";
 
@@ -16,6 +16,8 @@ export const AUTOSCALE = armType("Microsoft.Insights", "autoscaleSettings", "202
 export const WORKSPACES = armType("Microsoft.OperationalInsights", "workspaces", "2022-10-01");
 export const WORKBOOKS = armType("Microsoft.Insights", "workbooks", "2022-04-01");
 export const DATA_COLLECTION_RULES = armType("Microsoft.Insights", "dataCollectionRules", "2023-03-11");
+export const DATA_COLLECTION_ENDPOINTS = armType("Microsoft.Insights", "dataCollectionEndpoints", "2023-03-11");
+export const PRIVATE_LINK_SCOPES = armType("Microsoft.Insights", "privateLinkScopes", "2021-07-01-preview");
 
 const withRg = (a) => ({ ...a, resourceGroup: parseId(a.id).resourceGroup });
 
@@ -89,6 +91,31 @@ export const deleteWorkbook = (rg, name) => WORKBOOKS.remove(rg, name);
 export const listDataCollectionRules = async () => (await DATA_COLLECTION_RULES.list()).map(withRg);
 export const putDataCollectionRule = (rg, name, body) => DATA_COLLECTION_RULES.put(rg, name, body);
 export const deleteDataCollectionRule = (rg, name) => DATA_COLLECTION_RULES.remove(rg, name);
+
+// ── data collection endpoints (Microsoft.Insights/dataCollectionEndpoints) ──────────
+export const listDataCollectionEndpoints = async () => (await DATA_COLLECTION_ENDPOINTS.list()).map(withRg);
+export const putDataCollectionEndpoint = (rg, name, body) => DATA_COLLECTION_ENDPOINTS.put(rg, name, body);
+export const deleteDataCollectionEndpoint = (rg, name) => DATA_COLLECTION_ENDPOINTS.remove(rg, name);
+
+// ── private link scopes (Microsoft.Insights/privateLinkScopes) ─────────────────────
+export const listPrivateLinkScopes = async () => (await PRIVATE_LINK_SCOPES.list()).map(withRg);
+export const putPrivateLinkScope = (rg, name, body) => PRIVATE_LINK_SCOPES.put(rg, name, body);
+export const deletePrivateLinkScope = (rg, name) => PRIVATE_LINK_SCOPES.remove(rg, name);
+
+// ── diagnostic settings (Microsoft.Insights/diagnosticSettings) — a real ARM extension
+// resource scoped to ANY other resource's own id (the path re-enters "providers", the same
+// shape Microsoft.Authorization/locks uses), so it's a plain restJson call keyed off the
+// resource's own full id rather than an armType() (which only knows RG-scoped collections).
+export const DIAGNOSTIC_SETTINGS_API_VERSION = "2021-05-01-preview";
+export const listDiagnosticSettings = async (resourceId) =>
+  (await restJson("GET", `${resourceId}/providers/Microsoft.Insights/diagnosticSettings`,
+    { query: { "api-version": DIAGNOSTIC_SETTINGS_API_VERSION } })).value || [];
+export const putDiagnosticSetting = (resourceId, name, body) =>
+  restJson("PUT", `${resourceId}/providers/Microsoft.Insights/diagnosticSettings/${encodeURIComponent(name)}`,
+    { query: { "api-version": DIAGNOSTIC_SETTINGS_API_VERSION }, body });
+export const deleteDiagnosticSetting = (resourceId, name) =>
+  restJson("DELETE", `${resourceId}/providers/Microsoft.Insights/diagnosticSettings/${encodeURIComponent(name)}`,
+    { query: { "api-version": DIAGNOSTIC_SETTINGS_API_VERSION } });
 
 // ── generic resource inventory (Insights per-resource-type dashboards, Metrics scope) ──
 // Microsoft.Insights has no metric-VALUE data plane in Vyomi (not modelled); these dashboards

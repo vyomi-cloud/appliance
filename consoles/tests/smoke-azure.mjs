@@ -891,6 +891,60 @@ try {
   await page.getByRole("checkbox", { name: `Select /subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}` }).waitFor({ state: "detached", timeout: 10000 });
   const alertGone = await armMonitor("GET", `/resourceGroups/${MON_RG}/providers/Microsoft.Insights/metricAlerts/${ALERT}`);
   check("UI delete alert rule → ARM GET 404", alertGone.status === 404, `HTTP ${alertGone.status}`);
+
+  // ── Monitor depth: Data Collection Endpoint created through the wizard → visible over ARM ──
+  const DCE = `vysmokedce${n}`;
+  await page.goto(UI + "#/monitor/createdatacollectionendpoint");
+  await page.getByLabel("Endpoint name", { exact: true }).fill(DCE);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(DCE, { exact: true }).first().waitFor({ timeout: 10000 });
+  const dceGet = await armMonitor("GET", `/resourceGroups/${MON_RG}/providers/Microsoft.Insights/dataCollectionEndpoints/${DCE}`);
+  check("UI create data collection endpoint → visible over native ARM", dceGet.status === 200, `HTTP ${dceGet.status}`);
+  const dceBody = dceGet.status === 200 ? JSON.parse(dceGet.text) : {};
+  check("DCE generated a logs ingestion endpoint", !!dceBody.properties?.logsIngestion?.endpoint, JSON.stringify(dceBody.properties));
+
+  // ── Monitor depth: Private Link Scope created through the wizard → visible over ARM ────────
+  const PLS = `vysmokepls${n}`;
+  await page.goto(UI + "#/monitor/createprivatelinkscope");
+  await page.getByLabel("Name", { exact: true }).fill(PLS);
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(PLS, { exact: true }).first().waitFor({ timeout: 10000 });
+  const plsGet = await armMonitor("GET", `/resourceGroups/${MON_RG}/providers/Microsoft.Insights/privateLinkScopes/${PLS}`);
+  check("UI create private link scope → visible over native ARM", plsGet.status === 200, `HTTP ${plsGet.status}`);
+
+  // ── Monitor depth: diagnostic setting added through the UI (resource-scoped extension
+  // resource, Microsoft.Insights/diagnosticSettings) → visible over native ARM, and the
+  // reverse (wire-created resource's diagnostics status shown in the picker grid) ─────────
+  const DIAGSA = `vysmokediagsa${n}`;
+  const diagSaPut = await wire(`/subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.Storage/storageAccounts/${DIAGSA}?api-version=2023-01-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ location: "eastus" }) });
+  check("ARM PUT storage account for diagnostic settings over wire", diagSaPut.status === 200 || diagSaPut.status === 201, `HTTP ${diagSaPut.status}`);
+  const DIAGWS = `vysmokediagws${n}`;
+  const diagWsPut = await wire(`/subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.OperationalInsights/workspaces/${DIAGWS}?api-version=2022-10-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ location: "eastus", properties: {} }) });
+  check("ARM PUT Log Analytics workspace for diagnostic settings over wire", diagWsPut.status === 200 || diagWsPut.status === 201, `HTTP ${diagWsPut.status}`);
+  const diagSaId = `/subscriptions/${SUB}/resourceGroups/${MON_RG}/providers/Microsoft.Storage/storageAccounts/${DIAGSA}`;
+  await page.goto(UI + "#/monitor/diagnosticsettings");
+  await page.getByText(DIAGSA, { exact: true }).first().waitFor({ timeout: 10000 });
+  check("wire-created storage account shown in Diagnostic settings picker", true);
+  await page.goto(UI + `#/monitor/diagnosticsettingsresource?id=${encodeURIComponent(diagSaId)}&name=${encodeURIComponent(DIAGSA)}&type=Storage%20account`);
+  const DIAG = `vysmokediag${n}`;
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByLabel("Diagnostic setting name", { exact: true }).fill(DIAG);
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByText(DIAG, { exact: true }).first().waitFor({ timeout: 10000 });
+  const diagGet = await wire(`${diagSaId}/providers/Microsoft.Insights/diagnosticSettings/${DIAG}?api-version=2021-05-01-preview`);
+  check("UI create diagnostic setting → visible over native ARM extension resource", diagGet.status === 200, `HTTP ${diagGet.status}`);
+  await page.goto(UI + "#/monitor/diagnosticsettings");
+  await page.getByText(DIAGSA, { exact: true }).first().waitFor({ timeout: 10000 });
+  await page.getByText("Enabled (1)").first().waitFor({ timeout: 10000 });
+  check("diagnostic settings picker shows the resource's Diagnostics status as Enabled", true);
+
   // ── SQL: server + database created through the wizard → visible over native ARM ───────
   const sqlArm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2023-08-01`,
     { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });

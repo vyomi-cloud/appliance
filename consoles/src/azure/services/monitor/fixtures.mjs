@@ -44,10 +44,35 @@ const createDataCollectionRule = insights("dataCollectionRules", () => ({
   },
 }), "2023-03-11");
 
+const createDataCollectionEndpoint = insights("dataCollectionEndpoints", () => ({
+  location: "eastus", properties: {},
+}), "2023-03-11");
+
+const createPrivateLinkScope = insights("privateLinkScopes", () => ({
+  location: "global", properties: {},
+}), "2021-07-01-preview");
+
+/** A resource with a REAL diagnostic setting attached — proves the Microsoft.Insights/
+ * diagnosticSettings extension-resource round trip (core/azure_monitor_core.py's
+ * find_diagnostic_marker / upsert_diagnostic_setting), not just resource inventory. The
+ * Diagnostic settings picker page shows the resource's own name. */
+async function createDiagnosticSetting(wire, uniq) {
+  const name = `uic${uniq}`.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 24);
+  const rid = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${name}`;
+  await wire("PUT", rid, { svc: null, body: { location: "eastus" } });
+  await wire("PUT", `${rid}/providers/microsoft.insights/diagnosticSettings/diag1?api-version=2021-05-01-preview`, {
+    svc: null, body: { properties: { storageAccountId: rid, logs: [{ categoryGroup: "allLogs", enabled: true }] } },
+  });
+  return name;
+}
+
 export default {
   "az-activity-resource": createResource,
   "az-metric-alert": createMetricAlert,
   "az-autoscale": createAutoscale,
   "az-workbook": createWorkbook,
   "az-dcr": createDataCollectionRule,
+  "az-dce": createDataCollectionEndpoint,
+  "az-privatelinkscope": createPrivateLinkScope,
+  "az-diagnostic-setting": createDiagnosticSetting,
 };

@@ -1,9 +1,10 @@
 /* Monitor nav items that are genuine capability gaps for Vyomi (no backend models Container
  * insights, Azure Cache for Redis, Azure Local, SCOM, Grafana/Prometheus managed services,
- * diagnostic settings/DCR/DCE/pipelines, Private Link, support ticketing, …): title + the
- * honest CapabilityContainer panel, driven by core/capabilities/azure/monitor.json — never a
- * hand-written disclaimer. Grouped here (one tiny file per page would be noise), same pattern
- * as consoles/src/azure/services/cost/StaticPages.jsx. */
+ * pipelines, support ticketing, …): title + the honest CapabilityContainer panel, driven by
+ * core/capabilities/azure/monitor.json — never a hand-written disclaimer. Grouped here (one
+ * tiny file per page would be noise), same pattern as consoles/src/azure/services/cost/StaticPages.jsx.
+ * Data Collection Endpoints, Private Link Scopes and Diagnostic settings moved out to their own
+ * real pages (DataCollectionEndpoints.jsx, PrivateLinkScopes.jsx, DiagnosticSettings.jsx). */
 import { useState } from "react";
 import { Tab, TabList } from "@fluentui/react-components";
 import MonitorShell from "./MonitorShell.jsx";
@@ -21,9 +22,7 @@ const GAPS = [
   ["insights-azurelocal", "Azure Local", "azure.monitor.azure_local_insights"],
   ["managedgrafana", "Azure Managed Grafana", "azure.monitor.managed_grafana"],
   ["scommanagedinstance", "Azure Monitor SCOM managed instance", "azure.monitor.scom_managed_instance"],
-  ["datacollectionendpoints", "Data Collection Endpoints", "azure.monitor.data_collection_endpoints"],
   ["pipelines", "Azure Monitor pipelines", "azure.monitor.pipelines"],
-  ["privatelinkscopes", "Private Link Scopes", "azure.monitor.private_link_scopes"],
   ["support", "New support request", "azure.monitor.new_support_request"],
 ];
 
@@ -44,14 +43,6 @@ export function ManagedPrometheus() {
   return (
     <MonitorShell active="managedprometheus">
       <CapabilityContainer id="azure.monitor.managed_prometheus" title="Managed Prometheus" />
-    </MonitorShell>
-  );
-}
-
-export function DiagnosticSettings() {
-  return (
-    <MonitorShell active="diagnosticsettings">
-      <CapabilityContainer id="azure.monitor.diagnostic_settings" title="Diagnostic settings" />
     </MonitorShell>
   );
 }

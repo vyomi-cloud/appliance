@@ -496,6 +496,13 @@ class AzureArm:
         if lock_marker is not None:
             return self._locks(method, sub, rg, namespace, chain, lock_marker, payload)
 
+        # Microsoft.Insights/diagnosticSettings: a real ARM extension resource scoped to ANY
+        # other resource's own id (chain re-enters "providers", same shape as locks above) —
+        # generic over every catalog type, so caught before the alternation too.
+        diag_marker = monitor_engine.find_diagnostic_marker(chain)
+        if diag_marker is not None:
+            return self._diagnostic_settings(method, sub, rg, namespace, chain, diag_marker, payload)
+
         # ARM type path alternates type/name: providers/<ns>/<t1>/<n1>/<t2>/<n2>...
         type_chain = [namespace]
         names: list = []
@@ -640,6 +647,35 @@ class AzureArm:
             else:
                 return _err(405, "MethodNotAllowed", f"{method} not allowed.")
         return {"status": r["status"], "headers": {}, "body": r["body"]}
+
+    def _diagnostic_settings(self, method, sub, rg, namespace, chain, marker, payload):
+        # Replay the SAME type/name alternation the main dispatcher uses (see `_arm` above)
+        # over everything before the "providers/Microsoft.Insights/diagnosticSettings" marker.
+        stc, snames = [namespace], []
+        for n, token in enumerate(chain[:marker]):
+            (stc if n % 2 == 0 else snames).append(token)
+        scope_rid = _canonical_id(sub, rg, stc, snames)
+        rest = chain[marker + 3:]
+        activity_name = snames[-1] if snames else scope_rid
+        if not rest:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+            r = monitor_engine.list_diagnostic_settings(self.state, scope_rid)
+        else:
+            name = rest[0]
+            if method == "GET":
+                r = monitor_engine.get_diagnostic_setting(self.state, scope_rid, name)
+            elif method in ("PUT", "PATCH"):
+                r = monitor_engine.upsert_diagnostic_setting(self.state, scope_rid, name, payload)
+                if r["status"] in (200, 201):
+                    _record_activity(activity_name, "Create diagnostic setting" if r["status"] == 201 else "Update diagnostic setting", name)
+            elif method == "DELETE":
+                r = monitor_engine.remove_diagnostic_setting(self.state, scope_rid, name)
+                if r["status"] == 200:
+                    _record_activity(activity_name, "Delete diagnostic setting", name)
+            else:
+                return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
 
     def _dns(self, method, sub, rg, chain, payload, query):
         dn = dns_engine
