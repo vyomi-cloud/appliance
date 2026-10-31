@@ -27,22 +27,23 @@
  "gcp.monitoring.incidents": {
   "title": "Alerts (open incidents)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi has no background rule-evaluation engine: alert policies are stored and can be queried exactly like the real API, but a policy's conditions are never evaluated against time series, so no incident is ever opened or closed. The Alerts list is always empty."
+   "Vyomi's alert-evaluation engine evaluates condition_threshold and condition_absent conditions for real against the stored time series a policy's filter matches, opening and closing incidents (and honoring active snoozes) exactly like the real engine — there is no public incidents.list API, so this is modeled on the documented webhook notification payload shape (incident_id/state/started_at/ended_at/...) instead. condition_matched_log, MQL (condition_monitoring_query_language) and PromQL (condition_prometheus_query_language) conditions are never evaluated (no log ingestion or query-language engine), so policies that rely solely on those never open an incident. Multi-condition policies are tracked as one whole-policy incident rather than per matching resource (AND_WITH_MATCHING_RESOURCE doesn't cross-match resources between conditions)."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
   ]
  },
  "gcp.monitoring.snoozes": {
   "title": "Snoozes",
   "level": {
-   "nano": "limited",
-   "offline": "limited"
+   "nano": "full",
+   "offline": "full"
   },
-  "limitations": [
-   "A snooze is stored for real against the policies it names, but since Vyomi never opens incidents (see Alerts), a snooze has nothing to suppress — it's recorded and returned exactly as the real API would, just with no observable effect."
-  ],
+  "limitations": [],
   "tests": [
    "tests/conformance/test_gcp_monitoring_core.py"
   ]
@@ -90,7 +91,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Services and their SLOs (goal, compliance period, indicator) are real resources — the same Service Monitoring API v3 create/get/list/delete the gcloud/client libraries use. For a request-based SLO (service_level_indicator.request_based.good_total_ratio), Vyomi computes a real error-budget fraction from the good/total time series you've written, via the same select_slo_compliance()/select_slo_budget_fraction()/select_slo_health() timeSeries.list filter functions the real API reserves for SLO burn-down queries — the 'SLOs out of error budget' count reflects that. Windows-based and basic SLIs aren't evaluated (shown as '—', since there's no live request/latency pipeline to classify them against). 'SLOs with firing alert' is always 0: Vyomi has no alert-evaluation engine (see gcp.monitoring.incidents), so an SLO's burn-rate alert condition never actually opens an incident."
+   "Services and their SLOs (goal, compliance period, indicator) are real resources — the same Service Monitoring API v3 create/get/list/delete the gcloud/client libraries use. For a request-based SLO (service_level_indicator.request_based.good_total_ratio), Vyomi computes a real error-budget fraction from the good/total time series you've written, via the same select_slo_compliance()/select_slo_budget_fraction()/select_slo_health() timeSeries.list filter functions the real API reserves for SLO burn-down queries — the 'SLOs out of error budget' count reflects that. Windows-based and basic SLIs aren't evaluated (shown as '—', since there's no live request/latency pipeline to classify them against). 'SLOs with firing alert' is always 0: an SLO's burn-rate alert condition is a condition_monitoring_query_language (MQL) alert condition, and Vyomi's alert-evaluation engine (see gcp.monitoring.incidents) only evaluates condition_threshold/condition_absent, so a burn-rate condition never actually opens an incident."
   ],
   "tests": [
    "tests/conformance/test_gcp_monitoring_core.py"
@@ -160,11 +161,14 @@
  "gcp.monitoring.integrations": {
   "title": "Integrations catalog",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "The Integrations catalog installs Google-curated dashboards/alerts for specific platforms (e.g. MongoDB Atlas, Istio). Vyomi doesn't model the catalog or its install flow."
+   "The catalog itself (which platforms are available, their type/platform metadata) is reference data, the same on every project, not a simulated resource. Installing one is real: it creates a Dashboards API (v1) dashboard in this project with a tile wired to a real metric filter for that platform, via the same create call the Dashboards page uses. The curated alerting policies a real install also adds aren't modeled, and the catalog's Status filter (installed/not installed) isn't wired up."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_monitoring_core.py"
   ]
  },
  "gcp.monitoring.permissions": {

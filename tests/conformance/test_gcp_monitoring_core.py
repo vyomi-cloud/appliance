@@ -358,6 +358,78 @@ def main():
     check("synthetic monitor + http_check → 400", s == 400, b)
     call(st, "DELETE", "/uptimeCheckConfigs/" + sm["name"].rsplit("/", 1)[-1])
 
+    # incidents: the alert-policy rule-evaluation engine opens/closes real incidents against
+    # stored time series — see core.evaluate_incidents.
+    s, inc_pol = call(st, "POST", "/alertPolicies", {
+        "displayName": "latency-high", "combiner": "OR",
+        "conditions": [{"displayName": "p99 high", "conditionThreshold": {
+            "filter": 'metric.type = "custom.googleapis.com/req/latency" AND resource.type = "global"',
+            "comparison": "COMPARISON_GT", "thresholdValue": 100}}]})
+    write(150.0, now - timedelta(seconds=10), metric="custom.googleapis.com/req/latency", route="/lat")
+    s, b = call(st, "GET", "/incidents")
+    check("breaching threshold opens a real incident", s == 200 and len(b.get("incidents", [])) == 1
+          and b.get("incidents", [{}])[0]["state"] == "OPEN" and b.get("incidents", [{}])[0]["policyName"] == inc_pol["name"]
+          and b.get("incidents", [{}])[0]["observedValue"] == 150.0 and "incidentId" in b.get("incidents", [{}])[0]
+          and "_resourceKey" not in b.get("incidents", [{}])[0], b)
+    incid = b.get("incidents", [{}])[0]["name"].rsplit("/", 1)[-1]
+    s, b = call(st, "GET", "/incidents/" + incid)
+    check("get incident", s == 200 and b["state"] == "OPEN", b)
+    s, b = call(st, "POST", "/incidents/%s:acknowledge" % incid)
+    check("acknowledge incident", s == 200 and b["acknowledged"] is True, b)
+    s, pv = call(st, "GET", "/alertPolicies", query={"filter": 'display_name = "latency-high"'})
+    check("policy console view would show it (checked via list_all below)", s == 200, pv)
+    view = mon.list_all(st, "p1")
+    pview = next(v for v in view if v["name"] == inc_pol["name"])
+    check("console view reflects the real open-incident count", pview["incidents"] == "1 open incident", pview)
+
+    write(10.0, now - timedelta(seconds=9), metric="custom.googleapis.com/req/latency", route="/lat")
+    s, b = call(st, "GET", "/incidents", query={"filter": 'state = "OPEN"'})
+    check("value dropping below threshold closes the incident", s == 200 and len(b.get("incidents", [])) == 0, b)
+    s, b = call(st, "GET", "/incidents", query={"filter": 'policy_name = "%s"' % inc_pol["name"]})
+    check("closed incident still visible unfiltered by state", s == 200 and len(b.get("incidents", [])) == 1
+          and b.get("incidents", [{}])[0]["state"] == "CLOSED" and b.get("incidents", [{}])[0]["endedAt"], b)
+
+    # disabling a policy with an open incident closes it
+    s, dis_pol = call(st, "POST", "/alertPolicies", {
+        "displayName": "cpu-wild", "combiner": "OR",
+        "conditions": [{"displayName": "c", "conditionThreshold": {
+            "filter": 'metric.type = "custom.googleapis.com/req/cpu2" AND resource.type = "global"',
+            "comparison": "COMPARISON_GT", "thresholdValue": 1}}]})
+    write(99.0, now - timedelta(seconds=8), metric="custom.googleapis.com/req/cpu2", route="/c")
+    s, b = call(st, "GET", "/incidents", query={"filter": 'policy_name = "%s" AND state = "OPEN"' % dis_pol["name"]})
+    check("second policy also opens an incident", s == 200 and len(b.get("incidents", [])) == 1, b)
+    did = dis_pol["name"].rsplit("/", 1)[-1]
+    call(st, "PATCH", "/alertPolicies/" + did, {"enabled": False}, {"updateMask": "enabled"})
+    s, b = call(st, "GET", "/incidents", query={"filter": 'policy_name = "%s" AND state = "OPEN"' % dis_pol["name"]})
+    check("disabling the policy closes its open incident", s == 200 and len(b.get("incidents", [])) == 0, b)
+
+    # condition_absent: only series that have reported at least one point are ever "absent"
+    s, absent_pol = call(st, "POST", "/alertPolicies", {
+        "displayName": "heartbeat-silent", "combiner": "OR",
+        "conditions": [{"displayName": "silent", "conditionAbsent": {
+            "filter": 'metric.type = "custom.googleapis.com/req/heartbeat" AND resource.type = "global"',
+            "duration": "1s"}}]})
+    s, b = call(st, "GET", "/incidents", query={"filter": 'policy_name = "%s"' % absent_pol["name"]})
+    check("absent condition on a never-written metric never fires", s == 200 and len(b.get("incidents", [])) == 0, b)
+    write(1.0, t0, metric="custom.googleapis.com/req/heartbeat", route="/hb")   # old point, nothing since
+    s, b = call(st, "GET", "/incidents", query={"filter": 'policy_name = "%s" AND state = "OPEN"' % absent_pol["name"]})
+    check("metric that stopped reporting opens an absence incident", s == 200 and len(b.get("incidents", [])) == 1, b)
+
+    # a snooze covering the policy suppresses NEW incidents (but real GCP behavior: it does
+    # not retroactively close ones already open)
+    s, snooze_pol = call(st, "POST", "/alertPolicies", {
+        "displayName": "snoozed-metric", "combiner": "OR",
+        "conditions": [{"displayName": "c", "conditionThreshold": {
+            "filter": 'metric.type = "custom.googleapis.com/req/snoozeme" AND resource.type = "global"',
+            "comparison": "COMPARISON_GT", "thresholdValue": 1}}]})
+    call1(st, "POST", "/snoozes", {"displayName": "maint2", "criteria": {"policies": [snooze_pol["name"]]},
+                                   "interval": {"startTime": iso(now), "endTime": iso(now + timedelta(hours=1))}})
+    write(99.0, now - timedelta(seconds=7), metric="custom.googleapis.com/req/snoozeme", route="/s")
+    s, b = call(st, "GET", "/incidents", query={"filter": 'policy_name = "%s" AND state = "OPEN"' % snooze_pol["name"]})
+    check("an active snooze suppresses a new incident from opening", s == 200 and len(b.get("incidents", [])) == 0, b)
+    s, b = call(st, "GET", "/incidents/nope")
+    check("get unknown incident → 404", s == 404, b)
+
     print(f"\n{PASS} passed, {FAIL} failed")
     sys.exit(1 if FAIL else 0)
 

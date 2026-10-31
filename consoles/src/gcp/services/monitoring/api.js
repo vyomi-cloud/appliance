@@ -87,6 +87,13 @@ export const listSnoozes = async () => (await restJson("GET", `${v1()}/snoozes`)
 export const createSnooze = (body) => restJson("POST", `${v1()}/snoozes`, { body });
 export const patchSnooze = (id, body, updateMask) => restJson("PATCH", `${v1()}/snoozes/${e(id)}`, { query: updateMask ? { updateMask } : undefined, body });
 
+// ── incidents — the real alert-evaluation engine's open/closed alerts (see
+// gcp.monitoring.incidents): no public incidents.list API exists, so this is modeled on the
+// documented webhook notification payload shape, evaluated fresh against stored time series
+// on every read. ──────────────────────────────────────────────────────────────
+export const listIncidents = async (filter) => (await restJson("GET", `${v3()}/incidents`, { query: { pageSize: 500, ...(filter ? { filter } : {}) } })).incidents || [];
+export const acknowledgeIncident = (id) => restJson("POST", `${v3()}/incidents/${e(id)}:acknowledge`, { body: {} });
+
 // ── project IAM policy (Permissions page) — resourcemanager-style getIamPolicy/setIamPolicy
 // on the generic IAM policy store every Vyomi GCP resource shares. ──────────────────────────
 export const getProjectIamPolicy = () => restJson("POST", `/v1/projects/${e(getProject())}:getIamPolicy`, { body: {} });
