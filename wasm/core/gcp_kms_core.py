@@ -36,8 +36,14 @@ tests/conformance/test_c0b_legacy_parity_core.py): key labels / rotationPeriod /
 nextRotationTime (the classic console's key settings) via PATCH cryptoKey with an
 updateMask, ciphertextCrc32c / plaintextCrc32c (real CRC32C) on the wire, key rings
 that persist with the store, and an optional `store.legacy_decrypt(name, blob)` hook
-so ciphertext minted by the pre-v4 Vault-transit handler still decrypts. IAM policy, rotation, asymmetric
-keys, and key-version lifecycle reuse the same helpers and slot in next.
+so ciphertext minted by the pre-v4 Vault-transit handler still decrypts.
+
+v4 DEPTH — IAM policy on a CryptoKey is a real, enforced policy (mirrors the
+per-secret enforcement in gcp_secretmanager_core.py): :encrypt/:decrypt and
+:setIamPolicy are gated by the caller's granted role (identified by the
+X-Cloudlearn-Principal header; an owner/root principal or an unconfigured
+policy always passes). get/list/:getIamPolicy stay open. Rotation and
+key-version lifecycle reuse the same helpers and slot in next.
 """
 from __future__ import annotations
 
@@ -166,6 +172,74 @@ def _crypto_key_view(store: KeyStore, name: str) -> dict:
 
 def _default_policy() -> dict:
     return {"version": 1, "etag": _b64e(b"0"), "bindings": []}
+
+
+# ── IAM on a CryptoKey: a real, enforced policy (v4 DEPTH — was store-only) ──
+# Mirrors the per-secret enforcement in gcp_secretmanager_core.py: owners/root bypass,
+# an unconfigured policy denies nothing (so existing traffic keeps working), and only
+# the "use the key material" + "change who can" operations are gated — get/list/
+# getIamPolicy stay open, matching the real API's least-surprise default.
+_OWNER_PRINCIPALS = {"", "root", "owner", "admin"}
+
+_ROLE_PERMS: dict[str, list[str]] = {
+    "roles/cloudkms.admin": [
+        "cloudkms.cryptoKeys.get", "cloudkms.cryptoKeys.list", "cloudkms.cryptoKeys.update",
+        "cloudkms.cryptoKeys.setIamPolicy",
+        "cloudkms.cryptoKeyVersions.get", "cloudkms.cryptoKeyVersions.list",
+        "cloudkms.cryptoKeyVersions.create", "cloudkms.cryptoKeyVersions.update",
+        "cloudkms.cryptoKeyVersions.destroy", "cloudkms.cryptoKeyVersions.restore",
+    ],
+    "roles/cloudkms.cryptoKeyEncrypterDecrypter": [
+        "cloudkms.cryptoKeyVersions.useToEncrypt", "cloudkms.cryptoKeyVersions.useToDecrypt",
+        "cloudkms.cryptoKeys.get",
+    ],
+    "roles/cloudkms.cryptoKeyEncrypter": ["cloudkms.cryptoKeyVersions.useToEncrypt", "cloudkms.cryptoKeys.get"],
+    "roles/cloudkms.cryptoKeyDecrypter": ["cloudkms.cryptoKeyVersions.useToDecrypt", "cloudkms.cryptoKeys.get"],
+    "roles/cloudkms.cryptoKeyViewer": [
+        "cloudkms.cryptoKeys.get", "cloudkms.cryptoKeys.list",
+        "cloudkms.cryptoKeyVersions.get", "cloudkms.cryptoKeyVersions.list",
+    ],
+}
+
+
+def _header(headers: dict | None, name: str) -> str:
+    for k, v in (headers or {}).items():
+        if k.lower() == name:
+            return str(v)
+    return ""
+
+
+def _principal(headers: dict | None) -> str:
+    return _header(headers, "x-cloudlearn-principal").strip().lower()
+
+
+def _granted(meta: dict, principal: str) -> set[str]:
+    perms: set[str] = set()
+    for b in (meta.get("iamPolicy") or {}).get("bindings") or []:
+        role = str(b.get("role") or "")
+        for m in b.get("members") or []:
+            ms = str(m)
+            if ms in ("allUsers", "allAuthenticatedUsers") or ms.split(":", 1)[-1].lower() == principal:
+                perms.update(_ROLE_PERMS.get(role, []))
+                break
+    return perms
+
+
+def _authorized(meta: dict, principal: str, permission: str) -> bool:
+    if not principal or principal in _OWNER_PRINCIPALS:
+        return True
+    bindings = (meta.get("iamPolicy") or {}).get("bindings") or []
+    if not bindings:
+        return True   # no policy configured yet: nothing to deny against
+    return permission in _granted(meta, principal)
+
+
+def _require(meta: dict, name: str, headers, permission: str) -> GcpKmsResponse | None:
+    principal = _principal(headers)
+    if _authorized(meta, principal, permission):
+        return None
+    return _err(403, "PERMISSION_DENIED",
+                f"Permission '{permission}' denied on resource '{name}' (or it may not exist).")
 
 
 # google-cloud-* REST clients send enums as numbers (`$alt=json;enum-encoding=int`).
@@ -327,9 +401,9 @@ def dispatch(store: KeyStore, method: str, path: str,
     if len(segs) == 8:
         name = "/".join(segs)
         if verb == "encrypt":
-            return _encrypt(store, name, payload)
+            return _encrypt(store, name, payload, headers)
         if verb == "decrypt":
-            return _decrypt(store, name, payload)
+            return _decrypt(store, name, payload, headers)
         if verb == "updateCryptoKeyPrimaryVersion":
             if not store.key_exists(name):
                 return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
@@ -350,7 +424,15 @@ def dispatch(store: KeyStore, method: str, path: str,
             if not store.key_exists(name):
                 return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
             meta = store.get_key(name)
+            denied = _require(meta, name, headers, "cloudkms.cryptoKeys.setIamPolicy")
+            if denied:
+                return denied
             policy = dict(payload.get("policy") or {})
+            for b in policy.get("bindings") or []:
+                if not str(b.get("role") or "") or not isinstance(b.get("members"), list) or not b["members"]:
+                    return _err(400, "INVALID_ARGUMENT",
+                                "Each policy.bindings[] entry requires a role and a non-empty members list.")
+            policy.setdefault("bindings", [])
             policy.setdefault("etag", _b64e(os.urandom(8)))
             meta["iamPolicy"] = policy
             store.put_key(name, meta, store.get_material(name))
@@ -446,10 +528,13 @@ def dispatch(store: KeyStore, method: str, path: str,
 # the same bytes under a new label. Encrypt embeds the *version* that did the work
 # (not just the CryptoKey) so Decrypt can re-check that specific version's state —
 # the one piece symmetric Encrypt/Decrypt needs to enforce lifecycle correctly.
-def _encrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
+def _encrypt(store: KeyStore, name: str, payload: dict, headers: dict | None = None) -> GcpKmsResponse:
     if not store.key_exists(name):
         return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
     meta = store.get_key(name) or {}
+    denied = _require(meta, name, headers, "cloudkms.cryptoKeyVersions.useToEncrypt")
+    if denied:
+        return denied
     primary = str(meta.get("primary", "1"))
     if meta.get("versions", {}).get(primary, {}).get("state", "ENABLED") != "ENABLED":
         return _err(400, "FAILED_PRECONDITION",
@@ -476,9 +561,12 @@ def _encrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
     return _json(200, out)
 
 
-def _decrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
+def _decrypt(store: KeyStore, name: str, payload: dict, headers: dict | None = None) -> GcpKmsResponse:
     if not store.key_exists(name):
         return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
+    denied = _require(store.get_key(name) or {}, name, headers, "cloudkms.cryptoKeyVersions.useToDecrypt")
+    if denied:
+        return denied
     try:
         blob = base64.b64decode(payload.get("ciphertext", "") or "")
     except Exception:
