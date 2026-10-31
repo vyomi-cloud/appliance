@@ -2473,6 +2473,9 @@
     // bar, so its account menu / Sign out stays on screen in every view, however long.
     function _sizeSideMenu() {
       var ab = document.getElementById('app-body');
+      // The menu's area reaches at least the bottom of the window, so the menu never
+      // stops short of it (no strip of page showing under it on short pages).
+      if (ab) ab.style.minHeight = Math.max(0, Math.round(window.innerHeight - (ab.getBoundingClientRect().top + window.scrollY))) + 'px';
       var r = ab ? ab.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
       var h = Math.min(window.innerHeight, r.bottom) - Math.max(0, r.top);
       document.body.style.setProperty('--side-h', Math.round(Math.max(240, h)) + 'px');
