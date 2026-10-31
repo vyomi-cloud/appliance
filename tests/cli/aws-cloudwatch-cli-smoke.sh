@@ -31,7 +31,11 @@ out=$(cw get-metric-statistics --namespace "$NS" --metric-name Latency --dimensi
 out=$(cw get-metric-statistics --namespace "$NS" --metric-name Latency --dimensions Name=Service,Value=cart --start-time "$START" --end-time "$END" --period 3600 --statistics SampleCount --query 'sum(Datapoints[].SampleCount)' --output text 2>&1); chk $([ "$out" = "3.0" ]; echo $?) "get-metric-statistics SampleCount=3" "$out"
 out=$(cw get-metric-data --start-time "$START" --end-time "$END" --metric-data-queries "[{\"Id\":\"m\",\"MetricStat\":{\"Metric\":{\"Namespace\":\"$NS\",\"MetricName\":\"Latency\",\"Dimensions\":[{\"Name\":\"Service\",\"Value\":\"cart\"}]},\"Period\":3600,\"Stat\":\"Maximum\"}}]" --query 'MetricDataResults[0].Values[0]' --output text 2>&1); chk $([ "$out" = "250.0" ]; echo $?) "get-metric-data Maximum=250" "$out"
 
-out=$(cw put-metric-alarm --alarm-name "$A" --namespace "$NS" --metric-name Latency --dimensions Name=Service,Value=cart --statistic Maximum --period 60 --evaluation-periods 1 --threshold 200 --comparison-operator GreaterThanThreshold --alarm-actions arn:aws:sns:us-east-1:123456789012:cli --tags Key=team,Value=cli 2>&1); chk $? "put-metric-alarm" "$out"
+# The alarm is evaluated over the latest periods, so give it a fresh datapoint and two 60 s
+# periods (1 breaching is enough): the steps above can take longer than a minute, which
+# left the first datapoint outside a 1-period window (flaky on the release runner).
+cw put-metric-data --namespace "$NS" --metric-name Latency --dimensions Service=cart --value 250 --unit Milliseconds >/dev/null 2>&1
+out=$(cw put-metric-alarm --alarm-name "$A" --namespace "$NS" --metric-name Latency --dimensions Name=Service,Value=cart --statistic Maximum --period 60 --evaluation-periods 2 --datapoints-to-alarm 1 --threshold 200 --comparison-operator GreaterThanThreshold --alarm-actions arn:aws:sns:us-east-1:123456789012:cli --tags Key=team,Value=cli 2>&1); chk $? "put-metric-alarm" "$out"
 out=$(cw describe-alarms --alarm-names "$A" --query 'MetricAlarms[0].StateValue' --output text 2>&1); chk $([ "$out" = "ALARM" ]; echo $?) "alarm evaluated against existing data → ALARM" "$out"
 out=$(cw describe-alarms --alarm-names "$A" --query 'MetricAlarms[0].[Threshold,Period,ComparisonOperator]' --output text 2>&1); chk $([[ "$out" == *"200.0"*"60"*"GreaterThanThreshold"* ]]; echo $?) "describe-alarms fields" "$out"
 out=$(cw set-alarm-state --alarm-name "$A" --state-value OK --state-reason "cli reset" 2>&1); chk $? "set-alarm-state" "$out"
