@@ -109,12 +109,21 @@ def _record_activity(resource_name: str, action: str, detail: str = "") -> None:
         pass
 
 
+def _parse_odata_ts(s: str):
+    try:
+        return datetime.datetime.fromisoformat(s.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
 def _activity_log_query(query: dict) -> dict:
     """GET /subscriptions/{sub}/providers/Microsoft.Insights/eventtypes/management/values —
     the real ARM activity-log read API every resource's "Activity log" blade calls, scoped
-    via an OData $filter containing ``resourceUri eq '{id}'``. Only that scoping predicate is
-    understood (not the full OData grammar); with no resourceUri filter the unfiltered feed
-    (every resource) is returned, matching the subscription-wide Activity log page."""
+    via an OData $filter containing ``resourceUri eq '{id}'`` and/or the timespan picker's
+    ``eventTimestamp ge/le '{iso}'`` predicates (ENFORCED — a narrower timespan really narrows
+    the result). The rest of the OData grammar (severity/category, other operators) is not
+    understood; with no resourceUri filter the unfiltered feed (every resource) is returned,
+    matching the subscription-wide Activity log page."""
     try:
         try:
             from core import nano_events
@@ -126,6 +135,19 @@ def _activity_log_query(query: dict) -> dict:
     m = re.search(r"resourceUri\s+eq\s+'([^']*)'", filt)
     resource = (m.group(1).rstrip("/").split("/")[-1]) if m else None
     events = nano_events.list_events(resource=resource)
+    since = _parse_odata_ts(m.group(1)) if (m := re.search(r"eventTimestamp\s+ge\s+'([^']*)'", filt)) else None
+    until = _parse_odata_ts(m.group(1)) if (m := re.search(r"eventTimestamp\s+le\s+'([^']*)'", filt)) else None
+    if since is not None or until is not None:
+        def _in_range(e):
+            ts = _parse_odata_ts(e["ts"])
+            if ts is None:
+                return True
+            if since is not None and ts < since:
+                return False
+            if until is not None and ts > until:
+                return False
+            return True
+        events = [e for e in events if _in_range(e)]
     value = [{
         "eventName": {"value": e["action"], "localizedValue": e["action"]},
         "operationName": {"value": e["action"], "localizedValue": f"{e['action']}: {e['detail']}" if e["detail"] else e["action"]},
@@ -242,6 +264,20 @@ def _canonical_id(sub: str, rg, type_chain, names) -> str:
         if i + 1 < len(rest_types):
             seg.append(rest_types[i + 1])
     return "/".join(seg)
+
+
+def _role_assignment_marker(chain):
+    """Index of a re-entrant, LIST-only ``['providers', 'Microsoft.Authorization',
+    'roleAssignments']`` marker in `chain` (`AzureArm._arm`'s split of everything after the
+    FIRST namespace token) — i.e. GET .../<some resource>/providers/Microsoft.Authorization/
+    roleAssignments, same shape as the locks/diagnosticSettings extension resources. A bare
+    name after the marker (reading ONE assignment scoped that way) isn't modelled and falls
+    through to the generic subscription-scoped catalog alternation instead."""
+    for i in range(len(chain) - 2):
+        if (chain[i].lower() == "providers" and chain[i + 1].lower() == "microsoft.authorization"
+                and chain[i + 2].lower() == "roleassignments" and i + 3 == len(chain)):
+            return i
+    return None
 
 
 def _view(rec: dict) -> dict:
@@ -501,6 +537,29 @@ class AzureArm:
         if diag_marker is not None:
             return self._diagnostic_settings(method, sub, rg, namespace, chain, diag_marker, payload)
 
+        # Microsoft.Authorization/roleAssignments: a real ARM extension resource that can be
+        # READ scoped to ANY other resource's own id (chain re-enters "providers", same shape
+        # as locks/diagnostic settings above) — real Azure's IAM blade lists assignments at that
+        # exact scope plus its subscription/resource-group ancestors (inherited access), not the
+        # whole subscription. Generic over every catalog type; GET-only (assignments are still
+        # CREATED at the subscription scope, matching how az role assignment create/Entra work
+        # today — this only narrows the READ for a resource's own IAM blade).
+        role_marker = _role_assignment_marker(chain)
+        if role_marker is not None:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Use the subscription-scoped roleAssignments path to write.")
+            stc, snames = [namespace], []
+            for n, token in enumerate(chain[:role_marker]):
+                (stc if n % 2 == 0 else snames).append(token)
+            scope_rid = _canonical_id(sub, rg, stc, snames).lower()
+            ancestors = {scope_rid, f"/subscriptions/{sub}".lower()}
+            if rg is not None:
+                ancestors.add(f"/subscriptions/{sub}/resourcegroups/{rg}".lower())
+            items = [_view(r) for r in self.state.values()
+                     if r.get("_type", "").lower() == "microsoft.authorization/roleassignments"
+                     and ((r.get("properties") or {}).get("scope") or "").rstrip("/").lower() in ancestors | {""}]
+            return _ok({"value": items})
+
         # ARM type path alternates type/name: providers/<ns>/<t1>/<n1>/<t2>/<n2>...
         type_chain = [namespace]
         names: list = []
@@ -605,6 +664,9 @@ class AzureArm:
             blocked = self._aks_stopped_block(type_chain, names, sub, rg)
             if blocked:
                 return blocked
+            blocked = self._cosmos_validate_block(type_chain, names, payload, sub, rg)
+            if blocked:
+                return blocked
             resp = self._upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
             if lro:
                 resp["status"] = 200
@@ -697,6 +759,69 @@ class AzureArm:
         if (cluster or {}).get("properties", {}).get("powerState", {}).get("code") == "Stopped":
             return _err(409, "ClusterNotRunning",
                         "The cluster is stopped. Start the cluster before performing operations on its node pools.")
+        return None
+
+    def _cosmos_validate_block(self, type_chain, names, payload, sub, rg):
+        # Real Cosmos DB ARM rejects an invalid consistencyPolicy / backupPolicy / locations
+        # shape outright — Vyomi now ENFORCES that contract instead of round-tripping whatever
+        # the caller sends (azure.cosmos.default_consistency, azure.cosmos.backup_restore,
+        # azure.cosmos.replicate_data_globally); the underlying behaviour (read consistency,
+        # taking/restoring a backup, provisioning a second region) is still not simulated.
+        if type_chain[0].lower() != "microsoft.documentdb" or type_chain[1].lower() != "databaseaccounts" or len(type_chain) != 2:
+            return None
+        existing_props = (self.state.get(_canonical_id(sub, rg, type_chain, names).lower()) or {}).get("properties") or {}
+        payload_props = (payload or {}).get("properties") or {}
+        props = _merge(existing_props, payload_props) if payload_props else existing_props
+
+        cp = props.get("consistencyPolicy")
+        if isinstance(cp, dict):
+            level = cp.get("defaultConsistencyLevel", "Session")
+            if level not in ("Strong", "BoundedStaleness", "Session", "ConsistentPrefix", "Eventual"):
+                return _err(400, "BadRequest", f"Unsupported consistencyPolicy.defaultConsistencyLevel '{level}'.")
+            if level == "BoundedStaleness":
+                prefix, interval = cp.get("maxStalenessPrefix"), cp.get("maxIntervalInSeconds")
+                if not isinstance(prefix, int) or not isinstance(interval, int):
+                    return _err(400, "BadRequest",
+                                "BoundedStaleness requires integer consistencyPolicy.maxStalenessPrefix and maxIntervalInSeconds.")
+                if not (10 <= prefix <= 2147483647):
+                    return _err(400, "BadRequest", "consistencyPolicy.maxStalenessPrefix must be between 10 and 2147483647.")
+                if not (5 <= interval <= 86400):
+                    return _err(400, "BadRequest", "consistencyPolicy.maxIntervalInSeconds must be between 5 and 86400.")
+
+        bp = props.get("backupPolicy")
+        if isinstance(bp, dict):
+            btype = bp.get("type", "Periodic")
+            if btype not in ("Periodic", "Continuous"):
+                return _err(400, "BadRequest", f"Unsupported backupPolicy.type '{btype}'.")
+            existing_type = (existing_props.get("backupPolicy") or {}).get("type", "Periodic")
+            if existing_type == "Continuous" and btype == "Periodic":
+                return _err(400, "BadRequest",
+                            "Migrating an account's backup policy from Continuous to Periodic mode is not supported.")
+            if btype == "Periodic":
+                pm = bp.get("periodicModeProperties") or {}
+                interval = pm.get("backupIntervalInMinutes", 240)
+                retention = pm.get("backupRetentionIntervalInHours", 8)
+                redundancy = pm.get("backupStorageRedundancy", "Geo")
+                if not isinstance(interval, int) or not (60 <= interval <= 1440):
+                    return _err(400, "BadRequest", "periodicModeProperties.backupIntervalInMinutes must be between 60 and 1440.")
+                if not isinstance(retention, int) or not (8 <= retention <= 720):
+                    return _err(400, "BadRequest", "periodicModeProperties.backupRetentionIntervalInHours must be between 8 and 720.")
+                if redundancy not in ("Geo", "Zone", "Local"):
+                    return _err(400, "BadRequest", f"Unsupported periodicModeProperties.backupStorageRedundancy '{redundancy}'.")
+            else:
+                tier = (bp.get("continuousModeProperties") or {}).get("tier", "Continuous30Days")
+                if tier not in ("Continuous7Days", "Continuous30Days"):
+                    return _err(400, "BadRequest", f"Unsupported continuousModeProperties.tier '{tier}'.")
+
+        locations = props.get("locations")
+        if isinstance(locations, list) and locations:
+            loc_names = [l.get("locationName") for l in locations]
+            if len(set(loc_names)) != len(loc_names):
+                return _err(400, "BadRequest", "properties.locations cannot repeat the same locationName.")
+            prios = sorted(l.get("failoverPriority") for l in locations)
+            if prios != list(range(len(locations))):
+                return _err(400, "BadRequest",
+                            "properties.locations.failoverPriority must be a 0-based, gap-free sequence with exactly one region at priority 0.")
         return None
 
     def _locks(self, method, sub, rg, namespace, chain, marker, payload):
@@ -931,6 +1056,8 @@ class AzureArm:
         if ns == "microsoft.documentdb" and typ == "databaseaccounts" and action in (
                 "listkeys", "listreadonlykeys", "listconnectionstrings", "regeneratekey"):
             return self._cosmos_keys_action(action, resource_name, parent_rid, payload or {})
+        if ns == "microsoft.documentdb" and typ == "databaseaccounts" and action == "failoverprioritychange":
+            return self._cosmos_failover_action(resource_name, parent_rid, payload or {})
         if action in ("start", "poweroff", "restart", "deallocate"):
             if ns != "microsoft.compute" or typ != "virtualmachines":
                 return _err(400, "ActionNotSupported",
@@ -987,6 +1114,47 @@ class AzureArm:
             return _err(400, "BadRequest", f"Unknown keyKind '{payload.get('keyKind')}'.")
         keys[field] = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes).decode()
         return _ok({"status": "Succeeded"})
+
+    def _cosmos_failover_action(self, account_name, parent_rid, payload):
+        """Microsoft.DocumentDB/databaseAccounts/{name}/failoverPriorityChange — the real
+        action behind the Replicate data globally blade's Manual Failover button. ENFORCED for
+        real: it reassigns which configured region is the write region (failoverPriority 0) and
+        updates location/writeLocations/readLocations to match — Vyomi still has one logical
+        region underneath, so the promoted region doesn't get its own separate data-plane copy
+        (azure.cosmos.replicate_data_globally)."""
+        rec = self.state.get(parent_rid.lower()) if parent_rid else None
+        if not rec:
+            return _err(404, "ResourceNotFound", f"Database account '{account_name}' not found.")
+        policies = payload.get("failoverPolicies")
+        if not isinstance(policies, list) or not policies:
+            return _err(400, "BadRequest", "failoverPolicies is required.")
+        locations = rec.get("properties", {}).get("locations") or []
+        by_name = {l.get("locationName"): dict(l) for l in locations}
+        if not by_name:
+            return _err(400, "BadRequest", "This account has no configured regions to fail over between.")
+        seen = set()
+        for p in policies:
+            name, prio = p.get("locationName"), p.get("failoverPriority")
+            if name not in by_name:
+                return _err(400, "BadRequest", f"Location '{name}' is not configured on this account.")
+            if not isinstance(prio, int) or prio < 0:
+                return _err(400, "BadRequest", "failoverPriority must be a non-negative integer.")
+            by_name[name]["failoverPriority"] = prio
+            seen.add(name)
+        if seen != set(by_name.keys()):
+            return _err(400, "BadRequest", "failoverPolicies must list every region configured on the account.")
+        prios = sorted(l["failoverPriority"] for l in by_name.values())
+        if prios != list(range(len(prios))):
+            return _err(400, "BadRequest",
+                        "failoverPriority values must be a 0-based, gap-free sequence with exactly one region at priority 0.")
+        new_locations = sorted(by_name.values(), key=lambda l: l["failoverPriority"])
+        rec["properties"]["locations"] = new_locations
+        primary = new_locations[0]["locationName"]
+        rec["location"] = primary
+        rec["properties"]["writeLocations"] = [{"locationName": primary, "failoverPriority": 0}]
+        rec["properties"]["readLocations"] = [{"locationName": l["locationName"], "failoverPriority": l["failoverPriority"]} for l in new_locations]
+        _record_activity(account_name, "Failover", f"Microsoft.DocumentDB/databaseAccounts '{account_name}' promoted '{primary}' to the write region")
+        return _ok(None, status=202)
 
     def _aks_action(self, action, cluster_name, parent_rid, payload):
         """POST actions on Microsoft.ContainerService/managedClusters/{name}/<action> — start/stop

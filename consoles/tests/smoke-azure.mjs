@@ -1293,6 +1293,24 @@ try {
   check("wire-created document → readable via the UI's SQL query box", true);
   await shot("32-cosmos-data-explorer-query");
 
+  // ── Replicate data globally: Add region + Manual Failover through the UI really
+  // reassign the write region over native ARM (azure.cosmos.replicate_data_globally) ─────────
+  await openPanel("Replicate data globally");
+  await page.getByRole("button", { name: "Add region" }).click();
+  await page.getByLabel("Region", { exact: true }).selectOption("westus");
+  await page.getByRole("dialog", { name: "Add region" }).getByRole("button", { name: "Save" }).click();
+  await page.getByRole("dialog", { name: "Add region" }).waitFor({ state: "detached", timeout: 10000 });
+  await page.getByText("West US", { exact: true }).waitFor({ timeout: 10000 });
+  await shot("33b-cosmos-replicate-add-region");
+  await page.getByRole("button", { name: "Manual Failover" }).click();
+  await page.getByLabel("New write region", { exact: true }).selectOption("westus");
+  await page.getByRole("dialog", { name: "Manual Failover" }).getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog", { name: "Manual Failover" }).waitFor({ state: "detached", timeout: 10000 });
+  const cosmosFailedOver = await cosmosArm("GET", `/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS}`);
+  const cosmosFailedOverBody = JSON.parse(cosmosFailedOver.text);
+  check("UI Manual Failover → write region reassigned over native ARM",
+    cosmosFailedOverBody.location === "westus", JSON.stringify(cosmosFailedOverBody.properties?.locations));
+
   // ── Lock created on the account → visible over native ARM ──────────────────────────────
   await page.goto(UI + `#/cosmos/${RG}/${COSMOS}/locks`);
   await page.getByRole("button", { name: "Add", exact: true }).click();

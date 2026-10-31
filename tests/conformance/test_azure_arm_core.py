@@ -206,6 +206,15 @@ def run() -> int:
     ops2 = [e["operationName"]["value"] for e in ev2["body"]["value"]]
     _check("activity log is scoped per vault (no cross-resource leakage)", "Create lock" not in ops2)
 
+    # the timespan picker (eventTimestamp ge) is ENFORCED: a future lower bound excludes
+    # every event the two writes above just produced, a past one keeps them all.
+    ev_future = arm.handle("GET", events_path, {"api-version": "2015-04-01",
+                           "$filter": f"resourceUri eq '{kv}' and eventTimestamp ge '2999-01-01T00:00:00Z'"})
+    _check("timespan filter excludes events before the lower bound", ev_future["body"]["value"] == [])
+    ev_past = arm.handle("GET", events_path, {"api-version": "2015-04-01",
+                         "$filter": f"resourceUri eq '{kv}' and eventTimestamp ge '2000-01-01T00:00:00Z'"})
+    _check("timespan filter keeps events after the lower bound", len(ev_past["body"]["value"]) == len(ev["body"]["value"]))
+
     r = arm.handle("DELETE", lock, {"api-version": "2020-05-01"})
     _check("lock delete 200", r["status"] == 200)
     r = arm.handle("GET", lock, {"api-version": "2020-05-01"})
@@ -613,6 +622,94 @@ def run() -> int:
     # (a lock on a KeyVault vault — a different resource type — stays config_only, not
     # enforced: proven above at "locks cascade-deleted with resource", where DELETE
     # succeeded on `kv` despite its ReadOnly lock.)
+
+    # Microsoft.DocumentDB/databaseAccounts: azure.cosmos.default_consistency /
+    # backup_restore / replicate_data_globally are ENFORCED at the ARM contract level.
+    cosmos_path = _p(RG, "Microsoft.DocumentDB", "databaseAccounts", "cosmosarmtest")
+    r = arm.handle("PUT", cosmos_path, {"api-version": "2024-05-15"}, {
+        "location": "eastus", "kind": "GlobalDocumentDB",
+        "properties": {
+            "databaseAccountOfferType": "Standard",
+            "consistencyPolicy": {"defaultConsistencyLevel": "Session"},
+            "locations": [{"locationName": "eastus", "failoverPriority": 0, "isZoneRedundant": False}],
+            "backupPolicy": {"type": "Periodic", "periodicModeProperties": {
+                "backupIntervalInMinutes": 240, "backupRetentionIntervalInHours": 8, "backupStorageRedundancy": "Geo"}},
+        },
+    })
+    _check("cosmos account create 200 (LRO)", r["status"] == 200 and "Azure-AsyncOperation" in r["headers"])
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"},
+                   {"properties": {"consistencyPolicy": {"defaultConsistencyLevel": "BoundedStaleness"}}})
+    _check("BoundedStaleness without staleness fields rejected", r["status"] == 400)
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"}, {"properties": {
+        "consistencyPolicy": {"defaultConsistencyLevel": "BoundedStaleness", "maxStalenessPrefix": 5, "maxIntervalInSeconds": 300}}})
+    _check("BoundedStaleness out-of-range prefix rejected", r["status"] == 400)
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"}, {"properties": {
+        "consistencyPolicy": {"defaultConsistencyLevel": "BoundedStaleness", "maxStalenessPrefix": 100000, "maxIntervalInSeconds": 300}}})
+    _check("BoundedStaleness with valid fields accepted", r["status"] == 200)
+    _check("BoundedStaleness round-trips",
+           r["body"]["properties"]["consistencyPolicy"]["maxStalenessPrefix"] == 100000)
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"},
+                   {"properties": {"backupPolicy": {"type": "Continuous", "continuousModeProperties": {"tier": "Continuous30Days"}}}})
+    _check("Periodic -> Continuous backup migration accepted", r["status"] == 200)
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"},
+                   {"properties": {"backupPolicy": {"type": "Periodic"}}})
+    _check("Continuous -> Periodic backup migration rejected", r["status"] == 400)
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"},
+                   {"properties": {"locations": [
+                       {"locationName": "eastus", "failoverPriority": 0},
+                       {"locationName": "westus", "failoverPriority": 2},
+                   ]}})
+    _check("locations with a failoverPriority gap rejected", r["status"] == 400)
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"},
+                   {"properties": {"locations": [
+                       {"locationName": "eastus", "failoverPriority": 0, "isZoneRedundant": False},
+                       {"locationName": "westus", "failoverPriority": 1, "isZoneRedundant": False},
+                   ]}})
+    _check("adding a second region accepted", r["status"] == 200)
+
+    r = arm.handle("POST", cosmos_path + "/failoverPriorityChange", {"api-version": "2024-05-15"},
+                   {"failoverPolicies": [{"locationName": "eastus", "failoverPriority": 1},
+                                        {"locationName": "westus", "failoverPriority": 0}]})
+    _check("manual failover accepted", r["status"] == 202)
+    r = arm.handle("GET", cosmos_path, {"api-version": "2024-05-15"})
+    _check("failover promotes westus to priority 0",
+           next(l["failoverPriority"] for l in r["body"]["properties"]["locations"] if l["locationName"] == "westus") == 0)
+    _check("failover demotes eastus", r["body"]["location"] == "westus")
+
+    r = arm.handle("POST", cosmos_path + "/failoverPriorityChange", {"api-version": "2024-05-15"},
+                   {"failoverPolicies": [{"locationName": "eastus", "failoverPriority": 0}]})
+    _check("failover missing a configured region rejected", r["status"] == 400)
+
+    # azure.cosmos.iam: Microsoft.Authorization/roleAssignments read scoped to the account
+    # (plus its subscription/resource-group ancestors — real Azure's inherited access).
+    ra_path = f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleAssignments"
+    r = arm.handle("PUT", ra_path + "/ra-cosmos-scoped", {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "11111111-1111-1111-1111-111111111111",
+                                   "roleDefinitionId": "owner", "scope": cosmos_path}})
+    _check("role assignment scoped to the cosmos account created", r["status"] == 201)
+    r = arm.handle("PUT", ra_path + "/ra-sub-scoped", {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "22222222-2222-2222-2222-222222222222",
+                                   "roleDefinitionId": "reader", "scope": f"/subscriptions/{SUB}"}})
+    _check("role assignment scoped to the subscription created", r["status"] == 201)
+    other_rid = _p(RG, "Microsoft.Storage", "storageAccounts", "unrelatedforiam")
+    arm.handle("PUT", other_rid, {"api-version": AV}, {"location": "eastus"})
+    r = arm.handle("PUT", ra_path + "/ra-other-scoped", {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "33333333-3333-3333-3333-333333333333",
+                                   "roleDefinitionId": "contributor", "scope": other_rid}})
+    _check("role assignment scoped to an unrelated resource created", r["status"] == 201)
+
+    r = arm.handle("GET", cosmos_path + "/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    names = {x["name"] for x in r["body"]["value"]}
+    _check("account-scoped IAM list includes the account-scoped assignment", "ra-cosmos-scoped" in names)
+    _check("account-scoped IAM list includes the inherited subscription-scoped assignment", "ra-sub-scoped" in names)
+    _check("account-scoped IAM list excludes an unrelated resource's assignment", "ra-other-scoped" not in names)
 
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0
