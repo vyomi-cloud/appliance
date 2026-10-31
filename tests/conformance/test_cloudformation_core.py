@@ -1,5 +1,5 @@
 """CloudFormation core conformance — stacks/change-sets/stack-sets + real resource
-provisioning through the S3/DynamoDB/SNS/SQS/IAM cores (host + Pyodide).
+provisioning through the S3/DynamoDB/SNS/SQS/IAM/Logs cores (host + Pyodide).
 
     PYTHONPATH=. python3 tests/conformance/test_cloudformation_core.py
 """
@@ -12,12 +12,14 @@ try:
     from core.nosql_store import InMemoryNoSqlStore
     from core.iam_store import InMemoryIamStore
     from core.messaging_store import InMemoryMessagingStore
+    from core.logs_core import LogsStore
 except ImportError:  # pragma: no cover - Pyodide flat layout
     from cloudformation_core import CloudFormationStore, dispatch  # type: ignore
     from object_store import InMemoryObjectStore  # type: ignore
     from nosql_store import InMemoryNoSqlStore  # type: ignore
     from iam_store import InMemoryIamStore  # type: ignore
     from messaging_store import InMemoryMessagingStore  # type: ignore
+    from logs_core import LogsStore  # type: ignore
 
 
 def _check(name, cond):
@@ -37,8 +39,8 @@ def _vs(xml, tag):
 
 def run():
     store = CloudFormationStore()
-    s3, ddb, iam, msg = InMemoryObjectStore(), InMemoryNoSqlStore(), InMemoryIamStore(), InMemoryMessagingStore()
-    call = lambda a, **p: dispatch(store, dict(p, Action=a), s3_store=s3, ddb_store=ddb, iam_store=iam, msg_store=msg)
+    s3, ddb, iam, msg, logs = InMemoryObjectStore(), InMemoryNoSqlStore(), InMemoryIamStore(), InMemoryMessagingStore(), LogsStore()
+    call = lambda a, **p: dispatch(store, dict(p, Action=a), s3_store=s3, ddb_store=ddb, iam_store=iam, msg_store=msg, logs_store=logs)
     err = lambda r, code: r.status >= 400 and f"<Code>{code}</Code>" in r.body
 
     _check("unknown action", err(call("Nope"), "InvalidAction"))
@@ -188,6 +190,36 @@ def run():
     _check("drift detected (bucket deleted out-of-band)", "<StackDriftStatus>DRIFTED</StackDriftStatus>" in r.body)
     r = call("DescribeStackResourceDrifts", StackName="conf-stack")
     _check("resource-level drift flagged DELETED", "<StackResourceDriftStatus>DELETED</StackResourceDriftStatus>" in r.body)
+
+    # ── AWS::Logs::LogGroup: a 6th provisioned type, with a real UpdateStack hook ───
+    log_tpl = json.dumps({"Resources": {"LG": {"Type": "AWS::Logs::LogGroup",
+                          "Properties": {"LogGroupName": "cfn-conf-loggroup", "RetentionInDays": 7}}}})
+    r = call("CreateStack", StackName="log-stack", TemplateBody=log_tpl)
+    _check("log group stack create 200", r.status == 200)
+    _check("log group actually created in the Logs store", logs.log_groups.get("cfn-conf-loggroup") is not None)
+    _check("retention applied at create time", logs.log_groups["cfn-conf-loggroup"].get("retentionInDays") == 7)
+    log_tpl2 = json.dumps({"Resources": {"LG": {"Type": "AWS::Logs::LogGroup",
+                           "Properties": {"LogGroupName": "cfn-conf-loggroup", "RetentionInDays": 14}}}})
+    r = call("UpdateStack", StackName="log-stack", TemplateBody=log_tpl2)
+    _check("log group update 200", r.status == 200)
+    _check("retention really changed (ENFORCED, not just stored)", logs.log_groups["cfn-conf-loggroup"]["retentionInDays"] == 14)
+
+    # ── property-level drift: an out-of-band change through the resource's OWN core ──
+    logs.log_groups["cfn-conf-loggroup"]["retentionInDays"] = 30  # someone edited it via the Logs console
+    r = call("DetectStackDrift", StackName="log-stack")
+    _check("log-stack drift detection kicked off", r.status == 200)
+    r = call("DescribeStackResourceDrifts", StackName="log-stack")
+    _check("property drift flagged MODIFIED (not just existence)", "<StackResourceDriftStatus>MODIFIED</StackResourceDriftStatus>" in r.body)
+    _check("property difference names RetentionInDays", "<PropertyPath>/RetentionInDays</PropertyPath>" in r.body)
+    _check("property difference shows expected 14", "<ExpectedValue>14</ExpectedValue>" in r.body)
+    _check("property difference shows actual 30", "<ActualValue>30</ActualValue>" in r.body)
+    logs.log_groups["cfn-conf-loggroup"]["retentionInDays"] = 14  # un-drift
+    r = call("DetectStackDrift", StackName="log-stack")
+    r = call("DescribeStackResourceDrifts", StackName="log-stack")
+    _check("drift clears once the live property matches the baseline again", "<StackResourceDriftStatus>IN_SYNC</StackResourceDriftStatus>" in r.body)
+    r = call("DeleteStack", StackName="log-stack")
+    _check("log group stack delete 200", r.status == 200)
+    _check("log group torn down with the stack", logs.log_groups.get("cfn-conf-loggroup") is None)
 
     # ── ValidateTemplate ─────────────────────────────────────────────────────
     r = call("ValidateTemplate", TemplateBody=iam_tpl)

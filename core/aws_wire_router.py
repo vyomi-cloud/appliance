@@ -853,7 +853,7 @@ class AwsWireRouter:
             r = elbv2.dispatch(self.elbv2, params)
         elif svc == "cloudformation":
             r = cfn.dispatch(self.cfn, params, s3_store=self.s3, ddb_store=self.ddb,
-                              iam_store=self.iam, msg_store=self.msg)
+                              iam_store=self.iam, msg_store=self.msg, logs_store=self.logs)
         else:  # sns
             r = sns.dispatch(self.msg, params)
         hdrs = dict(r.headers or {})
