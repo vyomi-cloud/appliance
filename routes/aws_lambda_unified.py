@@ -310,8 +310,9 @@ async def _native(request: Request):
         fn = _find(segs[2]) if len(segs) >= 4 else None
         if fn is None:
             return _wi.to_response(_wi.dispatch_service("lambda", "POST", path, dict(request.query_params), headers, body))
-        hdrs = {k: v for k, v in headers.items() if k.lower() != "x-amz-invocation-type"}
-        _in_background(_wi.dispatch_service, "lambda", "POST", path, dict(request.query_params), hdrs, body)
+        # keep InvocationType=Event: the core then delivers the outcome to the function's
+        # OnSuccess/OnFailure destination (or DLQ), as real async Lambda does
+        _in_background(_wi.dispatch_service, "lambda", "POST", path, dict(request.query_params), headers, body)
         return Response(status_code=202, headers={"x-amzn-requestid": _lc.uuid.uuid4().hex})
     out = _wi.dispatch_service("lambda", request.method, path, dict(request.query_params), headers, body)
     return _wi.to_response(out)
@@ -583,11 +584,23 @@ def _default_code(name: str) -> str:
         """).strip() + "\n"
 
 
+_OTHER_PREFIXES = (
+    "/2014-11-13/functions", "/2016-08-19/account-settings", "/2017-03-31/tags", "/2017-10-31/functions",
+    "/2018-10-31/layers", "/2019-09-25/functions", "/2019-09-30/functions", "/2020-04-22/code-signing-configs",
+    "/2020-06-30/functions", "/2021-07-20/functions", "/2021-10-31/functions", "/2021-11-15/functions",
+    "/2024-08-31/functions", "/2025-11-30/functions", "/2025-11-30/capacity-providers", "/2025-12-01/functions")
+
+
 def register(app) -> None:
     """Mount the native Lambda REST + the classic console REST on the shared engine (BEFORE
     the provider routes and the net-new mount — Starlette matches in registration order)."""
     if not _wi.is_unified("lambda"):
         return
     app.add_route("/2015-03-31/{rest:path}", _native, methods=_METHODS)
+    # the other API-date prefixes boto3 / the CLI use for newer Lambda operations
+    # (event-invoke-config, function URLs, provisioned concurrency, tags, layers, …)
+    for pre in _OTHER_PREFIXES:
+        app.add_route(pre, _native, methods=_METHODS)
+        app.add_route(pre + "/{rest:path}", _native, methods=_METHODS)
     _register_console(app)
 

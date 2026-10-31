@@ -1391,6 +1391,27 @@ def dispatch(store, method: str, path: str,
 
     if kind == "layers":
         return _dispatch_layers(store, method, tail, body)
+    if kind == "tags" and tail:          # native TagResource / UntagResource / ListTags: /2017-03-31/tags/{ARN}
+        from urllib.parse import unquote
+        arn = unquote("/".join(tail))
+        name = arn.split(":function:", 1)[-1].split(":", 1)[0] if ":function:" in arn else arn
+        if method == "GET":
+            return _list_tags(store, name)
+        if method == "POST":
+            return _tag_resource(store, name, _parse(body))
+        if method == "DELETE":
+            keys = query.get("tagKeys") or []
+            keys = keys if isinstance(keys, list) else str(keys).split(",")
+            return _untag_resource(store, name, [k for k in keys if k])
+    if kind == "account-settings" and not tail and method == "GET":   # GetAccountSettings
+        fns = _functions(store)
+        total = sum(len(f.get("source", "")) for f in fns.values())
+        return _json(200, {
+            "AccountLimit": {"TotalCodeSize": 80530636800, "CodeSizeUnzipped": 262144000,
+                             "CodeSizeZipped": 52428800, "ConcurrentExecutions": 1000,
+                             "UnreservedConcurrentExecutions": 1000 - sum(
+                                 int(f.get("reserved_concurrency") or 0) for f in fns.values())},
+            "AccountUsage": {"TotalCodeSize": total, "FunctionCount": len(fns)}})
     if kind == "event-source-mappings":
         return _dispatch_esms(store, method, tail, query, body)
     if kind == "functions":

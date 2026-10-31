@@ -548,7 +548,14 @@ class AwsWireRouter:
                 # plus Vyomi-exclusive console surfaces — see core/lambda_core.py module note)
                 "/2015-03-31/capacity-providers", "/2015-03-31/code-signing-configs",
                 "/2015-03-31/network-connectors", "/2015-03-31/microvm-images",
-                "/2015-03-31/microvms", "/2015-03-31/applications", "/2015-03-31/replicas")):
+                "/2015-03-31/microvms", "/2015-03-31/applications", "/2015-03-31/replicas",
+                # the other API-date prefixes boto3 / the CLI use for newer operations
+                "/2014-11-13/functions", "/2016-08-19/account-settings", "/2017-03-31/tags",
+                "/2017-10-31/functions", "/2018-10-31/layers", "/2019-09-25/functions",
+                "/2019-09-30/functions", "/2020-04-22/code-signing-configs", "/2020-06-30/functions",
+                "/2021-07-20/functions", "/2021-10-31/functions", "/2021-11-15/functions",
+                "/2024-08-31/functions", "/2025-11-30/functions", "/2025-11-30/capacity-providers",
+                "/2025-12-01/functions")):
             return "lambda"
         if path.startswith("/v2/") and path[4:].split("/", 1)[0] in (   # API Gateway V2 control plane
                 "apis", "domainnames", "vpclinks", "tags", "portals", "portalproducts", "domainnameaccessassociations"):

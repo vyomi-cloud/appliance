@@ -2120,6 +2120,9 @@ def _find_launch_template(m, params) -> dict:
     target = next((lt for lt in m["launch_templates"].values() if (lt_id and lt["id"] == lt_id) or (name and lt["name"] == name)), None)
     if target is None:
         raise VpcError("InvalidLaunchTemplateId.NotFound", "Launch template not found.")
+    # Nano persists state as JSON, which turns the int version keys into strings
+    if any(not isinstance(k, int) for k in target["versions"]):
+        target["versions"] = {int(k): v for k, v in target["versions"].items()}
     return target
 
 

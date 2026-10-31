@@ -451,7 +451,12 @@ try {
   await page.getByRole("radio", { name: "Asynchronous" }).check();
   await page.getByRole("button", { name: "Test", exact: true }).click();
   await page.getByText("Asynchronous invocation accepted").first().waitFor({ timeout: 10000 });
-  const destMsgs = await sqs("ReceiveMessage", { QueueUrl: destQ.QueueUrl, MaxNumberOfMessages: 10 });
+  // async really is async offline (the function runs off the request) — poll like a consumer would
+  let destMsgs = {};
+  for (let i = 0; i < 20 && !(destMsgs.Messages || []).length; i++) {
+    if (i) await page.waitForTimeout(500);
+    destMsgs = await sqs("ReceiveMessage", { QueueUrl: destQ.QueueUrl, MaxNumberOfMessages: 10 });
+  }
   check("Lambda async Test invoke (UI) → really delivered to the OnSuccess destination over the wire",
     (destMsgs.Messages || []).length > 0, JSON.stringify(destMsgs));
   await shot("17b-lambda-async-destination");
