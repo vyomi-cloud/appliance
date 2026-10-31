@@ -17,6 +17,7 @@ policies. Archives, replays, schedules and non-SQS targets slot in next.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -121,7 +122,10 @@ def _put_targets(store, body):
         raise _E("ResourceNotFoundException", f"Rule {name} does not exist.")
     for t in body.get("Targets") or []:
         tid = str(t.get("Id") or uuid.uuid4().hex)
-        rule["targets"][tid] = {"Id": tid, "Arn": str(t.get("Arn", ""))}
+        # Keep every target field the caller set (Input, InputPath, InputTransformer,
+        # RetryPolicy, DeadLetterConfig, RoleArn…) so ListTargetsByRule returns them.
+        rule["targets"][tid] = {**{k: v for k, v in t.items() if v is not None},
+                                "Id": tid, "Arn": str(t.get("Arn", ""))}
     store.persist()
     return EventsResponse(body={"FailedEntryCount": 0, "FailedEntries": []})
 
@@ -140,6 +144,43 @@ def _list_targets_by_rule(store, body):
     if not rule:
         raise _E("ResourceNotFoundException", "Rule does not exist.")
     return EventsResponse(body={"Targets": list(rule["targets"].values())})
+
+
+def _json_path(doc, path):
+    """Resolve a `$.a.b[0]` JSONPath subset; returns (found, value)."""
+    cur = doc
+    for part in re.findall(r"[^.\[\]$]+|\[\d+\]", path or ""):
+        try:
+            if part.startswith("["):
+                cur = cur[int(part[1:-1])]
+            else:
+                cur = cur[part]
+        except (KeyError, IndexError, TypeError):
+            return False, None
+    return True, cur
+
+
+def _target_input(tgt, envelope, body_str):
+    """Apply the target's Input / InputPath / InputTransformer to the event."""
+    if tgt.get("Input") is not None:
+        return str(tgt["Input"])
+    if tgt.get("InputPath"):
+        ok, val = _json_path(envelope, tgt["InputPath"])
+        return json.dumps(val) if ok else body_str
+    tr = tgt.get("InputTransformer")
+    if tr:
+        values = {}
+        for k, path in (tr.get("InputPathsMap") or {}).items():
+            ok, val = _json_path(envelope, path)
+            values[k] = val if ok else None
+
+        def sub(m):
+            v = values.get(m.group(1))
+            if v is None:
+                return ""
+            return v if isinstance(v, str) else json.dumps(v)
+        return re.sub(r"<([A-Za-z0-9_.\-]+)>", sub, str(tr.get("InputTemplate", "")))
+    return body_str
 
 
 def _deliver_sns(store, topic_arn, body_str):
@@ -176,7 +217,7 @@ def _put_events(store, body):
                      "account": store.account_id, "region": REGION}
         envelope = {"version": "0", "id": event_id, "source": source,
                     "detail-type": detail_type, "detail": detail, "time": _now_iso()}
-        body_str = json.dumps(envelope)
+        base_str = json.dumps(envelope)
         for rule in _rules(store).values():
             if rule.get("bus", "default") != bus or rule.get("state") != "ENABLED":
                 continue
@@ -184,6 +225,7 @@ def _put_events(store, body):
                 continue
             for tgt in rule["targets"].values():
                 arn = tgt["Arn"]
+                body_str = _target_input(tgt, envelope, base_str)
                 queue = store.get_queue_by_arn(arn)
                 if queue is not None:
                     sqs_core.enqueue(store, queue, body_str)

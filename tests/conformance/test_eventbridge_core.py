@@ -63,6 +63,29 @@ def run(store=None):
     got = sqs.dispatch(s, "AmazonSQS.ReceiveMessage", {"QueueUrl": qurl2, "MaxNumberOfMessages": 10}).body
     _check("matching event → delivered to SNS target → SQS subscriber", len(got.get("Messages", [])) == 1)
 
+    # Target input shaping: InputTransformer, InputPath, constant Input.
+    def recv():
+        m = sqs.dispatch(s, "AmazonSQS.ReceiveMessage", {"QueueUrl": qurl, "MaxNumberOfMessages": 10}).body["Messages"]
+        for x in m:
+            sqs.dispatch(s, "AmazonSQS.DeleteMessage", {"QueueUrl": qurl, "ReceiptHandle": x["ReceiptHandle"]})
+        return json.loads(m[0]["Body"])
+
+    call("PutRule", {"Name": "r3", "EventPattern": json.dumps({"source": ["shape.app"]})})
+    call("PutTargets", {"Rule": "r3", "Targets": [
+        {"Id": "tt", "Arn": qarn, "InputTransformer": {
+            "InputPathsMap": {"st": "$.detail.state", "src": "$.source"},
+            "InputTemplate": '{"s":"<st>","from":"<src>"}'}}]})
+    _check("PutTargets keeps InputTransformer",
+           "InputTransformer" in call("ListTargetsByRule", {"Rule": "r3"}).body["Targets"][0])
+    call("PutEvents", {"Entries": [{"Source": "shape.app", "DetailType": "x", "Detail": json.dumps({"state": "up"})}]})
+    _check("InputTransformer applied", recv() == {"s": "up", "from": "shape.app"})
+    call("PutTargets", {"Rule": "r3", "Targets": [{"Id": "tt", "Arn": qarn, "InputPath": "$.detail"}]})
+    call("PutEvents", {"Entries": [{"Source": "shape.app", "DetailType": "x", "Detail": json.dumps({"state": "up"})}]})
+    _check("InputPath applied", recv() == {"state": "up"})
+    call("PutTargets", {"Rule": "r3", "Targets": [{"Id": "tt", "Arn": qarn, "Input": '{"fixed":1}'}]})
+    call("PutEvents", {"Entries": [{"Source": "shape.app", "DetailType": "x", "Detail": "{}"}]})
+    _check("constant Input applied", recv() == {"fixed": 1})
+
     _check("ListRules",call("ListRules", {}).body["Rules"][0]["Name"] == "r1")
     _check("ListTargetsByRule", call("ListTargetsByRule", {"Rule": "r1"}).body["Targets"][0]["Id"] == "t1")
 
