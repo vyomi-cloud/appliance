@@ -32,6 +32,8 @@ const sqs = async (target, body) => JSON.parse(await wire("/", { method: "POST",
 const sns = async (action, body) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/sns/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...body }).toString() });
 const events = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `AWSEvents.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/events/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const scheduler = async (method, path, body) => { const t = await wire(path, { method, headers: { "content-type": "application/json", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/scheduler/aws4_request, SignedHeaders=host, Signature=0" }, body: body === undefined ? undefined : JSON.stringify(body) }); try { return JSON.parse(t); } catch { return t; } };
+const kinesis = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `Kinesis_20131202.${target}`, "content-type": "application/x-amz-json-1.1", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/kinesis/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
+const sfn = async (target, body) => JSON.parse(await wire("/", { method: "POST", headers: { "x-amz-target": `AWSStepFunctions.${target}`, "content-type": "application/x-amz-json-1.0", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/states/aws4_request, SignedHeaders=host, Signature=0" }, body: JSON.stringify(body) }));
 const lam = async (method, path, body) => { const t = await wire(path, { method, body: body === undefined ? undefined : JSON.stringify(body) }); try { return JSON.parse(t); } catch { return t; } };
 const rds = async (action, body = {}) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/rds/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams({ Action: action, ...body }).toString() });
 const iamXml = async (body) => wire("/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded; charset=utf-8", authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/iam/aws4_request, SignedHeaders=host, Signature=0" }, body: new URLSearchParams(body).toString() });
@@ -447,7 +449,7 @@ try {
   await page.goto(UI + "#/eventbridge/create-rule");
   await page.getByRole("tab", { name: "Build" }).click();
   await page.getByRole("button", { name: "Add target" }).click();
-  await page.getByLabel("Select a target").first().click();
+  await page.getByLabel("Select a target 1").first().click();
   await page.getByRole("option", { name: new RegExp(`SQS queue: ${EBQ}$`) }).click();
   await page.getByRole("tab", { name: "Configure" }).click();
   await page.getByLabel("Rule name").fill(R);
@@ -463,6 +465,40 @@ try {
   await events("PutEvents", { Entries: [{ Source: "my.app", DetailType: "x", Detail: "{}", EventBusName: "default" }] });
   const ebMsgs = await sqs("ReceiveMessage", { QueueUrl: ebQueueUrl, MaxNumberOfMessages: 10 });
   check("EventBridge PutEvents over wire → really delivered to the UI-created rule's SQS target", (ebMsgs.Messages || []).length > 0, JSON.stringify(ebMsgs));
+
+  // EventBridge: Step Functions + Kinesis targets — the depth-pass addition beyond the
+  // SQS/SNS/Lambda targets proven above. A second rule, built entirely through the UI,
+  // with both target types; PutEvents over the wire must really invoke both.
+  const EBSTREAM = `v4smoke-eb-stream-${Date.now() % 100000}`;
+  await kinesis("CreateStream", { StreamName: EBSTREAM, ShardCount: 1 });
+  const EBSM = `v4smoke-eb-sm-${Date.now() % 100000}`;
+  const smDef = JSON.stringify({ StartAt: "Pass", States: { Pass: { Type: "Pass", End: true } } });
+  const smCreated = await sfn("CreateStateMachine", { name: EBSM, roleArn: "arn:aws:iam::000000000000:role/smoke", definition: smDef });
+  const smArn = smCreated.stateMachineArn;
+  const R2 = `v4smoke-rule2-${Date.now() % 100000}`;
+  await page.goto(UI + "#/eventbridge/create-rule");
+  await page.getByRole("tab", { name: "Build" }).click();
+  await page.getByRole("button", { name: "Add target" }).click();
+  await page.getByLabel("Select a target 1").first().click();
+  await page.getByRole("option", { name: new RegExp(`Kinesis stream: ${EBSTREAM}$`) }).click();
+  await page.getByRole("button", { name: "Add target" }).click();
+  await page.getByLabel("Select a target 2").first().click();
+  await page.getByRole("option", { name: new RegExp(`Step Functions state machine: ${EBSM}$`) }).click();
+  await page.getByRole("tab", { name: "Configure" }).click();
+  await page.getByLabel("Rule name").fill(R2);
+  await page.getByRole("button", { name: "Create rule" }).click();
+  await page.getByRole("heading", { name: "Rules", level: 1 }).waitFor({ timeout: 10000 });
+  const ebTargets2 = await events("ListTargetsByRule", { Rule: R2, EventBusName: "default" });
+  check("EventBridge rule's Step Functions + Kinesis targets attached (UI) → visible over native wire",
+    (ebTargets2.Targets || []).some((t) => t.Arn.endsWith(`stream/${EBSTREAM}`)) && (ebTargets2.Targets || []).some((t) => t.Arn === smArn),
+    JSON.stringify(ebTargets2));
+  await events("PutEvents", { Entries: [{ Source: "my.app", DetailType: "x", Detail: "{}", EventBusName: "default" }] });
+  const ebShards = await kinesis("ListShards", { StreamName: EBSTREAM });
+  const ebIter = (await kinesis("GetShardIterator", { StreamName: EBSTREAM, ShardId: ebShards.Shards[0].ShardId, ShardIteratorType: "TRIM_HORIZON" })).ShardIterator;
+  const ebKinRecs = await kinesis("GetRecords", { ShardIterator: ebIter });
+  check("EventBridge PutEvents over wire → really delivered to the UI-created rule's Kinesis target", (ebKinRecs.Records || []).length > 0, JSON.stringify(ebKinRecs));
+  const ebExecs = await sfn("ListExecutions", { stateMachineArn: smArn });
+  check("EventBridge PutEvents over wire → really started a Step Functions execution on the UI-created rule's target", (ebExecs.executions || []).length > 0, JSON.stringify(ebExecs));
 
   // Custom event bus created over the wire (CLI direction) must show up in the UI (wire → UI).
   const EBUS = `v4smoke-bus-${Date.now() % 100000}`;

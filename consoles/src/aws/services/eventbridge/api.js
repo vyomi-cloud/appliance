@@ -93,8 +93,20 @@ export async function listFunctionTargets() {
   return (r.Functions || []).map((f) => ({ arn: f.FunctionArn, label: `Lambda function: ${f.FunctionName}` }));
 }
 
+export async function listStateMachineTargets() {
+  const r = await awsJson("states", "AWSStepFunctions.ListStateMachines", {});
+  return (r.stateMachines || []).map((m) => ({ arn: m.stateMachineArn, label: `Step Functions state machine: ${m.name}` }));
+}
+
+export async function listStreamTargets() {
+  const r = await awsJson("kinesis", "Kinesis_20131202.ListStreams", {}, { version: "1.1" });
+  return (r.StreamSummaries || []).map((st) => ({ arn: st.StreamARN, label: `Kinesis stream: ${st.StreamName}` }));
+}
+
 /** All deliverable target types, for the target picker across Create rule / Create schedule. */
 export async function listAllTargets() {
-  const [queues, topics, fns] = await Promise.all([listQueueTargets(), listTopicTargets(), listFunctionTargets()]);
-  return [...queues, ...topics, ...fns];
+  const [queues, topics, fns, machines, streams] = await Promise.all([
+    listQueueTargets(), listTopicTargets(), listFunctionTargets(), listStateMachineTargets(), listStreamTargets(),
+  ]);
+  return [...queues, ...topics, ...fns, ...machines, ...streams];
 }

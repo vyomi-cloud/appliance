@@ -18,10 +18,10 @@
     ]
   },
   "eventbridge.rule.targets": {
-    "title": "Targets (SQS, SNS, Lambda)",
+    "title": "Targets (SQS, SNS, Lambda, Step Functions, Kinesis)",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Only SQS, SNS and Lambda targets are actually invoked. Other target types (Step Functions, Kinesis, API destinations, ECS tasks, ...) are accepted and stored by PutTargets like the real API, but PutEvents never delivers to them — there is no silent fake success, the delivery simply never happens."
+      "Only SQS, SNS, Lambda, Step Functions state machines and Kinesis data streams are actually invoked. Other target types (API destinations, ECS tasks, CodeBuild/CodePipeline, Batch, Systems Manager, ...) are accepted and stored by PutTargets like the real API, but PutEvents never delivers to them — there is no silent fake success, the delivery simply never happens."
     ],
     "tests": [
       "tests/conformance/test_eventbridge_console_v4_core.py"
@@ -65,7 +65,7 @@
     ]
   },
   "eventbridge.scheduler.firing": {
-    "title": "Scheduler: target delivery (SQS, SNS, Lambda) when a schedule's time arrives",
+    "title": "Scheduler: target delivery (SQS, SNS, Lambda, Step Functions, Kinesis) when a schedule's time arrives",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
       "Vyomi has no background timer. A schedule's firing is computed and delivered the next time any Scheduler API call is made after its due time (console navigation and the periodic list/describe calls it makes are usually enough) — it does not fire on the wall clock while nothing is polling."

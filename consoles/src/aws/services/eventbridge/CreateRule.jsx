@@ -48,17 +48,23 @@ function matchPattern(pattern, event) {
 }
 
 function TargetRow({ idx, target, onChange, onRemove, options }) {
+  const isKinesis = (target.arn || "").includes(":kinesis:");
   return (
     <Container header={<Header variant="h3" actions={<Button onClick={onRemove}>Remove</Button>}>{`Target ${idx + 1}`}</Header>}>
       <SpaceBetween size="l">
-        <FormField label="Target types" description="SQS queue, SNS topic or Lambda function — the targets Vyomi actually delivers to.">
+        <FormField label="Target types" description="SQS queue, SNS topic, Lambda function, Step Functions state machine or Kinesis stream — the targets Vyomi actually delivers to.">
           <Select selectedOption={target.arn ? { value: target.arn, label: target.label } : null}
             onChange={({ detail }) => onChange({ ...target, arn: detail.selectedOption.value, label: detail.selectedOption.label })}
-            options={options.map((o) => ({ value: o.arn, label: o.label }))} placeholder="Select a target" ariaLabel="Select a target" />
+            options={options.map((o) => ({ value: o.arn, label: o.label }))} placeholder="Select a target" ariaLabel={`Select a target ${idx + 1}`} />
         </FormField>
         <FormField label="Execution role" description="Vyomi delivers directly; no IAM role is assumed for delivery.">
           <NotSimulated feature="A dedicated per-target execution role" note="Vyomi delivers using the appliance's own permissions." />
         </FormField>
+        {isKinesis && (
+          <FormField label="Partition key path - optional" description="A JSONPath into the matched event (e.g. $.detail.id) used as the Kinesis partition key; defaults to the event ID.">
+            <Input value={target.partitionKeyPath || ""} onChange={({ detail }) => onChange({ ...target, partitionKeyPath: detail.value })} ariaLabel="Partition key path" />
+          </FormField>
+        )}
         <FormField label="Input" description="Optional JSON passed to the target instead of the matched event.">
           <Textarea value={target.input || ""} onChange={({ detail }) => onChange({ ...target, input: detail.value })} rows={3} ariaLabel="Target input" />
         </FormField>
@@ -97,7 +103,10 @@ export default function CreateRule({ params, query }) {
     }
   }, [existing.data]);
   useEffect(() => {
-    if (existingTargets.data?.length) setTargets(existingTargets.data.map((t) => ({ id: t.Id, arn: t.Arn, label: t.Arn, input: t.Input || "" })));
+    if (existingTargets.data?.length) setTargets(existingTargets.data.map((t) => ({
+      id: t.Id, arn: t.Arn, label: t.Arn, input: t.Input || "",
+      partitionKeyPath: t.KinesisParameters?.PartitionKeyPath || "",
+    })));
   }, [existingTargets.data]);
 
   const testPattern = () => {
@@ -125,7 +134,11 @@ export default function CreateRule({ params, query }) {
         if (removedIds.length) await api.removeTargets(name, bus, removedIds);
       }
       if (targets.length) {
-        await api.putTargets(name, bus, targets.map((t, i) => ({ Id: t.id || `t${i + 1}`, Arn: t.arn, ...(t.input ? { Input: t.input } : {}) })));
+        await api.putTargets(name, bus, targets.map((t, i) => ({
+          Id: t.id || `t${i + 1}`, Arn: t.arn,
+          ...(t.input ? { Input: t.input } : {}),
+          ...(t.partitionKeyPath ? { KinesisParameters: { PartitionKeyPath: t.partitionKeyPath } } : {}),
+        })));
       }
       notify.success(editing ? `Updated rule ${name}.` : `Rule ${name} was created.`);
       navigate("eventbridge", bus === "default" ? "rules" : "event-buses", ...(bus === "default" ? [] : [bus]));

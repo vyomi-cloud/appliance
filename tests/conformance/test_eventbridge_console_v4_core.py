@@ -1,7 +1,7 @@
 """EventBridge v4-console conformance — the additions built for the native-
-fidelity console: custom event buses, rule enable/disable, SNS/Lambda target
-delivery (SQS was already proven by test_eventbridge_core.py), archives +
-replay, and tags on buses/rules/archives.
+fidelity console: custom event buses, rule enable/disable, SNS/Lambda/Step
+Functions/Kinesis target delivery (SQS was already proven by
+test_eventbridge_core.py), archives + replay, and tags on buses/rules/archives.
 
 Run on host:    PYTHONPATH=. python3 tests/conformance/test_eventbridge_console_v4_core.py
 """
@@ -9,13 +9,16 @@ import json
 
 try:
     from core.messaging_store import InMemoryMessagingStore
-    from core import sqs_core as sqs, sns_core as sns, lambda_core as lam, eventbridge_core as eb
+    from core import (sqs_core as sqs, sns_core as sns, lambda_core as lam, eventbridge_core as eb,
+                       kinesis_core as kin, stepfunctions_core as sfnlib)
 except ImportError:  # pragma: no cover - Pyodide flat layout
     from messaging_store import InMemoryMessagingStore  # type: ignore
     import sqs_core as sqs  # type: ignore
     import sns_core as sns  # type: ignore
     import lambda_core as lam  # type: ignore
     import eventbridge_core as eb  # type: ignore
+    import kinesis_core as kin  # type: ignore
+    import stepfunctions_core as sfnlib  # type: ignore
 
 E = "AWSEvents."
 
@@ -30,9 +33,11 @@ def run() -> int:
     s = InMemoryMessagingStore()
     import types
     lam_store = types.SimpleNamespace()
+    kin_store = kin.KinesisStore()
+    sfn_store = sfnlib.StepFunctionsStore()
 
     def call(a, b):
-        return eb.dispatch(s, E + a, b, lam_store=lam_store)
+        return eb.dispatch(s, E + a, b, lam_store=lam_store, kinesis_store=kin_store, sfn_store=sfn_store)
 
     # 1. Default bus always exists; custom buses are real resources.
     _check("default bus exists", any(b["Name"] == "default" for b in call("ListEventBuses", {}).body["EventBuses"]))
@@ -113,6 +118,30 @@ def run() -> int:
     after2 = len(sqs.dispatch(s, "AmazonSQS.ReceiveMessage", {"QueueUrl": qurl, "MaxNumberOfMessages": 10}).body.get("Messages", []))
     _check("replay does not re-send an event retention already expired", after2 == before2)
     call("DeleteArchive", {"ArchiveName": "arc2"})
+
+    # 7c. Step Functions + Kinesis targets — real invocation, not stored-only
+    #     (SQS/SNS/Lambda in step 5 were already real; these two are the depth-pass additions).
+    kin.create_stream(kin_store, {"StreamName": "eb-stream", "ShardCount": 1})
+    stream_arn = kin._arn(kin_store, "eb-stream")
+    sfnlib.op_create_state_machine(sfn_store, {
+        "name": "eb-sm", "roleArn": "arn:aws:iam::000000000000:role/test",
+        "definition": json.dumps({"StartAt": "Pass", "States": {"Pass": {"Type": "Pass", "End": True}}}),
+    })
+    sm_arn = sfnlib._sm_arn("eb-sm")
+    call("PutTargets", {"Rule": "r1", "EventBusName": "orders", "Targets": [
+        {"Id": "t4", "Arn": stream_arn, "KinesisParameters": {"PartitionKeyPath": "$.detail.k"}},
+        {"Id": "t5", "Arn": sm_arn},
+    ]})
+    _check("ListTargetsByRule now sees five targets",
+           len(call("ListTargetsByRule", {"Rule": "r1", "EventBusName": "orders"}).body["Targets"]) == 5)
+    call("PutEvents", {"Entries": [{"Source": "app", "DetailType": "x", "Detail": json.dumps({"k": 7}), "EventBusName": "orders"}]})
+    shard_id = kin_store.streams["eb-stream"]["shards"][0]["id"]
+    it = kin.get_shard_iterator(kin_store, {"StreamName": "eb-stream", "ShardId": shard_id, "ShardIteratorType": "TRIM_HORIZON"})["ShardIterator"]
+    kin_records = kin.get_records(kin_store, {"ShardIterator": it})["Records"]
+    _check("Kinesis target really receives the matching event", len(kin_records) >= 1)
+    _check("Kinesis PartitionKeyPath was honoured", kin_records[0]["PartitionKey"] == "7")
+    _check("Step Functions target really starts an execution",
+           any(ex["stateMachineArn"] == sm_arn for ex in sfn_store.executions.values()))
 
     # 8. Tags round-trip on a bus and a rule.
     call("TagResource", {"ResourceARN": desc["Arn"], "Tags": [{"Key": "env", "Value": "prod"}]})

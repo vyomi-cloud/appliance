@@ -135,7 +135,7 @@ export default function CreateSchedule({ query }) {
             content: (
               <Container header={<Header variant="h2">Target detail</Header>}>
                 <SpaceBetween size="l">
-                  <FormField label="Target API" description="SQS, SNS and Lambda are the targets Vyomi actually delivers to.">
+                  <FormField label="Target API" description="SQS, SNS, Lambda, Step Functions and Kinesis are the targets Vyomi actually delivers to.">
                     <Select selectedOption={target} placeholder="Select a target" onChange={({ detail }) => setTarget(detail.selectedOption)} options={targetOptions.map((o) => ({ value: o.arn, label: o.label }))} ariaLabel="Target API" />
                   </FormField>
                   <FormField label="Target" description="Optional JSON input passed to the target when the schedule fires.">
