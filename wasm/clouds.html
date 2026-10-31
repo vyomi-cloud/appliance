@@ -2688,6 +2688,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     // bar, so its account menu / Sign out stays on screen in every view, however long.
     function _sizeSideMenu() {
       var ab = document.getElementById('app-body');
+      // The menu's area reaches at least the bottom of the window, so the menu never
+      // stops short of it (no strip of page showing under it on short pages).
+      if (ab) ab.style.minHeight = Math.max(0, Math.round(window.innerHeight - (ab.getBoundingClientRect().top + window.scrollY))) + 'px';
       var r = ab ? ab.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
       var h = Math.min(window.innerHeight, r.bottom) - Math.max(0, r.top);
       document.body.style.setProperty('--side-h', Math.round(Math.max(240, h)) + 'px');
@@ -4108,7 +4111,9 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   var epEl = document.getElementById("nano-foot-ep"), logsPane = document.getElementById("nano-logs"), logEl = document.getElementById("nano-foot-log");
   var toggleBtn = document.getElementById("nano-foot-toggle"), logsBtn = document.getElementById("nano-foot-logs");
   var phase = "off", lastSeen = 0, mode = null, external = null, noteText = null, _prevServed = 0, _prevPhase = null;
-  document.body.style.paddingBottom = "40px";   // never cover page content
+  // Never cover page content: the space for the bar is reserved inside the main column, so
+  // the side menu still runs to the bottom of the window and the bar starts at its edge.
+  (document.getElementById("app-main") || document.body).style.paddingBottom = "40px";
 
   function render(state, served){
     phase = state || "off";
