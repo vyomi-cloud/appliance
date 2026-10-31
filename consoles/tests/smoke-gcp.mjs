@@ -1085,6 +1085,7 @@ try {
 
   // Delete from the list → gone over the native wire
   await page.goto(UI + "#/security/secret-manager");
+  await page.getByPlaceholder("Filter").first().fill(SM);   // a long-lived project has >1 page of secrets
   await page.getByRole("link", { name: SM }).waitFor({ timeout: 10000 });
   await page.getByRole("checkbox", { name: `Select projects/vyomi-project/secrets/${SM}` }).check();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
