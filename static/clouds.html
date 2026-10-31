@@ -1403,6 +1403,17 @@
     #view-api .usage-tab:hover { background: #f2f4f7; }
     #view-api .usage-tab .material-icons { font-size: 17px; }
     #view-api .usage-tab.active { background: #2563eb !important; color: #fff !important; }
+
+    /* Space cards: one shape for all three clouds — identical corners, border and shadow
+       (each keeps its native type, colours and accent). */
+    #spaces-grid .space-card[data-provider] {
+      border-radius: 12px !important; border: 1px solid #e4e7ec !important;
+      box-shadow: 0 1px 2px rgba(16,24,40,.05) !important;
+    }
+    #spaces-grid .space-card[data-provider]:hover { border-color: #d0d5dd !important; box-shadow: 0 4px 12px rgba(16,24,40,.10) !important; }
+    #spaces-grid .space-card[data-provider="aws"].active   { border-color: #0972d3 !important; box-shadow: 0 0 0 1px #0972d3 !important; }
+    #spaces-grid .space-card[data-provider="gcp"].active   { border-color: #1a73e8 !important; box-shadow: 0 0 0 1px #1a73e8 !important; }
+    #spaces-grid .space-card[data-provider="azure"].active { border-color: #0078d4 !important; box-shadow: 0 0 0 1px #0078d4 !important; }
   </style>
 </head>
 <body class="side-collapsed">
