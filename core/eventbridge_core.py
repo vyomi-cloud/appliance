@@ -142,6 +142,24 @@ def _list_targets_by_rule(store, body):
     return EventsResponse(body={"Targets": list(rule["targets"].values())})
 
 
+def _deliver_sns(store, topic_arn, body_str):
+    """SNS rule target: publish the event envelope to the topic (fans out to its
+    subscriptions). A missing/FIFO-incompatible topic is a failed delivery, which
+    EventBridge swallows (retries then DLQ), never a PutEvents error."""
+    try:
+        try:
+            from core import sns_core
+        except ImportError:  # Pyodide flat layout
+            import sns_core  # type: ignore
+        topic = store.get_topic(topic_arn)
+        if topic is not None:
+            sns_core._publish_to_topic(store, topic, {"Message": body_str, "Subject": None,
+                                                      "MessageStructure": "", "attrs": {},
+                                                      "group": "", "dedup": ""})
+    except Exception:
+        pass
+
+
 def _put_events(store, body):
     entries_out = []
     for entry in body.get("Entries") or []:
@@ -165,9 +183,12 @@ def _put_events(store, body):
             if not _match_pattern(rule.get("pattern", {}), event_obj):
                 continue
             for tgt in rule["targets"].values():
-                queue = store.get_queue_by_arn(tgt["Arn"])
+                arn = tgt["Arn"]
+                queue = store.get_queue_by_arn(arn)
                 if queue is not None:
                     sqs_core.enqueue(store, queue, body_str)
+                elif ":sns:" in arn:
+                    _deliver_sns(store, arn, body_str)
         entries_out.append({"EventId": event_id})
     store.persist()
     return EventsResponse(body={"FailedEntryCount": 0, "Entries": entries_out})
