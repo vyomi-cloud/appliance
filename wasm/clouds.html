@@ -1043,6 +1043,14 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     /* Outer section wrappers stay fully transparent. */
     .surface-card, #stats-card, #host-util-card, #svc-status-card, #spaces-card,
     .empty-spaces, .filter-empty { background: transparent !important; box-shadow: none !important; }
+    /* Active spaces: one panel around the whole section — rounded border + soft shadow. */
+    #spaces-card {
+      background: rgba(255,255,255,0.02) !important;
+      border: 1px solid rgba(255,255,255,0.10) !important;
+      border-radius: 16px !important;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.30), 0 14px 36px rgba(0,0,0,0.38) !important;
+      padding: 20px 22px 22px !important;
+    }
     /* Inner tiles use the portal tile gradient (surface → bg-3). */
     .pie-card, .stat-card, .kct, .space-card {
       background: linear-gradient(180deg, #14172e 0%, #0d1228 100%) !important;
