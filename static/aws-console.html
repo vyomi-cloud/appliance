@@ -35,6 +35,34 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   header .nav-link:hover{color:var(--orange)}
   header button.nav-link{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;font:inherit;font-size:12.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:6px}
   header button.nav-link:hover{background:rgba(255,255,255,.14);border-color:var(--orange);color:var(--orange)}
+  /* Services menu — the AWS console's: a panel under the header; left, Recently visited /
+     Favorites / All services and the categories (hover selects); right, the services with icon,
+     name, description and a star to favourite. Esc / outside click closes. */
+  .svc-menu{position:fixed;top:40px;left:12px;width:min(980px,calc(100vw - 24px));height:min(640px,calc(100vh - 56px));background:#fff;border:1px solid #e9ebed;border-radius:0 0 8px 8px;box-shadow:0 4px 20px 1px rgba(0,7,22,.18);z-index:60;display:none;overflow:hidden;color:#000716}
+  .svc-menu.open{display:flex}
+  .svc-menu .sm-nav{width:244px;flex-shrink:0;border-right:1px solid #e9ebed;overflow-y:auto;padding:12px 0}
+  .svc-menu .sm-nav button{display:block;width:100%;text-align:left;border:0;background:none;padding:7px 20px;font:inherit;font-size:14px;line-height:20px;color:#414d5c;cursor:pointer}
+  .svc-menu .sm-nav button:hover{background:#f4f4f4;color:#000716}
+  .svc-menu .sm-nav button.on{background:#f2f8fd;color:#0972d3;font-weight:700;box-shadow:inset 3px 0 0 #0972d3}
+  .svc-menu .sm-nav hr{border:0;border-top:1px solid #e9ebed;margin:8px 20px}
+  .svc-menu .sm-pane{flex:1;overflow-y:auto;padding:20px 28px}
+  .svc-menu .sm-pane h2{font-size:18px;line-height:22px;font-weight:700;margin:0 0 14px}
+  .svc-menu .sm-row{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer}
+  .svc-menu .sm-row:hover{background:#f4f4f4}
+  .svc-menu .sm-ic{width:32px;height:32px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:6px;background:#5a6b86;color:#fff}
+  .svc-menu .sm-ic svg{width:32px;height:32px;display:block}
+  .svc-menu .sm-ic .material-symbols-outlined{font-size:20px}
+  .svc-menu .sm-txt{flex:1;min-width:0}
+  .svc-menu .sm-name{font-size:14px;line-height:20px;font-weight:700;color:#0972d3}
+  .svc-menu .sm-row:hover .sm-name{text-decoration:underline}
+  .svc-menu .sm-desc{font-size:12px;line-height:16px;color:#5f6b7a;margin-top:2px}
+  .svc-menu .sm-star{border:0;background:none;color:#8d99a8;cursor:pointer;padding:2px;visibility:hidden;display:flex}
+  .svc-menu .sm-row:hover .sm-star,.svc-menu .sm-star.fav{visibility:visible}
+  .svc-menu .sm-star.fav{color:#ec7211}
+  .svc-menu .sm-star .material-symbols-outlined{font-size:20px}
+  .svc-menu .sm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px}
+  .svc-menu .sm-empty{font-size:14px;color:#5f6b7a;line-height:20px;max-width:440px}
+  header button.nav-link.open{background:rgba(255,255,255,.14);border-color:var(--orange);color:var(--orange)}
   /* "Go back to spaces" — escape hatch from the AWS console back to the cross-cloud Spaces SPA */
   header .back-spaces{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;font-size:12.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:6px;cursor:pointer;text-decoration:none;margin-left:6px}
   header .back-spaces:hover{background:rgba(255,255,255,.14);border-color:var(--orange);color:var(--orange);text-decoration:none}
@@ -381,6 +409,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 }
 #disk-widget-slot .disk-popover .dp-close:hover { color: #0f1b2d; }
 </style>
+<script src="/assets/service-icons.js"></script>
 </head>
 <body>
 
@@ -645,6 +674,7 @@ async function boot(){
       toast("Region switching is set by the active simulator space — change there.", "ok"));
     document.getElementById("acctBtn").addEventListener("click", () =>
       toast("Account is set by the active simulator space.", "ok"));
+    wireServicesMenu();
     try {
       const ir = await fetch(ORIGIN + "/api/instances/catalog?provider=aws");
       const id = await ir.json();
@@ -863,6 +893,97 @@ function recordRecentVisit(svcKey){
   const recent = getRecentVisits().filter(v => v.key !== svcKey);
   recent.unshift({key:svcKey, at: new Date().toISOString()});
   localStorage.setItem(recentVisitsKey(), JSON.stringify(recent.slice(0, 8)));
+}
+
+// ── Services menu (header "Services ▾") ─────────────────────────────────────────
+// The AWS console's own categories and one-line descriptions for the services here.
+const SVC_MENU_INFO = {
+  ec2:            ["Compute", "Virtual servers in the cloud"],
+  lambda:         ["Compute", "Run code without thinking about servers"],
+  s3:             ["Storage", "Scalable storage in the cloud"],
+  rds:            ["Database", "Managed relational database service"],
+  dynamodb:       ["Database", "Managed NoSQL database"],
+  vpc:            ["Networking & Content Delivery", "Isolated cloud resources"],
+  apigateway:     ["Networking & Content Delivery", "Build, deploy and manage APIs"],
+  apigatewayv2:   ["Networking & Content Delivery", "HTTP and WebSocket APIs"],
+  elbv2:          ["Networking & Content Delivery", "Distribute traffic across targets"],
+  sqs:            ["Application Integration", "Managed message queues"],
+  sns:            ["Application Integration", "Pub/sub, SMS, email and mobile push notifications"],
+  eventbridge:    ["Application Integration", "Serverless event bus for your apps and AWS services"],
+  stepfunctions:  ["Application Integration", "Coordination for distributed applications"],
+  kinesis:        ["Analytics", "Work with real-time streaming data"],
+  iam:            ["Security, Identity, & Compliance", "Manage access to AWS resources"],
+  secretsmanager: ["Security, Identity, & Compliance", "Rotate, manage and retrieve secrets"],
+  kms:            ["Security, Identity, & Compliance", "Securely generate and manage encryption keys"],
+  cloudwatch:     ["Management & Governance", "Monitor resources and applications"],
+  logs:           ["Management & Governance", "Collect, search and analyse log data"],
+  ssm:            ["Management & Governance", "Access insights and take action on your resources"],
+};
+const SVC_MENU_ICON = { apigatewayv2: "apigateway", logs: "cloudwatch" };
+const favKey = () => "vyomi.aws.favorites";
+function getFavs(){ try { return JSON.parse(localStorage.getItem(favKey()) || "[]"); } catch (_) { return []; } }
+function wireServicesMenu(){
+  const btn = document.getElementById("servicesBtn");
+  const menu = el("div",{class:"svc-menu",id:"svcMenu",role:"dialog","aria-label":"Services"});
+  document.body.append(menu);
+  let pick = "recent";
+  const services = () => (CATALOG.services || []).filter(s => SVC_MENU_INFO[s.key]);
+  const categories = () => [...new Set(services().map(s => SVC_MENU_INFO[s.key][0]))].sort();
+  const icon = (s) => {
+    const lib = window.VyomiServiceIcons, cat = SVC_MENU_INFO[s.key][0];
+    if (lib) { const box = el("span",{class:"sm-ic"}); box.innerHTML = '<svg viewBox="0 0 24 24">' + lib.aws(SVC_MENU_ICON[s.key] || s.key, cat) + '</svg>'; return box; }
+    return el("span",{class:"sm-ic"}, el("span",{class:"material-symbols-outlined"}, s.icon || "apps"));
+  };
+  const open = (s) => { close(); navigate({view:"list", service:s.key, child:null, item:null}); };
+  const row = (s) => {
+    const favs = getFavs(), fav = favs.includes(s.key);
+    const star = el("button",{class:"sm-star"+(fav ? " fav" : ""),type:"button",title:fav ? "Remove from favorites" : "Add to favorites",
+      "aria-label":(fav ? "Remove " : "Add ") + s.label + (fav ? " from" : " to") + " favorites",
+      onclick:(e) => { e.stopPropagation(); const f = getFavs(); const i = f.indexOf(s.key); if (i >= 0) f.splice(i, 1); else f.push(s.key);
+        try { localStorage.setItem(favKey(), JSON.stringify(f)); } catch (_) {} draw(); }},
+      el("span",{class:"material-symbols-outlined",style:fav ? "font-variation-settings:'FILL' 1" : ""}, "star"));
+    return el("div",{class:"sm-row",onclick:() => open(s)}, icon(s),
+      el("div",{class:"sm-txt"}, el("div",{class:"sm-name"}, s.label), el("div",{class:"sm-desc"}, SVC_MENU_INFO[s.key][1])), star);
+  };
+  const draw = () => {
+    menu.innerHTML = "";
+    const nav = el("div",{class:"sm-nav"}), pane = el("div",{class:"sm-pane"});
+    const item = (id, label) => nav.append(el("button",{type:"button",class:pick === id ? "on" : "",
+      onmouseenter:() => { if (pick !== id) { pick = id; draw(); } }, onclick:() => { pick = id; draw(); }}, label));
+    item("recent", "Recently visited"); item("favs", "Favorites"); item("all", "All services");
+    nav.append(el("hr"));
+    categories().forEach(c => item("cat:" + c, c));
+    const svcs = services();
+    if (pick === "recent") {
+      pane.append(el("h2",{}, "Recently visited"));
+      const rec = getRecentVisits().map(v => svcs.find(s => s.key === v.key)).filter(Boolean);
+      if (rec.length) { const g = el("div",{class:"sm-grid"}); rec.forEach(s => g.append(row(s))); pane.append(g); }
+      else pane.append(el("div",{class:"sm-empty"}, "No recently visited services. Open a service and it shows up here."));
+    } else if (pick === "favs") {
+      pane.append(el("h2",{}, "Favorites"));
+      const fav = getFavs().map(k => svcs.find(s => s.key === k)).filter(Boolean);
+      if (fav.length) fav.forEach(s => pane.append(row(s)));
+      else pane.append(el("div",{class:"sm-empty"}, "No favorites yet. Choose the star next to a service to add it here."));
+    } else if (pick === "all") {
+      pane.append(el("h2",{}, "All services"));
+      svcs.slice().sort((a, b) => a.label.localeCompare(b.label)).forEach(s => pane.append(row(s)));
+    } else {
+      const c = pick.slice(4);
+      pane.append(el("h2",{}, c));
+      svcs.filter(s => SVC_MENU_INFO[s.key][0] === c).forEach(s => pane.append(row(s)));
+    }
+    menu.append(nav, pane);
+  };
+  const close = () => { menu.classList.remove("open"); btn.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); };
+  btn.setAttribute("aria-haspopup", "dialog"); btn.setAttribute("aria-expanded", "false");
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menu.classList.contains("open")) return close();
+    pick = getRecentVisits().length ? "recent" : "all"; draw();
+    menu.classList.add("open"); btn.classList.add("open"); btn.setAttribute("aria-expanded", "true");
+  });
+  document.addEventListener("click", (e) => { if (menu.classList.contains("open") && !menu.contains(e.target)) close(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && menu.classList.contains("open")) { close(); btn.focus(); } });
 }
 
 // ── Home cards shared by the AWS / GCP / Azure consoles (offline + Nano) ─────────
