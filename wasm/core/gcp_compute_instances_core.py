@@ -321,7 +321,7 @@ def insert_instance(store, project, zone, payload):
     for ni in nis_in:
         internal_ip = ni.get("networkIP") or _synthetic_ip("10.128", full)
         net = ni.get("network") or _selflink("projects/%s/global/networks/default" % project)
-        sub = ni.get("subnetwork") or _selflink("projects/%s/regions/%s/subnetworks/default" % (project, zone))
+        sub = ni.get("subnetwork") or _selflink("projects/%s/regions/%s/subnetworks/default" % (project, _region_of(zone)))
         access = ni.get("accessConfigs")
         out_ni = {"name": "nic0", "network": net, "subnetwork": sub, "networkIP": internal_ip,
                   "stackType": "IPV4_ONLY", "fingerprint": _fingerprint(ni)}

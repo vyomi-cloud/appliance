@@ -62,8 +62,14 @@ def run(store=None):
     rt_id = s._vpc_model["subnets"][web_sn]["route_table"]
     call({"Action": "CreateRoute", "RouteTableId": rt_id,
           "DestinationCidrBlock": "0.0.0.0/0", "GatewayId": igw})
-    _check("after IGW + 0.0.0.0/0 route → external reachable",
-           vpc.analyze_reachability(s, src, {"ip": "8.8.8.8"}, 443, "tcp")["reachable"])
+    r = vpc.analyze_reachability(s, src, {"ip": "8.8.8.8"}, 443, "tcp")
+    _check("IGW route but no public IPv4 → blocked (an IGW only serves public addresses)",
+           not r["reachable"] and r["code"] == "NO_PUBLIC_IP")
+    web_i = xid(call({"Action": "RunInstances", "MinCount": "1", "MaxCount": "1", "SubnetId": web_sn,
+                      "PrivateIpAddress": "10.0.1.10", "SecurityGroupId.1": web_sg,
+                      "NetworkInterface.1.AssociatePublicIpAddress": "true"}), "instanceId")
+    _check("instance with a public IPv4 → external reachable via the IGW",
+           vpc.analyze_reachability(s, {"instance_id": web_i}, {"ip": "8.8.8.8"}, 443, "tcp")["reachable"])
 
     # NACL deny layer: attach a NACL to the web subnet that denies egress on 5432
     acl = xid(call({"Action": "CreateNetworkAcl", "VpcId": vpc_id}), "networkAclId")

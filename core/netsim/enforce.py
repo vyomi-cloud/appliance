@@ -284,7 +284,10 @@ class _Compiler:
     def compile(self) -> Plan:
         t = self.t
         tbl = table_name(self.space)
-        fwd = ["ip saddr != @space ip daddr != @space accept"]
+        fwd = ["ip saddr != @space ip daddr != @space accept",
+               # Docker published ports (the console's SSH port-publish path) arrive DNAT'd by Docker:
+               # management access, like the cloud consoles' own connect paths — not tenant traffic
+               "ct status dnat accept comment \"docker published port (management)\""]
         if self.mgmt:
             fwd += ["ip saddr @mgmt accept comment \"management (console/ssh bridge)\"",
                     "ip daddr @mgmt accept comment \"management replies\""]

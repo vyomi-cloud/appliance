@@ -145,11 +145,10 @@ class TwoTier(unittest.TestCase):
 
     def test_appliance_needs_source_dest_check_off(self):
         priv_rt = self.a.rtb(self.x["vpc"], self.x["priv"])
-        # vpc_core's CreateRoute has no InstanceId target yet → write the route as AWS stores it
-        self.a.m["route_tables"][priv_rt]["routes"].append({"dest": "0.0.0.0/0", "target": self.x["a"]})
+        self.a.route(priv_rt, "0.0.0.0/0", InstanceId=self.x["a"])
         v = reach(self.t(), eni(self.x["b"]), INET, "tcp", 443)
         self.assertEqual(v.code, "SOURCE_DEST_CHECK")
-        self.a.m["instances"][self.x["a"]]["source_dest_check"] = False
+        self.a.call("ModifyInstanceAttribute", InstanceId=self.x["a"], **{"SourceDestCheck.Value": "false"})
         self.a.eip(self.x["a"])
         self.a.allow_in(self.x["web"], "tcp", 443, 443, cidr="10.213.0.0/16")
         v = reach(self.t(), eni(self.x["b"]), INET, "tcp", 443)

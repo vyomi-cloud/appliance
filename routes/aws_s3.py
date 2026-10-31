@@ -1253,6 +1253,8 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if service == "ec2":
             params = await _srv()._ec2_query_params(request)
             if str(params.get("Action", "")).strip() in _EC2_VPC_ACTIONS:
+                if _srv()._vpc_engine_is_core():   # v4: ONE VPC engine (core/vpc_core) offline + Nano
+                    return _srv().api_vpc_core_query(params)
                 return await _srv().api_vpc_query(request)
             return await _srv().api_ec2_query(request)
         if service == "kinesis":

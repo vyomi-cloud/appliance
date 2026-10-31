@@ -391,6 +391,12 @@ def compute(method: str, native: str, query: dict, body: bytes, classic: bool = 
         rid = core_rec.get("_runtimeId")
         rec = _runtime_store().get(rid) if rid else None
     out = _wi.dispatch_service("gcp_compute", method, native, query, {"content-type": "application/json"}, body)
+    if method != "GET" and out["status"] < 300:
+        try:                         # enforced VPC networking (core/netsim) — a no-op unless enabled
+            from core.netsim import wiring as _nsw
+            _nsw.schedule_apply(f"gcp {method} {native.split('?')[0][-60:]}")
+        except Exception:
+            pass
     if not target or out["status"] != 200:
         return out
     project, zone, name, verb = target
@@ -467,6 +473,10 @@ def register(app) -> list:
             app.add_route(f"/compute/{v}/{{rest:path}}", _compute_native, methods=_METHODS)
             app.add_route(f"/api/gcp/compute/{v}/{{rest:path}}", _compute_classic, methods=_METHODS)
         app.add_route("/api/gcp/vpc/{rest:path}", _vpc_alias, methods=_METHODS)
+        # Network Intelligence Center Connectivity Tests (networkmanagement v1) — the VPC core answers
+        # them with the shared netsim evaluator (same engine as Nano)
+        app.add_route("/v1/projects/{project}/locations/global/connectivityTests", _compute_native, methods=_METHODS)
+        app.add_route("/v1/projects/{project}/locations/global/connectivityTests/{rest:path}", _compute_native, methods=_METHODS)
         mounted.append("gcp_compute")
     return mounted
 

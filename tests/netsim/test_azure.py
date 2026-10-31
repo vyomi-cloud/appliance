@@ -1,6 +1,5 @@
-"""Azure translator + evaluator. VNets / NSGs / NICs go through the real ARM engine
-(core/azure_arm_core.AzureArm); route tables, public IPs and NAT gateways are not in the ARM
-catalog yet, so they are written into ARM state in the exact ARM resource shape.
+"""Azure translator + evaluator. Everything goes through the real ARM engine
+(core/azure_arm_core.AzureArm) except subnet re-writes, which some tests poke straight into ARM state.
 
     PYTHONPATH=. python3 tests/netsim/test_azure.py
 """
@@ -28,10 +27,8 @@ class Az:
         return r["body"]["id"]
 
     def raw(self, path, props):
-        """ARM-shaped resource for types the ARM catalog does not simulate yet."""
-        rid = f"{NET}/{path}"
-        self.arm.state[rid.lower()] = {"id": rid, "name": path.split("/")[-1], "properties": props}
-        return rid
+        """routeTables / natGateways / publicIPAddresses / applicationSecurityGroups — now real ARM types."""
+        return self.put(path, {"properties": props})
 
     def vnet(self, name, prefixes, subnets, peerings=()):
         return self.put(f"virtualNetworks/{name}", {"properties": {
@@ -130,13 +127,14 @@ class AzureTests(unittest.TestCase):
 
     def test_inbound_public_ip_and_service_tag_internet(self):
         z = self.z
-        pip = z.raw("publicIPAddresses/pip1", {"ipAddress": "20.1.2.3"})
+        pip = z.raw("publicIPAddresses/pip1", {})
+        addr = z.arm.state[pip.lower()]["properties"]["ipAddress"]
         nsg = z.nsg("nsg-pub", [dict(name="https", priority=100, direction="Inbound", access="Allow", protocol="Tcp",
                                      destinationPortRange="443", sourceAddressPrefix="Internet")])
         pub = z.nic("pub-nic", sid("vnet1", "web"), "10.50.1.9", nsg=nsg, pip=pip)
         t = z.topo()
-        self.assertTrue(reach(t, INET, "20.1.2.3", "tcp", 443).reachable)
-        self.assertEqual(reach(t, INET, "20.1.2.3", "tcp", 22).code, "INGRESS_DENIED")
+        self.assertTrue(reach(t, INET, addr, "tcp", 443).reachable)
+        self.assertEqual(reach(t, INET, addr, "tcp", 22).code, "INGRESS_DENIED")
         # `Internet` tag does not match vnet sources: 443 from inside is the default AllowVnetInBound
         self.assertTrue(reach(t, self.app, pub, "tcp", 443).reachable)
 

@@ -7785,6 +7785,27 @@ def _docker_available() -> bool:
     return _runtime_available("docker")
 
 
+# ── netsim: enforced VPC networking for Docker-backed instances (core/netsim) ──
+# OFF unless VYOMI_NETSIM_ENFORCE=1|auto (see core/netsim/README.md). Every call is
+# best-effort and swallowed: networking enforcement must never break a launch.
+def _netsim_kick(reason: str) -> None:
+    try:
+        from core.netsim import wiring as _nsw
+        _nsw.schedule_apply(reason)
+    except Exception:
+        pass
+
+
+def _netsim_attach(instance: dict) -> dict | None:
+    if str(instance.get("state") or "") in ("terminated", "shutting-down"):
+        return None
+    try:
+        from core.netsim import wiring as _nsw
+        return _nsw.docker_attach(instance)
+    except Exception:
+        return None
+
+
 # ── instance SSH reachability (port-publish + routable-IP) ────────────────────
 # The Docker backend had NO SSH exposure after the LXD proxy-device path was
 # dropped — the advertised IP is a placeholder, and `docker run` mapped no port,
@@ -8079,6 +8100,9 @@ def _docker_instance_obj(instance: dict):
         _ssh_port = int(_ssh_port) if str(_ssh_port or "").strip().isdigit() else None
     except (TypeError, ValueError):
         _ssh_port = None
+    _ns = _netsim_attach(instance)   # enforced VPC: the subnet's own bridge + the model IP
+    if _ns:
+        instance["netsim_network"], instance["netsim_interface"] = _ns["network"], _ns["interface"]
     return Instance(
         instance_id=str(instance["instance_id"]),
         image=image,
@@ -8087,7 +8111,8 @@ def _docker_instance_obj(instance: dict):
         ssh_pubkey=pubkey,
         # routable-IP: attach to the VPC bridge (Linux) so the container gets a
         # host-routable IP; else honour an explicit operator network.
-        network=(_ensure_vpc_network() or os.environ.get("VYOMI_INSTANCE_NETWORK") or None),
+        network=((_ns or {}).get("network") or _ensure_vpc_network() or os.environ.get("VYOMI_INSTANCE_NETWORK") or None),
+        ip_address=(_ns or {}).get("ip"),
         # port-publish: map this host port -> container :22 (set at first start).
         ssh_port=(_ssh_port if _port_publish_enabled() else None),
     )
@@ -8151,6 +8176,7 @@ def _start_docker_instance(instance: dict) -> dict:
         instance["private_ip"] = ip
         instance["runtime_internal_ip"] = ip
     _update_docker_ssh_metadata(instance)
+    _netsim_kick(f"start {instance.get('instance_id')}")
     return instance
 
 
@@ -8196,6 +8222,7 @@ def _terminate_docker_instance(instance: dict) -> dict:
     instance["container_status"] = "removed"
     instance["pid"] = None
     _post_terminate_cleanup(instance)
+    _netsim_kick(f"terminate {instance.get('instance_id')}")
     return instance
 
 
@@ -12512,12 +12539,15 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
     _disk_preflight(getattr(req, "storage_gb", None))
     instance_id = _id("i")
     pack = _activate_pack("cloudlearn.ec2.basic")
-    if req.vpc_id and req.vpc_id not in vpc_state["vpcs"]:
+    # VPC objects live in two stores offline: the pre-v4 vpc_state (REST console) and the
+    # shared EC2/VPC core slot (the EC2 Query API / v4 console) — accept either.
+    _core_m = _Ec2CoreSpaceStore()._vpc_model or {}
+    if req.vpc_id and req.vpc_id not in vpc_state["vpcs"] and req.vpc_id not in _core_m.get("vpcs", {}):
         raise HTTPException(404, detail="NoSuchVpc")
-    if req.subnet_id and req.subnet_id not in vpc_state["subnets"]:
+    if req.subnet_id and req.subnet_id not in vpc_state["subnets"] and req.subnet_id not in _core_m.get("subnets", {}):
         raise HTTPException(404, detail="NoSuchSubnet")
     for sg in req.security_group_ids:
-        if sg not in vpc_state["security_groups"]:
+        if sg not in vpc_state["security_groups"] and sg not in _core_m.get("sgs", {}):
             raise HTTPException(404, detail=f"NoSuchSecurityGroup:{sg}")
     profile = _ami_profile(req.ami)
     requested_backend = (req.runtime_backend or "").strip().lower()
@@ -12600,11 +12630,25 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
         # Real EC2 auto-assigns a public IPv4 to launches into the default VPC/subnet.
         instance["public_ip"] = _public_ip()
         instance["public_dns"] = _ec2_public_dns_name(instance)
+    if req.subnet_id and req.subnet_id in _core_m.get("subnets", {}):
+        # a core-VPC subnet: the address comes from the subnet's CIDR like EC2 (.4+, reserved and
+        # in-use excluded — including the other offline instances in that subnet)
+        try:
+            from core import vpc_core as _vpc_core
+            _taken = {i.get("private_ip") for i in ec2_state["instances"].values()
+                      if isinstance(i, dict) and i.get("subnet_id") == req.subnet_id and i.get("state") != "terminated"}
+            _probe = {**_core_m, "instances": {**_core_m.get("instances", {}),
+                                               **{f"x{n}": {"subnet_id": req.subnet_id, "private_ip": ip, "state": "running"}
+                                                  for n, ip in enumerate(_taken)}}}
+            instance["private_ip"] = _vpc_core._allocate_private_ip(_probe, req.subnet_id)
+        except Exception:
+            pass
     ec2_state["instances"][instance_id] = instance
     _cloudsim_sync_ec2_resource(instance, "upsert")
     if auto_start:
         _queue_runtime_start(instance_id)
     _record_usage("ec2.create_instance", instance)
+    _netsim_kick(f"ec2 launch {instance_id}")
     return instance
 
 
@@ -14088,6 +14132,8 @@ async def api_ec2_query(request: Request):
         if action == "DescribeInstanceTypes":
             return _ec2_query_describe_instance_types(params)
         if action == "DescribeSecurityGroups":
+            if _vpc_engine_is_core():
+                return api_vpc_core_query(params)
             return _ec2_query_describe_security_groups(params)
         if action == "DescribeVolumes":
             return _ec2_query_describe_volumes(params)
@@ -14165,8 +14211,66 @@ async def api_ec2_query(request: Request):
         r = _vpc_core.dispatch(_Ec2CoreSpaceStore(), dict(params))
         if r.status < 300 and not action.startswith(("Describe", "Get", "List")):
             _persist_state()
+            _netsim_kick(f"ec2 {action}")
         return Response(content=r.body, status_code=r.status, media_type=r.media_type, headers=r.headers or None)
     return _ec2_error_response("InvalidAction", f"The action '{action}' is not implemented by the simulator.", 400)
+
+
+def _vpc_engine_is_core() -> bool:
+    """v4 netsim: the EC2/VPC wire's VPC objects are served by the ONE shared engine
+    (core/vpc_core.py — what Nano runs and core/netsim evaluates/enforces). The pre-v4 handlers
+    behind VYOMI_VPC_ENGINE=legacy remain as an escape hatch."""
+    return (os.environ.get("VYOMI_VPC_ENGINE") or "core").strip().lower() != "legacy"
+
+
+def _vpc_mirror_from_core() -> None:
+    """Bridge for pre-v4 READERS of vpc_state (REST views, RDS/ELB subnet pickers, launch
+    validation): mirror the core's VPCs / subnets / security groups in the legacy shape, tagged
+    `_engine: vpc_core`; the core stays authoritative (mirrors are rebuilt on every core write)."""
+    m = _Ec2CoreSpaceStore()._vpc_model or {}
+    for coll in ("vpcs", "subnets", "security_groups"):
+        for k in [k for k, v in vpc_state[coll].items() if isinstance(v, dict) and v.get("_engine") == "vpc_core"]:
+            del vpc_state[coll][k]
+    for vid, v in (m.get("vpcs") or {}).items():
+        if vid in vpc_state["vpcs"]:
+            continue
+        vpc_state["vpcs"][vid] = {"vpc_id": vid, "name": (v.get("tags") or {}).get("Name", vid), "cidr_block": v.get("cidr", ""),
+                                  "tenancy": v.get("tenancy", "default"), "tags": [], "state": "available",
+                                  "created": v.get("created", ""), "internet_gateway_id": v.get("igw") or "",
+                                  "default_security_group_id": next((g["id"] for g in (m.get("sgs") or {}).values()
+                                                                     if g.get("vpc_id") == vid and g.get("is_default")), ""),
+                                  "main_route_table_id": next((r["id"] for r in (m.get("route_tables") or {}).values()
+                                                               if r.get("vpc_id") == vid and r.get("main")), ""),
+                                  "_engine": "vpc_core"}
+    for sid, sn in (m.get("subnets") or {}).items():
+        if sid in vpc_state["subnets"]:
+            continue
+        vpc_state["subnets"][sid] = {"subnet_id": sid, "vpc_id": sn.get("vpc_id", ""), "cidr_block": sn.get("cidr", ""),
+                                     "availability_zone": sn.get("az", ""), "name": (sn.get("tags") or {}).get("Name", sid),
+                                     "route_table_id": sn.get("route_table") or "", "tags": [], "created": "",
+                                     "_engine": "vpc_core"}
+    for gid, g in (m.get("sgs") or {}).items():
+        if gid in vpc_state["security_groups"]:
+            continue
+        vpc_state["security_groups"][gid] = {"security_group_id": gid, "vpc_id": g.get("vpc_id", ""),
+                                             "group_name": g.get("name", ""), "description": g.get("description", ""),
+                                             "ingress": [], "egress": [], "is_default": bool(g.get("is_default")),
+                                             "tags": [], "created": "", "_engine": "vpc_core"}
+
+
+def api_vpc_core_query(params: dict) -> Response:
+    """EC2 Query VPC actions → core/vpc_core (same engine as Nano), legacy readers kept in sync."""
+    from core import vpc_core as _vpc_core
+    action = str(params.get("Action", "")).strip()
+    r = _vpc_core.dispatch(_Ec2CoreSpaceStore(), dict(params))
+    if r.status < 300 and not action.startswith(("Describe", "Get", "List")):
+        try:
+            _vpc_mirror_from_core()
+        except Exception:
+            pass
+        _persist_state()
+        _netsim_kick(f"ec2 {action}")
+    return Response(content=r.body, status_code=r.status, media_type=r.media_type, headers=r.headers or None)
 
 
 class _Ec2CoreSpaceStore:

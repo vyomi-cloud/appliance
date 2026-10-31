@@ -92,7 +92,8 @@ def from_gcp(net_store, inst_store=None, project: str | None = None, cloud_nats=
             Rule(direction=INGRESS, action="deny", peers=[Peer("any")], priority=65535, name="implied-deny-ingress", implied=True),
         ]))
         routes = []
-        if not n.get("_defaultRouteDeleted"):
+        if "_hasDefaultRoute" not in n and not n.get("_defaultRouteDeleted"):
+            # networks created before the core materialised its default route
             routes.append(Route(dest="0.0.0.0/0", kind=IGW, target=IGW_ID, priority=1000, origin="system",
                                 name=f"default-route-{n['name']}"))
         t.add(RouteTable(id=f"{nid}/routes", routes=routes, name=f"{n['name']} routes"))
@@ -117,9 +118,26 @@ def from_gcp(net_store, inst_store=None, project: str | None = None, cloud_nats=
         if fw.get("logEnable"):
             t.rulesets[f"{nid}/firewall"].log = True
 
-    for nat in cloud_nats or []:
+    # Cloud Router NAT configs + network peerings straight from the core (params override/extend)
+    cloud_nats = list(cloud_nats or [])
+    for r in (getattr(net_store, "routers", None) or {}).values():
+        if project and r["project"] != project:
+            continue
+        for nat in r.get("nats") or []:
+            mode = nat.get("sourceSubnetworkIpRangesToNat", "ALL_SUBNETWORKS_ALL_IP_RANGES")
+            subs = "ALL" if mode.startswith("ALL_SUBNETWORKS") else [_tail(x.get("name")) for x in nat.get("subnetworks") or []]
+            cloud_nats.append({"network": f"{r['project']}/{r['networkName']}", "region": r["region"], "subnets": subs,
+                               "name": f"{r['name']}/{nat.get('name')}"})
+    peerings = list(peerings or [])
+    for n in nets.values():
+        for p in n.get("peerings") or []:
+            if p.get("state") == "ACTIVE" and p.get("exchangeSubnetRoutes", True):
+                a, b = f"{n['project']}/{n['name']}", f"{n['project']}/{_tail(p['network'])}"
+                if a < b:                                   # one model peering per pair
+                    peerings.append({"name": p["name"], "network": a, "peerNetwork": b, "state": "ACTIVE"})
+    for nat in cloud_nats:
         nid = f"{project or nat.get('project', '')}/{nat['network']}" if "/" not in nat["network"] else nat["network"]
-        gid = f"cloud-nat:{nid}:{nat.get('region', '')}"
+        gid = f"cloud-nat:{nat.get('name') or nid + ':' + nat.get('region', '')}"
         t.add(Gateway(id=gid, kind=NAT, network=nid))
         for s in t.subnets.values():
             if s.network == nid and s.zone == nat.get("region") and (nat.get("subnets", "ALL") == "ALL" or s.name in nat["subnets"]):
@@ -180,5 +198,5 @@ def from_gcp(net_store, inst_store=None, project: str | None = None, cloud_nats=
             t.warnings.append(f"route {r['name']}: next hop {target} not simulated")
         t.route_tables[f"{nid}/routes"].routes.append(
             Route(dest=r["destRange"], kind=kind, target=target, priority=int(r.get("priority", 1000)),
-                  tags=list(r.get("tags") or []) or None, origin="user", name=r["name"]))
+                  tags=list(r.get("tags") or []) or None, origin="system" if r.get("_system") else "user", name=r["name"]))
     return t

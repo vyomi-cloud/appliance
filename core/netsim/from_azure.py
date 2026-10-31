@@ -182,6 +182,7 @@ def from_azure(state: dict) -> Topology:
         if rt_lid and rt_lid in route_tables:
             for r in _children(state, rt_lid, (route_tables[rt_lid].get("properties") or {}).get("routes"), "routes"):
                 rp = r["properties"]
+                r = {**r, "name": f"{route_tables[rt_lid].get('id', rt_lid)}/routes/{r['name']}"}   # nextHop reports the table
                 nht = str(rp.get("nextHopType", "None")).lower()
                 dest = rp.get("addressPrefix", "")
                 if nht == "virtualappliance":

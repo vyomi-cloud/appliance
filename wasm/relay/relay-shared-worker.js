@@ -42,6 +42,10 @@ const CORES = [
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (console↔CLI parity)
 ];
 
+// core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
+// lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS
+const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/enforce.py"];
+
 const bc = new BroadcastChannel("nano-relay");
 // Defaults; the page (footer) may override any of these via the `start` message
 // (it reads localStorage — workers can't). `session` scopes the cloud tunnel.
@@ -120,6 +124,10 @@ async function bootPyodide() {
     py.FS.mkdir("/core"); py.FS.writeFile("/core/__init__.py", "");
     for (const f of CORES)
       py.FS.writeFile("/core/" + f, await (await fetch(CORE_BASE + "/" + f)).text());
+    for (const f of CORE_PKGS) {
+      try { py.FS.mkdir("/core/" + f.split("/")[0]); } catch (e) { /* exists */ }
+      py.FS.writeFile("/core/" + f, await (await fetch(CORE_BASE + "/" + f)).text());
+    }
     py.runPython(`
 import sys, json, base64; sys.path.insert(0, "/")
 from core.aws_wire_router import AwsWireRouter

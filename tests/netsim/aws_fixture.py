@@ -74,14 +74,10 @@ class Aws:
         self.call("CreateNetworkAclEntry", **p)
 
     def instance(self, subnet, sgs, ip):
-        p = {"SubnetId": subnet, "MinCount": 1, "MaxCount": 1, "InstanceType": "t3.micro"}
+        p = {"SubnetId": subnet, "MinCount": 1, "MaxCount": 1, "InstanceType": "t3.micro", "PrivateIpAddress": ip}
         for i, g in enumerate(sgs, 1):
             p[f"SecurityGroupId.{i}"] = g
-        iid = self._id(self.call("RunInstances", **p), "instanceId")
-        # vpc_core hands out pseudo IPs outside the subnet (integration gap, see README); pin the
-        # address the way RunInstances(PrivateIpAddress=…) would.
-        self.m["instances"][iid]["private_ip"] = ip
-        return iid
+        return self._id(self.call("RunInstances", **p), "instanceId")
 
     def eip(self, iid):
         alloc = self._id(self.call("AllocateAddress", Domain="vpc"), "allocationId")

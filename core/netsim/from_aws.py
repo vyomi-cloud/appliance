@@ -11,9 +11,8 @@ Mapping:
                      missing gateway → blackhole (AWS shows the route as "blackhole")
   security group     → RuleSet(STATEFUL_ALLOW), SG references → Peer(group)
   network ACL        → RuleSet(STATELESS_ORDERED), rule number = priority
-  instance / ENI     → Interface(groups = rulesets = its SG ids). Public IP only when the
-                       subnet maps public IPs (MapPublicIpOnLaunch / default VPC) or an EIP is
-                       associated — exactly when real AWS gives one.
+  instance / ENI     → Interface(groups = rulesets = its SG ids, public IP as vpc_core assigned it
+                       — MapPublicIpOnLaunch / AssociatePublicIpAddress / EIP, like EC2).
 """
 from __future__ import annotations
 
@@ -150,7 +149,9 @@ def from_aws(store_or_model) -> Topology:
         sub = m.get("subnets", {}).get(sid)
         if sub is None:
             continue
-        public = eips.get(iid) or (inst.get("public_ip") if sub.get("map_public_ip") else None)
+        # vpc_core now assigns a public IPv4 exactly per EC2's rule (MapPublicIpOnLaunch /
+        # AssociatePublicIpAddress / EIP), so the instance record is the truth
+        public = eips.get(iid) or inst.get("public_ip") or None
         ip = inst.get("private_ip", "")
         if not ip_in(ip, sub["cidr"]):
             t.warnings.append(f"{iid}: private IP {ip} is outside its subnet {sub['cidr']} "

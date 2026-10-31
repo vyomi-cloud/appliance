@@ -72,6 +72,21 @@ def _model(store) -> dict:
     return m
 
 
+def _vpc_default_sg(m: dict, vpc_id: str, fallback: str) -> str:
+    """The VPC's `default` security group (created on first use, like AWS creates it with the VPC)."""
+    sg = next((g["id"] for g in m["sgs"].values() if g.get("vpc_id") == vpc_id and g.get("is_default")), None)
+    if sg or vpc_id not in m["vpcs"]:
+        return sg or fallback
+    sg_id = _rid("sg")
+    m["sgs"][sg_id] = {"id": sg_id, "vpc_id": vpc_id, "name": "default", "description": "default VPC security group",
+                       "is_default": True, "tags": {},
+                       "ingress": [{"protocol": "-1", "from_port": None, "to_port": None, "cidrs": [], "sgs": [sg_id],
+                                    "rule_id": _rid("sgr", 8), "description": ""}],
+                       "egress": [{"protocol": "-1", "from_port": None, "to_port": None, "cidrs": ["0.0.0.0/0"], "sgs": [],
+                                   "rule_id": _rid("sgr", 8), "description": ""}]}
+    return sg_id
+
+
 def _rid(prefix: str, n: int = 12) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:n]}"
 
@@ -378,10 +393,21 @@ def _delete_internet_gateway(store, params):
 
 
 # ── route tables ─────────────────────────────────────────────────────────
+_ROUTE_TARGET_TAG = (("nat-", "natGatewayId"), ("pcx-", "vpcPeeringConnectionId"), ("eni-", "networkInterfaceId"),
+                     ("i-", "instanceId"))
+
+
+def _route_xml(r: dict) -> str:
+    t = str(r.get("target", ""))
+    tag = next((tg for pre, tg in _ROUTE_TARGET_TAG if t.startswith(pre)), "gatewayId")
+    state = r.get("state", "active")
+    origin = "CreateRouteTable" if t == "local" else "CreateRoute"
+    return (f"<item><destinationCidrBlock>{_xml_escape(r['dest'])}</destinationCidrBlock>"
+            f"<{tag}>{_xml_escape(t)}</{tag}><state>{state}</state><origin>{origin}</origin></item>")
+
+
 def _rt_xml(rt: dict) -> str:
-    routes = "".join(f"<item><destinationCidrBlock>{_xml_escape(r['dest'])}</destinationCidrBlock>"
-                      f"<gatewayId>{_xml_escape(r['target'])}</gatewayId><state>active</state></item>"
-                      for r in rt["routes"])
+    routes = "".join(_route_xml(r) for r in rt["routes"])
     assocs = ""
     if rt.get("main"):
         assocs += (f"<item><routeTableAssociationId>rtbassoc-main-{_xml_escape(rt['vpc_id'])}</routeTableAssociationId>"
@@ -402,7 +428,8 @@ def _create_route_table(store, params):
     if vpc_id not in m["vpcs"]:
         raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
     rt_id = _rid("rtb")
-    m["route_tables"][rt_id] = {"id": rt_id, "vpc_id": vpc_id, "main": False, "routes": [], "subnets": [],
+    m["route_tables"][rt_id] = {"id": rt_id, "vpc_id": vpc_id, "main": False,
+                               "routes": [{"dest": m["vpcs"][vpc_id]["cidr"], "target": "local"}], "subnets": [],
                                "tags": _parse_tag_specifications(params).get("route-table", {})}
     return _envelope("CreateRouteTable", f"<routeTable>{_rt_xml(m['route_tables'][rt_id])[len('<item>'):-len('</item>')]}</routeTable>")
 
@@ -437,8 +464,21 @@ def _create_route(store, params):
     if not rt:
         raise VpcError("InvalidRouteTableID.NotFound", f"Route table {rt_id} not found.")
     dest = str(params.get("DestinationCidrBlock", ""))
-    target = str(params.get("GatewayId") or params.get("NatGatewayId")
-                 or params.get("VpcPeeringConnectionId") or "local")
+    try:
+        ipaddress.ip_network(dest, strict=False)
+    except ValueError:
+        raise VpcError("InvalidParameterValue", f"Value ({dest}) for parameter destinationCidrBlock is invalid.")
+    target = str(params.get("GatewayId") or params.get("NatGatewayId") or params.get("VpcPeeringConnectionId")
+                 or params.get("NetworkInterfaceId") or params.get("InstanceId") or "")
+    if not target:
+        raise VpcError("MissingParameter", "The request must contain exactly one of gatewayId, natGatewayId, "
+                                           "networkInterfaceId, vpcPeeringConnectionId or instanceId")
+    if target.startswith("i-"):
+        _find_instance(m, target)
+    elif target.startswith("eni-") and target not in m["enis"]:
+        raise VpcError("InvalidNetworkInterfaceID.NotFound", f"The networkInterface ID '{target}' does not exist")
+    if any(r["dest"] == dest for r in rt["routes"]):
+        raise VpcError("RouteAlreadyExists", f"The route identified by {dest} already exists.")
     rt["routes"].append({"dest": dest, "target": target})
     return _envelope("CreateRoute", "<return>true</return>")
 
@@ -664,7 +704,7 @@ def _create_nat_gateway(store, params):
             m["addresses"][alloc_id] = addr
         gw["allocation_id"] = alloc_id
         gw["public_ip"] = addr["public_ip"]
-    gw["private_ip"] = _pseudo_ip(len(m["nat_gateways"]), base=(10, 0, 3))
+    gw["private_ip"] = _allocate_private_ip(m, subnet_id, str(params.get("PrivateIpAddress") or ""))
     gw["eni_id"] = _rid("eni")
     m["nat_gateways"][natgw_id] = gw
     return _envelope("CreateNatGateway", f"<natGateway>{_natgw_xml(gw)[len('<item>'):-len('</item>')]}</natGateway>")
@@ -963,114 +1003,108 @@ def _describe_subnets(store, params):
 
 
 # ── data plane: reachability analyzer ──────────────────────────────────────
+# ── reachability: ONE evaluator (core/netsim) for the analyzer verb, Reachability Analyzer
+#    (Network Insights paths/analyses) and the offline packet enforcer ─────────────────────
+def _netsim():
+    try:
+        from core.netsim import evaluate as ev, from_aws as fa, model as nm
+    except ImportError:                                  # pragma: no cover - flat layout
+        from netsim import evaluate as ev, from_aws as fa, model as nm   # type: ignore
+    return ev, fa, nm
+
+
 def _find_subnet_for_ip(m, ip):
     for sn in m["subnets"].values():
         try:
             if ipaddress.ip_address(ip) in ipaddress.ip_network(sn["cidr"], strict=False):
                 return sn
         except ValueError:
-            pass
+            continue
     return None
 
 
-def _route_allows(m, subnet, dest_ip) -> tuple[bool, str]:
-    """Does the subnet's route table have a route to dest_ip?"""
-    rt = m["route_tables"].get(subnet.get("route_table")) if subnet else None
-    if not rt:
-        return False, "source subnet has no route table"
-    best = None
-    for r in rt["routes"]:
-        try:
-            net = ipaddress.ip_network(r["dest"], strict=False)
-        except ValueError:
-            continue
-        if ipaddress.ip_address(dest_ip) in net:
-            if best is None or net.prefixlen > best[0]:
-                best = (net.prefixlen, r)
-    if best is None:
-        return False, f"no route to {dest_ip}"
-    return True, f"route {best[1]['dest']} → {best[1]['target']}"
+_CODE_TEXT = {
+    "NO_ROUTE": "no route to the destination", "BLACKHOLE_ROUTE": "route is a blackhole",
+    "INGRESS_DENIED": "destination security group ingress does not allow it",
+    "EGRESS_DENIED": "source security group egress does not allow it",
+    "ACL_INGRESS_DENIED": "destination subnet NACL blocks ingress", "ACL_EGRESS_DENIED": "source subnet NACL blocks egress",
+    "ACL_RETURN_DENIED": "subnet NACL blocks the return traffic (stateless)",
+    "NO_PUBLIC_IP": "no public IPv4 address for internet gateway egress",
+    "IGW_DETACHED": "route to a detached internet gateway (blackhole)",
+    "NAT_UNAVAILABLE": "NAT gateway unavailable", "NAT_NO_IGW_ROUTE": "NAT gateway's subnet has no route to an internet gateway",
+    "NAT_PRIVATE": "private NAT gateway cannot reach the internet",
+    "PEERING_INACTIVE": "VPC peering connection not active", "PEERING_NOT_TRANSITIVE": "VPC peering is not transitive",
+    "PEERING_NO_RETURN_ROUTE": "no return route over the VPC peering connection",
+    "PRIVATE_DEST_VIA_GATEWAY": "private destination is not routable via a gateway",
+    "SOURCE_DEST_CHECK": "appliance has source/destination check enabled",
+    "NOT_PUBLIC": "destination has no public IPv4 address", "NO_DESTINATION": "no network interface at the destination",
+    "UNSUPPORTED_TARGET": "route target type is not simulated",
+}
+# Reachability Analyzer explanation codes (closest native code; others pass the netsim code through)
+_EXPLANATION_CODE = {
+    "INGRESS_DENIED": "ENI_SG_RULES_MISMATCH", "EGRESS_DENIED": "ENI_SG_RULES_MISMATCH",
+    "ACL_INGRESS_DENIED": "SUBNET_ACL_RESTRICTION", "ACL_EGRESS_DENIED": "SUBNET_ACL_RESTRICTION",
+    "ACL_RETURN_DENIED": "SUBNET_ACL_RESTRICTION", "NO_ROUTE": "NO_ROUTE_TO_DESTINATION",
+    "PRIVATE_DEST_VIA_GATEWAY": "NO_ROUTE_TO_DESTINATION", "BLACKHOLE_ROUTE": "NO_ROUTE_TO_DESTINATION",
+}
 
 
-def _nacl_allows(m, subnet, protocol, port, direction) -> tuple[bool, str]:
-    """Stateless NACL check. No custom NACL → default-allow. Entries are ordered
-    numbered allow/deny; first match wins."""
-    nacl = m["nacls"].get(subnet.get("nacl")) if subnet else None
-    if not nacl:
-        return True, "default NACL (allow all)"
-    entries = sorted((e for e in nacl["entries"] if e["egress"] == (direction == "egress")),
-                     key=lambda e: e["rule_number"])
-    for e in entries:
-        if e["protocol"] not in ("-1", protocol):
-            continue
-        if e["protocol"] != "-1" and e.get("from_port") is not None:
-            if not (e["from_port"] <= port <= e["to_port"]):
-                continue
-        return (e["allow"], f"NACL rule {e['rule_number']} {'allow' if e['allow'] else 'deny'}")
-    return False, "no matching NACL entry (implicit deny)"
+def _endpoint_ref(m, topo, ep: dict, nm):
+    """Resolve an analyzer endpoint {instance_id | eni_id | ip [+ security_group_ids]} to a netsim
+    interface id, or to a plain IP string (= outside the VPCs). A bare in-subnet IP that is no
+    interface becomes a synthetic interface carrying the given SGs (the legacy verb's contract)."""
+    if ep.get("instance_id"):
+        _find_instance(m, ep["instance_id"])
+        return _netsim()[1].primary_eni(ep["instance_id"])
+    if ep.get("eni_id"):
+        if ep["eni_id"] not in topo.interfaces:
+            raise VpcError("InvalidNetworkInterfaceID.NotFound", f"The networkInterface ID '{ep['eni_id']}' does not exist")
+        return ep["eni_id"]
+    ip = ep.get("ip", "")
+    hit = topo.iface_by_ip(ip)
+    if hit is not None and hit.ip == ip:
+        return hit.id
+    sn = _find_subnet_for_ip(m, ip)
+    if sn is not None and sn["id"] in topo.subnets:
+        sgs = list(ep.get("security_group_ids") or [])
+        iid = f"ip:{ip}"
+        topo.add(nm.Interface(id=iid, subnet=sn["id"], ip=ip, groups=sgs, rulesets=sgs))
+        return iid
+    return ip
+
+
+def reach(store, source: dict, dest: dict, port, protocol: str = "tcp", src_port=None):
+    """netsim Verdict for two analyzer endpoints (dicts, see _endpoint_ref)."""
+    ev, fa, nm = _netsim()
+    m = _model(store)
+    topo = fa.from_aws(m)
+    src = _endpoint_ref(m, topo, source, nm)
+    dst = _endpoint_ref(m, topo, dest, nm)
+    return ev.reach(topo, src, dst, protocol, int(port) if port not in (None, "") else None, src_port)
 
 
 def analyze_reachability(store, source: dict, dest: dict, port: int, protocol: str = "tcp") -> dict:
-    """Evaluate whether `source` can reach `dest` on `port`. source/dest are dicts:
-    {ip, security_group_ids?}. dest may be external (no subnet). Returns
-    {reachable: bool, reason: str, path: [...]}."""
+    """Evaluate whether `source` can reach `dest` on `port` with the shared netsim evaluator
+    (routes, IGW/NAT/peering semantics, SGs, stateless NACLs incl. the ephemeral return path).
+    source/dest: {ip, security_group_ids?} | {instance_id} | {eni_id}.
+    Returns {reachable, reason, path: [step strings], code, hops: [...]}"""
     m = _model(store)
-    src_ip, dst_ip = source["ip"], dest["ip"]
-    src_sn = _find_subnet_for_ip(m, src_ip)
-    dst_sn = _find_subnet_for_ip(m, dst_ip)
-    src_sgs = source.get("security_group_ids", [])
-    dst_sgs = dest.get("security_group_ids", [])
-    path = []
-
-    if src_sn is None:
-        return {"reachable": False, "reason": "source IP is not in any subnet", "path": path}
-
-    # 1. route
-    ok, why = _route_allows(m, src_sn, dst_ip)
-    path.append(f"route: {why}")
-    if not ok:
-        return {"reachable": False, "reason": why, "path": path}
-
-    # 2. source SG egress (stateful → return traffic auto-allowed)
-    egress_ok = any(_rule_matches(r, protocol, port, dst_ip, dst_sgs)
-                    for sg in src_sgs for r in m["sgs"].get(sg, {}).get("egress", []))
-    if not src_sgs:
-        egress_ok = True  # no SG attached → default egress allow-all
-    path.append(f"source SG egress: {'allow' if egress_ok else 'DENY'}")
-    if not egress_ok:
-        return {"reachable": False, "reason": "source security group egress does not allow it", "path": path}
-
-    # 3. dest SG ingress (default deny — must be explicitly allowed)
-    if dst_sgs:
-        ingress_ok = any(_rule_matches(r, protocol, port, src_ip, src_sgs)
-                         for sg in dst_sgs for r in m["sgs"].get(sg, {}).get("ingress", []))
-        path.append(f"dest SG ingress: {'allow' if ingress_ok else 'DENY'}")
-        if not ingress_ok:
-            return {"reachable": False,
-                    "reason": f"destination security group ingress does not allow {protocol}:{port} from {src_ip}",
-                    "path": path}
-
-    # 4. NACLs (stateless, forward path)
-    ok, why = _nacl_allows(m, src_sn, protocol, port, "egress")
-    path.append(f"source NACL egress: {why}")
-    if not ok:
-        return {"reachable": False, "reason": f"source subnet NACL blocks egress ({why})", "path": path}
-    if dst_sn is not None:
-        ok, why = _nacl_allows(m, dst_sn, protocol, port, "ingress")
-        path.append(f"dest NACL ingress: {why}")
-        if not ok:
-            return {"reachable": False, "reason": f"destination subnet NACL blocks ingress ({why})", "path": path}
-
-    return {"reachable": True, "reason": "path is open", "path": path}
+    if not (source.get("instance_id") or source.get("eni_id")) and _find_subnet_for_ip(m, source.get("ip", "")) is None:
+        return {"reachable": False, "reason": "source IP is not in any subnet", "path": [], "code": "NO_SOURCE", "hops": []}
+    v = reach(store, source, dest, port, protocol)
+    path = [f"{h.component} {h.id}: {h.decision}" + (f" ({h.detail})" if h.detail else "") for h in v.hops]
+    reason = "path is open" if v.reachable else f"{_CODE_TEXT.get(v.code, v.code)} — {v.reason}"
+    return {"reachable": v.reachable, "reason": reason, "path": path, "code": v.code,
+            "hops": [h.__dict__ for h in v.hops]}
 
 
 def _analyze_reachability_action(store, params):
-    """Simulator data-plane verb: AnalyzeReachability. Endpoints via
-    Source.Ip / Source.SecurityGroupId.N / Destination.Ip / Destination.SecurityGroupId.N."""
+    """Simulator data-plane verb: AnalyzeReachability. Endpoints via Source.Ip /
+    Source.SecurityGroupId.N / Source.InstanceId / Source.NetworkInterfaceId (same for Destination)."""
     def endpoint(prefix):
-        sgs = [v for k, v in params.items()
-               if k.startswith(f"{prefix}.SecurityGroupId")]
-        return {"ip": params.get(f"{prefix}.Ip", ""), "security_group_ids": sgs}
+        sgs = [v for k, v in params.items() if k.startswith(f"{prefix}.SecurityGroupId")]
+        return {"ip": params.get(f"{prefix}.Ip", ""), "security_group_ids": sgs,
+                "instance_id": params.get(f"{prefix}.InstanceId", ""), "eni_id": params.get(f"{prefix}.NetworkInterfaceId", "")}
     result = analyze_reachability(store, endpoint("Source"), endpoint("Destination"),
                                   int(params.get("DestinationPort", 0) or 0),
                                   str(params.get("Protocol", "tcp")))
@@ -1078,7 +1112,135 @@ def _analyze_reachability_action(store, params):
     return _envelope("AnalyzeReachability",
                      f"<reachable>{str(result['reachable']).lower()}</reachable>"
                      f"<reason>{_xml_escape(result['reason'])}</reason>"
+                     f"<code>{_xml_escape(result['code'])}</code>"
                      f"<path>{steps}</path>")
+
+
+# ── VPC Reachability Analyzer (native EC2 API: Network Insights paths + analyses) ──
+def _nip_xml(p: dict) -> str:
+    return ("<item>"
+            f"<networkInsightsPathId>{p['id']}</networkInsightsPathId>"
+            f"<networkInsightsPathArn>arn:aws:ec2:us-east-1:{OWNER_ID}:network-insights-path/{p['id']}</networkInsightsPathArn>"
+            f"<createdDate>{p['created']}</createdDate><source>{_xml_escape(p['source'])}</source>"
+            f"<destination>{_xml_escape(p.get('destination', ''))}</destination>"
+            + (f"<sourceIp>{_xml_escape(p['source_ip'])}</sourceIp>" if p.get("source_ip") else "")
+            + (f"<destinationIp>{_xml_escape(p['destination_ip'])}</destinationIp>" if p.get("destination_ip") else "")
+            + f"<protocol>{_xml_escape(p['protocol'])}</protocol>"
+            + (f"<destinationPort>{p['destination_port']}</destinationPort>" if p.get("destination_port") is not None else "")
+            + f"{_tags_xml(p.get('tags', {}))}</item>")
+
+
+def _create_network_insights_path(store, params):
+    m = _model(store)
+    src, dst = str(params.get("Source", "")), str(params.get("Destination", ""))
+    if not src:
+        raise VpcError("MissingParameter", "The request must contain the parameter Source")
+    if not dst and not params.get("DestinationIp"):
+        raise VpcError("MissingParameter", "The request must contain Destination or DestinationIp")
+    pid = _rid("nip", 17)
+    m.setdefault("insights_paths", {})[pid] = {
+        "id": pid, "created": _now(), "source": src, "destination": dst,
+        "source_ip": str(params.get("SourceIp") or ""), "destination_ip": str(params.get("DestinationIp") or ""),
+        "protocol": str(params.get("Protocol") or "tcp").lower(),
+        "destination_port": int(params["DestinationPort"]) if params.get("DestinationPort") else None,
+        "tags": _parse_tag_specifications(params).get("network-insights-path", {})}
+    return _envelope("CreateNetworkInsightsPath",
+                     f"<networkInsightsPath>{_nip_xml(m['insights_paths'][pid])[6:-7]}</networkInsightsPath>")
+
+
+def _describe_network_insights_paths(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("NetworkInsightsPathId.")]
+    rows = [p for p in m.get("insights_paths", {}).values() if not ids or p["id"] in ids]
+    return _envelope("DescribeNetworkInsightsPaths", f"<networkInsightsPathSet>{''.join(_nip_xml(p) for p in rows)}</networkInsightsPathSet>")
+
+
+def _delete_network_insights_path(store, params):
+    m = _model(store)
+    pid = str(params.get("NetworkInsightsPathId", ""))
+    if pid not in m.get("insights_paths", {}):
+        raise VpcError("InvalidNetworkInsightsPathId.NotFound", f"The network insights path '{pid}' does not exist")
+    if any(a["path_id"] == pid for a in m.get("insights_analyses", {}).values()):
+        raise VpcError("DependencyViolation", f"Network insights path {pid} has analyses; delete them first")
+    m["insights_paths"].pop(pid)
+    return _envelope("DeleteNetworkInsightsPath", f"<networkInsightsPathId>{pid}</networkInsightsPathId>")
+
+
+def _insights_endpoint(m, rid: str, ip: str) -> dict:
+    if rid.startswith("i-"):
+        return {"instance_id": rid}
+    if rid.startswith("eni-"):
+        inst = next((i for i in m["instances"].values() if _netsim()[1].primary_eni(i["id"]) == rid), None)
+        return {"instance_id": inst["id"]} if inst else {"eni_id": rid}
+    if rid.startswith("igw-"):
+        if rid not in m["igws"]:
+            raise VpcError("InvalidInternetGatewayID.NotFound", f"The internetGateway ID '{rid}' does not exist")
+        return {"ip": ip or "198.51.100.1"}                    # "the internet" behind this IGW
+    return {"ip": ip or rid}
+
+
+def _start_network_insights_analysis(store, params):
+    m = _model(store)
+    pid = str(params.get("NetworkInsightsPathId", ""))
+    p = m.get("insights_paths", {}).get(pid)
+    if p is None:
+        raise VpcError("InvalidNetworkInsightsPathId.NotFound", f"The network insights path '{pid}' does not exist")
+    src = _insights_endpoint(m, p["source"], p.get("source_ip", ""))
+    dst = _insights_endpoint(m, p.get("destination") or "", p.get("destination_ip", ""))
+    if p["source"].startswith("igw-"):                   # inbound: internet → resource
+        src = {"ip": p.get("source_ip") or "198.51.100.1"}
+        if dst.get("instance_id"):
+            inst = _find_instance(m, dst["instance_id"])
+            dst = {"ip": inst.get("public_ip") or inst.get("private_ip", "")}
+    v = reach(store, src, dst, p.get("destination_port"), p["protocol"])
+    aid = _rid("nia", 17)
+    m.setdefault("insights_analyses", {})[aid] = {
+        "id": aid, "path_id": pid, "start": _now(), "status": "succeeded", "found": v.reachable,
+        "code": v.code, "reason": v.reason, "blocked_by": v.blocked_by,
+        "hops": [h.__dict__ for h in v.hops], "tags": _parse_tag_specifications(params).get("network-insights-analysis", {})}
+    return _envelope("StartNetworkInsightsAnalysis",
+                     f"<networkInsightsAnalysis>{_nia_xml(m['insights_analyses'][aid])[6:-7]}</networkInsightsAnalysis>")
+
+
+def _nia_xml(a: dict) -> str:
+    comps = "".join(
+        f"<item><sequenceNumber>{n}</sequenceNumber><component><id>{_xml_escape(h['id'])}</id>"
+        f"<name>{_xml_escape(h['component'])}</name></component></item>"
+        for n, h in enumerate((h for h in a["hops"] if h["decision"] != "deny"), 1))
+    expl = ""
+    if not a["found"]:
+        expl = (f"<item><explanationCode>{_EXPLANATION_CODE.get(a['code'], a['code'])}</explanationCode>"
+                f"<component><id>{_xml_escape(a.get('blocked_by') or '')}</id></component>"
+                f"<direction>{'ingress' if 'INGRESS' in a['code'] else 'egress'}</direction>"
+                f"<state>{_xml_escape(a['code'])}</state>"
+                f"<explanation>{_xml_escape(_CODE_TEXT.get(a['code'], a['code']) + ' — ' + a['reason'])}</explanation></item>")
+    return ("<item>"
+            f"<networkInsightsAnalysisId>{a['id']}</networkInsightsAnalysisId>"
+            f"<networkInsightsAnalysisArn>arn:aws:ec2:us-east-1:{OWNER_ID}:network-insights-analysis/{a['id']}</networkInsightsAnalysisArn>"
+            f"<networkInsightsPathId>{a['path_id']}</networkInsightsPathId><startDate>{a['start']}</startDate>"
+            f"<status>{a['status']}</status><networkPathFound>{str(a['found']).lower()}</networkPathFound>"
+            f"<forwardPathComponentSet>{comps}</forwardPathComponentSet><explanationSet>{expl}</explanationSet>"
+            f"{_tags_xml(a.get('tags', {}))}</item>")
+
+
+def _describe_network_insights_analyses(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("NetworkInsightsAnalysisId.")]
+    pid = params.get("NetworkInsightsPathId")
+    rows = [a for a in m.get("insights_analyses", {}).values()
+            if (not ids or a["id"] in ids) and (not pid or a["path_id"] == pid)]
+    return _envelope("DescribeNetworkInsightsAnalyses",
+                     f"<networkInsightsAnalysisSet>{''.join(_nia_xml(a) for a in rows)}</networkInsightsAnalysisSet>")
+
+
+def _delete_network_insights_analysis(store, params):
+    m = _model(store)
+    aid = str(params.get("NetworkInsightsAnalysisId", ""))
+    if aid not in m.get("insights_analyses", {}):
+        raise VpcError("InvalidNetworkInsightsAnalysisId.NotFound", f"The network insights analysis '{aid}' does not exist")
+    m["insights_analyses"].pop(aid)
+    return _envelope("DeleteNetworkInsightsAnalysis", f"<networkInsightsAnalysisId>{aid}</networkInsightsAnalysisId>")
+
 
 
 OWNER_ID = "123456789012"
@@ -1232,6 +1394,54 @@ def _pseudo_ip(n: int, base=(10, 0, 1)) -> str:
     return f"{base[0]}.{base[1]}.{base[2]}.{10 + (n % 240)}"
 
 
+def _used_ips(m: dict, subnet_id: str) -> set:
+    used = set()
+    for i in m["instances"].values():
+        if i.get("subnet_id") == subnet_id and i.get("state") != "terminated":
+            used.add(i.get("private_ip"))
+    for e in m["enis"].values():
+        if e.get("subnet_id") == subnet_id:
+            used.add(e.get("private_ip"))
+    for g in m["nat_gateways"].values():
+        if g.get("subnet_id") == subnet_id:
+            used.add(g.get("private_ip"))
+    return used
+
+
+def _allocate_private_ip(m: dict, subnet_id: str, requested: str = "") -> str:
+    """A private IPv4 from the SUBNET's own CIDR, like EC2: the first four addresses (network,
+    VPC router, DNS, reserved) and the last (broadcast) are never handed out; a requested
+    address must be inside the subnet, not reserved and not in use."""
+    sn = m["subnets"].get(subnet_id)
+    if sn is None:
+        return requested or _pseudo_ip(len(m["instances"]))
+    net = ipaddress.ip_network(sn["cidr"], strict=False)
+    used = _used_ips(m, subnet_id)
+    first, last = int(net.network_address) + 4, int(net.broadcast_address) - 1
+    if requested:
+        try:
+            ip = ipaddress.ip_address(requested)
+        except ValueError:
+            raise VpcError("InvalidParameterValue", f"Invalid IPv4 address: {requested}")
+        if ip not in net:
+            raise VpcError("InvalidParameterValue", f"Address {requested} does not fall within the subnet's address range")
+        if not first <= int(ip) <= last:
+            raise VpcError("InvalidParameterValue", f"Address {requested} is reserved by AWS in subnet {subnet_id}")
+        if requested in used:
+            raise VpcError("InvalidIPAddress.InUse", f"Address {requested} is in use.")
+        return requested
+    for n in range(first, last + 1):
+        cand = str(ipaddress.ip_address(n))
+        if cand not in used:
+            return cand
+    raise VpcError("InsufficientFreeAddressesInSubnet", f"There are not enough free addresses in subnet '{subnet_id}' to satisfy the requested number of instances.")
+
+
+def _bool_param(params: dict, key: str):
+    v = params.get(key)
+    return None if v is None or v == "" else str(v).lower() == "true"
+
+
 def _pseudo_public_ip(n: int) -> str:
     return f"54.{(n * 7) % 220 + 10}.{(n * 13) % 250}.{(n * 29) % 250}"
 
@@ -1272,6 +1482,7 @@ def _instance_xml(inst: dict) -> str:
         f"<virtualizationType>{_xml_escape(inst.get('virtualization_type', 'hvm'))}</virtualizationType>"
         f"<hypervisor>{_xml_escape(inst.get('hypervisor', 'nitro'))}</hypervisor>"
         f"<ebsOptimized>{str(inst.get('ebs_optimized', True)).lower()}</ebsOptimized>"
+        f"<sourceDestCheck>{str(inst.get('source_dest_check', True)).lower()}</sourceDestCheck>"
         f"<disableApiTermination>{str(inst.get('termination_protection', False)).lower()}</disableApiTermination>"
         f"<disableApiStop>{str(inst.get('stop_protection', False)).lower()}</disableApiStop>"
         f"<instanceInitiatedShutdownBehavior>{_xml_escape(inst.get('shutdown_behavior', 'stop'))}</instanceInitiatedShutdownBehavior>"
@@ -1292,11 +1503,17 @@ def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
     if image is None:
         raise VpcError("InvalidAMIID.NotFound", f"The image id '[{image_id}]' does not exist.")
     vpc_id, default_subnet, default_sg = _ensure_default_network(m)
-    subnet_id = str(params.get("SubnetId") or default_subnet)
+    subnet_id = str(params.get("SubnetId") or params.get("NetworkInterface.1.SubnetId") or default_subnet)
     subnet = m["subnets"].get(subnet_id)
+    if params.get("SubnetId") and subnet is None:
+        raise VpcError("InvalidSubnetID.NotFound", f"The subnet ID '{subnet_id}' does not exist")
+    if subnet is not None:
+        vpc_id = subnet["vpc_id"]
     az = str(params.get("Placement.AvailabilityZone") or (subnet or {}).get("az") or _AZS[idx % len(_AZS)])
     sg_ids = [v for k, v in params.items() if k.startswith("SecurityGroupId.")] or \
-             [v for k, v in params.items() if k.startswith("SecurityGroupIds.")] or [default_sg]
+             [v for k, v in params.items() if k.startswith("SecurityGroupIds.")] or \
+             [v for k, v in params.items() if k.startswith("NetworkInterface.1.SecurityGroupId.")] or \
+             [_vpc_default_sg(m, vpc_id, default_sg)]
     group_name = str(params.get("Placement.GroupName") or "")
     partition_number = None
     if group_name:
@@ -1315,8 +1532,13 @@ def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
             partition_number = (len(members) % partition_count) + 1
     instance_id = "i-" + uuid.uuid4().hex[:17]
     n = len(m["instances"]) + idx
-    private_ip = _pseudo_ip(n)
-    public_ip = _pseudo_public_ip(n)
+    requested_ip = str(params.get("PrivateIpAddress") or params.get("NetworkInterface.1.PrivateIpAddress") or "")
+    private_ip = _allocate_private_ip(m, subnet_id, requested_ip if idx == 0 else "")
+    # EC2 rule: a public IPv4 only when the launch asks for one (AssociatePublicIpAddress on the
+    # primary interface) or, absent that, when the subnet has MapPublicIpOnLaunch (default VPC: on).
+    assoc = _bool_param(params, "NetworkInterface.1.AssociatePublicIpAddress")
+    auto_public = assoc if assoc is not None else bool((subnet or {}).get("map_public_ip"))
+    public_ip = _pseudo_public_ip(n) if auto_public else ""
     tags = dict(tag_specs.get("instance", {}))
     size = int(params.get("BlockDeviceMapping.1.Ebs.VolumeSize") or image.get("block_devices", [{}])[0].get("size", 8))
     vol_type = str(params.get("BlockDeviceMapping.1.Ebs.VolumeType") or "gp3")
@@ -1332,8 +1554,8 @@ def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
     inst = {
         "id": instance_id, "image_id": image_id, "state": "running", "instance_type": str(params.get("InstanceType") or "t3.micro"),
         "launch_time": _now(), "az": az, "vpc_id": vpc_id, "subnet_id": subnet_id, "sg_ids": sg_ids,
-        "private_ip": private_ip, "public_ip": public_ip,
-        "public_dns": f"ec2-{public_ip.replace('.', '-')}.compute-1.amazonaws.com",
+        "private_ip": private_ip, "public_ip": public_ip, "auto_public_ip": auto_public, "source_dest_check": True,
+        "public_dns": f"ec2-{public_ip.replace('.', '-')}.compute-1.amazonaws.com" if public_ip else "",
         "private_dns": f"ip-{private_ip.replace('.', '-')}.ec2.internal",
         "key_name": str(params.get("KeyName") or ""), "monitoring": str(params.get("Monitoring.Enabled", "")).lower() == "true",
         "architecture": image.get("architecture", "x86_64"), "root_device_type": "ebs", "root_device_name": "/dev/xvda",
@@ -1400,9 +1622,11 @@ def _instance_state_change(store, params, action, target_state):
         inst["state"] = target_state
         if action == "stop":
             inst["public_ip"] = "" if not inst.get("elastic_ip") else inst["public_ip"]
+            if not inst.get("elastic_ip"):
+                inst["public_dns"] = ""
         if action == "start":
             n = len(m["instances"])
-            if not inst.get("elastic_ip"):
+            if not inst.get("elastic_ip") and inst.get("auto_public_ip", True):
                 inst["public_ip"] = _pseudo_public_ip(n)
                 inst["public_dns"] = f"ec2-{inst['public_ip'].replace('.', '-')}.compute-1.amazonaws.com"
         if action == "terminate":
@@ -1441,10 +1665,42 @@ def _modify_instance_attribute(store, params):
         inst["instance_type"] = str(params["InstanceType.Value"])
     if "EbsOptimized.Value" in params:
         inst["ebs_optimized"] = str(params["EbsOptimized.Value"]).lower() == "true"
+    sdc = _bool_param(params, "SourceDestCheck.Value")
+    if sdc is not None:
+        inst["source_dest_check"] = sdc
     groups = [v for k, v in params.items() if k.startswith("GroupId.")]
     if groups:
         inst["sg_ids"] = groups
     return _envelope("ModifyInstanceAttribute", "<return>true</return>")
+
+
+def _modify_subnet_attribute(store, params):
+    m = _model(store)
+    sid = str(params.get("SubnetId", ""))
+    sn = m["subnets"].get(sid)
+    if sn is None:
+        raise VpcError("InvalidSubnetID.NotFound", f"The subnet ID '{sid}' does not exist")
+    v = _bool_param(params, "MapPublicIpOnLaunch.Value")
+    if v is not None:
+        sn["map_public_ip"] = v
+    return _envelope("ModifySubnetAttribute", "<return>true</return>")
+
+
+def _modify_network_interface_attribute(store, params):
+    m = _model(store)
+    eni_id = str(params.get("NetworkInterfaceId", ""))
+    e = m["enis"].get(eni_id)
+    if e is None:
+        raise VpcError("InvalidNetworkInterfaceID.NotFound", f"The networkInterface ID '{eni_id}' does not exist")
+    sdc = _bool_param(params, "SourceDestCheck.Value")
+    if sdc is not None:
+        e["source_dest_check"] = sdc
+    if "Description.Value" in params:
+        e["description"] = str(params["Description.Value"])
+    groups = [v for k, v in params.items() if k.startswith("SecurityGroupId.")]
+    if groups:
+        e["sg_ids"] = groups
+    return _envelope("ModifyNetworkInterfaceAttribute", "<return>true</return>")
 
 
 def _monitor_instances(store, params, enabled):
@@ -1881,7 +2137,8 @@ def _eni_xml(e: dict) -> str:
             f"<vpcId>{_xml_escape(e['vpc_id'])}</vpcId><availabilityZone>{_xml_escape(e['az'])}</availabilityZone>"
             f"<description>{_xml_escape(e.get('description', ''))}</description><status>{_xml_escape(e['status'])}</status>"
             f"<privateIpAddress>{_xml_escape(e['private_ip'])}</privateIpAddress><association><publicIp>{_xml_escape(e.get('public_ip', ''))}</publicIp></association>"
-            f"<groupSet>{sgs}</groupSet>{att_xml}{_tags_xml(e.get('tags', {}))}"
+            f"<groupSet>{sgs}</groupSet>{att_xml}<sourceDestCheck>{str(e.get('source_dest_check', True)).lower()}</sourceDestCheck>"
+            f"{_tags_xml(e.get('tags', {}))}"
             "</item>")
 
 
@@ -1896,7 +2153,8 @@ def _create_network_interface(store, params):
     n = len(m["enis"])
     e = {"id": eni_id, "subnet_id": subnet_id, "vpc_id": subnet["vpc_id"], "az": subnet.get("az", _AZS[0]),
          "description": str(params.get("Description") or ""), "status": "available",
-         "private_ip": _pseudo_ip(n, base=(10, 0, 2)), "public_ip": "", "sg_ids": sgs, "attachment": None,
+         "private_ip": _allocate_private_ip(m, subnet_id, str(params.get("PrivateIpAddress") or "")), "public_ip": "",
+         "sg_ids": sgs or [_vpc_default_sg(m, subnet["vpc_id"], "")], "attachment": None, "source_dest_check": True,
          "tags": _parse_tag_specifications(params).get("network-interface", {})}
     m["enis"][eni_id] = e
     return _envelope("CreateNetworkInterface", _eni_xml(e).replace("<item>", "<networkInterface>").replace("</item>", "</networkInterface>"))
@@ -2357,6 +2615,14 @@ _OPS = {
     "TerminateInstances": lambda s, p: _instance_state_change(s, p, "terminate", "terminated"),
     "RebootInstances": _reboot_instances,
     "ModifyInstanceAttribute": _modify_instance_attribute,
+    "ModifySubnetAttribute": _modify_subnet_attribute,
+    "CreateNetworkInsightsPath": _create_network_insights_path,
+    "DescribeNetworkInsightsPaths": _describe_network_insights_paths,
+    "DeleteNetworkInsightsPath": _delete_network_insights_path,
+    "StartNetworkInsightsAnalysis": _start_network_insights_analysis,
+    "DescribeNetworkInsightsAnalyses": _describe_network_insights_analyses,
+    "DeleteNetworkInsightsAnalysis": _delete_network_insights_analysis,
+    "ModifyNetworkInterfaceAttribute": _modify_network_interface_attribute,
     "MonitorInstances": lambda s, p: _monitor_instances(s, p, True),
     "UnmonitorInstances": lambda s, p: _monitor_instances(s, p, False),
     "DescribeInstanceTypes": _describe_instance_types,

@@ -87,9 +87,6 @@ class GcpTests(unittest.TestCase):
     def test_target_service_account(self):
         self.g.fw(name="sa-rule", network="vpc1", direction="INGRESS", sourceRanges=["10.0.0.0/8"],
                   targetServiceAccounts=["db@proj1.iam.gserviceaccount.com"], allowed=[{"IPProtocol": "tcp", "ports": ["5432"]}])
-        # gcp_compute_core._insert_firewall drops targetServiceAccounts today (README: core gap) —
-        # store it the way the API resource carries it
-        self.g.net.firewalls[f"{P}/sa-rule"]["targetServiceAccounts"] = ["db@proj1.iam.gserviceaccount.com"]
         t = self.g.topo()
         self.assertTrue(reach(t, self.batch, self.db, "tcp", 5432).reachable)
         self.assertEqual(reach(t, self.db, self.web, "tcp", 5432).code, "INGRESS_DENIED")   # web runs as another SA
@@ -120,7 +117,9 @@ class GcpTests(unittest.TestCase):
     def test_external_ip_or_cloud_nat(self):
         t = self.g.topo()
         self.assertEqual(reach(t, self.batch, INET, "tcp", 443).code, "NO_PUBLIC_IP")
-        t = self.g.topo(cloud_nats=[{"network": "vpc1", "region": "us-central1", "subnets": "ALL"}])
+        self.g.call("POST", "regions/us-central1/routers", {"name": "r1", "network": "vpc1", "nats": [
+            {"name": "nat1", "sourceSubnetworkIpRangesToNat": "ALL_SUBNETWORKS_ALL_IP_RANGES"}]})
+        t = self.g.topo()
         v = reach(t, self.batch, INET, "tcp", 443)
         self.assertEqual((v.reachable, v.path), (True, "internet-via-nat"))
         self.assertEqual(reach(t, self.db, INET, "tcp", 443).code, "NO_PUBLIC_IP")   # NAT is regional
@@ -134,6 +133,19 @@ class GcpTests(unittest.TestCase):
         self.assertTrue(reach(t, self.web, self.batch, "tcp", 22).code != "SOURCE_DEST_CHECK")
         self.assertEqual(reach(t, self.db, INET, "tcp", 443).code, "NO_PUBLIC_IP")          # untagged: default route
 
+    def test_default_route_deleted_means_no_internet(self):
+        name = next(r["name"] for r in self.g.net.routes.values() if r.get("_system") and r["networkName"] == "vpc1")
+        self.g.call("DELETE", f"global/routes/{name}")
+        self.assertEqual(reach(self.g.topo(), self.web, INET, "tcp", 443).code, "NO_ROUTE")
+
+    def test_one_sided_peering_inactive(self):
+        g = self.g
+        g.network("vpc2")
+        g.subnet("vpc2", "s2", "us-central1", "10.30.1.0/24")
+        x2 = g.vm("x2", "us-central1-a", "vpc2", "us-central1", "s2", "10.30.1.10")
+        g.call("POST", "global/networks/vpc1/addPeering", {"networkPeering": {"name": "p", "network": "vpc2"}})
+        self.assertFalse(reach(g.topo(), self.web, x2, "tcp", 22).reachable)
+
     def test_peering_exchanges_routes_non_transitive(self):
         g = self.g
         g.network("vpc2")
@@ -144,8 +156,10 @@ class GcpTests(unittest.TestCase):
         x3 = g.vm("x3", "us-central1-a", "vpc3", "us-central1", "s3", "10.40.1.10")
         for n in ("vpc1", "vpc2", "vpc3"):
             g.fw(name=f"in-{n}", network=n, direction="INGRESS", sourceRanges=["10.0.0.0/8"], allowed=[{"IPProtocol": "all"}])
-        t = g.topo(peerings=[{"name": "p12", "network": "vpc1", "peerNetwork": "vpc2"},
-                             {"name": "p23", "network": "vpc2", "peerNetwork": "vpc3"}])
+        for a, b in (("vpc1", "vpc2"), ("vpc2", "vpc1"), ("vpc2", "vpc3"), ("vpc3", "vpc2")):
+            g.call("POST", f"global/networks/{a}/addPeering", {"networkPeering": {"name": f"{a}-{b}", "network": b,
+                                                                                "exchangeSubnetRoutes": True}})
+        t = g.topo()
         v = reach(t, self.web, x2, "tcp", 22)
         self.assertEqual((v.reachable, v.path), (True, "peering"), v.explain())
         v = reach(t, self.web, x3, "tcp", 22)
