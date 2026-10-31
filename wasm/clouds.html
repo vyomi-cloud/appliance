@@ -1453,6 +1453,13 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     #spaces-grid .space-card[data-provider="aws"].active   { border-color: #0972d3 !important; }
     #spaces-grid .space-card[data-provider="gcp"].active   { border-color: #1a73e8 !important; }
     #spaces-grid .space-card[data-provider="azure"].active { border-color: #0078d4 !important; }
+
+    /* Activate appliance + GitHub community live in the header (right), on every view */
+    .tb-actions { margin-left: auto; }
+    .tb-actions .hero-actions { display: flex; align-items: center; gap: 8px; margin: 0; }
+    .tb-actions .hero-btn { padding: 7px 14px; font-size: 13px; border-radius: 8px; white-space: nowrap; }
+    .tb-actions .tb-community-menu { left: auto; right: 0; transform: none; z-index: 1000; }
+    @media (max-width: 720px) { .tb-actions .hero-btn-github > span:not(.tb-caret) { display: none; } .tb-actions .hb-badge { display: none; } }
   </style>
 </head>
 <body>
@@ -1512,6 +1519,38 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     <button id="side-burger" type="button" onclick="toggleSidebar()" aria-label="Open menu" aria-controls="app-sidebar" aria-expanded="false"><span class="material-icons">menu</span></button>
     <a class="tb-brand" href="./" aria-label="vyomi"><img src="assets/brand/vyomi-logo.png" alt="vyomi"></a>
     <div class="tb-actions">
+        <div class="hero-actions">
+          <button class="hero-btn hero-btn-activate" type="button" onclick="openActivateModal()">
+            <span class="material-icons">verified</span>Activate appliance
+          </button>
+          <div class="tb-community" id="tb-community">
+            <button class="hero-btn hero-btn-github" type="button" onclick="toggleCommunityMenu(event)">
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+              <span>GitHub community</span>
+              <span class="tb-caret" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"></polyline></svg></span>
+            </button>
+            <div class="tb-community-menu" role="menu">
+              <div class="tbc-title">Join the Vyomi community</div>
+              <div class="tbc-sub">Star us · Watch releases · Join Discussions</div>
+              <a class="tbc-row tbc-row-primary" href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('star')">
+                <span class="tbc-row-ic">⭐</span><span class="tbc-row-lbl"><strong>Star on GitHub</strong></span>
+                <span class="tbc-row-meta" id="tbc-star-count"><span class="tbc-spin"></span>loading</span>
+              </a>
+              <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/subscription" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('watch')">
+                <span class="tbc-row-ic">👀</span><span class="tbc-row-lbl">Watch releases</span><span class="tbc-row-meta tbc-row-arrow">↗</span>
+              </a>
+              <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/discussions" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('discussions')">
+                <span class="tbc-row-ic">💬</span><span class="tbc-row-lbl">Discussions</span><span class="tbc-row-meta tbc-row-arrow">↗</span>
+              </a>
+              <div class="tbc-sep"></div>
+              <div class="tbc-foot">
+                <a href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('source')">Source ↗</a>
+                <a href="https://github.com/vyomi-cloud/appliance/issues" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('issues')">Issues ↗</a>
+                <a href="https://github.com/vyomi-cloud/appliance/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('contributing')">Contributing ↗</a>
+              </div>
+            </div>
+          </div>
+        </div>
       <style>
         #tb-user-trigger:hover { background: rgba(255,255,255,.06); }
         #tb-user-out:hover { background: rgba(124,92,246,.16); color:#fff; }
@@ -1758,38 +1797,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         .tbc-foot a:hover { color: #1f2937; }
         @keyframes rspin { to { transform: rotate(360deg); } }
       </style>
-      <div class="hero-actions">
-        <button class="hero-btn hero-btn-activate" type="button" onclick="openActivateModal()">
-          <span class="material-icons">verified</span>Activate appliance
-        </button>
-        <div class="tb-community" id="tb-community">
-          <button class="hero-btn hero-btn-github" type="button" onclick="toggleCommunityMenu(event)">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-            <span>GitHub community</span>
-            <span class="tb-caret" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 8 10 13 15 8"></polyline></svg></span>
-          </button>
-          <div class="tb-community-menu" role="menu">
-            <div class="tbc-title">Join the Vyomi community</div>
-            <div class="tbc-sub">Star us · Watch releases · Join Discussions</div>
-            <a class="tbc-row tbc-row-primary" href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('star')">
-              <span class="tbc-row-ic">⭐</span><span class="tbc-row-lbl"><strong>Star on GitHub</strong></span>
-              <span class="tbc-row-meta" id="tbc-star-count"><span class="tbc-spin"></span>loading</span>
-            </a>
-            <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/subscription" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('watch')">
-              <span class="tbc-row-ic">👀</span><span class="tbc-row-lbl">Watch releases</span><span class="tbc-row-meta tbc-row-arrow">↗</span>
-            </a>
-            <a class="tbc-row" href="https://github.com/vyomi-cloud/appliance/discussions" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('discussions')">
-              <span class="tbc-row-ic">💬</span><span class="tbc-row-lbl">Discussions</span><span class="tbc-row-meta tbc-row-arrow">↗</span>
-            </a>
-            <div class="tbc-sep"></div>
-            <div class="tbc-foot">
-              <a href="https://github.com/vyomi-cloud/appliance" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('source')">Source ↗</a>
-              <a href="https://github.com/vyomi-cloud/appliance/issues" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('issues')">Issues ↗</a>
-              <a href="https://github.com/vyomi-cloud/appliance/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" onclick="trackCommunityClick('contributing')">Contributing ↗</a>
-            </div>
-          </div>
-        </div>
-      </div>
     </header>
     <script>
       function toggleCommunityMenu(evt){ if(evt)evt.stopPropagation(); var w=document.getElementById('tb-community'); if(!w)return; var was=w.classList.contains('open'); w.classList.toggle('open'); if(!was){ _loadStarCount(); trackCommunityClick('modal_open'); } }
