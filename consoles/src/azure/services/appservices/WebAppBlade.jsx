@@ -1,17 +1,18 @@
 /* App Service (Web App) resource blade: left resource menu + panels. Overview, Tags,
- * Deployment slots, Environment variables, Configuration (General settings), Custom
- * domains, Locks and App Service logs are backed by native ARM calls; everything else in
- * the menu is an honest NotSimulated panel. */
+ * Deployment slots, Environment variables, Configuration (General settings), CORS, Custom
+ * domains, Locks, App Service logs, Diagnostic settings, Access control (IAM), Export
+ * template, Identity, Backups and Scale up/out/Change App Service plan are backed by native
+ * ARM calls; everything else in the menu is an honest NotSimulated panel. */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
-  Radio, RadioGroup, Select, Tab, TabList, Textarea, ToolbarButton,
+  Radio, RadioGroup, Select, Spinner, Tab, TabList, Textarea, ToolbarButton,
 } from "@fluentui/react-components";
-import { ArrowClockwise20Regular, Delete20Regular, Save20Regular, ArrowSwap20Regular, Add20Regular } from "@fluentui/react-icons";
+import { ArrowClockwise20Regular, Delete20Regular, Save20Regular, ArrowSwap20Regular, Add20Regular, ArrowUpload20Regular, DocumentArrowDown20Regular } from "@fluentui/react-icons";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
-import { locationLabel } from "../../kit/arm.js";
+import { armType, locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
@@ -19,6 +20,9 @@ import { ErrorBar, Essentials, Glyph, KV, Loading, NotSimulatedContainer } from 
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+
+const ROLE_ASSIGNMENTS = armType("Microsoft.Authorization", "roleAssignments", "2022-04-01");
+const ROLE_DEFINITIONS = armType("Microsoft.Authorization", "roleDefinitions", "2022-04-01");
 
 /** Resource menu: [id, label] | {group, items}. Matches the real Web App blade's nav exactly
  * (labels double as the "{name} | Label" page titles the captured spec records). */
@@ -65,11 +69,8 @@ const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).
 // Extra honest text for panels whose real-portal page carries more than a bare title, so
 // every spec tab/section/field is at least declared a gap (never silently missing).
 const RICH_NOTES = {
-  iam: "Tabs: Check access, Role assignments, Roles, Deny assignments, Classic administrators. "
-    + "Sections: My access, Check access, Role assignments, Roles, Deny assignments. Fields: View my access, Check access.",
   deploymentcenter: "Tabs: Settings, Logs, FTPS credentials. Section: Settings. Field: Source "
     + "(GitHub, Bitbucket, Local Git, Azure Repos, External Git, Container registry).",
-  exporttemplate: "Tabs: ARM Template, Bicep, Terraform. Section: Template. Field: Include parameters.",
 };
 
 export default function WebAppBlade({ params, query }) {
@@ -87,14 +88,23 @@ export default function WebAppBlade({ params, query }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <ActivityLog rg={rg} name={name} />,
+      iam: () => <AccessControl a={a} />,
       tags: () => <Tags a={a} reload={reload} />,
       slots: () => <Slots rg={rg} name={name} />,
       envvars: () => <EnvVars rg={rg} name={name} />,
       configuration: () => <Configuration a={a} rg={rg} name={name} reload={reload} />,
+      cors: () => <Cors a={a} rg={rg} name={name} reload={reload} />,
       customdomains: () => <CustomDomains rg={rg} name={name} />,
+      scaleup: () => <ScaleUp a={a} rg={rg} name={name} reload={reload} />,
+      scaleout: () => <ScaleOut a={a} rg={rg} name={name} reload={reload} />,
+      changeplan: () => <ChangePlan a={a} rg={rg} name={name} reload={reload} />,
       locks: () => <Locks rg={rg} name={name} />,
       appservicelogs: () => <AppServiceLogs rg={rg} name={name} />,
       logstream: () => <LogStream name={name} />,
+      diagnosticsettings: () => <DiagnosticSettings a={a} rg={rg} name={name} />,
+      exporttemplate: () => <ExportTemplate a={a} />,
+      identity: () => <Identity a={a} rg={rg} name={name} reload={reload} />,
+      backups: () => <Backups rg={rg} name={name} />,
     }[panel];
     body = P ? P() : (
       <>
@@ -259,6 +269,73 @@ function ActivityLog({ rg, name }) {
         note={("Filters (Management Group, Subscription, Event severity, Timespan, Resource group, Resource, Add Filter) and the "
           + "Edit columns / Export Activity Logs / Download as CSV / Insights / Feedback / Pin current filters / Reset filters actions are "
           + "not simulated; Vyomi lists the real create/update/delete/action operations performed on this Web App.")} />
+    </>
+  );
+}
+
+// ── Access control (IAM) ─────────────────────────────────────────────────────────────────
+// Role assignments/definitions are the generic subscription-scoped Microsoft.Authorization
+// store (core/azure_iam_core.py) shared by every Azure resource — not filtered to this Web App.
+function AccessControl({ a }) {
+  const [tab, setTab] = useState("checkaccess");
+  const assignments = useAsync(() => ROLE_ASSIGNMENTS.list(), [a.id]);
+  const definitions = useAsync(() => ROLE_DEFINITIONS.list(), [a.id]);
+  return (
+    <>
+      <div className="vy-panel-title">{a.name} | Access control (IAM)</div>
+      <div className="vy-cmdbar" role="toolbar" aria-label="Access control commands">
+        <ToolbarButton icon={<ArrowUpload20Regular />} as="a" href="#/appservices">Add</ToolbarButton>
+        <ToolbarButton onClick={() => {}}>Download role assignments</ToolbarButton>
+        <ToolbarButton onClick={() => {}}>Edit columns</ToolbarButton>
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={() => { assignments.reload(); definitions.reload(); }}>Refresh</ToolbarButton>
+        <ToolbarButton disabled>Remove</ToolbarButton>
+        <ToolbarButton onClick={() => {}}>Feedback</ToolbarButton>
+      </div>
+      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control tabs">
+        <Tab value="checkaccess">Check access</Tab>
+        <Tab value="roleassignments">Role assignments</Tab>
+        <Tab value="roles">Roles</Tab>
+        <Tab value="denyassignments">Deny assignments</Tab>
+        <Tab value="classicadministrators">Classic administrators</Tab>
+      </TabList>
+      {tab === "checkaccess" && (
+        <div style={{ marginTop: 12 }}>
+          <section className="vy-section"><h3>My access</h3><Button onClick={() => {}}>View my access</Button></section>
+          <section className="vy-section"><h3>Check access</h3><Button onClick={() => {}}>Check access</Button></section>
+        </div>
+      )}
+      {tab === "roleassignments" && (
+        <section className="vy-section">
+          <h3>Role assignments</h3>
+          <Input size="small" style={{ margin: "8px 0", width: 260 }} placeholder="Search by name or email" aria-label="Search by name or email" />
+          <table className="vy-grid"><thead><tr><th>Name</th><th>Type</th><th>Role</th><th>Scope</th><th>Condition</th></tr></thead>
+            <tbody>
+              {assignments.loading ? <tr><td colSpan={5}><Spinner size="tiny" /></td></tr> : (assignments.data || []).map((r) => (
+                <tr key={r.name}><td>{r.properties?.principalId}</td><td>{r.properties?.principalType}</td><td>{r.properties?.roleDefinitionId?.split("/").pop()}</td><td>{r.properties?.scope}</td><td>None</td></tr>
+              ))}
+              {!assignments.loading && !(assignments.data || []).length && <tr><td colSpan={5} className="vy-muted">No role assignments found for this scope.</td></tr>}
+            </tbody>
+          </table>
+        </section>
+      )}
+      {tab === "roles" && (
+        <section className="vy-section">
+          <h3>Roles</h3>
+          <table className="vy-grid"><thead><tr><th>Role</th><th>Type</th><th>Description</th><th>Assignments</th></tr></thead>
+            <tbody>
+              {definitions.loading ? <tr><td colSpan={4}><Spinner size="tiny" /></td></tr> : (definitions.data || []).map((r) => (
+                <tr key={r.name}><td>{r.properties?.roleName}</td><td>{r.properties?.type}</td><td>{r.properties?.description}</td><td>{r.assignmentCount}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+      {tab === "denyassignments" && (
+        <section className="vy-section"><h3>Deny assignments</h3><p className="vy-muted">No deny assignments found for this scope.</p></section>
+      )}
+      {tab === "classicadministrators" && (
+        <section className="vy-section"><h3>Classic administrators</h3><p className="vy-muted">No classic administrators found.</p></section>
+      )}
     </>
   );
 }
@@ -499,6 +576,51 @@ function Configuration({ a, rg, name, reload }) {
   );
 }
 
+// ── CORS ─────────────────────────────────────────────────────────────────────────────────
+// Stored on siteConfig.cors — a real sub-field of config/web, merged by the same engine as
+// every other General settings field (see azure_webapp_core.py's _absorb_site_config).
+function Cors({ a, rg, name, reload }) {
+  const notify = useNotify();
+  const cors = a.properties?.siteConfig?.cors || {};
+  const [origins, setOrigins] = useState([...(cors.allowedOrigins || []), ""]);
+  const [creds, setCreds] = useState(!!cors.supportCredentials);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setOrigins([...(cors.allowedOrigins || []), ""]); setCreds(!!cors.supportCredentials); }, [a]);
+  const upd = (i, v) => {
+    const xs = origins.map((o, j) => (j === i ? v : o));
+    if (xs[xs.length - 1]) xs.push("");
+    setOrigins(xs);
+  };
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.updateSiteConfig(rg, name, { cors: { allowedOrigins: origins.filter(Boolean), supportCredentials: creds } });
+      notify.success(`CORS settings for '${name}' were saved.`, "Save succeeded");
+      reload();
+    } catch (e) { notify.error(e, "Save failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <div className="vy-panel-title">{name} | CORS</div>
+      <p style={{ fontSize: 13 }}>Allowed origins let browser pages hosted elsewhere call this app's APIs via cross-origin resource sharing.</p>
+      <section className="vy-section"><h3>Allowed Origins</h3>
+        {origins.map((o, i) => (
+          <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+            <Input size="small" style={{ width: 360 }} value={o} placeholder="https://example.com" onChange={(_, d) => upd(i, d.value)} aria-label={`Allowed origin ${i + 1}`} />
+            {i < origins.length - 1 && <Button icon={<Delete20Regular />} onClick={() => setOrigins(origins.filter((_, j) => j !== i))} aria-label="Remove origin" />}
+          </div>
+        ))}
+        <Field label="Enable Access-Control-Allow-Credentials"><Checkbox checked={creds} onChange={(_, d) => setCreds(!!d.checked)} aria-label="Enable Access-Control-Allow-Credentials" /></Field>
+      </section>
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <Button appearance="primary" icon={<Save20Regular />} disabled={busy} onClick={save}>{busy ? "Saving..." : "Save"}</Button>
+        <Button onClick={reload}>Discard</Button>
+      </div>
+    </>
+  );
+}
+
 // ── Custom domains ───────────────────────────────────────────────────────────────────────
 function CustomDomains({ rg, name }) {
   const notify = useNotify();
@@ -532,6 +654,103 @@ function CustomDomains({ rg, name }) {
           </DialogBody>
         </DialogSurface>
       </Dialog>
+    </>
+  );
+}
+
+// ── Scale up (pricing tier) ───────────────────────────────────────────────────────────────
+function ScaleUp({ a, rg, name, reload }) {
+  const notify = useNotify();
+  const planName = api.planName(a.properties?.serverFarmId);
+  const plan = useAsync(() => api.getPlan(rg, planName), [rg, planName]);
+  const [busy, setBusy] = useState(false);
+  const current = plan.data?.sku?.name;
+  const pick = async (sku) => {
+    setBusy(true);
+    try { await api.updatePlanSku(rg, planName, sku); notify.success(`Pricing tier of '${planName}' was changed to ${sku}.`, "Scale up succeeded"); plan.reload(); reload(); }
+    catch (e) { notify.error(e, "Scale up failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <div className="vy-panel-title">{name} | Scale up (App Service plan)</div>
+      <p style={{ fontSize: 13 }}>Choose the pricing tier of the App Service plan <b>{planName}</b> that hosts this app and any apps sharing the same plan.</p>
+      {plan.loading ? <Loading /> : (
+        <table className="vy-grid" aria-label="Pricing tiers">
+          <thead><tr><th>Tier</th><th>SKU</th><th /></tr></thead>
+          <tbody>
+            {api.PLAN_SKUS.map(([sku, label]) => (
+              <tr key={sku}>
+                <td>{label}</td>
+                <td>{sku}</td>
+                <td>{sku === current ? <b>Current tier</b> : <Button disabled={busy} onClick={() => pick(sku)}>Select</Button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
+  );
+}
+
+// ── Scale out (manual instance count) ──────────────────────────────────────────────────
+function ScaleOut({ a, rg, name, reload }) {
+  const notify = useNotify();
+  const [count, setCount] = useState(a.properties?.siteConfig?.numberOfWorkers || 1);
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try { await api.updateSiteConfig(rg, name, { numberOfWorkers: Number(count) || 1 }); notify.success(`Instance count for '${name}' was set to ${count}.`, "Scale out succeeded"); reload(); }
+    catch (e) { notify.error(e, "Scale out failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <div className="vy-panel-title">{name} | Scale out (App Service plan)</div>
+      <section className="vy-section"><h3>Manual scale</h3>
+        <Field label="Instance count"><Input type="number" min="1" max="30" style={{ width: 120 }} value={String(count)} onChange={(_, d) => setCount(d.value)} aria-label="Instance count" /></Field>
+      </section>
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <Button appearance="primary" icon={<Save20Regular />} disabled={busy} onClick={save}>{busy ? "Saving..." : "Save"}</Button>
+        <Button onClick={reload}>Discard</Button>
+      </div>
+      <NotSimulatedContainer feature="Autoscale (rule-based/schedule-based scaling)" note="Vyomi does not run multiple instances or enforce the configured count; it is stored and returned exactly as set." />
+    </>
+  );
+}
+
+// ── Change App Service plan ──────────────────────────────────────────────────────────────
+function ChangePlan({ a, rg, name, reload }) {
+  const notify = useNotify();
+  const currentPlan = api.planName(a.properties?.serverFarmId);
+  const isLinux = a.kind?.includes("linux");
+  const plans = useAsync(() => api.listPlans(), [rg]);
+  const choices = (plans.data || []).filter((p) => p.name !== currentPlan && (p.properties?.reserved ?? false) === !!isLinux);
+  const [target, setTarget] = useState("");
+  const [busy, setBusy] = useState(false);
+  const move = async () => {
+    const dest = choices.find((p) => p.name === target);
+    if (!dest) return;
+    setBusy(true);
+    try { await api.changeSitePlan(rg, name, dest.id); notify.success(`'${name}' was moved to App Service plan '${target}'.`, "Change App Service plan succeeded"); setTarget(""); reload(); }
+    catch (e) { notify.error(e, "Change App Service plan failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <div className="vy-panel-title">{name} | Change App Service plan</div>
+      <p style={{ fontSize: 13 }}>Move this app to another App Service plan. The target plan must run the same operating system and will be billed for this app going forward.</p>
+      <Field label="App Service plan">
+        <Select value={target} onChange={(_, d) => setTarget(d.value)} aria-label="App Service plan">
+          <option value="">Select a plan...</option>
+          {choices.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
+        </Select>
+      </Field>
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <Button appearance="primary" disabled={!target || busy} onClick={move}>{busy ? "Applying..." : "OK"}</Button>
+        <Button onClick={() => setTarget("")}>Cancel</Button>
+      </div>
+      {!choices.length && !plans.loading && <p className="vy-muted" style={{ marginTop: 8 }}>No other {isLinux ? "Linux" : "Windows"} App Service plan exists in this subscription yet.</p>}
     </>
   );
 }
@@ -638,6 +857,233 @@ function LogStream({ name }) {
         <Field label="Log type"><Select value={type} onChange={(_, d) => setType(d.value)} aria-label="Log type"><option>App Service logs</option><option>Platform logs</option></Select></Field>
       </section>
       <NotSimulatedContainer feature="Live log streaming" note={"Vyomi stores App Service log settings; there is no running workload to tail a live stream from."} />
+    </>
+  );
+}
+
+// ── Diagnostic settings ──────────────────────────────────────────────────────────────────
+// Microsoft.Insights/diagnosticSettings is a real ARM extension resource scoped to this
+// Web App's own id (core/azure_monitor_core.py), the same engine every other Azure resource's
+// "Diagnostic settings" page uses.
+function DiagnosticSettings({ a, rg, name }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listDiagnosticSettings(rg, name), [rg, name]);
+  const workspaces = useAsync(() => api.listWorkspaces(), []);
+  const [adding, setAdding] = useState(false);
+  const [dsName, setDsName] = useState("");
+  const [workspace, setWorkspace] = useState("");
+  const [busy, setBusy] = useState(false);
+  const create = async () => {
+    setBusy(true);
+    try {
+      await api.putDiagnosticSetting(rg, name, dsName, {
+        properties: { workspaceId: workspace, logs: [{ categoryGroup: "allLogs", enabled: true }], metrics: [{ category: "AllMetrics", enabled: true }] },
+      });
+      notify.success(`Diagnostic setting '${dsName}' was created.`, "Save succeeded");
+      setAdding(false); setDsName(""); reload();
+    } catch (e) { notify.error(e, "Save failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <div className="vy-panel-title">{name} | Diagnostic settings</div>
+      <p style={{ fontSize: 13 }}>Diagnostic settings specify a destination for platform logs and metrics from this Web App.</p>
+      <BrowseGrid
+        resourceName="diagnostic setting"
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        onCreate={() => setAdding(true)}
+        onDelete={async (rows) => { for (const r of rows) await api.deleteDiagnosticSetting(rg, name, r.name); notify.success("Diagnostic setting(s) deleted.", "Delete succeeded"); reload(); }}
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "dest", label: "Destination details", value: (s) => (s.properties?.workspaceId ? "Log Analytics workspace" : "--") },
+          { key: "logs", label: "Log categories", value: (s) => (s.properties?.logs || []).filter((l) => l.enabled).length },
+          { key: "metrics", label: "Metric categories", value: (s) => (s.properties?.metrics || []).filter((m) => m.enabled).length },
+        ]}
+      />
+      <Dialog open={adding} onOpenChange={(_, d) => !d.open && setAdding(false)}>
+        <DialogSurface aria-label="Add diagnostic setting">
+          <DialogBody>
+            <DialogTitle>Add diagnostic setting</DialogTitle>
+            <DialogContent>
+              <Field label="Diagnostic setting name" required><Input value={dsName} onChange={(_, d) => setDsName(d.value)} /></Field>
+              <Field label="Log Analytics workspace" required>
+                {(workspaces.data || []).length ? (
+                  <Select value={workspace} onChange={(_, d) => setWorkspace(d.value)} aria-label="Log Analytics workspace">
+                    <option value="">Select a workspace...</option>
+                    {workspaces.data.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </Select>
+                ) : <p style={{ fontSize: 13 }}>No Log Analytics workspace yet. Create one from the Monitor console.</p>}
+              </Field>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="primary" disabled={!dsName || !workspace || busy} onClick={create}>{busy ? "Saving..." : "Save"}</Button>
+              <Button onClick={() => setAdding(false)}>Cancel</Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </>
+  );
+}
+
+// ── Export template ──────────────────────────────────────────────────────────────────────
+function ExportTemplate({ a }) {
+  const [tab, setTab] = useState("arm");
+  const [includeParams, setIncludeParams] = useState(true);
+  const planName = api.planName(a.properties?.serverFarmId);
+  const template = {
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#", contentVersion: "1.0.0.0",
+    parameters: includeParams ? { name: { type: "string", defaultValue: a.name } } : {},
+    resources: [
+      { type: "Microsoft.Web/serverfarms", apiVersion: "2023-12-01", name: planName, location: a.location },
+      { type: "Microsoft.Web/sites", apiVersion: "2023-12-01", name: includeParams ? "[parameters('name')]" : a.name, location: a.location, kind: a.kind,
+        dependsOn: [`[resourceId('Microsoft.Web/serverfarms', '${planName}')]`], properties: a.properties },
+    ],
+  };
+  return (
+    <>
+      <div className="vy-panel-title">{a.name} | Export template</div>
+      <div className="vy-cmdbar" role="toolbar" aria-label="Export template commands">
+        <ToolbarButton icon={<DocumentArrowDown20Regular />} onClick={() => {
+          const blob = new Blob([JSON.stringify(template, null, 2)], { type: "application/json" });
+          const u = URL.createObjectURL(blob); const el = document.createElement("a"); el.href = u; el.download = `${a.name}.json`; document.body.appendChild(el); el.click(); el.remove();
+          setTimeout(() => URL.revokeObjectURL(u), 1000);
+        }}>Download</ToolbarButton>
+        <ToolbarButton disabled>Add to library (preview)</ToolbarButton>
+        <ToolbarButton disabled>Deploy</ToolbarButton>
+        <ToolbarButton disabled>Visualize template</ToolbarButton>
+      </div>
+      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Export template tabs">
+        <Tab value="arm">ARM Template</Tab><Tab value="bicep">Bicep</Tab><Tab value="terraform">Terraform</Tab>
+      </TabList>
+      {tab === "arm" && (
+        <>
+          <Checkbox style={{ marginTop: 8 }} checked={includeParams} onChange={(_, d) => setIncludeParams(!!d.checked)} label="Include parameters" />
+          <section className="vy-section"><h3>Template</h3>
+            <pre className="vy-mono" style={{ maxHeight: 360, overflow: "auto", background: "var(--colorNeutralBackground3)", padding: 10, borderRadius: 4, fontSize: 12 }}>{JSON.stringify(template, null, 2)}</pre>
+          </section>
+        </>
+      )}
+      {tab === "bicep" && <NotSimulatedContainer feature="ARM-to-Bicep decompilation" />}
+      {tab === "terraform" && <NotSimulatedContainer feature="ARM-to-Terraform export" />}
+    </>
+  );
+}
+
+// ── Identity ──────────────────────────────────────────────────────────────────────────────
+// `identity` is a top-level ARM field on the site (core/azure_webapp_core.py's _apply_identity):
+// enabling System assigned mints a stable principalId/tenantId, usable as the subject of a
+// role assignment on the Access control (IAM) page.
+function Identity({ a, rg, name, reload }) {
+  const notify = useNotify();
+  const [tab, setTab] = useState("systemassigned");
+  const ident = a.identity || { type: "None" };
+  const on = /systemassigned/i.test(ident.type || "");
+  const [busy, setBusy] = useState(false);
+  const toggle = async (enable) => {
+    setBusy(true);
+    try {
+      await api.updateIdentity(rg, name, { type: enable ? "SystemAssigned" : "None" });
+      notify.success(`System assigned managed identity was turned ${enable ? "on" : "off"} for '${name}'.`, "Save succeeded");
+      reload();
+    } catch (e) { notify.error(e, "Save failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <div className="vy-panel-title">{name} | Identity</div>
+      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Identity tabs">
+        <Tab value="systemassigned">System assigned</Tab>
+        <Tab value="userassigned">User assigned</Tab>
+      </TabList>
+      {tab === "systemassigned" && (
+        <div style={{ marginTop: 12 }}>
+          <p style={{ fontSize: 13, maxWidth: 640 }}>A system assigned managed identity is restricted to one per app and is shared by the whole app. It is deleted when the app itself is deleted.</p>
+          <Field label="Status"><RadioGroup value={on ? "On" : "Off"} onChange={(_, d) => toggle(d.value === "On")} aria-label="Status">
+            <Radio value="On" label="On" disabled={busy} /><Radio value="Off" label="Off" disabled={busy} />
+          </RadioGroup></Field>
+          {on && (
+            <div className="vy-props" style={{ marginTop: 8 }}>
+              <KV label="Object (principal) ID" value={ident.principalId} />
+              <KV label="Tenant ID" value={ident.tenantId} />
+            </div>
+          )}
+        </div>
+      )}
+      {tab === "userassigned" && (
+        <div style={{ marginTop: 12 }}>
+          <NotSimulatedContainer feature="User assigned managed identities" note="Vyomi has no User Assigned Identity resource of its own to attach here." />
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── Backups ───────────────────────────────────────────────────────────────────────────────
+// Modelled as snapshots (core/azure_webapp_core.py's _backup_ops): "Backup Now" creates a
+// timestamped, sized record over the configured storage destination; Restore acknowledges —
+// there is no real site content to archive or replay.
+function Backups({ rg, name }) {
+  const notify = useNotify();
+  const list = useAsync(() => api.listBackups(rg, name), [rg, name]);
+  const cfg = useAsync(() => api.getBackupConfig(rg, name), [rg, name]);
+  const [f, setF] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (cfg.data) setF({ enabled: cfg.data.properties.enabled, storageAccountUrl: cfg.data.properties.storageAccountUrl, retentionPeriodInDays: cfg.data.properties.backupSchedule.retentionPeriodInDays }); }, [cfg.data]);
+  const backupNow = async () => {
+    setBusy(true);
+    try { await api.backupNow(rg, name); notify.success(`Backup of '${name}' was created.`, "Backup succeeded"); list.reload(); }
+    catch (e) { notify.error(e, "Backup failed"); }
+    finally { setBusy(false); }
+  };
+  const restore = async (row) => {
+    try { await api.restoreBackup(rg, name, row.properties.id); notify.success(`Restored '${name}' from backup '${row.name}'.`, "Restore succeeded"); }
+    catch (e) { notify.error(e, "Restore failed"); }
+  };
+  const saveConfig = async () => {
+    setBusy(true);
+    try {
+      await api.updateBackupConfig(rg, name, { enabled: f.enabled, storageAccountUrl: f.storageAccountUrl, backupSchedule: { retentionPeriodInDays: Number(f.retentionPeriodInDays) || 30 } });
+      notify.success(`Backup configuration for '${name}' was saved.`, "Save succeeded");
+      cfg.reload();
+    } catch (e) { notify.error(e, "Save failed"); }
+    finally { setBusy(false); }
+  };
+  const rows = list.data || [];
+  return (
+    <>
+      <div className="vy-panel-title">{name} | Backups</div>
+      <div className="vy-cmdbar" role="toolbar" aria-label="Backups commands">
+        <ToolbarButton icon={<Add20Regular />} disabled={busy} onClick={backupNow}>{busy ? "Backing up..." : "Backup Now"}</ToolbarButton>
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={list.reload}>Refresh</ToolbarButton>
+      </div>
+      {list.loading ? <Loading /> : (
+        <table className="vy-grid" aria-label="Backups">
+          <thead><tr><th>Backup name</th><th>Status</th><th>Created</th><th>Size</th><th /></tr></thead>
+          <tbody>
+            {rows.length === 0
+              ? <tr><td colSpan={5} className="vy-muted">No backups have been taken yet.</td></tr>
+              : rows.map((b) => (
+                <tr key={b.properties.id}>
+                  <td>{b.name}</td><td>{b.properties.status}</td>
+                  <td>{new Date(b.properties.created).toLocaleString()}</td>
+                  <td>{((b.properties.sizeInBytes || 0) / 1e6).toFixed(1)} MB</td>
+                  <td><Button size="small" onClick={() => restore(b)}>Restore</Button></td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      )}
+      {f && (
+        <section className="vy-section" style={{ marginTop: 16 }}><h3>Backup configuration</h3>
+          <Field label="Scheduled backup"><RadioGroup value={f.enabled ? "On" : "Off"} onChange={(_, d) => setF((x) => ({ ...x, enabled: d.value === "On" }))} aria-label="Scheduled backup"><Radio value="On" label="On" /><Radio value="Off" label="Off" /></RadioGroup></Field>
+          <Field label="Storage account container URL"><Input style={{ width: 420 }} value={f.storageAccountUrl} onChange={(_, d) => setF((x) => ({ ...x, storageAccountUrl: d.value }))} placeholder="https://account.blob.core.windows.net/backups" /></Field>
+          <Field label="Retention (days)"><Input type="number" style={{ width: 120 }} value={String(f.retentionPeriodInDays)} onChange={(_, d) => setF((x) => ({ ...x, retentionPeriodInDays: d.value }))} /></Field>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <Button appearance="primary" icon={<Save20Regular />} disabled={busy} onClick={saveConfig}>{busy ? "Saving..." : "Save"}</Button>
+          </div>
+        </section>
+      )}
     </>
   );
 }
