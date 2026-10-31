@@ -1019,6 +1019,14 @@
       "timeout": 300
     },
     {
+      "id": "offline-cli-gcp-scheduler-pubsub",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "cli",
+      "cmd": "ENDPOINT={ENDPOINT} bash tests/cli/gcp-scheduler-pubsub-cli-smoke.sh",
+      "timeout": 300
+    },
+    {
       "id": "offline-ui-gcp-cloudscheduler",
       "target": "offline",
       "cloud": "gcp",
