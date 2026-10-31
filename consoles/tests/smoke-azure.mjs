@@ -672,9 +672,6 @@ try {
   check("UI Check access → real decision reflects the role just assigned", true);
   const checkClose = page.getByRole("dialog").getByRole("button", { name: "Close" }).last();   // the dialog's own Close (not the X)
   if (await checkClose.isVisible().catch(() => false)) await checkClose.click();
-  // Two "Close" buttons in this dialog (title's icon-only close + the footer button) — the
-  // footer one is last in DOM order.
-  await page.getByRole("button", { name: "Close" }).last().click();
 
   await page.getByRole("tab", { name: "Role assignments" }).click();
   await page.getByLabel(`Select ${RGPRINCIPAL}`, { exact: true }).check();
@@ -1810,7 +1807,8 @@ try {
   const vmGone = await arm("GET", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM2}`);
   check("UI delete virtual machine → ARM GET 404", vmGone.status === 404, `HTTP ${vmGone.status}`);
 } catch (e) {
-  check("smoke run", false, e.message.split("\n")[0]);
+  const at = ((e.stack || "").match(/(?:smoke|dbg)-[a-z]+\.mjs:(\d+)/) || [])[1];   // the failing step's line
+  check("smoke run", false, e.message.split("\n")[0] + (at ? ` (smoke line ${at})` : ""));
   await shot("99-failure").catch(() => {});
 } finally {
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));

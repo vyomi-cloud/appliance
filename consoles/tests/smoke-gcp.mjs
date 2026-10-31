@@ -1214,7 +1214,8 @@ try {
   await shot("11-dark");
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "light"));
 } catch (e) {
-  check("smoke run", false, e.message.split("\n")[0]);
+  const at = ((e.stack || "").match(/(?:smoke|dbg)-[a-z]+\.mjs:(\d+)/) || [])[1];   // the failing step's line
+  check("smoke run", false, e.message.split("\n")[0] + (at ? ` (smoke line ${at})` : ""));
   await shot("99-failure").catch(() => {});
 } finally {
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
