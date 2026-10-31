@@ -1,7 +1,7 @@
 /* Logs Storage — log buckets list (real buckets CRUD). The storage-usage figures are a
  * live tally of ingested entry bytes this/last calendar month, not a GCP billing export. */
 import { useState } from "react";
-import { Button, Stack, Typography } from "@mui/material";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
@@ -9,7 +9,8 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { fmtBytes, fmtDate, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
+import { fmtBytes, fmtDate, KeyValue, NotSimulated, PageHeader, Section } from "../../kit/common.jsx";
+import { capability } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import * as api from "./api.js";
 
@@ -35,15 +36,18 @@ export default function LogsStorage() {
   const notify = useNotify();
   const [sel, setSel] = useState([]);
   const [del, setDel] = useState(false);
+  const [alertOpen, setAlertOpen] = useState(false);
   const buckets = useAsync(() => api.listBuckets(), []);
   const entries = useAsync(() => api.listEntries({ pageSize: 1000 }), []);
   const { cur, prev, projected } = usageStats(entries.data || []);
   const billable = (buckets.data || []).filter((b) => (b.retentionDays || 30) > 30).length;
+  const cap = capability("gcp.logs.storage.usage_alerts");
 
   return (
     <>
       <PageHeader title="Logs Storage" actions={<>
         <Button startIcon={<AddIcon />} href="#/logs/storage/bucket">Create log bucket</Button>
+        <Button onClick={() => setAlertOpen(true)}>Create usage alert</Button>
         <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={() => setDel(true)}>Delete</Button>
         <Button startIcon={<RefreshIcon />} onClick={buckets.reload}>Refresh</Button>
       </>} />
@@ -96,6 +100,13 @@ export default function LogsStorage() {
       >
         <Typography variant="body2">{sel.map(api.bucketId).join(", ")}</Typography>
       </DeleteDialog>
+      {alertOpen && (
+        <Dialog open onClose={() => setAlertOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>Create usage alert</DialogTitle>
+          <DialogContent><NotSimulated feature={cap?.title || "Usage alerts"} note={cap?.limitations?.join(" ")} compact /></DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}><Button onClick={() => setAlertOpen(false)}>Close</Button></DialogActions>
+        </Dialog>
+      )}
     </>
   );
 }
