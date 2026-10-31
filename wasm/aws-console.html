@@ -3790,6 +3790,22 @@ boot();
  <button id="nano-menu-conf">📘 Conformance</button>
 </div>
 <script>
+// The tunnel bar starts right of the left side menu (never over it: the account menu /
+// Sign out lives at the side menu's foot) and follows it as it collapses or expands.
+(function(){
+  var foot = document.getElementById("nano-foot"); if(!foot) return;
+  function fit(){
+    var sb = document.getElementById("app-sidebar");
+    var r = (sb && sb.getClientRects().length) ? sb.getBoundingClientRect() : null;
+    foot.style.left = (r && r.width && r.left < 1 ? Math.round(r.right) : 0) + "px";
+  }
+  fit(); addEventListener("resize", fit); addEventListener("load", fit);
+  var sb = document.getElementById("app-sidebar");
+  if(sb && window.ResizeObserver) new ResizeObserver(fit).observe(sb);
+  new MutationObserver(fit).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+})();
+</script>
+<script>
 (function(){
   var base = window.__NANO_BASE || "";
   // Tunnel config + cloud session live in localStorage (the worker can't read it);
