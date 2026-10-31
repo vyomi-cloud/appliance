@@ -453,7 +453,8 @@ try {
   await page.getByLabel("Select a role").click();
   await page.getByRole("option", { name: "Viewer", exact: true }).click();
   await page.getByRole("button", { name: "Save" }).click();
-  await page.getByText(M).waitFor({ timeout: 10000 });
+  await page.getByPlaceholder("Enter property name or value").first().fill(M);   // a long-lived space has >1 page of principals
+  await page.getByText(M).first().waitFor({ timeout: 10000 });
   const iamPol = await wjson("/v1/projects/vyomi-project:getIamPolicy", { method: "POST", body: "{}" });
   check("IAM grant access via UI → native getIamPolicy shows binding", (iamPol.bindings || []).some((b) => b.role === "roles/viewer" && b.members.includes(`user:${M}`)));
   await shot("12-iam-allow");

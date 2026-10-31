@@ -139,7 +139,19 @@ def appliance_stores() -> dict:
             "az_kvkeys": aps.az_kv_keys_store(), "az_kvcerts": aps.az_kv_certs_store(),
             "az_acr": aps.acr_store(), "az_sb": aps.az_servicebus_store(),
             "gcp_msg": aps.gcp_pubsub_store(), "az_graph": aps.graph_store(),
-            "az_cosmos": aps.cosmos_store(), "iam": aps.iam_store(), "az_table": aps.table_store()}
+            "az_cosmos": aps.cosmos_store(), "iam": aps.iam_store(), "az_table": aps.table_store(),
+            **_gcp_logging_store()}
+
+
+def _gcp_logging_store() -> dict:
+    """The offline Cloud Logging store (routes/gcp_logging.py — the active space's persisted
+    slot that entries:list reads), so engine-written entries (Secret Manager audit events, …)
+    land where the console's Logs views read them."""
+    try:
+        from routes.gcp_logging import _STORE
+        return {"gcp_logging": _STORE}
+    except Exception:
+        return {}
 
 
 # router store key -> unified service name (which stores a full-ingress router overrides)
@@ -151,7 +163,8 @@ STORE_SERVICE = {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb", "az_blob": "azure_
                  "az_kvsec": "azure_keyvault", "az_kvkeys": "azure_keyvault",
                  "az_kvcerts": "azure_keyvault", "az_acr": "azure_acr", "az_sb": "azure_servicebus",
                  "gcp_msg": "gcp_pubsub", "az_graph": "azure_graph", "az_cosmos": "azure_cosmos",
-                 "iam": "iam", "az_table": "azure_table"}
+                 "iam": "iam", "az_table": "azure_table",
+                 "gcp_logging": "gcp_secrets"}   # Secret Manager writes its audit entries here
 
 
 def appliance_router() -> AwsWireRouter:

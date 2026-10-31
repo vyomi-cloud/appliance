@@ -17384,6 +17384,10 @@ def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
         # Codespace sandbox: laptop-side tunnel + client command through the jump.
         "connect_help": _db_connect_help(instance.get("_backend"),
                                          instance.get("databaseVersion", "postgres")),
+        # read replicas (core/gcp_cloudsql_core — the Replicas tab filters on masterInstanceName)
+        **{k: instance[k] for k in ("masterInstanceName", "replicaNames", "replicaConfiguration",
+                                    "failoverReplica", "diskEncryptionConfiguration")
+           if instance.get(k)},
     }
 
 

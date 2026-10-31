@@ -353,6 +353,22 @@ async def api_gcp_sql_create_instance(project: str, request: Request):
         payload = {}
     payload = payload if isinstance(payload, dict) else {}
     instance = s._gcp_sql_instance_record(project, payload)
+    # Read replica (masterInstanceName): a READ_REPLICA_INSTANCE of an existing primary, listed
+    # in the primary's replicaNames and seeded with the primary's databases (as the shared
+    # core does on Nano — gcp.sql.replicas).
+    master_name = str(payload.get("masterInstanceName") or "").strip()
+    master_name = master_name.split(":")[-1] if master_name else ""
+    if master_name:
+        master = gcp_sql_state.get("instances", {}).get(master_name)
+        if not master or str(master.get("project") or project) != project:
+            raise HTTPException(404, detail=f"The Cloud SQL instance does not exist: {master_name}")
+        if master.get("masterInstanceName"):
+            raise HTTPException(400, detail="A read replica can't be created from another read replica.")
+        instance["masterInstanceName"] = master_name
+        instance["instanceType"] = "READ_REPLICA_INSTANCE"
+        instance["databaseVersion"] = master.get("databaseVersion", instance.get("databaseVersion"))
+        instance["replicaConfiguration"] = {"kind": "sql#replicaConfiguration", "failoverTarget": False}
+        instance["databases"] = [dict(d) for d in (master.get("databases") or [])]
     existing = gcp_sql_state.get("instances", {}).get(instance["name"])
     if existing:
         # Idempotent create — same name+project returns the existing
@@ -381,6 +397,10 @@ async def api_gcp_sql_create_instance(project: str, request: Request):
         instance["_backend"] = None
         instance["_backend_error"] = str(exc)[:200]
     gcp_sql_state.setdefault("instances", {})[instance["name"]] = instance
+    if master_name:
+        reps = gcp_sql_state["instances"][master_name].setdefault("replicaNames", [])
+        if instance["name"] not in reps:
+            reps.append(instance["name"])
     # Real Cloud SQL insert returns a long-running Operation (clients/Terraform
     # poll operations.get until DONE), not the instance — so does the simulator.
     return s._gcp_sql_make_operation(project, instance["name"], "CREATE")
@@ -522,9 +542,13 @@ async def api_gcp_sql_create_database(project: str, instance: str, request: Requ
     name = str(payload.get("name") or "").strip()
     if not name:
         raise HTTPException(400, detail="Database name is required")
-    dbs = rec.setdefault("databases", [])
-    if not any(d.get("name") == name for d in dbs):
-        dbs.append({"name": name, "charset": str(payload.get("charset") or "UTF8"), "collation": str(payload.get("collation") or "")})
+    if rec.get("masterInstanceName"):
+        raise HTTPException(400, detail="A read replica is read-only: create databases on its primary.")
+    new_db = {"name": name, "charset": str(payload.get("charset") or "UTF8"), "collation": str(payload.get("collation") or "")}
+    for target in [rec] + [gcp_sql_state.get("instances", {}).get(r) or {} for r in rec.get("replicaNames") or []]:
+        dbs = target.setdefault("databases", [])          # replicas mirror the primary's databases
+        if not any(d.get("name") == name for d in dbs):
+            dbs.append(dict(new_db))
     return s._gcp_sql_make_operation(project, instance, "CREATE_DATABASE")
 
 
