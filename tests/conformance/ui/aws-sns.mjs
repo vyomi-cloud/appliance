@@ -127,6 +127,7 @@ try {
   await page.waitForTimeout(800);
   let published = null;
   page.on("response", (r) => { if (r.request().method() === "POST" && /\/topics\/MyTopic\/publish$/.test(r.url())) published = r.status(); });
+  await page.locator("[data-testid=sns-message]").fill("hello from the conformance check");
   await page.locator("#main button").filter({ hasText: /Publish message/ }).last().click();
   for (let i = 0; i < 20 && published === null; i++) await page.waitForTimeout(400);
   check(published === 200, "Publish message from the tab returns 200", `HTTP ${published}`);

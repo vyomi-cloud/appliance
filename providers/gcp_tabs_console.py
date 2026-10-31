@@ -376,7 +376,7 @@ def _pubsub(op: str, name: str, body: dict):
     from core import gcp_pubsub_emulator as emu
     s = _server()
     st = s.gcp_pubsub_state
-    project = _project()
+    project = s._gcp_project_name(_project())   # topics are stored under the mapped project (as create does)
     topic = T.short(name)
     live = emu.available()
     if live:
@@ -622,7 +622,7 @@ class _OfflineFunction:
     def topic_exists(self, topic):
         from core import gcp_pubsub_emulator as emu
         if emu.available():
-            return bool(emu.get_topic(_project(), topic))
+            return bool(emu.get_topic(_server()._gcp_project_name(_project()), topic))
         return topic in self.s.gcp_pubsub_state.get("topics", {})
 
 
@@ -791,7 +791,7 @@ class _OfflineSecret:
     def topic_exists(self, topic):
         from core import gcp_pubsub_emulator as emu
         if emu.available():
-            return bool(emu.get_topic(_project(), topic))
+            return bool(emu.get_topic(_server()._gcp_project_name(_project()), topic))
         return topic in _server().gcp_pubsub_state.get("topics", {})
 
 
@@ -986,7 +986,7 @@ class _OfflineTrigger:
             return name in s.gcp_functions_state.get("functions", {})
         if kind == "topic":
             from core import gcp_pubsub_emulator as emu
-            return bool(emu.get_topic(_project(), name)) if emu.available() else name in s.gcp_pubsub_state.get("topics", {})
+            return bool(emu.get_topic(s._gcp_project_name(_project()), name)) if emu.available() else name in s.gcp_pubsub_state.get("topics", {})
         return False
 
 

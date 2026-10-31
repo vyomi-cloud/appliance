@@ -750,6 +750,14 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         code, body = _arm.resource_group_item(_state, method, rest_segs[1], await _safe_json(request))
         return JSONResponse(status_code=code, content=body)
 
+    if len(rest_segs) == 3 and rest_segs[0].lower() == "resourcegroups" \
+            and rest_segs[2].lower() == "resources" and method == "GET":
+        res = _arm.list_group_resources(_state, rest_segs[1])
+        if res is None:
+            code, body = _arm.resource_group_item(_state, "GET", rest_segs[1], {})
+            return JSONResponse(status_code=code, content=body)
+        return JSONResponse({"value": res})
+
     # Provider resources. Two scopes:
     #   subscription scope: /subscriptions/{sub}/providers/{ns}/{type}[/{name}...]
     #   RG scope:           /subscriptions/{sub}/resourceGroups/{rg}/providers/{ns}/{type}[/...]

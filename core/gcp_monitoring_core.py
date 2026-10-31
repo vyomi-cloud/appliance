@@ -1286,6 +1286,8 @@ def policy_console_view(store, p):
         "channels_text": ", ".join(chans) if chans else "None",
         "channel_count": len(chans),
         "documentation_text": (p.get("documentation") or {}).get("content") or "No documentation",
+        "documentation_format": (p.get("documentation") or {}).get("mimeType") or "text/markdown",
+        "documentation_subject": (p.get("documentation") or {}).get("subject") or p.get("displayName", ""),
         "last_modified": (p.get("mutationRecord") or {}).get("mutateTime", ""),
         "created": (p.get("creationRecord") or {}).get("mutateTime", ""),
         "created_by": (p.get("creationRecord") or {}).get("mutatedBy", ""),

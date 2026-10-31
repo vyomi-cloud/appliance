@@ -36,12 +36,12 @@ const out = (k, v) => console.log("RESULT " + k + " = " + JSON.stringify(v));
       r.createInstance = (await J("POST", "/api/gcp/rds/databases", { name: inst })).status;
 
       // 2) core-backed sub-resource: users (durable adapter store) via /sub/ route
-      r.createUser = (await J("POST", sub("createUser", inst), { name: "appuser", host: "%" })).status;
+      r.createUser = (await J("POST", sub("createUser", inst), { name: "appuser", host: "%", password: "S3cret-pw-1" })).status;
       const lu = await J("GET", sub("listUsers", inst));
       r.listUsers = (lu.j && lu.j.items || []).map(x => x.name);
       r.deleteUser = (await J("POST", sub("deleteUser", inst), { name: "appuser" })).status;
       const lu2 = await J("GET", sub("listUsers", inst));
-      r.listUsersAfterDelete = (lu2.j && lu2.j.items || []).length;
+      r.listUsersAfterDelete = (lu2.j && lu2.j.items || []).filter(x => x.name === "appuser").length; // the default admin user stays
 
       // 3) core-backed sub-resource: databases (native cloud SQL core) via /sub/
       r.createDb = (await J("POST", sub("createDatabase", inst), { name: "appdb" })).status;

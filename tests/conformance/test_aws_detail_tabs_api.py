@@ -193,6 +193,9 @@ def s3():
 def rds():
     print("── RDS DB instance")
     did = f"tabs-db-{int(time.time()) % 100000}"
+    # a custom VPC without subnets must not capture the instance: RDS uses the default VPC
+    for cidr in ("10.201.0.0/16", "10.202.0.0/16"):
+        requests.post(f"{BASE}/api/vpc/vpcs", timeout=30, json={"cidr_block": cidr, "name": "rds-empty-vpc"})
     r = requests.post(f"{BASE}/api/rds/databases", timeout=180, json={
         "db_instance_identifier": did, "engine": "postgres", "master_username": "postgres", "master_user_password": "Password123!"})
     check("create DB instance", r.status_code < 300, r.text)

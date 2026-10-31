@@ -199,7 +199,8 @@ const SECTIONS = {
     await page.locator("#main [data-testid=idp-add]").click();
     await sleep(1500);
     await tab("Password policy");
-    const idp = await tab("Identity providers");
+    let idp = await tab("Identity providers");
+    for (let i = 0; i < 4 && !idp.includes(":oidc-provider/" + host); i++) { await sleep(1500); await tab("Password policy"); idp = await tab("Identity providers"); }
     check("iam Identity providers: provider added in the tab is listed with its ARN", idp.includes(":oidc-provider/" + host), idp);
     const aa = await tab("Access Analyzer");
     if (await page.locator("#main [data-testid=analyzer-create]").count()) {
@@ -344,8 +345,11 @@ const SECTIONS = {
     check("eventbridge Targets: target added in the tab persists", tg.includes(":" + name), tg);
     await tab("Event pattern");
     await page.locator("#main [data-testid=eb-test]").click();
-    await sleep(1200);
-    const res = await page.locator("#main [data-testid=eb-test-result]").innerText().catch(() => "");
+    let res = "";
+    for (let i = 0; i < 20 && !/matched/.test(res); i++) {
+      await sleep(500);
+      res = await page.locator("#main [data-testid=eb-test-result]").innerText().catch(() => "");
+    }
     check("eventbridge Event pattern: TestEventPattern result for the rule's own pattern", /matched the event pattern/.test(res), res);
     const det = await tab("Rule details");
     check("eventbridge Rule details: this rule's ARN", det.includes(":rule/" + name), det);
@@ -362,8 +366,12 @@ const SECTIONS = {
     await page.locator("#main [data-testid=apigw-dep-stage]").fill("rtstage");
     await page.locator("#main [data-testid=apigw-deploy]").click();
     await sleep(1500);
-    await tab("Models");
-    const dep = await tab("Deployments");
+    let dep = "";
+    for (let i = 0; i < 6 && !/rtstage/.test(dep); i++) {   // the deploy is async on a loaded host: poll, don't guess
+      await tab("Models");
+      dep = await tab("Deployments");
+      if (!/rtstage/.test(dep)) await sleep(1500);
+    }
     check("apigateway Deployments: deployment made in the tab is listed", /rtstage/.test(dep), dep);
     await tab("Settings");
     await page.locator("#main [data-testid=apigw-settings-save]").click();

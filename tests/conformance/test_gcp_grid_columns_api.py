@@ -8,7 +8,7 @@ import uuid
 import requests
 
 BASE = os.environ.get("VYOMI_BASE_URL", "http://localhost:9000")
-P = "cloudlearn"
+P = "vyomi-project"
 failed = False
 
 
