@@ -165,6 +165,14 @@ async def _invalid_json_body(request: Request, exc: json.JSONDecodeError):
 
 # ── Backend route registration (EARLY) ───────────────────────────────
 _aws_xamz_dispatchers: dict = {}
+# v4 offline durability — the cores' shared_store() singletons (API Gateway V2, SSM, Step
+# Functions, Cloud Scheduler, Memorystore, GKE, IAM Credentials, Cloud Monitoring) become
+# space slots of the persisted state BEFORE any route captures them (core/appliance_stores.py).
+try:
+    from core import appliance_stores as _aps_durable
+    _aps_durable.install_core_slot_stores()
+except Exception as _e:   # never let this break appliance boot
+    print(f"[durability] core slot stores not installed: {_e}")
 # v4 C0e — ONE engine + ONE messaging store for SQS / SNS / EventBridge / Scheduler: the
 # classic console REST (/api/sqs/*, /api/eventbridge/rules*, /api/aws/extras/eventbridge/*)
 # and the Scheduler REST are registered FIRST so they win over the nats / provider / extras
@@ -2495,6 +2503,14 @@ def _cloudsim_add_runtime_instance(runtime_instances: dict, resource_id: str, pr
     }
 
 
+def _core_records(store, space: dict | None, field: str) -> dict:
+    """One collection of a shared core's store as kept in `space` (core/appliance_stores
+    _CoreSlotStore: the data lives per space; a plain store is global)."""
+    if hasattr(store, "records_in"):
+        return store.records_in(space).get(field) or {}
+    return getattr(store, field, None) or {}
+
+
 def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[str, int], dict[str, dict]]:
     if not isinstance(space, dict):
         return [], {}, {}
@@ -2634,28 +2650,28 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     try:   # API Gateway V2 — the shared wire/console store (console + SDK/CLI created APIs)
         from core.apigatewayv2_core import shared_store as _apigwv2_store
-        for api_id, api in _apigwv2_store().apis.items():
+        for api_id, api in _core_records(_apigwv2_store(), space, "apis").items():
             add("aws", "apigatewayv2", "api", api_id, {"name": api["name"], "created": api["createdDate"]})
     except Exception:
         pass
 
     try:   # Systems Manager parameters — the shared wire/console store
         from core.ssm_core import shared_store as _ssm_store
-        for _n in _ssm_store().parameters:
+        for _n in _core_records(_ssm_store(), space, "parameters"):
             add("aws", "ssm", "parameter", _n, {"name": _n})
     except Exception:
         pass
 
     try:   # Step Functions — the shared wire/console store (console + SDK/CLI created state machines)
         from core.stepfunctions_core import shared_store as _sfn_store
-        for sm_name, sm in _sfn_store().machines.items():
+        for sm_name, sm in _core_records(_sfn_store(), space, "machines").items():
             add("aws", "stepfunctions", "state_machine", sm_name, {"name": sm_name, "created": sm["creationDate"]})
     except Exception:
         pass
 
     try:   # Cloud Scheduler — the shared wire/console store (console + SDK/CLI created jobs)
         from core.gcp_cloudscheduler_core import shared_store as _gcs_sched_store
-        for _jn, _job in _gcs_sched_store().jobs.items():
+        for _jn, _job in _core_records(_gcs_sched_store(), space, "jobs").items():
             add("gcp", "cloudscheduler", "job", _jn.rsplit("/", 1)[-1],
                 {"name": _jn.rsplit("/", 1)[-1], "created": _job.get("userUpdateTime", "")})
     except Exception:
@@ -2663,7 +2679,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     try:   # Memorystore for Redis — the shared wire/console store (console + SDK/CLI created instances)
         from core.gcp_redis_core import shared_store as _redis_store
-        for _rn, _ri in _redis_store().instances.items():
+        for _rn, _ri in _core_records(_redis_store(), space, "instances").items():
             add("gcp", "redis", "instance", _rn.rsplit("/", 1)[-1],
                 {"name": _rn.rsplit("/", 1)[-1], "created": _ri.get("createTime", "")})
     except Exception:
@@ -2671,7 +2687,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     try:   # Kubernetes Engine — the shared wire/console store (console + SDK/CLI created clusters)
         from core.gcp_container_core import shared_store as _gke_store
-        for _cn, _cl in _gke_store().clusters.items():
+        for _cn, _cl in _core_records(_gke_store(), space, "clusters").items():
             add("gcp", "container", "cluster", _cn.rsplit("/", 1)[-1],
                 {"name": _cn.rsplit("/", 1)[-1], "created": _cl.get("createTime", "")})
     except Exception:
@@ -2679,7 +2695,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     try:   # IAM Credentials — the shared wire/console issue log (never the secrets)
         from core.gcp_iamcredentials_core import shared_store as _iamc_store
-        for _cid, _cr in _iamc_store().issued.items():
+        for _cid, _cr in _core_records(_iamc_store(), space, "issued").items():
             add("gcp", "iamcredentials", "credential", _cid,
                 {"name": _cid, "created": _cr.get("issueTime", "")})
     except Exception:
@@ -2687,7 +2703,7 @@ def _cloudsim_collect_resources(space: dict | None) -> tuple[list[dict], dict[st
 
     try:   # Cloud Monitoring — alert policies from the shared wire/console store
         from core.gcp_monitoring_core import shared_store as _mon_store
-        for _pn, _pol in _mon_store().alert_policies.items():
+        for _pn, _pol in _core_records(_mon_store(), space, "alert_policies").items():
             add("gcp", "monitoring", "policy", _pn.rsplit("/", 1)[-1],
                 {"name": _pn.rsplit("/", 1)[-1], "created": (_pol.get("creationRecord") or {}).get("mutateTime", "")})
     except Exception:

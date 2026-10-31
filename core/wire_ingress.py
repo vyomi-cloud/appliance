@@ -660,6 +660,10 @@ def build_backed_router(overrides: dict | None = None) -> AwsWireRouter:
     for _k in ("az_kvsec", "az_kvkeys", "az_kvcerts", "az_sb"):   # C0f: Key Vault / Service Bus on the appliance state
         if overrides.get(_k) is not None:
             stores[_k] = overrides[_k]
+    from core import appliance_stores as _aps
+    _aps.install_core_slot_stores()   # the cores' shared_store()s → durable space slots
+    for _k in ("gcp_iam", "gcp_rm"):   # GCP custom roles / Workload Identity / Org Policy v2
+        stores[_k] = _aps.net_new_core_stores()[_k]
     from core.apigatewayv2_core import shared_store
     stores["apigwv2"] = shared_store()   # shared with the console REST (/api/apigatewayv2)
     from core.stepfunctions_core import shared_store as _sfn_store
@@ -711,14 +715,16 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
         /providers/Microsoft.Authorization/...   Azure RBAC checkAccess
 
     So the appliance serves these regardless of VYOMI_UNIFIED_INGRESS, without
-    touching the existing S3/DynamoDB/… handlers. These services are in-memory (no
-    backend deps), so a plain in-WASM-style router is used — no MinIO/Vault/NATS
-    required at mount time. Header/Action-routed net-new services (EventBridge,
+    touching the existing S3/DynamoDB/… handlers. No backend deps (no MinIO/Vault/NATS
+    required at mount time): every store is a durable space slot of the appliance state
+    (core/appliance_stores._CoreSlotStore), never the router's in-memory default. Header/Action-routed net-new services (EventBridge,
     VPC, Service Bus — dispatched on `/` by X-Amz-Target/Action) can't be isolated
     from the existing `/` handlers additively, so they remain served via the full
     unified ingress (mount())."""
     from fastapi import Request, Response
 
+    from core import appliance_stores as _aps
+    _aps.install_core_slot_stores()   # the cores' shared_store()s → durable space slots
     from core.apigatewayv2_core import shared_store as _apigwv2_store
     from core.stepfunctions_core import shared_store as _sfn_store, set_lambda_store as _sfn_lambda
     from core.gcp_cloudscheduler_core import shared_store as _gcp_sched_store
@@ -726,9 +732,11 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     from core.gcp_iamcredentials_core import shared_store as _gcp_iamc_store
     from core.gcp_redis_core import shared_store as _gcp_redis_store
     from core.gcp_monitoring_core import shared_store as _gcp_mon_store
-    _ns = {"apigwv2": _apigwv2_store(), "sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_redis": _gcp_redis_store(), "gcp_mon": _gcp_mon_store()}
+    _ns = {"apigwv2": _apigwv2_store(), "sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_redis": _gcp_redis_store(), "gcp_mon": _gcp_mon_store(),
+           # GCP custom roles / Workload Identity (gcp_iam), Org Policy v2 (gcp_rm), Azure RBAC
+           # (iam) and Azure SQL (rds): durable space slots, not the router's in-memory defaults
+           **_aps.net_new_core_stores()}
     if is_unified("lambda"):   # C0f: API Gateway / Step Functions / Scheduler reach the appliance's functions
-        from core import appliance_stores as _aps
         _ns["lam"] = _aps.lambda_store()
     try:   # the Azure SQL data plane enforces the server's ARM settings (publicNetworkAccess, …):
         from providers.azure_services import core_arm as _core_arm   # read the appliance's OWN ARM state

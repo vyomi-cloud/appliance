@@ -1639,11 +1639,26 @@ def _lam_attr(key: str):
     return property(_get, _set)
 
 
+def _apigw_attr(key: str):
+    """A lazily-created API Gateway v1 collection in the space's `apigateway_core` slot:
+    absent → AttributeError (so the core's `getattr(store, key, None)` creates it)."""
+    def _get(self):
+        v = _proxy("apigateway_core", dict, None)._target().get(key)
+        if v is None:
+            raise AttributeError(key)
+        return v
+
+    def _set(self, value):
+        _proxy("apigateway_core", dict, None)._target()[key] = value
+    return property(_get, _set)
+
+
 class AppStateLambdaStore:
     """lambda_core store over the active space's `lambda` slot. lambda_core reaches its
     collections through `_lambda_*` attributes (and reassigns `_lambda_esms`), so each one is
-    a read/write property onto the persisted slot. Other attributes (API Gateway v1's, which
-    shares this store on the router exactly as on Nano) stay process-local, as before."""
+    a read/write property onto the persisted slot. API Gateway v1's `_apigateway_*`
+    collections (it shares this store on the router exactly as on Nano) persist in the
+    space's `apigateway_core` slot."""
 
     def _slot(self) -> dict:
         from core import app_context as ctx
@@ -1664,6 +1679,13 @@ class AppStateLambdaStore:
     _lambda_microvm_images = _lam_attr("microvm_images")
     _lambda_microvms = _lam_attr("microvms")
     _lambda_applications = _lam_attr("applications")
+    # API Gateway v1 (core/apigateway_core.py) shares this store on the router (its AWS_PROXY
+    # integrations invoke these functions) and keeps its collections lazily on it.
+    _apigateway_apis = _apigw_attr("_apigateway_apis")
+    _apigateway_api_keys = _apigw_attr("_apigateway_api_keys")
+    _apigateway_usage_plans = _apigw_attr("_apigateway_usage_plans")
+    _apigateway_client_certs = _apigw_attr("_apigateway_client_certs")
+    _apigateway_account = _apigw_attr("_apigateway_account")
 
     @property
     def run_function(self):
@@ -2473,3 +2495,292 @@ def iam_store() -> AppStateIamStore:
     if _IAM is None:
         _IAM = AppStateIamStore(_proxy("iam_core", dict, None))
     return _IAM
+
+
+# ── v4 offline durability: the "net-new" cores ──────────────────────────────────────
+#
+# Services the offline appliance serves through a shared core whose store used to be a
+# process-local instance — the cores' `shared_store()` singletons (API Gateway V2, SSM,
+# Step Functions, Cloud Scheduler, Memorystore, GKE, IAM Credentials, Cloud Monitoring) and
+# the in-memory defaults of the net-new router (core/wire_ingress.mount_new_services: GCP
+# IAM custom roles / Workload Identity pools, Org Policy v2, Azure RBAC, Azure SQL, API
+# Gateway v1). A restart wiped them. Each now lives in its cloud's space slot:
+#
+#   service_states["<slot>"]["store"]          (AWS)   apigatewayv2_core, ssm_core,
+#                                                      stepfunctions_core
+#   service_states["apigateway_core"]          (AWS)   API Gateway v1 (properties of
+#                                                      AppStateLambdaStore, which it shares)
+#   service_states["gcp_<slot>"]["store"]      (GCP)   gcp_cloudscheduler_core, gcp_redis_core,
+#                                                      gcp_container_core, gcp_iamcredentials_core,
+#                                                      gcp_monitoring_core, gcp_iam_admin_core,
+#                                                      gcp_resourcemanager_core
+#   service_states["azure_<slot>"]["store"]    (Azure) azure_rbac_core, azure_sql_core
+#                                                      (+ the Azure SQL rows: one SQLite file per
+#                                                       database next to the state file)
+
+def _state_json_safe(value) -> bool:
+    """True when `value` survives the kernel state codec (JSON + bytes/sets) — the same test
+    core/nano_persist._public_state applies. One non-JSON object in the state breaks EVERY save."""
+    try:
+        from core.vyomi_platform import _encode_state_value
+        json.dumps(_encode_state_value(value), sort_keys=True)
+        return True
+    except Exception:
+        return False
+
+
+class _CoreSlotStore:
+    """Mixin (generalises _AzureSlotStore): the DATA attributes of a core's store (`_BASE`) live
+    in the `_PROVIDER` space's `_SLOT` dict inside the persisted kernel state; everything else —
+    engines, locks, live connections, handles — stays an ordinary instance attribute.
+
+    Data fields = the public attributes of a fresh `_BASE()` that are JSON-safe under the state
+    codec (exactly how Nano's nano_persist decides), plus `_EXTRA`: attributes a core creates
+    lazily (`getattr(store, "x", None)` … `store.x = {}`) or private ones that hold state.
+    A lazy field absent from the slot raises AttributeError, as on the plain store.
+
+    The slot is resolved with REQUEST_PROVIDER pinned to `_PROVIDER` (the request's path may be
+    classified as another cloud). A matching space is created only when the request itself is
+    for this cloud; a cross-cloud read (inventory, a boot-time sync, a background ticker) with no
+    space of this cloud sees an empty scratch dict instead of conjuring an "(auto)" space."""
+
+    _BASE: type = object
+    _SLOT = ""
+    _PROVIDER = "aws"
+    _EXTRA: tuple = ()
+    _DEFAULTS: dict = {}
+    _FIELDS: tuple = ()
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        if cls._BASE is object or not cls._SLOT:
+            return
+        base = cls._BASE()
+        cls._DEFAULTS = {k: v for k, v in vars(base).items()
+                         if (k in cls._EXTRA or not k.startswith("_")) and not callable(v)
+                         and _state_json_safe(v)}
+        cls._FIELDS = tuple(dict.fromkeys(tuple(cls._DEFAULTS) + tuple(cls._EXTRA)))
+
+    def __init__(self):        # NB: no base __init__ on self — the data attributes are the slot's
+        object.__setattr__(self, "_scratch", None)
+        for k, v in vars(self._BASE()).items():
+            if k not in self._FIELDS and not isinstance(getattr(type(self), k, None), property):
+                object.__setattr__(self, k, v)
+
+    # slot resolution ---------------------------------------------------------------
+    def slot_key(self) -> str:
+        return self._SLOT if self._PROVIDER == "aws" else f"{self._PROVIDER}_{self._SLOT}"
+
+    def _space_exists(self) -> bool:
+        from core import app_context as ctx
+        ss = ctx.STATE.get("spaces") or {}
+        spaces = ss.get("spaces") or {}
+        if not ss.get("active_space_id") or not spaces:
+            return True            # no spaces at all → the proxy's (persisted) legacy fallback
+        tid = ctx.active_tenant_id()
+        return any(isinstance(s, dict) and s
+                   and (s.get("tenant_id") or ctx.DEFAULT_TENANT_ID) == tid
+                   and str(s.get("provider") or "aws").lower().strip() == self._PROVIDER
+                   for s in spaces.values())
+
+    def _seed(self, slot: dict) -> dict:
+        import copy
+        for k, v in self._DEFAULTS.items():
+            if k not in slot:
+                slot[k] = copy.deepcopy(v)
+        return slot
+
+    def _dir(self) -> dict:
+        from core import app_context as ctx
+        if ctx.REQUEST_PROVIDER.get(None) != self._PROVIDER and not self._space_exists():
+            if self._scratch is None:
+                object.__setattr__(self, "_scratch", {})
+            return self._seed(self._scratch)
+        tok = ctx.REQUEST_PROVIDER.set(self._PROVIDER)
+        try:
+            slot = _proxy(self._SLOT, lambda: {"store": {}}, "store")._target()
+        finally:
+            ctx.REQUEST_PROVIDER.reset(tok)
+        return self._seed(slot)
+
+    def records_in(self, space: dict | None) -> dict:
+        """This store's data in one given space (no space switch, nothing created) — for
+        per-space readers such as the CloudSim inventory."""
+        if not isinstance(space, dict):
+            return dict(self._DEFAULTS)
+        rec = ((space.get("service_states") or {}).get(self.slot_key()) or {}).get("store")
+        return self._seed(dict(rec)) if isinstance(rec, dict) else dict(self._DEFAULTS)
+
+    def persist(self) -> None:
+        """No-op: the tier middleware persists the kernel state after every mutating request."""
+
+    def __getattr__(self, name):
+        if name in type(self)._FIELDS:
+            d = self._dir()
+            if name in d:
+                return d[name]
+        raise AttributeError(name)
+
+    def __setattr__(self, name, value):
+        if name in type(self)._FIELDS:
+            self._dir()[name] = value
+        else:
+            object.__setattr__(self, name, value)
+
+    def __delattr__(self, name):
+        if name in type(self)._FIELDS:
+            self._dir().pop(name, None)
+        else:
+            object.__delattr__(self, name)
+
+
+from core import apigatewayv2_core as _apigw2c   # noqa: E402
+from core import ssm_core as _ssmc   # noqa: E402
+from core import stepfunctions_core as _sfnc   # noqa: E402
+from core import gcp_cloudscheduler_core as _gschedc   # noqa: E402
+from core import gcp_redis_core as _gredisc   # noqa: E402
+from core import gcp_container_core as _ggkec   # noqa: E402
+from core import gcp_iamcredentials_core as _giamcc   # noqa: E402
+from core import gcp_monitoring_core as _gmonc   # noqa: E402
+from core import gcp_resourcemanager_core as _grmc   # noqa: E402
+from core.iam_store import InMemoryIamStore as _IamMem   # noqa: E402
+from core.sql_store import InMemorySqlStore as _SqlMem   # noqa: E402
+
+
+class AppStateApiGwV2Store(_CoreSlotStore, _apigw2c.ApiGwV2Store):
+    """API Gateway V2 (HTTP/WebSocket APIs, domains, VPC links)."""
+    _BASE, _SLOT, _PROVIDER = _apigw2c.ApiGwV2Store, "apigatewayv2_core", "aws"
+
+
+class AppStateSsmStore(_CoreSlotStore, _ssmc.SsmStore):
+    """Systems Manager (parameters, documents, Run Command, …); `_seeded` per space."""
+    _BASE, _SLOT, _PROVIDER, _EXTRA = _ssmc.SsmStore, "ssm_core", "aws", ("_seeded",)
+
+
+class AppStateStepFunctionsStore(_CoreSlotStore, _sfnc.StepFunctionsStore):
+    """Step Functions (state machines, executions + history, activities, task tokens, tags).
+    A RUNNING execution parked on a task token keeps its record; its live generator
+    (stepfunctions_core._RUNNING) does not survive a restart."""
+    _BASE, _SLOT, _PROVIDER = _sfnc.StepFunctionsStore, "stepfunctions_core", "aws"
+
+
+class AppStateCloudSchedulerStore(_CoreSlotStore, _gschedc.CloudSchedulerStore):
+    _BASE, _SLOT, _PROVIDER = _gschedc.CloudSchedulerStore, "cloudscheduler_core", "gcp"
+
+
+class AppStateRedisStore(_CoreSlotStore, _gredisc.RedisStore):
+    _BASE, _SLOT, _PROVIDER = _gredisc.RedisStore, "redis_core", "gcp"
+
+
+class AppStateContainerStore(_CoreSlotStore, _ggkec.ContainerStore):
+    _BASE, _SLOT, _PROVIDER = _ggkec.ContainerStore, "container_core", "gcp"
+
+
+class AppStateIamCredentialsStore(_CoreSlotStore, _giamcc.IamCredentialsStore):
+    _BASE, _SLOT, _PROVIDER = _giamcc.IamCredentialsStore, "iamcredentials_core", "gcp"
+
+
+class AppStateMonitoringStore(_CoreSlotStore, _gmonc.MonitoringStore):
+    _BASE, _SLOT, _PROVIDER = _gmonc.MonitoringStore, "monitoring_core", "gcp"
+
+
+class AppStateResourceManagerStore(_CoreSlotStore, _grmc.ResourceManagerStore):
+    """Resource Manager (Org Policy v2 on the offline net-new router)."""
+    _BASE, _SLOT, _PROVIDER = _grmc.ResourceManagerStore, "resourcemanager_core", "gcp"
+
+
+class AppStateGcpIamStore(_CoreSlotStore, _IamMem):
+    """GCP IAM core (core/gcp_iam_core.py): custom roles, Workload Identity pools/providers,
+    deny policies, … — kept lazily as `gcp_*` attributes. (Slot "iam_admin_core": a GCP
+    space's "gcp_iam_core" would shadow AWS IAM's "iam_core" in the CloudSim lookup.)"""
+    _BASE, _SLOT, _PROVIDER = _IamMem, "iam_admin_core", "gcp"
+    _EXTRA = ("gcp_custom_roles", "gcp_deny_policies", "gcp_iam_policies", "gcp_policy_activity",
+              "gcp_sa_keys", "gcp_service_accounts", "gcp_wi_pools")
+
+
+class AppStateAzureRbacStore(_CoreSlotStore, _IamMem):
+    """Azure RBAC (core/azure_iam_core.py: role definitions / assignments, checkAccess)."""
+    _BASE, _SLOT, _PROVIDER = _IamMem, "rbac_core", "azure"
+    _EXTRA = ("_azure_role_assignments", "_azure_role_defs")
+
+
+def azure_sql_data_dir() -> str:
+    """Where the Azure SQL data plane keeps its rows: next to the appliance state."""
+    import os
+    explicit = os.environ.get("VYOMI_AZURE_SQL_DIR", "").strip()
+    if explicit:
+        return explicit
+    state = os.environ.get("CLOUDLEARN_STATE_FILE", "").strip()
+    base = os.path.dirname(os.path.abspath(state)) if state else "/tmp"
+    return os.path.join(base, "vyomi-azure-sql")
+
+
+class AppStateAzureSqlStore(_CoreSlotStore, _SqlMem):
+    """Azure SQL data plane (core/azure_sql_core.py). Servers / databases / query log in the
+    Azure space's slot; each database's ROWS in its own SQLite file (per space) instead of a
+    shared-cache in-memory database, so a restart keeps the data, not just the catalog."""
+    _BASE, _SLOT, _PROVIDER = _SqlMem, "sql_core", "azure"
+    _EXTRA = ("_azure_sql_servers", "_azure_sql_query_log", "_azure_sql_applied_recs")
+
+    @property
+    def _conns(self) -> dict:      # live connections, per space (same db id in two spaces = two DBs)
+        by_space = self.__dict__.setdefault("_conns_by_space", {})
+        return by_space.setdefault(self._space(), {})
+
+    def _space(self) -> str:
+        return _space_id_of(self._dir()) or "default"
+
+    def _db_file(self, db_id: str) -> str:
+        import os
+        import re
+        safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", db_id)
+        space = re.sub(r"[^A-Za-z0-9_.-]+", "_", self._space())
+        d = os.path.join(azure_sql_data_dir(), space)
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, safe + ".sqlite")
+
+    def _connect(self, db_id: str):
+        import sqlite3
+        return sqlite3.connect(self._db_file(db_id), check_same_thread=False, isolation_level=None,
+                               timeout=30)
+
+    def close_engine(self, db_id: str) -> None:
+        """Dropping the engine drops the database (the in-memory engine's semantics)."""
+        import os
+        super().close_engine(db_id)
+        try:
+            os.remove(self._db_file(db_id))
+        except OSError:
+            pass
+
+
+# core module → its durable store (installed as the module's `shared_store()` singleton)
+_SHARED_CORE_STORES = (
+    (_apigw2c, AppStateApiGwV2Store), (_ssmc, AppStateSsmStore), (_sfnc, AppStateStepFunctionsStore),
+    (_gschedc, AppStateCloudSchedulerStore), (_gredisc, AppStateRedisStore),
+    (_ggkec, AppStateContainerStore), (_giamcc, AppStateIamCredentialsStore),
+    (_gmonc, AppStateMonitoringStore),
+)
+
+
+def install_core_slot_stores() -> None:
+    """Make every core's `shared_store()` (native wire + console REST + inventory all call it)
+    return its durable space-slot store. Idempotent; call before any route registration. The
+    cores themselves stay untouched (they are shared with Nano, which persists them through
+    core/nano_persist.py)."""
+    for mod, cls in _SHARED_CORE_STORES:
+        if not isinstance(getattr(mod, "_SHARED", None), cls):
+            mod._SHARED = cls()
+
+
+_NET_NEW: dict | None = None
+
+
+def net_new_core_stores() -> dict:
+    """The net-new router's otherwise in-memory stores (core/wire_ingress.mount_new_services),
+    keyed by AwsWireRouter store name."""
+    global _NET_NEW
+    if _NET_NEW is None:
+        _NET_NEW = {"gcp_iam": AppStateGcpIamStore(), "gcp_rm": AppStateResourceManagerStore(),
+                    "iam": AppStateAzureRbacStore(), "rds": AppStateAzureSqlStore()}
+    return _NET_NEW
