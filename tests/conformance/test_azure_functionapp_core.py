@@ -90,9 +90,18 @@ check("start → state Running", call(st, "POST", ["sites", "fn1", "start"])["st
 pub = call(st, "POST", ["sites", "fn1", "publishxml"])["body"]
 check("publish profile contains the default hostname", "fn1.azurewebsites.net" in pub["value"], pub)
 
-# scale and concurrency (config_only: PATCH then GET round-trips, not enforced)
+# scale and concurrency: a positive capacity round-trips (config_only); a capacity of
+# exactly zero (maximumInstanceCount x perInstanceConcurrency) is ENFORCED against invoke.
 r = call(st, "PATCH", ["sites", "fn1"], {"properties": {"functionAppConfig": {"scaleAndConcurrency": {"instanceMemoryMB": 4096, "maximumInstanceCount": 50}}}})
 check("scale and concurrency PATCH round-trips", r["body"]["properties"]["functionAppConfig"]["scaleAndConcurrency"]["instanceMemoryMB"] == 4096, r["body"])
+call(st, "PUT", ["sites", "fn1", "functions", "echo"], {"properties": {"files": {"__init__.py": "def main(req):\n    return {'ok': True}\n"}}})
+live = call(st, "POST", ["sites", "fn1", "functions", "echo", "invoke"], {})
+check("positive capacity never throttles (Vyomi invokes synchronously; nothing to run concurrently)", live["body"]["ok"] is True, live["body"])
+call(st, "PATCH", ["sites", "fn1"], {"properties": {"functionAppConfig": {"scaleAndConcurrency": {"maximumInstanceCount": 0}}}})
+zero = call(st, "POST", ["sites", "fn1", "functions", "echo", "invoke"], {})
+check("scaled-to-zero capacity IS enforced: invoke throttled 429 FunctionsTooBusy",
+      zero["body"]["ok"] is False and zero["body"]["status"] == 429, zero["body"])
+call(st, "PATCH", ["sites", "fn1"], {"properties": {"functionAppConfig": {"scaleAndConcurrency": {"maximumInstanceCount": 50}}}})
 
 check("subscription-scope list", len(wc.dispatch(st, "GET", "sub1", None, ["sites"], [])["body"]["value"]) == 1)
 check("delete", call(st, "DELETE", ["sites", "fn1"])["status"] == 200 and call(st, "DELETE", ["sites", "zzz"])["status"] == 204)

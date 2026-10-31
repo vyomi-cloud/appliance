@@ -463,7 +463,10 @@ function ScaleAndConcurrency({ a, reload }) {
     setBusy(true);
     try {
       await api.updateFunctionApp(a.resourceGroup, a.name, { properties: { functionAppConfig: { scaleAndConcurrency: { instanceMemoryMB: f.instanceMemoryMB, maximumInstanceCount: f.maximumInstanceCount, triggers: { http: { perInstanceConcurrency: f.perInstanceConcurrency } } } } } });
-      notify.success("Scale and concurrency settings were saved.", "Saved" + " — Vyomi stores this setting but does not enforce it.");
+      notify.success("Scale and concurrency settings were saved.",
+        f.maximumInstanceCount === 0 || f.perInstanceConcurrency === 0
+          ? "Saved — capacity is 0, so every invoke will now be throttled (429), same as a real scaled-to-zero app."
+          : "Saved — Vyomi stores this setting but runs every invoke synchronously, so a positive capacity is never enforced against concurrent callers.");
       reload();
     } catch (e) { notify.error(e, "Save failed"); }
     finally { setBusy(false); }
@@ -475,7 +478,7 @@ function ScaleAndConcurrency({ a, reload }) {
         <ToolbarButton icon={<Save20Regular />} disabled={!dirty || busy} onClick={save}>Save</ToolbarButton>
         <ToolbarButton icon={<Dismiss20Regular />} disabled={!dirty} onClick={() => setF(init())}>Discard</ToolbarButton>
       </div>
-      <InfoBar>Stored on the Function App and returned from the API exactly as configured; Vyomi runs a single instance and does not enforce these limits.</InfoBar>
+      <InfoBar>Stored on the Function App and returned from the API exactly as configured. A capacity of 0 (maximum instance count x per-instance concurrency) is enforced — every invoke is throttled, as on a real scaled-to-zero app; any positive capacity is not enforced, since Vyomi runs a single instance and every invoke is synchronous.</InfoBar>
       <div className="vy-form-row"><span className="vy-label">Instance memory</span>
         <Select value={String(f.instanceMemoryMB)} onChange={(_, d) => setF((x) => ({ ...x, instanceMemoryMB: Number(d.value) }))} aria-label="Instance memory">
           <option value="512">512 MB</option><option value="2048">2048 MB</option><option value="4096">4096 MB</option>
