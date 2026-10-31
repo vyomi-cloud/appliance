@@ -6,177 +6,177 @@
  },
  {
   "name": "s3",
-  "label": "s3 \u00b7 InMemoryObjectStore",
+  "label": "InMemoryObjectStore",
   "category": "aws"
  },
  {
   "name": "ddb",
-  "label": "ddb \u00b7 InMemoryNoSqlStore",
+  "label": "InMemoryNoSqlStore",
   "category": "aws"
  },
  {
   "name": "kms",
-  "label": "kms \u00b7 InMemoryKeyStore",
+  "label": "InMemoryKeyStore",
   "category": "aws"
  },
  {
   "name": "sec",
-  "label": "sec \u00b7 InMemoryKvStore",
+  "label": "InMemoryKvStore",
   "category": "aws"
  },
  {
   "name": "rds",
-  "label": "rds \u00b7 InMemorySqlStore",
+  "label": "InMemorySqlStore",
   "category": "aws"
  },
  {
   "name": "iam",
-  "label": "iam \u00b7 InMemoryIamStore",
+  "label": "InMemoryIamStore",
   "category": "aws"
  },
  {
   "name": "msg",
-  "label": "msg \u00b7 InMemoryMessagingStore",
+  "label": "InMemoryMessagingStore",
   "category": "aws"
  },
  {
   "name": "kinesis",
-  "label": "kinesis \u00b7 KinesisStore",
+  "label": "KinesisStore",
   "category": "aws"
  },
  {
   "name": "apigwv2",
-  "label": "apigwv2 \u00b7 ApiGwV2Store",
+  "label": "ApiGwV2Store",
   "category": "aws"
  },
  {
   "name": "logs",
-  "label": "logs \u00b7 LogsStore",
+  "label": "LogsStore",
   "category": "aws"
  },
  {
   "name": "elbv2",
-  "label": "elbv2 \u00b7 Elbv2Store",
+  "label": "Elbv2Store",
   "category": "aws"
  },
  {
   "name": "ssm",
-  "label": "ssm \u00b7 SsmStore",
+  "label": "SsmStore",
   "category": "aws"
  },
  {
   "name": "sfn",
-  "label": "sfn \u00b7 StepFunctionsStore",
+  "label": "StepFunctionsStore",
   "category": "aws"
  },
  {
   "name": "gcs",
-  "label": "gcs \u00b7 InMemoryObjectStore",
+  "label": "InMemoryObjectStore",
   "category": "gcp"
  },
  {
   "name": "gcp_fs",
-  "label": "gcp_fs \u00b7 FirestoreStore",
+  "label": "FirestoreStore",
   "category": "gcp"
  },
  {
   "name": "gcp_kms",
-  "label": "gcp_kms \u00b7 InMemoryKeyStore",
+  "label": "InMemoryKeyStore",
   "category": "gcp"
  },
  {
   "name": "gcp_sec",
-  "label": "gcp_sec \u00b7 InMemoryKvStore",
+  "label": "InMemoryKvStore",
   "category": "gcp"
  },
  {
   "name": "gcp_gke",
-  "label": "gcp_gke \u00b7 ContainerStore",
+  "label": "ContainerStore",
   "category": "gcp"
  },
  {
   "name": "gcp_mon",
-  "label": "gcp_mon \u00b7 MonitoringStore",
+  "label": "MonitoringStore",
   "category": "gcp"
  },
  {
   "name": "gcp_redis",
-  "label": "gcp_redis \u00b7 RedisStore",
+  "label": "RedisStore",
   "category": "gcp"
  },
  {
   "name": "gcp_iamc",
-  "label": "gcp_iamc \u00b7 IamCredentialsStore",
+  "label": "IamCredentialsStore",
   "category": "gcp"
  },
  {
   "name": "gcp_sched",
-  "label": "gcp_sched \u00b7 CloudSchedulerStore",
+  "label": "CloudSchedulerStore",
   "category": "gcp"
  },
  {
   "name": "gcp_msg",
-  "label": "gcp_msg \u00b7 InMemoryMessagingStore",
+  "label": "InMemoryMessagingStore",
   "category": "gcp"
  },
  {
   "name": "gcp_iam",
-  "label": "gcp_iam \u00b7 InMemoryIamStore",
+  "label": "InMemoryIamStore",
   "category": "gcp"
  },
  {
   "name": "gcp_sql",
-  "label": "gcp_sql \u00b7 InMemorySqlStore",
+  "label": "InMemorySqlStore",
   "category": "gcp"
  },
  {
   "name": "gcp_ar",
-  "label": "gcp_ar \u00b7 ArtifactRegistryStore",
+  "label": "ArtifactRegistryStore",
   "category": "gcp"
  },
  {
   "name": "az_blob",
-  "label": "az_blob \u00b7 AzureBlobStore",
+  "label": "AzureBlobStore",
   "category": "azure"
  },
  {
   "name": "az_cosmos",
-  "label": "az_cosmos \u00b7 CosmosStore",
+  "label": "CosmosStore",
   "category": "azure"
  },
  {
   "name": "az_kvsec",
-  "label": "az_kvsec \u00b7 InMemoryKvStore",
+  "label": "InMemoryKvStore",
   "category": "azure"
  },
  {
   "name": "az_kvkeys",
-  "label": "az_kvkeys \u00b7 InMemoryKeyStore",
+  "label": "InMemoryKeyStore",
   "category": "azure"
  },
  {
   "name": "az_queue",
-  "label": "az_queue \u00b7 AzureQueueStore",
+  "label": "AzureQueueStore",
   "category": "azure"
  },
  {
   "name": "az_sb",
-  "label": "az_sb \u00b7 InMemoryMessagingStore",
+  "label": "InMemoryMessagingStore",
   "category": "azure"
  },
  {
   "name": "az_arm",
-  "label": "az_arm \u00b7 AzureArm",
+  "label": "AzureArm",
   "category": "azure"
  },
  {
   "name": "events",
-  "label": "events \u00b7 EventStore",
+  "label": "EventStore",
   "category": "core"
  },
  {
   "name": "cw",
-  "label": "cw \u00b7 CloudWatchStore",
+  "label": "CloudWatchStore",
   "category": "aws"
  }
 ]

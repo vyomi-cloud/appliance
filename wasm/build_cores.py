@@ -214,7 +214,9 @@ def nano_backends():
     for key, store in reg.items():
         if isinstance(store, types.SimpleNamespace):
             continue
-        out.append({"name": key, "label": f"{key} · {type(store).__name__}", "category": _category(key)})
+        # The row shows the backend itself (as offline names its containers); the card's
+        # icon already says which cloud service it serves.
+        out.append({"name": key, "label": type(store).__name__, "category": _category(key)})
     return out
 
 
