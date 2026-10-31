@@ -45,7 +45,8 @@ EXCLUDE_FILES = {
     "test_conformance.py", "e2e.mjs", "README.md", "NANO-ARCHITECTURE.md",
     "vendor_to_portal.py",
 }
-# Suffixes never vendored (screenshots, compiled python).
+# Suffixes never vendored (screenshots, compiled python). Images under assets/ ARE the
+# bundle (the pages load assets/brand/*.png), so they are vendored like any other file.
 EXCLUDE_SUFFIXES = (".png", ".pyc")
 
 
@@ -55,7 +56,7 @@ def in_bundle(rel: str) -> bool:
         return False
     if rel in EXCLUDE_FILES:
         return False
-    if rel.endswith(EXCLUDE_SUFFIXES):
+    if rel.endswith(EXCLUDE_SUFFIXES) and not (parts[0] == "assets" and rel.endswith(".png")):
         return False
     return True
 
