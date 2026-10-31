@@ -146,10 +146,6 @@
     }
   },
   "azure": {
-    "aks": [
-      "aks-workloads",
-      "aks-services-and-ingresses"
-    ],
     "entra": [
       "entra-sign-in-logs"
     ],
