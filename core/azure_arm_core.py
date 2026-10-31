@@ -805,6 +805,9 @@ class AzureArm:
             blocked = self._aks_stopped_block(type_chain, names, sub, rg)
             if blocked:
                 return blocked
+            blocked = self._aks_namespace_block(type_chain, names, payload, sub, rg)
+            if blocked:
+                return blocked
             blocked = self._cosmos_validate_block(type_chain, names, payload, sub, rg)
             if blocked:
                 return blocked
@@ -933,6 +936,36 @@ class AzureArm:
         if (cluster or {}).get("properties", {}).get("powerState", {}).get("code") == "Stopped":
             return _err(409, "ClusterNotRunning",
                         "The cluster is stopped. Start the cluster before performing operations on its node pools.")
+        return None
+
+    _AKS_PROTECTED_NAMESPACES = {"default", "kube-system", "kube-public", "kube-node-lease"}
+
+    def _aks_namespace_block(self, type_chain, names, payload, sub, rg):
+        # A write to properties.namespaces goes through the cluster's own generic PUT/PATCH
+        # (api.js's addNamespace/deleteNamespace send the whole array back) — this is the one
+        # AKS-specific validation layered on top of that: the console's Namespaces blade never
+        # lets default/kube-system/kube-public/kube-node-lease be deleted (same restriction the
+        # real "Managed namespaces" preview enforces), and a namespace write needs the same
+        # running API server a node-pool write does (azure.aks.namespaces).
+        if len(type_chain) != 2 or type_chain[0].lower() != "microsoft.containerservice" \
+                or type_chain[1].lower() != "managedclusters":
+            return None
+        new_ns = (payload or {}).get("properties", {}).get("namespaces")
+        if new_ns is None:
+            return None
+        rid = _canonical_id(sub, rg, type_chain, names)
+        cluster = self.state.get(rid.lower())
+        current = {n.get("name") for n in (cluster or {}).get("properties", {}).get("namespaces") or []}
+        requested = {n.get("name") for n in new_ns}
+        removed = current - requested
+        protected_removed = removed & self._AKS_PROTECTED_NAMESPACES
+        if protected_removed:
+            return _err(409, "ProtectedNamespace",
+                        f"The namespace(s) {', '.join(sorted(protected_removed))} are system namespaces and cannot be deleted.")
+        if removed or (requested - current):
+            if (cluster or {}).get("properties", {}).get("powerState", {}).get("code") == "Stopped":
+                return _err(409, "ClusterNotRunning",
+                            "The cluster is stopped. Start the cluster before creating or deleting namespaces.")
         return None
 
     def _cosmos_validate_block(self, type_chain, names, payload, sub, rg):

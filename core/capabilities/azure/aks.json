@@ -92,11 +92,11 @@
  "azure.aks.namespaces": {
   "title": "Kubernetes namespaces (create, list, delete)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Namespaces are modelled as a stateful list on the cluster resource (seeded with the real default/kube-system/kube-public/kube-node-lease set a fresh cluster ships with) — Vyomi stores and returns them exactly as written, but nothing is scheduled into a namespace because there is no live Kubernetes API server behind it."
+   "Namespaces are modelled as a stateful list on the cluster resource (seeded with the real default/kube-system/kube-public/kube-node-lease set a fresh cluster ships with) — nothing is scheduled into a namespace because there is no live Kubernetes API server behind it. Two things ARE enforced rather than merely stored: the four system namespaces can never be deleted (409 ProtectedNamespace, matching the real 'Managed namespaces' preview), and creating or deleting a namespace is rejected with 409 ClusterNotRunning while the cluster is Stopped, the same API-server-down requirement node pools and runCommand already enforce."
   ],
   "tests": [
    "tests/conformance/test_azure_aks_core.py"

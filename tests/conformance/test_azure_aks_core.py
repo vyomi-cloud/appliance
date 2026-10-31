@@ -126,6 +126,31 @@ def run() -> int:
     r = arm.handle("POST", c1 + "/listClusterAdminCredential", {"api-version": AV})
     _check("listClusterAdminCredential returns a kubeconfig", r["body"]["kubeconfigs"][0]["name"] == "clusterAdmin")
 
+    # 8b. Namespaces: system namespaces are protected from deletion, and a namespace
+    # create/delete needs the same running API server a node-pool write does (ENFORCED,
+    # not just stored — azure.aks.namespaces).
+    r = arm.handle("GET", c1, {"api-version": AV})
+    ns = r["body"]["properties"]["namespaces"]
+    _check("cluster still has its seeded system namespaces", {n["name"] for n in ns} >= {"default", "kube-system", "kube-public", "kube-node-lease"})
+    without_kube_system = [n for n in ns if n["name"] != "kube-system"]
+    r = arm.handle("PATCH", c1, {"api-version": AV}, {"properties": {"namespaces": without_kube_system}})
+    _check("deleting a system namespace rejected", r["status"] == 409 and r["body"]["error"]["code"] == "ProtectedNamespace")
+    r = arm.handle("GET", c1, {"api-version": AV})
+    _check("system namespace survives the rejected delete", any(n["name"] == "kube-system" for n in r["body"]["properties"]["namespaces"]))
+    with_app_ns = ns + [{"name": "app-team", "status": "Active"}]
+    r = arm.handle("PATCH", c1, {"api-version": AV}, {"properties": {"namespaces": with_app_ns}})
+    _check("ordinary namespace create succeeds while running", r["status"] == 200 and any(n["name"] == "app-team" for n in r["body"]["properties"]["namespaces"]))
+
+    arm.handle("POST", c1 + "/stop", {"api-version": AV})
+    r = arm.handle("PATCH", c1, {"api-version": AV}, {"properties": {"namespaces": with_app_ns + [{"name": "another", "status": "Active"}]}})
+    _check("namespace create rejected while cluster stopped", r["status"] == 409 and r["body"]["error"]["code"] == "ClusterNotRunning")
+    without_app_ns = [n for n in with_app_ns if n["name"] != "app-team"]
+    r = arm.handle("PATCH", c1, {"api-version": AV}, {"properties": {"namespaces": without_app_ns}})
+    _check("namespace delete rejected while cluster stopped", r["status"] == 409 and r["body"]["error"]["code"] == "ClusterNotRunning")
+    arm.handle("POST", c1 + "/start", {"api-version": AV})
+    r = arm.handle("PATCH", c1, {"api-version": AV}, {"properties": {"namespaces": without_app_ns}})
+    _check("ordinary namespace delete succeeds once running again", r["status"] == 200 and not any(n["name"] == "app-team" for n in r["body"]["properties"]["namespaces"]))
+
     # 9. Action verbs are rejected on non-AKS types (same guard VM start/stop uses)
     storage = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Storage/storageAccounts/notacluster"
     arm.handle("PUT", storage, {"api-version": "2023-01-01"}, {"location": "eastus"})
