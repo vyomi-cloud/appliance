@@ -586,6 +586,8 @@ try {
   await page.getByText(LOCK).first().waitFor({ timeout: 10000 });
   const lockGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}/providers/Microsoft.Authorization/locks/${LOCK}`);
   check("UI add lock → visible over native ARM (extension resource)", lockGet.status === 200, `HTTP ${lockGet.status}`);
+  const lockedEgDelete = await arm("DELETE", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT}`);
+  check("locked Event Grid topic rejects delete over native ARM", lockedEgDelete.status === 409, `HTTP ${lockedEgDelete.status}`);
 
   // ── Access control (IAM): a role assignment created over the wire (subscription-wide,
   // same honest scoping as the Cosmos DB account blade) is read back on the topic's tab ────
@@ -612,7 +614,31 @@ try {
   check("wire-created topic shown in browse grid", true);
   await shot("21-eventgrid-topics");
 
-  // ── Delete through the topic overview → gone over ARM ──────────────────────────────────
+  // ── Bulk "Assign tags" on the Topics list → real ARM PATCH merged onto the selection ───
+  await page.getByRole("row", { name: new RegExp(EGT2) }).getByRole("checkbox").check();
+  await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Assign tags" }).click();
+  await page.getByLabel("Tag name 1", { exact: true }).fill("env");
+  await page.getByLabel("Tag value 1", { exact: true }).fill("smoke");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.waitForTimeout(600);
+  const egBulkTags = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.EventGrid/topics/${EGT2}`);
+  check("UI bulk Assign tags → merged onto the selected topic over native ARM", JSON.parse(egBulkTags.text).tags?.env === "smoke", egBulkTags.text);
+
+  // ── Delete through the topic overview is blocked while the lock stands ─────────────────
+  await page.goto(UI + `#/eventgrid/topics/${RG}/${EGT}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
+  await page.getByLabel("Confirm deletion").fill(EGT);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByText("ScopeLocked").waitFor({ timeout: 10000 });
+  check("UI delete is blocked by the lock and shows the ScopeLocked error", true);
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  // ── Remove the lock, then delete through the topic overview → gone over ARM ────────────
+  await page.goto(UI + `#/eventgrid/topics/${RG}/${EGT}/locks`);
+  await page.getByRole("button", { name: `Delete ${LOCK}` }).click();
+  await page.getByLabel("Confirm deletion").fill(LOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByText(LOCK).waitFor({ state: "detached", timeout: 10000 });
   await page.goto(UI + `#/eventgrid/topics/${RG}/${EGT}`);
   await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete" }).click();
   await page.getByLabel("Confirm deletion").fill(EGT);
