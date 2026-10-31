@@ -15,7 +15,15 @@ export async function runGcpServiceFlow(page, { service, label, check, pushActio
   await open();
   check(true, `${service}: service opens from the rail`);
 
-  const before = await countRows();
+  // The grid may still be loading (or refreshing from the API) when the service
+  // opens: take the baseline only once the row count is stable.
+  let before = await countRows();
+  for (let i = 0; i < 10; i++) {
+    await sleep(700);
+    const now = await countRows();
+    if (now === before) break;
+    before = now;
+  }
   await page.locator("#main button").filter({ hasText: /^\s*(add\s*)?Create/i }).first().click({ timeout: 8000 });
   await sleep(1000);
   // the wizard's primary "Create" (top of the summary card or the bottom of the form)
