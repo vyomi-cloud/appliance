@@ -72,9 +72,13 @@
  },
  "azure.appservices.webapp.iam": {
   "title": "Access control (IAM)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Role assignments/definitions scoped to a single Web App, deny assignments and classic administrators are not modelled."],
-  "api": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Role assignments and role definitions are the generic subscription-scoped Microsoft.Authorization store (shared with every other Azure resource), not filtered to assignments scoped exactly to this Web App.",
+   "Deny assignments and classic administrators are always empty (Vyomi models neither)."
+  ],
+  "api": ["RoleAssignments_ListForSubscription", "RoleDefinitions_List"],
+  "tests": ["tests/conformance/test_azure_rbac_core.py"]
  },
  "azure.appservices.webapp.deploymentcenter": {
   "title": "Deployment Center (CI/CD source, FTPS credentials)",
@@ -84,9 +88,13 @@
  },
  "azure.appservices.webapp.monitoring": {
   "title": "Monitoring (Alerts, Metrics, Logs, Advisor recommendations, Health check, Diagnostic settings, Log stream, Process explorer)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["No metrics pipeline, alert evaluation, Log Analytics export or live log/process streaming for Web Apps."],
-  "api": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Diagnostic settings (Microsoft.Insights/diagnosticSettings) are real: create/list/delete round-trip through the same generic engine every other Azure resource's Diagnostic settings page uses, scoped to this Web App's resource id. Export to the Log Analytics workspace is not simulated (no log/metric pipeline writes land there).",
+   "Alerts, Metrics, Logs, Advisor recommendations, Health check, Log stream and Process explorer have no metrics pipeline, alert evaluation or live log/process streaming behind them for Web Apps."
+  ],
+  "api": ["diagnosticSettings CreateOrUpdate", "diagnosticSettings List", "diagnosticSettings Delete"],
+  "tests": ["tests/conformance/test_azure_monitor_core.py"]
  },
  "azure.appservices.webapp.devtools": {
   "title": "Development Tools (Clone App, Console, Advanced Tools, App Service Editor, Extensions)",
@@ -96,21 +104,34 @@
  },
  "azure.appservices.webapp.api": {
   "title": "API (API Management link, API definition, CORS)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["No API Management linkage, OpenAPI definition import or CORS rule enforcement."],
-  "api": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "CORS allowed origins / credentials are stored on siteConfig.cors and returned to SDKs/az CLI; Vyomi has no real HTTP layer in front of the app, so the rule is never actually enforced against a cross-origin request.",
+   "No API Management linkage or OpenAPI/Swagger definition import."
+  ],
+  "api": ["sites/config/web CreateOrUpdate (cors)", "sites/config/web Get"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py"]
  },
  "azure.appservices.webapp.platform": {
   "title": "Authentication, Identity, Application Insights, Microsoft Defender for Cloud, Backups, Certificates, Networking, WebJobs, Service Connector",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Auth providers, managed identity, App Insights linkage, Defender, backups/restore, TLS certificates, VNet integration, WebJobs and Service Connector are not modelled."],
-  "api": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Identity: enabling a system-assigned managed identity mints a stable principalId/tenantId that can be the subject of a role assignment on Access control (IAM); user-assigned identities are not modelled.",
+   "Backups: modelled as snapshots — backup configuration (storage URL, schedule) and on-demand/scheduled backup records (status, size, timestamp) round-trip for real, and Restore acknowledges, but there is no real site content to archive or replay.",
+   "Authentication providers, Application Insights linkage, Microsoft Defender for Cloud, TLS/SSL certificates, VNet integration / private endpoints, WebJobs and Service Connector are not modelled."
+  ],
+  "api": ["sites Update (identity)", "sites/config/backup CreateOrUpdate", "sites/backups List/Create", "sites/backups/{id}/restore Action"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py"]
  },
  "azure.appservices.webapp.scale": {
   "title": "Scale up/out, Change App Service plan, Quotas",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
-  "limitations": ["Plan SKU is stored but changing it does not resize or move the app, and quota usage is not tracked."],
-  "api": []
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Scale up changes the plan's SKU, Scale out changes siteConfig.numberOfWorkers, and Change App Service plan re-points serverFarmId at another existing plan in the same resource group and OS — all real, round-tripping ARM PATCHes.",
+   "No capacity is actually added or removed: Vyomi does not run multiple instances, autoscale rules are not evaluated, and quota usage (Quotas page) is not tracked."
+  ],
+  "api": ["serverfarms Update (sku)", "sites/config/web Update (numberOfWorkers)", "sites Update (serverFarmId)"],
+  "tests": ["tests/conformance/test_azure_webapp_core.py"]
  },
  "azure.appservices.webapp.automation": {
   "title": "Automation (Tasks, Export template)",
