@@ -166,7 +166,7 @@ def run() -> int:
                     {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{topic_path('t1')}'"})
     check("activity log 200", r["status"] == 200, r)
     ops = [e["operationName"]["value"] for e in r["body"]["value"]]
-    check("activity log sees t1's Create", "Create" in ops, ops)
+    check("activity log sees t1's Create", "Microsoft.EventGrid/topics/write" in ops, ops)
 
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0

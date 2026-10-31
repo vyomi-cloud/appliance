@@ -36,6 +36,9 @@ const EGROLE = `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;  // rol
 const RGUI = `vyrg${n}`;           // resource group created through the UI
 const RGWIRE = `vyrgwire${n}`;     // resource group created over the wire (CLI → UI direction)
 const RGLOCK = `vyrglock${n}`;     // resource-group-scoped lock created through the UI
+const RGPRINCIPAL = `vyrgprincipal${n}@contoso.com`;  // principal assigned a role through the resource group's IAM tab
+const RGDEPLOY = `vyrgdeploy${n}`;  // resource-group-scoped deployment with a real template, created over the wire
+const RGDEPLOYRES = `vyrgdeployres${n}`;  // storage account the deployment's template actually provisions
 const APIM = `vyapim${n}`;         // API Management service created through the UI
 const APIM2 = `vyapimwire${n}`;    // API Management service created over the wire
 const AKS = `vysmokeaks${n}`;      // AKS cluster created through the UI
@@ -608,6 +611,11 @@ try {
   const rgTags = await arm("GET", `/resourceGroups/${RGUI}`);
   check("UI tag apply → persisted on the resource group over ARM", JSON.parse(rgTags.text).tags?.env === "smoke", rgTags.text);
 
+  // ── Activity log: aggregates both the group's own create and its tag update ────────────
+  await openPanel("Activity log");
+  await page.getByText("Microsoft.Resources/resourceGroups/write").first().waitFor({ timeout: 10000 });
+  check("resource group activity log shows its own create/update", true);
+
   // ── Lock created in the UI, scoped to the resource group itself → visible over ARM ──────
   await openPanel("Locks");
   await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -617,6 +625,67 @@ try {
   await page.getByText(RGLOCK, { exact: true }).waitFor({ timeout: 10000 });
   const rgLockGet = await arm("GET", `/resourceGroups/${RGUI}/providers/Microsoft.Authorization/locks/${RGLOCK}`);
   check("UI add resource-group-scoped lock → visible over native ARM", rgLockGet.status === 200, `HTTP ${rgLockGet.status}`);
+
+  // ── Access control (IAM): role assignment added through the UI, scoped to this resource
+  // group (not the subscription), then a real checkAccess decision, then removed ───────────
+  await openPanel("Access control (IAM)");
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByRole("toolbar", { name: "Access control commands" }).getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Role", { exact: true }).selectOption("Reader");
+  await page.getByLabel("Member", { exact: true }).fill(RGPRINCIPAL);
+  await page.getByRole("button", { name: "Review + assign" }).click();
+  await page.getByText(RGPRINCIPAL).first().waitFor({ timeout: 10000 });
+  const raGet = await arm("GET", `/resourceGroups/${RGUI}/providers/Microsoft.Authorization/roleAssignments`);
+  const raList = JSON.parse(raGet.text).value || [];
+  const ra = raList.find((r) => r.properties?.principalId === RGPRINCIPAL);
+  check("UI Add role assignment → visible over native ARM, scoped to this resource group",
+    !!ra && ra.properties.scope === `/subscriptions/${SUB}/resourceGroups/${RGUI}`, JSON.stringify(ra));
+  await shot("22b-resourcegroup-iam-role-assignments");
+
+  await page.getByRole("tab", { name: "Check access" }).click();
+  await page.getByRole("button", { name: "Check access", exact: true }).click();
+  await page.getByLabel("Find a user, group or service principal", { exact: true }).fill(RGPRINCIPAL);
+  await page.getByRole("dialog").getByRole("button", { name: "Check access", exact: true }).click();
+  await page.getByText("Allowed").waitFor({ timeout: 10000 });
+  check("UI Check access → real decision reflects the role just assigned", true);
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByLabel(`Select ${RGPRINCIPAL}`, { exact: true }).check();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await page.getByText(RGPRINCIPAL).waitFor({ state: "detached", timeout: 10000 });
+  const raGone = await arm("GET", `/resourceGroups/${RGUI}/providers/Microsoft.Authorization/roleAssignments`);
+  check("UI Remove role assignment → gone over native ARM",
+    !(JSON.parse(raGone.text).value || []).some((r) => r.properties?.principalId === RGPRINCIPAL), raGone.text);
+
+  // ── Deployments: a template-driven deployment created over the wire actually provisions a
+  // real resource; Redeploy re-runs it for real, Cancel on a completed deployment honestly fails ──
+  const deployTemplate = {
+    parameters: { saName: { defaultValue: RGDEPLOYRES } },
+    resources: [{ type: "Microsoft.Storage/storageAccounts", apiVersion: "2023-01-01", name: "[parameters('saName')]" }],
+  };
+  const depPut = await arm("PUT", `/resourceGroups/${RGUI}/providers/Microsoft.Resources/deployments/${RGDEPLOY}`,
+    { properties: { mode: "Incremental", template: deployTemplate } });
+  check("ARM PUT resource-group-scoped deployment with a template over wire → provisions the resource for real",
+    depPut.status === 200 && JSON.parse(depPut.text).properties?.outputResources?.[0]?.resourceName === RGDEPLOYRES, depPut.text);
+
+  await openPanel("Deployments");
+  await page.getByText(RGDEPLOY, { exact: true }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "View template" }).click();
+  await page.getByText(RGDEPLOYRES).first().waitFor({ timeout: 5000 });
+  check("UI View template shows the resource the deployment actually provisioned", true);
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await page.getByLabel(`Select ${RGDEPLOY}`, { exact: true }).check();
+  await page.getByRole("button", { name: "Redeploy", exact: true }).click();
+  await page.getByText("Redeploy").first().waitFor({ timeout: 10000 });
+  check("UI Redeploy re-runs the template for real", true);
+
+  await page.getByLabel(`Select ${RGDEPLOY}`, { exact: true }).check();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByText("Cancel failed").waitFor({ timeout: 10000 });
+  check("UI Cancel on an already-completed deployment honestly fails (every deployment here completes synchronously)", true);
+  await shot("22c-resourcegroup-deployments");
 
   // ── Resource group created over the wire → visible in the UI browse grid (CLI → UI) ─────
   const rgPut = await arm("PUT", `/resourceGroups/${RGWIRE}`, { location: "eastus" });

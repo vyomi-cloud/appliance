@@ -51,7 +51,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Deployment creation stores whatever template/parameters/mode the client sends and returns Succeeded immediately — there is no template-language evaluation (no parameter/variable resolution, no dependsOn ordering) and nothing is actually provisioned from it; the underlying resources still need their own PUT calls. Cancel and Redeploy are not simulated."
+   "Every resource listed in properties.template.resources is actually created (a real PUT through the same ARM dispatcher, with [parameters('x')] / [variables('y')] resolved to literal values) — but there is no full template-language evaluation: no concat()/resourceId()/reference()/copy-loop support, and dependsOn is not topologically sorted (resources are provisioned in template order). Redeploy re-runs the stored template for real; Cancel honestly 409s, since every deployment here completes synchronously and is never still 'Running' by the time a Cancel call could reach it."
   ],
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
@@ -60,11 +60,11 @@
  "azure.resourcegroups.activity_log": {
   "title": "Activity log",
   "level": {
-   "nano": "limited",
-   "offline": "limited"
+   "nano": "full",
+   "offline": "full"
   },
   "limitations": [
-   "Only records the resource group's own create/update/delete lifecycle events — operations on the resources inside the group are not aggregated into this view (each resource has its own Activity log). Only console/SDK-triggered mutations made since the simulation booted are recorded, and `caller` is a fixed placeholder identity."
+   "Only console/SDK-triggered mutations made since the simulation booted are recorded (no historical backfill), and `caller` is a fixed placeholder identity rather than a real signed-in principal."
   ],
   "api": [
    "ActivityLogs_List"
@@ -74,13 +74,13 @@
   ]
  },
  "azure.resourcegroups.access_control_iam": {
-  "title": "Access control (IAM) — role assignments and definitions",
+  "title": "Access control (IAM) — role assignments, roles and checkAccess",
   "level": {
    "nano": "limited",
    "offline": "limited"
   },
   "limitations": [
-   "Role assignments/definitions are the generic ARM catalog store (Microsoft.Authorization/roleAssignments, roleDefinitions) at subscription scope, not actually scoped to this resource group, and no access decisions are evaluated — every data-plane call succeeds regardless of what is assigned. Deny assignments and classic administrators are always empty."
+   "Role assignments are real ARM resources scoped to the resource group they were created under (list + checkAccess only see assignments at or above that scope, same hierarchy inheritance and explicit-deny-wins semantics as the Entra RBAC engine), and the Roles tab + checkAccess cover the built-in Owner/Contributor/Reader/… roles plus any custom role definitions. But checkAccess is a standalone decision tool: no other ARM call in Vyomi consults it, so every other data-plane/control-plane operation still succeeds regardless of what is assigned. Deny assignments and classic administrators are always empty."
   ],
   "tests": [
    "tests/conformance/test_azure_arm_core.py"
