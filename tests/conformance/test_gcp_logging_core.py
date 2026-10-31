@@ -9,6 +9,7 @@ google-cloud-logging / gcloud logging can drive the core unchanged.
 Run on host:    PYTHONPATH=. python3 tests/conformance/test_gcp_logging_core.py
 """
 import json
+from datetime import datetime, timedelta, timezone
 
 try:
     from core.aws_wire_router import AwsWireRouter
@@ -141,6 +142,32 @@ def run() -> int:
     _check("buckets.delete 200", st == 200)
     st, b = call("GET", "/v2/projects/demo/locations/global/buckets/my-bucket")
     _check("buckets.get after delete -> 404", st == 404)
+
+    # ── usage -> Monitoring (Logs Storage "Create usage alert" / "View usage data") ──
+    # Every entries:write above mirrored live byte/entry counts for project "demo" into the
+    # shared Cloud Monitoring store (core/gcp_logging_core._sync_usage_metrics); this is a
+    # REAL metric a REAL alert policy can reference, evaluated by Monitoring's own
+    # evaluate_incidents sweep — not a fabricated "it would work" claim.
+    def iso(delta=0):
+        return (datetime.now(timezone.utc) + timedelta(seconds=delta)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+    st, b = call("GET", "/v3/projects/demo/timeSeries", query={
+        "filter": 'metric.type = "logging.googleapis.com/byte_count" AND resource.type = "global"',
+        "interval.startTime": iso(-3600), "interval.endTime": iso(60)})
+    _check("byte_count time series carries a real point mirrored from Cloud Logging entries",
+           st == 200 and len(b["timeSeries"]) == 1 and b["timeSeries"][0]["points"] and int(b["timeSeries"][0]["points"][0]["value"]["int64Value"]) > 0)
+
+    st, b = call("POST", "/v3/projects/demo/alertPolicies", body={
+        "displayName": "log usage", "combiner": "OR",
+        "conditions": [{"displayName": "bytes high", "conditionThreshold": {
+            "filter": 'metric.type = "logging.googleapis.com/byte_count" AND resource.type = "global"',
+            "comparison": "COMPARISON_GT", "thresholdValue": 1, "duration": "0s"}}],
+    })
+    _check("usage alert policy created on the shared Monitoring store", st == 200 and b["name"].startswith("projects/demo/alertPolicies/"))
+
+    st, b = call("GET", "/v3/projects/demo/incidents")
+    _check("the usage alert really fires: evaluate_incidents opens a real incident against the live byte_count metric",
+           st == 200 and any(i["policyDisplayName"] == "log usage" and i["state"] == "OPEN" for i in b.get("incidents", [])))
 
     print("\nRESULT: PASS — every Cloud Logging wire operation behaves as asserted")
     return 0

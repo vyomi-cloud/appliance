@@ -356,6 +356,13 @@ BUILTIN_METRICS = {m["type"]: m for m in [
         "Current CPU utilization as a fraction of reserved CPU.", [], "CPU utilization", ["cloudsql_database"]),
     _md("kubernetes.io/container/cpu/core_usage_time", "CUMULATIVE", "DOUBLE", "s",
         "Cumulative CPU usage on all cores in seconds.", [], "CPU usage time", ["k8s_container"]),
+    _md("logging.googleapis.com/byte_count", "GAUGE", "INT64", "By",
+        "Live month-to-date bytes of log entries ingested into this project, mirrored from "
+        "Cloud Logging's own entries — fed by core/gcp_logging_core.py, not written over the "
+        "public timeSeries API.", [], "Log bytes ingested", ["global"]),
+    _md("logging.googleapis.com/log_entry_count", "GAUGE", "INT64", "1",
+        "Live month-to-date count of log entries ingested into this project, mirrored from "
+        "Cloud Logging's own entries.", [], "Log entries ingested", ["global"]),
 ]}
 
 MONITORED_RESOURCES = {r["type"]: r for r in [
@@ -1450,6 +1457,33 @@ def write_time_series(store, project, payload):
             except Exception:
                 pass
     return {}
+
+
+def record_system_point(store, project, metric_type, resource, value, end_iso, unit=""):
+    """Internal point writer for a Vyomi SYSTEM metric (one of BUILTIN_METRICS) fed by
+    another core in-process — e.g. Cloud Logging's live byte/entry counters. Unlike
+    `write_time_series`, never reaches the external REST API (callers are other cores, not
+    API clients) so it is not restricted to CUSTOM_PREFIXES; it still enforces the
+    monotonic-points-per-series rule so the evaluate_incidents / timeSeries.list readers see
+    an ordered series. Best effort: swallows stale/out-of-order points instead of raising."""
+    desc = BUILTIN_METRICS.get(metric_type)
+    if desc is None:
+        return
+    metric = {"type": metric_type, "labels": {}}
+    key = _series_key(project, metric, resource)
+    prev = store.time_series.get(key)
+    if prev and prev["points"] and end_iso <= prev["points"][-1]["interval"]["endTime"]:
+        return
+    vk = {"INT64": "int64Value", "DOUBLE": "doubleValue", "BOOL": "boolValue"}.get(desc["valueType"])
+    if vk is None:
+        return
+    val = str(int(value)) if vk == "int64Value" else (float(value) if vk == "doubleValue" else bool(value))
+    rec = store.time_series.setdefault(key, {"metric": metric, "resource": _copy(resource),
+                                              "metricKind": desc["metricKind"], "valueType": desc["valueType"],
+                                              "unit": unit, "points": []})
+    rec["points"].append({"interval": {"endTime": end_iso}, "value": {vk: val}})
+    if len(rec["points"]) > MAX_POINTS_PER_SERIES:
+        del rec["points"][: len(rec["points"]) - MAX_POINTS_PER_SERIES]
 
 
 def _ts_getter(s, lhs):

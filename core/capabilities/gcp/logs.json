@@ -129,11 +129,19 @@
  "gcp.logs.storage.usage_alerts": {
   "title": "Create usage alert / View usage data (Monitoring-backed storage alerting)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Storage usage alerting hands off to Cloud Monitoring alert policies, which Vyomi's Logging lens does not model; the console shows this honestly rather than faking an alert that never fires."
+   "Hands off to Cloud Monitoring exactly as the real console does: Create usage alert creates a real AlertPolicy on logging.googleapis.com/byte_count, evaluated by Monitoring's own incident sweep, and View usage data reads the real timeSeries. The metric is a GAUGE snapshot of month-to-date bytes/entries recomputed on every entries:write, not GCP's byte-exact billing export."
+  ],
+  "api": [
+   "entries.write",
+   "projects.alertPolicies.create",
+   "projects.timeSeries.list"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_logging_core.py"
   ]
  }
 }

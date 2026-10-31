@@ -445,6 +445,7 @@ class AwsWireRouter:
         self.gcp_mon = s.get("gcp_mon") or gcp_mon.MonitoringStore()   # Cloud Monitoring (policies, channels, metrics, series)
         self.gcp_ar = s.get("gcp_ar") or gcp_ar.ArtifactRegistryStore()
         self.gcp_logging = s.get("gcp_logging") or gcp_logging.LoggingStore()   # Cloud Logging
+        self.gcp_logging.mon_store = self.gcp_mon   # Logs Storage "Create usage alert" mirrors live byte/entry counts into Monitoring
         self.gcp_compute = s.get("gcp_compute") or gcp_compute.ComputeStore()   # VPC: networks, subnets, firewalls, routes, addresses
         self.gcp_compute_vm = s.get("gcp_compute_vm") or gcp_compute_vm.ComputeStore()   # Compute Engine VMs, disks, images, templates
         self.gcp_rm = s.get("gcp_rm") or gcp_rm.ResourceManagerStore()   # Resource Manager (project, tags, contacts, org policies)

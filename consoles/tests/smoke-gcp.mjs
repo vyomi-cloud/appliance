@@ -380,6 +380,25 @@ try {
   const sinks = await wjson(`/v2/projects/vyomi-project/sinks`);
   check("create sink via UI → visible over native wire (sinks.list)", (sinks.sinks || []).some((s) => s.name.endsWith(`/${SINK}`) && s.destination === "storage.googleapis.com/v4-smoke-sink-bucket"));
   await shot("14-log-router");
+
+  // Logs Storage "Create usage alert" hands off to Cloud Monitoring for real: the alert policy
+  // it creates through the UI is visible over Monitoring's OWN native wire (alertPolicies.list).
+  const ALERT = `v4-gcp-smoke-usage-alert-${Date.now() % 100000}`;
+  await page.goto(UI + "#/logs/storage");
+  await page.getByRole("button", { name: "Create usage alert" }).click();
+  await page.getByLabel("Alert name").fill(ALERT);
+  await page.getByLabel("Threshold").fill("1");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(`Created usage alert "${ALERT}"`).waitFor({ timeout: 10000 });
+  const alertPolicies = await wjson(`/v3/projects/vyomi-project/alertPolicies`);
+  check("create usage alert via UI → real AlertPolicy over Monitoring's native wire",
+    (alertPolicies.alertPolicies || []).some((p) => p.displayName === ALERT && p.conditions?.[0]?.conditionThreshold?.filter?.includes("logging.googleapis.com/byte_count")));
+  await page.goto(UI + `#/logs/storage/bucket/${LB}?loc=global`);
+  await page.getByRole("button", { name: "View usage data" }).click();
+  await page.getByText("Project log bytes (month-to-date)").waitFor({ timeout: 10000 });
+  check("view usage data reads the real byte_count time series", true);
+  await page.keyboard.press("Escape");
+  await shot("14b-logs-usage-alert");
   // VPC network: create a network through the UI → visible over native wire (networks.list)
   const NET = `v4-gcp-net-${Date.now() % 100000}`;
   await page.goto(UI + "#/networking/networks/add");

@@ -9,8 +9,8 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { ErrorAlert, fmtDate, KeyValue, NotSimulated, PageHeader, Section } from "../../kit/common.jsx";
-import { capability } from "../../kit/Capability.jsx";
+import { ErrorAlert, fmtBytes, fmtDate, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 export default function BucketDetail({ params, query }) {
@@ -23,7 +23,6 @@ export default function BucketDetail({ params, query }) {
   const notify = useNotify();
   const b = useAsync(() => api.getBucket(name, location_), [name, location_]);
   const views = useAsync(() => api.listViews(name, location_), [name, location_]);
-  const cap = capability("gcp.logs.storage.usage_alerts");
 
   return (
     <>
@@ -83,14 +82,36 @@ export default function BucketDetail({ params, query }) {
         onConfirm={async () => { await api.deleteBucket(name, location_); notify.success(`Deleted bucket "${name}"`); location.hash = "#/logs/storage"; }}>
         <Typography variant="body2">Bucket <b>{name}</b> and every log view on it will be permanently deleted.</Typography>
       </DeleteDialog>
-      {usageOpen && (
-        <Dialog open onClose={() => setUsageOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>View usage data</DialogTitle>
-          <DialogContent><NotSimulated feature={cap?.title || "Usage alerts"} note={cap?.limitations?.join(" ")} compact /></DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}><Button onClick={() => setUsageOpen(false)}>Close</Button></DialogActions>
-        </Dialog>
-      )}
+      {usageOpen && <ViewUsageDataDialog onClose={() => setUsageOpen(false)} />}
     </>
+  );
+}
+
+function ViewUsageDataDialog({ onClose }) {
+  const points = useAsync(() => api.usageTimeSeries(30), []);
+  const rows = (points.data || []).slice().reverse();
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>View usage data</DialogTitle>
+      <DialogContent>
+        <CapabilityContainer id="gcp.logs.storage.usage_alerts" title="Usage data">
+          <ErrorAlert error={points.error} title="Failed to load usage data" />
+          <ResourceTable
+            resourceName="usage samples"
+            items={rows}
+            rowKey={(p) => p.interval.endTime}
+            loading={points.loading}
+            dense
+            columns={[
+              { id: "time", header: "Time", cell: (p) => fmtDate(p.interval.endTime) },
+              { id: "bytes", header: "Project log bytes (month-to-date)", cell: (p) => fmtBytes(Number(p.value.int64Value)) },
+            ]}
+            empty={<Typography variant="body2" color="text.secondary">No usage data yet — write some log entries first.</Typography>}
+          />
+        </CapabilityContainer>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}><Button onClick={onClose}>Close</Button></DialogActions>
+    </Dialog>
   );
 }
 

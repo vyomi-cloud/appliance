@@ -52,6 +52,8 @@ class LoggingStore:
         self.buckets: dict[str, dict] = {}             # full resource name -> LogBucket
         self.views: dict[str, dict] = {}               # full resource name -> LogView
         self._clock: float | None = None
+        self.mon_store = None   # the shared Cloud Monitoring store (set by the wire router) —
+        # real usage-alert metrics (logging.googleapis.com/byte_count, .../log_entry_count)
 
     def now(self) -> float:
         return self._clock if self._clock is not None else time.time()
@@ -166,6 +168,8 @@ def write_entries(store, project_hint, body):
         if len(store.entries) > 200000:
             del store.entries[: len(store.entries) - 200000]
         _route_to_sinks(store, out)
+        for proj in {m.group(1) for e in out if (m := _PROJECT_OF_LOGNAME.match(e.get("logName", "")))}:
+            _sync_usage_metrics(store, proj)
         store.persist()
     resp = {}
     if err_index:
@@ -526,6 +530,49 @@ def metric_usage(store, m, now_t):
         elif prev_start <= ts < cur_start:
             prev += 1
     return prev, cur
+
+
+# ── usage (Logs Storage "Create usage alert" / "View usage data") ──────────
+_PROJECT_OF_LOGNAME = re.compile(r"^projects/([^/]+)/logs/")
+
+
+def usage_snapshot(store, project, now_t=None):
+    """Live month-to-date (bytes, entry count) ingested for `project` — the same figures
+    Logs Storage shows, recomputed from store.entries."""
+    import calendar
+    now_t = store.now() if now_t is None else now_t
+    g = time.gmtime(now_t)
+    cur_start = calendar.timegm((g.tm_year, g.tm_mon, 1, 0, 0, 0))
+    prefix = f"projects/{project}/logs/"
+    nbytes = nentries = 0
+    for e in store.entries:
+        if not e.get("logName", "").startswith(prefix) or _entry_ts(e) < cur_start:
+            continue
+        nbytes += len(json.dumps(e, default=str))
+        nentries += 1
+    return nbytes, nentries
+
+
+def _sync_usage_metrics(store, project):
+    """Best-effort: mirror `project`'s live month-to-date usage into the shared Cloud
+    Monitoring store as the real system metrics logging.googleapis.com/byte_count and
+    .../log_entry_count, so Logs Storage's "Create usage alert" hands off to Monitoring's
+    OWN alert-policy engine (real policy, real incident sweep) over a metric Vyomi actually
+    keeps live — the same hand-off the real console makes, just onto a core this appliance
+    runs, instead of leaving it not_simulated. Never raises: a metrics mirror must not be
+    able to break log ingestion."""
+    mon_store = store.mon_store
+    if mon_store is None:
+        return
+    try:
+        from core import gcp_monitoring_core as mon
+        nbytes, nentries = usage_snapshot(store, project)
+        end_iso = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(store.now())) + ".000000Z"
+        resource = {"type": "global", "labels": {"project_id": project}}
+        mon.record_system_point(mon_store, project, "logging.googleapis.com/byte_count", resource, nbytes, end_iso, unit="By")
+        mon.record_system_point(mon_store, project, "logging.googleapis.com/log_entry_count", resource, nentries, end_iso, unit="1")
+    except Exception:
+        pass
 
 
 # ── log buckets + views (Logs Storage) ──────────────────────────────────────
