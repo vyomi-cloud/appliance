@@ -611,6 +611,9 @@
     .pie-card .pie-legend-item .swatch {
       width: 10px; height: 10px; border-radius: 2px;
     }
+    .pie-card .pie-legend-item .pie-logo { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 14px; flex: none; }
+    .pie-card .pie-legend-item .pie-logo svg { width: 14px; height: 14px; display: block; }
+    .pie-card .pie-legend-item .pie-logo.aws svg { width: 22px; height: 13px; }
     .pie-card .pie-legend-item .lv {
       font-variant-numeric: tabular-nums;
       color: #5f6b7a; font-weight: 600;
@@ -3200,6 +3203,15 @@
       return { vmCount, lightCount, total: vmCount + lightCount };
     }
 
+    // The cloud's logo beside its legend entry (the swatch stays: it ties the entry to its arc).
+    // Gradient ids are made unique per copy so no logo depends on another, possibly hidden, one.
+    let _pieLogoSeq = 0;
+    function _pieLogo(key) {
+      const svg = (typeof SPACE_LOGOS !== 'undefined' && SPACE_LOGOS[key]) || '';
+      if (!svg) return '';
+      return '<span class="pie-logo ' + key + '" aria-hidden="true">' + svg.replace(/sp-az-g/g, 'pl' + (++_pieLogoSeq) + '-az-g') + '</span>';
+    }
+
     function _renderPie(card, segments, centerVal, centerSub) {
       // segments: [{ key, label, color, value, pct }]
       // Donut chart via stroke-dasharray on a circle r=15.91549
@@ -3242,7 +3254,7 @@
       // Legend
       legend.innerHTML = segments.map(seg => `
         <div class="pie-legend-item">
-          <span class="ll"><span class="swatch" style="background:${ seg.color }"></span>${ seg.label }</span>
+          <span class="ll"><span class="swatch" style="background:${ seg.color }"></span>${ _pieLogo(seg.key) }${ seg.label }</span>
           <span class="lv">${ seg.pct.toFixed(1) }%</span>
         </div>`).join('');
     }
@@ -3305,8 +3317,11 @@
             card.classList.add('empty');
             pcVal.textContent = '0';
             pcSub.textContent = metric === 'cpu' ? 'vCPU' : metric === 'ram' ? 'GiB' : 'GB';
-            legend.innerHTML =
-              '<div class="pie-legend-item" style="justify-content:flex-start;color:#5f6b7a">' +
+            // Still name the three clouds (logo + swatch), each at 0, then the hint.
+            legend.innerHTML = ['aws', 'gcp', 'azure'].map(p =>
+              '<div class="pie-legend-item"><span class="ll"><span class="swatch" style="background:' + PROV_PALETTE[p] + '"></span>' +
+                _pieLogo(p) + PROV_LABEL[p] + '</span><span class="lv">0.0%</span></div>').join('') +
+              '<div class="pie-legend-item" style="justify-content:flex-start;color:#5f6b7a;margin-top:4px">' +
                 'No workloads yet — create a resource to see the split.' +
               '</div>';
             return;
