@@ -602,7 +602,8 @@ def mount_gcp_secrets_kms(app) -> None:
         app.add_route("/v1/projects/{project}/locations/{loc}/keyRings/{rest:path}", _kms, methods=methods)
 
 
-_GCS_PREFIXES = ("/storage/v1/b", "/upload/storage/v1/b", "/download/storage/v1/b", "/api/gcp/storage/v1/b")
+_GCS_PREFIXES = ("/storage/v1/b", "/upload/storage/v1/b", "/download/storage/v1/b", "/api/gcp/storage/v1/b",
+                 "/storage/v1/projects")   # projects/{p}/hmacKeys (Interoperability) + serviceAccount
 
 
 def gcs_core_path(path: str) -> bool:

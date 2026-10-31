@@ -158,6 +158,15 @@ app = FastAPI(title="CloudLearn Cloud Simulator", version="2.0.0", docs_url=None
 # client error, not a crash: an unhandled JSONDecodeError surfaced as a 500 and
 # closed the keep-alive connection, so the client's NEXT request failed with
 # "Remote end closed connection" (console-actions ssm.create -> ssm.list).
+from core.native_errors import NativeHTTPError as _NativeHTTPError  # noqa: E402
+
+
+@app.exception_handler(_NativeHTTPError)
+async def _native_http_error(request, exc: _NativeHTTPError):
+    """Return a native cloud error body verbatim (no FastAPI {"detail": …} wrapper)."""
+    return JSONResponse(status_code=exc.status_code, content=exc.body, headers=exc.headers)
+
+
 @app.exception_handler(json.JSONDecodeError)
 async def _invalid_json_body(request: Request, exc: json.JSONDecodeError):
     return JSONResponse({"detail": f"Request body is not valid JSON: {exc.msg}",

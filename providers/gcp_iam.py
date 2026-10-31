@@ -40,7 +40,8 @@ def _deny_if_org_policy_enforced(project: str, constraint_id: str) -> None:
     from core.gcp_iam_core import org_policy_enforced
     rm_store = net_new_core_stores()["gcp_rm"]
     if org_policy_enforced(rm_store, project, constraint_id):
-        raise HTTPException(412, detail={
+        from core.native_errors import NativeHTTPError   # top-level {"error": …}, like GCP
+        raise NativeHTTPError(412, {
             "error": {"code": 412,
                       "message": f"Operation denied by org policy: 'constraints/{constraint_id}' "
                                  f"is enforced on 'projects/{project}'.",

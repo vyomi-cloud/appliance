@@ -32,10 +32,12 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 // Native 404s / 403s / 412s are legitimate API answers (e.g. a retention-protected delete,
 // an org-policy-denied create), not page errors.
-page.on("console", (m) => m.type() === "error" && !/status of (40[34]|412)/.test(m.text()) && errors.push(m.text()));
+// Expected native answers (400 validation, 403 denied, 404 gone, 412 precondition failed) are
+// not page errors. ONE handler: two handlers with different allow-lists record each other's codes.
+page.on("console", (m) => m.type() === "error" && !/status of (40[034]|412)/.test(m.text()) && errors.push(m.text()));
 // Native 400/403/404s are legitimate API answers (e.g. a retention-protected delete, a
 // public-access-prevention rejection), not page errors.
-page.on("console", (m) => m.type() === "error" && !/status of 40[034]/.test(m.text()) && errors.push(m.text()));
+
 const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true });
 
 try {
@@ -620,6 +622,9 @@ try {
   check("IAM grant access via UI → native getIamPolicy shows binding", (iamPol.bindings || []).some((b) => b.role === "roles/viewer" && b.members.includes(`user:${M}`)));
   await shot("12-iam-allow");
 
+  // A run that failed mid-way may have left the "disable service account creation" org
+  // policy enforced (it is durable) — clear it first so this run starts from a known state.
+  await wire("/v2/projects/vyomi-project/policies/constraints/iam.disableServiceAccountCreation", { method: "DELETE" });
   const SA = `smoke-sa-${Date.now() % 100000}`;
   await wire("/v1/projects/vyomi-project/serviceAccounts", { method: "POST", body: JSON.stringify({ accountId: SA, serviceAccount: { displayName: SA } }) });
   await page.goto(UI + "#/iam-admin/serviceaccounts");
