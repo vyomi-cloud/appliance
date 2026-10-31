@@ -1,8 +1,10 @@
 /* Network security group resource blade: left resource menu + panels. Overview, Tags,
- * Inbound/Outbound security rules, Locks, Activity log, Properties, Export template and the
- * Network interfaces / Subnets association lists are backed by real ARM calls; Access control
- * (IAM) and the remaining menu items are honest CapabilityContainer gaps
- * (core/capabilities/azure/nsgs.json is the single source of truth for which). */
+ * Inbound/Outbound security rules, Locks, Activity log, Properties, Export template,
+ * Diagnostic settings, Access control (IAM) (Role assignments/Roles/Check access real; Deny
+ * assignments/Classic administrators honest) and the Network interfaces / Subnets
+ * association + Associate picker are backed by real ARM calls; the remaining menu items are
+ * honest CapabilityContainer gaps (core/capabilities/azure/nsgs.json is the single source of
+ * truth for which). */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -17,7 +19,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
-import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, fmtDate } from "../../kit/common.jsx";
+import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
@@ -43,7 +45,6 @@ export const MENU = [
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 const GAP_CAP = {
   diagnose: "azure.nsgs.tools", tasks: "azure.nsgs.tools", support: "azure.nsgs.tools", effectivesecurityrules: "azure.nsgs.tools",
-  alerts: "azure.nsgs.monitoring", diagnosticsettings: "azure.nsgs.monitoring", logs: "azure.nsgs.monitoring", flowlogs: "azure.nsgs.monitoring",
 };
 
 export default function NsgBlade({ params }) {
@@ -70,6 +71,10 @@ export default function NsgBlade({ params }) {
       locks: () => <Locks a={a} />,
       activitylog: () => <ActivityLog a={a} />,
       exporttemplate: () => <ExportTemplate a={a} />,
+      diagnosticsettings: () => <DiagnosticSettings a={a} />,
+      alerts: () => <NotSimulatedContainer title={`${name} | Alerts`} feature="Alerts" />,
+      logs: () => <NotSimulatedContainer title={`${name} | Logs`} feature="Logs" />,
+      flowlogs: () => <NotSimulatedContainer title={`${name} | NSG flow logs`} feature="NSG flow logs" />,
     }[panel];
     body = P ? P() : (
       <CapabilityContainer id={GAP_CAP[panel] || "azure.nsgs.tools"} title={`${name} | ${LABEL[panel] || panel}`} />
@@ -127,14 +132,20 @@ function Overview({ a, reload, self }) {
   );
 }
 
-// ── Access control (IAM) — honest in every panel here, same as every other Azure lens
-// service: Microsoft.Authorization/roleAssignments is only simulated at subscription scope ──
+// ── Access control (IAM): Role assignments / Roles / Check access are real ARM reads and a
+// real decision call scoped to this NSG (plus its subscription/resource-group ancestors);
+// Deny assignments and Classic administrators stay honest — core/capabilities/azure/nsgs.json
+// azure.nsgs.iam. ────────────────────────────────────────────────────────────────────────
 function AccessControlIam({ a }) {
   const [tab, setTab] = useState("check");
   const [dlg, setDlg] = useState(null);
+  const [principal, setPrincipal] = useState("");
+  const [action, setAction] = useState("Microsoft.Network/networkSecurityGroups/write");
+  const [decision, setDecision] = useState(null);
+  const roleAssignments = useAsync(() => api.listRoleAssignments(a.id), [a.id]);
+  const roleDefinitions = useAsync(() => api.listRoleDefinitions(), []);
   return (
-    <>
-      <div className="vy-panel-title">Access control (IAM)</div>
+    <CapabilityContainer id="azure.nsgs.iam" title="Access control (IAM)">
       <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control (IAM) tabs">
         <Tab value="check">Check access</Tab>
         <Tab value="assignments">Role assignments</Tab>
@@ -145,23 +156,70 @@ function AccessControlIam({ a }) {
       {tab === "check" && (
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 16 }}>
           <section className="vy-section"><h3>My access</h3><Button onClick={() => setDlg("mine")}>View my access</Button></section>
-          <section className="vy-section"><h3>Check access</h3><Button onClick={() => setDlg("check")}>Check access</Button></section>
+          <section className="vy-section"><h3>Check access</h3><Button onClick={() => { setDecision(null); setDlg("check"); }}>Check access</Button></section>
         </div>
       )}
-      {tab === "assignments" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.nsgs.iam" title="Role assignments" /></div>}
-      {tab === "roles" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.nsgs.iam" title="Roles" /></div>}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.nsgs.iam" title="Deny assignments" /></div>}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><CapabilityContainer id="azure.nsgs.iam" title="Classic administrators" /></div>}
       <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
         <DialogSurface aria-label="Access check">
           <DialogBody>
             <DialogTitle>{dlg === "mine" ? "My access" : "Check access"}</DialogTitle>
-            <DialogContent><NotSimulated feature="Per-identity role-assignment resolution for this resource" note={`The network security group's resource id is ${a.id}.`} /></DialogContent>
+            <DialogContent>
+              {dlg === "mine" ? (
+                <NotSimulated feature="Per-identity 'my access' resolution" note="Vyomi has no signed-in identity to resolve — use Check access with a principal id instead." />
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 360 }}>
+                  <Field label="Find">
+                    <Input value={principal} onChange={(_, d) => setPrincipal(d.value)} placeholder="Principal (object) id" aria-label="Principal ID" />
+                  </Field>
+                  <Field label="Action"><Input value={action} onChange={(_, d) => setAction(d.value)} aria-label="Action" /></Field>
+                  <Button appearance="primary" disabled={!principal} onClick={async () => {
+                    const [r] = await api.checkAccess(a.id, principal, action);
+                    setDecision(r);
+                  }}>Check access</Button>
+                  {decision && (
+                    <section className="vy-section">
+                      <b>{decision.accessDecision}</b>
+                      {decision.roles?.length > 0 && <div>Granted by: {decision.roles.join(", ")}</div>}
+                    </section>
+                  )}
+                </div>
+              )}
+            </DialogContent>
             <DialogActions><Button onClick={() => setDlg(null)}>Close</Button></DialogActions>
           </DialogBody>
         </DialogSurface>
       </Dialog>
-    </>
+      {tab === "assignments" && (
+        <section className="vy-section" style={{ marginTop: 12 }}>
+          <BrowseGrid resourceName="role assignment" rowKey={(r) => r.id} filterPlaceholder="Search by name or email"
+            items={roleAssignments.data || []} loading={roleAssignments.loading} error={roleAssignments.error} onRefresh={roleAssignments.reload}
+            columns={[
+              { key: "name", label: "Name", value: (r) => r.properties?.principalId },
+              { key: "type", label: "Type", value: (r) => r.properties?.principalType || "--" },
+              { key: "role", label: "Role", value: (r) => r.properties?.roleName || (r.properties?.roleDefinitionId || "").split("/").pop() },
+              { key: "scope", label: "Scope", value: (r) => r.properties?.scope || "/" },
+              { key: "condition", label: "Condition", value: () => "None" },
+            ]}
+          />
+        </section>
+      )}
+      {tab === "roles" && (
+        <section className="vy-section" style={{ marginTop: 12 }}>
+          <BrowseGrid resourceName="role" rowKey={(r) => r.id} filterPlaceholder="Search by role name, description, permission, or ID"
+            items={roleDefinitions.data || []} loading={roleDefinitions.loading} error={roleDefinitions.error} onRefresh={roleDefinitions.reload}
+            columns={[
+              { key: "name", label: "Name", value: (r) => r.properties?.roleName || r.name },
+              { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
+              { key: "type", label: "Type", value: (r) => r.properties?.type || "BuiltInRole" },
+              { key: "category", label: "Category", value: () => "General" },
+              { key: "details", label: "Details", value: () => "View" },
+            ]}
+          />
+        </section>
+      )}
+      {tab === "deny" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>}
+      {tab === "classic" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Classic administrators" feature="Classic administrators" /></div>}
+    </CapabilityContainer>
   );
 }
 
@@ -384,17 +442,45 @@ function AddRuleDialog({ open, direction, existing, onClose, onCreate }) {
 }
 
 // ── Network interfaces / Subnets (NSG associations) — real ARM reads, scanned subscription-
-// wide and matched by properties.networkSecurityGroup.id (see api.js); the "Associate" picker
-// is the honest gap, since this lens has no standalone Network interfaces / Virtual networks
-// console to choose an existing resource from. ─────────────────────────────────────────
-function AssociateGap({ open, onClose, resourceType }) {
+// wide and matched by properties.networkSecurityGroup.id (see api.js). The "Associate"
+// picker lists every NIC/subnet in the subscription that has no NSG of its own yet and
+// PATCHes/PUTs the chosen one's networkSecurityGroup to point at THIS NSG — a real ARM
+// mutation, same constraint the real portal's Associate dialog enforces. ─────────────────
+function AssociateDialog({ open, onClose, resourceType, items, loading, onAssociate }) {
+  const notify = useNotify();
+  const [choice, setChoice] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (open) setChoice(""); }, [open]);
+  const go = async () => {
+    const picked = items.find((r) => r.id === choice);
+    if (!picked) return;
+    setBusy(true);
+    try {
+      await onAssociate(picked);
+      notify.success(`'${picked.name}' was associated with this network security group.`, "Associate succeeded");
+      onClose();
+    } catch (e) { notify.error(e, "Failed to associate"); }
+    finally { setBusy(false); }
+  };
   return (
     <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
       <DialogSurface aria-label="Associate">
         <DialogBody>
-          <DialogTitle>Associate</DialogTitle>
-          <DialogContent><NotSimulated feature={`Picking an existing ${resourceType} to associate`} note="This lens does not build a standalone Network interfaces or Virtual networks console yet; associations made elsewhere (ARM/CLI) still show up in this list." /></DialogContent>
-          <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+          <DialogTitle>Associate {resourceType}</DialogTitle>
+          <DialogContent>
+            {loading ? <Spinner size="tiny" /> : items.length ? (
+              <Field label={`Choose a ${resourceType} with no network security group yet`}>
+                <Select value={choice} onChange={(_, d) => setChoice(d.value)} aria-label={resourceType}>
+                  <option value="">Select a {resourceType}</option>
+                  {items.map((r) => <option key={r.id} value={r.id}>{r.vnetName ? `${r.vnetName} / ${r.name}` : r.name}</option>)}
+                </Select>
+              </Field>
+            ) : <p>No {resourceType} without a network security group was found in this subscription.</p>}
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={!choice || busy} onClick={go}>Associate</Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </DialogActions>
         </DialogBody>
       </DialogSurface>
     </Dialog>
@@ -408,6 +494,7 @@ const nicVm = (r) => r.properties?.virtualMachine?.id;
 function NetworkInterfaces({ a }) {
   const { data, loading, error, reload } = useAsync(() => api.listNetworkInterfacesForNsg(a.id), [a.id]);
   const [assoc, setAssoc] = useState(false);
+  const candidates = useAsync(() => (assoc ? api.listUnassociatedNics() : Promise.resolve([])), [assoc]);
   return (
     <CapabilityContainer id="azure.nsgs.associations" title={`${a.name} | Network interfaces`}>
       <BrowseGrid
@@ -422,7 +509,9 @@ function NetworkInterfaces({ a }) {
           { key: "vm", label: "Virtual machine", value: (r) => (nicVm(r) ? parseId(nicVm(r)).name : "--") },
         ]}
       />
-      <AssociateGap open={assoc} onClose={() => setAssoc(false)} resourceType="network interface" />
+      <AssociateDialog open={assoc} onClose={() => setAssoc(false)} resourceType="network interface"
+        items={candidates.data || []} loading={candidates.loading}
+        onAssociate={async (nic) => { await api.associateNic(nic, a.id); reload(); }} />
     </CapabilityContainer>
   );
 }
@@ -430,6 +519,7 @@ function NetworkInterfaces({ a }) {
 function Subnets({ a }) {
   const { data, loading, error, reload } = useAsync(() => api.listSubnetsForNsg(a.id), [a.id]);
   const [assoc, setAssoc] = useState(false);
+  const candidates = useAsync(() => (assoc ? api.listUnassociatedSubnets() : Promise.resolve([])), [assoc]);
   return (
     <CapabilityContainer id="azure.nsgs.associations" title={`${a.name} | Subnets`}>
       <BrowseGrid
@@ -443,7 +533,9 @@ function Subnets({ a }) {
           { key: "vnet", label: "Virtual network", value: (r) => r.vnetName },
         ]}
       />
-      <AssociateGap open={assoc} onClose={() => setAssoc(false)} resourceType="subnet" />
+      <AssociateDialog open={assoc} onClose={() => setAssoc(false)} resourceType="subnet"
+        items={candidates.data || []} loading={candidates.loading}
+        onAssociate={async (subnet) => { await api.associateSubnet(subnet, a.id); reload(); }} />
     </CapabilityContainer>
   );
 }
@@ -547,6 +639,67 @@ function AddLockDialog({ open, onClose, onCreate }) {
         </DialogBody>
       </DialogSurface>
     </Dialog>
+  );
+}
+
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension
+// resource scoped to this NSG) — the same generic mechanism apim/cosmos's lenses use. Logs/
+// metrics are stored and validated exactly as the real resource requires, but never
+// delivered anywhere (core/capabilities/azure/nsgs.json azure.nsgs.monitoring). ──────────
+const DIAG_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9-._]{0,255}$/;
+function DiagnosticSettings({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listDiagnosticSettings(a.id), [a.id]);
+  const workspaces = useAsync(() => api.listWorkspaces(), []);
+  const [add, setAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [workspace, setWorkspace] = useState("");
+  const ws = workspaces.data || [];
+  return (
+    <CapabilityContainer id="azure.nsgs.monitoring" title={`${a.name} | Diagnostic settings`}>
+      <BrowseGrid
+        resourceName="diagnostic setting" rowKey={(r) => r.name} filterPlaceholder="Search diagnostic settings"
+        items={data || []} loading={loading} error={error} onRefresh={reload}
+        extraCommands={<ToolbarButton icon={<Add20Regular />} onClick={() => { setAdd(true); setWorkspace(ws[0]?.id || ""); }}>Add diagnostic setting</ToolbarButton>}
+        onDelete={async (sel) => {
+          for (const r of sel) await api.deleteDiagnosticSetting(a.id, r.name);
+          notify.success(`Deleted ${sel.length} diagnostic setting${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+          reload();
+        }}
+        csvName="diagnostic-settings.csv"
+        columns={[
+          { key: "name", label: "Diagnostic setting name" },
+          { key: "dest", label: "Destination details", value: (r) => (r.properties?.workspaceId ? "Log Analytics workspace" : r.properties?.storageAccountId ? "Storage account" : r.properties?.eventHubAuthorizationRuleId ? "Event hub" : "--") },
+          { key: "logs", label: "Log categories", value: (r) => (r.properties?.logs || []).filter((l) => l.enabled).length },
+          { key: "metrics", label: "Metric categories", value: (r) => (r.properties?.metrics || []).filter((m) => m.enabled).length },
+        ]}
+      />
+      {add && (
+        <section className="vy-section" style={{ marginTop: 16 }}>
+          <h3>Add diagnostic setting</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 480 }}>
+            <Field label="Diagnostic setting name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Diagnostic setting name" /></Field>
+            <Field label="Log Analytics workspace">
+              {ws.length ? (
+                <Select value={workspace} onChange={(_, d) => setWorkspace(d.value)} aria-label="Log Analytics workspace">
+                  {ws.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </Select>
+              ) : <p style={{ margin: 0 }}>No Log Analytics workspace yet. Create one in the Monitor service first.</p>}
+            </Field>
+          </div>
+          <div className="vy-cmdbar" style={{ marginTop: 12 }}>
+            <Button appearance="primary" disabled={!DIAG_ID_RE.test(name) || !workspace} onClick={async () => {
+              await api.putDiagnosticSetting(a.id, name, {
+                properties: { workspaceId: workspace, logs: [{ categoryGroup: "allLogs", enabled: true }], metrics: [{ category: "AllMetrics", enabled: true }] },
+              });
+              notify.success(`Diagnostic setting '${name}' was created.`, "Create succeeded");
+              setAdd(false); setName(""); reload();
+            }}>Save</Button>
+            <Button onClick={() => setAdd(false)}>Cancel</Button>
+          </div>
+        </section>
+      )}
+    </CapabilityContainer>
   );
 }
 

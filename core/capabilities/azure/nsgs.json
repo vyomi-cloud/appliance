@@ -47,10 +47,11 @@
  },
  "azure.nsgs.iam": {
   "title": "Access control (IAM)",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Microsoft.Authorization/roleAssignments is only simulated at subscription scope, so role assignments/roles/deny assignments/classic administrators scoped to a single network security group are an honest gap."
-  ]
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), and Check access / My access run the real wildcard + scope-inheritance + notActions + explicit-deny decision — all ENFORCED scoped to this network security group (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view); Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too). Deny assignments and Classic administrators remain an honest gap — Microsoft Entra Privileged Identity Management and the legacy Azure Service Management administrator list are not modelled."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.nsgs.tools": {
   "title": "Diagnose and solve problems, Tasks, Effective security rules, Support + Troubleshooting",
@@ -61,16 +62,17 @@
  },
  "azure.nsgs.monitoring": {
   "title": "Alerts, Diagnostic settings, Logs, NSG flow logs",
-  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Azure Monitor alert rules/diagnostic settings/flow logs for network security groups are not modelled."
-  ]
+   "Diagnostic settings (Microsoft.Insights/diagnosticSettings) is a real ARM extension resource scoped to this network security group: logs/metrics are stored and validated exactly as the real resource requires, but never actually delivered to the configured destination (workspace, storage account or event hub) — there is no agent/telemetry pipeline. Alerts, Logs and NSG flow logs for network security groups remain an honest gap."
+  ],
+  "tests": ["tests/conformance/test_azure_monitor_core.py", "tests/conformance/test_azure_arm_core.py"]
  },
  "azure.nsgs.associations": {
   "title": "Network interfaces, Subnets (NSG associations)",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "The Network interfaces and Subnets lists are real ARM reads (every Microsoft.Network/networkInterfaces and virtualNetworks/subnets resource in the subscription whose properties.networkSecurityGroup.id matches this network security group), so an association made via ARM/the CLI/another tool shows up here. The 'Associate' button itself is an honest gap: this lens does not yet build a standalone Network interfaces or Virtual networks console to pick an existing resource from."
+   "The Network interfaces and Subnets lists are real ARM reads (every Microsoft.Network/networkInterfaces and virtualNetworks/subnets resource in the subscription whose properties.networkSecurityGroup.id matches this network security group), so an association made via ARM/the CLI/another tool shows up here. The 'Associate' button now really works: it picks from every network interface/subnet in the subscription that has no network security group of its own yet (the same constraint the real portal's Associate dialog enforces) and sets its networkSecurityGroup over ARM."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  }

@@ -531,6 +531,27 @@ def run() -> int:
     _check("subnet carries its NSG association and address prefix",
            subnet_rec["properties"]["networkSecurityGroup"]["id"].lower() == nsg3.lower() and subnet_rec["properties"]["addressPrefix"] == "10.0.1.0/24")
 
+    # 22c. azure.nsgs.iam: Microsoft.Authorization/roleAssignments + checkAccess, both
+    # resource-scoped to the NSG itself (not just the resource-group/subscription scope
+    # section 29 below already covers) — the console's NSG "Access control (IAM) >
+    # Role assignments / Check access" tabs.
+    ra_nsg = f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleAssignments/ra-nsg3"
+    r = arm.handle("PUT", ra_nsg, {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "nsg-owner", "roleName": "Owner", "scope": nsg3}})
+    _check("role assignment scoped to the NSG itself created", r["status"] == 201)
+    r = arm.handle("GET", nsg3 + "/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    _check("NSG-scoped IAM list includes the NSG-scoped assignment", any(x["name"] == "ra-nsg3" for x in r["body"]["value"]))
+    r = arm.handle("GET", nsg2 + "/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    _check("a sibling NSG's IAM list excludes the other NSG's assignment", all(x["name"] != "ra-nsg3" for x in r["body"]["value"]))
+    r = arm.handle("POST", nsg3 + "/providers/Microsoft.Authorization/checkAccess", {"api-version": "2022-04-01"},
+                   {"principalId": "nsg-owner", "action": "Microsoft.Network/networkSecurityGroups/write"})
+    _check("checkAccess resource-scoped to the NSG: Owner can write",
+           r["body"]["value"][0]["accessDecision"] == "Allowed")
+    r = arm.handle("POST", nsg2 + "/providers/Microsoft.Authorization/checkAccess", {"api-version": "2022-04-01"},
+                   {"principalId": "nsg-owner", "action": "Microsoft.Network/networkSecurityGroups/write"})
+    _check("checkAccess resource-scoped: no access on a sibling NSG the assignment doesn't cover",
+           r["body"]["value"][0]["accessDecision"] == "NotAllowed")
+
     # 23. Microsoft.DocumentDB/databaseAccounts listKeys / listReadOnlyKeys /
     # listConnectionStrings / regenerateKey — the real Cosmos shape (not the generic
     # storage-style {"keys": [...]}), and a round-trip for the account itself.

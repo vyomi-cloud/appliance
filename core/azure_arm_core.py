@@ -322,6 +322,19 @@ def _role_assignment_marker(chain):
     return None
 
 
+def _check_access_marker(chain):
+    """Index of a re-entrant ``['providers', 'Microsoft.Authorization', 'checkAccess']``
+    marker in `chain`, same shape as `_role_assignment_marker` — i.e. POST .../<some
+    resource>/providers/Microsoft.Authorization/checkAccess, the decision call behind any
+    resource's own "Access control (IAM) > Check access / My access" tab (not just the
+    resource-group/subscription scope the dedicated branch above already handled)."""
+    for i in range(len(chain) - 2):
+        if (chain[i].lower() == "providers" and chain[i + 1].lower() == "microsoft.authorization"
+                and chain[i + 2].lower() == "checkaccess" and i + 3 == len(chain)):
+            return i
+    return None
+
+
 def _view(rec: dict) -> dict:
     return {k: v for k, v in rec.items() if not k.startswith("_")}
 
@@ -639,6 +652,20 @@ class AzureArm:
                      if r.get("_type", "").lower() == "microsoft.authorization/roleassignments"
                      and ((r.get("properties") or {}).get("scope") or "").rstrip("/").lower() in ancestors | {""}]
             return _ok({"value": items})
+
+        # Microsoft.Authorization/checkAccess, resource-scoped: same re-entrant shape as the
+        # roleAssignments READ above, generic over every catalog type — the decision call
+        # behind any resource's own "Check access" / "My access" tab (the dedicated branch
+        # near the top of this method only covers the resource-group/subscription scope).
+        check_marker = _check_access_marker(chain)
+        if check_marker is not None:
+            if method != "POST":
+                return _err(405, "MethodNotAllowed", "checkAccess is a POST-only action.")
+            stc, snames = [namespace], []
+            for n, token in enumerate(chain[:check_marker]):
+                (stc if n % 2 == 0 else snames).append(token)
+            scope_rid = _canonical_id(sub, rg, stc, snames)
+            return self._check_access(sub, scope_rid, payload)
 
         # ARM type path alternates type/name: providers/<ns>/<t1>/<n1>/<t2>/<n2>...
         type_chain = [namespace]
