@@ -954,7 +954,8 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         # Cosmos DB (keys, failoverPriorityChange), ACR credentials and deployment
         # cancel/redeploy are the shared core engine's (what Nano serves); VM power actions
         # stay here (they drive the real runtime).
-        if type_chain[0].lower() in ("microsoft.documentdb", "microsoft.containerregistry", "microsoft.resources"):
+        if type_chain[0].lower() in ("microsoft.documentdb", "microsoft.containerregistry", "microsoft.resources",
+                                     "microsoft.apimanagement"):
             payload = await _safe_json(request)
             out = core_arm()._arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid,
                                          payload, sub=sub, rg=rg)
@@ -1243,6 +1244,11 @@ def core_arm():
     arm.sub_names = _subscription_meta("names")   # Microsoft.Subscription/rename
     arm.sub_tags = _subscription_meta("tags")     # Microsoft.Resources/tags/default at subscription scope
     arm.providers = _subscription_meta("providers")   # resource provider (un)registration
+    try:   # APIM Key Vault named values (listValue) resolve against this space's Key Vault secrets
+        from core.appliance_stores import az_kv_secrets_store
+        arm.kv_secrets_store = az_kv_secrets_store()
+    except Exception:
+        pass
     try:                                          # Defender for Cloud's Kubernetes posture: the real Kubescape
         from providers import kubescape_runner    # CLI container, debounced in the background (never blocks)
         kubescape_runner.install()

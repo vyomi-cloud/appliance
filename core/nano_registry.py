@@ -130,4 +130,5 @@ def get() -> dict:
         _REG["logs"].lam_store, _REG["logs"].kinesis_store = _REG["compute"], _REG["kinesis"]   # real subscription-filter delivery
         _REG["cw"].logs_store = _REG["logs"]   # real log-based Contributor Insights rules
         _REG["msg"].logs_store = _REG["logs"]   # real SNS delivery-status logging (SQSSuccessFeedbackRoleArn/…)
+        _REG["az_arm"].kv_secrets_store = _REG["az_kvsec"]   # APIM Key Vault named values resolve against this space's KV secrets
     return _REG
