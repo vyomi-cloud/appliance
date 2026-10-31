@@ -1,6 +1,7 @@
-/* Connections — Summary / Networking / Security tabs. IP configuration and authorized
- * networks round-trip through instances.patch (stored, not enforced — see
- * core/capabilities/gcp/sql.json: gcp.sql.connections is "config_only"). */
+/* Connections — Summary / Networking / Security tabs. ipv4Enabled / privateNetwork round-trip
+ * through instances.patch and are ENFORCED on ipAddresses (Public IP off removes the PRIMARY
+ * address entirely); authorizedNetworks is stored but not enforced — see
+ * core/capabilities/gcp/sql.json: gcp.sql.connections is "limited". */
 import { useState } from "react";
 import { Box, Button, Checkbox, FormControlLabel, IconButton, Stack, Tab, Tabs, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";

@@ -266,6 +266,24 @@ def run() -> int:
                                 json.dumps({"restoreBackupContext": {"backupRunId": "999999"}}).encode())
     _check("restoreBackup unknown backup 404", bad_restore.status == 404)
 
+    # 14. Connections enforcement (gcp.sql.connections): ipConfiguration drives ipAddresses,
+    # not just stores it — a disabled Public IP really removes the PRIMARY address.
+    csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
+                  json.dumps({"name": "netdb"}).encode())
+    netdb = _jbody(csql.dispatch(st, "GET", PROJ + "/netdb", {}, {}, b""))
+    _check("default instance has a PRIMARY ip", any(a["type"] == "PRIMARY" for a in netdb["ipAddresses"]))
+    _check("default instance has no PRIVATE ip", not any(a["type"] == "PRIVATE" for a in netdb["ipAddresses"]))
+    csql.dispatch(st, "PATCH", PROJ + "/netdb", {}, {"content-type": "application/json"},
+                  json.dumps({"settings": {"ipConfiguration": {"ipv4Enabled": False}}}).encode())
+    netdb2 = _jbody(csql.dispatch(st, "GET", PROJ + "/netdb", {}, {}, b""))
+    _check("ipv4Enabled=False removes the PRIMARY ip", not any(a["type"] == "PRIMARY" for a in netdb2["ipAddresses"]))
+    csql.dispatch(st, "PATCH", PROJ + "/netdb", {}, {"content-type": "application/json"},
+                  json.dumps({"settings": {"ipConfiguration": {
+                      "privateNetwork": "projects/demo-proj/global/networks/default"}}}).encode())
+    netdb3 = _jbody(csql.dispatch(st, "GET", PROJ + "/netdb", {}, {}, b""))
+    _check("privateNetwork set adds a PRIVATE ip", any(a["type"] == "PRIVATE" for a in netdb3["ipAddresses"]))
+    _check("ipv4Enabled still False -> still no PRIMARY ip", not any(a["type"] == "PRIMARY" for a in netdb3["ipAddresses"]))
+
     print("\nRESULT: PASS — GCP Cloud SQL control-plane core conforms "
           "(native Cloud SQL Admin REST wire) on this substrate.")
     return 0
