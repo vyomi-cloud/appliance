@@ -4,35 +4,39 @@ import { restJson } from "../../../../common/wire.js";
 import { getProject } from "../../../project.js";
 
 const e = encodeURIComponent;
-const base = (p = getProject()) => `/v1/projects/${e(p)}/secrets`;
+// A REGIONAL secret lives under its own locations/{loc} path — a distinct resource
+// from a global (automatic / user-managed replication) secret, not just a filter on it.
+const base = (p = getProject(), location) => location
+  ? `/v1/projects/${e(p)}/locations/${e(location)}/secrets`
+  : `/v1/projects/${e(p)}/secrets`;
 
 export const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
 export const unb64 = (s) => decodeURIComponent(escape(atob(s)));
 
-export async function listSecrets() {
-  const r = await restJson("GET", base());
+export async function listSecrets(location) {
+  const r = await restJson("GET", base(undefined, location));
   return r.secrets || [];
 }
-export const getSecret = (name) => restJson("GET", `${base()}/${e(name)}`);
-export const createSecret = (secretId, body) => restJson("POST", base(), { query: { secretId }, body });
-export const patchSecret = (name, body, updateMask) => restJson("PATCH", `${base()}/${e(name)}`, { query: { updateMask }, body });
-export const deleteSecret = (name) => restJson("DELETE", `${base()}/${e(name)}`);
+export const getSecret = (name, location) => restJson("GET", `${base(undefined, location)}/${e(name)}`);
+export const createSecret = (secretId, body, location) => restJson("POST", base(undefined, location), { query: { secretId }, body });
+export const patchSecret = (name, body, updateMask, location) => restJson("PATCH", `${base(undefined, location)}/${e(name)}`, { query: { updateMask }, body });
+export const deleteSecret = (name, location) => restJson("DELETE", `${base(undefined, location)}/${e(name)}`);
 
-export async function listVersions(name) {
-  const r = await restJson("GET", `${base()}/${e(name)}/versions`);
+export async function listVersions(name, location) {
+  const r = await restJson("GET", `${base(undefined, location)}/${e(name)}/versions`);
   return r.versions || [];
 }
-export const addVersion = (name, dataUtf8) => restJson("POST", `${base()}/${e(name)}:addVersion`, { body: { payload: { data: b64(dataUtf8) } } });
-export const accessVersion = async (name, ver = "latest") => {
-  const r = await restJson("GET", `${base()}/${e(name)}/versions/${e(String(ver))}:access`);
+export const addVersion = (name, dataUtf8, location) => restJson("POST", `${base(undefined, location)}/${e(name)}:addVersion`, { body: { payload: { data: b64(dataUtf8) } } });
+export const accessVersion = async (name, ver = "latest", location) => {
+  const r = await restJson("GET", `${base(undefined, location)}/${e(name)}/versions/${e(String(ver))}:access`);
   return unb64(r.payload.data);
 };
-export const enableVersion = (name, ver) => restJson("POST", `${base()}/${e(name)}/versions/${e(String(ver))}:enable`, { body: {} });
-export const disableVersion = (name, ver) => restJson("POST", `${base()}/${e(name)}/versions/${e(String(ver))}:disable`, { body: {} });
-export const destroyVersion = (name, ver) => restJson("POST", `${base()}/${e(name)}/versions/${e(String(ver))}:destroy`, { body: {} });
+export const enableVersion = (name, ver, location) => restJson("POST", `${base(undefined, location)}/${e(name)}/versions/${e(String(ver))}:enable`, { body: {} });
+export const disableVersion = (name, ver, location) => restJson("POST", `${base(undefined, location)}/${e(name)}/versions/${e(String(ver))}:disable`, { body: {} });
+export const destroyVersion = (name, ver, location) => restJson("POST", `${base(undefined, location)}/${e(name)}/versions/${e(String(ver))}:destroy`, { body: {} });
 
-export const getIamPolicy = (name) => restJson("GET", `${base()}/${e(name)}:getIamPolicy`);
-export const setIamPolicy = (name, policy) => restJson("POST", `${base()}/${e(name)}:setIamPolicy`, { body: { policy } });
+export const getIamPolicy = (name, location) => restJson("GET", `${base(undefined, location)}/${e(name)}:getIamPolicy`);
+export const setIamPolicy = (name, policy, location) => restJson("POST", `${base(undefined, location)}/${e(name)}:setIamPolicy`, { body: { policy } });
 
 /* Logs tab: the native Cloud Logging v2 entries:list the real console's audit log reads —
  * Secret Manager lifecycle events are written there by the backend (core/aws_wire_router.py). */
@@ -48,12 +52,16 @@ export async function listLogs(name) {
 
 export const shortName = (resourceName) => resourceName.split("/secrets/")[1];
 export const versionNumber = (resourceName) => resourceName.split("/versions/")[1];
+export const isRegional = (secret) => secret.name.includes("/locations/");
+export const regionalLocation = (secret) => secret.name.match(/\/locations\/([^/]+)\/secrets\//)?.[1] || "";
 
 export function encryptionLabel(secret) {
+  if (isRegional(secret)) return secret.customerManagedEncryption?.kmsKeyName ? "Customer-managed" : "Google-managed";
   const replicas = secret.replication?.userManaged?.replicas || [];
   return replicas.some((r) => r.customerManagedEncryption?.kmsKeyName) ? "Customer-managed" : "Google-managed";
 }
 export function locationLabel(secret) {
+  if (isRegional(secret)) return regionalLocation(secret);
   const um = secret.replication?.userManaged;
   if (!um) return "Automatic";
   const locs = (um.replicas || []).map((r) => r.location).filter(Boolean);

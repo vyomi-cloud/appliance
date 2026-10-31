@@ -597,6 +597,11 @@ def mount_gcp_secrets_kms(app) -> None:
         for v in ("/v1", "/v1beta1"):
             app.add_route(v + "/projects/{project}/secrets", _secrets, methods=methods)
             app.add_route(v + "/projects/{project}/secrets/{rest:path}", _secrets, methods=methods)
+            # REGIONAL secrets (projects/{p}/locations/{l}/secrets…) — a distinct resource
+            # from the global one above, same core (core/gcp_secretmanager_core.py dispatch
+            # branches on the extra /locations/{l} segment).
+            app.add_route(v + "/projects/{project}/locations/{loc}/secrets", _secrets, methods=methods)
+            app.add_route(v + "/projects/{project}/locations/{loc}/secrets/{rest:path}", _secrets, methods=methods)
     if is_unified("gcp_kms"):
         app.add_route("/v1/projects/{project}/locations/{loc}/keyRings", _kms, methods=methods)
         app.add_route("/v1/projects/{project}/locations/{loc}/keyRings/{rest:path}", _kms, methods=methods)

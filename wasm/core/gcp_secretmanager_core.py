@@ -145,17 +145,20 @@ def _err(status: int, message: str, token: str | None = None) -> GcpResponse:
     return GcpResponse(status=status, body=json.dumps(body).encode())
 
 
-# ── storage key: namespace secrets by project inside the KvStore ───────────
-def _key(project: str, secret_id: str) -> str:
-    return f"{project}/{secret_id}"
+# ── storage key: namespace secrets by project (+ location for a REGIONAL secret,
+# projects/{p}/locations/{l}/secrets/... — a distinct resource from the global
+# projects/{p}/secrets/... one) inside the KvStore ──────────────────────────
+def _key(project: str, secret_id: str, location: str | None = None) -> str:
+    return f"{project}/locations/{location}/{secret_id}" if location else f"{project}/{secret_id}"
 
 
-def _resource_name(project: str, secret_id: str) -> str:
-    return f"projects/{project}/secrets/{secret_id}"
+def _resource_name(project: str, secret_id: str, location: str | None = None) -> str:
+    return (f"projects/{project}/locations/{location}/secrets/{secret_id}" if location
+            else f"projects/{project}/secrets/{secret_id}")
 
 
-def _version_name(project: str, secret_id: str, ver: int) -> str:
-    return f"projects/{project}/secrets/{secret_id}/versions/{ver}"
+def _version_name(project: str, secret_id: str, ver: int, location: str | None = None) -> str:
+    return f"{_resource_name(project, secret_id, location)}/versions/{ver}"
 
 
 # ── resource views ────────────────────────────────────────────────────────
@@ -163,23 +166,30 @@ _OPTIONAL_SECRET_FIELDS = ("labels", "annotations", "rotation", "expireTime", "t
 
 
 def _secret_view(secret: dict) -> dict:
-    return {
-        "name": secret["name"],
-        "createTime": secret["createTime"],
-        "replication": secret.get("replication", {"automatic": {}}),
-        **{k: secret[k] for k in _OPTIONAL_SECRET_FIELDS if secret.get(k)},
-        "etag": secret.get("etag", "\"0\""),
-    }
+    # A REGIONAL secret (secret["location"] set) has no multi-location replication
+    # policy — it IS the one location named in its resource name — so it carries
+    # customerManagedEncryption directly instead of global's replication block.
+    view = {"name": secret["name"], "createTime": secret["createTime"]}
+    if secret.get("location"):
+        if secret.get("customerManagedEncryption"):
+            view["customerManagedEncryption"] = secret["customerManagedEncryption"]
+    else:
+        view["replication"] = secret.get("replication", {"automatic": {}})
+    view.update({k: secret[k] for k in _OPTIONAL_SECRET_FIELDS if secret.get(k)})
+    view["etag"] = secret.get("etag", "\"0\"")
+    return view
 
 
-def _version_view(project: str, secret_id: str, ver: int, v: dict) -> dict:
-    return {
-        "name": _version_name(project, secret_id, ver),
+def _version_view(project: str, secret_id: str, ver: int, v: dict, location: str | None = None) -> dict:
+    view = {
+        "name": _version_name(project, secret_id, ver, location),
         "createTime": v["createTime"],
         "state": v["state"],
-        "replicationStatus": {"automatic": {}},
         "etag": v.get("etag", "\"0\""),
     }
+    if location is None:
+        view["replicationStatus"] = {"automatic": {}}
+    return view
 
 
 def _norm(secret: dict | None) -> dict | None:
@@ -347,6 +357,21 @@ def _validate_replication(replication) -> str | None:
     return None
 
 
+def _validate_cmek(cmek, location: str) -> str | None:
+    """A REGIONAL secret's top-level customerManagedEncryption (it has no replicas to
+    check locations against — just its own single location)."""
+    if not cmek:
+        return None
+    name = cmek.get("kmsKeyName") or ""
+    m = _CMEK_RE.match(name)
+    if not m:
+        return f"customerManagedEncryption.kmsKeyName '{name}' is not a valid CryptoKey resource name."
+    if m.group(1) != location:
+        return (f"customerManagedEncryption.kmsKeyName location '{m.group(1)}' must match "
+                f"the secret's location '{location}'.")
+    return None
+
+
 def _validate_rotation(rotation, topics) -> str | None:
     if not rotation:
         return None
@@ -403,17 +428,24 @@ def _resolve_version(secret: dict, ver_ref: str) -> int | None:
 
 
 # ── operations ─────────────────────────────────────────────────────────────
-def _create_secret(store: KvStore, project: str, secret_id: str, body: dict,
+def _create_secret(store: KvStore, project: str, secret_id: str, body: dict, location: str | None = None,
                    notifier=None, logger=None) -> GcpResponse:
     if not secret_id:
         return _err(400, "secretId is required (query parameter).")
-    key = _key(project, secret_id)
+    key = _key(project, secret_id, location)
     if store.secret_exists(key):
-        return _err(409, f"Secret [{_resource_name(project, secret_id)}] already exists.")
-    replication = body.get("replication") or {"automatic": {}}
-    rep_err = _validate_replication(replication)
-    if rep_err:
-        return _err(400, rep_err)
+        return _err(409, f"Secret [{_resource_name(project, secret_id, location)}] already exists.")
+    replication, cmek = None, None
+    if location:
+        cmek = body.get("customerManagedEncryption")
+        cmek_err = _validate_cmek(cmek, location)
+        if cmek_err:
+            return _err(400, cmek_err)
+    else:
+        replication = body.get("replication") or {"automatic": {}}
+        rep_err = _validate_replication(replication)
+        if rep_err:
+            return _err(400, rep_err)
     topics = body.get("topics") or []
     rotation = body.get("rotation") or {}
     rot_err = _validate_rotation(rotation, topics)
@@ -425,11 +457,13 @@ def _create_secret(store: KvStore, project: str, secret_id: str, body: dict,
         return _err(400, alias_err)
     expire_time = body.get("expireTime") or (_ttl_to_expire_time(body["ttl"]) if body.get("ttl") else None)
     secret = {
-        "name": _resource_name(project, secret_id),
+        "name": _resource_name(project, secret_id, location),
         "project": project,
         "secretId": secret_id,
+        "location": location,
         "createTime": _now(),
-        "replication": replication,
+        **({"replication": replication} if location is None else {}),
+        **({"customerManagedEncryption": cmek} if location and cmek else {}),
         "labels": body.get("labels") or {},
         "annotations": body.get("annotations") or {},
         "rotation": rotation,
@@ -447,12 +481,12 @@ def _create_secret(store: KvStore, project: str, secret_id: str, body: dict,
     return _json(200, _secret_view(secret))
 
 
-def _add_version(store: KvStore, project: str, secret_id: str, body: dict,
+def _add_version(store: KvStore, project: str, secret_id: str, body: dict, location: str | None = None,
                  headers=None, notifier=None, logger=None) -> GcpResponse:
-    key = _key(project, secret_id)
+    key = _key(project, secret_id, location)
     secret = _get(store, key, logger)
     if secret is None:
-        return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
+        return _err(404, f"Secret [{_resource_name(project, secret_id, location)}] not found.")
     denied = _require(secret, headers, "secretmanager.versions.add")
     if denied:
         return denied
@@ -472,39 +506,44 @@ def _add_version(store: KvStore, project: str, secret_id: str, body: dict,
     store.persist()
     _notify(notifier, secret, "SECRET_VERSION_ADD")
     _log(logger, secret["name"], "SECRET_VERSION_ADD", f"Version {ver} added to [{secret['name']}].")
-    return _json(200, _version_view(project, secret_id, ver, secret["versions"][ver]))
+    return _json(200, _version_view(project, secret_id, ver, secret["versions"][ver], location))
 
 
-def _access_version(store: KvStore, project: str, secret_id: str, ver_ref: str,
+def _access_version(store: KvStore, project: str, secret_id: str, ver_ref: str, location: str | None = None,
                     headers=None, logger=None) -> GcpResponse:
-    key = _key(project, secret_id)
+    key = _key(project, secret_id, location)
     secret = _get(store, key, logger)
     if secret is None:
-        return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
+        return _err(404, f"Secret [{_resource_name(project, secret_id, location)}] not found.")
     denied = _require(secret, headers, "secretmanager.versions.access")
     if denied:
         return denied
     ver = _resolve_version(secret, ver_ref)
     if ver is None:
-        return _err(404, f"Secret Version [{_resource_name(project, secret_id)}/versions/{ver_ref}] not found.")
+        return _err(404, f"Secret Version [{_resource_name(project, secret_id, location)}/versions/{ver_ref}] not found.")
     v = secret["versions"][ver]
     if v["state"] == DESTROYED:
-        return _err(400, f"Secret Version [{_version_name(project, secret_id, ver)}] is destroyed.",
+        return _err(400, f"Secret Version [{_version_name(project, secret_id, ver, location)}] is destroyed.",
                     token="FAILED_PRECONDITION")
     if v["state"] == DISABLED:
-        return _err(400, f"Secret Version [{_version_name(project, secret_id, ver)}] is disabled.",
+        return _err(400, f"Secret Version [{_version_name(project, secret_id, ver, location)}] is disabled.",
                     token="FAILED_PRECONDITION")
     return _json(200, {
-        "name": _version_name(project, secret_id, ver),
+        "name": _version_name(project, secret_id, ver, location),
         "payload": {"data": v["data"]},
     })
 
 
-def _list_secrets(store: KvStore, project: str, logger=None) -> GcpResponse:
-    prefix = f"{project}/"
+def _list_secrets(store: KvStore, project: str, location: str | None = None, logger=None) -> GcpResponse:
+    # A global list (location=None) must not pick up REGIONAL secrets, which nest
+    # under "<project>/locations/<loc>/<id>" — a global secret_id can't contain "/",
+    # so an extra "/" in the remainder after the prefix means "regional, skip it".
+    prefix = _key(project, "", location)
     secrets = []
     for k in list(store.names()):
         if not k.startswith(prefix):
+            continue
+        if location is None and "/" in k[len(prefix):]:
             continue
         s = _get(store, k, logger)
         if s is not None:
@@ -512,21 +551,21 @@ def _list_secrets(store: KvStore, project: str, logger=None) -> GcpResponse:
     return _json(200, {"secrets": secrets, "totalSize": len(secrets)})
 
 
-def _list_versions(store: KvStore, project: str, secret_id: str, logger=None) -> GcpResponse:
-    key = _key(project, secret_id)
+def _list_versions(store: KvStore, project: str, secret_id: str, location: str | None = None, logger=None) -> GcpResponse:
+    key = _key(project, secret_id, location)
     secret = _get(store, key, logger)
     if secret is None:
-        return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
-    versions = [_version_view(project, secret_id, n, secret["versions"][n])
+        return _err(404, f"Secret [{_resource_name(project, secret_id, location)}] not found.")
+    versions = [_version_view(project, secret_id, n, secret["versions"][n], location)
                 for n in sorted(secret["versions"], reverse=True)]
     return _json(200, {"versions": versions, "totalSize": len(versions)})
 
 
-def _get_secret(store: KvStore, project: str, secret_id: str, logger=None) -> GcpResponse:
-    key = _key(project, secret_id)
+def _get_secret(store: KvStore, project: str, secret_id: str, location: str | None = None, logger=None) -> GcpResponse:
+    key = _key(project, secret_id, location)
     secret = _get(store, key, logger)
     if secret is None:
-        return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
+        return _err(404, f"Secret [{_resource_name(project, secret_id, location)}] not found.")
     return _json(200, _secret_view(secret))
 
 
@@ -534,17 +573,19 @@ _PATCHABLE_FIELDS = ("labels", "annotations", "rotation", "expireTime", "ttl", "
 
 
 def _update_secret(store: KvStore, project: str, secret_id: str, body: dict, update_mask: str,
-                   headers=None, logger=None) -> GcpResponse:
-    key = _key(project, secret_id)
+                   location: str | None = None, headers=None, logger=None) -> GcpResponse:
+    key = _key(project, secret_id, location)
     secret = _get(store, key, logger)
     if secret is None:
-        return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
+        return _err(404, f"Secret [{_resource_name(project, secret_id, location)}] not found.")
     denied = _require(secret, headers, "secretmanager.secrets.update")
     if denied:
         return denied
     fields = [f.strip() for f in update_mask.split(",") if f.strip()] if update_mask else list(body.keys())
     if "replication" in fields:
         return _err(400, "The replication policy for a secret cannot be changed after it is created.")
+    if "customerManagedEncryption" in fields:
+        return _err(400, "The encryption configuration for a secret cannot be changed after it is created.")
     new_rotation = body["rotation"] if "rotation" in fields and "rotation" in body else secret.get("rotation", {})
     new_topics = body["topics"] if "topics" in fields and "topics" in body else secret.get("topics", [])
     rot_err = _validate_rotation(new_rotation, new_topics)
@@ -569,11 +610,12 @@ def _update_secret(store: KvStore, project: str, secret_id: str, body: dict, upd
     return _json(200, _secret_view(secret))
 
 
-def _delete_secret(store: KvStore, project: str, secret_id: str, headers=None, logger=None) -> GcpResponse:
-    key = _key(project, secret_id)
+def _delete_secret(store: KvStore, project: str, secret_id: str, location: str | None = None,
+                   headers=None, logger=None) -> GcpResponse:
+    key = _key(project, secret_id, location)
     secret = _get(store, key, logger)
     if secret is None:
-        return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
+        return _err(404, f"Secret [{_resource_name(project, secret_id, location)}] not found.")
     denied = _require(secret, headers, "secretmanager.secrets.delete")
     if denied:
         return denied
@@ -597,20 +639,20 @@ _STATE_EVENT = {
 
 
 def _set_version_state(store: KvStore, project: str, secret_id: str, ver_ref: str, new_state: str,
-                       headers=None, notifier=None, logger=None) -> GcpResponse:
-    key = _key(project, secret_id)
+                       location: str | None = None, headers=None, notifier=None, logger=None) -> GcpResponse:
+    key = _key(project, secret_id, location)
     secret = _get(store, key, logger)
     if secret is None:
-        return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
+        return _err(404, f"Secret [{_resource_name(project, secret_id, location)}] not found.")
     denied = _require(secret, headers, _STATE_PERM[new_state])
     if denied:
         return denied
     ver = _resolve_version(secret, ver_ref)
     if ver is None:
-        return _err(404, f"Secret Version [{_resource_name(project, secret_id)}/versions/{ver_ref}] not found.")
+        return _err(404, f"Secret Version [{_resource_name(project, secret_id, location)}/versions/{ver_ref}] not found.")
     v = secret["versions"][ver]
     if v["state"] == DESTROYED and new_state != DESTROYED:
-        return _err(400, f"Secret Version [{_version_name(project, secret_id, ver)}] is destroyed.",
+        return _err(400, f"Secret Version [{_version_name(project, secret_id, ver, location)}] is destroyed.",
                     token="FAILED_PRECONDITION")
     if new_state == DESTROYED:
         v["data"] = None  # payload is wiped on destroy
@@ -619,24 +661,24 @@ def _set_version_state(store: KvStore, project: str, secret_id: str, ver_ref: st
     store.persist()
     _notify(notifier, secret, _STATE_EVENT[new_state])
     _log(logger, secret["name"], _STATE_EVENT[new_state], f"Version {ver} of [{secret['name']}] set to {new_state}.")
-    return _json(200, _version_view(project, secret_id, ver, v))
+    return _json(200, _version_view(project, secret_id, ver, v, location))
 
 
 # ── IAM on a secret ──────────────────────────────────────────────────────────
-def _get_iam_policy(store: KvStore, project: str, secret_id: str, logger=None) -> GcpResponse:
-    key = _key(project, secret_id)
+def _get_iam_policy(store: KvStore, project: str, secret_id: str, location: str | None = None, logger=None) -> GcpResponse:
+    key = _key(project, secret_id, location)
     secret = _get(store, key, logger)
     if secret is None:
-        return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
+        return _err(404, f"Secret [{_resource_name(project, secret_id, location)}] not found.")
     return _json(200, secret.get("iamPolicy") or _default_policy())
 
 
-def _set_iam_policy(store: KvStore, project: str, secret_id: str, body: dict,
+def _set_iam_policy(store: KvStore, project: str, secret_id: str, body: dict, location: str | None = None,
                     headers=None, logger=None) -> GcpResponse:
-    key = _key(project, secret_id)
+    key = _key(project, secret_id, location)
     secret = _get(store, key, logger)
     if secret is None:
-        return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
+        return _err(404, f"Secret [{_resource_name(project, secret_id, location)}] not found.")
     denied = _require(secret, headers, "secretmanager.secrets.setIamPolicy")
     if denied:
         return denied
@@ -653,12 +695,12 @@ def _set_iam_policy(store: KvStore, project: str, secret_id: str, body: dict,
     return _json(200, policy)
 
 
-def _test_iam_permissions(store: KvStore, project: str, secret_id: str, body: dict,
+def _test_iam_permissions(store: KvStore, project: str, secret_id: str, body: dict, location: str | None = None,
                           headers=None, logger=None) -> GcpResponse:
-    key = _key(project, secret_id)
+    key = _key(project, secret_id, location)
     secret = _get(store, key, logger)
     if secret is None:
-        return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
+        return _err(404, f"Secret [{_resource_name(project, secret_id, location)}] not found.")
     requested = [p for p in (body.get("permissions") or []) if isinstance(p, str)]
     principal = _principal(headers)
     bindings = (secret.get("iamPolicy") or {}).get("bindings") or []
@@ -700,71 +742,84 @@ def dispatch(store: KvStore, method: str, path: str,
 
     segs = [s for s in p.split("/") if s != ""]
 
-    # Expect: projects/{p}/secrets[/{s}[/versions[/{v}]]]
-    if len(segs) < 3 or segs[0] != "projects" or segs[2] != "secrets":
+    # Expect: projects/{p}/secrets[/{s}[/versions[/{v}]]]  (global) OR
+    #         projects/{p}/locations/{l}/secrets[/{s}[/versions[/{v}]]]  (REGIONAL —
+    #         a distinct resource, scoped to exactly the one named location).
+    if len(segs) < 3 or segs[0] != "projects":
         return _err(404, f"Unknown path: {path}")
     project = segs[1]
+    location: str | None = None
+    rest = segs[2:]
+    if len(rest) >= 3 and rest[0] == "locations" and rest[2] == "secrets":
+        location = rest[1]
+        rest = rest[3:]
+    elif rest and rest[0] == "secrets":
+        rest = rest[1:]
+    else:
+        return _err(404, f"Unknown path: {path}")
 
-    # ---- secrets collection: projects/{p}/secrets ----
-    if len(segs) == 3:
+    # ---- secrets collection ----
+    if len(rest) == 0:
         if method == "POST":
             secret_id = (query.get("secretId") or query.get("secret_id")
                          or payload.get("secretId") or "")
-            return _create_secret(store, project, secret_id, payload, notifier=notifier, logger=logger)
+            return _create_secret(store, project, secret_id, payload, location=location,
+                                  notifier=notifier, logger=logger)
         if method == "GET":
-            return _list_secrets(store, project, logger=logger)
+            return _list_secrets(store, project, location=location, logger=logger)
         return _err(400, f"Unsupported method {method} on secrets collection.")
 
-    secret_id = segs[3]
+    secret_id = rest[0]
 
-    # ---- single secret + custom methods: projects/{p}/secrets/{s}[:verb] ----
-    if len(segs) == 4:
+    # ---- single secret + custom methods: .../secrets/{s}[:verb] ----
+    if len(rest) == 1:
         if verb == "addVersion":
-            return _add_version(store, project, secret_id, payload, headers=headers, notifier=notifier, logger=logger)
+            return _add_version(store, project, secret_id, payload, location=location,
+                                headers=headers, notifier=notifier, logger=logger)
         if verb == "getIamPolicy":
-            return _get_iam_policy(store, project, secret_id, logger=logger)
+            return _get_iam_policy(store, project, secret_id, location=location, logger=logger)
         if verb == "setIamPolicy":
-            return _set_iam_policy(store, project, secret_id, payload, headers=headers, logger=logger)
+            return _set_iam_policy(store, project, secret_id, payload, location=location, headers=headers, logger=logger)
         if verb == "testIamPermissions":
-            return _test_iam_permissions(store, project, secret_id, payload, headers=headers, logger=logger)
+            return _test_iam_permissions(store, project, secret_id, payload, location=location, headers=headers, logger=logger)
         if method == "GET":
-            return _get_secret(store, project, secret_id, logger=logger)
+            return _get_secret(store, project, secret_id, location=location, logger=logger)
         if method == "PATCH":
             return _update_secret(store, project, secret_id, payload, query.get("updateMask") or "",
-                                  headers=headers, logger=logger)
+                                  location=location, headers=headers, logger=logger)
         if method == "DELETE":
-            return _delete_secret(store, project, secret_id, headers=headers, logger=logger)
+            return _delete_secret(store, project, secret_id, location=location, headers=headers, logger=logger)
         return _err(400, f"Unsupported operation on secret ({method} :{verb}).")
 
-    # ---- versions collection: projects/{p}/secrets/{s}/versions ----
-    if len(segs) == 5 and segs[4] == "versions":
+    # ---- versions collection: .../secrets/{s}/versions ----
+    if len(rest) == 2 and rest[1] == "versions":
         if method == "GET":
-            return _list_versions(store, project, secret_id, logger=logger)
+            return _list_versions(store, project, secret_id, location=location, logger=logger)
         return _err(400, f"Unsupported method {method} on versions collection.")
 
-    # ---- single version: projects/{p}/secrets/{s}/versions/{v} ----
-    if len(segs) == 6 and segs[4] == "versions":
-        ver_ref = segs[5]
+    # ---- single version: .../secrets/{s}/versions/{v} ----
+    if len(rest) == 3 and rest[1] == "versions":
+        ver_ref = rest[2]
         if verb == "access":
-            return _access_version(store, project, secret_id, ver_ref, headers=headers, logger=logger)
+            return _access_version(store, project, secret_id, ver_ref, location=location, headers=headers, logger=logger)
         if verb == "destroy":
-            return _set_version_state(store, project, secret_id, ver_ref, DESTROYED,
+            return _set_version_state(store, project, secret_id, ver_ref, DESTROYED, location=location,
                                       headers=headers, notifier=notifier, logger=logger)
         if verb == "disable":
-            return _set_version_state(store, project, secret_id, ver_ref, DISABLED,
+            return _set_version_state(store, project, secret_id, ver_ref, DISABLED, location=location,
                                       headers=headers, notifier=notifier, logger=logger)
         if verb == "enable":
-            return _set_version_state(store, project, secret_id, ver_ref, ENABLED,
+            return _set_version_state(store, project, secret_id, ver_ref, ENABLED, location=location,
                                       headers=headers, notifier=notifier, logger=logger)
         if method == "GET":
-            key = _key(project, secret_id)
+            key = _key(project, secret_id, location)
             secret = _get(store, key, logger)
             if secret is None:
-                return _err(404, f"Secret [{_resource_name(project, secret_id)}] not found.")
+                return _err(404, f"Secret [{_resource_name(project, secret_id, location)}] not found.")
             ver = _resolve_version(secret, ver_ref)
             if ver is None:
-                return _err(404, f"Secret Version [{_resource_name(project, secret_id)}/versions/{ver_ref}] not found.")
-            return _json(200, _version_view(project, secret_id, ver, secret["versions"][ver]))
+                return _err(404, f"Secret Version [{_resource_name(project, secret_id, location)}/versions/{ver_ref}] not found.")
+            return _json(200, _version_view(project, secret_id, ver, secret["versions"][ver], location))
         return _err(400, f"Unsupported operation on version ({method} :{verb}).")
 
     return _err(404, f"Unknown path: {path}")

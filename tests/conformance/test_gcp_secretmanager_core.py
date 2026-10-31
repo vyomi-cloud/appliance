@@ -272,6 +272,66 @@ def run() -> int:
     sm.dispatch(st, "GET", f"{base}/exp-logged", {}, {}, b"", logger=lambda n, e, m: exp_logged.append(e))
     _check("logger fired on auto-expire", "SECRET_EXPIRE" in exp_logged)
 
+    # 15. REGIONAL secrets (v4 DEPTH): projects/{p}/locations/{l}/secrets — a distinct
+    # resource from the global one above, with no replication policy (it IS the one
+    # location) but the same version lifecycle, labels, rotation, IAM and logging.
+    rbase = f"/v1/projects/{PROJECT}/locations/us-east1/secrets"
+    rcreate = sm.dispatch(st, "POST", rbase, {"secretId": "db-password"}, {}, json.dumps({}).encode())
+    _check("regional create 200", rcreate.status == 200)
+    rcb = _jbody(rcreate)
+    _check("regional create name includes location",
+           rcb["name"] == f"projects/{PROJECT}/locations/us-east1/secrets/db-password")
+    _check("regional create has no replication field", "replication" not in rcb)
+    # Same secretId as the global secret deleted earlier (step 6) — distinct resource space.
+    gcreate = sm.dispatch(st, "GET", base, {}, {}, b"")
+    _check("regional secret absent from the GLOBAL list",
+           not any(s["name"].endswith("/locations/us-east1/secrets/db-password") for s in _jbody(gcreate)["secrets"]))
+    rlist = sm.dispatch(st, "GET", rbase, {}, {}, b"")
+    _check("regional list totalSize 1", _jbody(rlist)["totalSize"] == 1)
+
+    rav = sm.dispatch(st, "POST", f"{rbase}/db-password:addVersion", {}, {},
+                      json.dumps({"payload": {"data": _b64(b"regional-v1")}}).encode())
+    _check("regional addVersion name has location", _jbody(rav)["name"] ==
+           f"projects/{PROJECT}/locations/us-east1/secrets/db-password/versions/1")
+    rac = sm.dispatch(st, "GET", f"{rbase}/db-password/versions/latest:access", {}, {}, b"")
+    _check("regional access round-trip", base64.b64decode(_jbody(rac)["payload"]["data"]) == b"regional-v1")
+
+    # Bad / mismatched CMEK rejected the same way global's replication validation is.
+    rbad = sm.dispatch(st, "POST", rbase, {"secretId": "bad-cmek"}, {},
+                       json.dumps({"customerManagedEncryption": {"kmsKeyName": "not-a-key"}}).encode())
+    _check("regional bad CMEK name -> 400", rbad.status == 400)
+    rmismatch = sm.dispatch(st, "POST", rbase, {"secretId": "mismatch-cmek"}, {}, json.dumps({
+        "customerManagedEncryption": {"kmsKeyName": f"projects/{PROJECT}/locations/us-west1/keyRings/r/cryptoKeys/k"},
+    }).encode())
+    _check("regional CMEK location mismatch -> 400", rmismatch.status == 400)
+    rgood = sm.dispatch(st, "POST", rbase, {"secretId": "good-cmek"}, {}, json.dumps({
+        "customerManagedEncryption": {"kmsKeyName": f"projects/{PROJECT}/locations/us-east1/keyRings/r/cryptoKeys/k"},
+    }).encode())
+    _check("regional valid CMEK -> 200", rgood.status == 200)
+    _check("regional CMEK echoed", "customerManagedEncryption" in _jbody(rgood))
+    rimmut = sm.dispatch(st, "PATCH", f"{rbase}/good-cmek", {}, {},
+                        json.dumps({"customerManagedEncryption": {"kmsKeyName": "x"}}).encode())
+    _check("regional CMEK immutable on patch -> 400", rimmut.status == 400)
+
+    # Permissions + delete, scoped to the regional resource.
+    rdenied = sm.dispatch(st, "GET", f"{rbase}/db-password/versions/latest:access", {},
+                          {"X-Cloudlearn-Principal": "bob@example.com"}, b"")
+    rpol = sm.dispatch(st, "POST", f"{rbase}/db-password:setIamPolicy", {}, {}, json.dumps({
+        "policy": {"bindings": [{"role": "roles/secretmanager.secretAccessor", "members": ["user:bob@example.com"]}]},
+    }).encode())
+    _check("regional setIamPolicy 200", rpol.status == 200)
+    rallowed = sm.dispatch(st, "GET", f"{rbase}/db-password/versions/latest:access", {},
+                           {"X-Cloudlearn-Principal": "bob@example.com"}, b"")
+    _check("regional access allowed after grant", rallowed.status == 200)
+
+    rdel = sm.dispatch(st, "DELETE", f"{rbase}/db-password", {}, {}, b"")
+    _check("regional delete 200", rdel.status == 200)
+    rmiss = sm.dispatch(st, "GET", f"{rbase}/db-password", {}, {}, b"")
+    _check("regional deleted secret get -> 404", rmiss.status == 404)
+    # The global secret namespace is untouched by the regional delete.
+    gstill = sm.dispatch(st, "GET", base, {}, {}, b"")
+    _check("global list unaffected by regional delete", _jbody(gstill)["totalSize"] >= 1)
+
     print("\nGCP Secret Manager core conformance: ALL GREEN")
     return 0
 
