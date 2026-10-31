@@ -1334,17 +1334,17 @@
     .kc-open { color: #2563eb !important; border-color: #2563eb !important; background: #fff !important; }
 
     /* panels (Active spaces, Health sections, Knowledge Center groups, SDK & CLI usage) */
-    #spaces-card, #stats-card, #host-util-card, #svc-status-card, #view-kc .kc-panel, #view-usage .u-panel {
-      background: #fff !important; border: 1px solid #e4e7ec !important;
+    #spaces-card, #stats-card, #host-util-card, #svc-status-card, #view-kc .kc-panel, #view-usage .u-panel, #view-api .api-group {
+      background: #f4f5f7 !important; border: 1px solid #e4e7ec !important;
       box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 6px 16px rgba(16,24,40,.06) !important;
     }
     #spaces-card > .sc-head, #stats-card > .sc-head, #host-util-card > .sc-head, #svc-status-card > .sc-head,
-    #view-kc .kc-panel > .sc-head, #view-usage .u-panel > .sc-head { border-bottom-color: #e4e7ec !important; }
+    #view-kc .kc-panel > .sc-head, #view-usage .u-panel > .sc-head, #view-api .api-group > .api-tag-head { border-bottom-color: #e4e7ec !important; }
 
     /* tiles inside panels */
     #stats-card .pie-card, #host-util-card .stat-card, #vyomi-services-mount > div:last-child > div,
-    #view-kc .kct, #view-kc .kct.kct-pack, #view-usage .u-card { background: #f8fafc !important; border: 1px solid #eef0f3 !important; }
-    #view-kc .kct:hover { background: #f2f4f7 !important; }
+    #view-kc .kct, #view-kc .kct.kct-pack, #view-usage .u-card { background: #fff !important; border: 1px solid #e4e7ec !important; }
+    #view-kc .kct:hover { background: #f9fafb !important; }
     #stats-card .pie-card .pie-label, #host-util-card .stat-card .stat-label { color: #667085 !important; }
     .pie-card .pie-center .pc-sub, .pie-legend-item .lv, .pie-legend-item .ll { color: #475467 !important; }
     .pie-card .pie-legend-item .swatch { outline-color: rgba(16,24,40,.12) !important; }
@@ -1390,13 +1390,21 @@
     #view-api .api-search { background: #fff !important; border-color: #d0d5dd !important; color: #101828 !important; }
     #view-api .api-search::placeholder { color: #98a2b3 !important; }
     #view-api .api-tag-head { color: #101828 !important; border-bottom-color: #e4e7ec !important; }
+    /* each tag group is a card, in the same design as the other panels */
+    #view-api .api-group { border-radius: 16px; padding: 0 22px 22px; margin-bottom: 24px;
+      box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 6px 16px rgba(16,24,40,.06) !important; }
+    #view-api .api-group > .api-tag-head { margin: 0 -22px 16px; padding: 18px 22px 0; align-items: flex-end; font-size: 16px; }
+    #view-api .api-group > .api-tag-head .api-tag-title { display: inline-flex; align-items: center; gap: 9px; padding: 0 2px 10px; margin-bottom: -10px; border-bottom: 2px solid #2563eb; }
+    #view-api .api-group > .api-tag-head .cnt { margin-bottom: 11px; font-size: 11.5px; font-weight: 700; color: #475467 !important; background: #fff; border: 1px solid #e4e7ec; border-radius: 999px; padding: 1px 9px; }
+    #view-api .api-op .p, #view-api .api-op .s { display: block; }   /* path, then its summary underneath */
+    #view-api .api-group .api-grid { margin-bottom: 0; }
     #view-api .api-tag-head .material-icons { color: #2563eb !important; }
     #view-api .api-tag-head .cnt, #view-api .api-op .s, #view-api .api-caret, #view-api .api-empty { color: #667085 !important; }
     #view-api .api-op { background: #fff !important; border: 1px solid #e4e7ec !important; }
     #view-api .api-op:hover, #view-api .api-op-wrap.open .api-op { border-color: #84adff !important; }
     #view-api .api-op .p { color: #101828 !important; }
     #view-api .api-op-wrap.open .api-caret { color: #344054 !important; }
-    #view-api .api-detail { background: #f8fafc !important; border-color: #84adff !important; }
+    #view-api .api-detail { background: #fff !important; border-color: #84adff !important; }
     #view-api .api-detail .am-sec-h, #view-api .api-detail table.am-t th, #view-api .api-detail .am-none, #view-api .api-detail .api-rdesc { color: #667085 !important; }
     #view-api .api-detail table.am-t td { color: #344054 !important; border-bottom-color: #eef0f3 !important; }
     #view-api .api-detail table.am-t th { border-bottom-color: #eef0f3 !important; }
@@ -2655,7 +2663,7 @@
               + '<span class="material-icons api-caret">expand_more</span></button>'
               + '<div class="api-detail" hidden></div></div>';
           }).join('');
-          return '<div class="api-tag-head"><span class="material-icons">folder</span>' + esc(tag) + '<span class="cnt">' + g[tag].length + '</span></div><div class="api-grid">' + cards + '</div>';
+          return '<section class="api-group"><div class="api-tag-head"><span class="api-tag-title"><span class="material-icons">folder</span>' + esc(tag) + '</span><span class="cnt">' + g[tag].length + '</span></div><div class="api-grid">' + cards + '</div></section>';
         }).join('');
         // Toggle the inline detail on click (lazy-render its content on first open).
         body.querySelectorAll('.api-op').forEach(function(btn){
