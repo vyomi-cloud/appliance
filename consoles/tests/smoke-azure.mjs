@@ -56,6 +56,10 @@ const SUBLOCK = `vysublock${n}`;   // subscription-scoped lock created through t
 const SUBRG = `vysubrg${n}`;       // resource group created over the wire (shown in the Subscription's Resource groups panel)
 const SUBSA = `vysubsa${n}`;       // storage account created over the wire, inside SUBRG (shown in the Subscription's Resources panel)
 const SUBDEP = `vysubdep${n}`;     // subscription-scoped deployment created over the wire
+const NSGROLE = `00000000-0000-4000-a000-${String(n).padStart(12, "0")}`;  // role assignment GUID created over the wire, EXPLICITLY scoped to the NSG resource
+const NSGPRINCIPAL = `vynsgprincipal${n}`;  // principal of the NSG-scoped role assignment above
+const NSGDIAG = `vynsgdiag${n}`;   // diagnostic setting created through the NSG's own UI tab
+const NSGNIC = `vynsgnic${n}`;     // network interface (no NSG yet) created over the wire, associated through the UI
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -1362,6 +1366,54 @@ try {
   const nsgLockGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}/providers/Microsoft.Authorization/locks/${NSGLOCK}`);
   check("UI create lock on NSG → visible over native ARM", nsgLockGet.status === 200, `HTTP ${nsgLockGet.status}`);
   await shot("26-nsg-locks");
+
+  // ── Access control (IAM): a role assignment created over the wire, EXPLICITLY scoped to
+  // this NSG resource (not just the subscription/resource group) → read back on the Role
+  // assignments tab, and a real Check access decision reflects it (azure.nsgs.iam) ─────────
+  const nsgId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}`;
+  const nsgRoleRes = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments/${NSGROLE}?api-version=2022-04-01`,
+    { method: "PUT", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ properties: { principalId: NSGPRINCIPAL, roleName: "Owner", scope: nsgId } }) });
+  check("ARM PUT role assignment scoped to the NSG over wire", nsgRoleRes.status === 200 || nsgRoleRes.status === 201, `HTTP ${nsgRoleRes.status}`);
+  await openPanel("Access control (IAM)");
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByText(NSGPRINCIPAL).first().waitFor({ timeout: 10000 });
+  check("UI Access control (IAM) → Role assignments shows the NSG-scoped wire-created assignment", true);
+  await shot("26b-nsg-iam-role-assignments");
+
+  await page.getByRole("tab", { name: "Check access" }).click();
+  await page.getByRole("button", { name: "Check access", exact: true }).click();
+  await page.getByLabel("Principal ID", { exact: true }).fill(NSGPRINCIPAL);
+  await page.getByRole("dialog").getByRole("button", { name: "Check access", exact: true }).click();
+  await page.getByText("Allowed").waitFor({ timeout: 10000 });
+  check("UI Check access on the NSG → real decision reflects the NSG-scoped role assignment", true);
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+
+  // ── Diagnostic settings: added through the UI (real Microsoft.Insights/diagnosticSettings
+  // extension resource scoped to this NSG) → visible over native ARM (azure.nsgs.monitoring) ──
+  await openPanel("Diagnostic settings");
+  await page.getByRole("button", { name: "Add diagnostic setting" }).click();
+  await page.getByLabel("Diagnostic setting name", { exact: true }).fill(NSGDIAG);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText(NSGDIAG, { exact: true }).first().waitFor({ timeout: 10000 });
+  const nsgDiagGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG}/providers/Microsoft.Insights/diagnosticSettings/${NSGDIAG}?api-version=2021-05-01-preview`);
+  check("UI add diagnostic setting on NSG → visible over native ARM extension resource", nsgDiagGet.status === 200, `HTTP ${nsgDiagGet.status}`);
+
+  // ── Associations: a network interface with no NSG of its own, created over the wire, then
+  // picked through the UI's "Associate" dialog → its networkSecurityGroup is set over native
+  // ARM (azure.nsgs.associations) ─────────────────────────────────────────────────────────
+  const nsgNicPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NSGNIC}`, { location: "eastus" });
+  check("ARM PUT network interface with no NSG over wire", nsgNicPut.status === 200 || nsgNicPut.status === 201, `HTTP ${nsgNicPut.status}`);
+  await openPanel("Network interfaces");
+  await page.getByRole("button", { name: "Associate", exact: true }).click();
+  await page.getByLabel("network interface", { exact: true }).selectOption({ label: NSGNIC });
+  await page.getByRole("dialog").getByRole("button", { name: "Associate", exact: true }).click();
+  await page.getByRole("dialog", { name: "Associate network interface" }).waitFor({ state: "detached", timeout: 10000 });
+  await page.getByRole("cell", { name: NSGNIC, exact: true }).waitFor({ timeout: 10000 });
+  const nsgNicAfter = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${NSGNIC}`);
+  check("UI Associate network interface → networkSecurityGroup set over native ARM",
+    (JSON.parse(nsgNicAfter.text).properties?.networkSecurityGroup?.id || "").toLowerCase() === nsgId.toLowerCase(), nsgNicAfter.text);
+  await shot("26c-nsg-associate");
 
   // ── NSG created over the wire → visible in the UI (CLI → UI), then deleted in the UI ──
   const nsgPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG2}`, { location: "eastus" });
