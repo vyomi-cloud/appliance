@@ -102,7 +102,11 @@ def aws_model() -> dict | None:
         from core.app_context import PLATFORM
         spaces = PLATFORM.kernel.state.get("spaces") or {}
         sid = spaces.get("active_space_id") or "default"
-        return ((spaces.get("spaces") or {}).get(sid) or {}).get("service_states", {}).get("ec2_vpc_core")
+        owner = ((spaces.get("spaces") or {}).get(sid) or {}).get("service_states", {})
+        if (os.environ.get("VYOMI_VPC_ENGINE") or "core").strip().lower() != "legacy" and isinstance(owner.get("vpc"), dict):
+            from core import vpc_core
+            return vpc_core.adopt_legacy_slot(owner)          # pre-v4 VPCs join the one engine (once)
+        return owner.get("ec2_vpc_core")
     except Exception:
         return None
 
@@ -121,13 +125,28 @@ def _aws_topology() -> Topology:
         if not isinstance(inst, dict) or inst.get("state") in ("terminated", "shutting-down"):
             continue
         sid = inst.get("subnet_id")
-        if sid not in t.subnets or not ip_in(str(inst.get("private_ip") or ""), t.subnets[sid].cidr):
+        if sid not in t.subnets:
             continue
+        if not ip_in(str(inst.get("private_ip") or ""), t.subnets[sid].cidr):
+            # launched before its subnet joined vpc_core (pre-v4 store): give it a stable in-subnet
+            # address for the enforced network — the container takes it on its next start
+            if not ip_in(str(inst.get("netsim_ip") or ""), t.subnets[sid].cidr):
+                try:
+                    from core import vpc_core
+                    used = {i.ip for i in t.interfaces.values() if i.subnet == sid}
+                    probe = {**m, "instances": {**m.get("instances", {}), **{f"n{k}": {"subnet_id": sid, "private_ip": ip,
+                                                                                       "state": "running"} for k, ip in enumerate(used)}}}
+                    inst["netsim_ip"] = vpc_core._allocate_private_ip(probe, sid)
+                except Exception:
+                    continue
+            inst_ip = inst["netsim_ip"]
+        else:
+            inst_ip = inst["private_ip"]
         sgs = [g for g in inst.get("security_group_ids") or [] if g in t.rulesets]
         if not sgs:
             vpc = t.subnets[sid].network
             sgs = [g["id"] for g in m.get("sgs", {}).values() if g.get("vpc_id") == vpc and g.get("is_default")][:1]
-        t.add(Interface(id=from_aws.primary_eni(iid), instance=iid, subnet=sid, ip=inst["private_ip"],
+        t.add(Interface(id=from_aws.primary_eni(iid), instance=iid, subnet=sid, ip=inst_ip,
                         public_ip=inst.get("public_ip") or None, groups=sgs, rulesets=sgs,
                         source_dest_check=inst.get("source_dest_check", True), name=str(inst.get("name") or "")))
     return t

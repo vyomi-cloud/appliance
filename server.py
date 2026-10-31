@@ -14286,7 +14286,27 @@ class _Ec2CoreSpaceStore:
 
     @property
     def _vpc_model(self):
-        return self._slot_owner().get("ec2_vpc_core")
+        owner = self._slot_owner()
+        model = owner.get("ec2_vpc_core")
+        if _vpc_engine_is_core() and not (isinstance(model, dict) and model.get("_adopted_legacy")):
+            # upgrade path: the space's pre-v4 VPC objects move into the one engine, once, IDs kept
+            try:
+                from core import vpc_core as _vpc_core
+                legacy = owner.get("vpc")
+                if not isinstance(legacy, dict):
+                    legacy = {k: vpc_state.get(k, {}) for k in ("vpcs", "subnets", "security_groups",
+                                                                "route_tables", "internet_gateways")}
+                model = _vpc_core.adopt_legacy_slot(owner, legacy)
+                if isinstance(model, dict) and model.get("_adopted_counts"):
+                    for coll in ("vpcs", "subnets", "security_groups", "route_tables", "internet_gateways"):
+                        for rec in (legacy.get(coll) or {}).values():
+                            if isinstance(rec, dict) and rec.get("_engine") != "vpc_core":
+                                rec.setdefault("_adopted_into", "vpc_core")
+                    # persisted with the next state write; until then a restart simply re-adopts
+                    # (idempotent — same IDs, nothing duplicated)
+            except Exception as exc:
+                print(f"[vyomi] legacy VPC adoption skipped: {exc}")
+        return model
 
     @_vpc_model.setter
     def _vpc_model(self, model):
@@ -17754,7 +17774,7 @@ def api_vpc_list_internet_gateways():
 def api_vpc_create_internet_gateway(req: InternetGatewayRequest):
     igw_id = _id("igw")
     igw = {"internet_gateway_id": igw_id, "name": req.name or igw_id, "attached_vpc_id": "", "created": _now(), "tags": req.tags or []}
-    vpc_state["internet_gateways"][igw_id] = igw
+    vpc_state.setdefault("internet_gateways", {})[igw_id] = igw   # pre-v4 states lack the key
     _record_usage("vpc.create_internet_gateway", igw)
     return igw
 

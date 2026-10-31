@@ -96,8 +96,17 @@ publicIPAddresses / applicationSecurityGroups / networkWatchers.
   route tables, IGWs, `DescribeSecurityGroups` …) are served by `core/vpc_core` instead of the pre-v4
   `vpc_state` handlers (which only covered half the actions, so NACLs/NAT/peering lived in a different
   store than their VPC). Pre-v4 readers of `vpc_state` get a mirror (`_engine: vpc_core`).
-  `VYOMI_VPC_ENGINE=legacy` restores the old routing. VPCs created before this change in `vpc_state`
-  are not migrated into the core.
+  `VYOMI_VPC_ENGINE=legacy` restores the old routing.
+* **Upgrade adoption (no VPC is lost):** on first access in core mode, every pre-v4 `vpc_state` object of
+  the space — VPCs (+tags, DHCP option set id), subnets (+route-table association), security groups (+all
+  ingress/egress rules; a SG-referencing rule keeps only the SG, not the old 0.0.0.0/0 placeholder), route
+  tables (+routes, main flag, associations) and internet gateways (+attachment) — is copied into the
+  `vpc_core` slot with the SAME IDs (`vpc_core.adopt_legacy_slot`), once per space (`_adopted_legacy`
+  marker, so an object deleted after the upgrade is never resurrected) and idempotent per object. The
+  pre-v4 store never held EIPs, NAT gateways, NACLs, peering or ENIs (those were always vpc_core). EC2
+  instances launched against legacy subnets/SGs keep their references; netsim gives them a stable
+  in-subnet address (`netsim_ip`) for the enforced network. Caveat: the pre-v4 REST VPC console
+  (`/api/aws/vpc…`) still writes `vpc_state`; objects it creates after adoption are not picked up.
 * Docker published ports (the console's SSH port-publish path) are DNAT'd by Docker and pass as
   management traffic (`ct status dnat`), like a cloud console's own connect path.
 

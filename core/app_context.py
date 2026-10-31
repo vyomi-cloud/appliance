@@ -351,7 +351,7 @@ def _default_state() -> dict:
         "deployments": {},
         "iam": {"users": {}, "groups": {}, "roles": {}, "policies": {}, "attachments": [], "identity_providers": {}, "account_settings": {"password_policy": {"minimum_length": 8, "require_symbols": True, "require_numbers": True, "require_uppercase": True, "require_lowercase": True}}},
         "ec2": {"instances": {}},
-        "vpc": {"vpcs": {}, "subnets": {}, "security_groups": {}, "route_tables": {}},
+        "vpc": {"vpcs": {}, "subnets": {}, "security_groups": {}, "route_tables": {}, "internet_gateways": {}},
         "apigateway": {"apis": {}, "logs": []},
         "lambda": {"functions": {}, "events": [], "invocations": []},
         "sqs": {"queues": {}, "events": []},

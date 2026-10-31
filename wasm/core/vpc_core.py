@@ -2670,6 +2670,144 @@ _OPS = {
 }
 
 
+# ── upgrade path: adopt the pre-v4 offline VPC store (server.py `vpc_state`) ─────────────
+# Before v4 the offline appliance served CreateVpc / subnets / security groups / route tables /
+# internet gateways from its own `vpc_state` dict (service_states["vpc"]). vpc_core is now the
+# one engine; this copies every legacy object into the core model ONCE per space, keeping the
+# IDs (so EC2 instances, RDS subnet groups … that reference them keep working). Idempotent at two
+# levels: a per-model marker, and per-object "already present → skip". The pre-v4 store never had
+# EIPs, NAT gateways, NACLs, peering or ENIs (those were always vpc_core), so there is nothing else
+# to carry over. Pure dict code — runs anywhere.
+def _legacy_tags(rec: dict) -> dict:
+    out = {}
+    for t in rec.get("tags") or []:
+        if isinstance(t, dict) and (t.get("key") or t.get("Key")):
+            out[str(t.get("key") or t.get("Key"))] = str(t.get("value", t.get("Value", "")))
+    return out
+
+
+def _legacy_perm(rule: dict) -> dict:
+    proto = str(rule.get("protocol", "-1"))
+    proto = {"all": "-1", "6": "tcp", "17": "udp", "1": "icmp"}.get(proto.lower(), proto.lower())
+    src_sg = str(rule.get("source_sg") or "")
+    cidr = str(rule.get("cidr") or "")
+    # the pre-v4 handler stored a 0.0.0.0/0 default next to a source SG; a SG-referencing rule
+    # never meant "everyone", so only an explicit non-default CIDR is kept alongside the SG
+    cidrs = [cidr] if cidr and not (src_sg and cidr == "0.0.0.0/0") else []
+    allp = proto == "-1"
+    return {"protocol": proto, "from_port": None if allp else int(rule.get("from_port") or 0),
+            "to_port": None if allp else int(rule.get("to_port") if rule.get("to_port") is not None else 65535),
+            "cidrs": cidrs, "sgs": [src_sg] if src_sg else [], "rule_id": _rid("sgr", 8),
+            "description": str(rule.get("description") or "")}
+
+
+def adopt_legacy(model, legacy: dict) -> tuple[dict, dict]:
+    """Merge the pre-v4 `vpc_state` dict into a vpc_core model (created if None).
+    Returns (model, counts). Re-running adds nothing."""
+    holder = type("S", (), {})()
+    if model is not None:
+        holder._vpc_model = model
+    m = _model(holder)
+    counts = {"vpcs": 0, "subnets": 0, "security_groups": 0, "route_tables": 0, "routes": 0, "internet_gateways": 0}
+    legacy = legacy if isinstance(legacy, dict) else {}
+
+    def live(coll):
+        d = legacy.get(coll)
+        return [(k, v) for k, v in (d.items() if isinstance(d, dict) else [])
+                if isinstance(v, dict) and v.get("_engine") != "vpc_core"]      # skip our own mirrors
+
+    for vid, v in live("vpcs"):
+        if vid in m["vpcs"]:
+            continue
+        dopt = str(v.get("dhcp_options_id") or "") or _default_dhcp_options(m)
+        m["dhcp_options"].setdefault(dopt, {"id": dopt, "default": True, "tags": {},
+                                            "options": {"domain-name": "ec2.internal", "domain-name-servers": "AmazonProvidedDNS"}})
+        m["vpcs"][vid] = {"id": vid, "cidr": str(v.get("cidr_block") or "10.0.0.0/16"), "igw": None,
+                          "default_nacl": _create_default_nacl(m, vid), "tenancy": str(v.get("tenancy") or "default"),
+                          "dhcp_options_id": dopt, "enable_dns_hostnames": False, "enable_dns_support": True,
+                          "tags": _legacy_tags(v), "created": v.get("created", ""), "adopted_from": "vpc_state"}
+        counts["vpcs"] += 1
+    for rid, rt in live("route_tables"):
+        if rid in m["route_tables"] or rt.get("vpc_id") not in m["vpcs"]:
+            continue
+        vpc = m["vpcs"][rt["vpc_id"]]
+        routes = [{"dest": vpc["cidr"], "target": "local"}]
+        for r in rt.get("routes") or []:
+            dest, ttype, tid = str(r.get("destination") or ""), str(r.get("target_type") or ""), str(r.get("target_id") or "")
+            if not dest or ttype == "local" or not tid or any(x["dest"] == dest for x in routes):
+                continue
+            routes.append({"dest": dest, "target": tid})
+            counts["routes"] += 1
+        main = bool(rt.get("is_main"))
+        if main and any(x.get("main") for x in m["route_tables"].values() if x["vpc_id"] == rt["vpc_id"]):
+            main = False
+        m["route_tables"][rid] = {"id": rid, "vpc_id": rt["vpc_id"], "main": main, "routes": routes, "subnets": [],
+                                  "tags": _legacy_tags(rt)}
+        counts["route_tables"] += 1
+    for vid in list(m["vpcs"]):                      # every VPC needs a main route table
+        if not any(x.get("main") for x in m["route_tables"].values() if x["vpc_id"] == vid):
+            rid = _rid("rtb")
+            m["route_tables"][rid] = {"id": rid, "vpc_id": vid, "main": True, "subnets": [], "tags": {},
+                                      "routes": [{"dest": m["vpcs"][vid]["cidr"], "target": "local"}]}
+    for sid, sn in live("subnets"):
+        if sid in m["subnets"] or sn.get("vpc_id") not in m["vpcs"]:
+            continue
+        vid = sn["vpc_id"]
+        rt = sn.get("route_table_id") if sn.get("route_table_id") in m["route_tables"] else \
+            next((x["id"] for x in m["route_tables"].values() if x["vpc_id"] == vid and x.get("main")), None)
+        nacl = m["vpcs"][vid].get("default_nacl")
+        m["subnets"][sid] = {"id": sid, "vpc_id": vid, "cidr": str(sn.get("cidr_block") or ""),
+                             "az": str(sn.get("availability_zone") or _AZS[0]), "route_table": rt, "nacl": nacl,
+                             "map_public_ip": bool(sn.get("map_public_ip_on_launch", False)), "tags": _legacy_tags(sn)}
+        if rt and sid not in m["route_tables"][rt]["subnets"]:
+            m["route_tables"][rt]["subnets"].append(sid)
+        if nacl in m["nacls"] and sid not in m["nacls"][nacl]["subnets"]:
+            m["nacls"][nacl]["subnets"].append(sid)
+        counts["subnets"] += 1
+    for gid, g in live("security_groups"):
+        if gid in m["sgs"] or g.get("vpc_id") not in m["vpcs"]:
+            continue
+        m["sgs"][gid] = {"id": gid, "vpc_id": g["vpc_id"], "name": str(g.get("group_name") or ""),
+                         "description": str(g.get("description") or ""), "is_default": bool(g.get("is_default")),
+                         "tags": _legacy_tags(g),
+                         "ingress": [_legacy_perm(r) for r in g.get("ingress") or [] if isinstance(r, dict)],
+                         "egress": [_legacy_perm(r) for r in g.get("egress") or [] if isinstance(r, dict)]}
+        counts["security_groups"] += 1
+    for iid, igw in live("internet_gateways"):
+        if iid in m["igws"]:
+            continue
+        vid = str(igw.get("attached_vpc_id") or "") or None
+        if vid and vid not in m["vpcs"]:
+            vid = None
+        m["igws"][iid] = {"id": iid, "vpc_id": vid, "tags": _legacy_tags(igw)}
+        if vid and not m["vpcs"][vid].get("igw"):
+            m["vpcs"][vid]["igw"] = iid
+        counts["internet_gateways"] += 1
+    return m, counts
+
+
+def adopt_legacy_slot(service_states: dict, legacy: dict | None = None):
+    """Once per space: adopt service_states["vpc"] (the pre-v4 store) into
+    service_states["ec2_vpc_core"]. Returns the (possibly new) model, or the existing one."""
+    model = service_states.get("ec2_vpc_core")
+    if isinstance(model, dict) and model.get("_adopted_legacy"):
+        return model
+    legacy = legacy if legacy is not None else service_states.get("vpc")
+    has_legacy = isinstance(legacy, dict) and any(
+        isinstance(legacy.get(c), dict) and any(isinstance(v, dict) and v.get("_engine") != "vpc_core"
+                                                for v in legacy[c].values())
+        for c in ("vpcs", "subnets", "security_groups", "route_tables", "internet_gateways"))
+    if not has_legacy:
+        if isinstance(model, dict):
+            model["_adopted_legacy"] = _now()
+        return model
+    model, counts = adopt_legacy(model, legacy)
+    model["_adopted_legacy"] = _now()
+    model["_adopted_counts"] = counts
+    service_states["ec2_vpc_core"] = model
+    return model
+
+
 def dispatch(store, params: dict | None = None) -> VpcResponse:
     """Native EC2 Query-protocol router. `params` is the parsed form body
     ({"Action": "CreateVpc", "CidrBlock": "10.0.0.0/16", ...})."""
