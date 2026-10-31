@@ -2586,7 +2586,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       function cardHtml(s){
         var cur = picked[s.key] || 'cli';
         return '<div class="u-card" data-c="'+s.key+'"><div class="u-head"><h3>'+svcIcon(s)+s.name+'</h3>'
-          + '<div class="u-actions"><button class="u-expand" type="button" data-c="'+s.key+'" title="Full instructions" aria-label="Full instructions"><span class="material-icons">open_in_full</span></button></div></div>'
+          + '</div>'
           + '<div class="u-strip" role="tablist">'
           + TRANSPORTS.map(function(t){ return '<button class="u-tab" type="button" role="tab" data-k="'+t.k+'" aria-selected="'+(t.k===cur)+'">'+t.label+'</button>'; }).join('')
           + '<button class="u-cp" type="button" title="Copy" aria-label="Copy"><span class="material-icons">content_copy</span></button></div>'
