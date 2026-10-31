@@ -228,7 +228,15 @@
         .concat(Object.keys(groups).filter(function (c) { return CAT_ORDER.indexOf(c) < 0; }));
       bodyMount.style.cssText = '';
       bodyMount.innerHTML = '';
-      bodyMount.appendChild(buildMetricToggle());
+      // The CPU / Mem toggle goes in the section header when the page provides a slot
+      // (#vyomi-services-toggle), else above the tiles as before.
+      var toggleSlot = document.getElementById('vyomi-services-toggle');
+      if (toggleSlot) {
+        var tg = buildMetricToggle(); tg.style.marginBottom = '0';
+        toggleSlot.innerHTML = ''; toggleSlot.appendChild(tg);
+      } else {
+        bodyMount.appendChild(buildMetricToggle());
+      }
       var grid = document.createElement('div');
       // Two tiles per row (one on narrow screens, where half the width is under 240px).
       grid.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fit, minmax(max(240px, calc(50% - 8px)), 1fr)); gap:16px;';
