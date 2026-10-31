@@ -12,6 +12,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { ErrorAlert, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 export default function JobDetail({ params }) {
@@ -52,7 +53,7 @@ export default function JobDetail({ params }) {
           ["Region", region],
           ["Frequency", job.schedule],
           ["Timezone", job.timeZone || "Etc/UTC"],
-          ["Target", `${api.targetKind(job)} — ${api.targetText(job)}`],
+          ["Target", `${api.targetKind(job)} — ${api.targetText(job)}`, <CapabilityBadge key="tgt" id="gcp.cloudscheduler.jobs.targets" />],
           ["State", api.stateLabel(job)],
           ["Last run", api.lastRunText(job)],
           ["Next run", api.nextRunText(job)],

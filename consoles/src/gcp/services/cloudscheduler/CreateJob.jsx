@@ -6,6 +6,7 @@ import { Box, Button, Divider, IconButton, Stack, Typography } from "@mui/materi
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { ErrorAlert, PageHeader, Section } from "../../kit/common.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
 import { initialState, jobBody, RetryFields, ScheduleFields, targetError, TargetFields } from "./JobFormFields.jsx";
@@ -57,7 +58,7 @@ export default function CreateJob() {
       </Step>
       <Divider />
 
-      <Step n={2} title="Configure the execution">
+      <Step n={2} title={<Stack direction="row" spacing={1} alignItems="center" component="span"><span>Configure the execution</span><CapabilityBadge id="gcp.cloudscheduler.jobs.targets" /></Stack>}>
         <TargetFields s={s} set={set} />
       </Step>
       <Divider />

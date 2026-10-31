@@ -13,7 +13,8 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { NotSimulatedContainer, PageHeader } from "../../kit/common.jsx";
+import { PageHeader } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
@@ -38,7 +39,7 @@ export default function Jobs({ query }) {
       </Tabs>
       {tab === "jobs"
         ? <JobsTable data={data} loading={loading} error={error} reload={reload} />
-        : <NotSimulatedContainer title="Cron jobs" feature="App Engine cron jobs (legacy cron.yaml)" />}
+        : <CapabilityContainer id="gcp.cloudscheduler.cron-jobs" title="Cron jobs" />}
     </>
   );
 }
