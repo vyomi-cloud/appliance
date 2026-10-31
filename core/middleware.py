@@ -628,11 +628,66 @@ async def _capability_middleware(request: Request, call_next):
         return _capability_denied_response(_srv, capability_path, exc)
     response = await call_next(request)
     if request.method in {"POST", "PUT", "DELETE", "PATCH"}:
+        _schedule_persist()
+    return response
+
+
+# Coalesced state flush. Every POST/PUT/DELETE/PATCH used to serialize the WHOLE state
+# (JSON, megabytes once a user has built things) inline — and the AWS JSON protocol sends
+# reads as POSTs, so a console page firing N DescribeTable calls paid N full saves one after
+# another (120 tables ≈ 10 s: the "intermittent offline stall"). Now a mutating request marks
+# the state dirty and ONE flush runs after a short quiet window, on the event loop (never
+# concurrently with a handler). VYOMI_PERSIST_DEBOUNCE_MS=0 restores the per-request flush;
+# shutdown flushes anything pending (flush_pending_state).
+_PERSIST_PENDING = {"task": None}
+
+
+def _debounce_seconds() -> float:
+    import os
+    try:
+        return max(0.0, float(os.environ.get("VYOMI_PERSIST_DEBOUNCE_MS", "250")) / 1000.0)
+    except ValueError:
+        return 0.25
+
+
+def _schedule_persist() -> None:
+    import asyncio
+    delay = _debounce_seconds()
+    if delay <= 0:
         try:
             _persist_state()
         except Exception:
             pass
-    return response
+        return
+    if _PERSIST_PENDING["task"] is not None and not _PERSIST_PENDING["task"].done():
+        return                                   # a flush is already scheduled for this burst
+
+    async def _flush_later():
+        await asyncio.sleep(delay)
+        _PERSIST_PENDING["task"] = None
+        try:
+            _persist_state()
+        except Exception:
+            pass
+    try:
+        _PERSIST_PENDING["task"] = asyncio.get_running_loop().create_task(_flush_later())
+    except RuntimeError:                         # no running loop (sync caller): flush now
+        try:
+            _persist_state()
+        except Exception:
+            pass
+
+
+def flush_pending_state() -> None:
+    """Flush a scheduled-but-not-yet-run state save (shutdown)."""
+    task = _PERSIST_PENDING.get("task")
+    if task is not None and not task.done():
+        task.cancel()
+        _PERSIST_PENDING["task"] = None
+        try:
+            _persist_state()
+        except Exception:
+            pass
 
 
 async def _rate_limit_middleware(request: Request, call_next):

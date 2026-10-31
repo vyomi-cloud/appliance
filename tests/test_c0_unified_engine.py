@@ -165,8 +165,14 @@ def test_state_is_durable_in_the_kernel_store(client):
     _ddb(client, "CreateTable", {"TableName": t, "KeySchema": [{"AttributeName": "id", "KeyType": "HASH"}],
                                  "AttributeDefinitions": [{"AttributeName": "id", "AttributeType": "S"}]})
     from core.vyomi_platform import SQLiteStateStore
-    state = SQLiteStateStore(Path(os.environ["CLOUDLEARN_STATE_FILE"])).load_state(dict)
-    blob = json.dumps(state, default=lambda o: "<bytes>")
+    import time
+    # the middleware coalesces saves (one flush per burst, VYOMI_PERSIST_DEBOUNCE_MS, 250 ms)
+    for _ in range(40):
+        state = SQLiteStateStore(Path(os.environ["CLOUDLEARN_STATE_FILE"])).load_state(dict)
+        blob = json.dumps(state, default=lambda o: "<bytes>")
+        if f'"{t}"' in blob:
+            break
+        time.sleep(0.05)
     assert f'"{b}"' in blob and '"tagging"' in blob
     assert f'"{g}"' in blob and '"labels": {"x": "y"}' in blob
     assert f'"{t}"' in blob

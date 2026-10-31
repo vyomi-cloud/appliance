@@ -11900,6 +11900,16 @@ def _restore_license_from_backup() -> bool:
         return False
 
 
+@app.on_event("shutdown")
+def _flush_state_at_shutdown():
+    """Write any coalesced (debounced) state save that hasn't run yet."""
+    try:
+        from core.middleware import flush_pending_state
+        flush_pending_state()
+    except Exception:
+        pass
+
+
 @app.on_event("startup")
 def _restore_license_at_boot():
     """v2.0.6: re-apply the cached JWT from /data/license-backup.jwt if
