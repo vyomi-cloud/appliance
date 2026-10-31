@@ -176,8 +176,13 @@ async def api_gcp_iam_patch_service_account(project: str, account: str, request)
         rec["displayName"] = str(body.get("displayName") or "")
     if "description" in body:
         rec["description"] = str(body.get("description") or "")
+    was_disabled = bool(rec.get("disabled"))
     if "disabled" in body:
         rec["disabled"] = bool(body.get("disabled"))
+    if "disabled" in body and bool(rec["disabled"]) != was_disabled:
+        _sa_event(rec, project, "DISABLE" if rec["disabled"] else "ENABLE")
+    if "displayName" in body or "description" in body:
+        _sa_event(rec, project, "UPDATE")
     accounts[target] = rec
     return {"name": f"projects/{project}/serviceAccounts/{rec['email']}", "projectId": project, "uniqueId": rec.get("uniqueId", ""), "email": rec["email"], "displayName": rec.get("displayName", ""), "description": rec.get("description", ""), "oauth2ClientId": rec.get("oauth2ClientId", ""), "disabled": rec.get("disabled", False), "etag": rec.get("etag", "")}
 
@@ -394,6 +399,7 @@ async def api_gcp_iam_create_service_account_key(project: str, account: str, req
         "_key_id": key_id,
     }
     sa.setdefault("keys", {})[key_id] = rec
+    _sa_event(sa, project, "CREATE_KEY", key_id)
     return rec  # create is the only call that returns privateKeyData
 
 
@@ -425,5 +431,27 @@ def api_gcp_iam_delete_service_account_key(project: str, account: str, key: str)
     sa = _iam_find_sa(project, account)
     if not sa:
         raise HTTPException(404, detail="Service account not found")
-    sa.setdefault("keys", {}).pop(str(key).split("/")[-1], None)
+    kid = str(key).split("/")[-1]
+    if sa.setdefault("keys", {}).pop(kid, None) is not None:
+        _sa_event(sa, project, "DELETE_KEY", kid)
     return {}
+
+
+# ── per-service-account admin activity (what the console's service-account Logs tab reads via
+# GET .../serviceAccounts/{email}/policyActivity — same entry shape as core/gcp_iam_core on Nano) ──
+def _sa_event(sa: dict, project: str, action: str, detail: str = "") -> None:
+    from datetime import datetime, timezone
+    log = sa.setdefault("_activity", [])
+    log.append({"id": uuid.uuid4().hex[:12], "resource": f"projects/{project}/serviceAccounts/{sa.get('email', '')}",
+                "action": action, "role": "", "member": detail,
+                "time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+    del log[:max(0, len(log) - 500)]
+
+
+def api_gcp_iam_service_account_activity(project: str, account: str):
+    project = _gcp_project_name(project)
+    sa = _iam_find_sa(project, account)
+    if not sa:
+        raise HTTPException(404, detail="Service account not found")
+    return {"activity": [dict(e) for e in reversed(sa.get("_activity") or [])]}
+

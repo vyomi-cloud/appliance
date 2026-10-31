@@ -1639,7 +1639,7 @@ try {
   await page.getByRole("button", { name: "Review + create" }).click();
   await page.getByText("Validation passed").waitFor({ timeout: 5000 });
   await page.getByRole("button", { name: "Create", exact: true }).click();
-  await page.getByRole("heading", { name: VNET, exact: true }).waitFor({ timeout: 10000 });
+  await page.getByRole("heading", { name: VNET, exact: true }).first().waitFor({ timeout: 10000 });
   const vnetGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}`);
   check("UI create virtual network → visible over native ARM", vnetGet.status === 200, `HTTP ${vnetGet.status}`);
   const defaultSubnetGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/default`);

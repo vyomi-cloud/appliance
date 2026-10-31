@@ -723,8 +723,13 @@ try {
   });
   await page.goto(UI + "#/monitoring/services");
   await svcRow.waitFor({ timeout: 10000 });
-  await page.waitForTimeout(1500);
-  const sloBudgetCells = await svcRow.getByRole("cell").allTextContents();
+  // the page computes every service's SLO stats one after another — poll for this row's value
+  let sloBudgetCells = [];
+  for (let i = 0; i < 30; i++) {
+    sloBudgetCells = await svcRow.getByRole("cell").allTextContents();
+    if (sloBudgetCells[2] && sloBudgetCells[2].trim() !== "—") break;
+    await page.waitForTimeout(500);
+  }
   check("SLO error budget computed for real from written time series (not a '—' stub)", sloBudgetCells[2]?.trim() === "1", JSON.stringify(sloBudgetCells));
   await shot("13d-monitoring-slo-budget");
 

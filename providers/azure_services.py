@@ -1043,6 +1043,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         # resource_id makes per-resource activity filtering in the SPA possible.
         _record_usage(f"azure.{method.lower()}", {"type": full_type, "name": leaf_name, "resource_id": rid})
         _cloudsim_sync_arm_service(full_type, rid, leaf_name, str(payload.get("location") or DEFAULT_LOCATION), action="upsert")
+        _record_arm_activity(rid, f"{full_type}/write", sub)
         return resp
     if method == "DELETE":
         rec = _state.pop(key, None)
@@ -1050,6 +1051,7 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         if rec is not None:
             _record_usage("azure.delete", {"type": full_type, "name": leaf_name, "resource_id": rid})
             _cloudsim_sync_arm_service(full_type, rid, leaf_name, str((rec or {}).get("location") or DEFAULT_LOCATION), action="delete")
+            _record_arm_activity(rid, f"{full_type}/delete", sub)
         # Terminal success with NO async header: compatible with both sync
         # Delete clients (storage/functionapp expect 200/204) and BeginDelete
         # pollers (a header-less terminal status = immediately complete). The
@@ -1207,6 +1209,16 @@ def _core_arm_handles(namespace: str, top_type: str) -> bool:
         return False
     key = (namespace.lower(), (top_type or "").lower())
     return any((c["namespace"].lower(), c["type"].lower()) == key for c in _core_catalog)
+
+
+def _record_arm_activity(rid: str, operation_name: str, sub: str) -> None:
+    """Activity-log row for a write served by this offline catalog — the same
+    Microsoft.Insights/eventtypes record the core ARM engine writes for its own types (the
+    Activity log blades and Log Analytics' AzureActivity table read these back)."""
+    try:
+        core_arm()._record_activity(rid, operation_name, sub)
+    except Exception:
+        pass
 
 
 def core_arm():
