@@ -120,7 +120,7 @@ try {
   if (defTab >= 0) {
     await page.locator(".top-tabs button").nth(defTab).click();
     await sleep(900);
-    check(/"StartAt"/.test(await page.locator("#main").innerText()), "Definition tab shows the Amazon States Language");
+    check(/"StartAt"/.test(await page.locator('[data-testid="sfn-definition"]').inputValue()), "Definition tab shows the Amazon States Language");
   }
 
   // delete via the detail Delete action
