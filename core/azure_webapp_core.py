@@ -925,7 +925,27 @@ def _fn_view(fn):
     return out
 
 
-def _invoke_function(fn, req):
+def _scale_capacity(rec):
+    """maximumInstanceCount x triggers.http.perInstanceConcurrency — the total concurrent
+    request capacity Flex Consumption scale/concurrency settings describe. Vyomi runs every
+    invoke synchronously (nothing to run concurrently), so a positive capacity can only be
+    stored and echoed back; a configured capacity of exactly zero is the one case Vyomi CAN
+    enforce faithfully — real Azure never schedules an instance for a scaled-to-zero app, so
+    no invoke of it can ever run. Mirrors core/lambda_core.py's ReservedConcurrentExecutions=0."""
+    scale = (rec["properties"].get("functionAppConfig") or {}).get("scaleAndConcurrency") or {}
+    max_instances = scale.get("maximumInstanceCount", 100)
+    per_instance = ((scale.get("triggers") or {}).get("http") or {}).get("perInstanceConcurrency", 16)
+    try:
+        return int(max_instances) * int(per_instance)
+    except (TypeError, ValueError):
+        return 1
+
+
+def _invoke_function(rec, fn, req):
+    if _scale_capacity(rec) == 0:
+        return {"ok": False, "status": 429, "body": None,
+                "error": "FunctionsTooBusy: scaleAndConcurrency capacity is 0 (maximumInstanceCount x "
+                         "perInstanceConcurrency) — no instance is available to run this function"}
     sandbox = {"__builtins__": dict(_SAFE_BUILTINS), "json": json}
     try:
         exec(compile(fn["_code"], f"<function:{fn['name']}>", "exec"), sandbox)
@@ -985,7 +1005,7 @@ def _functions_ops(rec, rest, method, payload):
     if action == "invoke" and method == "POST":
         p = payload or {}
         req = {"method": p.get("method", "GET"), "query": p.get("query", {}), "headers": p.get("headers", {}), "body": p.get("body")}
-        return _ok(_invoke_function(fn, req))
+        return _ok(_invoke_function(rec, fn, req))
     return _err(404, "ResourceTypeNotSupported", f"Action '{action}' is not supported on functions.")
 
 

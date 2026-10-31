@@ -92,11 +92,12 @@
  "azure.functionapp.scale": {
   "title": "Scale and concurrency (Flex Consumption)",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Instance memory, maximum instance count and per-instance concurrency are stored on the site and returned from the API exactly as configured, but Vyomi does not run multiple instances or enforce these limits."
+   "A configured capacity of exactly zero (maximumInstanceCount x perInstanceConcurrency) is ENFORCED: every invoke is rejected (429 FunctionsTooBusy), the same way a real scaled-to-zero Flex Consumption app never has an instance available to run on.",
+   "Instance memory and any positive maximum instance count / per-instance concurrency are stored on the site and returned from the API exactly as configured, but never enforced against concurrent callers — Vyomi runs every invoke synchronously (nothing to run concurrently), so no invoke is ever rejected for exceeding a nonzero capacity."
   ],
   "api": [
    "Sites_CreateOrUpdate",

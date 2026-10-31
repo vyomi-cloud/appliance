@@ -328,6 +328,23 @@ try {
   check("Test/Run executes the real sandboxed function", await page.getByText("hello from Azure Functions").first().isVisible());
   await shot("20-function-test-run");
 
+  // ── Scale and concurrency: a capacity of 0 is ENFORCED against a real invoke ──────────
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}/scale-and-concurrency`);
+  await page.getByLabel("Maximum instance count").fill("0");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText(/invoke will now be throttled/).waitFor({ timeout: 10000 });
+  const scaled = await armWeb("GET", `/resourceGroups/${FARG}/providers/Microsoft.Web/sites/${FA}`);
+  check("UI set maximumInstanceCount=0 → native ARM reflects it",
+        JSON.parse(scaled.text).properties.functionAppConfig.scaleAndConcurrency.maximumInstanceCount === 0);
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}/functions/httptrigger`);
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await page.getByText("FunctionsTooBusy").first().waitFor({ timeout: 10000 });
+  check("scaled-to-zero capacity is ENFORCED: Test/Run is throttled 429", await page.getByText(/"status": 429/).first().isVisible());
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}/scale-and-concurrency`);
+  await page.getByLabel("Maximum instance count").fill("100");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText(/never enforced against concurrent callers/).waitFor({ timeout: 10000 });
+
   // ── Environment variables: UI write → native ARM config/appsettings ───────────────────
   await page.goto(UI + `#/functionapp/${FARG}/${FA}/environment-variables`);
   await page.getByRole("button", { name: "Add", exact: true }).click();
