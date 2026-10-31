@@ -285,6 +285,24 @@ def run() -> int:
     rbac = _j.loads(_body(R.handle("POST", f"{_AZ}/checkAccess", {}, {}, _j.dumps({"principalId": "u", "action": "x/read", "scope": "/subscriptions/S"}).encode())))
     _check("azure rbac checkAccess routes", rbac["value"][0]["accessDecision"] == "Allowed")
 
+    # GCP depth: a Cloud Scheduler job whose httpTarget names a Cloud Run job's own :run
+    # endpoint really triggers that job when it fires — the router's httpTarget invoker
+    # dispatches straight into the Cloud Run core instead of just recording the attempt
+    # (consoles/gcp/run Job details → Triggers tab).
+    RL = "/v2/projects/trigp/locations/us-central1"
+    R.handle("POST", RL + "/jobs", {"jobId": "jobtrig"}, {"content-type": "application/json"},
+             _j.dumps({"template": {"template": {"containers": [{"image": "gcr.io/x/job:1"}]}}}).encode())
+    SL = "/v1/projects/trigp/locations/us-central1/jobs"
+    R.handle("POST", SL, {}, {"content-type": "application/json"}, _j.dumps({
+        "name": "projects/trigp/locations/us-central1/jobs/sched1",
+        "schedule": "* * * * *",
+        "httpTarget": {"uri": "https://run.googleapis.com" + RL + "/jobs/jobtrig:run", "httpMethod": "POST"},
+    }).encode())
+    R.handle("POST", SL + "/sched1:run", {}, {"content-type": "application/json"}, b"{}")
+    trig = _j.loads(_body(R.handle("GET", RL + "/jobs/jobtrig", {}, {}, b"")))
+    _check("cloud scheduler httpTarget really runs the Cloud Run job it names",
+           trig["executionCount"] == 1 and bool(trig.get("latestCreatedExecution")))
+
     print("\nRESULT: PASS — AwsWireRouter routes all 7 AWS + all 7 GCP + all 5 Azure "
           "data-plane services (Blob, Cosmos, Key Vault keys/secrets, Queue) to the "
           "proven cores (native SDK wire) on this substrate.")

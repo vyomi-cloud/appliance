@@ -1,19 +1,23 @@
 /* Job details: summary strip + tabs (History, Observability, Triggers, YAML), native
  * Cloud Run Admin API v2. History lists executions, each a real run-to-completion job. */
 import { useState } from "react";
-import { Box, Breadcrumbs, Button, CircularProgress, IconButton, Stack, Tab, Tabs, TextField, Tooltip, Typography } from "@mui/material";
+import {
+  Alert, Box, Breadcrumbs, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
+  IconButton, Stack, Tab, Tabs, TextField, Tooltip, Typography,
+} from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import EditIcon from "@mui/icons-material/esm/Edit.js";
 import PlayArrowIcon from "@mui/icons-material/esm/PlayArrow.js";
+import AddIcon from "@mui/icons-material/esm/Add.js";
 import ContentCopyIcon from "@mui/icons-material/esm/ContentCopy.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
-import { ErrorAlert, fmtDate, PageHeader } from "../../kit/common.jsx";
+import { ErrorAlert, fmtDate, NotSimulated, PageHeader } from "../../kit/common.jsx";
 import { Link } from "../../link.jsx";
 import * as api from "./api.js";
 
@@ -59,13 +63,85 @@ export default function JobDetail({ params, query }) {
       {!job.data && !job.error && <Box sx={{ textAlign: "center", py: 4 }}><CircularProgress size={24} /></Box>}
       {job.data && tab === "history" && <History region={region} name={name} />}
       {job.data && tab === "observability" && <CapabilityContainer id="gcp.run.jobs.observability" title="Observability" />}
-      {job.data && tab === "triggers" && <CapabilityContainer id="gcp.run.jobs.triggers" title="Triggers" />}
+      {job.data && tab === "triggers" && <Triggers region={region} name={name} />}
       {job.data && tab === "yaml" && <Yaml job={job.data} />}
       <DeleteDialog open={del} onClose={() => setDel(false)} title="Delete job?" confirmText={name}
         onConfirm={async () => { await api.deleteJob(region, name); notify.success(`Deleted job "${name}"`); location.hash = "/run/jobs"; }}>
         <Typography variant="body2">Job <b>{name}</b> will be permanently deleted.</Typography>
       </DeleteDialog>
     </>
+  );
+}
+
+// ── Triggers ─────────────────────────────────────────────────────────────────────────────
+// A trigger is a Cloud Scheduler job whose httpTarget names this job's own :run endpoint;
+// firing it really starts an execution (see api.jobRunUri / core/aws_wire_router.py).
+function Triggers({ region, name }) {
+  const notify = useNotify();
+  const list = useAsync(() => api.listJobTriggers(region, name), [region, name]);
+  const [add, setAdd] = useState(false);
+  return (
+    <Stack spacing={2}>
+      <Stack direction="row" alignItems="center" spacing={1}>
+        <Typography variant="h3" component="h2" sx={{ flex: 1 }}>Triggers</Typography>
+        <Button startIcon={<AddIcon />} onClick={() => setAdd(true)}>Add trigger</Button>
+      </Stack>
+      <ResourceTable
+        resourceName="triggers"
+        items={list.data || []}
+        rowKey={(j) => j.name}
+        loading={list.loading}
+        error={list.error}
+        onRetry={list.reload}
+        filterPlaceholder="Filter triggers"
+        empty={<Typography variant="body2" color="text.secondary">No Cloud Scheduler triggers call this job yet.</Typography>}
+        columns={[
+          { id: "name", header: "Name", sortField: "name", cell: (j) => api.triggerId(j) },
+          { id: "schedule", header: "Schedule", cell: (j) => j.schedule },
+          { id: "last-run", header: "Last run", cell: (j) => j.lastAttemptTime ? fmtDate(j.lastAttemptTime) : "Has not run yet" },
+          { id: "status", header: "Status", cell: (j) => j.status?.message ? "Failed" : j.lastAttemptTime ? "Succeeded" : "—" },
+          { id: "actions", header: "Actions", cell: (j) => (
+            <Stack direction="row" spacing={1}>
+              <Button size="small" onClick={async () => { await api.runJobTriggerNow(region, api.triggerId(j)); notify.success("Trigger fired"); setTimeout(list.reload, 300); }}>Run now</Button>
+              <Button size="small" color="error" onClick={async () => { await api.deleteJobTrigger(region, api.triggerId(j)); notify.success("Trigger deleted"); list.reload(); }}>Delete</Button>
+            </Stack>
+          ) },
+        ]}
+      />
+      <NotSimulated compact feature="Event triggers (Eventarc)"
+        note="Vyomi has no Eventarc backend; only Cloud Scheduler triggers are modelled here, and firing one really starts an execution." />
+      {add && <AddTriggerDialog region={region} name={name} onClose={() => setAdd(false)} onAdded={() => { notify.success("Trigger added"); list.reload(); }} />}
+    </Stack>
+  );
+}
+
+function AddTriggerDialog({ region, name, onClose, onAdded }) {
+  const [id, setId] = useState(`${name}-trigger`);
+  const [schedule, setSchedule] = useState("0 * * * *");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const idErr = api.validName(id, "Trigger");
+  const save = async () => {
+    setBusy(true); setError(null);
+    try { await api.createJobTrigger(region, name, id, schedule); onAdded(); onClose(); }
+    catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth aria-label="Add trigger">
+      <DialogTitle>Add trigger</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <Typography variant="body2" color="text.secondary">Creates a Cloud Scheduler job that calls this job's run endpoint on the schedule below.</Typography>
+          <TextField label="Trigger name" required value={id} onChange={(e) => setId(e.target.value.trim())} error={!!idErr} helperText={idErr || " "} />
+          <TextField label="Frequency (unix-cron)" required value={schedule} onChange={(e) => setSchedule(e.target.value)} helperText="e.g. 0 * * * * — every hour" />
+          {error && <Alert severity="error">{error.message}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" disabled={busy || !!idErr || !schedule.trim()} onClick={save}>{busy ? "Creating…" : "Create"}</Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 

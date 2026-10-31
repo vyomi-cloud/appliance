@@ -74,6 +74,10 @@ from core import gcp_resourcemanager_core as gcp_rm
 from core import gcp_pam_core as gcp_pam
 from core import gcp_run_core as gcp_run
 
+# Cloud Scheduler httpTarget that names a Cloud Run job's own Admin API v2 `:run` endpoint
+# (the job-trigger binding the Cloud Run console's Triggers tab shows and creates).
+_SCHED_RUN_JOB_RE = re.compile(r"/v2/projects/([^/]+)/locations/([^/]+)/jobs/([^/:]+):run")
+
 
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
@@ -492,8 +496,21 @@ class AwsWireRouter:
         return None
 
     def _sched_invoke(self, kind, d):
-        """Cloud Scheduler firing a job: deliver a pubsub target via the Pub/Sub core
-        (returns True, or an error string recorded on the job's status)."""
+        """Cloud Scheduler firing a job: deliver a pubsub target via the Pub/Sub core, or —
+        for an httpTarget that names a Cloud Run job's own `:run` endpoint — actually run that
+        job (the one HTTP destination this appliance can call without a network); any other
+        httpTarget is recorded as attempted only. Returns True, or an error string recorded on
+        the job's status."""
+        if kind == "http":
+            m = _SCHED_RUN_JOB_RE.search(d.get("uri") or "")
+            if not m:
+                return True
+            project, location, jid = m.groups()
+            try:
+                gcp_run.run_job(self.gcp_run, project, location, jid, {})
+            except gcp_run._E as e:
+                return e.message
+            return True
         if kind != "pubsub":
             return True
         topic = d["topicName"]
