@@ -9,7 +9,7 @@ Pro/Max flow            ->  Nano (static, in-browser)
   /console/gcp          ->  /gcp-console.html
   /console/azure        ->  /azure-console.html
 
-Run:  python3 wasm/make_pages.py   (after build_fixtures.py)
+RETIRED (see RETIRED below): the Nano pages are edited in wasm/ directly now.
 """
 import os
 
@@ -382,7 +382,22 @@ def _process(src_name, dst_name, inject, cloud=None):
     print(f"{dst_name:24} <- {src_name:22} ({len(html)} bytes)")
 
 
+RETIRED = """make_pages.py is retired — it would overwrite the Nano pages with old code.
+
+The Nano pages in wasm/ (index.html, clouds.html, the three *-console.html) are their
+own source now: they carry Nano-only code (in-browser cost savings, the tunnel Connect
+card, the Spaces-first landing) that static/ doesn't have, and this script rebuilt
+index.html from the retired static/pricing.html. Running it restored the old UI.
+
+Edit the pages in wasm/ directly; the daily portal sync carries them to the portal.
+"""
+
+
 def main():
+    raise SystemExit(RETIRED)
+
+
+def _main_retired():
     # Launch page -> the Nano landing (/nano/ = index.html), identical to Lite/Max/Pro.
     _process("pricing.html", "index.html", LAUNCH)
     # Workspaces dashboard (Appliance health / Host util / Spaces / KC) -> clouds.html.

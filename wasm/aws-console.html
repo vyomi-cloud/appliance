@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script src="nano-rates.js"></script>
   <script>
   (function(){
     var base = location.pathname.replace(/\/[^\/]*$/, "");
@@ -1011,12 +1012,7 @@ function renderHome(main){
   //    resource census (/api/runtime/host-distribution → providers.aws.by_service),
   //    priced with rates that mirror core/cost_model. Simulator cost = $0, so every
   //    dollar of real-AWS cost for what you've spun up is a dollar saved.
-  const _NANO_RATE = {
-    s3:0.50, dynamodb:1.25, kms:1.00,cloudwatch:0.10,secretsmanager:0.40, sqs:0.40, sns:0.50, iam:0, rds:25.55, elbv2:16.43, ec2:30.37, lambda:0.20, apigateway:3.50, vpc:0, ssm:0.05,
-    compute:24.53, storage:0.50, cloudsql:25.00, pubsub:0.40, firestore:0.18, functions:0.20, secretmanager:0.18,
-    'microsoft.compute/virtualmachines':30.37, 'microsoft.sql/servers':4.99, 'microsoft.storage/storageaccounts':0.50,
-    'microsoft.documentdb/databaseaccounts':24.48, 'microsoft.web/sites':0.20, 'microsoft.servicebus/namespaces':9.81, 'microsoft.keyvault/vaults':0.03
-  };
+  const _NANO_RATE = window.NANO_RATE || {};   // the shared table: wasm/nano-rates.js
   function nanoSavingsFromByService(bs){
     var t = 0; for (var k in (bs||{})) { var r = _NANO_RATE.hasOwnProperty(k) ? _NANO_RATE[k] : 1.0; t += (Number(bs[k])||0) * r; } return t;
   }
