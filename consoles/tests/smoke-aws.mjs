@@ -234,6 +234,25 @@ try {
   check("DynamoDB create backup (UI) → visible over native wire", (backups.BackupSummaries || []).some((b) => b.TableName === T), JSON.stringify(backups));
   await shot("12-ddb-backups");
 
+  // Exports to S3: real backend (DEPTH wave 5) — export the table through the UI, verify
+  // the actual DynamoDB-JSON bytes landed in the destination S3 bucket (UI → wire direction)
+  const EXB = `v4-ddbexport-${Date.now() % 100000}`;
+  await wire(`/${EXB}`, { method: "PUT", headers: { authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=0" } });
+  await page.goto(UI + "#/dynamodb/exports");
+  await page.getByRole("link", { name: "Export to S3" }).click();
+  await page.getByLabel("Source table").first().click();
+  await page.getByRole("option", { name: T }).click();
+  await page.getByLabel("Destination S3 bucket").fill(`s3://${EXB}/nightly`);
+  await page.getByRole("button", { name: "Export" }).last().click();
+  await page.getByPlaceholder("Find exports").fill(EXB).catch(() => {});
+  await page.getByText(EXB).first().waitFor({ timeout: 10000 });
+  const ddbExports = await ddb("ListExports", { TableName: T });
+  const ddbExp = (ddbExports.ExportSummaries || [])[0];
+  check("DynamoDB export table (UI) → COMPLETED over native wire", ddbExp?.ExportStatus === "COMPLETED", JSON.stringify(ddbExports));
+  const exportListing = await wire(`/${EXB}?prefix=nightly/`);
+  check("DynamoDB export table (UI) → real data file landed in the destination bucket", /data\/1\.json/.test(exportListing), exportListing.slice(0, 300));
+  await shot("12b-ddb-exports");
+
   // Local secondary index: create a table with a sort key + LSI through the UI, verify over the wire
   await page.goto(UI + "#/dynamodb/create-table");
   await page.getByLabel("Table name").fill(T2);

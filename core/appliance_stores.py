@@ -181,15 +181,18 @@ class AppStateObjectStore(ObjectStore):
 class AppStateNoSqlStore(NoSqlStore):
     """NoSqlStore whose `tables` map is the appliance's space-scoped ddb_state["tables"]."""
 
-    def __init__(self, tables, account_id: str, backups=None):
+    def __init__(self, tables, account_id: str, backups=None, exports=None):
         self._t = tables
         self._b = backups if backups is not None else {}
+        self._e = exports if exports is not None else {}
         self.account_id = account_id
 
     tables = property(lambda self: self._t)
     # On-demand backups (CreateBackup/RestoreTableFromBackup) live beside the tables in the
     # same space-scoped, persisted ddb_state, so they survive restarts like the tables do.
     backups = property(lambda self: self._b)
+    # ExportTableToPointInTime job records — same persisted ddb_state, keyed by export ARN.
+    exports = property(lambda self: self._e)
 
 
 def _active_space_id() -> str:
@@ -1524,7 +1527,8 @@ def ddb_store() -> AppStateNoSqlStore:
         from core import app_context as ctx
         _DDB = AppStateNoSqlStore(_proxy("dynamodb", ctx.ddb_state.default_factory, "tables"),
                                   account_id=ctx.AWS_ACCOUNT_ID,
-                                  backups=_proxy("dynamodb", ctx.ddb_state.default_factory, "backups"))
+                                  backups=_proxy("dynamodb", ctx.ddb_state.default_factory, "backups"),
+                                  exports=_proxy("dynamodb", ctx.ddb_state.default_factory, "exports"))
     return _DDB
 
 

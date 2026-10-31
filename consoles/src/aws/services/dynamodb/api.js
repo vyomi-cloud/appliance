@@ -33,6 +33,9 @@ export const describeBackup = (arn) => call("DescribeBackup", { BackupArn: arn }
 export const deleteBackup = (arn) => call("DeleteBackup", { BackupArn: arn });
 export const restoreTableFromBackup = (arn, targetTableName) => call("RestoreTableFromBackup", { BackupArn: arn, TargetTableName: targetTableName });
 export const executeStatement = (statement, parameters) => call("ExecuteStatement", { Statement: statement, ...(parameters ? { Parameters: parameters } : {}) });
+export const exportTableToPointInTime = (input) => call("ExportTableToPointInTime", input).then((r) => r.ExportDescription);
+export const listExports = async (tableArn) => (await call("ListExports", tableArn ? { TableArn: tableArn } : {})).ExportSummaries || [];
+export const describeExport = (arn) => call("DescribeExport", { ExportArn: arn }).then((r) => r.ExportDescription);
 
 /** DynamoDB attribute-value JSON → plain JS, and back. */
 export function unmarshal(av) {

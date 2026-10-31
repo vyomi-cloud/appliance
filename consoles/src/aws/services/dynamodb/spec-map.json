@@ -27,11 +27,16 @@
   },
   "exports-to-s3": {
     "route": "#/dynamodb/exports",
-    "honest_page": true
+    "fixtures": [
+      "ddb-table"
+    ],
+    "live": "live-export"
   },
   "export-to-s3": {
     "route": "#/dynamodb/exports/create",
-    "honest_page": true
+    "fixtures": [
+      "ddb-table"
+    ]
   },
   "imports-from-s3": {
     "route": "#/dynamodb/imports",

@@ -14,4 +14,11 @@ export default {
     await wire("POST", "/", { ...T("PutItem"), body: { TableName: "uic-table", Item: { pk: { S: uniq } } } });
     return uniq;
   },
+  "live-export": async (wire, uniq) => {
+    await wire("PUT", `/${uniq}`, { svc: "s3" }).catch(() => {});
+    await wire("POST", "/", { ...T("CreateTable"), body: table("uic-table") }).catch(() => {});
+    await wire("POST", "/", { ...T("PutItem"), body: { TableName: "uic-table", Item: { pk: { S: "x" } } } }).catch(() => {});
+    await wire("POST", "/", { ...T("ExportTableToPointInTime"), body: { TableName: "uic-table", S3Bucket: uniq } });
+    return uniq;
+  },
 };

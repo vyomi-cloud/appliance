@@ -837,7 +837,7 @@ class AwsWireRouter:
             target = lheaders.get("x-amz-target", "") or ""
             payload = self._json_body(body)
             if svc == "dynamodb":
-                r = ddb.dispatch(self.ddb, target, payload)
+                r = ddb.dispatch(self.ddb, target, payload, s3_store=self.s3)
             elif svc == "kms":
                 r = kms.dispatch(self.kms, target, payload)
             elif svc == "secretsmanager":

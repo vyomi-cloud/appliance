@@ -115,7 +115,7 @@ class PersistentKvStore(_PersistentMixin, InMemoryKvStore):
 
 
 class PersistentNoSqlStore(_PersistentMixin, InMemoryNoSqlStore):
-    _STATE_ATTRS = ("tables", "backups")
+    _STATE_ATTRS = ("tables", "backups", "exports")
 
     def __init__(self, backend: SqliteStateBackend, store_id: str = "nosql"):
         InMemoryNoSqlStore.__init__(self)

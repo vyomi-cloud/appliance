@@ -8,7 +8,9 @@ import Backups from "./Backups.jsx";
 import Settings from "./Settings.jsx";
 import EditLayoutSettings from "./EditLayoutSettings.jsx";
 import EditExploreItemsSettings from "./EditExploreItemsSettings.jsx";
-import { ExportsToS3, ExportToS3, ImportsFromS3, ImportFromS3 } from "./HonestPages.jsx";
+import Exports from "./Exports.jsx";
+import ExportToS3 from "./ExportToS3.jsx";
+import { ImportsFromS3, ImportFromS3 } from "./HonestPages.jsx";
 import { NotSimulatedContainer } from "../../kit/common.jsx";
 import { getLayoutSettings } from "./prefs.js";
 
@@ -55,7 +57,7 @@ export default {
     { pattern: "/dynamodb/settings", component: Settings, crumbs: () => [{ text: "Settings", href: "#/dynamodb/settings" }] },
     { pattern: "/dynamodb/settings/layout", component: EditLayoutSettings, crumbs: () => [{ text: "Settings", href: "#/dynamodb/settings" }, { text: "Edit layout and navigation settings", href: "#/dynamodb/settings/layout" }] },
     { pattern: "/dynamodb/settings/explore-items", component: EditExploreItemsSettings, crumbs: () => [{ text: "Settings", href: "#/dynamodb/settings" }, { text: "Edit explore items settings", href: "#/dynamodb/settings/explore-items" }] },
-    { pattern: "/dynamodb/exports", component: ExportsToS3, crumbs: () => [{ text: "Exports to S3", href: "#/dynamodb/exports" }] },
+    { pattern: "/dynamodb/exports", component: Exports, crumbs: () => [{ text: "Exports to S3", href: "#/dynamodb/exports" }] },
     { pattern: "/dynamodb/exports/create", component: ExportToS3, crumbs: () => [{ text: "Exports to S3", href: "#/dynamodb/exports" }, { text: "Export table to Amazon S3", href: "#/dynamodb/exports/create" }] },
     { pattern: "/dynamodb/imports", component: ImportsFromS3, crumbs: () => [{ text: "Imports from S3", href: "#/dynamodb/imports" }] },
     { pattern: "/dynamodb/imports/create", component: ImportFromS3, crumbs: () => [{ text: "Imports from S3", href: "#/dynamodb/imports" }, { text: "Import from S3", href: "#/dynamodb/imports/create" }] },

@@ -224,7 +224,7 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
             return {"status": 400, "headers": {"content-type": "application/x-amz-json-1.0"},
                     "body": _json.dumps({"__type": "com.amazon.coral.service#SerializationException",
                                          "message": "Request body is not valid JSON."}).encode()}
-        resp = dynamodb_core.dispatch(r.ddb, target, payload if isinstance(payload, dict) else {})
+        resp = dynamodb_core.dispatch(r.ddb, target, payload if isinstance(payload, dict) else {}, s3_store=r.s3)
         import uuid as _uuid
         hdrs = {"x-amzn-requestid": _uuid.uuid4().hex.upper(), **dict(resp.headers or {})}
         hdrs.setdefault("content-type", "application/x-amz-json-1.0")
