@@ -128,11 +128,11 @@
  "lambda.vpc-filesystems": {
   "title": "VPC config and EFS file systems",
   "level": {
-   "nano": "config_only",
-   "offline": "config_only"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "VPC subnets/security groups and EFS mounts are stored and returned exactly as configured; Vyomi never attaches a real ENI or mounts a real file system, so code never actually reaches either at Invoke time."
+   "SubnetIds/SecurityGroupIds are validated for real: both must be given together (or both omitted, to detach), and each ID must look like a real EC2 resource ID — a malformed or missing pair is rejected with InvalidParameterValueException, exactly as real Lambda rejects it at Create/UpdateFunctionConfiguration time. An EFS access point's Arn and LocalMountPath are format-validated the same way. Vyomi has no shared VPC engine on this seam, so a syntactically valid but nonexistent subnet, security group or file system is still accepted; once a config passes validation it is stored and returned exactly as configured — Vyomi never attaches a real ENI or mounts a real file system, so code never actually reaches the VPC or the file system at Invoke time."
   ],
   "tests": [
    "tests/conformance/test_lambda_console_v4_core.py"

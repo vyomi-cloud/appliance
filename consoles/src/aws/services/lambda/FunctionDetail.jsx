@@ -306,7 +306,7 @@ function ConfigurationTab({ name, cfg, reload }) {
   const [onFailure, setOnFailure] = useState(eic.data?.DestinationConfig?.OnFailure?.Destination || "");
 
   const [addFs, setAddFs] = useState(false);
-  const [fsArn, setFsArn] = useState(""); const [apArn, setApArn] = useState(""); const [mount, setMount] = useState("/mnt/efs");
+  const [apArn, setApArn] = useState(""); const [mount, setMount] = useState("/mnt/efs");
 
   const [delTrigger, setDelTrigger] = useState(null);
 
@@ -411,8 +411,8 @@ function ConfigurationTab({ name, cfg, reload }) {
         await api.updateFunctionConfiguration(name, { VpcConfig: subnets.trim() ? { VpcId: "vpc-vyomi", SubnetIds: subnets.split(",").map((s) => s.trim()).filter(Boolean), SecurityGroupIds: sgs.split(",").map((s) => s.trim()).filter(Boolean) } : null });
         notify.success("VPC settings updated."); reload();
       }}>
-        <FormField label="Subnets" description="Comma-separated subnet IDs"><Input value={subnets} onChange={({ detail }) => setSubnets(detail.value)} /></FormField>
-        <FormField label="Security groups" description="Comma-separated security group IDs"><Input value={sgs} onChange={({ detail }) => setSgs(detail.value)} /></FormField>
+        <FormField label="Subnets" description="Comma-separated subnet IDs — required together with at least one security group."><Input value={subnets} onChange={({ detail }) => setSubnets(detail.value)} placeholder="subnet-0123456789abcdef0" /></FormField>
+        <FormField label="Security groups" description="Comma-separated security group IDs — required together with at least one subnet."><Input value={sgs} onChange={({ detail }) => setSgs(detail.value)} placeholder="sg-0123456789abcdef0" /></FormField>
       </EditModal>
 
       <NotSimulatedContainer title="RDS databases" feature="Lambda RDS database connectivity helper" />
@@ -471,12 +471,13 @@ function ConfigurationTab({ name, cfg, reload }) {
         columnDefinitions={[{ id: "fs", header: "File system", cell: (f) => f.Arn }, { id: "ap", header: "Access point", cell: (f) => f.Arn }, { id: "mp", header: "Local mount path", cell: (f) => f.LocalMountPath }]}
         empty={<Box textAlign="center" color="inherit"><b>No file systems</b></Box>} />
       <EditModal visible={addFs} onDismiss={() => setAddFs(false)} header="Add file system" onSave={async () => {
-        await api.updateFunctionConfiguration(name, { FileSystemConfigs: [...(cfg.FileSystemConfigs || []), { Arn: apArn || fsArn, LocalMountPath: mount }] });
+        await api.updateFunctionConfiguration(name, { FileSystemConfigs: [...(cfg.FileSystemConfigs || []), { Arn: apArn, LocalMountPath: mount }] });
         notify.success("File system added."); reload();
       }}>
-        <FormField label="EFS file system ARN"><Input value={fsArn} onChange={({ detail }) => setFsArn(detail.value)} /></FormField>
-        <FormField label="EFS access point ARN - optional"><Input value={apArn} onChange={({ detail }) => setApArn(detail.value)} /></FormField>
-        <FormField label="Local mount path"><Input value={mount} onChange={({ detail }) => setMount(detail.value)} /></FormField>
+        <FormField label="EFS access point ARN" description="arn:aws:elasticfilesystem:<region>:<account-id>:access-point/fsap-...">
+          <Input value={apArn} onChange={({ detail }) => setApArn(detail.value)} placeholder="arn:aws:elasticfilesystem:us-east-1:123456789012:access-point/fsap-0123456789abcdef0" />
+        </FormField>
+        <FormField label="Local mount path" description="Must be an absolute path under /mnt/."><Input value={mount} onChange={({ detail }) => setMount(detail.value)} /></FormField>
       </EditModal>
 
       <NotSimulatedContainer title="State machines" feature="Step Functions state machines using this function as a task" />
