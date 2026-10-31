@@ -737,7 +737,7 @@
     #spaces-card .sc-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 14px 0 18px; }
     #spaces-card .sc-actions .sc-desc { margin: 0; }
     #spaces-card .sc-actions-btns { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-    #spaces-card > .sc-head > .sc-actions-btns { margin-bottom: 10px; }   /* header row, right, above the baseline */
+    #spaces-card > .sc-head > .sc-actions-btns, #svc-status-card > .sc-head > .sc-actions-btns { margin-bottom: 10px; }   /* header row, right, above the baseline */
     /* Space cards: the Create Space button's fill (#1f2937), no border; a lighter fill on hover. */
     #spaces-grid .space-card { background: #1f2937 !important; border: none !important; }
     #spaces-grid .space-card:hover { background: #273548 !important; border: none !important; }
@@ -1074,8 +1074,8 @@
       margin-left: -22px; margin-right: -22px; padding-left: 22px; padding-right: 22px;
     }
     /* Distribution tiles, host stat tiles, and the per-cloud service tiles (readiness-strip.js
-       draws those with inline styles: the second child of the mount; the first is the CPU/Mem toggle). */
-    #stats-card .pie-card, #host-util-card .stat-card, #vyomi-services-mount > div:nth-child(2) > div {
+       draws those with inline styles: the tile grid is the mount's last child). */
+    #stats-card .pie-card, #host-util-card .stat-card, #vyomi-services-mount > div:last-child > div {
       background: #1f2937 !important; border: none !important; box-shadow: none !important;
     }
     /* Tile titles: a light-theme rule painted them #1f2937 (the tile colour) — readable grey here. */
@@ -1263,6 +1263,7 @@
         <div class="sc-title">
           <h2><span class="material-icons">dns</span>Service status</h2>
         </div>
+        <div class="sc-actions-btns" id="vyomi-services-toggle"></div>
       </div>
       <p class="sc-desc">Live status of every emulated backend service.</p>
       <div id="vyomi-services-mount"></div>
