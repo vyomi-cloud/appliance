@@ -33,6 +33,8 @@ import uuid
 from dataclasses import dataclass, field
 from xml.sax.saxutils import escape as _xml_escape
 
+from core import cloudwatch_core as _cw_core
+
 EC2_NS = "http://ec2.amazonaws.com/doc/2016-11-15/"
 
 
@@ -1802,6 +1804,28 @@ def _instance_status_xml(inst: dict) -> str:
             "</item>")
 
 
+_STATUS_METRICS = ("StatusCheckFailed", "StatusCheckFailed_Instance", "StatusCheckFailed_System")
+
+
+def _push_status_metrics(store, inst: dict, now: float) -> None:
+    """Publish the one CloudWatch metric family Vyomi can honestly derive from an instance's
+    own lifecycle state (see ec2.instances.monitoring / ec2.instances.alarms-metrics): a
+    running instance always passes, so each point is 0. The 'detailed monitoring' flag sets
+    how often a poll is allowed to record a fresh point (1 vs 5 minutes), same as AWS's basic
+    vs detailed monitoring granularity — there's no background ticker, so a point lands only
+    when something (DescribeInstanceStatus) actually asks."""
+    cw = getattr(store, "cw_store", None)
+    if cw is None or inst.get("state") != "running":
+        return
+    period = 60.0 if inst.get("monitoring") else 300.0
+    if now - (inst.get("_last_metric_ts") or 0.0) < period:
+        return
+    inst["_last_metric_ts"] = now
+    dims = [{"Name": "InstanceId", "Value": inst["id"]}]
+    for name in _STATUS_METRICS:
+        _cw_core.ingest_internal_metric(cw, "AWS/EC2", name, dims, 0.0, unit="Count", ts=now)
+
+
 def _describe_instance_status(store, params):
     m = _model(store)
     ids = [v for k, v in params.items() if k.startswith("InstanceId.")]
@@ -1809,6 +1833,9 @@ def _describe_instance_status(store, params):
     rows = [m["instances"][i] for i in ids if i in m["instances"]] if ids else list(m["instances"].values())
     if not include_all:
         rows = [r for r in rows if r["state"] == "running"]
+    now = time.time()
+    for r in rows:
+        _push_status_metrics(store, r, now)
     return _envelope("DescribeInstanceStatus", f"<instanceStatusSet>{''.join(_instance_status_xml(r) for r in rows)}</instanceStatusSet>")
 
 

@@ -349,6 +349,24 @@ def op_put_metric_data(store, a):
     return None
 
 
+def ingest_internal_metric(store: CloudWatchStore, namespace: str, metric_name: str, dims: list[dict],
+                            value: float, unit: str = "None", ts: float | None = None) -> None:
+    """Record one real AWS/* namespace datapoint on behalf of another core (e.g. EC2 publishing
+    StatusCheckFailed from its own instance lifecycle state) — the internal counterpart to
+    op_put_metric_data, which rejects the AWS/ namespace because that path is PutMetricData's
+    public contract (AWS/* metrics are system-published, never user-submitted). Alarms on the
+    metric evaluate exactly as they would for any other series."""
+    t = ts if ts is not None else _now()
+    s = _series(store, namespace, metric_name, dims, create=True)
+    s["points"].append([t, float(value), 1.0, float(value), float(value), unit, [[float(value), 1.0]]])
+    if len(s["points"]) > KEEP_POINTS:
+        del s["points"][: len(s["points"]) - KEEP_POINTS]
+    s["unit"] = unit
+    s["last"] = max(s["last"], t)
+    _evaluate_for(store, {(namespace, metric_name, _dim_key(dims))}, t)
+    store.persist()
+
+
 def _bucket_stat(pts: list, stat: str):
     """Aggregate the points of one bucket for `stat` (None when empty)."""
     if not pts:

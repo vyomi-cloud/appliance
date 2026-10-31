@@ -668,6 +668,35 @@ try {
   const instanceId = nameIdx >= 0 ? xtag(before.slice(before.lastIndexOf("<instanceId>")), "instanceId") : null;
   await shot("15-ec2-instances");
 
+  // EC2 monitoring/alarms: visiting "Status and alarms" polls DescribeInstanceStatus, which
+  // really publishes a StatusCheckFailed datapoint into CloudWatch (UI → CLI direction).
+  if (instanceId) {
+    await page.goto(UI + `#/ec2/instances/${instanceId}`);
+    await page.getByRole("tab", { name: "Status and alarms" }).click();
+    await page.getByText("2/2 checks passed").first().waitFor({ timeout: 10000 });
+    const end = new Date(), start = new Date(end - 30 * 60_000);
+    const stats = await cw("GetMetricStatistics", {
+      Namespace: "AWS/EC2", MetricName: "StatusCheckFailed", Dimensions: [{ Name: "InstanceId", Value: instanceId }],
+      StartTime: start.toISOString(), EndTime: end.toISOString(), Period: 60, Statistics: ["Maximum"],
+    });
+    check("EC2 Status and alarms tab (UI) → real StatusCheckFailed datapoint over native CloudWatch wire",
+          (stats.Datapoints || []).some((d) => d.Maximum === 0), JSON.stringify(stats).slice(0, 200));
+
+    // EC2 monitoring/alarms: an alarm on that same metric, created over the wire, shows up in
+    // the instance's Alarms table (CLI → UI direction).
+    const ALM = `v4-smoke-ec2-alarm-${Date.now() % 100000}`;
+    await cw("PutMetricAlarm", {
+      AlarmName: ALM, Namespace: "AWS/EC2", MetricName: "StatusCheckFailed", Dimensions: [{ Name: "InstanceId", Value: instanceId }],
+      Statistic: "Maximum", Period: 60, EvaluationPeriods: 1, Threshold: 1, ComparisonOperator: "GreaterThanOrEqualToThreshold",
+    });
+    await page.reload({ waitUntil: "load" });
+    await page.getByRole("tab", { name: "Status and alarms" }).click();
+    await page.getByText(ALM).waitFor({ timeout: 10000 });
+    check("EC2 status-check alarm created over wire → shown in instance's Alarms table", true, ALM);
+    await shot("15b-ec2-alarms");
+    await cw("DeleteAlarms", { AlarmNames: [ALM] });
+  }
+
   // EC2: create a security group over the wire, verify it shows up in the UI (CLI → UI direction)
   const SG = `v4-smoke-sg-${Date.now() % 100000}`;
   const sgCreated = await ec2("CreateSecurityGroup", { GroupName: SG, GroupDescription: "v4 smoke test" });
