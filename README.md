@@ -1,175 +1,138 @@
 # Vyomi Conformance — hourly report
 
-Run **2026-10-31T21:23:59+00:00** · commit `afddcfcdf6e3` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
+Run **2026-10-31T23:27:05+00:00** · commit `53194bf323ae` · Nano (in-browser) + offline appliance · updated every hour by [the conformance agent](https://github.com/vyomi-cloud/appliance/blob/main/tests/conformance/hourly/AGENT.md).
 
 | Suites green | Checks passing | Checks failing | Nano UI clean | Offline UI clean | Open UI findings | API routes with tests |
 |---|---|---|---|---|---|---|
-| 211/221 | 5168 | 32 | 55/63 | 49/58 | 38 | 49.5% (191/386) |
+| 215/221 | 5184 | 18 | 60/63 | 53/58 | 20 | 49.5% (191/386) |
 
 ## By cloud
 
 | Cloud | Suites green | Checks ✓ | Checks ✗ | Nano UI clean | Offline UI clean | Open findings |
 |---|---|---|---|---|---|---|
-| [AWS](#aws) | 94/96 | 2184 | 4 | 12/20 | 11/20 | 38 |
-| [GCP](#gcp) | 59/60 | 896 | 6 | 18/18 | 18/18 | 0 |
-| [Azure](#azure) | 54/58 | 1247 | 4 | 25/25 | 20/20 | 0 |
+| [AWS](#aws) | 93/96 | 2184 | 4 | 17/20 | 16/20 | 14 |
+| [GCP](#gcp) | 59/60 | 896 | 6 | 18/18 | 17/18 | 6 |
+| [Azure](#azure) | 58/58 | 1251 | 0 | 25/25 | 20/20 | 0 |
 
 <a id="aws"></a>
 ## AWS
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `offline-api-aws-detail-tabs` | offline | api | 199 | 1 | 222.5 |
-| ❌ | `offline-ui-aws-real-tabs` | offline | ui | 54 | 3 | 256.2 |
-| ✅ | `nano-aws-ec2-launch` | nano | core | 13 | 0 | 0.2 |
+| ❌ | `offline-ui-aws-real-tabs` | offline | ui | 57 | 2 | 275.0 |
+| ❌ | `offline-ui-aws-vpc-details-tab` | offline | ui | 0 | 1 | 34.2 |
+| ❌ | `offline-ui-aws-vpc-sg-iam-cells` | offline | ui | 1 | 1 | 36.5 |
+| ✅ | `nano-aws-ec2-launch` | nano | core | 13 | 0 | 0.1 |
 | ✅ | `nano-aws-iam-detail` | nano | core | 8 | 0 | 0.4 |
-| ✅ | `nano-core-aws-detail-tabs` | nano | core | 104 | 0 | 0.1 |
+| ✅ | `nano-core-aws-detail-tabs` | nano | core | 104 | 0 | 0.2 |
 | ✅ | `nano-ui-aws-api` | nano | ui | 6 | 0 | 4.5 |
-| ✅ | `nano-ui-aws-apigatewayv2` | nano | ui | 21 | 0 | 23.1 |
-| ✅ | `nano-ui-aws-apigw-row` | nano | ui | 6 | 0 | 16.2 |
-| ✅ | `nano-ui-aws-cloudwatch` | nano | ui | 21 | 0 | 16.7 |
-| ✅ | `nano-ui-aws-compute-reload` | nano | ui | 4 | 0 | 10.0 |
-| ✅ | `nano-ui-aws-compute-savings` | nano | ui | 6 | 0 | 10.3 |
-| ✅ | `nano-ui-aws-detail-tabs` | nano | ui | 6 | 0 | 23.5 |
-| ✅ | `nano-ui-aws-ec2-detail-tabs` | nano | ui | 5 | 0 | 12.8 |
-| ✅ | `nano-ui-aws-ec2-row` | nano | ui | 6 | 0 | 16.3 |
-| ✅ | `nano-ui-aws-elbv2` | nano | ui | 24 | 0 | 25.4 |
-| ✅ | `nano-ui-aws-eventbridge-row` | nano | ui | 4 | 0 | 16.3 |
-| ✅ | `nano-ui-aws-iam-detail` | nano | ui | 4 | 0 | 4.5 |
-| ✅ | `nano-ui-aws-kinesis` | nano | ui | 19 | 0 | 10.4 |
-| ✅ | `nano-ui-aws-lambda-row` | nano | ui | 4 | 0 | 16.3 |
-| ✅ | `nano-ui-aws-logs` | nano | ui | 33 | 0 | 20.6 |
-| ✅ | `nano-ui-aws-metrics` | nano | ui | 10 | 0 | 13.5 |
-| ✅ | `nano-ui-aws-rds-connectivity-tabs` | nano | ui | 3 | 0 | 11.3 |
-| ✅ | `nano-ui-aws-real-tabs` | nano | ui | 59 | 0 | 268.8 |
-| ✅ | `nano-ui-aws-secrets-created` | nano | ui | 3 | 0 | 4.3 |
-| ✅ | `nano-ui-aws-settings-tabs` | nano | ui | 10 | 0 | 12.2 |
-| ✅ | `nano-ui-aws-sns` | nano | ui | 36 | 0 | 31.8 |
-| ✅ | `nano-ui-aws-sqs-dlq-tab` | nano | ui | 2 | 0 | 9.8 |
-| ✅ | `nano-ui-aws-ssm` | nano | ui | 19 | 0 | 21.3 |
-| ✅ | `nano-ui-aws-stepfunctions` | nano | ui | 22 | 0 | 23.2 |
-| ✅ | `nano-ui-aws-tabs` | nano | ui | 16 | 0 | 15.7 |
+| ✅ | `nano-ui-aws-apigatewayv2` | nano | ui | 21 | 0 | 24.0 |
+| ✅ | `nano-ui-aws-apigw-row` | nano | ui | 6 | 0 | 16.9 |
+| ✅ | `nano-ui-aws-cloudwatch` | nano | ui | 21 | 0 | 16.9 |
+| ✅ | `nano-ui-aws-compute-reload` | nano | ui | 4 | 0 | 9.8 |
+| ✅ | `nano-ui-aws-compute-savings` | nano | ui | 6 | 0 | 10.5 |
+| ✅ | `nano-ui-aws-detail-tabs` | nano | ui | 6 | 0 | 24.2 |
+| ✅ | `nano-ui-aws-ec2-detail-tabs` | nano | ui | 5 | 0 | 13.0 |
+| ✅ | `nano-ui-aws-ec2-row` | nano | ui | 6 | 0 | 16.7 |
+| ✅ | `nano-ui-aws-elbv2` | nano | ui | 24 | 0 | 25.7 |
+| ✅ | `nano-ui-aws-eventbridge-row` | nano | ui | 4 | 0 | 16.6 |
+| ✅ | `nano-ui-aws-iam-detail` | nano | ui | 4 | 0 | 4.7 |
+| ✅ | `nano-ui-aws-kinesis` | nano | ui | 19 | 0 | 10.7 |
+| ✅ | `nano-ui-aws-lambda-row` | nano | ui | 4 | 0 | 16.8 |
+| ✅ | `nano-ui-aws-logs` | nano | ui | 33 | 0 | 21.2 |
+| ✅ | `nano-ui-aws-metrics` | nano | ui | 10 | 0 | 13.8 |
+| ✅ | `nano-ui-aws-rds-connectivity-tabs` | nano | ui | 3 | 0 | 11.8 |
+| ✅ | `nano-ui-aws-real-tabs` | nano | ui | 59 | 0 | 273.8 |
+| ✅ | `nano-ui-aws-secrets-created` | nano | ui | 3 | 0 | 4.4 |
+| ✅ | `nano-ui-aws-settings-tabs` | nano | ui | 10 | 0 | 12.6 |
+| ✅ | `nano-ui-aws-sns` | nano | ui | 36 | 0 | 32.1 |
+| ✅ | `nano-ui-aws-sqs-dlq-tab` | nano | ui | 2 | 0 | 10.2 |
+| ✅ | `nano-ui-aws-ssm` | nano | ui | 19 | 0 | 21.9 |
+| ✅ | `nano-ui-aws-stepfunctions` | nano | ui | 22 | 0 | 24.2 |
+| ✅ | `nano-ui-aws-tabs` | nano | ui | 16 | 0 | 15.9 |
 | ✅ | `nano-ui-aws-vpc-apigw-lists` | nano | ui | 5 | 0 | 4.4 |
-| ✅ | `nano-ui-aws-vpc-details-tab` | nano | ui | 2 | 0 | 11.3 |
-| ✅ | `nano-ui-aws-vpc-row` | nano | ui | 7 | 0 | 16.2 |
-| ✅ | `nano-ui-aws-vpc-sg-iam-cells` | nano | ui | 3 | 0 | 10.3 |
-| ✅ | `offline-api-aws-console-savings` | offline | api | 12 | 0 | 5.6 |
+| ✅ | `nano-ui-aws-vpc-details-tab` | nano | ui | 2 | 0 | 11.7 |
+| ✅ | `nano-ui-aws-vpc-row` | nano | ui | 7 | 0 | 16.7 |
+| ✅ | `nano-ui-aws-vpc-sg-iam-cells` | nano | ui | 3 | 0 | 10.1 |
+| ✅ | `offline-api-aws-console-savings` | offline | api | 12 | 0 | 6.7 |
+| ✅ | `offline-api-aws-detail-tabs` | offline | api | 200 | 0 | 291.0 |
 | ✅ | `offline-api-aws-eventbridge-rule-defaults` | offline | api | 14 | 0 | 2.3 |
-| ✅ | `offline-api-aws-provider-connect` | offline | api | 11 | 0 | 0.2 |
-| ✅ | `offline-api-aws-sdk-info-extras-config` | offline | api | 11 | 0 | 1.1 |
-| ✅ | `offline-api-aws-sdk-info-routes` | offline | api | 8 | 0 | 0.2 |
-| ✅ | `offline-api-aws-wire-routes` | offline | api | 7 | 0 | 1.6 |
-| ✅ | `offline-api-cost-savings-extras` | offline | api | 12 | 0 | 4.4 |
-| ✅ | `offline-api-ec2-capacity-manager-scores` | offline | api | 6 | 0 | 0.2 |
-| ✅ | `offline-api-ec2-capacity-reservation-fleet` | offline | api | 9 | 0 | 0.2 |
-| ✅ | `offline-api-ec2-default-public-ip` | offline | api | 3 | 0 | 0.4 |
-| ✅ | `offline-api-ec2-get-image-findings` | offline | api | 4 | 0 | 0.2 |
-| ✅ | `offline-api-ec2-instance-detail` | offline | api | 3 | 0 | 0.3 |
+| ✅ | `offline-api-aws-provider-connect` | offline | api | 11 | 0 | 0.1 |
+| ✅ | `offline-api-aws-sdk-info-extras-config` | offline | api | 11 | 0 | 1.6 |
+| ✅ | `offline-api-aws-sdk-info-routes` | offline | api | 8 | 0 | 0.1 |
+| ✅ | `offline-api-aws-wire-routes` | offline | api | 7 | 0 | 1.2 |
+| ✅ | `offline-api-cost-savings-extras` | offline | api | 12 | 0 | 5.6 |
+| ✅ | `offline-api-ec2-capacity-manager-scores` | offline | api | 6 | 0 | 0.1 |
+| ✅ | `offline-api-ec2-capacity-reservation-fleet` | offline | api | 9 | 0 | 0.1 |
+| ✅ | `offline-api-ec2-default-public-ip` | offline | api | 3 | 0 | 0.3 |
+| ✅ | `offline-api-ec2-get-image-findings` | offline | api | 4 | 0 | 0.1 |
+| ✅ | `offline-api-ec2-instance-detail` | offline | api | 3 | 0 | 0.2 |
 | ✅ | `offline-api-s3-bucket-creation-date` | offline | api | 3 | 0 | 0.3 |
-| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 22.0 |
-| ✅ | `offline-cli-aws-apigatewayv2` | offline | cli | 40 | 0 | 36.2 |
-| ✅ | `offline-cli-aws-cloudwatch` | offline | cli | 31 | 0 | 30.9 |
-| ✅ | `offline-cli-aws-elbv2` | offline | cli | 27 | 0 | 42.6 |
-| ✅ | `offline-cli-aws-kinesis` | offline | cli | 20 | 0 | 24.3 |
-| ✅ | `offline-cli-aws-logs` | offline | cli | 19 | 0 | 29.5 |
-| ✅ | `offline-cli-aws-sns` | offline | cli | 76 | 0 | 144.6 |
-| ✅ | `offline-cli-aws-ssm` | offline | cli | 34 | 0 | 35.1 |
-| ✅ | `offline-cli-aws-stepfunctions` | offline | cli | 26 | 0 | 21.4 |
-| ✅ | `offline-request-metrics` | offline | core | 4 | 0 | 0.4 |
-| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 44.6 |
-| ✅ | `offline-sdk-go-aws-apigatewayv2` | offline | sdk-go | 39 | 0 | 7.2 |
-| ✅ | `offline-sdk-go-aws-cloudwatch` | offline | sdk-go | 37 | 0 | 18.0 |
-| ✅ | `offline-sdk-go-aws-elbv2` | offline | sdk-go | 60 | 0 | 40.7 |
-| ✅ | `offline-sdk-go-aws-kinesis` | offline | sdk-go | 26 | 0 | 16.4 |
-| ✅ | `offline-sdk-go-aws-logs` | offline | sdk-go | 29 | 0 | 30.6 |
-| ✅ | `offline-sdk-go-aws-sns` | offline | sdk-go | 71 | 0 | 62.6 |
-| ✅ | `offline-sdk-go-aws-ssm` | offline | sdk-go | 38 | 0 | 19.5 |
-| ✅ | `offline-sdk-go-aws-stepfunctions` | offline | sdk-go | 39 | 0 | 9.0 |
-| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 29 | 0 | 15.7 |
-| ✅ | `offline-sdk-java-aws-apigatewayv2` | offline | sdk-java | 46 | 0 | 9.5 |
-| ✅ | `offline-sdk-java-aws-cloudwatch` | offline | sdk-java | 26 | 0 | 17.8 |
-| ✅ | `offline-sdk-java-aws-elbv2` | offline | sdk-java | 41 | 0 | 32.8 |
-| ✅ | `offline-sdk-java-aws-kinesis` | offline | sdk-java | 34 | 0 | 30.2 |
-| ✅ | `offline-sdk-java-aws-logs` | offline | sdk-java | 16 | 0 | 21.6 |
-| ✅ | `offline-sdk-java-aws-sns` | offline | sdk-java | 73 | 0 | 64.8 |
-| ✅ | `offline-sdk-java-aws-ssm` | offline | sdk-java | 33 | 0 | 17.2 |
-| ✅ | `offline-sdk-java-aws-stepfunctions` | offline | sdk-java | 41 | 0 | 10.4 |
-| ✅ | `offline-sdk-python-aws` | offline | sdk-python | 79 | 0 | 2.9 |
-| ✅ | `offline-sdk-python-aws-kms-kem` | offline | sdk-python | 6 | 0 | 0.6 |
-| ✅ | `offline-sdk-python-aws-ops` | offline | sdk-python | 12 | 0 | 2.0 |
-| ✅ | `offline-sdk-python-aws-ops2` | offline | sdk-python | 20 | 0 | 1.3 |
-| ✅ | `offline-ui-aws-apigatewayv2` | offline | ui | 21 | 0 | 22.6 |
-| ✅ | `offline-ui-aws-apigw-tabs` | offline | ui | 4 | 0 | 11.0 |
-| ✅ | `offline-ui-aws-cloudwatch` | offline | ui | 23 | 0 | 17.3 |
-| ✅ | `offline-ui-aws-detail-name` | offline | ui | 4 | 0 | 15.9 |
-| ✅ | `offline-ui-aws-detail-tabs` | offline | ui | 6 | 0 | 22.1 |
-| ✅ | `offline-ui-aws-ec2-detail-tabs` | offline | ui | 5 | 0 | 11.3 |
-| ✅ | `offline-ui-aws-elbv2` | offline | ui | 24 | 0 | 29.5 |
-| ✅ | `offline-ui-aws-kinesis` | offline | ui | 19 | 0 | 14.7 |
-| ✅ | `offline-ui-aws-logs` | offline | ui | 33 | 0 | 27.0 |
-| ✅ | `offline-ui-aws-metrics` | offline | ui | 10 | 0 | 15.8 |
-| ✅ | `offline-ui-aws-rds-connectivity-tabs` | offline | ui | 3 | 0 | 9.3 |
-| ✅ | `offline-ui-aws-sns` | offline | ui | 36 | 0 | 48.0 |
-| ✅ | `offline-ui-aws-sqs-dlq-tab` | offline | ui | 2 | 0 | 9.0 |
-| ✅ | `offline-ui-aws-ssm` | offline | ui | 19 | 0 | 21.9 |
-| ✅ | `offline-ui-aws-stepfunctions` | offline | ui | 22 | 0 | 22.6 |
-| ✅ | `offline-ui-aws-vpc-details-tab` | offline | ui | 2 | 0 | 9.3 |
-| ✅ | `offline-ui-aws-vpc-sg-iam-cells` | offline | ui | 3 | 0 | 9.1 |
-
-<details><summary>❌ <code>offline-api-aws-detail-tabs</code> log</summary>
-
-```
-[PASS] Key users: unknown principal rejected
-[PASS] Key administrators: added
-[PASS] Grants: grant created
-[PASS] Grants: invalid operation rejected
-[PASS] Grants: revoked
-[PASS] General: disabling shows Disabled
-── EventBridge rule
-[PASS] create rule
-[PASS] Rule details: this rule's ARN on the default bus
-[PASS] Rule details: disable persists
-[PASS] Targets: SQS target added
-[PASS] Targets: duplicate Id rejected
-[PASS] Targets: list row target count
-[PASS] Event pattern: non-array value rejected
-[PASS] Event pattern: TestEventPattern matches / rejects sample events
-[PASS] Dead-letter queue: non-existent DLQ rejected
-[PASS] Dead-letter queue: retry policy + DLQ on the target
-── API Gateway REST API
-[PASS] create REST API
-[PASS] Models: the Empty and Error models every REST API gets
-[PASS] Models: create Pet
-[PASS] Models: non-alphanumeric name rejected
-[PASS] Authorizers: Lambda TOKEN authorizer with its invocation URI
-[PASS] Authorizers: missing Lambda rejected
-[PASS] Deployments: deployment to prod listed
-[PASS] Logs/Tracing: INFO logs + X-Ray on the prod stage
-[PASS] Logs/Tracing: unknown stage rejected
-[PASS] Resource policy: non execute-api resource rejected
-[PASS] Resource policy: IP-restricting policy saved
-[PASS] Settings: UpdateRestApi persists
-```
-
-</details>
+| ✅ | `offline-cli-aws` | offline | cli | 15 | 0 | 18.9 |
+| ✅ | `offline-cli-aws-apigatewayv2` | offline | cli | 40 | 0 | 31.8 |
+| ✅ | `offline-cli-aws-cloudwatch` | offline | cli | 31 | 0 | 27.0 |
+| ✅ | `offline-cli-aws-elbv2` | offline | cli | 27 | 0 | 40.6 |
+| ✅ | `offline-cli-aws-kinesis` | offline | cli | 20 | 0 | 21.4 |
+| ✅ | `offline-cli-aws-logs` | offline | cli | 19 | 0 | 31.7 |
+| ✅ | `offline-cli-aws-sns` | offline | cli | 76 | 0 | 144.0 |
+| ✅ | `offline-cli-aws-ssm` | offline | cli | 34 | 0 | 29.1 |
+| ✅ | `offline-cli-aws-stepfunctions` | offline | cli | 26 | 0 | 14.7 |
+| ✅ | `offline-request-metrics` | offline | core | 4 | 0 | 0.2 |
+| ✅ | `offline-sdk-go-aws` | offline | sdk-go | 14 | 0 | 30.0 |
+| ✅ | `offline-sdk-go-aws-apigatewayv2` | offline | sdk-go | 39 | 0 | 5.4 |
+| ✅ | `offline-sdk-go-aws-cloudwatch` | offline | sdk-go | 37 | 0 | 15.2 |
+| ✅ | `offline-sdk-go-aws-elbv2` | offline | sdk-go | 60 | 0 | 45.3 |
+| ✅ | `offline-sdk-go-aws-kinesis` | offline | sdk-go | 26 | 0 | 17.0 |
+| ✅ | `offline-sdk-go-aws-logs` | offline | sdk-go | 29 | 0 | 36.7 |
+| ✅ | `offline-sdk-go-aws-sns` | offline | sdk-go | 71 | 0 | 69.2 |
+| ✅ | `offline-sdk-go-aws-ssm` | offline | sdk-go | 38 | 0 | 18.4 |
+| ✅ | `offline-sdk-go-aws-stepfunctions` | offline | sdk-go | 39 | 0 | 6.5 |
+| ✅ | `offline-sdk-java-aws` | offline | sdk-java | 29 | 0 | 9.2 |
+| ✅ | `offline-sdk-java-aws-apigatewayv2` | offline | sdk-java | 46 | 0 | 7.1 |
+| ✅ | `offline-sdk-java-aws-cloudwatch` | offline | sdk-java | 26 | 0 | 16.2 |
+| ✅ | `offline-sdk-java-aws-elbv2` | offline | sdk-java | 41 | 0 | 37.5 |
+| ✅ | `offline-sdk-java-aws-kinesis` | offline | sdk-java | 34 | 0 | 30.3 |
+| ✅ | `offline-sdk-java-aws-logs` | offline | sdk-java | 16 | 0 | 24.3 |
+| ✅ | `offline-sdk-java-aws-sns` | offline | sdk-java | 73 | 0 | 71.6 |
+| ✅ | `offline-sdk-java-aws-ssm` | offline | sdk-java | 33 | 0 | 17.3 |
+| ✅ | `offline-sdk-java-aws-stepfunctions` | offline | sdk-java | 41 | 0 | 7.8 |
+| ✅ | `offline-sdk-python-aws` | offline | sdk-python | 79 | 0 | 2.2 |
+| ✅ | `offline-sdk-python-aws-kms-kem` | offline | sdk-python | 6 | 0 | 0.3 |
+| ✅ | `offline-sdk-python-aws-ops` | offline | sdk-python | 12 | 0 | 1.4 |
+| ✅ | `offline-sdk-python-aws-ops2` | offline | sdk-python | 20 | 0 | 0.8 |
+| ✅ | `offline-ui-aws-apigatewayv2` | offline | ui | 21 | 0 | 23.0 |
+| ✅ | `offline-ui-aws-apigw-tabs` | offline | ui | 4 | 0 | 11.2 |
+| ✅ | `offline-ui-aws-cloudwatch` | offline | ui | 23 | 0 | 17.4 |
+| ✅ | `offline-ui-aws-detail-name` | offline | ui | 4 | 0 | 17.5 |
+| ✅ | `offline-ui-aws-detail-tabs` | offline | ui | 6 | 0 | 22.6 |
+| ✅ | `offline-ui-aws-ec2-detail-tabs` | offline | ui | 5 | 0 | 11.6 |
+| ✅ | `offline-ui-aws-elbv2` | offline | ui | 24 | 0 | 31.2 |
+| ✅ | `offline-ui-aws-kinesis` | offline | ui | 19 | 0 | 15.6 |
+| ✅ | `offline-ui-aws-logs` | offline | ui | 33 | 0 | 29.6 |
+| ✅ | `offline-ui-aws-metrics` | offline | ui | 10 | 0 | 17.7 |
+| ✅ | `offline-ui-aws-rds-connectivity-tabs` | offline | ui | 3 | 0 | 9.6 |
+| ✅ | `offline-ui-aws-sns` | offline | ui | 36 | 0 | 50.8 |
+| ✅ | `offline-ui-aws-sqs-dlq-tab` | offline | ui | 2 | 0 | 9.3 |
+| ✅ | `offline-ui-aws-ssm` | offline | ui | 19 | 0 | 22.5 |
+| ✅ | `offline-ui-aws-stepfunctions` | offline | ui | 22 | 0 | 22.4 |
 
 <details><summary>❌ <code>offline-ui-aws-real-tabs</code> log</summary>
 
 ```
-[FAIL] apigateway Deployments: deployment made in the tab is listed api-3ea9be6ea0a6
+[FAIL] apigateway Deployments: deployment made in the tab is listed api-4657d78456c4
 AWS/ApiGateway · us-east-1 · 123456789012
 delete
 Delete
 info
 API Gateway summary
 API ID
-api-3ea9be6ea0a6
+api-4657d78456c4
 NAME
-rt-api-mvww4a59
+rt-api-mvx0h9zt
 ENDPOINT TYPE
 REGIONAL
 CREATED
-2026-10-31T21:05:27.000Z
+2026-10-31T23:07:32.000Z
 Overview
 Activity
 Tags
@@ -190,33 +153,24 @@ Dashb
 
 </details>
 
-**UI findings: 38**
+<details><summary>❌ <code>offline-ui-aws-vpc-details-tab</code> log</summary>
 
-<details><summary><b>EC2</b> (nano) — 6 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | Details | tab Details: column "IAM ROLE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Details | tab Details: column "KEY PAIR ASSIGNED AT LAUNCH" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Details | tab Details: column "STATE TRANSITION REASON" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "Description" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Security | tab Security: column "Description" shows "-"/blank in 2 row(s) |
-| `PLACEHOLDER_CELL` | Security | tab Security: column "IAM ROLE" shows "-"/blank in 1 row(s) |
+```
+[FAIL] run TimeoutError: locator.click: Timeout 30000ms exceeded.
+```
 
 </details>
 
-<details><summary><b>EC2</b> (offline) — 6 finding(s)</summary>
+<details><summary>❌ <code>offline-ui-aws-vpc-sg-iam-cells</code> log</summary>
 
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | Details | tab Details: column "IAM ROLE" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Details | tab Details: column "KEY PAIR ASSIGNED AT LAUNCH" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Details | tab Details: column "STATE TRANSITION REASON" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Networking | tab Networking: column "Description" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Security | tab Security: column "Description" shows "-"/blank in 2 row(s) |
-| `PLACEHOLDER_CELL` | Security | tab Security: column "IAM ROLE" shows "-"/blank in 1 row(s) |
+```
+[PASS] IAM user listing carries an ARN
+[FAIL] run TimeoutError: locator.click: Timeout 30000ms exceeded.
+```
 
 </details>
+
+**UI findings: 14**
 
 <details><summary><b>VPC</b> (offline) — 4 finding(s)</summary>
 
@@ -226,16 +180,6 @@ Dashb
 | `PLACEHOLDER_CELL` |  | after create: column "Name" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` | Subnets | tab Subnets: column "Name" shows "-"/blank in 6 row(s) |
 | `PLACEHOLDER_CELL` | Route tables | tab Route tables: column "Name" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>DynamoDB</b> (nano) — 3 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` |  | resource detail: column "SORT KEY" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Overview | tab Overview: column "SORT KEY" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -249,31 +193,21 @@ Dashb
 
 </details>
 
-<details><summary><b>DynamoDB</b> (offline) — 3 finding(s)</summary>
+<details><summary><b>DynamoDB</b> (nano) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
 | `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
 | `PLACEHOLDER_CELL` |  | resource detail: column "SORT KEY" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Overview | tab Overview: column "SORT KEY" shows "-"/blank in 1 row(s) |
 
 </details>
 
-<details><summary><b>Lambda</b> (nano) — 2 finding(s)</summary>
+<details><summary><b>DynamoDB</b> (offline) — 2 finding(s)</summary>
 
 | Problem | Tab | Detail |
 |---|---|---|
-| `PLACEHOLDER_CELL` | Configuration | tab Configuration: column "DESCRIPTION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Versions | tab Versions: column "Description" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>Lambda</b> (offline) — 2 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | Configuration | tab Configuration: column "DESCRIPTION" shows "-"/blank in 1 row(s) |
-| `PLACEHOLDER_CELL` | Versions | tab Versions: column "Description" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | after create: column "Sort key" shows "-"/blank in 1 row(s) |
+| `PLACEHOLDER_CELL` |  | resource detail: column "SORT KEY" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -282,30 +216,6 @@ Dashb
 | Problem | Tab | Detail |
 |---|---|---|
 | `PLACEHOLDER_CELL` | Rule details | tab Rule details: column "DESCRIPTION" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>Secrets Manager</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | Secret value | tab Secret value: column "DESCRIPTION" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>KMS</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | General configuration | tab General configuration: column "DESCRIPTION" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>Systems Manager</b> (nano) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | History | tab History: column "Labels" shows "-"/blank in 1 row(s) |
 
 </details>
 
@@ -325,95 +235,71 @@ Dashb
 
 </details>
 
-<details><summary><b>Secrets Manager</b> (offline) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | Secret value | tab Secret value: column "DESCRIPTION" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>KMS</b> (offline) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | General configuration | tab General configuration: column "DESCRIPTION" shows "-"/blank in 1 row(s) |
-
-</details>
-
-<details><summary><b>Systems Manager</b> (offline) — 1 finding(s)</summary>
-
-| Problem | Tab | Detail |
-|---|---|---|
-| `PLACEHOLDER_CELL` | History | tab History: column "Labels" shows "-"/blank in 1 row(s) |
-
-</details>
-
 <a id="gcp"></a>
 ## GCP
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `offline-ui-gcp-artifactregistry` | offline | ui | 1 | 6 | 23.0 |
-| ✅ | `nano-ui-gcp-activity-detail` | nano | ui | 2 | 0 | 5.2 |
-| ✅ | `nano-ui-gcp-artifactregistry` | nano | ui | 15 | 0 | 20.6 |
-| ✅ | `nano-ui-gcp-cloudscheduler` | nano | ui | 23 | 0 | 27.9 |
-| ✅ | `nano-ui-gcp-container` | nano | ui | 21 | 0 | 24.8 |
-| ✅ | `nano-ui-gcp-create-defaults` | nano | ui | 36 | 0 | 69.4 |
-| ✅ | `nano-ui-gcp-firestore-usage` | nano | ui | 2 | 0 | 5.2 |
-| ✅ | `nano-ui-gcp-grid-defaults` | nano | ui | 39 | 0 | 5.3 |
-| ✅ | `nano-ui-gcp-iamcredentials` | nano | ui | 21 | 0 | 22.1 |
-| ✅ | `nano-ui-gcp-metrics-counts` | nano | ui | 3 | 0 | 5.2 |
-| ✅ | `nano-ui-gcp-monitoring` | nano | ui | 23 | 0 | 26.5 |
-| ✅ | `nano-ui-gcp-pubsub-grid` | nano | ui | 3 | 0 | 7.6 |
-| ✅ | `nano-ui-gcp-pubsub-subscriptions` | nano | ui | 3 | 0 | 5.2 |
-| ✅ | `nano-ui-gcp-redis` | nano | ui | 22 | 0 | 25.6 |
-| ✅ | `nano-ui-gcp-tabs` | nano | ui | 6 | 0 | 5.3 |
-| ✅ | `offline-api-gcp-apigateway-savings` | offline | api | 5 | 0 | 0.4 |
-| ✅ | `offline-api-gcp-cloudscheduler-http` | offline | api | 10 | 0 | 0.7 |
-| ✅ | `offline-api-gcp-cloudscheduler-pubsub` | offline | api | 7 | 0 | 0.3 |
-| ✅ | `offline-api-gcp-cloudscheduler-timer` | offline | api | 9 | 0 | 69.0 |
-| ✅ | `offline-api-gcp-console-next` | offline | api | 28 | 0 | 0.2 |
+| ❌ | `offline-ui-gcp-artifactregistry` | offline | ui | 1 | 6 | 23.8 |
+| ✅ | `nano-ui-gcp-activity-detail` | nano | ui | 2 | 0 | 4.3 |
+| ✅ | `nano-ui-gcp-artifactregistry` | nano | ui | 15 | 0 | 19.0 |
+| ✅ | `nano-ui-gcp-cloudscheduler` | nano | ui | 23 | 0 | 27.3 |
+| ✅ | `nano-ui-gcp-container` | nano | ui | 21 | 0 | 22.4 |
+| ✅ | `nano-ui-gcp-create-defaults` | nano | ui | 36 | 0 | 68.4 |
+| ✅ | `nano-ui-gcp-firestore-usage` | nano | ui | 2 | 0 | 4.3 |
+| ✅ | `nano-ui-gcp-grid-defaults` | nano | ui | 39 | 0 | 4.5 |
+| ✅ | `nano-ui-gcp-iamcredentials` | nano | ui | 21 | 0 | 19.6 |
+| ✅ | `nano-ui-gcp-metrics-counts` | nano | ui | 3 | 0 | 4.4 |
+| ✅ | `nano-ui-gcp-monitoring` | nano | ui | 23 | 0 | 25.8 |
+| ✅ | `nano-ui-gcp-pubsub-grid` | nano | ui | 3 | 0 | 7.0 |
+| ✅ | `nano-ui-gcp-pubsub-subscriptions` | nano | ui | 3 | 0 | 4.3 |
+| ✅ | `nano-ui-gcp-redis` | nano | ui | 22 | 0 | 24.8 |
+| ✅ | `nano-ui-gcp-tabs` | nano | ui | 6 | 0 | 4.3 |
+| ✅ | `offline-api-gcp-apigateway-savings` | offline | api | 5 | 0 | 0.5 |
+| ✅ | `offline-api-gcp-cloudscheduler-http` | offline | api | 10 | 0 | 0.8 |
+| ✅ | `offline-api-gcp-cloudscheduler-pubsub` | offline | api | 7 | 0 | 0.4 |
+| ✅ | `offline-api-gcp-cloudscheduler-timer` | offline | api | 9 | 0 | 54.8 |
+| ✅ | `offline-api-gcp-console-next` | offline | api | 28 | 0 | 0.3 |
 | ✅ | `offline-api-gcp-console-pubsub-lens` | offline | api | 16 | 0 | 0.2 |
-| ✅ | `offline-api-gcp-console-savings` | offline | api | 12 | 0 | 0.5 |
-| ✅ | `offline-api-gcp-console-vault-lens` | offline | api | 15 | 0 | 0.1 |
-| ✅ | `offline-api-gcp-eventarc-trigger-defaults` | offline | api | 6 | 0 | 0.1 |
+| ✅ | `offline-api-gcp-console-savings` | offline | api | 12 | 0 | 0.8 |
+| ✅ | `offline-api-gcp-console-vault-lens` | offline | api | 15 | 0 | 0.2 |
+| ✅ | `offline-api-gcp-eventarc-trigger-defaults` | offline | api | 6 | 0 | 0.2 |
 | ✅ | `offline-api-gcp-grid-columns` | offline | api | 19 | 0 | 0.2 |
-| ✅ | `offline-api-gcp-pubsub-savings` | offline | api | 11 | 0 | 0.5 |
-| ✅ | `offline-api-gcp-vault-console-secrets` | offline | api | 9 | 0 | 0.2 |
-| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 12.6 |
-| ✅ | `offline-cli-gcp-artifactregistry` | offline | cli | 11 | 0 | 5.6 |
-| ✅ | `offline-cli-gcp-cloudscheduler` | offline | cli | 13 | 0 | 6.2 |
-| ✅ | `offline-cli-gcp-container` | offline | cli | 14 | 0 | 8.7 |
-| ✅ | `offline-cli-gcp-iamcredentials` | offline | cli | 9 | 0 | 1.2 |
-| ✅ | `offline-cli-gcp-monitoring` | offline | cli | 15 | 0 | 5.2 |
-| ✅ | `offline-cli-gcp-redis` | offline | cli | 20 | 0 | 7.1 |
-| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 17.1 |
-| ✅ | `offline-sdk-go-gcp-admin` | offline | sdk-go | 26 | 0 | 11.9 |
-| ✅ | `offline-sdk-go-gcp-artifactregistry` | offline | sdk-go | 21 | 0 | 10.0 |
-| ✅ | `offline-sdk-go-gcp-cloudscheduler` | offline | sdk-go | 13 | 0 | 13.4 |
-| ✅ | `offline-sdk-go-gcp-container` | offline | sdk-go | 15 | 0 | 1.6 |
-| ✅ | `offline-sdk-go-gcp-iamcredentials` | offline | sdk-go | 17 | 0 | 1.4 |
-| ✅ | `offline-sdk-go-gcp-monitoring` | offline | sdk-go | 34 | 0 | 1.0 |
-| ✅ | `offline-sdk-go-gcp-redis` | offline | sdk-go | 16 | 0 | 1.6 |
-| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 8.4 |
-| ✅ | `offline-sdk-java-gcp-artifactregistry` | offline | sdk-java | 13 | 0 | 3.8 |
-| ✅ | `offline-sdk-java-gcp-cloudscheduler` | offline | sdk-java | 12 | 0 | 3.3 |
-| ✅ | `offline-sdk-java-gcp-container` | offline | sdk-java | 14 | 0 | 3.3 |
-| ✅ | `offline-sdk-java-gcp-iamcredentials` | offline | sdk-java | 11 | 0 | 3.5 |
-| ✅ | `offline-sdk-java-gcp-monitoring` | offline | sdk-java | 24 | 0 | 3.1 |
-| ✅ | `offline-sdk-java-gcp-redis` | offline | sdk-java | 15 | 0 | 3.5 |
-| ✅ | `offline-ui-gcp-activity-detail` | offline | ui | 2 | 0 | 0.6 |
-| ✅ | `offline-ui-gcp-cloudscheduler` | offline | ui | 24 | 0 | 23.9 |
-| ✅ | `offline-ui-gcp-container` | offline | ui | 21 | 0 | 20.7 |
-| ✅ | `offline-ui-gcp-create-defaults` | offline | ui | 36 | 0 | 65.8 |
-| ✅ | `offline-ui-gcp-grid-defaults` | offline | ui | 39 | 0 | 0.6 |
-| ✅ | `offline-ui-gcp-iamcredentials` | offline | ui | 21 | 0 | 19.8 |
-| ✅ | `offline-ui-gcp-metrics-tab` | offline | ui | 5 | 0 | 11.1 |
-| ✅ | `offline-ui-gcp-monitoring` | offline | ui | 23 | 0 | 22.2 |
-| ✅ | `offline-ui-gcp-pubsub-grid` | offline | ui | 3 | 0 | 3.1 |
-| ✅ | `offline-ui-gcp-pubsub-subscriptions` | offline | ui | 3 | 0 | 0.6 |
-| ✅ | `offline-ui-gcp-redis` | offline | ui | 22 | 0 | 21.3 |
+| ✅ | `offline-api-gcp-pubsub-savings` | offline | api | 11 | 0 | 0.6 |
+| ✅ | `offline-api-gcp-vault-console-secrets` | offline | api | 9 | 0 | 0.4 |
+| ✅ | `offline-cli-gcp` | offline | cli | 6 | 0 | 14.8 |
+| ✅ | `offline-cli-gcp-artifactregistry` | offline | cli | 11 | 0 | 7.9 |
+| ✅ | `offline-cli-gcp-cloudscheduler` | offline | cli | 13 | 0 | 8.6 |
+| ✅ | `offline-cli-gcp-container` | offline | cli | 14 | 0 | 12.6 |
+| ✅ | `offline-cli-gcp-iamcredentials` | offline | cli | 9 | 0 | 1.6 |
+| ✅ | `offline-cli-gcp-monitoring` | offline | cli | 15 | 0 | 7.0 |
+| ✅ | `offline-cli-gcp-redis` | offline | cli | 20 | 0 | 10.0 |
+| ✅ | `offline-sdk-go-gcp` | offline | sdk-go | 5 | 0 | 21.8 |
+| ✅ | `offline-sdk-go-gcp-admin` | offline | sdk-go | 26 | 0 | 12.8 |
+| ✅ | `offline-sdk-go-gcp-artifactregistry` | offline | sdk-go | 21 | 0 | 11.8 |
+| ✅ | `offline-sdk-go-gcp-cloudscheduler` | offline | sdk-go | 13 | 0 | 15.8 |
+| ✅ | `offline-sdk-go-gcp-container` | offline | sdk-go | 15 | 0 | 2.5 |
+| ✅ | `offline-sdk-go-gcp-iamcredentials` | offline | sdk-go | 17 | 0 | 1.8 |
+| ✅ | `offline-sdk-go-gcp-monitoring` | offline | sdk-go | 34 | 0 | 1.4 |
+| ✅ | `offline-sdk-go-gcp-redis` | offline | sdk-go | 16 | 0 | 1.7 |
+| ✅ | `offline-sdk-java-gcp` | offline | sdk-java | 6 | 0 | 13.1 |
+| ✅ | `offline-sdk-java-gcp-artifactregistry` | offline | sdk-java | 13 | 0 | 4.8 |
+| ✅ | `offline-sdk-java-gcp-cloudscheduler` | offline | sdk-java | 12 | 0 | 3.9 |
+| ✅ | `offline-sdk-java-gcp-container` | offline | sdk-java | 14 | 0 | 4.4 |
+| ✅ | `offline-sdk-java-gcp-iamcredentials` | offline | sdk-java | 11 | 0 | 4.4 |
+| ✅ | `offline-sdk-java-gcp-monitoring` | offline | sdk-java | 24 | 0 | 3.7 |
+| ✅ | `offline-sdk-java-gcp-redis` | offline | sdk-java | 15 | 0 | 4.3 |
+| ✅ | `offline-ui-gcp-activity-detail` | offline | ui | 2 | 0 | 0.7 |
+| ✅ | `offline-ui-gcp-cloudscheduler` | offline | ui | 24 | 0 | 24.2 |
+| ✅ | `offline-ui-gcp-container` | offline | ui | 21 | 0 | 20.9 |
+| ✅ | `offline-ui-gcp-create-defaults` | offline | ui | 36 | 0 | 66.0 |
+| ✅ | `offline-ui-gcp-grid-defaults` | offline | ui | 39 | 0 | 0.8 |
+| ✅ | `offline-ui-gcp-iamcredentials` | offline | ui | 21 | 0 | 20.0 |
+| ✅ | `offline-ui-gcp-metrics-tab` | offline | ui | 5 | 0 | 11.3 |
+| ✅ | `offline-ui-gcp-monitoring` | offline | ui | 23 | 0 | 22.4 |
+| ✅ | `offline-ui-gcp-pubsub-grid` | offline | ui | 3 | 0 | 3.2 |
+| ✅ | `offline-ui-gcp-pubsub-subscriptions` | offline | ui | 3 | 0 | 0.7 |
+| ✅ | `offline-ui-gcp-redis` | offline | ui | 22 | 0 | 21.4 |
 
 <details><summary>❌ <code>offline-ui-gcp-artifactregistry</code> log</summary>
 
@@ -430,202 +316,84 @@ Dashb
 
 </details>
 
-**UI findings: 0**
+**UI findings: 6**
 
-No open UI findings.
+<details><summary><b>Pub/Sub</b> (offline) — 6 finding(s)</summary>
+
+| Problem | Tab | Detail |
+|---|---|---|
+| `HTTP_404` | Labels | /api/gcp/sub/pubsub/getLabels/my-topic → 404 |
+| `HTTP_404` | Subscriptions | /api/gcp/sub/pubsub/listSubscriptions/my-topic → 404 |
+| `HTTP_404` | Schema | /api/gcp/sub/pubsub/getSchema/my-topic → 404 |
+| `HTTP_404` | Messages | /api/gcp/sub/pubsub/listPullSubscriptions/my-topic → 404 |
+| `HTTP_404` | Encryption | /api/gcp/sub/pubsub/getEncryption/my-topic → 404 |
+| `STATIC_TAB` | Properties | tab 'Properties' shows no backend data and nothing about this resource |
+
+</details>
 
 <a id="azure"></a>
 ## Azure
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-azure-app` | nano | ui | 28 | 1 | 21.1 |
-| ❌ | `nano-ui-azure-appconfiguration` | nano | ui | 27 | 1 | 22.8 |
-| ❌ | `nano-ui-azure-monitor` | nano | ui | 28 | 1 | 27.6 |
-| ❌ | `nano-ui-azure-storage-console` | nano | ui | 11 | 1 | 10.5 |
-| ✅ | `nano-ui-azure-cognitiveservices` | nano | ui | 29 | 0 | 23.4 |
-| ✅ | `nano-ui-azure-dns` | nano | ui | 28 | 0 | 23.2 |
-| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 9.9 |
-| ✅ | `nano-ui-azure-dp-detail` | nano | ui | 12 | 0 | 27.5 |
-| ✅ | `nano-ui-azure-flat-create` | nano | ui | 8 | 0 | 18.6 |
-| ✅ | `nano-ui-azure-home` | nano | ui | 12 | 0 | 4.6 |
-| ✅ | `nano-ui-azure-keyvault-tabs` | nano | ui | 9 | 0 | 4.7 |
-| ✅ | `nano-ui-azure-metrics` | nano | ui | 12 | 0 | 13.9 |
+| ✅ | `nano-ui-azure-app` | nano | ui | 29 | 0 | 21.2 |
+| ✅ | `nano-ui-azure-appconfiguration` | nano | ui | 28 | 0 | 22.9 |
+| ✅ | `nano-ui-azure-cognitiveservices` | nano | ui | 29 | 0 | 25.5 |
+| ✅ | `nano-ui-azure-dns` | nano | ui | 28 | 0 | 23.3 |
+| ✅ | `nano-ui-azure-dp` | nano | ui | 5 | 0 | 10.0 |
+| ✅ | `nano-ui-azure-dp-detail` | nano | ui | 12 | 0 | 27.7 |
+| ✅ | `nano-ui-azure-flat-create` | nano | ui | 8 | 0 | 18.7 |
+| ✅ | `nano-ui-azure-home` | nano | ui | 12 | 0 | 4.8 |
+| ✅ | `nano-ui-azure-keyvault-tabs` | nano | ui | 9 | 0 | 4.8 |
+| ✅ | `nano-ui-azure-metrics` | nano | ui | 12 | 0 | 14.0 |
+| ✅ | `nano-ui-azure-monitor` | nano | ui | 29 | 0 | 27.6 |
 | ✅ | `nano-ui-azure-nsg-roledef-create` | nano | ui | 7 | 0 | 10.3 |
-| ✅ | `nano-ui-azure-nsg-rules` | nano | ui | 8 | 0 | 11.3 |
-| ✅ | `nano-ui-azure-operationalinsights` | nano | ui | 33 | 0 | 29.2 |
-| ✅ | `nano-ui-azure-rail-last` | nano | ui | 3 | 0 | 4.6 |
-| ✅ | `nano-ui-azure-rg-nav` | nano | ui | 3 | 0 | 5.6 |
-| ✅ | `nano-ui-azure-savings` | nano | ui | 8 | 0 | 9.2 |
-| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 18.7 |
-| ✅ | `nano-ui-azure-tags-tab` | nano | ui | 36 | 0 | 49.2 |
-| ✅ | `nano-ui-reload-backend` | nano | ui | 3 | 0 | 12.5 |
+| ✅ | `nano-ui-azure-nsg-rules` | nano | ui | 8 | 0 | 12.0 |
+| ✅ | `nano-ui-azure-operationalinsights` | nano | ui | 33 | 0 | 27.3 |
+| ✅ | `nano-ui-azure-rail-last` | nano | ui | 3 | 0 | 4.4 |
+| ✅ | `nano-ui-azure-rg-nav` | nano | ui | 3 | 0 | 5.7 |
+| ✅ | `nano-ui-azure-savings` | nano | ui | 8 | 0 | 9.3 |
+| ✅ | `nano-ui-azure-storage-console` | nano | ui | 12 | 0 | 10.5 |
+| ✅ | `nano-ui-azure-tabs` | nano | ui | 71 | 0 | 19.1 |
+| ✅ | `nano-ui-azure-tags-tab` | nano | ui | 36 | 0 | 49.1 |
+| ✅ | `nano-ui-reload-backend` | nano | ui | 3 | 0 | 12.8 |
 | ✅ | `offline-api-azure-console-data-planes` | offline | api | 36 | 0 | 0.4 |
 | ✅ | `offline-api-azure-console-lens` | offline | api | 33 | 0 | 0.5 |
 | ✅ | `offline-api-azure-console-routes` | offline | api | 35 | 0 | 0.3 |
-| ✅ | `offline-cli-azure` | offline | cli | 6 | 0 | 8.7 |
-| ✅ | `offline-cli-azure-app` | offline | cli | 23 | 0 | 6.2 |
-| ✅ | `offline-cli-azure-appconfiguration` | offline | cli | 32 | 0 | 11.8 |
-| ✅ | `offline-cli-azure-cognitiveservices` | offline | cli | 20 | 0 | 4.8 |
-| ✅ | `offline-cli-azure-dns` | offline | cli | 24 | 0 | 5.1 |
-| ✅ | `offline-cli-azure-monitor` | offline | cli | 21 | 0 | 5.9 |
-| ✅ | `offline-cli-azure-operationalinsights` | offline | cli | 20 | 0 | 5.0 |
-| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 16.9 |
-| ✅ | `offline-sdk-go-azure-app` | offline | sdk-go | 29 | 0 | 2.9 |
-| ✅ | `offline-sdk-go-azure-appconfiguration` | offline | sdk-go | 34 | 0 | 2.4 |
-| ✅ | `offline-sdk-go-azure-cognitiveservices` | offline | sdk-go | 39 | 0 | 2.5 |
-| ✅ | `offline-sdk-go-azure-dns` | offline | sdk-go | 31 | 0 | 0.9 |
-| ✅ | `offline-sdk-go-azure-monitor` | offline | sdk-go | 30 | 0 | 2.7 |
-| ✅ | `offline-sdk-go-azure-operationalinsights` | offline | sdk-go | 33 | 0 | 17.9 |
-| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 28.3 |
-| ✅ | `offline-sdk-java-azure-app` | offline | sdk-java | 15 | 0 | 19.7 |
-| ✅ | `offline-sdk-java-azure-appconfiguration` | offline | sdk-java | 28 | 0 | 6.4 |
-| ✅ | `offline-sdk-java-azure-cognitiveservices` | offline | sdk-java | 28 | 0 | 4.2 |
-| ✅ | `offline-sdk-java-azure-dns` | offline | sdk-java | 20 | 0 | 19.2 |
-| ✅ | `offline-sdk-java-azure-monitor` | offline | sdk-java | 20 | 0 | 4.6 |
-| ✅ | `offline-sdk-java-azure-operationalinsights` | offline | sdk-java | 23 | 0 | 19.2 |
+| ✅ | `offline-cli-azure` | offline | cli | 6 | 0 | 7.7 |
+| ✅ | `offline-cli-azure-app` | offline | cli | 23 | 0 | 6.7 |
+| ✅ | `offline-cli-azure-appconfiguration` | offline | cli | 32 | 0 | 12.9 |
+| ✅ | `offline-cli-azure-cognitiveservices` | offline | cli | 20 | 0 | 5.6 |
+| ✅ | `offline-cli-azure-dns` | offline | cli | 24 | 0 | 6.1 |
+| ✅ | `offline-cli-azure-monitor` | offline | cli | 21 | 0 | 7.1 |
+| ✅ | `offline-cli-azure-operationalinsights` | offline | cli | 20 | 0 | 5.9 |
+| ✅ | `offline-sdk-go-azure` | offline | sdk-go | 14 | 0 | 21.5 |
+| ✅ | `offline-sdk-go-azure-app` | offline | sdk-go | 29 | 0 | 3.5 |
+| ✅ | `offline-sdk-go-azure-appconfiguration` | offline | sdk-go | 34 | 0 | 2.0 |
+| ✅ | `offline-sdk-go-azure-cognitiveservices` | offline | sdk-go | 39 | 0 | 2.6 |
+| ✅ | `offline-sdk-go-azure-dns` | offline | sdk-go | 31 | 0 | 1.1 |
+| ✅ | `offline-sdk-go-azure-monitor` | offline | sdk-go | 30 | 0 | 3.3 |
+| ✅ | `offline-sdk-go-azure-operationalinsights` | offline | sdk-go | 33 | 0 | 19.5 |
+| ✅ | `offline-sdk-java-azure` | offline | sdk-java | 5 | 0 | 29.8 |
+| ✅ | `offline-sdk-java-azure-app` | offline | sdk-java | 15 | 0 | 20.2 |
+| ✅ | `offline-sdk-java-azure-appconfiguration` | offline | sdk-java | 28 | 0 | 7.1 |
+| ✅ | `offline-sdk-java-azure-cognitiveservices` | offline | sdk-java | 28 | 0 | 5.1 |
+| ✅ | `offline-sdk-java-azure-dns` | offline | sdk-java | 20 | 0 | 20.2 |
+| ✅ | `offline-sdk-java-azure-monitor` | offline | sdk-java | 20 | 0 | 5.5 |
+| ✅ | `offline-sdk-java-azure-operationalinsights` | offline | sdk-java | 23 | 0 | 20.1 |
 | ✅ | `offline-sdk-python-azure-ops` | offline | sdk-python | 8 | 0 | 0.9 |
-| ✅ | `offline-ui-azure-app` | offline | ui | 29 | 0 | 19.4 |
-| ✅ | `offline-ui-azure-appconfiguration` | offline | ui | 31 | 0 | 22.8 |
-| ✅ | `offline-ui-azure-cognitiveservices` | offline | ui | 31 | 0 | 23.3 |
-| ✅ | `offline-ui-azure-dns` | offline | ui | 30 | 0 | 23.1 |
-| ✅ | `offline-ui-azure-flat-create` | offline | ui | 8 | 0 | 17.1 |
-| ✅ | `offline-ui-azure-metrics` | offline | ui | 12 | 0 | 9.6 |
-| ✅ | `offline-ui-azure-monitor` | offline | ui | 30 | 0 | 27.6 |
-| ✅ | `offline-ui-azure-nsg-roledef-create` | offline | ui | 7 | 0 | 10.7 |
-| ✅ | `offline-ui-azure-nsg-rules` | offline | ui | 8 | 0 | 8.7 |
-| ✅ | `offline-ui-azure-operationalinsights` | offline | ui | 34 | 0 | 27.1 |
+| ✅ | `offline-ui-azure-app` | offline | ui | 29 | 0 | 19.6 |
+| ✅ | `offline-ui-azure-appconfiguration` | offline | ui | 31 | 0 | 22.9 |
+| ✅ | `offline-ui-azure-cognitiveservices` | offline | ui | 31 | 0 | 23.5 |
+| ✅ | `offline-ui-azure-dns` | offline | ui | 30 | 0 | 23.4 |
+| ✅ | `offline-ui-azure-flat-create` | offline | ui | 8 | 0 | 17.2 |
+| ✅ | `offline-ui-azure-metrics` | offline | ui | 12 | 0 | 9.7 |
+| ✅ | `offline-ui-azure-monitor` | offline | ui | 30 | 0 | 30.7 |
+| ✅ | `offline-ui-azure-nsg-roledef-create` | offline | ui | 7 | 0 | 10.6 |
+| ✅ | `offline-ui-azure-nsg-rules` | offline | ui | 8 | 0 | 8.8 |
+| ✅ | `offline-ui-azure-operationalinsights` | offline | ui | 34 | 0 | 27.3 |
 | ✅ | `offline-ui-azure-rg-nav` | offline | ui | 3 | 0 | 4.6 |
-| ✅ | `offline-ui-azure-tags-tab` | offline | ui | 36 | 0 | 48.9 |
-
-<details><summary>❌ <code>nano-ui-azure-storage-console</code> log</summary>
-
-```
-[PASS] containers list is 200 (not 501) status 200
-[PASS] container create status 200
-[PASS] created container is listed with blobCount {"ok":true,"value":[{"name":"conf-cont","blobCount":0}]}
-[PASS] blob list of new container is empty 200 status 200
-[PASS] container survives reload {"ok":true,"value":[{"name":"conf-cont","blobCount":0}]}
-[PASS] container delete status 200
-[PASS] deleted container gone 
-[PASS] queues list is 200 (not 501) status 200
-[PASS] queue create status 200
-[PASS] created queue is listed {"ok":true,"value":["confq"]}
-[PASS] queue delete status 200
-[FAIL] deleted queue gone
-```
-
-</details>
-
-<details><summary>❌ <code>nano-ui-azure-app</code> log</summary>
-
-```
-[PASS] Container Apps is on the Nano Azure console rail
-[FAIL] service page says what runs below the Pro tier (control plane / Docker)
-[PASS] create form has a realistic default name
-[PASS] create form defaults a container image
-[PASS] create with defaults returns 2xx
-[PASS] new container app appears in the list
-[PASS] every grid column is filled
-[PASS] cost-savings metrics updated by the create
-[PASS] detail view shows its tabs
-[PASS] tab "Overview" renders
-[PASS] tab "Activity log" renders
-[PASS] tab "Access control (IAM)" renders
-[PASS] tab "Tags" renders
-[PASS] tab "Diagnose and solve problems" renders
-[PASS] tab "Revisions and replicas" renders
-[PASS] tab "Containers" renders
-[PASS] tab "Scale" renders
-[PASS] tab "Ingress" renders
-[PASS] tab "Secrets" renders
-[PASS] tab "Identity" renders
-[PASS] tab "Properties" renders
-[PASS] tab "Locks" renders
-[PASS] tab "Metrics" renders
-[PASS] Revisions tab lists the active revision
-[PASS] Containers tab shows the image
-[PASS] Ingress tab shows the application URL
-[PASS] delete removes the app from the list
-[PASS] deleted app is gone from the ARM API
-[PASS] no API errors / page errors during the flow
-1 check(s) failed
-```
-
-</details>
-
-<details><summary>❌ <code>nano-ui-azure-appconfiguration</code> log</summary>
-
-```
-[PASS] App Configuration is on the Nano Azure console rail
-[FAIL] service page explains what the service does
-[PASS] create form has a realistic default name
-[PASS] create form defaults the pricing tier to Standard
-[PASS] create with defaults returns 2xx
-[PASS] new store appears in the list
-[PASS] every grid column is filled
-[PASS] cost-savings metrics updated by the create
-[PASS] detail view shows its tabs
-[PASS] tab "Overview" renders
-[PASS] tab "Activity log" renders
-[PASS] tab "Access control (IAM)" renders
-[PASS] tab "Tags" renders
-[PASS] tab "Diagnose and solve problems" renders
-[PASS] tab "Configuration explorer" renders
-[PASS] tab "Geo-replication" renders
-[PASS] tab "Access settings" renders
-[PASS] tab "Identity" renders
-[PASS] tab "Networking" renders
-[PASS] tab "Properties" renders
-[PASS] tab "Locks" renders
-[PASS] tab "Metrics" renders
-[PASS] Access settings lists keys with connection strings
-[PASS] key-value created in the explorer is listed
-[PASS] …and listKeyValue returns it
-[PASS] delete removes the store from the list
-[PASS] deleted store is gone from the ARM API
-[PASS] no API errors / page errors during the flow
-1 check(s) failed
-```
-
-</details>
-
-<details><summary>❌ <code>nano-ui-azure-monitor</code> log</summary>
-
-```
-[PASS] Monitor alerts is on the Nano Azure console rail
-[FAIL] service page explains what the service does
-[PASS] create form has a realistic default alert rule name
-[PASS] create with defaults returns 2xx
-[PASS] new alert rule appears in the list
-[PASS] every grid column is filled
-[PASS] grid shows severity, evaluation frequency and the scope
-[PASS] cost-savings metrics updated by the create
-[PASS] detail view shows its tabs
-[PASS] tab "Overview" renders
-[PASS] tab "Activity log" renders
-[PASS] tab "Access control (IAM)" renders
-[PASS] tab "Tags" renders
-[PASS] tab "Diagnose and solve problems" renders
-[PASS] tab "Condition" renders
-[PASS] tab "Action groups" renders
-[PASS] tab "Activity log alerts" renders
-[PASS] tab "Autoscale settings" renders
-[PASS] tab "Properties" renders
-[PASS] tab "Locks" renders
-[PASS] tab "Metrics" renders
-[PASS] Condition shows the metric, operator, threshold and window
-[PASS] action group added in the blade is listed
-[PASS] …and readable over ARM
-[PASS] activity log alert added in the blade is listed
-[PASS] autoscale setting added in the blade is listed
-[PASS] delete removes the alert rule from the list
-[PASS] deleted alert rule is gone from the ARM API
-[PASS] no API errors / page errors during the flow
-1 check(s) failed
-```
-
-</details>
+| ✅ | `offline-ui-azure-tags-tab` | offline | ui | 36 | 0 | 49.7 |
 
 **UI findings: 0**
 
@@ -636,51 +404,26 @@ No open UI findings.
 
 | Status | Suite | Target | Kind | Passed | Failed | Time (s) |
 |---|---|---|---|---|---|---|
-| ❌ | `nano-ui-crawl` | nano | ui | 55 | 8 | 1384.5 |
-| ❌ | `offline-cost-savings` | offline | api | 8 | 1 | 16.9 |
-| ❌ | `offline-ui-crawl` | offline | ui | 49 | 9 | 1310.9 |
-| ✅ | `nano-cores` | nano | core | 344 | 0 | 4.6 |
-| ✅ | `nano-ui-budget-savings` | nano | ui | 5 | 0 | 5.5 |
-| ✅ | `offline-console-actions` | offline | api | 371 | 0 | 14.1 |
-| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 18.1 |
+| ❌ | `nano-ui-crawl` | nano | ui | 60 | 3 | 1264.6 |
+| ❌ | `offline-ui-crawl` | offline | ui | 53 | 5 | 1177.4 |
+| ✅ | `nano-cores` | nano | core | 344 | 0 | 4.7 |
+| ✅ | `nano-ui-budget-savings` | nano | ui | 5 | 0 | 5.9 |
+| ✅ | `offline-console-actions` | offline | api | 371 | 0 | 12.2 |
+| ✅ | `offline-cost-savings` | offline | api | 11 | 0 | 22.6 |
+| ✅ | `offline-ui-core` | offline | ui | 9 | 0 | 19.9 |
 
 <details><summary>❌ <code>offline-ui-crawl</code> log</summary>
 
 ```
-[offline/aws] 20 services crawled, 9 with findings
-UI crawl offline: 11/20 services clean → tests/conformance/hourly/out/ui-offline-aws.json
+[offline/aws] 20 services crawled, 4 with findings
+UI crawl offline: 16/20 services clean → tests/conformance/hourly/out/ui-offline-aws.json
 Console surfaces offline: {"static":19,"live":234,"partial":17}
 [offline/azure] 20 services crawled, 0 with findings
 UI crawl offline: 20/20 services clean → tests/conformance/hourly/out/ui-offline-azure.json
 Console surfaces offline: {"live":313,"static":2}
-[offline/gcp] 18 services crawled, 0 with findings
-UI crawl offline: 18/18 services clean → tests/conformance/hourly/out/ui-offline-gcp.json
-Console surfaces offline: {"static":2,"live":226}
-```
-
-</details>
-
-<details><summary>❌ <code>offline-cost-savings</code> log</summary>
-
-```
-== aws: S3 bucket ==
-PASS: aws: creating a S3 bucket raises the space resource_count
-PASS: aws: creating a S3 bucket raises aws savings
-PASS: aws: using the S3 bucket (5 × 2 MB uploads) raises savings
-
-== gcp: Cloud Storage bucket ==
-FAIL: gcp: savings check ran :: <HTTPError 403: 'Forbidden'>
-
-== azure: Storage account ==
-PASS: azure: creating a Storage account raises the space resource_count
-PASS: azure: creating a Storage account raises azure savings
-PASS: azure: using the Storage account (5 × 2 MB uploads) raises savings
-
-== azure: Virtual machine (Standard_B1s) ==
-PASS: azure: creating a VM raises the space resource_count
-PASS: azure: a Standard_B1s VM adds its 730 h list price ($7.59) to Azure savings
-
-RESULT fail=1
+[offline/gcp] 18 services crawled, 1 with findings
+UI crawl offline: 17/18 services clean → tests/conformance/hourly/out/ui-offline-gcp.json
+Console surfaces offline: {"live":221,"unimplemented":5,"static":2}
 ```
 
 </details>
@@ -688,8 +431,8 @@ RESULT fail=1
 <details><summary>❌ <code>nano-ui-crawl</code> log</summary>
 
 ```
-[nano/aws] 20 services crawled, 8 with findings
-UI crawl nano: 12/20 services clean → tests/conformance/hourly/out/ui-nano-aws.json
+[nano/aws] 20 services crawled, 3 with findings
+UI crawl nano: 17/20 services clean → tests/conformance/hourly/out/ui-nano-aws.json
 Console surfaces nano: {"live":237,"static":18,"partial":15}
 [nano/azure] 25 services crawled, 0 with findings
 UI crawl nano: 25/25 services clean → tests/conformance/hourly/out/ui-nano-azure.json
@@ -901,6 +644,7 @@ CreateChannel, CreateDescriptor, CreateUptime, DeleteChannel, DeleteDescriptor, 
 
 | Run | Suites | Checks ✓ | Checks ✗ | UI findings | API cov. | Agent |
 |---|---|---|---|---|---|---|
+| 2026-10-31T23:27:05+00:00 | 215/221 | 5184 | 18 | 20 | 49.5% |  |
 | 2026-10-31T21:23:59+00:00 | 211/221 | 5168 | 32 | 38 | 49.5% |  |
 | 2026-10-31T19:13:42+00:00 | 190/220 | 4863 | 260 | 63 | 49.5% |  |
 | 2026-10-31T17:27:12+00:00 | 226/230 | 5204 | 73 | 66 | 49.5% |  |
@@ -924,6 +668,5 @@ CreateChannel, CreateDescriptor, CreateUptime, DeleteChannel, DeleteDescriptor, 
 | 2026-10-29T23:56:10+00:00 | 215/223 | 4762 | 87 | 79 | 43.1% |  |
 | 2026-10-29T22:06:27+00:00 | 215/223 | 4749 | 100 | 161 | 43.1% |  |
 | 2026-10-29T19:55:18+00:00 | 207/216 | 4653 | 111 | 224 | 42.6% |  |
-| 2026-10-29T17:38:33+00:00 | 203/215 | 4682 | 78 | 6 | 42.6% |  |
 
 Raw data in this branch: `results.json`, `ui-findings.json`, `history.json`.
