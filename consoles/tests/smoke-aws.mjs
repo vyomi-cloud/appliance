@@ -51,7 +51,7 @@ const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 // Native 404s ("no tag set", "no encryption config") and the deliberate 400 from
 // GetSecretValue against a disabled CMK (below) are expected answers, not page errors.
-page.on("console", (m) => m.type() === "error" && !/status of (400|404)/.test(m.text()) && errors.push(m.text()));
+page.on("console", (m) => m.type() === "error" && !/status of (400|403|404)/.test(m.text()) && errors.push(m.text()));   // 403 = an expected denial (Object Lock, IAM)
 const shot = (n) => page.screenshot({ path: `${OUT}/${n}.png`, fullPage: true });
 
 try {
@@ -175,11 +175,10 @@ try {
   await page.getByText("GOVERNANCE mode, 10 days").waitFor({ timeout: 10000 });
   const lockXml = await wire(`/${LB}?object-lock=`);
   check("Properties: Object Lock default retention saved (native GetObjectLockConfiguration)", /<Mode>GOVERNANCE<\/Mode>/.test(lockXml) && /<Days>10<\/Days>/.test(lockXml), lockXml.slice(0, 200));
-  // Done from Node (not page.evaluate) — a deliberately-403ing fetch inside the page logs a
-  // browser devtools network warning that the "no page errors" check below would catch.
-  const lockedPut = await fetch(`${WIRE}/${LB}/locked.txt`, { method: "PUT", body: "locked" });
-  const lockedVid = lockedPut.headers.get("x-amz-version-id");
-  const lockedDelete = await (await fetch(`${WIRE}/${LB}/locked.txt?versionId=${lockedVid}`, { method: "DELETE" })).text();
+  // Through the page: on Nano only the page's service worker answers /_wire (a Node fetch would
+  // never reach Vyomi). The deliberate 403 is an expected answer (see the console filter).
+  const lockedVid = await page.evaluate(async (u) => (await fetch(u, { method: "PUT", body: "locked" })).headers.get("x-amz-version-id"), `${WIRE}/${LB}/locked.txt`);
+  const lockedDelete = await wire(`/${LB}/locked.txt?versionId=${lockedVid}`, { method: "DELETE" });
   check("Object Lock default retention is enforced on a newly uploaded object (DELETE rejected)", /AccessDenied/.test(lockedDelete), lockedDelete.slice(0, 200));
   await shot("05e-s3-object-lock-default-retention");
 

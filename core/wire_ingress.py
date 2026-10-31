@@ -410,6 +410,25 @@ def _lam_store(r: AwsWireRouter):
     return nr.lam if nr is not None else r.lam
 
 
+def _kinesis_store():
+    """The offline Kinesis streams (routes/aws_kinesis.STORE — the persisted store the native
+    Kinesis wire and console read), so EventBridge / Scheduler Kinesis targets really deliver."""
+    try:
+        from routes.aws_kinesis import STORE
+        return STORE
+    except Exception:
+        return None
+
+
+def _sfn_store():
+    """The (durable) Step Functions store — EventBridge / Scheduler state-machine targets."""
+    try:
+        from core.stepfunctions_core import shared_store
+        return shared_store()
+    except Exception:
+        return None
+
+
 def _dispatch_messaging(service: str, r: AwsWireRouter, method: str, path: str, query: dict,
                         headers: dict, body: bytes) -> dict:
     import json as _json
@@ -427,7 +446,8 @@ def _dispatch_messaging(service: str, r: AwsWireRouter, method: str, path: str, 
         from core import scheduler_core
         fired = {k: s.get("last_run") for k, s in r.sched.schedules.items()}
         resp = scheduler_core.dispatch(r.sched, method, path, query or {}, headers or {}, body or b"",
-                                       msg_store=st, lam_store=_lam_store(r))
+                                       msg_store=st, lam_store=_lam_store(r),
+                                       kinesis_store=_kinesis_store(), sfn_store=_sfn_store())
         if method.upper() == "GET" and fired != {k: s.get("last_run") for k, s in r.sched.schedules.items()}:
             try:   # a due schedule fired during a read: the middleware only flushes writes
                 from core import app_context as _ctx
@@ -453,7 +473,8 @@ def _dispatch_messaging(service: str, r: AwsWireRouter, method: str, path: str, 
             resp = sqs_core.dispatch(st, target, payload)
         elif service == "events":
             from core import eventbridge_core
-            resp = eventbridge_core.dispatch(st, target, payload, lam_store=_lam_store(r))
+            resp = eventbridge_core.dispatch(st, target, payload, lam_store=_lam_store(r),
+                                             kinesis_store=_kinesis_store(), sfn_store=_sfn_store())
         else:
             return {"status": 400, "headers": {"content-type": ct, "x-amzn-requestid": rid},
                     "body": _json.dumps({"__type": "UnknownOperationException",
