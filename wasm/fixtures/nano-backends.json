@@ -210,6 +210,11 @@
   "category": "azure"
  },
  {
+  "name": "az_table",
+  "label": "az_table \u00b7 AzureTableStore",
+  "category": "azure"
+ },
+ {
   "name": "az_sb",
   "label": "az_sb \u00b7 InMemoryMessagingStore",
   "category": "azure"

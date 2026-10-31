@@ -1,17 +1,387 @@
 {
-  "_doc": "ui-spec page id → v4 route (same contract as consoles/src/aws/services/*/spec-map.json). ui-spec/azure/storage.json has not been extracted yet (the live captures had no subscription, so create/blade pages were not crawlable); page ids below are the expected ones and must be reconciled when the spec lands. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap.",
-  "storage-accounts": { "route": "#/storage", "fixtures": ["az-storage-account"] },
-  "create-storage-account": { "route": "#/storage/create" },
-  "storage-account-overview": { "route": "#/storage/uic-rg/uicstorage", "fixtures": ["az-storage-account"], "vars": { "resource-name": "uicstorage" } },
-  "storage-account-containers": { "route": "#/storage/uic-rg/uicstorage/containers", "fixtures": ["az-storage-account"] },
-  "storage-account-access-keys": { "route": "#/storage/uic-rg/uicstorage/accesskeys", "fixtures": ["az-storage-account"] },
-  "storage-account-configuration": { "route": "#/storage/uic-rg/uicstorage/configuration", "fixtures": ["az-storage-account"] },
-  "storage-account-endpoints": { "route": "#/storage/uic-rg/uicstorage/endpoints", "fixtures": ["az-storage-account"] },
-  "storage-account-tags": { "route": "#/storage/uic-rg/uicstorage/tags", "fixtures": ["az-storage-account"] },
-  "storage-account-data-protection": { "route": "#/storage/uic-rg/uicstorage/dataprotection", "honest_page": true },
-  "storage-account-activity-log": { "route": "#/storage/uic-rg/uicstorage/activitylog", "honest_page": true },
-  "storage-account-iam": { "route": "#/storage/uic-rg/uicstorage/iam", "honest_page": true },
-  "storage-account-file-shares": { "route": "#/storage/uic-rg/uicstorage/fileshares", "honest_page": true },
-  "storage-account-queues": { "route": "#/storage/uic-rg/uicstorage/queues", "honest_page": true },
-  "storage-account-tables": { "route": "#/storage/uic-rg/uicstorage/tables", "honest_page": true }
+  "_doc": "ui-spec page id \u2192 v4 route (same contract as consoles/src/aws/services/*/spec-map.json). Fixtures/live hooks are consoles/src/azure/services/storage/fixtures.mjs. honest_page is reserved for the base-branch allowlist (consoles/honest-allowlist.json) \u2014 azure/storage has no entries there yet, so gaps here are declared per-section inside the page via NotSimulatedContainer instead.",
+  "storage-accounts": {
+    "route": "#/storage",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "live": "live-account"
+  },
+  "create-storage-account": {
+    "route": "#/storage/create"
+  },
+  "storage-account-overview": {
+    "route": "#/storage/uic-rg/{live}",
+    "live": "live-account"
+  },
+  "storage-account-activity-log": {
+    "route": "#/storage/uic-rg/{live}/activitylog",
+    "live": "live-activity"
+  },
+  "storage-account-tags": {
+    "route": "#/storage/uic-rg/uicstorage/tags",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-diagnose": {
+    "route": "#/storage/uic-rg/uicstorage/diagnose",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-iam": {
+    "route": "#/storage/uic-rg/uicstorage/iam",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-data-migration": {
+    "route": "#/storage/uic-rg/uicstorage/datamigration",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-events": {
+    "route": "#/storage/uic-rg/uicstorage/events",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-storage-browser": {
+    "route": "#/storage/uic-rg/uicstorage/storagebrowser",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-storage-mover": {
+    "route": "#/storage/uic-rg/uicstorage/storagemover",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-partner-solutions": {
+    "route": "#/storage/uic-rg/uicstorage/partnersolutions",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-containers": {
+    "route": "#/storage/uic-rg/{live}/containers",
+    "live": "live-container",
+    "expand": [
+      "button:has-text(\"Create\")"
+    ]
+  },
+  "storage-account-file-shares": {
+    "route": "#/storage/uic-rg/uicstorage/fileshares",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-queues": {
+    "route": "#/storage/uic-rg/{live}/queues",
+    "live": "live-queue",
+    "expand": [
+      "button:has-text(\"Queue\")"
+    ]
+  },
+  "storage-account-tables": {
+    "route": "#/storage/uic-rg/{live}/tables",
+    "live": "live-table",
+    "expand": [
+      "button:has-text(\"Table\")"
+    ]
+  },
+  "storage-account-networking": {
+    "route": "#/storage/uic-rg/uicstorage/networking",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-front-door-and-cdn": {
+    "route": "#/storage/uic-rg/uicstorage/frontdoorcdn",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-access-keys": {
+    "route": "#/storage/uic-rg/uicstorage/accesskeys",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-sas": {
+    "route": "#/storage/uic-rg/uicstorage/sas",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-encryption": {
+    "route": "#/storage/uic-rg/uicstorage/encryption",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-microsoft-defender-for-cloud": {
+    "route": "#/storage/uic-rg/uicstorage/defender",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-redundancy": {
+    "route": "#/storage/uic-rg/uicstorage/redundancy",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-data-protection": {
+    "route": "#/storage/uic-rg/uicstorage/dataprotection",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-object-replication": {
+    "route": "#/storage/uic-rg/uicstorage/objectreplication",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-blob-inventory": {
+    "route": "#/storage/uic-rg/uicstorage/inventory",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-static-website": {
+    "route": "#/storage/uic-rg/uicstorage/staticwebsite",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-lifecycle-management": {
+    "route": "#/storage/uic-rg/{live}/lifecycle",
+    "live": "live-lifecycle"
+  },
+  "storage-account-azure-ai-search": {
+    "route": "#/storage/uic-rg/uicstorage/azureaisearch",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-configuration": {
+    "route": "#/storage/uic-rg/uicstorage/configuration",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-data-lake-gen2-upgrade": {
+    "route": "#/storage/uic-rg/uicstorage/datalakegen2upgrade",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-cors": {
+    "route": "#/storage/uic-rg/uicstorage/cors",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-advisor-recommendations": {
+    "route": "#/storage/uic-rg/uicstorage/advisor",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-endpoints": {
+    "route": "#/storage/uic-rg/uicstorage/endpoints",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-locks": {
+    "route": "#/storage/uic-rg/{live}/locks",
+    "live": "live-lock",
+    "expand": [
+      "button:has-text(\"Add\")"
+    ]
+  },
+  "storage-account-insights": {
+    "route": "#/storage/uic-rg/uicstorage/insights",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-alerts": {
+    "route": "#/storage/uic-rg/uicstorage/alerts",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-metrics": {
+    "route": "#/storage/uic-rg/uicstorage/metrics",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-workbooks": {
+    "route": "#/storage/uic-rg/uicstorage/workbooks",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-diagnostic-settings": {
+    "route": "#/storage/uic-rg/uicstorage/diagnostics",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-logs": {
+    "route": "#/storage/uic-rg/uicstorage/logs",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-tasks": {
+    "route": "#/storage/uic-rg/uicstorage/tasks",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-export-template": {
+    "route": "#/storage/uic-rg/uicstorage/exporttemplate",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-account-support-troubleshooting": {
+    "route": "#/storage/uic-rg/uicstorage/support",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "resource-name": "uicstorage"
+    }
+  },
+  "storage-container-detail": {
+    "route": "#/storage/uic-rg/uicstorage/containers?container=uiccontainer",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "vars": {
+      "container-name": "uiccontainer"
+    },
+    "live": "live-blob"
+  },
+  "upload-blob": {
+    "route": "#/storage/uic-rg/uicstorage/containers?container=uiccontainer",
+    "fixtures": [
+      "az-storage-account"
+    ],
+    "expand": [
+      "button:has-text(\"Upload\")"
+    ]
+  }
 }

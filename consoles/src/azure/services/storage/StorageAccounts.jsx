@@ -1,11 +1,12 @@
 /* Storage accounts browse blade (ARM list at subscription scope). */
-import { Link } from "@fluentui/react-components";
+import { useState } from "react";
+import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Link, ToolbarButton } from "@fluentui/react-components";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
-import { Glyph } from "../../kit/common.jsx";
+import { Glyph, NotSimulated } from "../../kit/common.jsx";
 import { TitleRow } from "../../kit/ResourceBlade.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
@@ -15,6 +16,7 @@ export default function StorageAccounts() {
   const sub = useSubscription();
   const { data, loading, error, reload } = useAsync(() => api.listStorageAccounts(), [sub.id]);
   const subName = sub.displayName || sub.id;
+  const [gap, setGap] = useState(null); // "Restore" | "Open query" | "Assign tags"
   return (
     <>
       <TitleRow title="Storage accounts" subtitle="Vyomi simulator (default directory)" glyph={<Glyph id="storage" />} closeHref="#/" />
@@ -26,6 +28,11 @@ export default function StorageAccounts() {
           error={error}
           onRefresh={reload}
           onCreate={() => navigate("storage", "create")}
+          extraCommands={<>
+            <ToolbarButton onClick={() => setGap("Restore")}>Restore</ToolbarButton>
+            <ToolbarButton onClick={() => setGap("Open query")}>Open query</ToolbarButton>
+            <ToolbarButton onClick={() => setGap("Assign tags")}>Assign tags</ToolbarButton>
+          </>}
           onDelete={async (rows) => {
             for (const r of rows) await api.deleteStorageAccount(r.resourceGroup, r.name);
             notify.success(`Deleted ${rows.length} storage account${rows.length === 1 ? "" : "s"}.`, "Delete succeeded");
@@ -52,6 +59,15 @@ export default function StorageAccounts() {
           emptyAction={<Link href="#/storage/create">Create storage account</Link>}
         />
       </div>
+      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
+        <DialogSurface aria-label={gap || "Not simulated"}>
+          <DialogBody>
+            <DialogTitle>{gap}</DialogTitle>
+            <DialogContent><NotSimulated feature={gap === "Restore" ? "Restoring a deleted storage account" : gap === "Open query" ? "Resource Graph queries" : "Bulk tag assignment"} /></DialogContent>
+            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </>
   );
 }

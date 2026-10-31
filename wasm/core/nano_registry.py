@@ -29,6 +29,7 @@ from core.gcp_artifactregistry_core import ArtifactRegistryStore
 from core.azure_blob_core import AzureBlobStore
 from core.azure_cosmos_core import CosmosStore
 from core.azure_queue_core import AzureQueueStore
+from core.azure_table_core import AzureTableStore
 from core.nano_events import EventStore
 from core.kinesis_core import KinesisStore
 from core.apigatewayv2_core import ApiGwV2Store
@@ -116,6 +117,7 @@ def get() -> dict:
             "az_kvkeys": InMemoryKeyStore(),
             "az_kvcerts": InMemoryKvStore(),
             "az_queue":  AzureQueueStore(),
+            "az_table":  AzureTableStore(),
             "az_sb":     InMemoryMessagingStore(),   # Service Bus (router-only today)
             "az_graph":  GraphStore(),               # Microsoft Graph (Entra ID: users/groups/apps)
             "az_arm":    AzureArm(),                 # ARM control plane (VMs, apps, …): public `state` map → persisted + synced

@@ -169,6 +169,9 @@ from core import azure_keyvault_keys_core as az_kvkeys
 from core import azure_keyvault_certificates_core as az_kvcerts
 from core import azure_queue_core as az_queue
 from core.azure_queue_core import AzureQueueStore
+from core import azure_table_core as az_table
+from core.azure_table_core import AzureTableStore
+from core.azure_arm_core import AzureArm
 from core import azure_servicebus_core as az_sb
 from core import eventbridge_core as events
 from core import scheduler_core as sched
@@ -233,6 +236,14 @@ def _azure_service(path, lheaders, query):
     # Cosmos DB: /dbs path or the documentdb headers.
     if p.startswith("/dbs") or any(k.startswith("x-ms-documentdb") for k in lheaders):
         return "az-cosmos"
+    # Table storage: azure-data-tables always sends `Accept: application/json;odata=...`
+    # (Blob/Queue speak XML) and the wire shape — the "Tables" collection name and the
+    # parenthesised PartitionKey/RowKey entity key — is distinctive; no blob container or
+    # queue name (lowercase-only) can look like it.
+    accept = lheaders["accept"] if "accept" in lheaders else ""
+    tsegs = [s for s in p.split("/") if s]
+    if "odata" in accept.lower() or (tsegs and (tsegs[0] == "Tables" or tsegs[0].startswith("Tables(") or "(" in tsegs[0])):
+        return "az-table"
     # Blob / Queue: identified by the x-ms-* storage headers.
     if "x-ms-version" in lheaders or "x-ms-blob-type" in lheaders:
         if "/messages" in p:
@@ -432,6 +443,8 @@ class AwsWireRouter:
         self.az_kvkeys = s.get("az_kvkeys") or InMemoryKeyStore()
         self.az_kvcerts = s.get("az_kvcerts") or InMemoryKvStore()
         self.az_queue = s.get("az_queue") or AzureQueueStore()
+        self.az_table = s.get("az_table") or AzureTableStore()
+        self.az_arm = s.get("az_arm") or AzureArm()   # ARM control plane — read by the blob core for CORS/lifecycle/static-website enforcement
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
         self.az_acr = s.get("az_acr") or AcrRegistryStore()   # Container Registry repositories/tags/manifests
         self.az_graph = s.get("az_graph") or az_graph.GraphStore()   # Microsoft Graph (Entra ID)
@@ -725,12 +738,19 @@ class AwsWireRouter:
                 "az-blob": (az_blob, self.az_blob), "az-cosmos": (az_cosmos, self.az_cosmos),
                 "az-kv-secrets": (az_kvsec, self.az_kvsec), "az-kv-keys": (az_kvkeys, self.az_kvkeys),
                 "az-kv-certs": (az_kvcerts, self.az_kvcerts),
-                "az-queue": (az_queue, self.az_queue), "az-servicebus": (az_sb, self.az_sb),
+                "az-queue": (az_queue, self.az_queue), "az-table": (az_table, self.az_table),
+                "az-servicebus": (az_sb, self.az_sb),
                 "az-acr": (az_acr, self.az_acr),
                 "az-graph": (az_graph, self.az_graph),
             }[svc]
             mod, store = _az_core
-            r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
+            if svc == "az-blob":   # CORS preflight, lifecycle tiering/expiry and static-website
+                # serving read the storage account's ARM-stored config (blobServices/default,
+                # managementPolicies/default) — the single source of truth the Configuration/
+                # CORS/Lifecycle/Static website panels already write through ARM.
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), arm_state=self.az_arm.state)
+            else:
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body))
             hdrs = dict(r.headers or {})
             if r.media_type and not any(k.lower() == "content-type" for k in hdrs):
                 hdrs["content-type"] = r.media_type
