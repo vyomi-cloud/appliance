@@ -69,6 +69,23 @@ def _not_found(message: str) -> CloudSqlResponse:
 
 
 # ── resource views ─────────────────────────────────────────────────────────
+def _ip_addresses(ip_config: dict) -> list[dict]:
+    """Native Cloud SQL semantics, now ENFORCED: ipAddresses only carries an entry
+    for each network path ipConfiguration actually turns on. Disabling ipv4Enabled
+    means the instance has no public address at all — not a disabled one a client
+    could still dial — and leaving privateNetwork unset means no private address
+    either, matching real instances.get. authorizedNetworks (an allow-list of
+    source IPs) stays unenforced: this simulator has no real client IP to filter
+    against, same honest limit azure_sql_core.py takes for per-IP firewall rules.
+    See gcp.sql.connections in core/capabilities/gcp/sql.json."""
+    addrs = []
+    if ip_config.get("ipv4Enabled", True):
+        addrs.append({"type": "PRIMARY", "ipAddress": "34.148.0.2"})
+    if ip_config.get("privateNetwork"):
+        addrs.append({"type": "PRIVATE", "ipAddress": "10.0.0.2"})
+    return addrs
+
+
 def _instance_view(rec: dict) -> dict:
     project = rec["project"]
     name = rec["name"]
@@ -115,8 +132,7 @@ def _instance_view(rec: dict) -> dict:
                 "startTime": backup_config.get("startTime", "03:00"),
             },
         },
-        "ipAddresses": rec.get("ipAddresses", [
-            {"type": "PRIMARY", "ipAddress": "10.0.0.2"}]),
+        "ipAddresses": _ip_addresses(ip_config),
         "createTime": rec.get("createTime", ""),
         "etag": rec.get("etag", ""),
         "selfLink": (f"https://sqladmin.googleapis.com/sql/v1beta4/projects/"

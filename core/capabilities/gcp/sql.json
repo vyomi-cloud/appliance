@@ -42,9 +42,9 @@
   },
   "gcp.sql.connections": {
     "title": "Connections (public/private IP toggle, authorized networks)",
-    "level": { "nano": "config_only", "offline": "config_only" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "ipConfiguration (ipv4Enabled, authorizedNetworks, privateNetwork) round-trips through instances.patch exactly as set, but Vyomi does not enforce it — a client can reach a simulated instance regardless of the authorized networks list or whether public IP is disabled."
+      "ipv4Enabled and privateNetwork are now enforced on instances.get/list: disabling Public IP removes the PRIMARY entry from ipAddresses (no public address to connect to at all, not a disabled one a client could still dial) and leaving privateNetwork unset means no PRIVATE entry either — the Instances list, instance overview and Connections pages all read this live. authorizedNetworks (the per-IP allow-list) stays unenforced: Vyomi has no real client IP to match against a simulated instance's allow-list, the same honest limit azure_sql_core.py takes for per-IP SQL firewall rules."
     ],
     "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
   },
