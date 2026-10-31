@@ -23,8 +23,11 @@ Custom methods use the `:verb` suffix (`:encrypt`, `:decrypt`). `plaintext` /
 Scope (v1 slice): keyRings create/get/list (location "-" aggregates across locations),
 cryptoKeys create/get/list/patch (location/keyRing "-" aggregates project-wide — the
 console's Key inventory), :encrypt, :decrypt (encrypt requires the primary version to
-be ENABLED), :updateCryptoKeyPrimaryVersion, :getIamPolicy/:setIamPolicy.
-cryptoKeyVersions get/list/create, patch (enable/disable), :destroy, :restore.
+be ENABLED; decrypt re-checks the state of the version that produced the ciphertext —
+see cryptoKeyVersions below), :updateCryptoKeyPrimaryVersion, :getIamPolicy/:setIamPolicy.
+cryptoKeyVersions get/list/create (each version is minted with its OWN key material, so
+rotation — create + make primary — is genuine new crypto, not bookkeeping over shared
+material), patch (enable/disable), :destroy, :restore.
 
 v4 C0b — the offline appliance serves Cloud KMS through THIS core (over
 core/appliance_stores.py) instead of the retired Vault-transit handlers in
@@ -307,7 +310,9 @@ def dispatch(store: KeyStore, method: str, path: str,
                 "versions": {"1": {"state": "ENABLED", "createTime": now}},
             }
             _apply_settings(meta, payload, [])
-            store.put_key(name, meta, store.engine.new_key_material())
+            material = store.engine.new_key_material()
+            store.put_key(name, meta, material)
+            store.material[_version_name(name, "1")] = material
             store.persist()
             return _json(200, _crypto_key_view(store, name))
         if method == "GET":
@@ -386,9 +391,10 @@ def dispatch(store: KeyStore, method: str, path: str,
         if len(segs) == 9 and method == "GET":       # list versions
             items = [_version_view(key_name, v, versions[v]) for v in sorted(versions)]
             return _json(200, {"cryptoKeyVersions": items})
-        if len(segs) == 9 and method == "POST":      # create a new (disabled) version
+        if len(segs) == 9 and method == "POST":      # create a new version with its OWN key material
             next_id = str(max((int(v) for v in versions), default=0) + 1)
             versions[next_id] = {"state": "ENABLED", "createTime": _now()}
+            store.material[_version_name(key_name, next_id)] = store.engine.new_key_material()
             _save()
             return _json(200, _version_view(key_name, next_id, versions[next_id]))
         if len(segs) == 10 and method == "GET" and not verb:      # get one version
@@ -435,6 +441,11 @@ def dispatch(store: KeyStore, method: str, path: str,
 
 
 # ── crypto operations (reuse the AWS KMS engine + key material) ─────────────
+# Every CryptoKeyVersion gets its OWN key material (minted on create, above), so
+# rotation is real: the new primary encrypts with genuinely different material, not
+# the same bytes under a new label. Encrypt embeds the *version* that did the work
+# (not just the CryptoKey) so Decrypt can re-check that specific version's state —
+# the one piece symmetric Encrypt/Decrypt needs to enforce lifecycle correctly.
 def _encrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
     if not store.key_exists(name):
         return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
@@ -449,9 +460,11 @@ def _encrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
         return _err(400, "INVALID_ARGUMENT", "plaintext must be valid base64.")
     if not plaintext:
         return _err(400, "INVALID_ARGUMENT", "plaintext must not be empty.")
-    blob = store.engine.encrypt(store.get_material(name), name, plaintext)
+    vname = _version_name(name, primary)
+    material = store.get_material(vname) or store.get_material(name)
+    blob = store.engine.encrypt(material, vname, plaintext)
     out = {
-        "name": f"{name}/cryptoKeyVersions/{(store.get_key(name) or {}).get('primary', '1')}",
+        "name": vname,
         "ciphertext": _b64e(blob),
         "ciphertextCrc32c": str(crc32c(blob)),
         "protectionLevel": "SOFTWARE",
@@ -472,7 +485,7 @@ def _decrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
         return _err(400, "INVALID_ARGUMENT", "ciphertext must be valid base64.")
     if payload.get("ciphertextCrc32c") not in (None, "") and str(payload["ciphertextCrc32c"]) != str(crc32c(blob)):
         return _err(400, "INVALID_ARGUMENT", "The checksum in field ciphertext_crc32c did not match the data in field ciphertext.")
-    # The ciphertext self-identifies its crypto key; it must match this resource.
+    # The ciphertext self-identifies its CryptoKeyVersion; it must belong to this CryptoKey.
     embedded = store.engine.key_id_in(blob)
     if not embedded and hasattr(store, "legacy_decrypt"):
         # pre-v4 ciphertext (the appliance's retired Vault-transit handler)
@@ -480,12 +493,22 @@ def _decrypt(store: KeyStore, name: str, payload: dict) -> GcpKmsResponse:
         if legacy is not None:
             return _json(200, {"plaintext": _b64e(legacy), "plaintextCrc32c": str(crc32c(legacy)),
                                "usedPrimary": True, "protectionLevel": "SOFTWARE"})
-    if embedded and embedded != name:
+    key_part, _, ver_part = (embedded or "").partition("/cryptoKeyVersions/")
+    if embedded and key_part != name:
         return _err(400, "INVALID_ARGUMENT",
                     "Decryption failed: the ciphertext is for a different CryptoKey.")
+    material = store.get_material(name)
+    meta = store.get_key(name) or {}
+    if ver_part:
+        vstate = (meta.get("versions", {}).get(ver_part) or {}).get("state", "ENABLED")
+        if vstate != "ENABLED":
+            return _err(400, "FAILED_PRECONDITION",
+                        f"Decryption failed: CryptoKeyVersion {name}/cryptoKeyVersions/{ver_part} is not enabled.")
+        material = store.get_material(_version_name(name, ver_part)) or material
     try:
-        plaintext = store.engine.decrypt(store.get_material(name), blob)
+        plaintext = store.engine.decrypt(material, blob)
     except Exception:
         return _err(400, "INVALID_ARGUMENT", "Decryption failed: the ciphertext is invalid.")
+    used_primary = (ver_part or str(meta.get("primary", "1"))) == str(meta.get("primary", "1"))
     return _json(200, {"plaintext": _b64e(plaintext), "plaintextCrc32c": str(crc32c(plaintext)),
-                       "usedPrimary": True, "protectionLevel": "SOFTWARE"})
+                       "usedPrimary": used_primary, "protectionLevel": "SOFTWARE"})
