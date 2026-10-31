@@ -18,6 +18,15 @@ delete/setSize/setAutoscaling/setManagement, operations.get/list/cancel,
 locations.getServerConfig. The legacy `projects/{p}/zones/{z}/...` paths are served too.
 Every mutation returns a completed `Operation` (DONE) like a very fast real cloud; errors
 use the Google shape `{"error":{"code","message","status"}}`.
+
+Also serves Backup for GKE's control-plane shape (`gkebackup.googleapis.com/v1`), since a
+backup is a snapshot of the same cluster/node-pool config this core already owns:
+    projects/{p}/locations/{l}/backupPlans/{bp}
+    projects/{p}/locations/{l}/backupPlans/{bp}/backups/{b}
+backupPlans.create/get/list/delete, backups.create/get/list/delete. Backups snapshot the
+cluster's control-plane config (node pool shapes, version) at create time and complete
+synchronously (state SUCCEEDED); there is no scheduler, no RestorePlan/Restore, and no pod
+volume data — see core/capabilities/gcp/kubernetes.json's `gcp.kubernetes.backup` entry.
 """
 from __future__ import annotations
 
@@ -58,6 +67,8 @@ class ContainerStore:
     def __init__(self):
         self.clusters: dict = {}     # full cluster name -> Cluster resource
         self.operations: dict = {}   # full operation name -> Operation resource
+        self.backup_plans: dict = {}   # full backupPlan name -> BackupPlan resource (Backup for GKE)
+        self.backups: dict = {}        # full backup name -> Backup resource (Backup for GKE)
         self.seq: dict = {"op": 0}
 
 
@@ -544,6 +555,116 @@ def pool_setting(store, project, location, cid, pid, verb, payload):
     raise _E(404, "NOT_FOUND", "Unknown method :%s" % verb)
 
 
+# ── Backup for GKE (gkebackup.googleapis.com shape, served from this core — see module
+# docstring) ─────────────────────────────────────────────────────────────────
+def backup_plan_name(project, location, bp_id):
+    return "projects/%s/locations/%s/backupPlans/%s" % (project, location, bp_id)
+
+
+def backup_name(project, location, bp_id, b_id):
+    return "projects/%s/locations/%s/backupPlans/%s/backups/%s" % (project, location, bp_id, b_id)
+
+
+def _get_plan(store, project, location, bp_id):
+    full = backup_plan_name(project, location, bp_id)
+    plan = store.backup_plans.get(full)
+    if not plan:
+        raise _E(404, "NOT_FOUND", "Not found: %s." % full)
+    return plan
+
+
+def create_backup_plan(store, project, location, bp_id, payload):
+    if not bp_id or not _NAME.match(bp_id):
+        raise _E(400, "INVALID_ARGUMENT", "Invalid backup plan id %r: must match %s." % (bp_id, _NAME.pattern))
+    full = backup_plan_name(project, location, bp_id)
+    if full in store.backup_plans:
+        raise _E(409, "ALREADY_EXISTS", "Already exists: %s." % full)
+    cluster = payload.get("cluster") or ""
+    if cluster not in store.clusters:
+        raise _E(400, "INVALID_ARGUMENT", "Cluster %r not found; a backup plan needs an existing cluster to back up." % cluster)
+    now = _ts()
+    plan = {
+        "name": full, "cluster": cluster, "description": payload.get("description", ""),
+        "retentionPolicy": dict({"backupRetainDays": 0, "backupDeleteLockDays": 0, "locked": False}, **(payload.get("retentionPolicy") or {})),
+        "backupSchedule": dict({"paused": True}, **(payload.get("backupSchedule") or {})),
+        "backupConfig": dict({"allNamespaces": True, "includeVolumeData": True, "includeSecrets": True}, **(payload.get("backupConfig") or {})),
+        "labels": payload.get("labels") or {},
+        "state": "READY", "stateReason": "", "protectedPodCount": 0,
+        "createTime": now, "updateTime": now, "uid": hashlib.sha1(full.encode()).hexdigest(),
+        "etag": hashlib.md5(full.encode()).hexdigest()[:16],
+    }
+    store.backup_plans[full] = plan
+    return _copy(plan)
+
+
+def list_backup_plans(store, project, location):
+    return [_copy(p) for n, p in sorted(store.backup_plans.items())
+            if n.startswith("projects/%s/locations/" % project) and (location == "-" or n.split("/")[3] == location)]
+
+
+def delete_backup_plan(store, project, location, bp_id, force=False):
+    full = backup_plan_name(project, location, bp_id)
+    _get_plan(store, project, location, bp_id)
+    children = [n for n in store.backups if n.startswith(full + "/backups/")]
+    if children and not force:
+        raise _E(400, "FAILED_PRECONDITION", "Backup plan %s has %d backup(s); pass force=true to delete them too." % (full, len(children)))
+    for n in children:
+        del store.backups[n]
+    del store.backup_plans[full]
+    return {"name": full, "done": True}
+
+
+def create_backup(store, project, location, bp_id, b_id, payload):
+    plan = _get_plan(store, project, location, bp_id)
+    if not b_id or not _NAME.match(b_id):
+        raise _E(400, "INVALID_ARGUMENT", "Invalid backup id %r: must match %s." % (b_id, _NAME.pattern))
+    full = backup_name(project, location, bp_id, b_id)
+    if full in store.backups:
+        raise _E(409, "ALREADY_EXISTS", "Already exists: %s." % full)
+    c = store.clusters.get(plan["cluster"])
+    if not c:
+        raise _E(400, "FAILED_PRECONDITION", "Source cluster %s no longer exists; a backup needs a live cluster to run." % plan["cluster"])
+    now = _ts()
+    pools = c.get("nodePools", [])
+    node_count = sum(pool_node_count(p) for p in pools)
+    size = (node_count + 1) * 52428800 + len(json.dumps(c, sort_keys=True)) * 37   # deterministic, config-sized
+    backup = {
+        "name": full, "state": "SUCCEEDED", "createTime": now, "startTime": now, "endTime": now, "completeTime": now,
+        "sizeBytes": str(size), "resourceCount": len(pools) + node_count + 1, "podCount": node_count * 8,
+        "configBackupSizeBytes": str(len(json.dumps(c, sort_keys=True))),
+        "clusterMetadata": {"cluster": plan["cluster"], "k8sVersion": c.get("currentMasterVersion", ""),
+                            "backupCrVersion": "1.0.0", "clusterUid": hashlib.sha1(plan["cluster"].encode()).hexdigest()},
+        "allNamespaces": bool(plan["backupConfig"].get("allNamespaces", True)),
+        "manual": True, "etag": hashlib.md5(full.encode()).hexdigest()[:16],
+    }
+    store.backups[full] = backup
+    plan["protectedPodCount"] = backup["podCount"]
+    plan["updateTime"] = now
+    return _copy(backup)
+
+
+def list_backups(store, project, location, bp_id):
+    full = backup_plan_name(project, location, bp_id)
+    _get_plan(store, project, location, bp_id)
+    return [_copy(b) for n, b in sorted(store.backups.items()) if n.startswith(full + "/backups/")]
+
+
+def get_backup(store, project, location, bp_id, b_id):
+    full = backup_name(project, location, bp_id, b_id)
+    b = store.backups.get(full)
+    if not b:
+        raise _E(404, "NOT_FOUND", "Not found: %s." % full)
+    return _copy(b)
+
+
+def delete_backup(store, project, location, bp_id, b_id):
+    full = backup_name(project, location, bp_id, b_id)
+    if full not in store.backups:
+        raise _E(404, "NOT_FOUND", "Not found: %s." % full)
+    del store.backups[full]
+    return {"name": full, "done": True}
+
+
 # ── operations / server config ─────────────────────────────────────────────
 def _get_op(store, project, location, oid):
     op = store.operations.get("projects/%s/locations/%s/operations/%s" % (project, location, oid))
@@ -693,6 +814,8 @@ def _dispatch(store, method, path, query, headers, body):
             return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
         if rest[0] == "clusters":
             return _clusters(store, method, project, location, rest[1:], verb, payload, legacy)
+        if rest[0] == "backupPlans":
+            return _backup_plans(store, method, project, location, rest[1:], payload, query)
         if rest[0] == "operations":
             if len(rest) == 1 and method == "GET":
                 ops = [o for n, o in sorted(store.operations.items())
@@ -755,3 +878,33 @@ def _clusters(store, method, project, location, rest, verb, payload, legacy):
     if method == "DELETE":
         return _json(200, delete_pool(store, project, location, cid, pid))
     raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on nodePool." % method)
+
+
+def _backup_plans(store, method, project, location, rest, payload, query):
+    if not rest:
+        if method == "POST":
+            return _json(200, create_backup_plan(store, project, location, query.get("backupPlanId", ""), payload))
+        if method == "GET":
+            return _json(200, {"backupPlans": list_backup_plans(store, project, location)})
+        raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on backupPlans collection." % method)
+    bp_id = rest[0]
+    if len(rest) == 1:
+        if method == "GET":
+            return _json(200, _get_plan(store, project, location, bp_id))
+        if method == "DELETE":
+            return _json(200, delete_backup_plan(store, project, location, bp_id, force=str(query.get("force", "")).lower() == "true"))
+        raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on backupPlan." % method)
+    if rest[1] != "backups":
+        raise _E(404, "NOT_FOUND", "Unknown path.")
+    if len(rest) == 2:
+        if method == "GET":
+            return _json(200, {"backups": list_backups(store, project, location, bp_id)})
+        if method == "POST":
+            return _json(200, create_backup(store, project, location, bp_id, query.get("backupId", ""), payload))
+        raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on backups collection." % method)
+    b_id = rest[2]
+    if method == "GET":
+        return _json(200, get_backup(store, project, location, bp_id, b_id))
+    if method == "DELETE":
+        return _json(200, delete_backup(store, project, location, bp_id, b_id))
+    raise _E(405, "UNIMPLEMENTED", "Method %s not allowed on backup." % method)

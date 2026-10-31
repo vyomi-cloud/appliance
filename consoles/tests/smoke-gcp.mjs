@@ -656,6 +656,33 @@ try {
   await shot("13-cluster-nodes");
   await wire(`${KL}/clusters/${K2}`, { method: "DELETE" });
 
+  // Backup for GKE: create a backup plan + an on-demand backup through the UI, cross-check
+  // over the native gkebackup REST shape (projects.locations.backupPlans[.backups]).
+  const BP = `v4-gcp-smoke-bp-${Date.now() % 100000}`;
+  await page.goto(UI + "#/kubernetes/backup");
+  await page.getByRole("button", { name: "Create backup plan" }).click();
+  await page.getByLabel("Name").fill(BP);
+  await page.getByLabel("Cluster").click();
+  await page.getByRole("option", { name: new RegExp(`^${K} `) }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  await page.getByRole("cell", { name: BP, exact: true }).waitFor({ timeout: 10000 });
+  const bpWire = await wjson(`${KL}/backupPlans/${BP}`);
+  check("create backup plan via UI → visible over native wire, references the cluster",
+    bpWire.state === "READY" && bpWire.cluster?.endsWith(`/clusters/${K}`));
+  await page.getByRole("checkbox", { name: `Select ${bpWire.name}` }).check();
+  await page.getByRole("button", { name: "Create backup now" }).click();
+  await page.getByText("SUCCEEDED").first().waitFor({ timeout: 10000 });
+  const backupsWire = await wjson(`${KL}/backupPlans/${BP}/backups`);
+  check("create backup via UI → SUCCEEDED over native wire, sized from the cluster",
+    backupsWire.backups?.length === 1 && backupsWire.backups[0].state === "SUCCEEDED" && Number(backupsWire.backups[0].sizeBytes) > 0);
+  await shot("13b-backup-for-gke");
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(BP);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  check("delete backup plan via UI → gone over native wire", (await wire(`${KL}/backupPlans/${BP}`)).status === 404);
+
   await page.goto(UI + "#/kubernetes/clusters");
   await page.getByRole("link", { name: K }).waitFor({ timeout: 10000 });
   check("cluster list shows new cluster", true);

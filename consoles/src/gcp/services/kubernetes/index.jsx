@@ -18,6 +18,7 @@ import ClusterDetail from "./ClusterDetail.jsx";
 import Workloads from "./Workloads.jsx";
 import SecretsConfigMaps from "./SecretsConfigMaps.jsx";
 import GatewaysServicesIngress from "./GatewaysServicesIngress.jsx";
+import BackupForGke from "./BackupForGke.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 
 const ns = (title, capId) => function NotSimulatedPage() {
@@ -33,7 +34,6 @@ const GAPS = [
   ["applications", "Applications", AppsIcon, "gcp.kubernetes.applications"],
   ["storage", "Storage", StorageIcon, "gcp.kubernetes.storage"],
   ["object-browser", "Object Browser", FolderOutlinedIcon, "gcp.kubernetes.object-browser"],
-  ["backup", "Backup for GKE", BackupIcon, "gcp.kubernetes.backup"],
   ["config", "Config", SettingsIcon, "gcp.kubernetes.config"],
   ["marketplace", "Marketplace", ShoppingCartIcon, "gcp.kubernetes.config"],
   ["release-notes", "Release Notes", DescriptionIcon, "gcp.kubernetes.config"],
@@ -51,7 +51,7 @@ export default {
     link("storage"),
     link("object-browser"),
     { text: "Gateways, Services & Ingress", href: "#/kubernetes/discovery", icon: LanIcon },
-    link("backup"),
+    { text: "Backup for GKE", href: "#/kubernetes/backup", icon: BackupIcon },
     link("config"),
     link("marketplace"),
     link("release-notes"),
@@ -65,6 +65,7 @@ export default {
     { pattern: "/kubernetes/workloads", component: Workloads },
     { pattern: "/kubernetes/secrets-configmaps", component: SecretsConfigMaps },
     { pattern: "/kubernetes/discovery", component: GatewaysServicesIngress },
+    { pattern: "/kubernetes/backup", component: BackupForGke },
     ...GAPS.map(([p, t, , capId]) => ({ pattern: `/kubernetes/${p}`, component: ns(t, capId) })),
   ],
 };
