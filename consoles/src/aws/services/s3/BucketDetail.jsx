@@ -200,13 +200,60 @@ function Encryption({ bucket, state }) {
 }
 
 function ObjectLockSection({ bucket }) {
+  const notify = useNotify();
   const lock = useAsync(() => api.getObjectLock(bucket), [bucket]);
+  const [edit, setEdit] = useState(null);
+  const [saving, setSaving] = useState(false);
   return (
     <CapabilityContainer id="s3.bucket.object-lock" title="Object Lock"
-      description="Object Lock can only be enabled when a bucket is created; it permanently allows objects in this bucket to be locked.">
+      description="Object Lock can only be enabled when a bucket is created; it permanently allows objects in this bucket to be locked."
+      actions={lock.data?.enabled && <Button onClick={() => setEdit({
+        enabled: !!lock.data.defaultRetention, mode: lock.data.defaultRetention?.mode || "GOVERNANCE",
+        period: String(lock.data.defaultRetention?.days || lock.data.defaultRetention?.years || "1"),
+        unit: lock.data.defaultRetention?.years ? "Years" : "Days",
+      })}>Edit default retention</Button>}>
       {lock.loading ? <StatusIndicator type="loading">Loading</StatusIndicator>
         : lock.error ? <ErrorAlert error={lock.error} />
-        : <div><Box variant="awsui-key-label">Object Lock</Box><div>{lock.data?.enabled ? "Enabled" : "Disabled"}</div></div>}
+        : <SpaceBetween size="s">
+            <div><Box variant="awsui-key-label">Object Lock</Box><div>{lock.data?.enabled ? "Enabled" : "Disabled"}</div></div>
+            {lock.data?.enabled && <div><Box variant="awsui-key-label">Default retention</Box>
+              <div>{lock.data.defaultRetention
+                ? `${lock.data.defaultRetention.mode} mode, ${lock.data.defaultRetention.days || lock.data.defaultRetention.years} ${lock.data.defaultRetention.days ? "days" : "years"}`
+                : "None"}</div></div>}
+          </SpaceBetween>}
+      <Modal visible={!!edit} onDismiss={() => setEdit(null)} header="Edit default retention"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setEdit(null)}>Cancel</Button>
+          <Button variant="primary" loading={saving} onClick={async () => {
+            setSaving(true);
+            try {
+              if (edit.enabled) await api.putObjectLockDefaultRetention(bucket, edit.mode, edit.period, edit.unit);
+              else await api.clearObjectLockDefaultRetention(bucket);
+              notify.success(`Successfully edited default retention.${saveNotice("s3.bucket.object-lock")}`);
+              setEdit(null); lock.reload();
+            } catch (e) { notify.error(e); } finally { setSaving(false); }
+          }}>Save changes</Button>
+        </SpaceBetween></Box>}>
+        {edit && <SpaceBetween size="m">
+          <FormField label="Default retention">
+            <RadioGroup value={edit.enabled ? "enabled" : "disabled"} onChange={({ detail }) => setEdit({ ...edit, enabled: detail.value === "enabled" })}
+              items={[{ value: "disabled", label: "None" }, { value: "enabled", label: "Enabled" }]} />
+          </FormField>
+          {edit.enabled && <>
+            <FormField label="Retention mode">
+              <RadioGroup value={edit.mode} onChange={({ detail }) => setEdit({ ...edit, mode: detail.value })}
+                items={[{ value: "GOVERNANCE", label: "Governance mode" }, { value: "COMPLIANCE", label: "Compliance mode" }]} />
+            </FormField>
+            <FormField label="Retention period">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Input type="number" value={edit.period} onChange={({ detail }) => setEdit({ ...edit, period: detail.value })} />
+                <RadioGroup value={edit.unit} onChange={({ detail }) => setEdit({ ...edit, unit: detail.value })}
+                  items={[{ value: "Days", label: "Days" }, { value: "Years", label: "Years" }]} />
+              </SpaceBetween>
+            </FormField>
+          </>}
+        </SpaceBetween>}
+      </Modal>
     </CapabilityContainer>
   );
 }

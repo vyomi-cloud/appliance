@@ -284,6 +284,7 @@ def _insert_simple_delete_marker(store: ObjectStore, bucket: str, key: str) -> d
     marker = _make_version_record(delete_marker=True, version_id=vid)
     entry = _write_object_version(store, bucket, key, marker)
     store.mirror_delete(bucket, key)   # the external byte store mirrors the CURRENT view
+    _replicate_delete_marker(store, bucket, key)
     return entry
 
 
@@ -633,7 +634,41 @@ def _parse_lifecycle_rules(doc: str) -> list:
                 except ValueError:
                     exp_days = None
             exp_date = _child_text(exp, "Date") or None
-        rules.append({"prefix": prefix or "", "expiration_days": exp_days, "expiration_date": exp_date})
+        noncur_exp = _child(r, "NoncurrentVersionExpiration")
+        noncurrent_days = None
+        if noncur_exp is not None:
+            nd = _child_text(noncur_exp, "NoncurrentDays")
+            if nd:
+                try:
+                    noncurrent_days = int(nd)
+                except ValueError:
+                    noncurrent_days = None
+        transitions = []
+        for t in _children(r, "Transition"):
+            sc = _child_text(t, "StorageClass")
+            if not sc:
+                continue
+            t_days, t_date = None, None
+            td = _child_text(t, "Days")
+            if td:
+                try:
+                    t_days = int(td)
+                except ValueError:
+                    t_days = None
+            t_date = _child_text(t, "Date") or None
+            transitions.append({"storage_class": sc, "days": t_days, "date": t_date})
+        abort_mpu = _child(r, "AbortIncompleteMultipartUpload")
+        abort_days = None
+        if abort_mpu is not None:
+            ad = _child_text(abort_mpu, "DaysAfterInitiation")
+            if ad:
+                try:
+                    abort_days = int(ad)
+                except ValueError:
+                    abort_days = None
+        rules.append({"prefix": prefix or "", "expiration_days": exp_days, "expiration_date": exp_date,
+                      "noncurrent_days": noncurrent_days, "transitions": transitions,
+                      "abort_incomplete_days": abort_days})
     return rules
 
 
@@ -662,33 +697,115 @@ def _rule_expires(rule: dict, key: str, last_modified_iso: str) -> bool:
     return False
 
 
+def _rule_transition_class(rule: dict, key: str, last_modified_iso: str) -> str | None:
+    """The deepest Transition tier whose threshold (Days elapsed or past Date) has
+    fired, among a rule's <Transition> entries matching this key's prefix."""
+    if not key.startswith(rule["prefix"]):
+        return None
+    now = datetime.now(timezone.utc)
+    best_sc, best_rank = None, -1
+    for idx, t in enumerate(rule.get("transitions") or []):
+        fired = False
+        if t.get("date"):
+            try:
+                fired = now >= datetime.fromisoformat(t["date"].replace("Z", "+00:00"))
+            except ValueError:
+                fired = False
+        elif t.get("days") is not None:
+            try:
+                lm = datetime.fromisoformat(last_modified_iso.replace("Z", "+00:00"))
+                fired = now >= lm + timedelta(days=t["days"])
+            except ValueError:
+                fired = False
+        if fired and idx > best_rank:   # later <Transition> entries = colder tiers (document order)
+            best_sc, best_rank = t["storage_class"], idx
+    return best_sc
+
+
 def _apply_lifecycle(store: ObjectStore, bucket: str) -> None:
     """Lazily evaluated on every read path (list/get/head) — Date-based Expiration rules
     fire deterministically (testable without waiting real days); Days-based rules use the
-    real elapsed wall-clock, matching S3's own (non-accelerated) semantics."""
+    real elapsed wall-clock, matching S3's own (non-accelerated) semantics. Also enforces
+    NoncurrentVersionExpiration (deletes aged-out noncurrent versions, honouring Object Lock)
+    and Transition (flips the current version's storage class once its threshold fires)."""
     rules = _lifecycle_rules(store, bucket)
     if not rules:
         return
     bucket_objects = store.bucket_objects(bucket)
     vstatus = store.versioning_status(bucket)
-    expired_any = False
+    changed_any = False
     for key in list(bucket_objects.keys()):
         entry = bucket_objects.get(key)
         if not isinstance(entry, dict) or not entry.get("versions"):
             continue
         cur = entry["versions"][0]
-        if cur.get("is_delete_marker"):
+        if not cur.get("is_delete_marker"):
+            if any(_rule_expires(rule, key, cur.get("last_modified", _now())) for rule in rules):
+                changed_any = True
+                if vstatus in ("Enabled", "Suspended"):
+                    _insert_simple_delete_marker(store, bucket, key)
+                    _emit(store, bucket, key, "s3:LifecycleExpiration:DeleteMarkerCreated", None, "Lifecycle")
+                else:
+                    bucket_objects.pop(key, None)
+                    store.mirror_delete(bucket, key)
+                    _emit(store, bucket, key, "s3:LifecycleExpiration:Delete", None, "Lifecycle")
+                continue
+            new_sc = None
+            for rule in rules:
+                sc = _rule_transition_class(rule, key, cur.get("last_modified", _now()))
+                if sc:
+                    new_sc = sc
+            if new_sc and cur.get("storage_class") != new_sc:
+                cur["storage_class"] = new_sc
+                changed_any = True
+        # NoncurrentVersionExpiration — walk every version behind the current one.
+        entry2 = bucket_objects.get(key)
+        if not isinstance(entry2, dict):
             continue
-        if any(_rule_expires(rule, key, cur.get("last_modified", _now())) for rule in rules):
-            expired_any = True
-            if vstatus in ("Enabled", "Suspended"):
-                _insert_simple_delete_marker(store, bucket, key)
-                _emit(store, bucket, key, "s3:LifecycleExpiration:DeleteMarkerCreated", None, "Lifecycle")
-            else:
-                bucket_objects.pop(key, None)
-                store.mirror_delete(bucket, key)
-                _emit(store, bucket, key, "s3:LifecycleExpiration:Delete", None, "Lifecycle")
-    if expired_any:
+        for v in list(entry2.get("versions", [])[1:]):
+            if _lock_block(v, None):
+                continue   # legal hold / retention keeps a noncurrent version alive
+            for rule in rules:
+                if not key.startswith(rule["prefix"]) or rule.get("noncurrent_days") is None:
+                    continue
+                try:
+                    lm = datetime.fromisoformat(v.get("last_modified", _now()).replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                if datetime.now(timezone.utc) >= lm + timedelta(days=rule["noncurrent_days"]):
+                    _delete_version(store, bucket, key, v.get("version_id", "null"))
+                    changed_any = True
+                    break
+    if changed_any:
+        store.persist()
+
+
+def _apply_lifecycle_mpu(store: ObjectStore, bucket: str) -> None:
+    """AbortIncompleteMultipartUpload — lazily sweep stale in-progress uploads for
+    this bucket on ListMultipartUploads, matching the same lazy-evaluation style as
+    the other lifecycle actions."""
+    rules = _lifecycle_rules(store, bucket)
+    if not rules:
+        return
+    uploads = _mpu(store)
+    now = datetime.now(timezone.utc)
+    aborted = False
+    for uid, up in list(uploads.items()):
+        if up.get("bucket") != bucket:
+            continue
+        key = up.get("key", "")
+        for rule in rules:
+            if rule.get("abort_incomplete_days") is None or not key.startswith(rule["prefix"]):
+                continue
+            try:
+                initiated = datetime.fromisoformat(str(up.get("initiated") or _now()).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if now >= initiated + timedelta(days=rule["abort_incomplete_days"]):
+                uploads.pop(uid, None)
+                aborted = True
+                break
+    if aborted:
         store.persist()
 
 
@@ -716,6 +833,34 @@ def _lock_block(obj: dict | None, headers: dict | None) -> S3Response | None:
                                   "Object is WORM-protected (Object Lock retention, GOVERNANCE mode); "
                                   "retry with x-amz-bypass-governance-retention to override.", "/", 403)
     return None
+
+
+def _apply_object_lock_on_write(store: ObjectStore, bucket: str, headers: dict, version: dict) -> None:
+    """Explicit per-request Object Lock headers (x-amz-object-lock-*) take precedence;
+    otherwise, on a bucket with Object Lock enabled, the bucket's DefaultRetention rule
+    (PutObjectLockConfiguration) is stamped onto every new version that doesn't carry an
+    explicit one — matching real S3's upload-time default-retention behaviour."""
+    if not (store.buckets.get(bucket) or {}).get("object_lock"):
+        return
+    mode = headers.get("x-amz-object-lock-mode")
+    until = headers.get("x-amz-object-lock-retain-until-date")
+    if mode and until:
+        version["retention"] = {"mode": mode, "retain_until": until}
+    else:
+        default = (store.buckets.get(bucket) or {}).get("object_lock_default_retention")
+        if default:
+            now = datetime.now(timezone.utc)
+            if default.get("days") is not None:
+                retain_until = now + timedelta(days=default["days"])
+            else:
+                retain_until = now.replace(year=now.year + int(default.get("years") or 0))
+            version["retention"] = {
+                "mode": default["mode"],
+                "retain_until": retain_until.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            }
+    legal_hold = headers.get("x-amz-object-lock-legal-hold-status")
+    if legal_hold in ("ON", "OFF"):
+        version["legal_hold"] = legal_hold
 
 
 def _done(store: ObjectStore, resp: S3Response) -> S3Response:
@@ -748,11 +893,13 @@ def _replication_rules(store: ObjectStore, bucket: str) -> list:
         dest_arn = _child_text(dest_el, "Bucket") if dest_el is not None else ""
         filt = _child(r, "Filter")
         prefix = _child_text(filt, "Prefix") if filt is not None else _child_text(r, "Prefix")
+        dmr = _child(r, "DeleteMarkerReplication")
         rules.append({
             "id": _child_text(r, "ID"),
             "status": _child_text(r, "Status", "Disabled"),
             "prefix": prefix,
             "destination": dest_arn.rsplit(":", 1)[-1] if dest_arn else "",
+            "delete_marker_replication": dmr is not None and _child_text(dmr, "Status") == "Enabled",
         })
     return rules
 
@@ -789,6 +936,72 @@ def _replicate(store: ObjectStore, bucket: str, key: str, entry: dict | None) ->
         cur["replication_status"] = "COMPLETED"
 
 
+def _replicate_delete_marker(store: ObjectStore, bucket: str, key: str) -> None:
+    """DeleteMarkerReplication — a delete marker inserted by a plain (no versionId)
+    DELETE on a versioned+replicated source key is propagated to the destination too,
+    synchronously, same as every other replicated write in this simulator."""
+    for rule in _replication_rules(store, bucket):
+        if rule["status"] != "Enabled" or not rule.get("delete_marker_replication"):
+            continue
+        if rule["prefix"] and not key.startswith(rule["prefix"]):
+            continue
+        dest = rule["destination"]
+        if not dest or dest == bucket or not store.bucket_exists(dest):
+            continue
+        vstatus_dest = store.versioning_status(dest)
+        vid = _new_version_id(store, dest) if vstatus_dest == "Enabled" else "null"
+        marker = _make_version_record(delete_marker=True, version_id=vid)
+        replace = "__overwrite__" if vstatus_dest == "Disabled" else ("null" if vstatus_dest == "Suspended" else None)
+        _write_object_version(store, dest, key, marker, replace_version_id=replace)
+
+
+def _bucket_logging_target(store: ObjectStore, bucket: str) -> tuple[str, str] | None:
+    meta = store.buckets.get(bucket) or {}
+    doc = meta.get("logging")
+    if not doc:
+        return None
+    try:
+        root = ET.fromstring(doc)
+    except ET.ParseError:
+        return None
+    enabled = _child(root, "LoggingEnabled")
+    if enabled is None:
+        return None
+    target = _child_text(enabled, "TargetBucket")
+    if not target:
+        return None
+    return target, _child_text(enabled, "TargetPrefix")
+
+
+def _write_access_log(store: ObjectStore, bucket: str, method: str, key: str,
+                      operation: str, status: int, request_uri: str, bytes_sent: int) -> None:
+    """Server access logging — ENFORCED (not merely stored): every logged request on a
+    bucket with PutBucketLogging configured writes one real log-line object into the
+    target bucket, in this simulator's own delivery window (immediately, request by
+    request) rather than real S3's batched/delayed delivery — the one divergence from
+    real S3 this lazy, single-process simulator cannot remove."""
+    try:
+        target = _bucket_logging_target(store, bucket)
+        if not target or not store.bucket_exists(target[0]):
+            return
+        dest, prefix = target
+        now = datetime.now(timezone.utc)
+        line = (f'79a59df900b949e55d96a1e698fbacedfd6e09d98eacf8f8d5218e7cd47ef2be '
+                f'{bucket} [{now.strftime("%d/%b/%Y:%H:%M:%S +0000")}] 127.0.0.1 '
+                f'- {uuid.uuid4().hex.upper()} {operation} {_xml_escape(key)} '
+                f'"{method} /{request_uri} HTTP/1.1" {status} - {bytes_sent} {bytes_sent} '
+                f'12 12 "-" "-" -\n')
+        log_key = f"{prefix}{bucket}-{now.strftime('%Y-%m-%d-%H-%M-%S')}-{uuid.uuid4().hex[:16].upper()}"
+        version = _make_version_record(data=line.encode(), content_type="text/plain", version_id="null")
+        vstatus_dest = store.versioning_status(dest)
+        if vstatus_dest == "Enabled":
+            version["version_id"] = _new_version_id(store, dest)
+        _write_object_version(store, dest, log_key, version)
+        store.persist()
+    except Exception:
+        pass   # log delivery is best-effort; never fail the request it is logging
+
+
 # ── the 5 operations (faithful ports of the handler bodies) ───────────────
 def put_object(store: ObjectStore, bucket: str, key: str, body: bytes, headers: dict) -> S3Response:
     headers = {k.lower(): v for k, v in (headers or {}).items()}
@@ -804,6 +1017,7 @@ def put_object(store: ObjectStore, bucket: str, key: str, body: bytes, headers: 
     version = _make_version_record(data=data, content_type=content_type,
                                    storage_class=storage_class, metadata=user_meta, tags=tags,
                                    version_id=vid, delete_marker=False)
+    _apply_object_lock_on_write(store, bucket, headers, version)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
     _replicate(store, bucket, key, entry)
@@ -858,6 +1072,7 @@ def copy_object(store: ObjectStore, bucket: str, key: str, headers: dict) -> S3R
                                    content_type=content_type,
                                    storage_class=storage_class, metadata=user_meta, tags=tags,
                                    version_id=vid, delete_marker=False)
+    _apply_object_lock_on_write(store, bucket, headers, version)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
     _replicate(store, bucket, key, entry)
@@ -1124,6 +1339,7 @@ def create_multipart_upload(store, bucket, key, headers) -> S3Response:
         "content_type": headers.get("content-type", "application/octet-stream"),
         "metadata": {h[11:]: v for h, v in headers.items() if h.startswith("x-amz-meta-")},
         "storage_class": headers.get("x-amz-storage-class", "STANDARD"),
+        "lock_headers": {h: v for h, v in headers.items() if h.startswith("x-amz-object-lock-")},
         "parts": {},
         "initiated": _now(),
     }
@@ -1219,6 +1435,7 @@ def complete_multipart_upload(store, bucket, key, query, body) -> S3Response:
                                    storage_class=up.get("storage_class", "STANDARD"),
                                    metadata=up.get("metadata") or {},
                                    version_id=vid, delete_marker=False, etag=etag)
+    _apply_object_lock_on_write(store, bucket, up.get("lock_headers") or {}, version)
     replace = "__overwrite__" if vstatus == "Disabled" else ("null" if vstatus == "Suspended" else None)
     entry = _write_object_version(store, bucket, key, version, replace_version_id=replace)
     _replicate(store, bucket, key, entry)
@@ -1282,6 +1499,7 @@ _NS = 'xmlns="http://s3.amazonaws.com/doc/2006-03-01/"'
 
 
 def _list_multipart_uploads(store: ObjectStore, bucket: str, query: dict) -> S3Response:
+    _apply_lifecycle_mpu(store, bucket)
     prefix = (query or {}).get("prefix", "") or ""
     rows = []
     for uid, up in sorted(_mpu(store).items(), key=lambda kv: (kv[1].get("key", ""), kv[0])):
@@ -1449,8 +1667,35 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
                 return _error_xml("InvalidBucketState", "Object Lock configuration cannot be enabled on a bucket that was not created with Object Lock enabled.", f"/{bucket}", 409)
         else:
             if method == "GET":
-                return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><ObjectLockConfiguration {_NS}><ObjectLockEnabled>Enabled</ObjectLockEnabled></ObjectLockConfiguration>')
+                default = meta.get("object_lock_default_retention")
+                rule_xml = ""
+                if default:
+                    period = (f"<Days>{default['days']}</Days>" if default.get("days") is not None
+                              else f"<Years>{default['years']}</Years>")
+                    rule_xml = f"<Rule><DefaultRetention><Mode>{default['mode']}</Mode>{period}</DefaultRetention></Rule>"
+                return _xml_response(f'<?xml version="1.0" encoding="UTF-8"?><ObjectLockConfiguration {_NS}><ObjectLockEnabled>Enabled</ObjectLockEnabled>{rule_xml}</ObjectLockConfiguration>')
             if method == "PUT":
+                text = (body or b"").decode("utf-8", "replace").strip()
+                if text:
+                    try:
+                        root = ET.fromstring(text)
+                    except ET.ParseError:
+                        return _error_xml("MalformedXML", "The XML you provided was not well-formed or did not validate against our published schema.", f"/{bucket}", 400)
+                    rule = _child(root, "Rule")
+                    default_ret = _child(rule, "DefaultRetention") if rule is not None else None
+                    if default_ret is not None:
+                        mode = _child_text(default_ret, "Mode")
+                        days = _child_text(default_ret, "Days")
+                        years = _child_text(default_ret, "Years")
+                        if mode not in ("GOVERNANCE", "COMPLIANCE") or not (days or years):
+                            return _error_xml("MalformedXML", "DefaultRetention requires Mode and one of Days/Years.", f"/{bucket}", 400)
+                        meta["object_lock_default_retention"] = {
+                            "mode": mode,
+                            "days": int(days) if days else None,
+                            "years": int(years) if years else None,
+                        }
+                    else:
+                        meta.pop("object_lock_default_retention", None)
                 return _done(store, _empty_response(200))
     elif sub == "versions":
         if method == "GET":
@@ -1729,16 +1974,26 @@ def dispatch(store: ObjectStore, method: str, path: str,
         if query.get("uploadId") and query.get("partNumber"):
             return upload_part(store, bucket, key, query, _decode_aws_chunked(body or b"", lheaders))
         if "x-amz-copy-source" in lheaders:
-            return copy_object(store, bucket, key, headers)
-        return put_object(store, bucket, key, body, headers)
+            resp = copy_object(store, bucket, key, headers)
+            _write_access_log(store, bucket, "PUT", key, "REST.COPY.OBJECT", resp.status, f"{bucket}/{key}", len(body or b""))
+            return resp
+        resp = put_object(store, bucket, key, body, headers)
+        _write_access_log(store, bucket, "PUT", key, "REST.PUT.OBJECT", resp.status, f"{bucket}/{key}", len(body or b""))
+        return resp
     if method == "GET":
         if query.get("uploadId"):
             return list_parts(store, bucket, key, query)
-        return get_object(store, bucket, key, query, headers)
+        resp = get_object(store, bucket, key, query, headers)
+        _write_access_log(store, bucket, "GET", key, "REST.GET.OBJECT", resp.status, f"{bucket}/{key}", len(resp.body or b""))
+        return resp
     if method == "HEAD":
-        return head_object(store, bucket, key, query, headers)
+        resp = head_object(store, bucket, key, query, headers)
+        _write_access_log(store, bucket, "HEAD", key, "REST.HEAD.OBJECT", resp.status, f"{bucket}/{key}", 0)
+        return resp
     if method == "DELETE":
         if query.get("uploadId"):
             return abort_multipart_upload(store, bucket, key, query)
-        return delete_object(store, bucket, key, query, lheaders)
+        resp = delete_object(store, bucket, key, query, lheaders)
+        _write_access_log(store, bucket, "DELETE", key, "REST.DELETE.OBJECT", resp.status, f"{bucket}/{key}", 0)
+        return resp
     return _error_xml("MethodNotAllowed", "The specified method is not allowed against this resource.", f"/{bucket}/{key}", 405)
