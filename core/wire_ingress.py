@@ -242,10 +242,22 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         return {"status": resp.status, "headers": hdrs, "body": resp.json_bytes()}
     if service == "azure_blob":
         from core import azure_blob_core
+        from core import app_context as _ctx
         st = r.az_blob
         if account is not None and hasattr(st, "adopt"):
             st.adopt(account)            # pre-v4 Azurite blobs → this state (once)
-        resp = azure_blob_core.dispatch(st, method, path, query, headers, body, account=account)
+        # The account's own ARM record (allowSharedKeyAccess, publicNetworkAccess, …) lives
+        # in the offline ARM store (providers/azure_services._state, injected as
+        # core.app_context.azure_arm_state) — NOT in this router's disconnected, in-memory
+        # `az_arm` (that one only backs the blob core's CORS/lifecycle/static-website lookups
+        # when a caller hands it a real `arm_state=`, which the ARM control-plane route never does).
+        tok = _ctx.REQUEST_PROVIDER.set("azure")
+        try:
+            arm_state = _ctx.azure_arm_state
+        finally:
+            _ctx.REQUEST_PROVIDER.reset(tok)
+        resp = azure_blob_core.dispatch(st, method, path, query, headers, body, account=account,
+                                        arm_state=arm_state)
         hdrs = dict(resp.headers or {})
         if resp.media_type and not any(k.lower() == "content-type" for k in hdrs):
             hdrs["content-type"] = resp.media_type

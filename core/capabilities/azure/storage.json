@@ -15,8 +15,8 @@
  "azure.storage.containers": {
   "title": "Containers (create, list, delete) over the Blob REST data plane",
   "level": { "nano": "full", "offline": "full" },
-  "limitations": [],
-  "tests": ["tests/conformance/test_azure_blob_core.py"]
+  "limitations": ["A container's anonymous access level (x-ms-blob-public-access: blob|container, set at create) is stored and echoed back on GetContainerProperties/ListContainers exactly as configured; enforcing it against a genuinely credential-less reader is not modelled (see azure.storage.configuration)."],
+  "tests": ["tests/conformance/test_azure_blob_core.py", "tests/conformance/test_azure_storage_depth_core.py"]
  },
  "azure.storage.blobs": {
   "title": "Blobs (upload, download, list, delete) over the Blob REST data plane",
@@ -38,21 +38,21 @@
  },
  "azure.storage.configuration": {
   "title": "Configuration (performance, secure transfer, TLS, access tier, replication SKU, …)",
-  "level": { "nano": "config_only", "offline": "config_only" },
-  "limitations": ["Every field round-trips through ARM exactly as written, but nothing is enforced by the Blob data plane: HTTPS-only, TLS version, Entra-only auth and shared-key-access toggles do not change what a request can do."],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["ENFORCED: allowSharedKeyAccess=false really rejects a SharedKey-authenticated request (403 KeyBasedAuthenticationNotPermitted), and the Blob access tier (default) really seeds a newly uploaded blob's tier when the request carries no x-ms-access-tier of its own. Still config-only: HTTPS-only (secure transfer) and minimum TLS version have no real TLS negotiation layer underneath to enforce a protocol/version against, Entra-only portal auth is a console preference, and the permitted-scope-for-copy-operations restriction is not checked on copy."],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_depth_core.py"]
  },
  "azure.storage.redundancy": {
   "title": "Redundancy (replication SKU)",
   "level": { "nano": "config_only", "offline": "config_only" },
-  "limitations": ["The SKU name round-trips through ARM; Vyomi stores data once, locally — there is no secondary region, no geo-replication and no customer-managed failover."],
+  "limitations": ["The SKU name round-trips through ARM; Vyomi stores data once, locally — there is no secondary region, no geo-replication and no customer-managed failover to enforce against."],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.storage.networking": {
   "title": "Networking (public network access / firewall default action / routing preference)",
-  "level": { "nano": "config_only", "offline": "config_only" },
-  "limitations": ["publicNetworkAccess, networkAcls and routingPreference round-trip through ARM, but the Blob data plane never enforces them — a request from a 'denied' network still succeeds. Virtual network rules, IP firewall rules and private endpoints are not simulated."],
-  "tests": ["tests/conformance/test_azure_arm_core.py"]
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["ENFORCED: publicNetworkAccess=\"Disabled\" really rejects every Blob data-plane request for that account (403 AuthorizationFailure) — the account has no private endpoint in this simulator, so \"disabled\" means unreachable, same as the real service with no private endpoint configured. Still not simulated: virtual network rules, IP firewall rules, private endpoints and the networkAcls.defaultAction allow-list (which needs a real client network identity to match against — core/netsim models inter-VNet reachability, not a public-Internet client's source IP) and routingPreference."],
+  "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_storage_depth_core.py"]
  },
  "azure.storage.encryption": {
   "title": "Encryption (key source)",

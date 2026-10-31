@@ -42,6 +42,26 @@ are invisible to other accounts, like separate `{account}.blob.core.windows.net`
 endpoints. Requests without a SharedKey account (or for `devstoreaccount1`)
 use the default namespace, exactly as before.
 
+v4 depth — account configuration, ENFORCED. `arm_state` also carries the storage account
+resource's OWN properties (not just its blobServices/managementPolicies sub-resources),
+looked up by `_account_properties`:
+  - `allowSharedKeyAccess: false` rejects any request whose Authorization header is
+    SharedKey/SharedKeyLite with 403 `KeyBasedAuthenticationNotPermitted` — real key-based
+    auth rejection, independent of substrate (checked off the header, not off how `acct`
+    was resolved).
+  - `publicNetworkAccess: "Disabled"` rejects every data-plane request (the account has no
+    private endpoint in this simulator, so "disabled" means unreachable) with 403
+    `AuthorizationFailure`.
+  - `accessTier` (the account's default) seeds a newly uploaded blob's tier when the
+    request carries no `x-ms-access-tier` of its own.
+  - A container's anonymous access level (`x-ms-blob-public-access: blob|container` on
+    create) is stored and echoed back (`GetContainerProperties`, `ListContainers`'
+    `<PublicAccess>`) exactly as configured — enforcing it against a genuinely
+    credential-less reader is not modelled: `acct` itself is only ever resolved from a
+    SharedKey header (Nano) or the appliance's own route (offline), so a request with no
+    Authorization header is indistinguishable from "the caller's tooling omitted it", not
+    a real anonymous Internet client.
+
 v4 depth — CORS / lifecycle / static website, ENFORCED (not just stored). The caller
 (core/aws_wire_router.py) passes the Azure ARM core's `state` dict (`arm_state=`) — the
 same record the Configuration/CORS/Lifecycle/Static website console panels write through
@@ -95,8 +115,8 @@ class AzureBlobStore:
     def container_exists(self, name: str) -> bool:
         return name in self.containers
 
-    def create_container(self, name: str) -> None:
-        self.containers[name] = {"created": _now_http()}
+    def create_container(self, name: str, public_access: str = "") -> None:
+        self.containers[name] = {"created": _now_http(), "public_access": public_access}
         self.blobs.setdefault(name, {})
 
     def delete_container(self, name: str) -> None:
@@ -215,6 +235,21 @@ def _arm_properties(arm_state: dict | None, acct: str, suffix: str) -> dict:
         elif f"/{suffix}" in kl and "/storageaccounts/" in kl:
             # default namespace: any account's record is a loose match (good enough for
             # the simulator's single-tenant default namespace with no explicit account).
+            return (rec or {}).get("properties", {}) or {}
+    return {}
+
+
+def _account_properties(arm_state: dict | None, acct: str) -> dict:
+    """The storage account resource's OWN `properties` (allowSharedKeyAccess,
+    allowBlobPublicAccess, publicNetworkAccess, accessTier, …) — as written by
+    Create/Update storage account, looked up by account name (exact match, unlike
+    `_arm_properties`'s sub-resource suffix match: a sub-resource key like
+    `.../storageaccounts/{acct}/blobservices/default` never ends with `/storageaccounts/{acct}`)."""
+    if not arm_state or not acct:
+        return {}
+    want = f"/storageaccounts/{acct.lower()}"
+    for key, rec in arm_state.items():
+        if key.lower().endswith(want):
             return (rec or {}).get("properties", {}) or {}
     return {}
 
@@ -367,6 +402,16 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
     p = p.rstrip("/") if p != "/" else p
     segs = [unquote(s) for s in p.split("/") if s != ""]
 
+    # ---- account configuration gates (ENFORCED — see module docstring) ----
+    props = _account_properties(arm_state, acct)
+    if props.get("publicNetworkAccess") == "Disabled":
+        return _err(403, "AuthorizationFailure",
+                    "Public network access is disabled for this storage account.")
+    auth_header = headers.get("authorization", "") or ""
+    if _SHAREDKEY_RE.match(auth_header) and props.get("allowSharedKeyAccess") is False:
+        return _err(403, "KeyBasedAuthenticationNotPermitted",
+                    "Key based authentication is not permitted on this storage account.")
+
     # ---- CORS preflight: any OPTIONS carrying an Origin header ----
     if method == "OPTIONS":
         pre = _cors_preflight(arm_state, acct, headers)
@@ -400,7 +445,8 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                 if store.container_exists(container):
                     return _err(409, "ContainerAlreadyExists",
                                 "The specified container already exists.")
-                store.create_container(container)
+                pa = (headers.get("x-ms-blob-public-access") or "").strip().lower()
+                store.create_container(container, pa if pa in ("blob", "container") else "")
                 store.persist()
                 h = _base_headers()
                 h["etag"] = _etag()
@@ -425,9 +471,12 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                 if not store.container_exists(container):
                     return _err(404, "ContainerNotFound",
                                 "The specified container does not exist.")
+                pa = store.containers[container].get("public_access", "")
                 h = _base_headers()
                 h["last-modified"] = store.containers[container].get("created", _now_http())
                 h["etag"] = _etag()
+                if pa:
+                    h["x-ms-blob-public-access"] = pa
                 return Response(status=200, headers=h, body=b"", media_type=None)
         return _err(400, "InvalidQueryParameterValue",
                     f"Unsupported container operation {method}")
@@ -447,6 +496,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
                         or "application/octet-stream")
         now = _now_http()
         prev = store.container_blobs(container).get(blob) or {}
+        tier = headers.get("x-ms-access-tier") or prev.get("access_tier") or props.get("accessTier") or "Hot"
         entry = {
             "data": body,
             "size": len(body),
@@ -456,6 +506,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
             "last_modified": now,
             "created": prev.get("created") or now,
             "md5": _md5_b64(body),
+            "access_tier": tier,
             "metadata": {k[len("x-ms-meta-"):]: v for k, v in headers.items()
                          if k.startswith("x-ms-meta-")},
         }
@@ -559,12 +610,14 @@ def _list_containers(store: AzureBlobStore, acct: str = "") -> Response:
         else:
             name = key
         meta = store.containers[key]
+        pa = meta.get("public_access", "")
         parts.append(
             "<Container>"
             f"<Name>{escape(name)}</Name>"
             "<Properties>"
             f"<Last-Modified>{escape(meta.get('created', _now_http()))}</Last-Modified>"
             f"<Etag>{escape(_etag())}</Etag>"
+            + (f"<PublicAccess>{escape(pa)}</PublicAccess>" if pa else "") +
             "<LeaseStatus>unlocked</LeaseStatus>"
             "<LeaseState>available</LeaseState>"
             "</Properties>"

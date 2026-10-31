@@ -123,7 +123,49 @@ def run() -> int:
     miss = az.dispatch(st, "GET", "/__website__/nope.html", {}, {}, b"", arm_state=arm_state)
     _check("a missing page falls back to the 404 document", miss.status == 404 and miss.body == b"<h1>missing</h1>")
 
-    print("\nAzure Blob Storage DEPTH (CORS / lifecycle / static website) conformance: ALL GREEN")
+    # ── Account configuration: allowSharedKeyAccess / publicNetworkAccess / default tier /
+    #    container anonymous access level — all read off the account's OWN ARM record ──
+    st2 = az.AzureBlobStore()
+    arm2 = {RID: {"properties": {}}}
+    sk = {"authorization": f"SharedKey {ACCT}:sig"}
+
+    create = az.dispatch(st2, "PUT", f"/{ACCT}/cfgtest", {"restype": "container"}, sk, b"", arm_state=arm2)
+    _check("SharedKey write allowed when allowSharedKeyAccess is unset", create.status == 201)
+
+    arm2[RID]["properties"]["allowSharedKeyAccess"] = False
+    denied = az.dispatch(st2, "GET", f"/{ACCT}/cfgtest", {"restype": "container", "comp": "list"}, sk, b"", arm_state=arm2)
+    _check("SharedKey request denied once allowSharedKeyAccess is false", denied.status == 403)
+    _check("SharedKey denial error code", denied.headers.get("x-ms-error-code") == "KeyBasedAuthenticationNotPermitted")
+    arm2[RID]["properties"]["allowSharedKeyAccess"] = True
+
+    arm2[RID]["properties"]["publicNetworkAccess"] = "Disabled"
+    net_denied = az.dispatch(st2, "GET", f"/{ACCT}/cfgtest", {"restype": "container", "comp": "list"}, sk, b"", arm_state=arm2)
+    _check("publicNetworkAccess Disabled blocks the data plane", net_denied.status == 403)
+    _check("publicNetworkAccess denial error code", net_denied.headers.get("x-ms-error-code") == "AuthorizationFailure")
+    arm2[RID]["properties"]["publicNetworkAccess"] = "Enabled"
+
+    arm2[RID]["properties"]["accessTier"] = "Cool"
+    up = az.dispatch(st2, "PUT", f"/{ACCT}/cfgtest/x.txt", {}, {**sk, "x-ms-blob-type": "BlockBlob"}, b"x", arm_state=arm2)
+    _check("blob upload succeeds", up.status == 201)
+    head = az.dispatch(st2, "HEAD", f"/{ACCT}/cfgtest/x.txt", {}, sk, b"", arm_state=arm2)
+    _check("a new blob inherits the account's default access tier", head.headers.get("x-ms-access-tier") == "Cool")
+    az.dispatch(st2, "PUT", f"/{ACCT}/cfgtest/y.txt", {},
+                {**sk, "x-ms-blob-type": "BlockBlob", "x-ms-access-tier": "Archive"}, b"y", arm_state=arm2)
+    head2 = az.dispatch(st2, "HEAD", f"/{ACCT}/cfgtest/y.txt", {}, sk, b"", arm_state=arm2)
+    _check("an explicit x-ms-access-tier wins over the account default", head2.headers.get("x-ms-access-tier") == "Archive")
+
+    pub = az.dispatch(st2, "PUT", f"/{ACCT}/public-ro", {"restype": "container"},
+                      {**sk, "x-ms-blob-public-access": "container"}, b"", arm_state=arm2)
+    _check("create container with an anonymous access level", pub.status == 201)
+    props_resp = az.dispatch(st2, "GET", f"/{ACCT}/public-ro", {"restype": "container"}, sk, b"", arm_state=arm2)
+    _check("GetContainerProperties echoes x-ms-blob-public-access", props_resp.headers.get("x-ms-blob-public-access") == "container")
+    lc_body = az.dispatch(st2, "GET", f"/{ACCT}", {"comp": "list"}, sk, b"", arm_state=arm2).body.decode()
+    _check("ListContainers reflects the public access level",
+           lc_body.split("<Name>public-ro</Name>", 1)[1].split("</Container>", 1)[0].count("<PublicAccess>container</PublicAccess>") == 1)
+    cfgtest_block = lc_body.split("<Name>cfgtest</Name>", 1)[1].split("</Container>", 1)[0]
+    _check("a private container has no PublicAccess element", "<PublicAccess>" not in cfgtest_block)
+
+    print("\nAzure Blob Storage DEPTH (CORS / lifecycle / static website / account configuration) conformance: ALL GREEN")
     return 0
 
 

@@ -320,14 +320,15 @@ function Containers({ account, self }) {
 function NewContainer({ open, onClose, account, onCreated }) {
   const notify = useNotify();
   const [name, setName] = useState("");
+  const [access, setAccess] = useState("private");
   const [busy, setBusy] = useState(false);
   const valid = /^(?!-)(?!.*--)[a-z0-9-]{3,63}(?<!-)$/.test(name);
   const go = async () => {
     setBusy(true);
     try {
-      await api.createContainer(account, name);
+      await api.createContainer(account, name, access);
       notify.success(`Successfully created storage container '${name}'.`, "Container created");
-      setName(""); onClose(); onCreated();
+      setName(""); setAccess("private"); onClose(); onCreated();
     } catch (e) { notify.error(e, "Failed to create container"); }
     finally { setBusy(false); }
   };
@@ -342,7 +343,11 @@ function NewContainer({ open, onClose, account, onCreated }) {
                 <Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Container name" />
               </Field>
               <Field label="Anonymous access level">
-                <Select value="private" aria-label="Anonymous access level"><option value="private">Private (no anonymous access)</option></Select>
+                <Select value={access} onChange={(_, d) => setAccess(d.value)} aria-label="Anonymous access level">
+                  <option value="private">Private (no anonymous access)</option>
+                  <option value="blob">Blob (anonymous read access for blobs only)</option>
+                  <option value="container">Container (anonymous read access for containers and blobs)</option>
+                </Select>
               </Field>
               <NotSimulated feature="Encryption scope and Enable version-level immutability support for new containers" />
             </div>
