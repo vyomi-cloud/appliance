@@ -110,3 +110,9 @@ the UI → read back over the native wire, and the reverse), following the S3/Dy
 - Commit on the branch the workflow gave you; the workflow opens the PR. Never push to
   `main` or to `release/v4.0.0-dev` directly.
 - End with a short summary: fidelity / coverage before → after, backend changes, honest gaps.
+
+## Headless runs: never wait on background work
+The runner invokes you with `claude -p`: the job ends the moment you end your turn. Never start a
+command in the background (`&`, `nohup`, `run_in_background`) and never end a message with "waiting
+for …" — run builds, gates and smokes in the foreground (split long suites into parts), read their
+results, and only send your final message once the work is committed.

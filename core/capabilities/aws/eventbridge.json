@@ -40,7 +40,7 @@
     "title": "Archives (capture a bus's events matching a pattern)",
     "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "An archive filters the bus's most recent 500 events (a bounded in-memory log), not a true unlimited-retention store. RetentionDays is recorded but nothing is ever actually expired early or kept past that window."
+      "An archive filters the bus's most recent 500 events (a bounded in-memory log), not a true unlimited-retention store, so RetentionDays can only be enforced within that window — it cannot bring back events the 500-event cap already dropped."
     ],
     "tests": [
       "tests/conformance/test_eventbridge_console_v4_core.py"

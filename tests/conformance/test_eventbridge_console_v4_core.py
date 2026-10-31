@@ -99,6 +99,21 @@ def run() -> int:
     call("DeleteArchive", {"ArchiveName": "arc1"})
     _check("DeleteArchive removes it", call("DescribeArchive", {"ArchiveName": "arc1"}).body.get("__type") == "ResourceNotFoundException")
 
+    # 7b. RetentionDays is ENFORCED, not just stored: an archived event older than the
+    #     retention window is excluded from both the count and from what StartReplay re-sends.
+    call("CreateArchive", {"ArchiveName": "arc2", "EventSourceArn": desc["Arn"],
+                            "EventPattern": json.dumps({"source": ["app"]}), "RetentionDays": 1})
+    stale = next(e for e in s.event_buses["orders"]["event_log"] if e.get("source") == "app")
+    stale["time"] = "2000-01-01T00:00:00Z"  # 26 years stale — well past the 1-day retention
+    d2 = call("DescribeArchive", {"ArchiveName": "arc2"}).body
+    _check("RetentionDays excludes an event older than the window", d2["EventCount"] == 0)
+    before2 = len(sqs.dispatch(s, "AmazonSQS.ReceiveMessage", {"QueueUrl": qurl, "MaxNumberOfMessages": 10}).body.get("Messages", []))
+    call("StartReplay", {"ReplayName": "rep2", "EventSourceArn": call("DescribeArchive", {"ArchiveName": "arc2"}).body["ArchiveArn"],
+                          "Destination": {"Arn": desc["Arn"]}})
+    after2 = len(sqs.dispatch(s, "AmazonSQS.ReceiveMessage", {"QueueUrl": qurl, "MaxNumberOfMessages": 10}).body.get("Messages", []))
+    _check("replay does not re-send an event retention already expired", after2 == before2)
+    call("DeleteArchive", {"ArchiveName": "arc2"})
+
     # 8. Tags round-trip on a bus and a rule.
     call("TagResource", {"ResourceARN": desc["Arn"], "Tags": [{"Key": "env", "Value": "prod"}]})
     tags = call("ListTagsForResource", {"ResourceARN": desc["Arn"]}).body["Tags"]
