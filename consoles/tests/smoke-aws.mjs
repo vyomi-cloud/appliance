@@ -277,6 +277,35 @@ try {
   await page.getByText(S2).first().waitFor({ timeout: 10000 });
   check("Secrets Manager CreateSecret over wire → shown in Secrets list", true);
   await shot("16-secretsmanager-list");
+
+  // Secrets Manager (DEPTH): a schedule really fires on its own — RotateSecret over the
+  // wire schedules an already-due rotation (RotateImmediately false), then just loading the
+  // UI detail page (DescribeSecret) lazily fires it, no Lambda/scheduler involved.
+  const S3 = `v4smoke-secret3-${Date.now() % 100000}`;
+  await sm("CreateSecret", { Name: S3, SecretString: "v4-smoke-rotate" });
+  await sm("RotateSecret", { SecretId: S3, RotationRules: { AutomaticallyAfterDays: 0 }, RotateImmediately: false });
+  const beforeAutoRotate = await sm("ListSecretVersionIds", { SecretId: S3 });
+  await page.goto(UI + `#/secretsmanager/secret/${S3}`);
+  await page.getByRole("heading", { name: S3 }).waitFor({ timeout: 10000 });
+  const afterAutoRotate = await sm("ListSecretVersionIds", { SecretId: S3 });
+  check("Secrets Manager: loading the detail page lazily fires a due rotation schedule",
+    afterAutoRotate.Versions.length === beforeAutoRotate.Versions.length + 1,
+    JSON.stringify({ before: beforeAutoRotate.Versions.length, after: afterAutoRotate.Versions.length }));
+
+  // Secrets Manager (DEPTH): Resource permissions on an EXISTING secret is a real editor now
+  // (Overview tab), not a blanket "not simulated" panel — Edit permissions → Save round-trips
+  // through PutResourcePolicy over the native wire.
+  const policyText = JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow",
+    Principal: { AWS: "arn:aws:iam::123456789012:root" }, Action: "secretsmanager:GetSecretValue", Resource: "*" }] });
+  await page.getByRole("button", { name: "Edit permissions" }).click();
+  await page.getByLabel("Resource policy", { exact: true }).fill(policyText);
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.getByRole("button", { name: "Edit permissions" }).waitFor({ timeout: 10000 });
+  const putPolicy = await sm("GetResourcePolicy", { SecretId: S3 });
+  check("Secrets Manager: detail page Resource permissions editor → PutResourcePolicy over native wire",
+    putPolicy.ResourcePolicy === policyText, JSON.stringify(putPolicy));
+  await shot("16b-secretsmanager-rotation-policy");
+
   // SQS: create a queue through the UI, verify over native wire (UI → CLI direction)
   const Q = `v4smoke-queue-${Date.now() % 100000}`;
   await page.goto(UI + "#/sqs/create-queue");

@@ -31,13 +31,28 @@ deletion fails with InvalidRequestException, as in real AWS.
 
 Scope: CreateSecret, GetSecretValue, PutSecretValue, UpdateSecret, DescribeSecret,
 ListSecrets, ListSecretVersionIds, DeleteSecret, RestoreSecret, RotateSecret,
-TagResource/UntagResource, Get/Put/DeleteResourcePolicy. KmsKeyId and tags are
-stored and round-tripped as-written; Vyomi does not use them to actually
-encrypt the value or evaluate the resource policy (same honesty posture as
-core/kms_core.py's key policy). Replication is not modeled.
+TagResource/UntagResource, Get/Put/DeleteResourcePolicy. KmsKeyId is stored and
+round-tripped as-written; Vyomi does not use it to actually encrypt the value
+(same honesty posture as core/kms_core.py's key policy).
+
+v4 depth pass: automatic rotation now really fires on its own schedule — a
+secret with RotationRules (AutomaticallyAfterDays, or a `rate(N day(s)/hour(s))`
+ScheduleExpression) computes NextRotationDate, and any read (GetSecretValue /
+DescribeSecret / ListSecrets) lazily rotates it the same way RotateSecret's
+RotateImmediately does (carry the current value into a fresh AWSCURRENT
+version) once that time has passed — the same lazy-on-access pattern TTL uses
+elsewhere. There is still no Lambda runtime, so the "new" value is the old one,
+not a freshly generated credential. PutResourcePolicy now validates the policy
+is well-formed JSON with at least one Allow/Deny statement and rejects (unless
+BlockPublicPolicy=false) a policy that grants public access — the same
+public-policy guard real Secrets Manager applies at write time. Resource policy
+CONTENT is still never evaluated for an actual GetSecretValue access decision
+(no multi-principal/cross-account identity model). Replication is not modeled.
 """
 from __future__ import annotations
 
+import json
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -212,11 +227,63 @@ def _put_value(store: KvStore, body: dict, update: bool = False) -> dict:
     return {"ARN": secret["arn"], "Name": secret["name"], "VersionId": vid, "VersionStages": stages}
 
 
+_SCHEDULE_RE = re.compile(r"rate\(\s*(\d+)\s*(hour|hours|day|days)\s*\)", re.IGNORECASE)
+
+
+def _rotation_interval_seconds(rules: dict) -> float | None:
+    """How often this secret's schedule asks to rotate, or None if the schedule
+    can't be resolved to an interval (e.g. an unparseable cron-style expression) —
+    in which case auto-rotation stays honestly off; 'Rotate secret immediately'
+    still works."""
+    days = (rules or {}).get("AutomaticallyAfterDays")
+    if days is not None:
+        try:
+            return float(days) * 86400
+        except (TypeError, ValueError):
+            return None
+    expr = (rules or {}).get("ScheduleExpression")
+    m = _SCHEDULE_RE.match((expr or "").strip())
+    if not m:
+        return None
+    n, unit = int(m.group(1)), m.group(2).lower()
+    return n * (3600 if unit.startswith("hour") else 86400)
+
+
+def _carry_forward_rotation(store: KvStore, secret: dict) -> str:
+    """The shared 'rotate without a Lambda' step: carry the current value into a
+    fresh AWSCURRENT version (old → AWSPREVIOUS), used by both RotateImmediately
+    and the lazy auto-rotation check."""
+    vid = _stage_to_version(secret, CURRENT)
+    cur = secret["versions"].get(vid, {}) if vid else {}
+    res = _put_value(store, {"SecretId": secret["name"],
+                             "SecretString": cur.get("SecretString"),
+                             "SecretBinary": cur.get("SecretBinary")})
+    secret["last_rotated_date"] = time.time()
+    return res["VersionId"]
+
+
+def _reschedule(secret: dict, anchor: float) -> None:
+    interval = _rotation_interval_seconds(secret.get("rotation_rules") or {})
+    secret["next_rotation_date"] = (anchor + interval) if interval is not None else None
+
+
+def _auto_rotate_if_due(store: KvStore, secret: dict) -> None:
+    """Lazy, on-access rotation — the same pattern DynamoDB TTL uses: nothing runs
+    in the background, but any read notices a past-due schedule and fires it."""
+    due = secret.get("next_rotation_date")
+    if not secret.get("rotation_enabled") or secret.get("deleted_date") or due is None or time.time() < due:
+        return
+    _carry_forward_rotation(store, secret)
+    _reschedule(secret, time.time())
+
+
 def _rotate_secret(store: KvStore, body: dict) -> dict:
     """Rotate a secret: enable rotation metadata and (RotateImmediately, default
     true) create a fresh AWSCURRENT version. Without a rotation Lambda we carry the
     current value into the new version, mirroring the version-stage transitions a
-    real rotation performs (new VersionId → AWSCURRENT, old → AWSPREVIOUS)."""
+    real rotation performs (new VersionId → AWSCURRENT, old → AWSPREVIOUS). Also
+    schedules the next automatic rotation from RotationRules, so the schedule
+    really fires on its own (see _auto_rotate_if_due) even though no Lambda runs."""
     secret = _require_secret(store, body.get("SecretId") or "")
     if secret.get("deleted_date"):
         raise SecretsError("InvalidRequestException",
@@ -228,15 +295,10 @@ def _rotate_secret(store: KvStore, body: dict) -> dict:
     secret["rotation_enabled"] = True
     vid = _stage_to_version(secret, CURRENT)
     if body.get("RotateImmediately", True):
-        cur = secret["versions"].get(vid, {}) if vid else {}
-        new_body = {"SecretId": secret["name"],
-                    "SecretString": cur.get("SecretString"),
-                    "SecretBinary": cur.get("SecretBinary")}
-        res = _put_value(store, new_body)   # handles CURRENT→PREVIOUS demotion + new vid
-        vid = res["VersionId"]
-        secret["last_rotated_date"] = time.time()
+        vid = _carry_forward_rotation(store, secret)
     else:
         store.persist()
+    _reschedule(secret, secret.get("last_rotated_date") or time.time())
     return {"ARN": secret["arn"], "Name": secret["name"], "VersionId": vid}
 
 
@@ -245,6 +307,7 @@ def _get_secret_value(store: KvStore, body: dict) -> dict:
     if secret.get("deleted_date"):
         raise SecretsError("InvalidRequestException",
                            "You can't perform this operation on the secret because it was marked for deletion.", 400)
+    _auto_rotate_if_due(store, secret)
     vid = body.get("VersionId")
     if not vid:
         stage = body.get("VersionStage") or CURRENT
@@ -276,6 +339,8 @@ def _common_fields(secret: dict) -> dict:
             out["RotationRules"] = secret["rotation_rules"]
         if secret.get("last_rotated_date"):
             out["LastRotatedDate"] = secret["last_rotated_date"]
+        if secret.get("next_rotation_date"):
+            out["NextRotationDate"] = secret["next_rotation_date"]
     if secret.get("deleted_date"):
         out["DeletedDate"] = secret["deleted_date"]
     if secret.get("kms_key_id"):
@@ -305,6 +370,7 @@ def _untag_resource(store: KvStore, body: dict) -> dict:
 
 def _describe_secret(store: KvStore, body: dict) -> dict:
     secret = _require_secret(store, body.get("SecretId") or "")
+    _auto_rotate_if_due(store, secret)
     vids_to_stages = {vid: v.get("stages", []) for vid, v in secret["versions"].items()}
     return {"ARN": secret["arn"], "Name": secret["name"], "VersionIdsToStages": vids_to_stages,
             **_common_fields(secret)}
@@ -317,6 +383,7 @@ def _list_secrets(store: KvStore, body: dict) -> dict:
         s = store.get_secret(name)
         if s.get("deleted_date") and not include_deleted:
             continue
+        _auto_rotate_if_due(store, s)
         out.append({"ARN": s["arn"], "Name": name, **_common_fields(s),
                     "SecretVersionsToStages": {vid: v.get("stages", []) for vid, v in s["versions"].items()}})
     return {"SecretList": out}
@@ -360,11 +427,53 @@ def _get_resource_policy(store: KvStore, body: dict) -> dict:
     return out
 
 
+def _policy_is_public(doc: dict) -> bool:
+    """Same 'is this statement wide open' check core/s3_object_core.py's
+    _policy_is_public uses for BlockPublicAccess — Secrets Manager's own
+    BlockPublicPolicy guard works the same way."""
+    for st in doc.get("Statement") or []:
+        if st.get("Effect") != "Allow":
+            continue
+        principal = st.get("Principal")
+        if principal == "*":
+            return True
+        if isinstance(principal, dict):
+            aws = principal.get("AWS")
+            if aws == "*" or (isinstance(aws, list) and "*" in aws):
+                return True
+    return False
+
+
+def _parse_resource_policy(policy) -> dict:
+    try:
+        doc = json.loads(policy)
+    except (TypeError, ValueError):
+        raise SecretsError("MalformedPolicyDocumentException", "The policy text is not valid JSON.", 400)
+    statements = doc.get("Statement") if isinstance(doc, dict) else None
+    if not isinstance(doc, dict) or not isinstance(statements, list) or not statements:
+        raise SecretsError("MalformedPolicyDocumentException",
+                           "The policy must be a JSON object with a non-empty Statement list.", 400)
+    for st in statements:
+        if not isinstance(st, dict) or st.get("Effect") not in ("Allow", "Deny") or not st.get("Principal"):
+            raise SecretsError("MalformedPolicyDocumentException",
+                               "Each statement needs an Effect of Allow or Deny and a Principal.", 400)
+    return doc
+
+
 def _put_resource_policy(store: KvStore, body: dict) -> dict:
+    """Real Secrets Manager validates the policy document's shape and, by default
+    (BlockPublicPolicy=true), rejects one that grants public access — enforced
+    here the same way; evaluating the policy against an actual caller at
+    GetSecretValue time is not modeled (Vyomi has one implicit caller identity)."""
     secret = _require_secret(store, body.get("SecretId") or "")
     policy = body.get("ResourcePolicy")
     if not policy:
         raise SecretsError("InvalidParameterException", "ResourcePolicy is required.", 400)
+    doc = _parse_resource_policy(policy)
+    if _policy_is_public(doc) and body.get("BlockPublicPolicy", True):
+        raise SecretsError("PublicPolicyException",
+                           "The resource policy grants public access to the secret. Pass "
+                           "BlockPublicPolicy=false to attach it anyway.", 400)
     secret["resource_policy"] = str(policy)
     store.persist()
     return {"ARN": secret["arn"], "Name": secret["name"]}
