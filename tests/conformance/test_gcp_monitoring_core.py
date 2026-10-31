@@ -305,6 +305,47 @@ def main():
     s, b = call(st, "DELETE", "/services/" + svcid)
     check("delete service cascades SLOs", s == 200 and not st.slos and not st.services, b)
 
+    # SLO error-budget computation: request-based good/total-ratio SLOs get a real number
+    # back from the same `select_slo_*()` timeSeries.list filter functions the real API
+    # reserves for SLO burn-down queries, computed from the good/total time series the SLI's
+    # filters actually match (not a stored-but-unevaluated stub).
+    s, svc2 = call(st, "POST", "/services", {"displayName": "checkout2"})
+    svc2id = svc2["name"].rsplit("/", 1)[-1]
+    rb_slo = {"displayName": "99% good", "goal": 0.99, "rollingPeriod": "86400s",
+              "serviceLevelIndicator": {"requestBased": {"goodTotalRatio": {
+                  "goodServiceFilter": 'metric.type = "custom.googleapis.com/req/good"',
+                  "totalServiceFilter": 'metric.type = "custom.googleapis.com/req/total"'}}}}
+    s, b = call(st, "POST", "/services/%s/serviceLevelObjectives" % svc2id,
+               {**rb_slo, "serviceLevelIndicator": {"requestBased": {"goodTotalRatio": {
+                   "goodServiceFilter": 'metric.type = "custom.googleapis.com/req/good"'}}}})
+    check("request-based SLO without total/bad filter → 400", s == 400, b)
+    s, rbo = call(st, "POST", "/services/%s/serviceLevelObjectives" % svc2id, rb_slo)
+    check("create request-based good/total-ratio SLO", s == 200, rbo)
+    rboid = rbo["name"].rsplit("/", 1)[-1]
+    win_end = now + timedelta(minutes=1)
+    write(98.0, win_end, metric="custom.googleapis.com/req/good")
+    write(100.0, win_end, metric="custom.googleapis.com/req/total")
+    q_slo = {"interval.startTime": iso(t0 - timedelta(minutes=5)), "interval.endTime": iso(win_end)}
+    s, b = call(st, "GET", "/timeSeries", query=dict(q_slo, filter='select_slo_compliance("%s")' % rbo["name"]))
+    check("select_slo_compliance computes real good/total ratio", s == 200
+          and abs(b["timeSeries"][0]["points"][0]["value"]["doubleValue"] - 0.98) < 1e-9, b)
+    s, b = call(st, "GET", "/timeSeries", query=dict(q_slo, filter='select_slo_budget_fraction("%s")' % rbo["name"]))
+    # goal 0.99 → error budget 0.01; actual error 0.02 → burned 2x the budget → fraction -1.0
+    check("select_slo_budget_fraction computes real burn against the goal", s == 200
+          and abs(b["timeSeries"][0]["points"][0]["value"]["doubleValue"] - (-1.0)) < 1e-9, b)
+    s, b = call(st, "GET", "/timeSeries", query=dict(q_slo, filter='select_slo_health("%s")' % rbo["name"]))
+    check("select_slo_health reflects goal miss", s == 200 and b["timeSeries"][0]["points"][0]["value"]["doubleValue"] == 0.0, b)
+    s, b = call(st, "GET", "/timeSeries", query=dict(q_slo, filter='select_slo_compliance("projects/p1/services/%s/serviceLevelObjectives/nope")' % svc2id))
+    check("select_slo_* on unknown SLO → 404", s == 404, b)
+    s, b = call(st, "GET", "/timeSeries", query=dict(
+        {"interval.startTime": iso(now - timedelta(days=2)), "interval.endTime": iso(now - timedelta(days=1))},
+        filter='select_slo_compliance("%s")' % rbo["name"]))
+    check("select_slo_* with no data in the window → empty result", s == 200 and b == {}, b)
+    s, basic = call(st, "POST", "/services/%s/serviceLevelObjectives" % svc2id, slo)
+    s, b = call(st, "GET", "/timeSeries", query=dict(q_slo, filter='select_slo_budget_fraction("%s")' % basic["name"]))
+    check("basic SLI (non request-based) is honestly not computed → empty result", s == 200 and b == {}, b)
+    call(st, "DELETE", "/services/" + svc2id)
+
     # uptime check with a synthetic-monitor target (same collection, different check type)
     s, sm = call(st, "POST", "/uptimeCheckConfigs", {
         "displayName": "synthetic-login", "monitoredResource": {"type": "uptime_url", "labels": {"host": "example.com"}},

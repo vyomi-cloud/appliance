@@ -1121,6 +1121,21 @@ def create_slo(store, project, sid, payload):
         raise _bad("Field service_level_objective must specify exactly one of rolling_period or calendar_period.")
     if not isinstance(o.get("serviceLevelIndicator"), dict) or not o["serviceLevelIndicator"]:
         raise _bad("Field service_level_objective.service_level_indicator is required.")
+    rb = (o["serviceLevelIndicator"].get("requestBased") or {}).get("goodTotalRatio")
+    if rb:
+        if not str(rb.get("goodServiceFilter") or "").strip():
+            raise _bad("Field service_level_objective.service_level_indicator.request_based.good_total_ratio"
+                       ".good_service_filter is required.")
+        if not (rb.get("totalServiceFilter") or rb.get("badServiceFilter")):
+            raise _bad("Field service_level_objective.service_level_indicator.request_based.good_total_ratio "
+                       "must specify total_service_filter or bad_service_filter.")
+        for k in ("goodServiceFilter", "totalServiceFilter", "badServiceFilter"):
+            if rb.get(k):
+                try:
+                    compile_filter(rb[k], _ts_getter, lambda l: True)
+                except _E:
+                    raise _bad("Field service_level_objective.service_level_indicator.request_based."
+                               "good_total_ratio.%s is not a valid filter." % _snake(k))
     o["name"] = _slo_name(svc["name"], _rand_id())
     store.slos[o["name"]] = o
     return o
@@ -1139,6 +1154,77 @@ def delete_slo(store, project, sid, oid):
     if name not in store.slos:
         raise _E(404, "NOT_FOUND", "Service level objective %s does not exist." % name)
     del store.slos[name]
+
+
+# `timeSeries.list` filter functions the real Monitoring API reserves for SLO burn-down
+# queries (used by `select_slo_health`/`select_slo_compliance`/`select_slo_budget_fraction` in
+# the console's SLO detail charts) — computed here from the request-based good/total-ratio time
+# series an SLO's filters actually match, same engine as a normal aggregation query.
+_SLO_FILTER_RE = re.compile(r'^select_slo_(compliance|budget_fraction|health)\(\s*"([^"]+)"\s*\)$')
+
+
+def _sum_filtered_value(store, project, filt, start, end):
+    if not str(filt or "").strip():
+        return None
+    pred = compile_filter(filt, _ts_getter, lambda l: l in ("metric.type", "resource.type", "project") or re.match(
+        r"^(metric|resource)\.labels?\.", l) or l.startswith("metadata."))
+    total, seen = 0.0, False
+    prefix = project + "|"
+    for key, s in store.time_series.items():
+        if not key.startswith(prefix) or not pred(s):
+            continue
+        for p in s["points"]:
+            e = parse_ts(p["interval"]["endTime"])
+            if start <= e <= end:
+                v = _num(p["value"])
+                if v is not None:
+                    total += v
+                    seen = True
+    return total if seen else None
+
+
+def _slo_fn_value(store, project, slo, fn, start, end):
+    rb = ((slo.get("serviceLevelIndicator") or {}).get("requestBased") or {}).get("goodTotalRatio")
+    if not rb:
+        return None   # only request-based good/total-ratio SLIs get a live computed number
+    good = _sum_filtered_value(store, project, rb.get("goodServiceFilter") or "", start, end)
+    if rb.get("totalServiceFilter"):
+        total = _sum_filtered_value(store, project, rb["totalServiceFilter"], start, end)
+    else:
+        bad = _sum_filtered_value(store, project, rb.get("badServiceFilter") or "", start, end)
+        total = None if good is None and bad is None else (good or 0.0) + (bad or 0.0)
+    if not total:
+        return None
+    ratio = (good or 0.0) / total
+    goal = slo.get("goal") or 0.0
+    if fn == "compliance":
+        return ratio
+    if fn == "health":
+        return 1.0 if ratio >= goal else 0.0
+    error_budget = 1.0 - goal
+    if error_budget <= 0:
+        return 1.0 if ratio >= 1.0 else 0.0
+    return 1.0 - (1.0 - ratio) / error_budget
+
+
+def _slo_filter_series(store, project, fn, slo_name, query):
+    if not query.get("interval.endTime"):
+        raise _bad("Field interval.end_time is required.")
+    end = parse_ts(query["interval.endTime"])
+    start = parse_ts(query["interval.startTime"]) if query.get("interval.startTime") else end
+    if start > end:
+        raise _bad("Field interval had an invalid value: start_time must not be later than end_time.")
+    slo = store.slos.get(slo_name)
+    if not slo:
+        raise _E(404, "NOT_FOUND", "Service level objective %s does not exist." % slo_name)
+    value = _slo_fn_value(store, project, slo, fn, start, end)
+    if value is None:
+        return {}
+    ts = {"metric": {"type": "select_slo_%s" % fn, "labels": {"slo": slo_name}},
+          "resource": {"type": "global", "labels": {"project_id": project}},
+          "metricKind": "GAUGE", "valueType": "DOUBLE", "unit": "1",
+          "points": [{"interval": {"startTime": _ts(start), "endTime": _ts(end)}, "value": {"doubleValue": value}}]}
+    return {"timeSeries": [ts], "unit": "1"}
 
 
 def _services(store, method, project, rest, payload, query):
@@ -1420,6 +1506,9 @@ def list_time_series(store, project, query):
     filt = query.get("filter")
     if not filt:
         raise _bad("Field filter is required.")
+    m = _SLO_FILTER_RE.match(filt.strip())
+    if m:
+        return _slo_filter_series(store, project, m.group(1), m.group(2), query)
     if "metric.type" not in filt:
         raise _bad("Field filter had an invalid value of \"%s\": must specify a metric type, e.g. "
                    "metric.type = \"custom.googleapis.com/foo\"." % filt)
