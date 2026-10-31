@@ -96,12 +96,13 @@ def _cfg(key: str, default: str) -> str:
 
 _DEFAULT_SERVICES = ("s3,dynamodb,gcs,azure_blob,gcp_secrets,gcp_kms,kms,secretsmanager,"
                      "gcp_firestore,gcp_compute,sqs,sns,events,scheduler,"
-                     "lambda,azure_keyvault,azure_acr,azure_servicebus,gcp_pubsub,azure_graph,azure_cosmos,iam")
+                     "lambda,azure_keyvault,azure_acr,azure_servicebus,gcp_pubsub,azure_graph,azure_cosmos,iam,"
+                     "azure_table")
 _KNOWN_SERVICES = ("s3", "dynamodb", "gcs", "azure_blob", "gcp_secrets", "gcp_kms",
                    "kms", "secretsmanager", "gcp_firestore", "gcp_compute",
                    "sqs", "sns", "events", "scheduler",
                    "lambda", "azure_keyvault", "azure_acr", "azure_servicebus", "gcp_pubsub",
-                   "azure_graph", "azure_cosmos", "iam")
+                   "azure_graph", "azure_cosmos", "iam", "azure_table")
 
 
 def unified_services() -> frozenset:
@@ -138,7 +139,7 @@ def appliance_stores() -> dict:
             "az_kvkeys": aps.az_kv_keys_store(), "az_kvcerts": aps.az_kv_certs_store(),
             "az_acr": aps.acr_store(), "az_sb": aps.az_servicebus_store(),
             "gcp_msg": aps.gcp_pubsub_store(), "az_graph": aps.graph_store(),
-            "az_cosmos": aps.cosmos_store(), "iam": aps.iam_store()}
+            "az_cosmos": aps.cosmos_store(), "iam": aps.iam_store(), "az_table": aps.table_store()}
 
 
 # router store key -> unified service name (which stores a full-ingress router overrides)
@@ -150,7 +151,7 @@ STORE_SERVICE = {"s3": "s3", "gcs": "gcs", "ddb": "dynamodb", "az_blob": "azure_
                  "az_kvsec": "azure_keyvault", "az_kvkeys": "azure_keyvault",
                  "az_kvcerts": "azure_keyvault", "az_acr": "azure_acr", "az_sb": "azure_servicebus",
                  "gcp_msg": "gcp_pubsub", "az_graph": "azure_graph", "az_cosmos": "azure_cosmos",
-                 "iam": "iam"}
+                 "iam": "iam", "az_table": "azure_table"}
 
 
 def appliance_router() -> AwsWireRouter:
@@ -302,11 +303,12 @@ def dispatch_service(service: str, method: str, path: str, query: dict, headers:
         hdrs = dict(resp.headers or {})
         hdrs.setdefault("content-type", resp.media_type or "application/json")
         return {"status": resp.status, "headers": hdrs, "body": resp.body or b""}
-    if service in ("azure_graph", "azure_cosmos"):
-        from core import azure_graph_core, azure_cosmos_core
+    if service in ("azure_graph", "azure_cosmos", "azure_table"):
+        from core import azure_graph_core, azure_cosmos_core, azure_table_core
         from core import app_context as _ctx
-        core, st = ((azure_graph_core, r.az_graph) if service == "azure_graph"
-                    else (azure_cosmos_core, r.az_cosmos))
+        core, st = {"azure_graph": (azure_graph_core, r.az_graph),
+                    "azure_cosmos": (azure_cosmos_core, r.az_cosmos),
+                    "azure_table": (azure_table_core, r.az_table)}[service]
         tok = _ctx.REQUEST_PROVIDER.set("azure")   # the state lives in the Azure space
         try:
             resp = core.dispatch(st, method, path, query or {}, headers or {}, body or b"")

@@ -196,6 +196,74 @@ try {
   const reposAfter = await wjson("/v1/projects/vyomi-project/locations/-/repositories");
   check("delete repository via UI → gone over native wire", !(reposAfter.repositories || []).some((x) => x.name.endsWith(`/repositories/${R}`)));
 
+  // Cleanup policies are ENFORCED, not just stored: an unconditional "Delete artifacts"
+  // policy added via the Edit dialog deletes a pushed version immediately.
+  const CR = `v4-gcp-ar-cleanup-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories?repositoryId=${CR}`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ format: "DOCKER" }) });
+  await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories/${CR}:pushSample`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: "cleanup-me", tag: "v1" }) });
+  await page.goto(UI + `#/artifacts/repo/us-central1/${CR}`);
+  await page.getByRole("link", { name: "cleanup-me" }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Edit repository" }).click();
+  const editDialog = page.getByRole("dialog", { name: "Edit repository" });
+  await editDialog.getByRole("button", { name: "Add a cleanup policy" }).click();
+  const policyDialog = page.getByRole("dialog", { name: "Add a cleanup policy" });
+  await policyDialog.getByLabel("Policy name").fill("purge-all");
+  await policyDialog.getByLabel("Older than (days)").fill("0");   // unconditional: matches regardless of age
+  await policyDialog.getByRole("button", { name: "Add" }).click();
+  await policyDialog.waitFor({ state: "detached", timeout: 10000 });
+  await editDialog.getByRole("button", { name: "Save" }).click();
+  await editDialog.waitFor({ state: "detached", timeout: 10000 });
+  await page.getByText("No images in this repository yet.").waitFor({ timeout: 10000 });
+  const crVersions = await wjson(`/v1/projects/vyomi-project/locations/us-central1/repositories/${CR}/packages/cleanup-me/versions`);
+  check("cleanup policy via UI → version actually deleted over native wire", !(crVersions.versions || []).length,
+    JSON.stringify(crVersions).slice(0, 160));
+  await shot("13b-cleanup-policy-enforced");
+
+  // Virtual repositories aggregate their upstreams — ENFORCED, not just stored config: the
+  // UI's Repositories table shows images from two other repositories merged read-only.
+  const VSTD1 = `v4-gcp-ar-vstd1-${Date.now() % 100000}`;
+  const VSTD2 = `v4-gcp-ar-vstd2-${Date.now() % 100000}`;
+  const VIRT = `v4-gcp-ar-virt-${Date.now() % 100000}`;
+  for (const [id, image] of [[VSTD1, "from-std1"], [VSTD2, "from-std2"]]) {
+    await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories?repositoryId=${id}`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ format: "DOCKER" }) });
+    await wire(`/v1/projects/vyomi-project/locations/us-central1/repositories/${id}:pushSample`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image, tag: "v1" }) });
+  }
+  await page.goto(UI + "#/artifacts/create-repo");
+  await page.getByLabel("Name").fill(VIRT);
+  await page.getByRole("radio", { name: "Virtual" }).check();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: "Upstream repositories" }).waitFor({ timeout: 10000 });
+  check("create virtual repository via UI → native wire", true);
+
+  await page.getByRole("button", { name: "Add repository" }).click();
+  let addDialog = page.getByRole("dialog", { name: "Add upstream repository" });
+  await addDialog.getByLabel("Repository").click();
+  await page.getByRole("option", { name: VSTD1 }).click();
+  await addDialog.getByRole("button", { name: "Add" }).click();
+  await addDialog.waitFor({ state: "detached", timeout: 10000 });
+
+  await page.getByRole("button", { name: "Add repository" }).click();
+  addDialog = page.getByRole("dialog", { name: "Add upstream repository" });
+  await addDialog.getByLabel("Repository").click();
+  await page.getByRole("option", { name: VSTD2 }).click();
+  await addDialog.getByLabel("Priority").fill("5");
+  await addDialog.getByRole("button", { name: "Add" }).click();
+  await addDialog.waitFor({ state: "detached", timeout: 10000 });
+
+  await page.getByRole("link", { name: "from-std1" }).waitFor({ timeout: 10000 });
+  await page.getByRole("link", { name: "from-std2" }).waitFor({ timeout: 10000 });
+  check("virtual repository aggregates both upstreams' images in the UI", true);
+  check("virtual repository is read-only: no Push sample button", (await page.getByRole("button", { name: /Push sample/ }).count()) === 0);
+  const virtImages = await wjson(`/v1/projects/vyomi-project/locations/us-central1/repositories/${VIRT}/dockerImages`);
+  const virtNames = (virtImages.dockerImages || []).map((i) => i.name.split("/dockerImages/")[1]);
+  check("virtual repository aggregation enforced over native wire (dockerImages)",
+    virtNames.some((n) => n.startsWith("from-std1")) && virtNames.some((n) => n.startsWith("from-std2")), JSON.stringify(virtNames));
+  await shot("13c-virtual-repository");
+
   // Settings: toggle redirection → native projectSettings round-trip
   await page.goto(UI + "#/artifacts/settings");
   // State persists across runs on a real appliance — start from "disabled".
@@ -319,6 +387,55 @@ try {
   await page.getByText(DISK).waitFor({ timeout: 10000 });
   check("disk created over wire → shown in Disks UI", true);
   await shot("14-disks");
+
+  // Managed instance group: create an instance template via the UI, then a managed group
+  // off it with 2 instances → the group manager really stamps out 2 instances from the
+  // template over the native wire. Resize down to 1 deletes one; delete the group cascades.
+  const MIG_TPL = `v4-gcp-mig-tpl-${Date.now() % 100000}`;
+  const MIG_NAME = `v4-gcp-mig-${Date.now() % 100000}`;
+  await page.goto(UI + "#/compute/instance-templates");
+  await page.getByRole("button", { name: "Create instance template" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(MIG_TPL);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("cell", { name: MIG_TPL, exact: true }).waitFor({ timeout: 10000 });
+
+  await page.goto(UI + "#/compute/instance-groups");
+  await page.getByRole("button", { name: "Create instance group" }).click();
+  await page.getByRole("radio", { name: "New managed instance group" }).check();
+  await page.getByLabel("Name", { exact: true }).fill(MIG_NAME);
+  await page.getByRole("combobox", { name: "Instance template" }).click();
+  await page.getByRole("option", { name: MIG_TPL }).click();
+  await page.getByLabel("Number of instances").fill("2");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("cell", { name: MIG_NAME, exact: true }).waitFor({ timeout: 10000 });
+
+  const migAgg1 = await wjson("/compute/v1/projects/vyomi-project/aggregated/instanceGroupManagers");
+  const mig1 = Object.values(migAgg1.items || {}).flatMap((v) => v.instanceGroupManagers || []).find((m) => m.name === MIG_NAME);
+  check("create managed instance group via UI → visible over native wire (instanceGroupManagers.get)", mig1?.targetSize === 2);
+  const instAgg1 = await wjson("/compute/v1/projects/vyomi-project/aggregated/instances");
+  const migMembers1 = Object.values(instAgg1.items || {}).flatMap((v) => v.instances || []).filter((i) => i.name.startsWith(`${MIG_NAME}-`));
+  check("managed group stamped out real instances from the template", migMembers1.length === 2);
+  await shot("15-managed-instance-group");
+
+  await page.getByRole("button", { name: `Actions for ${MIG_NAME}` }).click();
+  await page.getByRole("menuitem", { name: "Edit group size" }).click();
+  await page.getByLabel("Number of instances").fill("1");
+  await page.getByRole("button", { name: "Resize", exact: true }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  const instAgg2 = await wjson("/compute/v1/projects/vyomi-project/aggregated/instances");
+  const migMembers2 = Object.values(instAgg2.items || {}).flatMap((v) => v.instances || []).filter((i) => i.name.startsWith(`${MIG_NAME}-`));
+  check("resize via UI → one member instance deleted over native wire", migMembers2.length === 1);
+
+  await page.getByRole("checkbox", { name: `Select us-central1-a/${MIG_NAME}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(MIG_NAME);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  check("delete managed instance group via UI → gone over native wire",
+    (await wire(`/compute/v1/projects/vyomi-project/zones/us-central1-a/instanceGroupManagers/${MIG_NAME}`)).status === 404);
+  const instAgg3 = await wjson("/compute/v1/projects/vyomi-project/aggregated/instances");
+  check("deleting managed instance group deletes its member instances too",
+    !Object.values(instAgg3.items || {}).flatMap((v) => v.instances || []).some((i) => i.name.startsWith(`${MIG_NAME}-`)));
 
   // Delete the instance via the detail page → gone over the native wire
   await page.goto(UI + `#/compute/instances/us-central1-a/${VM}`);
@@ -531,6 +648,17 @@ try {
   const fnPolicy = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${FN}:getIamPolicy`);
   check("Allow public access → setIamPolicy grants allUsers run.invoker", (fnPolicy.bindings || []).some((b) => b.role === "roles/run.invoker" && b.members?.includes("allUsers")));
   await shot("12-function-created");
+
+  // Editing a function's source and clicking "Save and redeploy" must actually redeploy: the
+  // native API cuts a real new revision (not just store the edited text on the service).
+  await page.goto(UI + `#/functions/detail/us-central1/${FN}?tab=source`);
+  await page.getByRole("button", { name: "Edit source" }).click();
+  await page.getByLabel("Source files").fill("exports.handler = (event) => ({ redeployed: true });\n");
+  await page.getByRole("button", { name: "Save and redeploy" }).click();
+  await page.getByRole("button", { name: "Edit source" }).waitFor({ timeout: 10000 });
+  const fnRevs = await wjson(`/v2/projects/vyomi-project/locations/us-central1/services/${FN}/revisions`);
+  check("editing function source redeploys a real new revision", (fnRevs.revisions || []).length === 2, JSON.stringify(fnRevs).slice(0, 200));
+  await shot("12b-function-source-redeployed");
 
   const JOB = `v4-gcp-job-${Date.now() % 100000}`;
   await wire("/v2/projects/vyomi-project/locations/us-central1/jobs?jobId=" + JOB, {

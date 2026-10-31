@@ -42,6 +42,8 @@ export const Products = subResource("products");
 export const Subscriptions = subResource("subscriptions");
 export const NamedValues = subResource("namedValues");
 export const Backends = subResource("backends");
+export const ApiTags = subResource("tags");
+export const PolicyFragments = subResource("policyFragments");
 
 // Product ↔ API association (`.../products/{productId}/apis/{apiId}`, empty-body PUT — the
 // real ARM shape azure-mgmt-apimanagement / az apim product api add use).
@@ -59,11 +61,36 @@ export const putLock = (rg, name, lockName, body) => restJson("PUT", lockPath(rg
 export const deleteLock = (rg, name, lockName) => restJson("DELETE", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION } });
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, filtered to this service) ──
-export const listActivityLog = async (rg, name) => {
+// `timespan` is an optional { ge, le } pair of ISO-8601 UTC bounds from the Timespan picker —
+// a real `eventTimestamp ge/le` OData predicate (core/azure_arm_core._filter_by_timespan).
+export const listActivityLog = async (rg, name, timespan) => {
   const rid = ARM.path(rg, name);
-  const query = { "api-version": "2015-04-01", "$filter": `resourceUri eq '${rid}'` };
+  let filter = `resourceUri eq '${rid}'`;
+  if (timespan?.ge) filter += ` and eventTimestamp ge '${timespan.ge}'`;
+  if (timespan?.le) filter += ` and eventTimestamp le '${timespan.le}'`;
+  const query = { "api-version": "2015-04-01", "$filter": filter };
   return (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/eventtypes/management/values`, { query })).value || [];
 };
+
+// ── Access control (IAM): real ARM resources, subscription-wide (see capabilities.json) ────
+const AUTHZ_API = "2022-04-01";
+export const listRoleAssignments = async () =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": AUTHZ_API } })).value || [];
+export const listRoleDefinitions = async () =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": AUTHZ_API } })).value || [];
+
+// ── Diagnostic settings (Microsoft.Insights/diagnosticSettings, a real ARM extension resource
+// scoped to this service's own id — core/azure_arm_core.AzureArm._diagnostic_settings) ──────
+const DIAG_API = "2021-05-01-preview";
+const diagPath = (rg, name, setting) => `${ARM.path(rg, name)}/providers/Microsoft.Insights/diagnosticSettings${setting ? `/${encodeURIComponent(setting)}` : ""}`;
+export const listDiagnosticSettings = async (rg, name) => (await restJson("GET", diagPath(rg, name), { query: { "api-version": DIAG_API } })).value || [];
+export const putDiagnosticSetting = (rg, name, setting, body) => restJson("PUT", diagPath(rg, name, setting), { query: { "api-version": DIAG_API }, body });
+export const deleteDiagnosticSetting = (rg, name, setting) => restJson("DELETE", diagPath(rg, name, setting), { query: { "api-version": DIAG_API } });
+
+// ── Log Analytics workspaces (Microsoft.OperationalInsights/workspaces) — the diagnostic
+// setting "Send to Log Analytics workspace" destination picker's source list. ──────────────
+export const listWorkspaces = async () => (await ARM_WORKSPACES.list()).map((w) => ({ id: w.id, name: w.name }));
+const ARM_WORKSPACES = armType("Microsoft.OperationalInsights", "workspaces", "2022-10-01");
 
 // ── create-service form model → ARM body ────────────────────────────────────────────────
 const SKU_NAME = {

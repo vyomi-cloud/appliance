@@ -1,9 +1,10 @@
 /* API Management service resource blade: left resource menu + panels. Overview, Activity
- * log, Tags, APIs, Products, Subscriptions, Named values, Backends, Properties, Locks and
- * Export template (ARM Template tab) are backed by native ARM calls; everything else in the
- * menu — Access control (IAM) and every item the real console renders as a bare blade link
- * (Diagnose and solve problems, Events, Developer portal, Monitoring, Deployment +
- * infrastructure, Security, Automation tasks, Help) — is an honest NotSimulated panel. */
+ * log, Access control (IAM) (subscription-wide, see capabilities.json), Tags, APIs, Products,
+ * Subscriptions, Named values, Backends, API Tags, Policy fragments, Diagnostic settings,
+ * Scale out and up, Pricing tier, Properties, Locks and Export template (ARM Template tab)
+ * are backed by native ARM calls; everything else in the menu — Diagnose and solve problems,
+ * Events, Developer portal, the rest of Monitoring, the rest of Deployment + infrastructure,
+ * Security, Automation tasks, Help — is an honest NotSimulated panel. */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -26,6 +27,9 @@ import Products from "./Products.jsx";
 import Subscriptions from "./Subscriptions.jsx";
 import NamedValues from "./NamedValues.jsx";
 import Backends from "./Backends.jsx";
+import ApiTags from "./ApiTags.jsx";
+import PolicyFragments from "./PolicyFragments.jsx";
+import DiagnosticSettings from "./DiagnosticSettings.jsx";
 import * as api from "./api.js";
 
 export const MENU = [
@@ -66,15 +70,13 @@ export const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items :
 // a hand-written disclaimer.
 const CAP_FOR = {
   diagnose: "azure.apim.tools", events: "azure.apim.tools", tasks: "azure.apim.tools", support: "azure.apim.tools",
-  mcpservers: "azure.apim.tools", apitags: "azure.apim.tools", policyfragments: "azure.apim.tools",
-  workspaces: "azure.apim.tools", credentialmanager: "azure.apim.tools",
-  iam: "azure.apim.iam",
+  mcpservers: "azure.apim.tools", workspaces: "azure.apim.tools", credentialmanager: "azure.apim.tools",
   portaloverview: "azure.apim.developerportal", portalsettings: "azure.apim.developerportal", users: "azure.apim.developerportal",
   groups: "azure.apim.developerportal", identities: "azure.apim.developerportal", delegation: "azure.apim.developerportal",
   appinsights: "azure.apim.monitoring", alerts: "azure.apim.monitoring", metrics: "azure.apim.monitoring",
-  diagnosticsettings: "azure.apim.monitoring", logs: "azure.apim.monitoring", analytics: "azure.apim.monitoring",
+  logs: "azure.apim.monitoring", analytics: "azure.apim.monitoring",
   network: "azure.apim.deployment", customdomains: "azure.apim.deployment", locations: "azure.apim.deployment",
-  scaleoutandup: "azure.apim.deployment", pricingtier: "azure.apim.deployment", managedidentities: "azure.apim.deployment",
+  managedidentities: "azure.apim.deployment",
   certificates: "azure.apim.deployment", gateways: "azure.apim.deployment", selfhostedgateways: "azure.apim.deployment",
   defenderforcloud: "azure.apim.deployment",
 };
@@ -101,6 +103,11 @@ export default function ApimBlade({ params, query }) {
       subscriptions: () => <Subscriptions rg={rg} svc={name} />,
       namedvalues: () => <NamedValues rg={rg} svc={name} />,
       backends: () => <Backends rg={rg} svc={name} />,
+      apitags: () => <ApiTags rg={rg} svc={name} />,
+      policyfragments: () => <PolicyFragments rg={rg} svc={name} />,
+      diagnosticsettings: () => <DiagnosticSettings rg={rg} svc={name} />,
+      scaleoutandup: () => <ScaleOutAndUp a={a} reload={reload} />,
+      pricingtier: () => <PricingTier a={a} reload={reload} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
       exporttemplate: () => <ExportTemplate a={a} />,
@@ -225,11 +232,67 @@ function Properties({ a }) {
   return <><div className="vy-panel-title">{a.name} | Properties</div><PropertyList a={a} /></>;
 }
 
-// ── Access control (IAM) ──────────────────────────────────────────────────────────────
+// ── Access control (IAM): Role assignments / Roles are real ARM resources
+// (Microsoft.Authorization/roleAssignments, roleDefinitions), subscription-wide rather than
+// scoped to this one service — see capabilities.json azure.apim.iam. ──────────────────────
 function AccessControlIam({ a }) {
+  const [tab, setTab] = useState("checkaccess");
+  const [gap, setGap] = useState(null);
+  const roleAssignments = useAsync(() => api.listRoleAssignments(), []);
+  const roleDefinitions = useAsync(() => api.listRoleDefinitions(), []);
   return (
-    <CapabilityContainer id="azure.apim.iam" title={`${a.name} | Access control (IAM)`}
-      note="Tabs: Check access, Role assignments, Roles, Deny assignments, Classic administrators. My access and Check access actions (View my access) live on the Check access tab." />
+    <CapabilityContainer id="azure.apim.iam" title={`${a.name} | Access control (IAM)`}>
+      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control (IAM) tabs">
+        <Tab value="checkaccess">Check access</Tab>
+        <Tab value="roleassignments">Role assignments</Tab>
+        <Tab value="roles">Roles</Tab>
+        <Tab value="deny">Deny assignments</Tab>
+        <Tab value="classic">Classic administrators</Tab>
+      </TabList>
+      {tab === "checkaccess" && (
+        <div style={{ display: "flex", gap: 24, marginTop: 12 }}>
+          <section className="vy-section"><h3>My access</h3><Button onClick={() => setGap("View my access")}>View my access</Button></section>
+          <section className="vy-section"><h3>Check access</h3><Button onClick={() => setGap("Check access")}>Check access</Button></section>
+        </div>
+      )}
+      {tab === "roleassignments" && (
+        <section className="vy-section" style={{ marginTop: 12 }}>
+          <BrowseGrid resourceName="role assignment" rowKey={(r) => r.id} filterPlaceholder="Search by name or email"
+            items={roleAssignments.data || []} loading={roleAssignments.loading} error={roleAssignments.error} onRefresh={roleAssignments.reload}
+            csvName="role-assignments.csv"
+            columns={[
+              { key: "name", label: "Name", value: (r) => r.properties?.principalId },
+              { key: "type", label: "Type", value: (r) => r.properties?.principalType || "--" },
+              { key: "role", label: "Role", value: (r) => r.properties?.roleDefinitionId?.split("/").pop() },
+              { key: "scope", label: "Scope", value: (r) => r.properties?.scope || "/" },
+              { key: "condition", label: "Condition", value: () => "None" },
+            ]}
+          />
+        </section>
+      )}
+      {tab === "roles" && (
+        <section className="vy-section" style={{ marginTop: 12 }}>
+          <BrowseGrid resourceName="role" rowKey={(r) => r.id} filterPlaceholder="Search by role name, description, permission, or ID"
+            items={roleDefinitions.data || []} loading={roleDefinitions.loading} error={roleDefinitions.error} onRefresh={roleDefinitions.reload}
+            csvName="roles.csv"
+            columns={[
+              { key: "name", label: "Name", value: (r) => r.properties?.roleName || r.name },
+              { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
+              { key: "type", label: "Type", value: (r) => r.properties?.type || "BuiltInRole" },
+              { key: "category", label: "Category", value: () => "General" },
+            ]}
+          />
+        </section>
+      )}
+      {tab === "deny" && <div style={{ marginTop: 12 }}><NotSimulatedContainer title="Deny assignments" feature="Deny assignments" /></div>}
+      {tab === "classic" && <div style={{ marginTop: 12 }} />}
+      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
+        <DialogSurface aria-label={gap || "Not simulated"}>
+          <DialogBody><DialogTitle>{gap}</DialogTitle><DialogContent><NotSimulated feature={`${gap} evaluation`} /></DialogContent>
+            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
   );
 }
 
@@ -376,9 +439,17 @@ function AddLockDialog({ open, onClose, onCreate }) {
   );
 }
 
+// Pads JS's millisecond ISO string to the backend's 6-digit microsecond `%f` format
+// (zero-padding the remainder keeps the bound inclusive — see core/azure_arm_core._filter_by_timespan).
+const isoMicro = (d) => d.toISOString().replace(/(\.\d{3})Z$/, "$1000Z");
+const TIMESPANS = [["6h", "Last 6 hours", 6], ["24h", "Last 24 hours", 24], ["7d", "Last 7 days", 24 * 7], ["30d", "Last 30 days", 24 * 30], ["all", "All time", null]];
+
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this service) ──
 function ActivityLog({ a }) {
-  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
+  const [timespan, setTimespan] = useState("24h");
+  const hours = TIMESPANS.find(([k]) => k === timespan)?.[2];
+  const ge = hours ? isoMicro(new Date(Date.now() - hours * 3600e3)) : null;
+  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name, ge ? { ge } : undefined), [a.id, timespan]);
   const rows = data || [];
   const [gap, setGap] = useState(null);
   return (
@@ -394,6 +465,11 @@ function ActivityLog({ a }) {
         <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
         <ToolbarButton onClick={() => setGap("Reset filters")}>Reset filters</ToolbarButton>
       </div>
+      <Field label="Timespan" style={{ maxWidth: 200, marginBottom: 8 }}>
+        <Select value={timespan} onChange={(_, d) => setTimespan(d.value)} aria-label="Timespan">
+          {TIMESPANS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+        </Select>
+      </Field>
       <ErrorBar error={error} />
       <table className="vy-grid" style={{ width: "100%" }}>
         <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
@@ -455,6 +531,61 @@ function ExportTemplate({ a }) {
         {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
         {tab !== "arm" && <NotSimulatedContainer feature={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
       </section>
+    </CapabilityContainer>
+  );
+}
+
+// ── Scale out and up / Pricing tier (post-creation sku.capacity / sku.name over ARM — the
+// SAME generic sku merge the create wizard's Pricing tier step writes) ────────────────────
+const TIER_NAMES = ["Developer", "Basic", "Standard", "Premium", "BasicV2", "StandardV2", "PremiumV2", "Consumption"];
+
+function ScaleOutAndUp({ a, reload }) {
+  const notify = useNotify();
+  const [units, setUnits] = useState(a.sku?.capacity ?? 1);
+  const [busy, setBusy] = useState(false);
+  return (
+    <CapabilityContainer id="azure.apim.scaletier" title={`${a.name} | Scale out and up`}>
+      <p style={{ fontSize: 13 }}>Current tier: <b>{a.sku?.name || "--"}</b>. Units: <b>{a.sku?.capacity ?? 0}</b>.</p>
+      <Field label="Units" style={{ maxWidth: 240 }}>
+        <Input type="number" min={0} max={12} value={String(units)} onChange={(_, d) => setUnits(Number(d.value) || 0)} aria-label="Units" />
+      </Field>
+      <div style={{ marginTop: 12 }}>
+        <Button appearance="primary" disabled={busy} onClick={async () => {
+          setBusy(true);
+          try {
+            await api.updateService(a.resourceGroup, a.name, { sku: { capacity: units } });
+            notify.success(`Scaled '${a.name}' to ${units} unit${units === 1 ? "" : "s"}.`, "Scale succeeded");
+            reload();
+          } catch (e) { notify.error(e, "Scaling failed"); }
+          finally { setBusy(false); }
+        }}>Save</Button>
+      </div>
+    </CapabilityContainer>
+  );
+}
+
+function PricingTier({ a, reload }) {
+  const notify = useNotify();
+  const [tier, setTier] = useState(a.sku?.name || "Developer");
+  const [busy, setBusy] = useState(false);
+  return (
+    <CapabilityContainer id="azure.apim.scaletier" title={`${a.name} | Pricing tier`}>
+      <Field label="Pricing tier" style={{ maxWidth: 280 }}>
+        <Select value={tier} onChange={(_, d) => setTier(d.value)} aria-label="Pricing tier">
+          {TIER_NAMES.map((t) => <option key={t}>{t}</option>)}
+        </Select>
+      </Field>
+      <div style={{ marginTop: 12 }}>
+        <Button appearance="primary" disabled={busy} onClick={async () => {
+          setBusy(true);
+          try {
+            await api.updateService(a.resourceGroup, a.name, { sku: { name: tier } });
+            notify.success(`'${a.name}' tier changed to ${tier}.`, "Pricing tier updated");
+            reload();
+          } catch (e) { notify.error(e, "Changing tier failed"); }
+          finally { setBusy(false); }
+        }}>Save</Button>
+      </div>
     </CapabilityContainer>
   );
 }

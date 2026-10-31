@@ -82,3 +82,25 @@ def test_cosmos_root_data_plane_on_the_core(client):
     finally:
         ctx.REQUEST_PROVIDER.reset(tok)
     assert client.delete(f"/dbs/{db}").status_code == 204
+
+
+def test_table_storage_root_wire_on_the_core(client):
+    """Azure Table REST (azure-data-tables / the v4 Storage browser) — pre-v4 these root paths
+    fell through to the S3 catch-all (405)."""
+    t = f"c0ht{uuid.uuid4().hex[:6]}"
+    acc = {"accept": "application/json;odata=nometadata"}
+    assert client.post("/_wire/Tables", json={"TableName": t}, headers=acc).status_code == 201
+    assert any(x["TableName"] == t for x in client.get("/Tables", headers=acc).json()["value"])
+    r = client.post(f"/{t}", json={"PartitionKey": "p", "RowKey": "r1", "Greeting": "hi"}, headers=acc)
+    assert r.status_code == 201, r.text
+    got = client.get(f"/{t}(PartitionKey='p',RowKey='r1')", headers=acc)
+    assert got.status_code == 200 and got.json()["Greeting"] == "hi"
+    from core import app_context as ctx
+    from core import appliance_stores as aps
+    tok = ctx.REQUEST_PROVIDER.set("azure")
+    try:
+        assert t in aps.table_store().tables
+    finally:
+        ctx.REQUEST_PROVIDER.reset(tok)
+    # an S3-shaped request is never claimed as a table
+    assert client.get(f"/{t}", headers={"authorization": "AWS4-HMAC-SHA256 Credential=x/20261031/us-east-1/s3/aws4_request"}).status_code != 200 or "TableName" not in client.get(f"/{t}", headers={"authorization": "AWS4-HMAC-SHA256 Credential=x"}).text

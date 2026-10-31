@@ -29,7 +29,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Start/Stop update the cluster's logical powerState only — there are no real node VMs in-browser to deallocate or boot, so no compute cost changes and no API server downtime are actually simulated."
+   "Start/Stop update the cluster's logical powerState — there are no real node VMs in-browser to deallocate or boot, so no compute cost changes are simulated, but the API server downtime a Stopped cluster causes IS enforced: runCommand and node-pool writes/deletes are rejected with a 409 until the cluster is started again."
   ],
   "tests": [
    "tests/conformance/test_azure_aks_core.py"
@@ -42,7 +42,7 @@
    "offline": "full"
   },
   "limitations": [
-   "Scaling, image updates and the autoscaler only change the pool's recorded properties (count, nodeImageVersion, min/max count) — no node VMs are actually provisioned, so the \"Nodes\" tab is a deterministic rollup of those properties rather than live kubelet-reported node objects."
+   "Scaling, image updates and the autoscaler only change the pool's recorded properties (count, nodeImageVersion, min/max count) — no node VMs are actually provisioned, so the \"Nodes\" tab is a deterministic rollup of those properties rather than live kubelet-reported node objects. Real Azure's requirement that the cluster be Running before a node pool can be added, scaled or deleted IS enforced (409 ClusterNotRunning while the cluster is Stopped)."
   ],
   "tests": [
    "tests/conformance/test_azure_aks_core.py"
@@ -68,7 +68,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Vyomi does not run a real kubelet or API server, so runCommand accepts and echoes the submitted command in its response but never actually executes it against a live cluster."
+   "Vyomi does not run a real kubelet or API server, so runCommand accepts and echoes the submitted command in its response but never actually executes it against a live cluster. It IS rejected (409 ClusterNotRunning) while the cluster's powerState is Stopped, matching the real requirement for a running API server."
   ],
   "tests": [
    "tests/conformance/test_azure_aks_core.py"

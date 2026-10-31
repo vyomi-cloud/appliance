@@ -434,12 +434,14 @@ function ServicesIngresses() {
 
 // ── Run command ────────────────────────────────────────────────────────────────────────
 function RunCommand({ a }) {
+  const notify = useNotify();
   const [command, setCommand] = useState("");
   const [out, setOut] = useState(null);
   const [busy, setBusy] = useState(false);
   const run = async () => {
     setBusy(true);
     try { setOut(await api.runCommand(a.resourceGroup, a.name, command)); }
+    catch (e) { notify.error(e, "Run command failed"); }
     finally { setBusy(false); }
   };
   return (
@@ -463,13 +465,18 @@ function NodePools({ a }) {
   const [add, setAdd] = useState(false);
   const [scaleRow, setScaleRow] = useState(null);
   const pools = data || [];
-  const busyOn = async (r, fn) => { await fn(); notify.success(`Node pool '${r.name}' updated.`, "Request submitted"); reload(); };
+  const busyOn = async (r, fn) => {
+    try { await fn(); notify.success(`Node pool '${r.name}' updated.`, "Request submitted"); reload(); }
+    catch (e) { notify.error(e, `Failed to update node pool '${r.name}'`); }
+  };
   const NEXT_VERSION = { "1.27.9": "1.28.5", "1.28.5": "1.29.2", "1.29.2": "1.30.0" };
   const upgrade = async () => {
     const next = NEXT_VERSION[a.properties?.kubernetesVersion] || "1.30.0";
-    await api.updateCluster(a.resourceGroup, a.name, { properties: { kubernetesVersion: next } });
-    notify.success(`Upgrading '${a.name}' to Kubernetes ${next}.`, "Upgrade started");
-    reload();
+    try {
+      await api.updateCluster(a.resourceGroup, a.name, { properties: { kubernetesVersion: next } });
+      notify.success(`Upgrading '${a.name}' to Kubernetes ${next}.`, "Upgrade started");
+      reload();
+    } catch (e) { notify.error(e, "Upgrade failed"); }
   };
   return (
     <>
@@ -575,10 +582,16 @@ function AddNodePoolDialog({ open, onClose, onCreate }) {
 }
 
 function ScaleNodePoolDialog({ open, pools, onClose, onScale }) {
+  const notify = useNotify();
   const [poolName, setPoolName] = useState("");
   const [count, setCount] = useState(3);
   const [busy, setBusy] = useState(false);
-  const go = async () => { setBusy(true); try { await onScale(poolName || pools[0]?.name, count); onClose(); } finally { setBusy(false); } };
+  const go = async () => {
+    setBusy(true);
+    try { await onScale(poolName || pools[0]?.name, count); onClose(); }
+    catch (e) { notify.error(e, "Failed to scale node pool"); }
+    finally { setBusy(false); }
+  };
   return (
     <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
       <DialogSurface aria-label="Scale node pool">

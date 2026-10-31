@@ -29,8 +29,28 @@ async function createSavingsPlan(wire, uniq) {
   return name;
 }
 
+async function createReservation(wire, uniq) {
+  const name = `uic-res-${uniq}`;
+  await wire("PUT", `/subscriptions/${SUB}/providers/Microsoft.Capacity/reservationOrders/${name}`, {
+    svc: null, body: { properties: { term: "P1Y", skuName: "Standard_B2s", quantity: 1 } },
+  });
+  return name;
+}
+
+async function createAllocationRule(wire, uniq) {
+  const name = `uic-alloc-${uniq}`;
+  await wire("PUT", `/subscriptions/${SUB}/providers/Microsoft.CostManagement/costAllocationRules/${name}`, {
+    svc: null, body: { properties: { details: {
+      sourceResources: [{ name: RG }], targetResources: [{ name: RG, allocation: 100 }],
+    } } },
+  });
+  return name;
+}
+
 export default {
   "az-cost-resource": createResource,
   "az-cost-budget": createBudget,
   "az-cost-savingsplan": createSavingsPlan,
+  "az-cost-reservation": createReservation,
+  "az-cost-allocationrule": createAllocationRule,
 };

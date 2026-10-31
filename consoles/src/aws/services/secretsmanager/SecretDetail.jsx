@@ -1,6 +1,8 @@
 /* Secret detail — General details + 5 tabs, all wired to real secretsmanager.* calls except
  * Replication (core/capabilities/aws/secretsmanager.json: secretsmanager.secret.replication,
- * not_simulated — there's no second Region's store to replicate into). */
+ * not_simulated — there's no second Region's store to replicate into). Rotation really fires
+ * on its own schedule (lazy, on access) and Resource permissions is a real Get/Put/Delete
+ * ResourcePolicy editor — both are 'limited', not not_simulated: see the capability badges. */
 import { useState } from "react";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -13,6 +15,7 @@ import Table from "@cloudscape-design/components/table";
 import Alert from "@cloudscape-design/components/alert";
 import Modal from "@cloudscape-design/components/modal";
 import FormField from "@cloudscape-design/components/form-field";
+import Textarea from "@cloudscape-design/components/textarea";
 import Select from "@cloudscape-design/components/select";
 import Toggle from "@cloudscape-design/components/toggle";
 import Spinner from "@cloudscape-design/components/spinner";
@@ -22,6 +25,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate, href, follow } from "../../../common/router.js";
 import { ErrorAlert, fmtDate, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 function SecretValueSection({ name }) {
@@ -55,11 +59,45 @@ function SecretValueSection({ name }) {
   );
 }
 
+function ResourcePolicySection({ name }) {
+  const notify = useNotify();
+  const p = useAsync(() => api.getResourcePolicy(name), [name]);
+  const [edit, setEdit] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [modalError, setModalError] = useState(null);
+  const save = async () => {
+    setBusy(true); setModalError(null);
+    try {
+      if (edit.trim()) await api.putResourcePolicy(name, edit);
+      else await api.deleteResourcePolicy(name);
+      notify.success(`Resource permissions updated.${saveNotice("secretsmanager.secret.resource-policy")}`);
+      setEdit(null); p.reload();
+    } catch (e) { setModalError(e); } finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="secretsmanager.secret.resource-policy" title="Resource permissions - optional"
+      actions={<Button onClick={() => setEdit(p.data || "")} loading={p.loading}>Edit permissions</Button>}>
+      {p.data ? <Box variant="code"><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{p.data}</pre></Box> : <Box color="text-body-secondary">No resource policy attached.</Box>}
+      <Modal visible={edit !== null} onDismiss={() => setEdit(null)} size="large" header="Edit resource permissions"
+        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+          <Button variant="link" onClick={() => setEdit(null)}>Cancel</Button>
+          <Button variant="primary" loading={busy} onClick={save}>Save changes</Button>
+        </SpaceBetween></Box>}>
+        <SpaceBetween size="m">
+          {modalError && <ErrorAlert error={modalError} />}
+          <FormField label="Resource policy" description="JSON policy document. Leave empty to remove it.">
+            <Textarea rows={14} value={edit || ""} onChange={({ detail }) => setEdit(detail.value)} spellcheck={false} />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+    </CapabilityContainer>
+  );
+}
+
 function OverviewTab({ name }) {
   return (
     <SpaceBetween size="l">
-      <NotSimulatedContainer title="Resource permissions - optional" feature="IAM-principal permissions summary"
-        note="The visual summary of who can access this secret isn't modeled; edit the resource policy JSON directly (Secrets list page action, or the create wizard's Resource permissions step)." />
+      <ResourcePolicySection name={name} />
       <SecretValueSection name={name} />
     </SpaceBetween>
   );
@@ -78,26 +116,26 @@ function RotationTab({ name, secret, reload }) {
     setBusy(true);
     try {
       await api.rotateSecret(name, { RotationRules: { AutomaticallyAfterDays: edit.days }, RotateImmediately: edit.now });
-      notify.success("Rotation configured.");
+      notify.success(`Rotation configured — the schedule really fires on the next access once due.${saveNotice("secretsmanager.secret.rotation")}`);
       setEdit(null); reload();
     } catch (e) { notify.error(e); } finally { setBusy(false); }
   };
   return (
     <SpaceBetween size="l">
-      <Container header={<Header variant="h2" actions={
+      <CapabilityContainer id="secretsmanager.secret.rotation" title="Rotation configuration" actions={
         <SpaceBetween direction="horizontal" size="xs">
           <Button onClick={() => setEdit({ days: secret.RotationRules?.AutomaticallyAfterDays || 30, now: true })}>Edit rotation</Button>
           <Button loading={busy} disabled={!secret.RotationEnabled} onClick={rotateNow}>Rotate secret immediately</Button>
         </SpaceBetween>
-      }>Rotation configuration</Header>}>
+      }>
         <KeyValue columns={2} items={[
           ["Rotation status", secret.RotationEnabled ? "Enabled" : "Disabled"],
           ["Rotation schedule", secret.RotationRules ? JSON.stringify(secret.RotationRules) : "-"],
           ["Last rotated date (UTC)", secret.LastRotatedDate ? fmtDate(secret.LastRotatedDate) : "-"],
-          ["Next rotation date (UTC)", secret.RotationEnabled ? "Vyomi rotates on demand only — there's no background scheduler." : "-"],
-          ["Lambda rotation function", "Not simulated — no Lambda runtime wired to Secrets Manager."],
+          ["Next rotation date (UTC)", secret.NextRotationDate ? fmtDate(secret.NextRotationDate) : "-"],
+          ["Lambda rotation function", secret.RotationLambdaARN || "-"],
         ]} />
-      </Container>
+      </CapabilityContainer>
       <Modal visible={!!edit} onDismiss={() => setEdit(null)} header="Edit rotation"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setEdit(null)}>Cancel</Button>

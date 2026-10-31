@@ -9,6 +9,7 @@ import { armType, DEFAULT_RG, getSubscription, parseId } from "../../kit/arm.js"
 
 export const SITES = armType("Microsoft.Web", "sites", "2023-12-01");
 export const PLANS = armType("Microsoft.Web", "serverfarms", "2023-12-01");
+const WORKSPACES = armType("Microsoft.OperationalInsights", "workspaces", "2022-10-01");
 
 const shape = (s) => ({ ...s, resourceGroup: parseId(s.id).resourceGroup });
 
@@ -30,6 +31,15 @@ export const getPlan = (rg, name) => PLANS.get(rg, name);
 export const createPlan = (rg, name, body) => PLANS.put(rg, name, body);
 export const deletePlan = (rg, name) => PLANS.remove(rg, name);
 
+// Scale up (pricing tier) changes the App Service plan's SKU; Scale out (manual instance
+// count) is a siteConfig field; Change App Service plan re-points the site at a different,
+// already-existing plan — all three are plain ARM PATCHes the core already supports.
+export const updatePlanSku = (rg, planName, sku) => PLANS.patch(rg, planName, { sku: { name: sku } });
+export const changeSitePlan = (rg, name, planId) => SITES.patch(rg, name, { properties: { serverFarmId: planId } });
+
+// Identity is a top-level sibling of `properties` on the site, exactly like real ARM.
+export const updateIdentity = (rg, name, identity) => SITES.patch(rg, name, { identity });
+
 const cfgPath = (rg, name, ...tail) => `${SITES.path(rg, name)}/config/${tail.join("/")}`;
 const q = { "api-version": "2023-12-01" };
 
@@ -41,6 +51,13 @@ export const getConnectionStrings = async (rg, name) => (await restJson("GET", c
 export const updateConnectionStrings = (rg, name, props) => restJson("PUT", cfgPath(rg, name, "connectionstrings"), { query: q, body: { properties: props } });
 export const getAppServiceLogs = (rg, name) => restJson("GET", cfgPath(rg, name, "logs"), { query: q });
 export const updateAppServiceLogs = (rg, name, props) => restJson("PUT", cfgPath(rg, name, "logs"), { query: q, body: { properties: props } });
+export const getBackupConfig = (rg, name) => restJson("GET", cfgPath(rg, name, "backup"), { query: q });
+export const updateBackupConfig = (rg, name, props) => restJson("PUT", cfgPath(rg, name, "backup"), { query: q, body: { properties: props } });
+
+const backupsPath = (rg, name) => `${SITES.path(rg, name)}/backups`;
+export const listBackups = async (rg, name) => (await restJson("GET", backupsPath(rg, name), { query: q })).value || [];
+export const backupNow = (rg, name) => restJson("POST", backupsPath(rg, name), { query: q });
+export const restoreBackup = (rg, name, backupId) => restJson("POST", `${backupsPath(rg, name)}/${encodeURIComponent(backupId)}/restore`, { query: q });
 
 const slotsPath = (rg, name) => `${SITES.path(rg, name)}/slots`;
 export const listSlots = async (rg, name) => (await restJson("GET", slotsPath(rg, name), { query: q })).value || [];
@@ -57,6 +74,19 @@ export const listLocks = async (rg, name) => (await restJson("GET", locksPath(rg
 export const addLock = (rg, name, lockName, level, notes) =>
   restJson("PUT", `${locksPath(rg, name)}/${encodeURIComponent(lockName)}`, { query: q, body: { properties: { level, notes } } });
 export const removeLock = (rg, name, lockName) => restJson("DELETE", `${locksPath(rg, name)}/${encodeURIComponent(lockName)}`, { query: q });
+
+// Diagnostic settings: Microsoft.Insights/diagnosticSettings is a real ARM extension resource
+// scoped to ANY other resource's own id (core/azure_monitor_core.py), reached by re-entering
+// "providers" under the site's own path — the same shape Microsoft.Authorization/locks uses.
+const DIAG_API_VERSION = "2021-05-01-preview";
+const diagPath = (rg, name) => `${SITES.path(rg, name)}/providers/Microsoft.Insights/diagnosticSettings`;
+export const listDiagnosticSettings = async (rg, name) =>
+  (await restJson("GET", diagPath(rg, name), { query: { "api-version": DIAG_API_VERSION } })).value || [];
+export const putDiagnosticSetting = (rg, name, dsName, body) =>
+  restJson("PUT", `${diagPath(rg, name)}/${encodeURIComponent(dsName)}`, { query: { "api-version": DIAG_API_VERSION }, body });
+export const deleteDiagnosticSetting = (rg, name, dsName) =>
+  restJson("DELETE", `${diagPath(rg, name)}/${encodeURIComponent(dsName)}`, { query: { "api-version": DIAG_API_VERSION } });
+export const listWorkspaces = async () => (await WORKSPACES.list()).map((w) => ({ ...w, resourceGroup: parseId(w.id).resourceGroup }));
 
 // Activity log: the native Microsoft.Insights Activity Log feed (az monitor activity-log list /
 // the portal's Activity Log blade), filtered to this Web App's resource id.

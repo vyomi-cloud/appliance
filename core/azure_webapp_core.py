@@ -19,10 +19,14 @@ a sites list returns both and each portal blade filters by kind. Create-time def
 the kind-specific sub-resources are chosen by kind; everything else is shared.
 
 Resource types
-    Microsoft.Web/serverfarms   App Service plans (numberOfSites, in-use delete guard)
+    Microsoft.Web/serverfarms   App Service plans (numberOfSites, in-use delete guard, SKU PATCH
+                                for "Scale up"); sites PATCH serverFarmId moves a site onto
+                                another existing plan ("Change App Service plan")
     Microsoft.Web/sites         both kinds:
-        shared       start/stop/restart, publishxml/resetpublishxml,
-                     config/web|appsettings|connectionstrings|logs (GET, POST [.../list], PUT, PATCH),
+        shared       start/stop/restart, publishxml/resetpublishxml, identity (top-level field:
+                     SystemAssigned mints a stable principalId/tenantId),
+                     config/web|appsettings|connectionstrings|logs|backup (GET, POST [.../list],
+                     PUT, PATCH), backups/{id} (+ restore) — modelled as snapshots,
                      providers/Microsoft.Authorization/locks/{name} and the short ``locks/{name}``
                      form — both stored by core/azure_locks_core.py (one lock store for all of ARM)
         web apps     slots/{name} (+ start/stop/restart), slotsswap, hostNameBindings/{host}
@@ -80,6 +84,9 @@ LOCK_LEVELS = ("CanNotDelete", "ReadOnly")
 DEFAULT_LOGS = {"applicationLogs": {"fileSystem": {"level": "Off"}},
                 "httpLogs": {"fileSystem": {"retentionInMb": 35, "retentionInDays": 0, "enabled": False}},
                 "detailedErrorMessages": {"enabled": False}, "failedRequestsTracing": {"enabled": False}}
+DEFAULT_BACKUP_CONFIG = {"enabled": False, "storageAccountUrl": "",
+                         "backupSchedule": {"frequencyInterval": 1, "frequencyUnit": "Day",
+                                            "keepAtLeastOneBackup": True, "retentionPeriodInDays": 30, "startTime": None}}
 # Site properties a client may not set (server-computed).
 _READONLY_PROPS = {"state", "defaultHostName", "hostNames", "enabledHostNames", "usageState", "availabilityState",
                    "provisioningState", "outboundIpAddresses", "possibleOutboundIpAddresses", "repositorySiteName",
@@ -126,6 +133,11 @@ def _now():
 
 def _h(*parts, n=8):
     return hashlib.sha1("|".join(str(p) for p in parts).encode()).hexdigest()[:n]
+
+
+def _guid(*parts):
+    h = _h(*parts, n=32)
+    return f"{h[0:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
 
 
 def _view(rec):
@@ -231,7 +243,7 @@ def _record_event(state, sub, rg, resource_id, op_value, op_text, status="Succee
 _SUB_LABELS = {"functions": "function", "keys": "function key", "host": "host key", "locks": "lock",
                "slots": "deployment slot", "hostnamebindings": "custom domain"}
 _CONFIG_LABELS = {"web": "configuration", "appsettings": "application settings",
-                  "connectionstrings": "connection strings", "logs": "App Service logs"}
+                  "connectionstrings": "connection strings", "logs": "App Service logs", "backup": "backup configuration"}
 _LOGGED_ACTIONS = {"start", "stop", "restart", "slotsswap", "resetpublishxml"}
 _READ_ACTIONS = {"list", "listkeys", "invoke", "publishxml"}
 
@@ -427,6 +439,26 @@ def _absorb_site_config(rec, cfg):
     rec["properties"]["siteConfig"] = _merge(rec["properties"].get("siteConfig"), cfg)
 
 
+_NO_IDENTITY = {"type": "None", "principalId": None, "tenantId": None, "userAssignedIdentities": None}
+
+
+def _apply_identity(rec, ident):
+    """``identity`` is a top-level sibling of ``properties`` (real ARM shape). System-assigned
+    identity gets a stable, deterministic principal/tenant id (minted once, kept across PUT/PATCH
+    like the real RP does); switching back to "None" clears it. User-assigned identities are
+    stored by resource id but not resolved (Vyomi has no Managed Identity resource of its own)."""
+    if ident is None:
+        return
+    itype = str(ident.get("type") or "None")
+    cur = rec.get("identity") or _NO_IDENTITY
+    out = {"type": itype, "principalId": None, "tenantId": None,
+           "userAssignedIdentities": ident.get("userAssignedIdentities") or {}}
+    if "systemassigned" in itype.lower():
+        out["principalId"] = cur.get("principalId") or _guid(rec["id"], "principal")
+        out["tenantId"] = _guid(rec["_sub"], "tenant")
+    rec["identity"] = out
+
+
 def _ensure(rec):
     """Every site carries every store (records written by older builds are upgraded in place)."""
     if "_connstrings" in rec and "_connectionstrings" not in rec:
@@ -437,6 +469,9 @@ def _ensure(rec):
             rec[k] = dict(DEFAULT_LOGS) if k == "_logs" else (
                 {"masterKey": _h(rec["id"], "master", n=40), "functionKeys": {"default": _h(rec["id"], "default", n=40)},
                  "systemKeys": {}} if k == "_host" else dict(v))
+    rec.setdefault("identity", dict(_NO_IDENTITY))
+    rec.setdefault("_backups", {})
+    rec.setdefault("_backupconfig", None)
     return rec
 
 
@@ -499,6 +534,8 @@ def _new_site(state, sub, rg, name, payload):
     _absorb_site_config(rec, cfg)
     if not fn:
         rec["properties"]["runtime"] = rec["properties"]["siteConfig"].get("linuxFxVersion") or ""
+    rec["identity"] = dict(_NO_IDENTITY)
+    _apply_identity(rec, payload.get("identity"))
     return rec
 
 
@@ -508,6 +545,7 @@ def _update_site(state, rec, payload, method):
         rec["location"] = payload["location"]
     if isinstance(payload.get("tags"), dict):
         rec["tags"] = payload["tags"]
+    _apply_identity(rec, payload.get("identity"))
     pay = payload.get("properties") or {}
     if pay.get("serverFarmId"):
         rec["properties"]["serverFarmId"] = _ensure_plan(state, rec["_sub"], rec["_rg"], rec["name"], payload, _is_fn(rec))
@@ -551,6 +589,10 @@ def _site_ops(state, sub, rg, chain, method, payload):
         if method == "PATCH" and not existed:
             raise _not_found("sites", name, rg)
         if existed:
+            _migrate_locks(state, rec)
+            blocked = _lock_block(state, rec, for_delete=False)
+            if blocked:
+                return blocked
             _ensure(rec)
             _update_site(state, rec, payload, method)
         else:
@@ -561,6 +603,11 @@ def _site_ops(state, sub, rg, chain, method, payload):
         _log_site_call(state, rec, [], method, resp, existed)
         return resp
     if method == "DELETE":
+        if rec is not None:
+            _migrate_locks(state, rec)
+            blocked = _lock_block(state, rec, for_delete=True)
+            if blocked:
+                return blocked
         state.pop(rid.lower(), None)
         resp = _ok(None, 200 if rec is not None else 204, rid=rid, verb="delete")
         if rec is not None:
@@ -593,6 +640,8 @@ def _site_subresource(state, rec, rest, method, payload):
         return _slot_ops(rec, rest[1:], method, payload)
     if r0 == "hostnamebindings":
         return _hostname_ops(rec, rest[1:], method, payload)
+    if r0 == "backups":
+        return _backup_ops(rec, rest[1:], method, payload)
     if len(rest) == 1:
         return _site_action(rec, r0, method, payload)
     return _err(404, "ResourceTypeNotSupported", f"'{'/'.join(rest)}' is not supported on sites.")
@@ -651,6 +700,12 @@ def _config_ops(rec, rest, method, payload):
         if method in ("PUT", "PATCH"):
             rec["_logs"] = _merge(rec["_logs"], _props(payload))
             return _ok({"properties": rec["_logs"]})
+    elif kind == "backup":
+        if read:
+            return _ok({"properties": rec["_backupconfig"] or DEFAULT_BACKUP_CONFIG})
+        if method in ("PUT", "PATCH"):
+            rec["_backupconfig"] = _merge(rec["_backupconfig"] or DEFAULT_BACKUP_CONFIG, _props(payload))
+            return _ok({"properties": rec["_backupconfig"]})
     return _err(405, "MethodNotAllowed", f"{method} not supported on config/{kind}.")
 
 
@@ -669,6 +724,24 @@ def _migrate_locks(state, rec):
     for name, lk in old.items():
         props = lk.get("properties", lk) if isinstance(lk, dict) else {}
         _locks_engine().upsert(state, rec["id"], name, {"properties": {"level": props.get("level"), "notes": props.get("notes", "")}})
+
+
+def _lock_block(state, rec, for_delete):
+    """Enforce a CanNotDelete/ReadOnly lock on this site — the same semantics and error shape
+    as the generic ARM engine's Service Bus namespace lock enforcement (azure_arm_core.py's
+    ``_lock_block``): blocks DELETE outright, and blocks PUT/PATCH only under a ReadOnly lock.
+    Scoped to this site's own id; it does not cascade from a resource-group/subscription lock
+    (those scopes are an honest 'Not simulated' gap, same as the Locks blade's scope buttons)."""
+    levels = {(r.get("properties") or {}).get("level")
+              for r in state.values() if r.get("_lock_scope") == rec["id"].lower()}
+    if not levels:
+        return None
+    if for_delete or "ReadOnly" in levels:
+        verb = "delete" if for_delete else "write"
+        return _err(409, "ScopeLocked",
+                    f"The scope '{rec['id']}' cannot perform {verb} operation because the "
+                    f"following scope(s) are locked: '{rec['id']}'. Please remove the lock and try again.")
+    return None
 
 
 def _lock_ops(state, rec, rest, method, payload):
@@ -785,6 +858,47 @@ def _hostname_ops(rec, rest, method, payload):
             rec["properties"]["hostNames"] = [h for h in rec["properties"]["hostNames"] if h != host]
         return _ok(None, 200 if had is not None else 204)
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+# ── backups (modelled as snapshots: metadata + a restore acknowledgement, no real site
+#    content to archive) ─────────────────────────────────────────────────────────────────
+def _backup_view(rec_id, b):
+    return {"id": f"{rec_id}/backups/{b['id']}", "name": b["name"],
+            "properties": {"id": b["id"], "backupId": b["id"], "status": b["status"], "created": b["created"],
+                           "sizeInBytes": b["sizeInBytes"], "log": "", "databases": [],
+                           "storageAccountUrl": b.get("storageAccountUrl", ""), "scheduled": b.get("scheduled", False),
+                           "correlationId": b["id"]}}
+
+
+def _new_backup(rec, scheduled=False):
+    bid = _h(rec["id"], len(rec["_backups"]), _now(), "scheduled" if scheduled else "manual", n=12)
+    b = {"id": bid, "name": f"{rec['name']}_{bid}", "status": "Succeeded", "created": _now(),
+         "sizeInBytes": int(_h(rec["id"], bid, "size", n=6), 16) % 50_000_000 + 1_000_000,
+         "storageAccountUrl": (rec["_backupconfig"] or DEFAULT_BACKUP_CONFIG).get("storageAccountUrl", ""), "scheduled": scheduled}
+    rec["_backups"][bid] = b
+    return b
+
+
+def _backup_ops(rec, rest, method, payload):
+    backups = rec["_backups"]
+    if not rest:
+        if method == "GET":
+            items = list(reversed(list(backups.values())))  # dict preserves insertion order: newest last in, first out
+            return _ok({"value": [_backup_view(rec["id"], b) for b in items]})
+        if method == "POST":
+            return _ok(_backup_view(rec["id"], _new_backup(rec)), 200)
+        return _err(405, "MethodNotAllowed", "Collection supports GET/POST only.")
+    bid, tail = rest[0], rest[1:]
+    b = backups.get(bid)
+    if b is None:
+        raise _E(404, "NotFound", f"Backup '{bid}' was not found.")
+    if not tail:
+        if method == "GET":
+            return _ok(_backup_view(rec["id"], b))
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+    if len(tail) == 1 and tail[0].lower() == "restore" and method == "POST":
+        return _ok({"status": "Succeeded"}, 200)
+    return _err(404, "ResourceTypeNotSupported", f"backups/{'/'.join(rest)} is not supported.")
 
 
 # ── function apps: functions, host keys, invoke ────────────────────────────────

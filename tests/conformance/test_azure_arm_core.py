@@ -41,6 +41,10 @@ def _p(rg, ns, typ, name):
     return f"/subscriptions/{SUB}/resourceGroups/{rg}/providers/{ns}/{typ}/{name}"
 
 
+def _rgpath(rg):
+    return f"/subscriptions/{SUB}/resourceGroups/{rg}"
+
+
 def run() -> int:
     arm = AzureArm()
 
@@ -164,6 +168,68 @@ def run() -> int:
     r = arm.handle("GET", pol, {"api-version": "2023-05-01-preview"})
     _check("apim saved policy persists", r["body"]["properties"]["value"] == "<policies><inbound /></policies>")
 
+    # 17a. APIM API Tags (Microsoft.ApiManagement/service/tags) — generic nested ARM
+    # sub-resource, the SAME mechanism as named values/backends (AzureArm._upsert): no
+    # service-specific backend code, just the type/name alternation one level deeper.
+    tag = apim + "/tags/env-prod"
+    r = arm.handle("PUT", tag, {"api-version": "2023-05-01-preview"}, {"properties": {"displayName": "env-prod"}})
+    _check("apim tag put 201", r["status"] == 201 and r["body"]["name"] == "env-prod")
+    r = arm.handle("GET", apim + "/tags", {"api-version": "2023-05-01-preview"})
+    _check("apim tags list has it", [t["name"] for t in r["body"]["value"]] == ["env-prod"])
+    r = arm.handle("DELETE", tag, {"api-version": "2023-05-01-preview"})
+    _check("apim tag delete 200", r["status"] == 200)
+
+    # 17b. APIM Policy fragments (Microsoft.ApiManagement/service/policyFragments) — same
+    # generic nested mechanism; the XML round-trips exactly as configured (never executed).
+    frag = apim + "/policyFragments/rate-limit"
+    r = arm.handle("PUT", frag, {"api-version": "2023-05-01-preview"},
+                   {"properties": {"format": "xml",
+                                    "value": "<fragment><rate-limit calls=\"10\" renewal-period=\"60\" /></fragment>",
+                                    "description": "Shared rate limit"}})
+    _check("apim policy fragment put 201", r["status"] == 201 and r["body"]["properties"]["description"] == "Shared rate limit")
+    r = arm.handle("GET", apim + "/policyFragments", {"api-version": "2023-05-01-preview"})
+    _check("apim policy fragments list has it", [f["name"] for f in r["body"]["value"]] == ["rate-limit"])
+    r = arm.handle("DELETE", frag, {"api-version": "2023-05-01-preview"})
+    _check("apim policy fragment delete 200", r["status"] == 200)
+
+    # 17c. Scale out and up / Pricing tier (post-creation): sku.capacity and sku.name PATCH
+    # generically (any catalog resource type), reflected back on GET — real for APIM's
+    # Overview "Tier" field and every other blade that reads a.sku.
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"capacity": 3}})
+    _check("apim scale-out patch", r["status"] == 200 and r["body"]["sku"]["capacity"] == 3)
+    r = arm.handle("PATCH", apim, {"api-version": "2023-05-01-preview"}, {"sku": {"name": "Premium"}})
+    _check("apim pricing tier patch keeps capacity",
+           r["body"]["sku"]["name"] == "Premium" and r["body"]["sku"]["capacity"] == 3)
+
+    # 17d. Activity log Timespan picker: eventTimestamp ge/le $filter predicates actually
+    # narrow the feed (core/azure_arm_core._filter_by_timespan + azure_monitor_core's own copy).
+    feed = f"/subscriptions/{SUB}/providers/Microsoft.Insights/eventtypes/management/values"
+    r = arm.handle("GET", feed, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{apim}'"})
+    all_ts = [e["eventTimestamp"] for e in r["body"]["value"]]
+    _check("apim activity log has entries before timespan filter", len(all_ts) >= 3)
+    future = "2999-01-01T00:00:00.000000Z"
+    r = arm.handle("GET", feed, {"api-version": "2015-04-01",
+                                  "$filter": f"resourceUri eq '{apim}' and eventTimestamp ge '{future}'"})
+    _check("timespan ge in the future excludes everything", r["body"]["value"] == [])
+    past = "1999-01-01T00:00:00.000000Z"
+    r = arm.handle("GET", feed, {"api-version": "2015-04-01",
+                                  "$filter": f"resourceUri eq '{apim}' and eventTimestamp ge '{past}'"})
+    _check("timespan ge in the past keeps everything", [e["eventTimestamp"] for e in r["body"]["value"]] == all_ts)
+
+    # 17e. Microsoft.Authorization/roleAssignments + roleDefinitions — generic top-level
+    # catalog types (subscription-wide), backing every Azure lens service's "Access control
+    # (IAM)" Role assignments/Roles tabs (core/azure_arm_data.py CATALOG keys 'rbac'/'role_definition').
+    ra = f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleAssignments/11111111-1111-1111-1111-111111111111"
+    r = arm.handle("PUT", ra, {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "user-1", "roleDefinitionId": "owner", "principalType": "User"}})
+    _check("role assignment put 201", r["status"] == 201 and r["body"]["properties"]["principalId"] == "user-1")
+    r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    _check("role assignments list has it", any(a["name"] == "11111111-1111-1111-1111-111111111111" for a in r["body"]["value"]))
+    rd = f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleDefinitions/owner"
+    arm.handle("PUT", rd, {"api-version": "2022-04-01"}, {"properties": {"roleName": "Owner", "type": "BuiltInRole"}})
+    r = arm.handle("GET", f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleDefinitions", {"api-version": "2022-04-01"})
+    _check("role definitions list has it", any(d["name"] == "owner" for d in r["body"]["value"]))
+
     # 18. Generic top-level "identity" block merges like tags/sku (any catalog resource type).
     topic = _p(RG, "Microsoft.EventGrid", "topics", "eg-identity")
     r = arm.handle("PUT", topic, {"api-version": "2024-06-01-preview"}, {"location": "eastus",
@@ -201,10 +267,19 @@ def run() -> int:
     ev = arm.handle("GET", events_path, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{kv}'"})
     ops = [e["operationName"]["value"] for e in ev["body"]["value"]]
     _check("activity log records the vault create + the lock create, newest first",
-           ev["status"] == 200 and ops[0] == "Create lock" and "Create" in ops)
+           ev["status"] == 200 and ops[0] == "Create lock" and "Microsoft.KeyVault/vaults/write" in ops)
     ev2 = arm.handle("GET", events_path, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{kv2}'"})
     ops2 = [e["operationName"]["value"] for e in ev2["body"]["value"]]
     _check("activity log is scoped per vault (no cross-resource leakage)", "Create lock" not in ops2)
+
+    # the timespan picker (eventTimestamp ge) is ENFORCED: a future lower bound excludes
+    # every event the two writes above just produced, a past one keeps them all.
+    ev_future = arm.handle("GET", events_path, {"api-version": "2015-04-01",
+                           "$filter": f"resourceUri eq '{kv}' and eventTimestamp ge '2999-01-01T00:00:00Z'"})
+    _check("timespan filter excludes events before the lower bound", ev_future["body"]["value"] == [])
+    ev_past = arm.handle("GET", events_path, {"api-version": "2015-04-01",
+                         "$filter": f"resourceUri eq '{kv}' and eventTimestamp ge '2000-01-01T00:00:00Z'"})
+    _check("timespan filter keeps events after the lower bound", len(ev_past["body"]["value"]) == len(ev["body"]["value"]))
 
     r = arm.handle("DELETE", lock, {"api-version": "2020-05-01"})
     _check("lock delete 200", r["status"] == 200)
@@ -277,9 +352,11 @@ def run() -> int:
     r = arm.handle("GET", rg_lock2, {"api-version": "2020-05-01"})
     _check("resource-group-scoped lock cascades away when the group itself is deleted", r["status"] == 404)
 
-    # 26. Microsoft.Resources/deployments: a generic catalog resource (no template evaluation,
-    # see azure_arm_data.py) — enough to back a real "Deployments" history list + "View
-    # template" honestly. PUT is an LRO like any other top-level type.
+    # 26. Microsoft.Resources/deployments: a bounded but REAL template evaluator — every
+    # resource in properties.template.resources is actually PUT through this ARM dispatcher
+    # (literal [parameters('x')]/[variables('y')] substitution only), not just stored inert.
+    # Enough to back a real "Deployments" history list + "View template" honestly. PUT is an
+    # LRO like any other top-level type.
     dep = _p(RG, "Microsoft.Resources", "deployments", "uic-deployment")
     r = arm.handle("PUT", dep, {"api-version": "2021-04-01"},
                    {"properties": {"mode": "Incremental", "template": {"resources": []}, "timestamp": "2026-01-01T00:00:00Z"}})
@@ -292,6 +369,34 @@ def run() -> int:
     _check("deployment collection lists it", any(x["name"] == "uic-deployment" for x in r["body"]["value"]))
     r = arm.handle("DELETE", dep, {"api-version": "2021-04-01"})
     _check("deployment delete 200", r["status"] == 200)
+
+    tpl_dep = _p(RG, "Microsoft.Resources", "deployments", "uic-tpl-deployment")
+    template = {"parameters": {"saName": {"defaultValue": "uictplsa"}}, "variables": {"loc": "eastus"},
+               "resources": [{"type": "Microsoft.Storage/storageAccounts", "apiVersion": "2023-01-01",
+                              "name": "[parameters('saName')]", "location": "[variables('loc')]"}]}
+    r = arm.handle("PUT", tpl_dep, {"api-version": "2021-04-01"}, {"properties": {"mode": "Incremental", "template": template}})
+    _check("deployment with a template put 200", r["status"] == 200)
+    _check("deployment template evaluation actually provisions the listed resource",
+           r["body"]["properties"]["provisioningState"] == "Succeeded"
+           and r["body"]["properties"]["outputResources"][0]["resourceName"] == "uictplsa")
+    sa_from_tpl = _p(RG, "Microsoft.Storage", "storageAccounts", "uictplsa")
+    r = arm.handle("GET", sa_from_tpl, {"api-version": "2023-01-01"})
+    _check("the deployment's template resource is a real resource, GET-able on its own",
+           r["status"] == 200 and r["body"]["location"] == "eastus")
+
+    bad_tpl_dep = _p(RG, "Microsoft.Resources", "deployments", "uic-bad-tpl-deployment")
+    bad_template = {"resources": [{"type": "Microsoft.NotReal/widgets", "apiVersion": "2021-01-01", "name": "w1"}]}
+    r = arm.handle("PUT", bad_tpl_dep, {"api-version": "2021-04-01"}, {"properties": {"mode": "Incremental", "template": bad_template}})
+    _check("a template resource of an unsimulated type honestly fails the deployment",
+           r["body"]["properties"]["provisioningState"] == "Failed" and r["body"]["properties"]["error"]["details"])
+
+    cancel_url = tpl_dep + "/cancel"
+    r = arm.handle("POST", cancel_url, {"api-version": "2021-04-01"}, {})
+    _check("Cancel on an already-completed deployment is an honest 409 (every deployment here completes synchronously)",
+           r["status"] == 409 and r["body"]["error"]["code"] == "DeploymentNotCancellable")
+    redeploy_url = tpl_dep + "/redeploy"
+    r = arm.handle("POST", redeploy_url, {"api-version": "2021-04-01"}, {})
+    _check("Redeploy re-runs the stored template for real", r["status"] == 200 and r["body"]["properties"]["provisioningState"] == "Succeeded")
     # 21. Microsoft.ContainerRegistry/registries — generic catalog CRUD + the admin-credentials
     # POST actions (az acr credential show / renew) + nested child resources (webhooks).
     AV_ACR = "2023-07-01"
@@ -613,6 +718,165 @@ def run() -> int:
     # (a lock on a KeyVault vault — a different resource type — stays config_only, not
     # enforced: proven above at "locks cascade-deleted with resource", where DELETE
     # succeeded on `kv` despite its ReadOnly lock.)
+
+    # Microsoft.DocumentDB/databaseAccounts: azure.cosmos.default_consistency /
+    # backup_restore / replicate_data_globally are ENFORCED at the ARM contract level.
+    cosmos_path = _p(RG, "Microsoft.DocumentDB", "databaseAccounts", "cosmosarmtest")
+    r = arm.handle("PUT", cosmos_path, {"api-version": "2024-05-15"}, {
+        "location": "eastus", "kind": "GlobalDocumentDB",
+        "properties": {
+            "databaseAccountOfferType": "Standard",
+            "consistencyPolicy": {"defaultConsistencyLevel": "Session"},
+            "locations": [{"locationName": "eastus", "failoverPriority": 0, "isZoneRedundant": False}],
+            "backupPolicy": {"type": "Periodic", "periodicModeProperties": {
+                "backupIntervalInMinutes": 240, "backupRetentionIntervalInHours": 8, "backupStorageRedundancy": "Geo"}},
+        },
+    })
+    _check("cosmos account create 200 (LRO)", r["status"] == 200 and "Azure-AsyncOperation" in r["headers"])
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"},
+                   {"properties": {"consistencyPolicy": {"defaultConsistencyLevel": "BoundedStaleness"}}})
+    _check("BoundedStaleness without staleness fields rejected", r["status"] == 400)
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"}, {"properties": {
+        "consistencyPolicy": {"defaultConsistencyLevel": "BoundedStaleness", "maxStalenessPrefix": 5, "maxIntervalInSeconds": 300}}})
+    _check("BoundedStaleness out-of-range prefix rejected", r["status"] == 400)
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"}, {"properties": {
+        "consistencyPolicy": {"defaultConsistencyLevel": "BoundedStaleness", "maxStalenessPrefix": 100000, "maxIntervalInSeconds": 300}}})
+    _check("BoundedStaleness with valid fields accepted", r["status"] == 200)
+    _check("BoundedStaleness round-trips",
+           r["body"]["properties"]["consistencyPolicy"]["maxStalenessPrefix"] == 100000)
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"},
+                   {"properties": {"backupPolicy": {"type": "Continuous", "continuousModeProperties": {"tier": "Continuous30Days"}}}})
+    _check("Periodic -> Continuous backup migration accepted", r["status"] == 200)
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"},
+                   {"properties": {"backupPolicy": {"type": "Periodic"}}})
+    _check("Continuous -> Periodic backup migration rejected", r["status"] == 400)
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"},
+                   {"properties": {"locations": [
+                       {"locationName": "eastus", "failoverPriority": 0},
+                       {"locationName": "westus", "failoverPriority": 2},
+                   ]}})
+    _check("locations with a failoverPriority gap rejected", r["status"] == 400)
+
+    r = arm.handle("PATCH", cosmos_path, {"api-version": "2024-05-15"},
+                   {"properties": {"locations": [
+                       {"locationName": "eastus", "failoverPriority": 0, "isZoneRedundant": False},
+                       {"locationName": "westus", "failoverPriority": 1, "isZoneRedundant": False},
+                   ]}})
+    _check("adding a second region accepted", r["status"] == 200)
+
+    r = arm.handle("POST", cosmos_path + "/failoverPriorityChange", {"api-version": "2024-05-15"},
+                   {"failoverPolicies": [{"locationName": "eastus", "failoverPriority": 1},
+                                        {"locationName": "westus", "failoverPriority": 0}]})
+    _check("manual failover accepted", r["status"] == 202)
+    r = arm.handle("GET", cosmos_path, {"api-version": "2024-05-15"})
+    _check("failover promotes westus to priority 0",
+           next(l["failoverPriority"] for l in r["body"]["properties"]["locations"] if l["locationName"] == "westus") == 0)
+    _check("failover demotes eastus", r["body"]["location"] == "westus")
+
+    r = arm.handle("POST", cosmos_path + "/failoverPriorityChange", {"api-version": "2024-05-15"},
+                   {"failoverPolicies": [{"locationName": "eastus", "failoverPriority": 0}]})
+    _check("failover missing a configured region rejected", r["status"] == 400)
+
+    # azure.cosmos.iam: Microsoft.Authorization/roleAssignments read scoped to the account
+    # (plus its subscription/resource-group ancestors — real Azure's inherited access).
+    ra_path = f"/subscriptions/{SUB}/providers/Microsoft.Authorization/roleAssignments"
+    r = arm.handle("PUT", ra_path + "/ra-cosmos-scoped", {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "11111111-1111-1111-1111-111111111111",
+                                   "roleDefinitionId": "owner", "scope": cosmos_path}})
+    _check("role assignment scoped to the cosmos account created", r["status"] == 201)
+    r = arm.handle("PUT", ra_path + "/ra-sub-scoped", {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "22222222-2222-2222-2222-222222222222",
+                                   "roleDefinitionId": "reader", "scope": f"/subscriptions/{SUB}"}})
+    _check("role assignment scoped to the subscription created", r["status"] == 201)
+    other_rid = _p(RG, "Microsoft.Storage", "storageAccounts", "unrelatedforiam")
+    arm.handle("PUT", other_rid, {"api-version": AV}, {"location": "eastus"})
+    r = arm.handle("PUT", ra_path + "/ra-other-scoped", {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "33333333-3333-3333-3333-333333333333",
+                                   "roleDefinitionId": "contributor", "scope": other_rid}})
+    _check("role assignment scoped to an unrelated resource created", r["status"] == 201)
+
+    r = arm.handle("GET", cosmos_path + "/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    names = {x["name"] for x in r["body"]["value"]}
+    _check("account-scoped IAM list includes the account-scoped assignment", "ra-cosmos-scoped" in names)
+    _check("account-scoped IAM list includes the inherited subscription-scoped assignment", "ra-sub-scoped" in names)
+    _check("account-scoped IAM list excludes an unrelated resource's assignment", "ra-other-scoped" not in names)
+    # 28. A resource group's own Activity log (queried with the RG's own resourceUri, like
+    # the resource group blade does) aggregates every resource's lifecycle event inside it —
+    # not just the group's own create/update/delete — because every generic-catalog mutation
+    # now also lands a resourceGroupName-tagged eventtypes row (azure.resourcegroups.activity_log).
+    rg3 = "activity-rg"
+    arm.handle("PUT", _rgpath(rg3), {"api-version": "2021-04-01"}, {})
+    sa3 = _p(rg3, "Microsoft.Storage", "storageAccounts", "activitysa")
+    arm.handle("PUT", sa3, {"api-version": "2023-01-01"}, {"location": "eastus"})
+    arm.handle("DELETE", sa3, {"api-version": "2023-01-01"})
+    rg_events_url = f"/subscriptions/{SUB}/providers/Microsoft.Insights/eventtypes/management/values"
+    r = arm.handle("GET", rg_events_url, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{_rgpath(rg3)}'"})
+    rg_ops = [e["operationName"]["value"] for e in r["body"]["value"]]
+    _check("resource group activity log includes the RG's own create",
+           "Microsoft.Resources/resourceGroups/write" in rg_ops)
+    _check("resource group activity log aggregates a resource's create inside it",
+           "Microsoft.Storage/storageAccounts/write" in rg_ops)
+    _check("resource group activity log aggregates a resource's delete inside it",
+           "Microsoft.Storage/storageAccounts/delete" in rg_ops)
+    rg4 = "activity-rg-2"
+    arm.handle("PUT", _rgpath(rg4), {"api-version": "2021-04-01"}, {})
+    r = arm.handle("GET", rg_events_url, {"api-version": "2015-04-01", "$filter": f"resourceUri eq '{_rgpath(rg4)}'"})
+    rg4_ops = [e["operationName"]["value"] for e in r["body"]["value"]]
+    _check("activity log aggregation is scoped per resource group (no cross-group leakage)",
+           "Microsoft.Storage/storageAccounts/write" not in rg4_ops)
+    r = arm.handle("GET", f"/subscriptions/{SUB}/resources", {"api-version": "2021-04-01"})
+    _check("activity log eventtypes rows never leak into the generic resources list",
+           not any(x.get("type", "").lower() == "microsoft.insights/eventtypes" for x in r["body"]["value"]))
+
+    # 29. Access control (IAM): role assignments are real ARM resources scoped to the resource
+    # group they were PUT under (not a flat subscription-wide catalog), the Roles tab lists the
+    # built-in roles (never provisioned as catalog records) alongside any custom ones, and
+    # checkAccess evaluates a genuine decision (wildcard + scope-inheritance + notActions +
+    # explicit-deny) over exactly those assignments (azure.resourcegroups.access_control_iam).
+    iamrg1, iamrg2 = "iam-rg-1", "iam-rg-2"
+    arm.handle("PUT", _rgpath(iamrg1), {"api-version": "2021-04-01"}, {})
+    arm.handle("PUT", _rgpath(iamrg2), {"api-version": "2021-04-01"}, {})
+    roledefs_url = lambda rg: f"{_rgpath(rg)}/providers/Microsoft.Authorization/roleDefinitions"
+    r = arm.handle("GET", roledefs_url(iamrg1), {"api-version": "2022-04-01"})
+    roledef_names = {x["name"] for x in r["body"]["value"]}
+    _check("Roles tab lists the built-in roles with no custom roles ever created",
+           {"Owner", "Contributor", "Reader"} <= roledef_names)
+    ra1 = f"{_rgpath(iamrg1)}/providers/Microsoft.Authorization/roleAssignments/ra1"
+    r = arm.handle("PUT", ra1, {"api-version": "2022-04-01"},
+                   {"properties": {"principalId": "alice", "roleName": "Reader"}})
+    _check("role assignment put 201 scoped to the resource group it was created under",
+           r["status"] == 201 and r["body"]["properties"]["scope"] == _rgpath(iamrg1))
+    ra2 = f"{_rgpath(iamrg1)}/providers/Microsoft.Authorization/roleAssignments/ra2"
+    arm.handle("PUT", ra2, {"api-version": "2022-04-01"},
+               {"properties": {"principalId": "bob", "roleName": "Contributor"}})
+    r = arm.handle("GET", f"{_rgpath(iamrg1)}/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    _check("role assignments list scoped to the group that owns them", {x["name"] for x in r["body"]["value"]} == {"ra1", "ra2"})
+    r = arm.handle("GET", f"{_rgpath(iamrg2)}/providers/Microsoft.Authorization/roleAssignments", {"api-version": "2022-04-01"})
+    _check("a sibling resource group's role assignments never leak in", r["body"]["value"] == [])
+
+    def _decision(rg, principal, action):
+        resp = arm.handle("POST", f"{_rgpath(rg)}/providers/Microsoft.Authorization/checkAccess",
+                          {"api-version": "2022-04-01"}, {"principalId": principal, "action": action})
+        return resp["body"]["value"][0]["accessDecision"]
+
+    _check("checkAccess: Reader can read in its own resource group",
+           _decision(iamrg1, "alice", "Microsoft.Storage/storageAccounts/read") == "Allowed")
+    _check("checkAccess: Reader cannot write",
+           _decision(iamrg1, "alice", "Microsoft.Storage/storageAccounts/write") == "NotAllowed")
+    _check("checkAccess: Contributor can write",
+           _decision(iamrg1, "bob", "Microsoft.Storage/storageAccounts/write") == "Allowed")
+    _check("checkAccess: scope isolation — Reader has no access in a sibling resource group",
+           _decision(iamrg2, "alice", "Microsoft.Storage/storageAccounts/read") == "NotAllowed")
+    r = arm.handle("DELETE", ra1, {"api-version": "2022-04-01"})
+    _check("role assignment delete 200", r["status"] == 200)
+    _check("checkAccess reflects the deleted assignment immediately",
+           _decision(iamrg1, "alice", "Microsoft.Storage/storageAccounts/read") == "NotAllowed")
 
     print("\nRESULT: PASS — Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate.")
     return 0

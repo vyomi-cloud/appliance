@@ -134,23 +134,46 @@
     ]
   },
   "azure.cost.cost_allocation": {
-    "title": "Cost allocation (tag-based cost splitting rules)",
+    "title": "Cost allocation (resource-group cost splitting rules)",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Cost allocation rules are not modelled; cost by resource/service/location is still available from Cost analysis."
+      "Rules split cost by resource group only — real Cost allocation can also key off tags; that finer dimension isn't modelled.",
+      "Only \"Fixed\" (explicit percentage) rules are modelled; there is no \"Proportional\"/\"Even split by percentage\" allocation type."
+    ],
+    "api": [
+      "CostAllocationRule.CreateOrUpdate",
+      "CostAllocationRule.Get",
+      "CostAllocationRule.List",
+      "CostAllocationRule.Delete",
+      "CostManagement.Query"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cost_core.py"
     ]
   },
   "azure.cost.reservations_hybrid_benefit": {
-    "title": "Reservations + Hybrid Benefit (purchase a commitment)",
+    "title": "Reservations + Hybrid Benefit (purchase a commitment, real utilization, license discount)",
     "level": {
-      "nano": "not_simulated",
-      "offline": "not_simulated"
+      "nano": "limited",
+      "offline": "limited"
     },
     "limitations": [
-      "Purchasing a real financial commitment against a payment method is out of scope for a simulator."
+      "The \"Purchase\" checkout (payment method, term pricing calculator) is not modelled; a reservation order is created directly with a VM size and quantity instead.",
+      "Utilization compares the reserved VM size/quantity to real compute spend of the same size only — Azure's own usage-pattern heuristics are not reproduced.",
+      "Azure Hybrid Benefit is modelled as a flat ~20% discount on a VM's list price when its licenseType is set to Windows Server — real Azure's per-SKU license-cost breakdown isn't reproduced."
+    ],
+    "api": [
+      "ReservationOrder.CreateOrUpdate",
+      "ReservationOrder.Get",
+      "ReservationOrder.List",
+      "ReservationOrder.Delete",
+      "VirtualMachines.Update"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_cost_core.py"
     ]
   },
   "azure.cost.savings_plans": {

@@ -68,6 +68,10 @@ export const REGIONS = [
 ];
 export const locationTypeLabel = (location) => (MULTI_REGIONS.includes(location) ? "Multi-region" : "Region");
 export const encryptionLabel = (repo) => (repo.kmsKeyName ? "Customer-managed" : "Google-managed");
+// Cleanup policy conditions carry durations as protobuf Duration strings ("2592000s");
+// the console asks for whole days.
+export const daysToDuration = (days) => `${Math.round(Number(days) * 86400)}s`;
+export const durationToDays = (dur) => (dur ? Math.round(parseInt(dur, 10) / 86400) : null);
 export const sizeHuman = (bytes) => {
   let n = Number(bytes || 0);
   const u = ["B", "KB", "MB", "GB", "TB"];

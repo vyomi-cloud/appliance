@@ -15,7 +15,7 @@ import MoreVertIcon from "@mui/icons-material/esm/MoreVert.js";
 import { useAsync } from "../../../../common/useAsync.js";
 import { useNotify } from "../../../../common/notify.jsx";
 import ResourceTable from "../../../kit/ResourceTable.jsx";
-import { CapabilityContainer } from "../../../kit/Capability.jsx";
+import { CapabilityBadge, CapabilityContainer } from "../../../kit/Capability.jsx";
 import { ErrorAlert, fmtDate, KeyValue, PageHeader, Section } from "../../../kit/common.jsx";
 import { Link, hashHref } from "../../../link.jsx";
 import * as api from "./api.js";
@@ -88,14 +88,14 @@ function Versions({ loc, keyRing, k, keyData, reloadKey }) {
   };
 
   return (
-    <>
-      <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
+    <CapabilityContainer id="gcp.kms.key.versions" title="Versions"
+      actions={<>
         <Button startIcon={<AddIcon />} onClick={() => run(() => api.createVersion(loc, keyRing, k), "Created a new version")}>Create new version</Button>
         <Button disabled={!sel.length} onClick={() => bulk("Disable")}>Disable</Button>
         <Button disabled={!sel.length} onClick={() => bulk("Enable")}>Enable</Button>
         <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={() => bulk("Destroy")}>Destroy</Button>
         <Button disabled={!sel.length} onClick={() => bulk("Restore")}>Restore</Button>
-      </Stack>
+      </>}>
       <ResourceTable
         resourceName="versions"
         items={vers.data || []}
@@ -126,7 +126,7 @@ function Versions({ loc, keyRing, k, keyData, reloadKey }) {
         <MenuItem disabled={!["ENABLED", "DISABLED"].includes(menu?.v.state)}
           onClick={() => { const id = ver(menu.v); setMenu(null); run(() => api.destroyVersion(loc, keyRing, k, id), `Scheduled version ${id} for destruction`); }}>Destroy</MenuItem>
       </Menu>
-    </>
+    </CapabilityContainer>
   );
 }
 
@@ -143,7 +143,10 @@ function Overview({ loc, keyRing, k, keyData, reload }) {
           ["Protection level", "Software"],
           ["Primary version", api.parseVersionId(keyData.primary?.name)],
           ["Rotation period", api.rotationLabel(keyData.rotationPeriod),
-            <IconButton key="e" size="small" aria-label="Edit rotation period" onClick={() => setEditRot(true)}><EditIcon fontSize="inherit" /></IconButton>],
+            <Stack key="e" direction="row" spacing={0.5} alignItems="center">
+              <CapabilityBadge id="gcp.kms.key.rotation" />
+              <IconButton size="small" aria-label="Edit rotation period" onClick={() => setEditRot(true)}><EditIcon fontSize="inherit" /></IconButton>
+            </Stack>],
           ["Next rotation", fmtDate(keyData.nextRotationTime)],
           ["Labels", ls.length ? <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>{ls.map(([k2, v]) => <Chip key={k2} size="small" label={`${k2}: ${v}`} />)}</Stack> : "None",
             <IconButton key="e" size="small" aria-label="Edit labels" onClick={() => setEditLabels(true)}><EditIcon fontSize="inherit" /></IconButton>],

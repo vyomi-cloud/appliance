@@ -34,16 +34,19 @@ export default {
     await wire("PUT", base("uicfn", `/host/default/functionkeys/${name}`) + q, { svc: null, body: {} });
     return name;
   },
+  // CanNotDelete, not ReadOnly — these locks are never removed (each run adds another one with
+  // a fresh unique name), and uicfn is the one shared site every other page's fixture re-PUTs;
+  // a ReadOnly lock would permanently block those writes now that locks are enforced.
   "lock": async (wire, uniq = "uic") => {
     await ensureSite(wire, "uicfn");
     const name = `uiclock${uniq}`;
-    await wire("PUT", base("uicfn", `/locks/${name}`) + q, { svc: null, body: { properties: { level: "ReadOnly", notes: "uic" } } });
+    await wire("PUT", base("uicfn", `/locks/${name}`) + q, { svc: null, body: { properties: { level: "CanNotDelete", notes: "uic" } } });
     return name;
   },
   "activity": async (wire, uniq = "uic") => {
     await ensureSite(wire, "uicfn");
     const name = `uicact${uniq}`;
-    await wire("PUT", base("uicfn", `/locks/${name}`) + q, { svc: null, body: { properties: { level: "ReadOnly", notes: "uic" } } });
+    await wire("PUT", base("uicfn", `/locks/${name}`) + q, { svc: null, body: { properties: { level: "CanNotDelete", notes: "uic" } } });
     return name;
   },
 };

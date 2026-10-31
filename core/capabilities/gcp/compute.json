@@ -7,7 +7,7 @@
   "api": ["instances.insert", "instances.get", "instances.list", "instances.aggregatedList", "instances.delete",
           "instances.start", "instances.stop", "instances.suspend", "instances.resume", "instances.reset",
           "instances.setLabels", "instances.setMetadata", "instances.setMachineType"],
-  "tests": ["tests/conformance/test_gcp_compute_core.py"]
+  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.instances.data_plane": {
   "title": "Guest OS access (SSH, serial console, screenshot, OS info)",
@@ -20,64 +20,66 @@
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
   "api": ["disks.insert", "disks.get", "disks.list", "disks.aggregatedList", "disks.delete", "disks.createSnapshot"],
-  "tests": ["tests/conformance/test_gcp_compute_core.py"]
+  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.snapshots.crud": {
   "title": "Snapshots",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
   "api": ["snapshots.get", "snapshots.list", "snapshots.delete"],
-  "tests": ["tests/conformance/test_gcp_compute_core.py"]
+  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.images.crud": {
   "title": "Custom images",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
   "api": ["images.insert", "images.get", "images.list", "images.delete"],
-  "tests": ["tests/conformance/test_gcp_compute_core.py"]
+  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.machine_images.crud": {
   "title": "Machine images",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
   "api": ["machineImages.insert", "machineImages.get", "machineImages.list", "machineImages.delete"],
-  "tests": ["tests/conformance/test_gcp_compute_core.py"]
+  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.instance_templates.crud": {
   "title": "Instance templates",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
   "api": ["instanceTemplates.insert", "instanceTemplates.get", "instanceTemplates.list", "instanceTemplates.delete"],
-  "tests": ["tests/conformance/test_gcp_compute_core.py"]
+  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.instance_groups.crud": {
-  "title": "Instance groups",
+  "title": "Instance groups (unmanaged and managed)",
   "level": { "nano": "limited", "offline": "limited" },
-  "limitations": ["Only unmanaged instance groups are modeled; managed instance group templates, autoscaling and rolling updates aren't simulated."],
+  "limitations": ["Managed instance groups support a fixed target size stamped out of an instance template (resize really creates/deletes member instances); autoscaling policies and rolling-update (max-surge/max-unavailable) orchestration aren't simulated."],
   "api": ["instanceGroups.insert", "instanceGroups.get", "instanceGroups.list", "instanceGroups.aggregatedList",
-          "instanceGroups.delete", "instanceGroups.addInstances", "instanceGroups.removeInstances", "instanceGroups.listInstances"],
-  "tests": ["tests/conformance/test_gcp_compute_core.py"]
+          "instanceGroups.delete", "instanceGroups.addInstances", "instanceGroups.removeInstances", "instanceGroups.listInstances",
+          "instanceGroupManagers.insert", "instanceGroupManagers.get", "instanceGroupManagers.list", "instanceGroupManagers.aggregatedList",
+          "instanceGroupManagers.delete", "instanceGroupManagers.resize", "instanceGroupManagers.listManagedInstances"],
+  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.health_checks.crud": {
   "title": "Health checks",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
   "api": ["healthChecks.insert", "healthChecks.get", "healthChecks.list", "healthChecks.delete"],
-  "tests": ["tests/conformance/test_gcp_compute_core.py"]
+  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.metadata": {
   "title": "Project metadata (custom metadata, SSH keys)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
   "api": ["projects.get", "projects.setCommonInstanceMetadata"],
-  "tests": ["tests/conformance/test_gcp_compute_core.py"]
+  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.operations": {
   "title": "Operations",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [],
   "api": ["zoneOperations.list", "globalOperations.list", "globalOperations.aggregatedList"],
-  "tests": ["tests/conformance/test_gcp_compute_core.py"]
+  "tests": ["tests/conformance/test_gcp_compute_instances_core.py"]
  },
  "gcp.compute.observability": {
   "title": "Observability, recommendations and VM Manager",

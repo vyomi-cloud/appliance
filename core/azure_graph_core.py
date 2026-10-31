@@ -38,7 +38,9 @@ check runs, so it can never collide with ARM / Blob / Cosmos / Key Vault paths.
   GET               /v1.0/auditLogs/signIns                        honestly empty (no sign-in flow)
 
 Errors: Graph-shaped JSON {"error": {"code": ..., "message": ...}} with the matching HTTP
-status (400 Request_BadRequest, 404 Request_ResourceNotFound, 409 Request_Conflict).
+status (400 Request_BadRequest, 403 Authorization_RequestDenied, 404 Request_ResourceNotFound,
+409 Request_Conflict). 403 is raised for security-group / application creation when the
+matching "User settings" toggle (directory_settings) disables it.
 """
 from __future__ import annotations
 
@@ -106,8 +108,14 @@ class GraphStore:
             "privacyProfile": {"contactEmail": "", "statementUrl": ""},
             "createdDateTime": _now(),
         }
-        # User settings (Default Directory | User settings) — stored and returned exactly
-        # as set (azure.entra.directory_settings is config_only: Vyomi never enforces them).
+        # User settings (Default Directory | User settings). usersCanCreateSecurityGroups
+        # and usersCanRegisterApplications are ENFORCED (azure.entra.directory_settings:
+        # limited) — see _create_group / _create_application. The real console only applies
+        # them to non-admin members; Vyomi has no signed-in-identity model to tell members
+        # from admins apart, so the toggle gates every caller tenant-wide. The remaining
+        # toggles (guest access, tenant creation, admin-center access, LinkedIn, keep-signed-
+        # in) are stored and returned exactly as set but have no subsystem to enforce them
+        # against.
         self.directory_settings: dict = {
             "usersCanRegisterApplications": True,
             "usersCanRegisterAgentIdentityBlueprints": True,
@@ -218,19 +226,24 @@ def _create_group(store: GraphStore, body: dict) -> Response:
     name = body.get("displayName")
     if not name:
         return _err(400, "Request_BadRequest", "displayName is required.")
-    gid = _guid()
     unified = "Unified" in (body.get("groupTypes") or [])
+    if not unified and not store.directory_settings.get("usersCanCreateSecurityGroups", True):
+        return _err(403, "Authorization_RequestDenied",
+                     "Insufficient privileges to complete the operation. "
+                     "Security group creation is disabled by the 'Users can create security groups' tenant setting.")
+    gid = _guid()
+    mail_nickname = body.get("mailNickname") or re.sub(r"[^a-zA-Z0-9-]", "", name).lower() or gid[:8]
     group = {
         "id": gid,
         "displayName": name,
         "description": body.get("description"),
-        "mailNickname": body.get("mailNickname") or re.sub(r"[^a-zA-Z0-9-]", "", name).lower() or gid[:8],
+        "mailNickname": mail_nickname,
         "mailEnabled": bool(body.get("mailEnabled", unified)),
         "securityEnabled": bool(body.get("securityEnabled", not unified)),
         "groupTypes": body.get("groupTypes") or [],
         "isAssignableToRole": body.get("isAssignableToRole", False),
         "membershipType": "Dynamic" if body.get("membershipRule") else "Assigned",
-        "mail": (body.get("mailNickname") + "@" + DEFAULT_DOMAIN) if unified else None,
+        "mail": (mail_nickname + "@" + DEFAULT_DOMAIN) if unified else None,
         "onPremisesSyncEnabled": None,
         "createdDateTime": _now(),
     }
@@ -300,6 +313,10 @@ def _create_application(store: GraphStore, body: dict) -> Response:
     name = body.get("displayName")
     if not name:
         return _err(400, "Request_BadRequest", "displayName is required.")
+    if not store.directory_settings.get("usersCanRegisterApplications", True):
+        return _err(403, "Authorization_RequestDenied",
+                     "Insufficient privileges to complete the operation. "
+                     "Application registration is disabled by the 'Users can register applications' tenant setting.")
     oid, app_id, tenant = _guid(), _guid(), DEFAULT_TENANT_ID
     app = {
         "id": oid,

@@ -9,7 +9,8 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
-import { ErrorAlert, fmtDate, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
+import { ErrorAlert, fmtDate, KeyValue, NotSimulated, PageHeader, Section } from "../../kit/common.jsx";
+import { capability } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
 export default function BucketDetail({ params, query }) {
@@ -18,15 +19,19 @@ export default function BucketDetail({ params, query }) {
   const [editOpen, setEditOpen] = useState(false);
   const [delOpen, setDelOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
+  const [usageOpen, setUsageOpen] = useState(false);
   const notify = useNotify();
   const b = useAsync(() => api.getBucket(name, location_), [name, location_]);
   const views = useAsync(() => api.listViews(name, location_), [name, location_]);
+  const cap = capability("gcp.logs.storage.usage_alerts");
 
   return (
     <>
       <PageHeader title={name} back={<IconButton aria-label="Back to Logs Storage" href="#/logs/storage"><ArrowBackIcon /></IconButton>} actions={<>
         <Button onClick={() => setEditOpen(true)}>Edit bucket</Button>
         <Button startIcon={<DeleteIcon />} onClick={() => setDelOpen(true)}>Delete bucket</Button>
+        <Button href={`#/logs/query`}>View logs</Button>
+        <Button onClick={() => setUsageOpen(true)}>View usage data</Button>
         <Button startIcon={<RefreshIcon />} onClick={() => { b.reload(); views.reload(); }}>Refresh</Button>
       </>} />
       <ErrorAlert error={b.error} title="Failed to load bucket" />
@@ -78,6 +83,13 @@ export default function BucketDetail({ params, query }) {
         onConfirm={async () => { await api.deleteBucket(name, location_); notify.success(`Deleted bucket "${name}"`); location.hash = "#/logs/storage"; }}>
         <Typography variant="body2">Bucket <b>{name}</b> and every log view on it will be permanently deleted.</Typography>
       </DeleteDialog>
+      {usageOpen && (
+        <Dialog open onClose={() => setUsageOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>View usage data</DialogTitle>
+          <DialogContent><NotSimulated feature={cap?.title || "Usage alerts"} note={cap?.limitations?.join(" ")} compact /></DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}><Button onClick={() => setUsageOpen(false)}>Close</Button></DialogActions>
+        </Dialog>
+      )}
     </>
   );
 }

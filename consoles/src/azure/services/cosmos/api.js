@@ -24,6 +24,9 @@ export const listKeys = (rg, name) => ARM.action(rg, name, "listKeys");
 export const listReadOnlyKeys = (rg, name) => ARM.action(rg, name, "listReadOnlyKeys");
 export const listConnectionStrings = (rg, name) => ARM.action(rg, name, "listConnectionStrings");
 export const regenerateKey = (rg, name, keyKind) => ARM.action(rg, name, "regenerateKey", { keyKind });
+/** Manual Failover: promotes a configured region to failoverPriority 0 for real
+ *  (azure.cosmos.replicate_data_globally) — ENFORCED on the ARM side. */
+export const failoverPriorityChange = (rg, name, failoverPolicies) => ARM.action(rg, name, "failoverPriorityChange", { failoverPolicies });
 
 export const accountEndpoint = (name) => `https://${name}.documents.azure.com:443/`;
 export const resourcePath = (rg, name) => ARM.path(rg, name);
@@ -36,14 +39,20 @@ export const putLock = (resPath, lockName, body) => restJson("PUT", lockPath(res
 export const deleteLock = (resPath, lockName) => restJson("DELETE", lockPath(resPath, lockName), { query: { "api-version": LOCK_API_VERSION } });
 
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, filtered to a resource) ──
-export const listActivityLog = async (resPath, sub) => {
-  const query = { "api-version": "2015-04-01", "$filter": `resourceUri eq '${resPath}'` };
+/** sinceIso: ISO timestamp lower bound (the timespan picker) — ENFORCED, narrows the result. */
+export const listActivityLog = async (resPath, sub, sinceIso) => {
+  const filter = `resourceUri eq '${resPath}'` + (sinceIso ? ` and eventTimestamp ge '${sinceIso}'` : "");
+  const query = { "api-version": "2015-04-01", "$filter": filter };
   return (await restJson("GET", `/subscriptions/${sub}/providers/Microsoft.Insights/eventtypes/management/values`, { query })).value || [];
 };
 
-// ── Access control (IAM): real ARM resources, subscription-wide (see capabilities.json) ────
+// ── Access control (IAM): real ARM resources ────────────────────────────────────────────
 const AUTHZ_API = "2022-04-01";
-export const listRoleAssignments = async (sub) => (await restJson("GET", `/subscriptions/${sub}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": AUTHZ_API } })).value || [];
+/** Role assignments scoped to THIS account (plus its subscription/resource-group ancestors,
+ *  real Azure's "inherited access" — see capabilities.json: azure.cosmos.iam), not every
+ *  assignment in the subscription. */
+export const listRoleAssignments = async (resPath) =>
+  (await restJson("GET", `${resPath}/providers/Microsoft.Authorization/roleAssignments`, { query: { "api-version": AUTHZ_API } })).value || [];
 export const listRoleDefinitions = async (sub) => (await restJson("GET", `/subscriptions/${sub}/providers/Microsoft.Authorization/roleDefinitions`, { query: { "api-version": AUTHZ_API } })).value || [];
 
 // ── Cosmos data plane (core/azure_cosmos_core.py, native /dbs wire) ────────────────────
@@ -84,6 +93,8 @@ export const runQuery = async (db, coll, query) =>
   })).Documents || [];
 
 // ── create-form model → ARM body ────────────────────────────────────────────────────────
+const REDUNDANCY_CODE = { "Geo-redundant backup storage": "Geo", "Zone-redundant backup storage": "Zone", "Locally-redundant backup storage": "Local" };
+
 export function toArmBody(f) {
   return {
     location: f.location,
@@ -99,7 +110,7 @@ export function toArmBody(f) {
       enableFreeTier: f.freeTier === "Apply",
       consistencyPolicy: { defaultConsistencyLevel: "Session" },
       backupPolicy: f.backupPolicy === "Periodic"
-        ? { type: "Periodic", periodicModeProperties: { backupIntervalInMinutes: Number(f.backupInterval), backupRetentionIntervalInHours: Number(f.backupRetention), backupStorageRedundancy: f.backupRedundancy } }
+        ? { type: "Periodic", periodicModeProperties: { backupIntervalInMinutes: Number(f.backupInterval), backupRetentionIntervalInHours: Number(f.backupRetention), backupStorageRedundancy: REDUNDANCY_CODE[f.backupRedundancy] || "Geo" } }
         : { type: "Continuous", continuousModeProperties: { tier: f.backupPolicy === "Continuous (30 days)" ? "Continuous30Days" : "Continuous7Days" } },
     },
   };

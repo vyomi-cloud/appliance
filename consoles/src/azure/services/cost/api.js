@@ -7,7 +7,7 @@
  * Served by core/azure_cost_core.py on every substrate, over the SAME flat ARM resource
  * store storage accounts/VMs/… live in — so cost analysis reads Vyomi's real inventory. */
 import { restJson } from "../../../common/wire.js";
-import { getSubscription, getSubscriptionInfo } from "../../kit/arm.js";
+import { armType, getSubscription, getSubscriptionInfo, parseId } from "../../kit/arm.js";
 
 const API_VERSION = "2023-11-01";
 const scope = (rg) => `/subscriptions/${getSubscription()}${rg ? `/resourceGroups/${encodeURIComponent(rg)}` : ""}`;
@@ -43,6 +43,26 @@ export const deleteSavingsPlan = (name) => restJson("DELETE", `${scope()}/provid
 export const SAVINGSPLAN_TERMS = ["P1Y", "P3Y"];
 export const SAVINGSPLAN_TERM_LABEL = { P1Y: "1 year", P3Y: "3 years" };
 export const SAVINGSPLAN_SCOPES = ["Shared", "Single subscription"];
+
+// ── reservations (Microsoft.Capacity/reservationOrders) ─────────────────────────────
+export const listReservations = async () => (await restJson("GET", `${scope()}/providers/Microsoft.Capacity/reservationOrders`, { query: q })).value || [];
+export const putReservation = (name, body) => restJson("PUT", `${scope()}/providers/Microsoft.Capacity/reservationOrders/${encodeURIComponent(name)}`, { query: q, body });
+export const deleteReservation = (name) => restJson("DELETE", `${scope()}/providers/Microsoft.Capacity/reservationOrders/${encodeURIComponent(name)}`, { query: q });
+export const RESERVATION_TERMS = ["P1Y", "P3Y"];
+export const RESERVATION_TERM_LABEL = { P1Y: "1 year", P3Y: "3 years" };
+export const listVmSizes = async (location = "eastus") =>
+  (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Compute/locations/${location}/vmSizes`, { query: q })).value || [];
+
+// ── Azure Hybrid Benefit (Microsoft.Compute/virtualMachines licenseType) ────────────
+const VM_ARM = armType("Microsoft.Compute", "virtualMachines", "2023-09-01");
+export const listVmsForHybridBenefit = async () => (await VM_ARM.list()).map((v) => ({ ...v, resourceGroup: parseId(v.id).resourceGroup }));
+export const setHybridBenefit = (rg, name, enabled) =>
+  VM_ARM.patch(rg, name, { properties: { licenseType: enabled ? "Windows_Server" : "None" } });
+
+// ── cost allocation rules (Microsoft.CostManagement/costAllocationRules) ────────────
+export const listAllocationRules = async () => (await restJson("GET", `${scope()}/providers/Microsoft.CostManagement/costAllocationRules`, { query: q })).value || [];
+export const putAllocationRule = (name, body) => restJson("PUT", `${scope()}/providers/Microsoft.CostManagement/costAllocationRules/${encodeURIComponent(name)}`, { query: q, body });
+export const deleteAllocationRule = (name) => restJson("DELETE", `${scope()}/providers/Microsoft.CostManagement/costAllocationRules/${encodeURIComponent(name)}`, { query: q });
 
 // ── form helpers ─────────────────────────────────────────────────────────────────────
 export const RESET_PERIODS = ["Monthly", "Quarterly", "Annually", "BillingMonth", "BillingQuarter", "BillingAnnual"];

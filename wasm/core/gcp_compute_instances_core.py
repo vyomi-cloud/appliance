@@ -16,12 +16,16 @@ Resources (v1 discovery doc, subset the v4 console needs):
     projects/{p}/global/images/{i}                  projects/{p}/global/snapshots/{s}
     projects/{p}/global/machineImages/{m}           projects/{p}/global/instanceTemplates/{t}
     projects/{p}/zones/{z}/instanceGroups/{g}        projects/{p}/global/healthChecks/{h}
-    projects/{p}/zones/{z}/operations/{o}           projects/{p}/global/operations/{o}
+    projects/{p}/zones/{z}/instanceGroupManagers/{g} projects/{p}/zones/{z}/operations/{o}
+    projects/{p}/global/operations/{o}
     projects/{p}/zones, projects/{p}/regions, projects/{p}/zones/{z}/machineTypes (catalog)
     projects/{p} (project resource incl. commonInstanceMetadata)
 Methods: insert/get/list/delete/aggregatedList per collection, instances.start/stop/suspend/
 resume/reset/setLabels/setMetadata/setDeletionProtection/setMachineType, disks.createSnapshot,
-instanceGroups.addInstances/removeInstances/listInstances, projects.setCommonInstanceMetadata.
+instanceGroups.addInstances/removeInstances/listInstances, instanceGroupManagers.resize/
+listManagedInstances (member instances are really created/deleted from the instance template;
+autoscaling policies and rolling updates are not modeled — resize is the only lever),
+projects.setCommonInstanceMetadata.
 Every mutation returns a completed `Operation` (status DONE) like a very fast real cloud;
 errors use the Google JSON shape `{"error":{"code","message","status"}}` (the same
 simplification gcp_cloudsql_core and gcp_container_core use for these older-style APIs).
@@ -75,6 +79,7 @@ class ComputeStore:
         self.machine_images: dict = {}     # "projects/p/global/machineImages/n" -> resource
         self.instance_templates: dict = {}  # "projects/p/global/instanceTemplates/n" -> resource
         self.instance_groups: dict = {}    # "projects/p/zones/z/instanceGroups/n" -> resource
+        self.instance_group_managers: dict = {}  # "projects/p/zones/z/instanceGroupManagers/n" -> resource
         self.health_checks: dict = {}      # "projects/p/global/healthChecks/n" -> resource
         self.operations: dict = {}         # "projects/p/(zones/z|global)/operations/n" -> resource
         self.project_metadata: dict = {}   # project -> commonInstanceMetadata
@@ -770,7 +775,10 @@ def remove_group_instances(store, project, zone, name, payload):
 def list_instance_groups(store, project, zone):
     out = []
     for n in list_all(store.instance_groups, "projects/%s/zones/%s/instanceGroups/" % (project, zone)):
-        v = _copy({k: x for k, x in store.instance_groups[n].items() if not k.startswith("_")})
+        g = store.instance_groups[n]
+        if g.get("_managed"):   # the backing group of a managed instance group — not in the unmanaged list
+            continue
+        v = _copy({k: x for k, x in g.items() if not k.startswith("_")})
         out.append(v)
     return out
 
@@ -788,6 +796,137 @@ def delete_instance_group(store, project, zone, name):
     full, g = _group(store, project, zone, name)
     del store.instance_groups[full]
     return _operation(store, project, zone, "delete", name, _selflink(full))
+
+
+# ── instance groups (managed) ─────────────────────────────────────────────────
+# A managed instance group holds a fixed-size pool of instances stamped out of an instance
+# template; resize() creates/deletes real instances to match targetSize. Autoscaling policies
+# and rolling-update (max-surge/max-unavailable) orchestration are not modeled — resize is the
+# only way the member count changes, exactly like gcp.compute.instance_groups.crud declares.
+def _mig(store, project, zone, name):
+    full = "projects/%s/zones/%s/instanceGroupManagers/%s" % (project, zone, name)
+    return full, _get(store, store.instance_group_managers, full, "instanceGroupManager")
+
+
+def _mig_view(mgr):
+    return {k: x for k, x in mgr.items() if not k.startswith("_")}
+
+
+def insert_instance_group_manager(store, project, zone, payload):
+    if zone not in ZONE_REGION:
+        raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'zone': %r." % zone)
+    name = payload.get("name") or ""
+    _check_name(name, "resource.name")
+    full = "projects/%s/zones/%s/instanceGroupManagers/%s" % (project, zone, name)
+    if full in store.instance_group_managers:
+        raise _E(409, "ALREADY_EXISTS", "The resource '%s' already exists." % full)
+    base_name = payload.get("baseInstanceName") or name
+    _check_name(base_name, "baseInstanceName")
+    tpl_name = _last(payload.get("instanceTemplate") or "")
+    tpl_full = "projects/%s/global/instanceTemplates/%s" % (project, tpl_name)
+    tpl = store.instance_templates.get(tpl_full)
+    if not tpl:
+        raise _E(400, "INVALID_ARGUMENT", "The instance template '%s' was not found." % tpl_name)
+    if not any(d.get("initializeParams") or d.get("source") for d in (tpl["properties"].get("disks") or [])):
+        raise _E(400, "INVALID_ARGUMENT", "Instance template '%s' has no boot disk configured." % tpl_name)
+    now = _ts()
+    grp_full = "projects/%s/zones/%s/instanceGroups/%s" % (project, zone, name)
+    members: list = []
+    mgr = {
+        "id": _next_id(store), "name": name, "kind": "compute#instanceGroupManager",
+        "zone": _selflink("projects/%s/zones/%s" % (project, zone)),
+        "baseInstanceName": base_name, "instanceTemplate": _selflink(tpl_full),
+        "instanceGroup": _selflink(grp_full), "targetSize": 0,
+        "description": payload.get("description", ""), "creationTimestamp": now, "selfLink": _selflink(full),
+        "currentActions": {"none": 0, "creating": 0, "deleting": 0, "recreating": 0, "restarting": 0, "refreshing": 0, "abandoning": 0, "creatingWithoutRetries": 0, "verifying": 0},
+        "status": {"isStable": True}, "members": members, "_zone": zone, "_seq": 0,
+    }
+    store.instance_group_managers[full] = mgr
+    store.instance_groups[grp_full] = {
+        "id": _next_id(store), "name": name, "kind": "compute#instanceGroup",
+        "zone": _selflink("projects/%s/zones/%s" % (project, zone)),
+        "description": payload.get("description", ""), "network": _selflink("projects/%s/global/networks/default" % project),
+        "size": 0, "creationTimestamp": now, "selfLink": _selflink(grp_full), "members": members, "_zone": zone, "_managed": True,
+    }
+    op = _operation(store, project, zone, "insert", name, _selflink(full))
+    target = int(payload.get("targetSize") or 0)
+    if target:
+        resize_instance_group_manager(store, project, zone, name, target)
+    return op
+
+
+def _create_mig_instance(store, project, zone, mgr):
+    tpl_full = "projects/%s/global/instanceTemplates/%s" % (project, _last(mgr["instanceTemplate"]))
+    tpl = store.instance_templates.get(tpl_full)
+    if not tpl:
+        raise _E(400, "INVALID_ARGUMENT", "The instance template '%s' was not found." % _last(mgr["instanceTemplate"]))
+    props = tpl["properties"]
+    mgr["_seq"] += 1
+    suffix = hashlib.sha1(("%s:%d" % (mgr["selfLink"], mgr["_seq"])).encode()).hexdigest()[:4]
+    iname = "%s-%s" % (mgr["baseInstanceName"], suffix)
+    insert_instance(store, project, zone, {
+        "name": iname, "machineType": props.get("machineType"),
+        "disks": props.get("disks") or [], "networkInterfaces": props.get("networkInterfaces") or [{}],
+        "labels": props.get("labels") or {},
+    })
+    mgr["members"].append(iname)
+
+
+def resize_instance_group_manager(store, project, zone, name, new_size):
+    full, mgr = _mig(store, project, zone, name)
+    new_size = int(new_size or 0)
+    if new_size < 0:
+        raise _E(400, "INVALID_ARGUMENT", "targetSize must be >= 0.")
+    current = len(mgr["members"])
+    if new_size > current:
+        for _ in range(current, new_size):
+            _create_mig_instance(store, project, zone, mgr)
+    elif new_size < current:
+        for _ in range(new_size, current):
+            iname = mgr["members"].pop()
+            ifull = "projects/%s/zones/%s/instances/%s" % (project, zone, iname)
+            if ifull in store.instances:
+                delete_instance(store, project, zone, iname)
+    mgr["targetSize"] = new_size
+    grp = store.instance_groups.get("projects/%s/zones/%s/instanceGroups/%s" % (project, zone, name))
+    if grp:
+        grp["size"] = len(mgr["members"])
+    return _operation(store, project, zone, "resize", name, _selflink(full))
+
+
+def delete_instance_group_manager(store, project, zone, name):
+    full, mgr = _mig(store, project, zone, name)
+    for iname in list(mgr["members"]):
+        ifull = "projects/%s/zones/%s/instances/%s" % (project, zone, iname)
+        if ifull in store.instances:
+            delete_instance(store, project, zone, iname)
+    store.instance_groups.pop("projects/%s/zones/%s/instanceGroups/%s" % (project, zone, name), None)
+    del store.instance_group_managers[full]
+    return _operation(store, project, zone, "delete", name, _selflink(full))
+
+
+def list_instance_group_managers(store, project, zone):
+    prefix = "projects/%s/zones/%s/instanceGroupManagers/" % (project, zone)
+    return [_mig_view(store.instance_group_managers[n]) for n in list_all(store.instance_group_managers, prefix)]
+
+
+def aggregated_instance_group_managers(store, project):
+    out = {}
+    for zone in ZONE_NAMES:
+        items = list_instance_group_managers(store, project, zone)
+        key = "zones/%s" % zone
+        out[key] = {"instanceGroupManagers": items} if items else {"warning": {"code": "NO_RESULTS_ON_PAGE", "message": "no results"}}
+    return {"kind": "compute#instanceGroupManagerAggregatedList", "items": out, "id": "projects/%s/aggregated/instanceGroupManagers" % project}
+
+
+def list_managed_instances(store, project, zone, name):
+    _, mgr = _mig(store, project, zone, name)
+    out = []
+    for iname in mgr["members"]:
+        ifull = "projects/%s/zones/%s/instances/%s" % (project, zone, iname)
+        inst = store.instances.get(ifull)
+        out.append({"instance": _selflink(ifull), "instanceStatus": inst["status"] if inst else "DELETING", "currentAction": "NONE"})
+    return out
 
 
 # ── health checks (global) ───────────────────────────────────────────────────
@@ -943,7 +1082,8 @@ def _dispatch(store, method, path, query, headers, body):
     if rest[0] == "regions" and len(rest) == 1 and method == "GET":
         return _json(200, {"kind": "compute#regionList", "items": list_regions(project)})
     if rest[0] == "aggregated" and len(rest) == 2 and method == "GET":
-        fn = {"instances": aggregated_instances, "disks": aggregated_disks, "instanceGroups": aggregated_instance_groups}.get(rest[1])
+        fn = {"instances": aggregated_instances, "disks": aggregated_disks, "instanceGroups": aggregated_instance_groups,
+              "instanceGroupManagers": aggregated_instance_group_managers}.get(rest[1])
         if fn:
             return _json(200, fn(store, project))
         if rest[1] == "operations":
@@ -960,7 +1100,7 @@ def _dispatch(store, method, path, query, headers, body):
         return _global(store, method, project, rest[1:], verb, payload)
     if rest[0] == "zones" and len(rest) >= 2:
         rest2 = rest[2:]
-        if not verb and len(rest2) == 3 and rest2[0] in ("instances", "disks", "instanceGroups"):
+        if not verb and len(rest2) == 3 and rest2[0] in ("instances", "disks", "instanceGroups", "instanceGroupManagers"):
             # The real Compute v1 REST spells custom methods as a trailing path segment
             # (`instances/{i}/start`, `disks/{d}/createSnapshot`) — what google-cloud-compute
             # and gcloud send; `instances/{i}:start` (the console's form) is accepted too.
@@ -1107,4 +1247,24 @@ def _zonal(store, method, project, zone, rest, verb, payload, query=None):
                 return _json(200, remove_group_instances(store, project, zone, name, payload))
             if verb == "listInstances" and method == "POST":
                 return _json(200, {"items": group_members(store, project, zone, name)})
+    elif coll == "instanceGroupManagers":
+        if not rest2:
+            if method == "POST":
+                return _json(200, insert_instance_group_manager(store, project, zone, payload))
+            if method == "GET":
+                return _json(200, {"kind": "compute#instanceGroupManagerList", "items": list_instance_group_managers(store, project, zone)})
+        elif len(rest2) == 1 and not verb:
+            name = rest2[0]
+            if method == "GET":
+                _, mgr = _mig(store, project, zone, name)
+                return _json(200, _mig_view(mgr))
+            if method == "DELETE":
+                return _json(200, delete_instance_group_manager(store, project, zone, name))
+        elif len(rest2) == 1 and verb:
+            name = rest2[0]
+            if verb == "resize" and method == "POST":
+                size = (query or {}).get("size", payload.get("targetSize"))
+                return _json(200, resize_instance_group_manager(store, project, zone, name, size))
+            if verb == "listManagedInstances" and method == "POST":
+                return _json(200, {"items": list_managed_instances(store, project, zone, name)})
     return _err(404, "NOT_FOUND", "Unknown path or method %s." % method)

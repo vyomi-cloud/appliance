@@ -36,13 +36,21 @@ const EGROLE = `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;  // rol
 const RGUI = `vyrg${n}`;           // resource group created through the UI
 const RGWIRE = `vyrgwire${n}`;     // resource group created over the wire (CLI → UI direction)
 const RGLOCK = `vyrglock${n}`;     // resource-group-scoped lock created through the UI
+const RGPRINCIPAL = `vyrgprincipal${n}@contoso.com`;  // principal assigned a role through the resource group's IAM tab
+const RGDEPLOY = `vyrgdeploy${n}`;  // resource-group-scoped deployment with a real template, created over the wire
+const RGDEPLOYRES = `vyrgdeployres${n}`;  // storage account the deployment's template actually provisions
 const APIM = `vyapim${n}`;         // API Management service created through the UI
 const APIM2 = `vyapimwire${n}`;    // API Management service created over the wire
+const APIMROLE = `00000000-0000-4000-9000-${String(n).padStart(12, "0")}`;  // role assignment GUID created over the wire, read back on the APIM service's Access control (IAM) tab
+const APIMTAG = `vyapimtag${n}`;   // API Tag created through the UI
+const APIMFRAG = `vyapimfrag${n}`; // Policy fragment created through the UI
+const APIMDIAG = `vyapimdiag${n}`; // diagnostic setting created over the wire, read back in the UI (CLI → UI direction)
 const AKS = `vysmokeaks${n}`;      // AKS cluster created through the UI
 const AKS2 = `vywireaks${n}`;      // AKS cluster created over the wire
 const POOL = `pool${n}`;           // node pool created through the UI (AKS pool names are short: <=12 chars)
 const EUSR = `vysmokeuser${n}`;    // Entra ID user created through the UI
 const EUSR2 = `vywireuser${n}`;    // Entra ID user created over the wire
+const EGRP = `vysmokegrp${n}`;     // Entra ID security group, created through the UI once the directory-settings toggle allows it
 const SUBNAME = `Vyomi Smoke Subscription ${n}`;  // subscription renamed through the UI
 const SUBLOCK = `vysublock${n}`;   // subscription-scoped lock created through the UI
 const SUBRG = `vysubrg${n}`;       // resource group created over the wire (shown in the Subscription's Resource groups panel)
@@ -74,8 +82,12 @@ const browser = await pw.chromium.launch();
 page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
-// Native 404s (e.g. a deleted resource's GET) are expected answers, not page errors.
-page.on("console", (m) => m.type() === "error" && !/status of 404/.test(m.text()) && errors.push(m.text()));
+// Native 404s (e.g. a deleted resource's GET) and 409s (e.g. a locked resource's blocked
+// write/delete) are expected answers, not page errors.
+page.on("console", (m) => m.type() === "error" && !/status of (404|409)/.test(m.text()) && errors.push(m.text()));
+// Native 404s (e.g. a deleted resource's GET) and 403s (e.g. a query against a server with
+// public network access disabled) are expected answers, not page errors.
+page.on("console", (m) => m.type() === "error" && !/status of (404|403)/.test(m.text()) && errors.push(m.text()));
 const shot = (name) => page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
 const openPanel = async (label) => { await page.getByRole("navigation", { name: "Resource menu" }).getByRole("link", { name: label, exact: true }).click(); await page.waitForTimeout(500); };
 
@@ -237,6 +249,42 @@ try {
   await page.getByText(CR, { exact: true }).first().waitFor({ timeout: 10000 });
   check("wire-created resource shown in Advisor recommendations", true);
   await shot("20-advisor-recommendations");
+
+  // ── Reservation purchased through the UI → visible over native Capacity wire; Azure
+  //    Hybrid Benefit toggled for a VM already in inventory → licenseType set over native ARM ──
+  const RES = `vysmokeres${n}`;
+  const AHBVM = `vyahbvm${n}`;
+  await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${AHBVM}`,
+    { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_B1s" } } });   // within the Free tier's size cap offline
+  await page.goto(UI + "#/cost/reservations");
+  await page.getByRole("button", { name: "Purchase" }).click();
+  await page.getByLabel("Reservation name").fill(RES);
+  await page.getByLabel("Quantity").fill("1");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(RES, { exact: true }).first().waitFor({ timeout: 10000 });
+  await shot("20a-reservation-created");
+  const resWire = await wire(`/subscriptions/${SUB}/providers/Microsoft.Capacity/reservationOrders/${RES}?api-version=2023-11-01`);
+  check("UI purchase reservation → visible over native Capacity wire", resWire.status === 200, `HTTP ${resWire.status}`);
+
+  await page.getByRole("row", { name: new RegExp(AHBVM) }).getByRole("switch").click();
+  await page.waitForTimeout(500);
+  const ahbWire = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${AHBVM}`);
+  check("UI toggle Hybrid Benefit → licenseType set over native ARM", JSON.parse(ahbWire.text).properties?.licenseType === "Windows_Server", ahbWire.text.slice(0, 160));
+  await shot("20b-hybrid-benefit-toggled");
+
+  // ── Cost allocation rule created through the UI → visible over native CostManagement wire ──
+  const ALLOC = `vysmokealloc${n}`;
+  await page.goto(UI + "#/cost/allocation");
+  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Rule name").fill(ALLOC);
+  await page.getByLabel("Source resource group").selectOption({ label: RG });
+  await page.getByLabel("Target resource group").selectOption({ label: RG });
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByText(ALLOC, { exact: true }).first().waitFor({ timeout: 10000 });
+  await shot("20c-allocation-rule-created");
+  const allocWire = await wire(`/subscriptions/${SUB}/providers/Microsoft.CostManagement/costAllocationRules/${ALLOC}?api-version=2023-11-01`);
+  check("UI create cost allocation rule → visible over native CostManagement wire", allocWire.status === 200, `HTTP ${allocWire.status}`);
+
   // ── Function App created through the wizard → visible over native ARM ─────────────────
   const FA = `vysmokefn${n}`;
   const FARG = "cloudlearn-rg";                   // the Function App wizard's default resource group
@@ -285,6 +333,29 @@ try {
   await page.getByRole("cell", { name: "default" }).first().waitFor({ timeout: 10000 });
   check("App keys panel lists the default host key", await page.getByRole("cell", { name: "default" }).first().isVisible());
   await shot("22-app-keys");
+
+  // ── Locks: a CanNotDelete lock added through the UI really blocks delete over native ARM ──
+  const FALOCK = `vyfnlock${n}`;
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}/locks`);
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByLabel("Lock name").fill(FALOCK);
+  await page.getByRole("button", { name: "OK" }).click();
+  await page.getByRole("cell", { name: FALOCK, exact: true }).waitFor({ timeout: 10000 });
+  const lockedDelete = await armWeb("DELETE", `/resourceGroups/${FARG}/providers/Microsoft.Web/sites/${FA}`);
+  check("locked function app rejects delete over native ARM", lockedDelete.status === 409, `HTTP ${lockedDelete.status}`);
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}`);
+  await page.getByRole("toolbar", { name: "Overview commands" }).getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(FA);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByText("ScopeLocked").waitFor({ timeout: 10000 });
+  check("UI delete is blocked by the lock and shows the ScopeLocked error", true);
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.goto(UI + `#/functionapp/${FARG}/${FA}/locks`);
+  await page.getByRole("row", { name: new RegExp(FALOCK) }).getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(FALOCK);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("cell", { name: FALOCK, exact: true }).waitFor({ state: "detached", timeout: 10000 });
 
   // ── Delete through Overview → gone over ARM ────────────────────────────────────────────
   await page.goto(UI + `#/functionapp/${FARG}/${FA}`);
@@ -547,6 +618,11 @@ try {
   const rgTags = await arm("GET", `/resourceGroups/${RGUI}`);
   check("UI tag apply → persisted on the resource group over ARM", JSON.parse(rgTags.text).tags?.env === "smoke", rgTags.text);
 
+  // ── Activity log: aggregates both the group's own create and its tag update ────────────
+  await openPanel("Activity log");
+  await page.getByText("Microsoft.Resources/resourceGroups/write").first().waitFor({ timeout: 10000 });
+  check("resource group activity log shows its own create/update", true);
+
   // ── Lock created in the UI, scoped to the resource group itself → visible over ARM ──────
   await openPanel("Locks");
   await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -556,6 +632,67 @@ try {
   await page.getByText(RGLOCK, { exact: true }).waitFor({ timeout: 10000 });
   const rgLockGet = await arm("GET", `/resourceGroups/${RGUI}/providers/Microsoft.Authorization/locks/${RGLOCK}`);
   check("UI add resource-group-scoped lock → visible over native ARM", rgLockGet.status === 200, `HTTP ${rgLockGet.status}`);
+
+  // ── Access control (IAM): role assignment added through the UI, scoped to this resource
+  // group (not the subscription), then a real checkAccess decision, then removed ───────────
+  await openPanel("Access control (IAM)");
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByRole("toolbar", { name: "Access control commands" }).getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Role", { exact: true }).selectOption("Reader");
+  await page.getByLabel("Member", { exact: true }).fill(RGPRINCIPAL);
+  await page.getByRole("button", { name: "Review + assign" }).click();
+  await page.getByText(RGPRINCIPAL).first().waitFor({ timeout: 10000 });
+  const raGet = await arm("GET", `/resourceGroups/${RGUI}/providers/Microsoft.Authorization/roleAssignments`);
+  const raList = JSON.parse(raGet.text).value || [];
+  const ra = raList.find((r) => r.properties?.principalId === RGPRINCIPAL);
+  check("UI Add role assignment → visible over native ARM, scoped to this resource group",
+    !!ra && ra.properties.scope === `/subscriptions/${SUB}/resourceGroups/${RGUI}`, JSON.stringify(ra));
+  await shot("22b-resourcegroup-iam-role-assignments");
+
+  await page.getByRole("tab", { name: "Check access" }).click();
+  await page.getByRole("button", { name: "Check access", exact: true }).click();
+  await page.getByLabel("Find a user, group or service principal", { exact: true }).fill(RGPRINCIPAL);
+  await page.getByRole("dialog").getByRole("button", { name: "Check access", exact: true }).click();
+  await page.getByText("Allowed").waitFor({ timeout: 10000 });
+  check("UI Check access → real decision reflects the role just assigned", true);
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByLabel(`Select ${RGPRINCIPAL}`, { exact: true }).check();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await page.getByText(RGPRINCIPAL).waitFor({ state: "detached", timeout: 10000 });
+  const raGone = await arm("GET", `/resourceGroups/${RGUI}/providers/Microsoft.Authorization/roleAssignments`);
+  check("UI Remove role assignment → gone over native ARM",
+    !(JSON.parse(raGone.text).value || []).some((r) => r.properties?.principalId === RGPRINCIPAL), raGone.text);
+
+  // ── Deployments: a template-driven deployment created over the wire actually provisions a
+  // real resource; Redeploy re-runs it for real, Cancel on a completed deployment honestly fails ──
+  const deployTemplate = {
+    parameters: { saName: { defaultValue: RGDEPLOYRES } },
+    resources: [{ type: "Microsoft.Storage/storageAccounts", apiVersion: "2023-01-01", name: "[parameters('saName')]" }],
+  };
+  const depPut = await arm("PUT", `/resourceGroups/${RGUI}/providers/Microsoft.Resources/deployments/${RGDEPLOY}`,
+    { properties: { mode: "Incremental", template: deployTemplate } });
+  check("ARM PUT resource-group-scoped deployment with a template over wire → provisions the resource for real",
+    depPut.status === 200 && JSON.parse(depPut.text).properties?.outputResources?.[0]?.resourceName === RGDEPLOYRES, depPut.text);
+
+  await openPanel("Deployments");
+  await page.getByText(RGDEPLOY, { exact: true }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "View template" }).click();
+  await page.getByText(RGDEPLOYRES).first().waitFor({ timeout: 5000 });
+  check("UI View template shows the resource the deployment actually provisioned", true);
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await page.getByLabel(`Select ${RGDEPLOY}`, { exact: true }).check();
+  await page.getByRole("button", { name: "Redeploy", exact: true }).click();
+  await page.getByText("Redeploy").first().waitFor({ timeout: 10000 });
+  check("UI Redeploy re-runs the template for real", true);
+
+  await page.getByLabel(`Select ${RGDEPLOY}`, { exact: true }).check();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByText("Cancel failed").waitFor({ timeout: 10000 });
+  check("UI Cancel on an already-completed deployment honestly fails (every deployment here completes synchronously)", true);
+  await shot("22c-resourcegroup-deployments");
 
   // ── Resource group created over the wire → visible in the UI browse grid (CLI → UI) ─────
   const rgPut = await arm("PUT", `/resourceGroups/${RGWIRE}`, { location: "eastus" });
@@ -632,6 +769,65 @@ try {
   const apimLockGet = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/providers/Microsoft.Authorization/locks/${APIMLOCK}?api-version=2020-05-01`);
   check("UI create lock → visible over native ARM (extension resource)", apimLockGet.status === 200, `HTTP ${apimLockGet.status}`);
   await shot("28-apim-locks");
+
+  // ── API Tag created through the UI → visible over native ARM (nested sub-resource) ─────
+  await openPanel("API Tags");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill(APIMTAG);
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByText(APIMTAG, { exact: true }).waitFor({ timeout: 10000 });
+  const apimTagGot = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/tags/${APIMTAG}`);
+  check("UI create API Tag → visible over native ARM (nested sub-resource)", apimTagGot.status === 200, `HTTP ${apimTagGot.status}`);
+  await shot("28b-apim-apitags");
+
+  // ── Policy fragment created through the UI → visible over native ARM, XML stored as-is ──
+  await openPanel("Policy fragments");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill(APIMFRAG);
+  await page.getByRole("dialog").getByRole("button", { name: "Create" }).click();
+  await page.getByText(APIMFRAG, { exact: true }).waitFor({ timeout: 10000 });
+  const apimFragGot = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/policyFragments/${APIMFRAG}`);
+  check("UI create policy fragment → visible over native ARM, XML round-trips",
+    apimFragGot.status === 200 && JSON.parse(apimFragGot.text).properties?.value?.includes("<fragment>"), `HTTP ${apimFragGot.status}`);
+  await shot("28c-apim-policyfragments");
+
+  // ── Scale out and up / Pricing tier: UI sku PATCH → visible over native ARM, reflected
+  // in Overview's "Tier" field (same sku merge the create wizard writes) ──────────────────
+  await openPanel("Scale out and up");
+  await page.getByLabel("Units", { exact: true }).fill("3");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText("Units: 3", { exact: false }).waitFor({ timeout: 10000 });
+  await openPanel("Pricing tier");
+  await page.getByLabel("Pricing tier", { exact: true }).selectOption("Premium");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByText("Tier updated").first().waitFor({ timeout: 10000 }).catch(() => {});
+  const apimSkuGot = await apimWire("GET", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}`);
+  const apimSku = apimSkuGot.status === 200 ? JSON.parse(apimSkuGot.text).sku : {};
+  check("UI scale + pricing tier → visible over native ARM", apimSku?.capacity === 3 && apimSku?.name === "Premium", JSON.stringify(apimSku));
+  await openPanel("Overview");
+  await page.getByText("Premium", { exact: true }).first().waitFor({ timeout: 10000 });
+  check("Overview Tier field reflects the ARM-patched sku", true);
+  await shot("28d-apim-scale-tier");
+
+  // ── Diagnostic setting created over the wire → visible in the UI (CLI → UI direction) ──
+  const apimDiagRes = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/providers/Microsoft.Insights/diagnosticSettings/${APIMDIAG}?api-version=2021-05-01-preview`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties: { storageAccountId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/apimsmokesa`, logs: [{ categoryGroup: "allLogs", enabled: true }] } }) });
+  check("ARM PUT diagnostic setting over wire", apimDiagRes.status === 200 || apimDiagRes.status === 201, `HTTP ${apimDiagRes.status}`);
+  await openPanel("Diagnostic settings");
+  await page.getByText(APIMDIAG, { exact: true }).waitFor({ timeout: 10000 });
+  check("UI Diagnostic settings shows the wire-created setting", true);
+  await shot("28e-apim-diagnosticsettings");
+
+  // ── Access control (IAM): a role assignment created over the wire (subscription-wide,
+  // same honest scoping as the Event Grid / Cosmos DB blades) is read back on this tab ─────
+  const apimRoleRes = await wire(`/subscriptions/${SUB}/providers/Microsoft.Authorization/roleAssignments/${APIMROLE}?api-version=2022-04-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties: { principalId: "apim-smoke-principal", roleDefinitionId: `/subscriptions/${SUB}/providers/Microsoft.Authorization/roleDefinitions/owner`, principalType: "User" } }) });
+  check("ARM PUT role assignment over wire", apimRoleRes.status === 200 || apimRoleRes.status === 201, `HTTP ${apimRoleRes.status}`);
+  await openPanel("Access control (IAM)");
+  await page.getByRole("tab", { name: "Role assignments" }).click();
+  await page.getByText("apim-smoke-principal").first().waitFor({ timeout: 10000 });
+  check("UI Access control (IAM) → Role assignments shows the wire-created assignment", true);
+  await shot("28f-apim-iam");
 
   // ── API Management service created over the wire → visible in the UI (CLI → UI) ────────
   const apimPut = await apimWire("PUT", `/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM2}`, { location: "eastus", properties: { publisherEmail: "a@b.com", publisherName: "CLI" } });
@@ -1054,6 +1250,39 @@ try {
   try { qRows = JSON.parse(q.text).rows; } catch {}
   check("UI query editor INSERT → readable over the azure-sql data-plane wire", q.status === 200 && qRows?.[0]?.[0] === "smoke", `HTTP ${q.status}`);
 
+  // ── Performance recommendations: real CREATE_INDEX suggestion from the query log ───────
+  for (let i = 0; i < 4; i++) {
+    await page.getByLabel("SQL query", { exact: true }).fill("SELECT name FROM t WHERE name = 'smoke';");
+    await page.getByRole("button", { name: "Run" }).click();
+    await page.waitForTimeout(300);
+  }
+  await openPanel("Performance recommendations");
+  await page.getByText("Create index on t(name)").waitFor({ timeout: 10000 });
+  await shot("26b-sql-performance-recommendations");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await page.getByText("No recommendations right now", { exact: false }).waitFor({ timeout: 10000 });
+  const idxCheck = await wire(`/azure-sql/servers/${SRV}/databases/${DB}/query`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sql: "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='t'" }) });
+  let idxRows = [];
+  try { idxRows = JSON.parse(idxCheck.text).rows; } catch {}
+  check("UI apply performance recommendation → real CREATE INDEX executed on the azure-sql data plane", idxRows.length === 1, `rows=${JSON.stringify(idxRows)}`);
+
+  // ── Networking: disabling public network access blocks the query data plane ────────────
+  await page.goto(UI + `#/sql/servers/${RG}/${SRV}/networking`);
+  await page.getByRole("radio", { name: "Disable" }).check();
+  await page.getByRole("toolbar", { name: "Networking commands" }).getByRole("button", { name: "Save" }).click();
+  await page.waitForTimeout(500);
+  const blockedQuery = await wire(`/azure-sql/servers/${SRV}/databases/${DB}/query`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sql: "SELECT 1" }) });
+  check("UI disable public network access → query data plane now rejects connections", blockedQuery.status === 403, `HTTP ${blockedQuery.status}`);
+  await shot("26c-sql-networking-disabled");
+  await page.getByRole("radio", { name: "Selected networks" }).check();
+  await page.getByRole("toolbar", { name: "Networking commands" }).getByRole("button", { name: "Save" }).click();
+  await page.waitForTimeout(500);
+  const allowedQuery = await wire(`/azure-sql/servers/${SRV}/databases/${DB}/query`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sql: "SELECT 1" }) });
+  check("UI re-enable public network access → query data plane allows connections again", allowedQuery.status === 200, `HTTP ${allowedQuery.status}`);
+
   // ── Firewall rule added on the server blade → visible over native ARM ──────────────────
   await page.goto(UI + `#/sql/servers/${RG}/${SRV}/networking`);
   await page.getByRole("button", { name: "Add a firewall rule" }).click();
@@ -1182,6 +1411,30 @@ try {
   const afterDelete = await graph("GET", "/users");
   const stillThere = (afterDelete.status === 200 ? JSON.parse(afterDelete.text).value : []).some((u) => u.displayName === EUSR);
   check("UI delete user → gone over native Microsoft Graph wire", !stillThere);
+
+  // ── Entra ID: "Users can create security groups" (User settings) really blocks/allows
+  // security-group creation over the native Microsoft Graph wire (azure.entra.directory_settings
+  // is now "limited", not just stored) ────────────────────────────────────────────────────
+  await graph("PATCH", "/settings/directory", { usersCanCreateSecurityGroups: false });
+  await page.goto(UI + "#/entra/groups/new");
+  await page.getByLabel("Group name", { exact: true }).fill(EGRP);
+  await page.getByRole("button", { name: "Review + create" }).click();
+  await page.getByText("Validation passed").waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(/Users can create security groups/).waitFor({ timeout: 10000 });
+  const blockedGroups = await graph("GET", "/groups");
+  const blockedCreated = (blockedGroups.status === 200 ? JSON.parse(blockedGroups.text).value : []).some((g) => g.displayName === EGRP);
+  check("'Users can create security groups' = No blocks group creation over native Microsoft Graph wire", !blockedCreated);
+  await shot("24-entra-group-blocked");
+
+  await graph("PATCH", "/settings/directory", { usersCanCreateSecurityGroups: true });
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText(EGRP, { exact: true }).waitFor({ timeout: 10000 });
+  const allowedGroups = await graph("GET", "/groups");
+  const allowedCreated = (allowedGroups.status === 200 ? JSON.parse(allowedGroups.text).value : []).some((g) => g.displayName === EGRP);
+  check("setting back to Yes allows the same group creation over native Microsoft Graph wire", allowedCreated);
+  await shot("25-entra-group-allowed");
+
   // ── Cosmos DB: account created through the wizard → visible over native ARM ───────────
   const cosmosArm = (method, path, body) => wire(`/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=2024-05-15`,
     { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -1232,6 +1485,24 @@ try {
   await page.getByText("wire-item", { exact: true }).waitFor({ timeout: 10000 });
   check("wire-created document → readable via the UI's SQL query box", true);
   await shot("32-cosmos-data-explorer-query");
+
+  // ── Replicate data globally: Add region + Manual Failover through the UI really
+  // reassign the write region over native ARM (azure.cosmos.replicate_data_globally) ─────────
+  await openPanel("Replicate data globally");
+  await page.getByRole("button", { name: "Add region" }).click();
+  await page.getByLabel("Region", { exact: true }).selectOption("westus");
+  await page.getByRole("dialog", { name: "Add region" }).getByRole("button", { name: "Save" }).click();
+  await page.getByRole("dialog", { name: "Add region" }).waitFor({ state: "detached", timeout: 10000 });
+  await page.getByText("West US", { exact: true }).waitFor({ timeout: 10000 });
+  await shot("33b-cosmos-replicate-add-region");
+  await page.getByRole("button", { name: "Manual Failover" }).click();
+  await page.getByLabel("New write region", { exact: true }).selectOption("westus");
+  await page.getByRole("dialog", { name: "Manual Failover" }).getByRole("button", { name: "OK" }).click();
+  await page.getByRole("dialog", { name: "Manual Failover" }).waitFor({ state: "detached", timeout: 10000 });
+  const cosmosFailedOver = await cosmosArm("GET", `/resourceGroups/${RG}/providers/Microsoft.DocumentDB/databaseAccounts/${COSMOS}`);
+  const cosmosFailedOverBody = JSON.parse(cosmosFailedOver.text);
+  check("UI Manual Failover → write region reassigned over native ARM",
+    cosmosFailedOverBody.location === "westus", JSON.stringify(cosmosFailedOverBody.properties?.locations));
 
   // ── Lock created on the account → visible over native ARM ──────────────────────────────
   await page.goto(UI + `#/cosmos/${RG}/${COSMOS}/locks`);
@@ -1437,6 +1708,7 @@ try {
   await page.goto(UI + "#/vms/create");
   await page.getByLabel("Virtual machine name", { exact: true }).fill(VM);
   await page.getByLabel("Username", { exact: true }).fill("azureuser");
+  await page.getByLabel("Size", { exact: true }).selectOption("Standard_B1s");   // within the offline Free tier's size cap
   await page.getByRole("button", { name: "Review + create" }).click();
   await page.getByText("Validation passed").waitFor({ timeout: 5000 });
   await shot("29-vm-create-review");
@@ -1457,7 +1729,7 @@ try {
 
   // ── Virtual machine created over the wire → visible in the UI (CLI → UI) ──────────────
   const vmPut = await arm("PUT", `/resourceGroups/${DEFAULT_RG}/providers/Microsoft.Compute/virtualMachines/${VM2}`,
-    { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_B2s" }, osProfile: { computerName: VM2, adminUsername: "azureuser" }, storageProfile: { osDisk: { osType: "Linux" } } } });
+    { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_B1s" }, osProfile: { computerName: VM2, adminUsername: "azureuser" }, storageProfile: { osDisk: { osType: "Linux" } } } });
   check("ARM PUT virtual machine over wire", vmPut.status === 200 || vmPut.status === 201, `HTTP ${vmPut.status}`);
   await page.goto(UI + "#/vms");
   await page.getByRole("link", { name: VM2, exact: true }).waitFor({ timeout: 10000 });

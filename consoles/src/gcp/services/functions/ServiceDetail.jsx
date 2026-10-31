@@ -190,7 +190,7 @@ function Source({ region, name, service, reload, notify }) {
   const save = async () => {
     setBusy(true); setError(null);
     try {
-      await api.patchService(region, name, { annotations: { ...service.annotations, ...api.functionAnnotations(runtime, entry, source) } }, "annotations");
+      await api.redeploySource(region, name, service, runtime, entry, source);
       notify.success("Source saved and redeployed");
       setEdit(false); reload();
     } catch (e) { setError(e); } finally { setBusy(false); }

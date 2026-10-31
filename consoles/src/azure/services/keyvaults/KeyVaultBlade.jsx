@@ -16,6 +16,7 @@ import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
@@ -297,14 +298,13 @@ function AccessPolicies({ a, reload }) {
     } catch (e) { notify.error(e, "Saving access policies failed"); }
   };
   return (
-    <>
-      <div className="vy-panel-title">Access policies</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Access policies commands">
+    <CapabilityContainer id="azure.keyvaults.access_policies" title="Access policies"
+      actions={<>
         <ToolbarButton icon={<Add20Regular />} onClick={() => setEdit("new")}>Create</ToolbarButton>
         <ToolbarButton disabled={!policies.length} onClick={() => setEdit({ index: 0 })}>Edit</ToolbarButton>
         <ToolbarButton icon={<Delete20Regular />} disabled={!policies.length} onClick={() => save(policies.slice(1))}>Delete</ToolbarButton>
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-      </div>
+      </>}>
       <Table size="small" aria-label="Access policies" style={{ maxWidth: 900, marginTop: 8 }}>
         <TableHeader><TableRow>
           <TableHeaderCell>Name</TableHeaderCell><TableHeaderCell>Email</TableHeaderCell>
@@ -325,7 +325,7 @@ function AccessPolicies({ a, reload }) {
       <PolicyDialog open={!!edit} policy={edit && edit !== "new" ? policies[edit.index] : null}
         onClose={() => setEdit(null)}
         onSave={async (p) => { await save(edit === "new" ? [...policies, p] : policies.map((x, i) => (i === edit.index ? p : x))); setEdit(null); }} />
-    </>
+    </CapabilityContainer>
   );
 }
 
@@ -646,8 +646,7 @@ function Certificates() {
   const [gap, setGap] = useState(null); // "Restore Backup" | "Manage deleted certificates" | "Certificate Contacts" | "Certificate Authorities"
   const rows = (data || []).map((c) => ({ ...api.parseCertId(c.id), raw: c }));
   return (
-    <>
-      <div className="vy-panel-title">Certificates</div>
+    <CapabilityContainer id="azure.keyvaults.certificates" title="Certificates">
       <BrowseGrid
         resourceName="certificate" rowKey={(r) => r.name} filterPlaceholder="Filter by name..."
         items={rows} loading={loading} error={error} onRefresh={reload}
@@ -681,7 +680,7 @@ function Certificates() {
           </DialogBody>
         </DialogSurface>
       </Dialog>
-    </>
+    </CapabilityContainer>
   );
 }
 
@@ -750,12 +749,11 @@ function AccessConfiguration({ a, reload }) {
     finally { setBusy(false); }
   };
   return (
-    <>
-      <div className="vy-panel-title">Access configuration</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Access configuration commands">
+    <CapabilityContainer id="azure.keyvaults.access_configuration" title="Access configuration"
+      actions={<>
         <ToolbarButton icon={<Save20Regular />} disabled={!dirty || busy} onClick={save}>Apply</ToolbarButton>
         <ToolbarButton disabled={!dirty} onClick={() => setF(init())}>Discard changes</ToolbarButton>
-      </div>
+      </>}>
       <section className="vy-section"><h3>Permission model</h3>
         <RadioGroup value={f.rbac ? "rbac" : "policy"} onChange={(_, d) => setF((x) => ({ ...x, rbac: d.value === "rbac" }))} aria-label="Permission model">
           <Radio value="rbac" label="Azure role-based access control (recommended)" />
@@ -767,7 +765,7 @@ function AccessConfiguration({ a, reload }) {
         <Checkbox label="Azure Resource Manager for template deployment" checked={f.arm} onChange={(_, d) => setF((x) => ({ ...x, arm: !!d.checked }))} />
         <Checkbox label="Azure Disk Encryption for volume encryption" checked={f.disk} onChange={(_, d) => setF((x) => ({ ...x, disk: !!d.checked }))} />
       </section>
-    </>
+    </CapabilityContainer>
   );
 }
 
@@ -801,13 +799,13 @@ function Networking({ a, reload }) {
         <Tab value="private">Private endpoint connections</Tab>
       </TabList>
       {tab === "firewalls" && (
-        <section className="vy-section" style={{ marginTop: 12 }}><h3>Firewalls and virtual networks</h3>
+        <CapabilityContainer id="azure.keyvaults.networking" title="Firewalls and virtual networks">
           <RadioGroup disabled={busy} value={value} onChange={(_, d) => save(d.value)} aria-label="Allow access from">
             <Radio value="all" label="Allow public access from all networks" />
             <Radio value="selected" label="Allow public access from specific virtual networks and IP addresses" />
             <Radio value="disabled" label="Disable public access" />
           </RadioGroup>
-        </section>
+        </CapabilityContainer>
       )}
       {tab === "private" && <NotSimulatedContainer title="Private endpoint connections" feature="Private endpoint connections for key vaults" />}
     </>
@@ -929,14 +927,21 @@ function AddLockDialog({ open, onClose, onCreate }) {
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, scoped to this vault) ──
 function ActivityLog({ a }) {
   const { data, loading, error, reload } = useAsync(() => api.listActivityLog(a.resourceGroup, a.name), [a.id]);
+  const [gap, setGap] = useState(null);
   const rows = data || [];
   return (
-    <>
-      <div className="vy-panel-title">{a.name} | Activity log</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Activity log commands">
+    <CapabilityContainer id="azure.keyvaults.activity_log" title={`${a.name} | Activity log`}
+      actions={<>
+        <ToolbarButton onClick={() => setGap("Edit columns")}>Edit columns</ToolbarButton>
         <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
-      </div>
+        <ToolbarButton onClick={() => setGap("Export Activity Logs")}>Export Activity Logs</ToolbarButton>
+        <ToolbarButton icon={<ArrowDownload20Regular />} onClick={() => setGap("Download as CSV")}>Download as CSV</ToolbarButton>
+        <ToolbarButton onClick={() => setGap("Feedback")}>Feedback</ToolbarButton>
+        <ToolbarButton onClick={() => setGap("Pin current filters")}>Pin current filters</ToolbarButton>
+        <ToolbarButton onClick={() => setGap("Reset filters")}>Reset filters</ToolbarButton>
+      </>}>
       <ErrorBar error={error} />
+      <NotSimulated feature="Severity/category filtering and the Timespan picker" note="This list always shows everything recorded since the simulation booted." />
       <table className="vy-grid">
         <thead><tr><th>Operation name</th><th>Status</th><th>Time</th><th>Time stamp</th><th>Subscription</th><th>Event initiated by</th></tr></thead>
         <tbody>
@@ -952,7 +957,16 @@ function ActivityLog({ a }) {
           )) : <tr><td colSpan={6} className="vy-muted">No events to display</td></tr>}
         </tbody>
       </table>
-    </>
+      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
+        <DialogSurface aria-label={gap || "Not simulated"}>
+          <DialogBody>
+            <DialogTitle>{gap}</DialogTitle>
+            <DialogContent><NotSimulated feature={gap === "Feedback" ? "Sending product feedback" : gap} /></DialogContent>
+            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
   );
 }
 

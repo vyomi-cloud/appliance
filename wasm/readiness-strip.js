@@ -151,9 +151,25 @@
       var up = s.status === 'ready';
       var row = document.createElement('div');
       row.style.cssText = 'display:flex; align-items:center; gap:8px;';
+      // The service's cloud mark (the same AWS / Google Cloud / Azure marks as the space
+      // cards — SPACE_LOGOS on clouds.html), in colour when ready, greyed out while not
+      // running, ringed red on error. Pages without the marks (or Core services) keep the dot.
+      var logos = (typeof SPACE_LOGOS !== 'undefined') ? SPACE_LOGOS : null;
+      var mark = logos && logos[s.category];
       var dot = document.createElement('span');
-      dot.style.cssText = 'width:8px; height:8px; border-radius:50%; flex:none; background:' +
-        (up ? '#34d399' : s.status === 'error' ? '#ef4444' : (onDark ? 'rgba(255,255,255,.35)' : '#d4d4d8')) + ';';
+      if (mark) {
+        dot.innerHTML = mark;
+        dot.title = ({ aws: 'AWS', gcp: 'Google Cloud', azure: 'Microsoft Azure' })[s.category] + ' — ' +
+          (up ? 'ready' : s.status === 'error' ? 'error' : 'not running');
+        dot.style.cssText = 'width:22px; height:16px; flex:none; display:inline-flex; align-items:center; justify-content:center;' +
+          ' border-radius:4px; transition:filter .2s, opacity .2s;' +
+          (up ? '' : s.status === 'error' ? ' box-shadow:0 0 0 1.5px #ef4444;' : ' filter:grayscale(1); opacity:.45;');
+        var svg = dot.querySelector('svg');
+        if (svg) { svg.style.width = '100%'; svg.style.height = '100%'; svg.setAttribute('preserveAspectRatio', 'xMidYMid meet'); }
+      } else {
+        dot.style.cssText = 'width:8px; height:8px; border-radius:50%; flex:none; background:' +
+          (up ? '#34d399' : s.status === 'error' ? '#ef4444' : (onDark ? 'rgba(255,255,255,.35)' : '#d4d4d8')) + ';';
+      }
       row.appendChild(dot);
       var name = document.createElement('span');
       name.style.cssText = 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;' +

@@ -81,6 +81,11 @@ try:                                              # Management locks (Microsoft.
 except ImportError:
     import azure_locks_core as locks_engine        # type: ignore
 
+try:                                              # checkAccess decision algorithm (wildcard + scope-inheritance +
+    from core import azure_iam_core as iam_engine  # notActions/deny) — reused for role assignments created as real
+except ImportError:                               # ARM resources scoped to a resource group (this module's own store,
+    import azure_iam_core as iam_engine            # type: ignore   not azure_iam_core's separate directory-role store).
+
 try:                                              # VM size catalog (vcpu/ram/family per real Azure size name)
     from core import instance_catalog
 except ImportError:
@@ -109,12 +114,23 @@ def _record_activity(resource_name: str, action: str, detail: str = "") -> None:
         pass
 
 
+def _parse_odata_ts(s: str):
+    try:
+        d = datetime.datetime.fromisoformat(s.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=datetime.timezone.utc)   # naive = UTC (comparable)
+
+
+
 def _activity_log_query(query: dict) -> dict:
     """GET /subscriptions/{sub}/providers/Microsoft.Insights/eventtypes/management/values —
     the real ARM activity-log read API every resource's "Activity log" blade calls, scoped
-    via an OData $filter containing ``resourceUri eq '{id}'``. Only that scoping predicate is
-    understood (not the full OData grammar); with no resourceUri filter the unfiltered feed
-    (every resource) is returned, matching the subscription-wide Activity log page."""
+    via an OData $filter containing ``resourceUri eq '{id}'`` and/or the timespan picker's
+    ``eventTimestamp ge/le '{iso}'`` predicates (ENFORCED — a narrower timespan really narrows
+    the result). The rest of the OData grammar (severity/category, other operators) is not
+    understood; with no resourceUri filter the unfiltered feed (every resource) is returned,
+    matching the subscription-wide Activity log page."""
     try:
         try:
             from core import nano_events
@@ -126,6 +142,19 @@ def _activity_log_query(query: dict) -> dict:
     m = re.search(r"resourceUri\s+eq\s+'([^']*)'", filt)
     resource = (m.group(1).rstrip("/").split("/")[-1]) if m else None
     events = nano_events.list_events(resource=resource)
+    since = _parse_odata_ts(m.group(1)) if (m := re.search(r"eventTimestamp\s+ge\s+'([^']*)'", filt)) else None
+    until = _parse_odata_ts(m.group(1)) if (m := re.search(r"eventTimestamp\s+le\s+'([^']*)'", filt)) else None
+    if since is not None or until is not None:
+        def _in_range(e):
+            ts = _parse_odata_ts(e["ts"])
+            if ts is None:
+                return True
+            if since is not None and ts < since:
+                return False
+            if until is not None and ts > until:
+                return False
+            return True
+        events = [e for e in events if _in_range(e)]
     value = [{
         "eventName": {"value": e["action"], "localizedValue": e["action"]},
         "operationName": {"value": e["action"], "localizedValue": f"{e['action']}: {e['detail']}" if e["detail"] else e["action"]},
@@ -218,6 +247,29 @@ def _expand_tokens(obj, name: str, base: str):
     return obj
 
 
+# ── ARM template deployment: literal [parameters('x')] / [variables('y')] substitution only
+# (no expression language, no resourceId()/concat()/etc, no dependsOn ordering beyond
+# template order) — a bounded but real evaluator, see AzureArm._execute_deployment.
+_PARAM_EXPR = re.compile(r"^\[\s*parameters\(\s*'([^']*)'\s*\)\s*\]$")
+_VAR_EXPR = re.compile(r"^\[\s*variables\(\s*'([^']*)'\s*\)\s*\]$")
+
+
+def _resolve_template_expr(value, params: dict, variables: dict):
+    if isinstance(value, str):
+        m = _PARAM_EXPR.match(value.strip())
+        if m:
+            return params.get(m.group(1))
+        m = _VAR_EXPR.match(value.strip())
+        if m:
+            return variables.get(m.group(1))
+        return value
+    if isinstance(value, dict):
+        return {k: _resolve_template_expr(v, params, variables) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_resolve_template_expr(v, params, variables) for v in value]
+    return value
+
+
 _APIM_DEFAULT_POLICY = ("<policies>\r\n  <inbound />\r\n  <backend>\r\n    <forward-request />\r\n"
                         "  </backend>\r\n  <outbound />\r\n  <on-error />\r\n</policies>")
 
@@ -249,6 +301,20 @@ def _canonical_id(sub: str, rg, type_chain, names) -> str:
         if i + 1 < len(rest_types):
             seg.append(rest_types[i + 1])
     return "/".join(seg)
+
+
+def _role_assignment_marker(chain):
+    """Index of a re-entrant, LIST-only ``['providers', 'Microsoft.Authorization',
+    'roleAssignments']`` marker in `chain` (`AzureArm._arm`'s split of everything after the
+    FIRST namespace token) — i.e. GET .../<some resource>/providers/Microsoft.Authorization/
+    roleAssignments, same shape as the locks/diagnosticSettings extension resources. A bare
+    name after the marker (reading ONE assignment scoped that way) isn't modelled and falls
+    through to the generic subscription-scoped catalog alternation instead."""
+    for i in range(len(chain) - 2):
+        if (chain[i].lower() == "providers" and chain[i + 1].lower() == "microsoft.authorization"
+                and chain[i + 2].lower() == "roleassignments" and i + 3 == len(chain)):
+            return i
+    return None
 
 
 def _view(rec: dict) -> dict:
@@ -391,7 +457,7 @@ class AzureArm:
                 return _err(405, "MethodNotAllowed", "Use GET to list resources in a resource group.")
             items = [_view(r) for r in self.state.values()
                      if r.get("_sub") == sub and (r.get("_rg") or "").lower() == rg.lower()
-                     and r.get("_type", "").lower() != "microsoft.resources/resourcegroups"]
+                     and r.get("_type", "").lower() not in ("microsoft.resources/resourcegroups", web_engine.EVENT_TYPE)]
             return _ok({"value": items})
 
         # GET /subscriptions/{sub}/resources — every resource across every resource group in
@@ -401,7 +467,8 @@ class AzureArm:
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "Use GET to list resources in a subscription.")
             items = [_view(r) for r in self.state.values()
-                     if r.get("_sub") == sub and r.get("_type", "").lower() != "microsoft.resources/resourcegroups"]
+                     if r.get("_sub") == sub
+                     and r.get("_type", "").lower() not in ("microsoft.resources/resourcegroups", web_engine.EVENT_TYPE)]
             return _ok({"value": items})
 
         if idx >= len(rest_segs) or rest_segs[idx].lower() != "providers":
@@ -480,7 +547,19 @@ class AzureArm:
             shared = _activity_log_query(query)["body"].get("value", [])
             seen = {e.get("id") for e in own}
             events = own + [e for e in shared if e.get("id") not in seen]
-            events.sort(key=lambda e: str(e.get("eventTimestamp") or ""), reverse=True)
+            # the timespan picker (eventTimestamp ge/le) narrows BOTH sources
+            filt = query.get("$filter") or ""
+            since = _parse_odata_ts(m.group(1)) if (m := re.search(r"eventTimestamp\s+ge\s+'([^']*)'", filt)) else None
+            until = _parse_odata_ts(m.group(1)) if (m := re.search(r"eventTimestamp\s+le\s+'([^']*)'", filt)) else None
+            if since is not None or until is not None:
+                def _in_range(e):
+                    ts = _parse_odata_ts(str(e.get("eventTimestamp") or ""))
+                    return ts is None or ((since is None or ts >= since) and (until is None or ts <= until))
+                events = [e for e in events if _in_range(e)]
+            # sort by the parsed instant: the two sources write ms vs µs precision, which
+            # string order gets wrong ("…47.463Z" > "…47.463441Z")
+            _epoch = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+            events.sort(key=lambda e: _parse_odata_ts(str(e.get("eventTimestamp") or "")) or _epoch, reverse=True)
             return _ok({"value": events})
 
         # Microsoft.Authorization/locks scoped directly to the RESOURCE GROUP (or, with no
@@ -493,6 +572,29 @@ class AzureArm:
         if namespace.lower() == "microsoft.authorization" and chain and chain[0].lower() == "locks":
             scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else f"/subscriptions/{sub}"
             return self._locks_crud(method, scope_rid, chain[1:], payload, rg or sub)
+
+        # Microsoft.Authorization/checkAccess at the resource-group (or subscription) scope
+        # itself — the real decision call behind the "Access control (IAM) > Check access" /
+        # "My access" tabs: resolves the principal's role assignments AT OR ABOVE this scope
+        # against the role's actions/notActions, same wildcard + explicit-deny-wins algorithm
+        # azure_iam_core.py's checkAccess uses, applied to THIS store's own roleAssignments
+        # (created as real, resource-group-scoped ARM resources — see the generic PUT branch
+        # below, which stamps `properties.scope` from the containing resource group).
+        if namespace.lower() == "microsoft.authorization" and chain and chain[0].lower() == "checkaccess":
+            if method != "POST":
+                return _err(405, "MethodNotAllowed", "checkAccess is a POST-only action.")
+            scope_rid = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else f"/subscriptions/{sub}"
+            return self._check_access(sub, scope_rid, payload)
+
+        # Microsoft.Authorization/roleDefinitions collection GET: the built-in Owner /
+        # Contributor / Reader / … roles (ROLES, core/azure_arm_data.py — never provisioned as
+        # catalog records, so the generic engine's own store never carries them) merged with
+        # any custom role definitions created via PUT (which DO live in the generic catalog).
+        if (namespace.lower() == "microsoft.authorization" and chain
+                and chain[0].lower() == "roledefinitions" and len(chain) == 1):
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+            return self._role_definitions_list(sub)
 
         # Microsoft.Authorization/locks: a real ARM extension resource scoped to ANY other
         # resource's own id (the chain re-enters "providers", like Event Grid's event
@@ -507,6 +609,29 @@ class AzureArm:
         diag_marker = monitor_engine.find_diagnostic_marker(chain)
         if diag_marker is not None:
             return self._diagnostic_settings(method, sub, rg, namespace, chain, diag_marker, payload)
+
+        # Microsoft.Authorization/roleAssignments: a real ARM extension resource that can be
+        # READ scoped to ANY other resource's own id (chain re-enters "providers", same shape
+        # as locks/diagnostic settings above) — real Azure's IAM blade lists assignments at that
+        # exact scope plus its subscription/resource-group ancestors (inherited access), not the
+        # whole subscription. Generic over every catalog type; GET-only (assignments are still
+        # CREATED at the subscription scope, matching how az role assignment create/Entra work
+        # today — this only narrows the READ for a resource's own IAM blade).
+        role_marker = _role_assignment_marker(chain)
+        if role_marker is not None:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Use the subscription-scoped roleAssignments path to write.")
+            stc, snames = [namespace], []
+            for n, token in enumerate(chain[:role_marker]):
+                (stc if n % 2 == 0 else snames).append(token)
+            scope_rid = _canonical_id(sub, rg, stc, snames).lower()
+            ancestors = {scope_rid, f"/subscriptions/{sub}".lower()}
+            if rg is not None:
+                ancestors.add(f"/subscriptions/{sub}/resourcegroups/{rg}".lower())
+            items = [_view(r) for r in self.state.values()
+                     if r.get("_type", "").lower() == "microsoft.authorization/roleassignments"
+                     and ((r.get("properties") or {}).get("scope") or "").rstrip("/").lower() in ancestors | {""}]
+            return _ok({"value": items})
 
         # ARM type path alternates type/name: providers/<ns>/<t1>/<n1>/<t2>/<n2>...
         type_chain = [namespace]
@@ -547,6 +672,8 @@ class AzureArm:
             return self._cost_consumption(method, sub, rg, chain, payload, query)
         if namespace.lower() == "microsoft.billingbenefits":
             return self._cost_billingbenefits(method, sub, rg, chain, payload, query)
+        if namespace.lower() == "microsoft.capacity":
+            return self._cost_capacity(method, sub, rg, chain, payload, query)
         # Microsoft.EventGrid/topics/{name}/providers/Microsoft.EventGrid/eventSubscriptions/{name}:
         # a real ARM extension resource (scoped to the topic), so the chain re-enters "providers"
         # instead of alternating type/name — the eventgrid engine owns that shape.
@@ -580,7 +707,7 @@ class AzureArm:
         # POST action verbs (listKeys / start / powerOff / runCommand / …)
         if method == "POST" and is_collection and len(type_chain) >= 3 and names:
             parent_rid = _canonical_id(sub, rg, type_chain[:-1], names)
-            return self._arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid, payload)
+            return self._arm_action(type_chain[-1].lower(), type_chain, names[-1], parent_rid, payload, sub=sub, rg=rg)
 
         full_type = "/".join(type_chain)
         if is_collection:
@@ -606,36 +733,75 @@ class AzureArm:
                 return _err(404, "ResourceNotFound", f"Resource '{rid}' not found.")
             return _ok(_view(rec))
         if method in ("PUT", "PATCH"):
-            existed_before = key in self.state
             blocked = self._lock_block(rid, full_type, for_delete=False)
             if blocked:
                 return blocked
             blocked = self._servicebus_tier_block(type_chain, names, payload, sub, rg)
             if blocked:
                 return blocked
+            blocked = self._aks_stopped_block(type_chain, names, sub, rg)
+            if blocked:
+                return blocked
+            blocked = self._cosmos_validate_block(type_chain, names, payload, sub, rg)
+            if blocked:
+                return blocked
+            if full_type.lower() == "microsoft.authorization/roleassignments":
+                # Real ARM derives a role assignment's scope from the resource ID it was PUT
+                # under — not from a client-supplied properties.scope — so checkAccess and the
+                # Role assignments list are genuinely scoped to the resource group they were
+                # created at, instead of trusting whatever the caller sent (or sent nothing).
+                # A client scope NARROWER than the path (a resource inside this group/subscription —
+                # role assignments are written at the subscription/group path here) is kept;
+                # anything else (missing, wider, unrelated) becomes the path's own scope.
+                payload = dict(payload or {})
+                path_scope = f"/subscriptions/{sub}/resourceGroups/{rg}" if rg is not None else f"/subscriptions/{sub}"
+                asked = str((payload.get("properties") or {}).get("scope") or "").rstrip("/")
+                inside = asked.lower().startswith(path_scope.lower() + "/")
+                payload["properties"] = {**(payload.get("properties") or {}),
+                                         "scope": asked if inside else path_scope}
             resp = self._upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
             if resp["status"] >= 300:          # validation error from a type hook (e.g. NIC IP allocation)
                 return resp
+            if full_type.lower() == "microsoft.resources/deployments":
+                # A bounded but REAL template evaluator (literal parameter/variable
+                # substitution only — no expression language, no dependsOn ordering, no
+                # nested/linked templates): every resource listed in properties.template.resources
+                # is actually PUT through this same ARM dispatcher, not just stored inert.
+                provisioned, errors = self._execute_deployment(sub, rg, self.state[key])
+                rec = self.state[key]
+                rec["properties"]["outputResources"] = provisioned
+                if errors:
+                    rec["properties"]["provisioningState"] = "Failed"
+                    rec["properties"]["error"] = {"code": "DeploymentFailed", "details": errors}
+                resp["body"] = _view(rec)
             if lro:
                 resp["status"] = 200
                 op_id = self._make_operation(rid, method)
                 url = f"{base}/api/azure/operations/{op_id}?api-version={api_version}"
                 resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
-            _record_activity(leaf_name, "Update" if existed_before else "Create", f"{full_type} '{leaf_name}'")
+            # One ARM-native eventtypes row per mutation (exact resourceId + real
+            # resourceGroupName) — supersedes the generic nano_events feed for this call site,
+            # so a resource group's Activity log can aggregate every resource inside it.
+            self._record_activity(rid, f"{full_type}/write", sub)
             return resp
         if method == "DELETE":
             blocked = self._lock_block(rid, full_type, for_delete=True)
             if blocked:
                 return blocked
+            blocked = self._aks_stopped_block(type_chain, names, sub, rg)
+            if blocked:
+                return blocked
             rec = self.state.pop(key, None)
             if rec is not None:
-                _record_activity(leaf_name, "Delete", f"{full_type} '{leaf_name}'")
                 # Both extension resources (locks, … keyed "{parent id}/providers/<ext ns>/…")
                 # and plain nested children (e.g. managedClusters/{c}/agentPools/{p}, keyed
-                # "{parent id}/agentPools/{p}") cascade-delete with their parent in real ARM.
+                # "{parent id}/agentPools/{p}") cascade-delete with their parent in real ARM —
+                # but NOT its own Activity log rows ("/__event__/" keys): real Azure keeps a
+                # deleted resource's history in the log, it doesn't erase it.
                 prefix = key + "/"
-                for child_key in [k for k in self.state if k.startswith(prefix)]:
+                for child_key in [k for k in self.state if k.startswith(prefix) and "/__event__/" not in k]:
                     del self.state[child_key]
+                self._record_activity(rid, f"{full_type}/delete", sub)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
 
@@ -692,6 +858,83 @@ class AzureArm:
                             "Duplicate detection is not supported on a Basic-tier Service Bus namespace.")
         return None
 
+    def _aks_stopped_block(self, type_chain, names, sub, rg):
+        # Real AKS rejects node-pool create/scale/upgrade/delete while the cluster itself is
+        # Stopped ("start the cluster before performing this operation") — Vyomi now ENFORCES
+        # that instead of letting agentPools writes silently succeed against a stopped cluster
+        # (azure.aks.cluster.power / azure.aks.node_pools.crud).
+        if len(type_chain) != 3 or type_chain[0].lower() != "microsoft.containerservice" \
+                or type_chain[1].lower() != "managedclusters" or type_chain[2].lower() != "agentpools":
+            return None
+        cluster = self.state.get(_canonical_id(sub, rg, type_chain[:-1], names[:-1]).lower())
+        if (cluster or {}).get("properties", {}).get("powerState", {}).get("code") == "Stopped":
+            return _err(409, "ClusterNotRunning",
+                        "The cluster is stopped. Start the cluster before performing operations on its node pools.")
+        return None
+
+    def _cosmos_validate_block(self, type_chain, names, payload, sub, rg):
+        # Real Cosmos DB ARM rejects an invalid consistencyPolicy / backupPolicy / locations
+        # shape outright — Vyomi now ENFORCES that contract instead of round-tripping whatever
+        # the caller sends (azure.cosmos.default_consistency, azure.cosmos.backup_restore,
+        # azure.cosmos.replicate_data_globally); the underlying behaviour (read consistency,
+        # taking/restoring a backup, provisioning a second region) is still not simulated.
+        if type_chain[0].lower() != "microsoft.documentdb" or type_chain[1].lower() != "databaseaccounts" or len(type_chain) != 2:
+            return None
+        existing_props = (self.state.get(_canonical_id(sub, rg, type_chain, names).lower()) or {}).get("properties") or {}
+        payload_props = (payload or {}).get("properties") or {}
+        props = _merge(existing_props, payload_props) if payload_props else existing_props
+
+        cp = props.get("consistencyPolicy")
+        if isinstance(cp, dict):
+            level = cp.get("defaultConsistencyLevel", "Session")
+            if level not in ("Strong", "BoundedStaleness", "Session", "ConsistentPrefix", "Eventual"):
+                return _err(400, "BadRequest", f"Unsupported consistencyPolicy.defaultConsistencyLevel '{level}'.")
+            if level == "BoundedStaleness":
+                prefix, interval = cp.get("maxStalenessPrefix"), cp.get("maxIntervalInSeconds")
+                if not isinstance(prefix, int) or not isinstance(interval, int):
+                    return _err(400, "BadRequest",
+                                "BoundedStaleness requires integer consistencyPolicy.maxStalenessPrefix and maxIntervalInSeconds.")
+                if not (10 <= prefix <= 2147483647):
+                    return _err(400, "BadRequest", "consistencyPolicy.maxStalenessPrefix must be between 10 and 2147483647.")
+                if not (5 <= interval <= 86400):
+                    return _err(400, "BadRequest", "consistencyPolicy.maxIntervalInSeconds must be between 5 and 86400.")
+
+        bp = props.get("backupPolicy")
+        if isinstance(bp, dict):
+            btype = bp.get("type", "Periodic")
+            if btype not in ("Periodic", "Continuous"):
+                return _err(400, "BadRequest", f"Unsupported backupPolicy.type '{btype}'.")
+            existing_type = (existing_props.get("backupPolicy") or {}).get("type", "Periodic")
+            if existing_type == "Continuous" and btype == "Periodic":
+                return _err(400, "BadRequest",
+                            "Migrating an account's backup policy from Continuous to Periodic mode is not supported.")
+            if btype == "Periodic":
+                pm = bp.get("periodicModeProperties") or {}
+                interval = pm.get("backupIntervalInMinutes", 240)
+                retention = pm.get("backupRetentionIntervalInHours", 8)
+                redundancy = pm.get("backupStorageRedundancy", "Geo")
+                if not isinstance(interval, int) or not (60 <= interval <= 1440):
+                    return _err(400, "BadRequest", "periodicModeProperties.backupIntervalInMinutes must be between 60 and 1440.")
+                if not isinstance(retention, int) or not (8 <= retention <= 720):
+                    return _err(400, "BadRequest", "periodicModeProperties.backupRetentionIntervalInHours must be between 8 and 720.")
+                if redundancy not in ("Geo", "Zone", "Local"):
+                    return _err(400, "BadRequest", f"Unsupported periodicModeProperties.backupStorageRedundancy '{redundancy}'.")
+            else:
+                tier = (bp.get("continuousModeProperties") or {}).get("tier", "Continuous30Days")
+                if tier not in ("Continuous7Days", "Continuous30Days"):
+                    return _err(400, "BadRequest", f"Unsupported continuousModeProperties.tier '{tier}'.")
+
+        locations = props.get("locations")
+        if isinstance(locations, list) and locations:
+            loc_names = [l.get("locationName") for l in locations]
+            if len(set(loc_names)) != len(loc_names):
+                return _err(400, "BadRequest", "properties.locations cannot repeat the same locationName.")
+            prios = sorted(l.get("failoverPriority") for l in locations)
+            if prios != list(range(len(locations))):
+                return _err(400, "BadRequest",
+                            "properties.locations.failoverPriority must be a 0-based, gap-free sequence with exactly one region at priority 0.")
+        return None
+
     def _locks(self, method, sub, rg, namespace, chain, marker, payload):
         # Replay the SAME type/name alternation the main dispatcher uses (see `_arm` above)
         # over everything before the "providers/Microsoft.Authorization/locks" marker.
@@ -722,6 +965,150 @@ class AzureArm:
             else:
                 return _err(405, "MethodNotAllowed", f"{method} not allowed.")
         return {"status": r["status"], "headers": {}, "body": r["body"]}
+
+    # ── Azure RBAC (role assignments created as real, resource-group-scoped ARM resources) ──
+    def _role_catalog(self, sub):
+        """{roleName: {actions, notActions, custom, description, id}} — the built-in roles
+        (ROLES, never provisioned as catalog records) merged with any custom role definitions
+        created via PUT .../roleDefinitions/{name} (which DO live in self.state)."""
+        out = {}
+        for r in ROLES:
+            props = r["properties"]
+            actions, not_actions = [], []
+            for p in props.get("permissions") or []:
+                actions.extend(p.get("actions") or [])
+                not_actions.extend(p.get("notActions") or [])
+            out[props["roleName"]] = {"roleName": props["roleName"], "actions": actions, "notActions": not_actions,
+                                      "custom": False, "description": props.get("description", ""), "id": r["id"]}
+        for rec in self.state.values():
+            if rec.get("_type", "").lower() != "microsoft.authorization/roledefinitions" or rec.get("_sub") != sub:
+                continue
+            props = rec.get("properties") or {}
+            actions, not_actions = [], []
+            for p in props.get("permissions") or []:
+                actions.extend(p.get("actions") or [])
+                not_actions.extend(p.get("notActions") or [])
+            out[rec["name"]] = {"roleName": rec["name"], "actions": actions, "notActions": not_actions,
+                                "custom": True, "description": props.get("description", ""), "id": rec["id"]}
+        return out
+
+    def _role_assignments(self, sub):
+        return [rec for rec in self.state.values()
+                if rec.get("_type", "").lower() == "microsoft.authorization/roleassignments" and rec.get("_sub") == sub]
+
+    def _role_definitions_list(self, sub):
+        roles = self._role_catalog(sub)
+        counts = {}
+        for rec in self._role_assignments(sub):
+            props = rec.get("properties") or {}
+            if str(props.get("kind", "allow")).lower() == "deny":
+                continue
+            role_name = props.get("roleName") or (props.get("roleDefinitionId") or "").rsplit("/", 1)[-1]
+            counts[role_name] = counts.get(role_name, 0) + 1
+        value = [{
+            "id": info["id"], "name": name,
+            "properties": {
+                "roleName": name, "type": "CustomRole" if info["custom"] else "BuiltInRole",
+                "description": info["description"], "assignableScopes": ["/"],
+                "permissions": [{"actions": info["actions"], "notActions": info["notActions"]}],
+            },
+            "assignmentCount": counts.get(name, 0),
+        } for name, info in roles.items()]
+        return _ok({"value": value})
+
+    def _check_access(self, sub, scope_rid, payload):
+        payload = payload or {}
+        subject = payload.get("subject") or {}
+        principal_id = payload.get("principalId") or subject.get("principalId") or ""
+        actions = payload.get("actions")
+        if actions is None:
+            single = payload.get("action") or ""
+            actions = [{"id": single}] if single else []
+        roles = self._role_catalog(sub)
+        assignments = self._role_assignments(sub)
+        results = []
+        for a in actions:
+            act = a.get("id") if isinstance(a, dict) else str(a)
+            allowed, denied, granting = False, False, []
+            for rec in assignments:
+                props = rec.get("properties") or {}
+                if props.get("principalId") != principal_id:
+                    continue
+                if not iam_engine._scope_covers(props.get("scope", "/"), scope_rid):
+                    continue
+                if str(props.get("kind", "allow")).lower() == "deny":
+                    if iam_engine._matches_any(props.get("denyActions"), act):
+                        denied = True
+                    continue
+                role_name = props.get("roleName") or (props.get("roleDefinitionId") or "").rsplit("/", 1)[-1]
+                role = roles.get(role_name)
+                if not role:
+                    continue
+                if iam_engine._matches_any(role["actions"], act) and not iam_engine._matches_any(role["notActions"], act):
+                    allowed = True
+                    granting.append(role_name)
+            results.append({"actionId": act, "accessDecision": "Allowed" if (allowed and not denied) else "NotAllowed",
+                            "roles": granting})
+        return _ok({"value": results})
+
+    # ── deployments (Microsoft.Resources/deployments): a bounded real template evaluator ────
+    def _execute_deployment(self, sub, rg, rec):
+        """PUT every resource listed in properties.template.resources through THIS SAME ARM
+        dispatcher — so a deployment actually provisions something, not just stores a record
+        of what was asked for. [parameters('x')] / [variables('y')] resolve to literal values
+        (properties.parameters, falling back to the template's own defaultValue); any other
+        ARM template function (concat/resourceId/reference/copy loops) is left as-is, so that
+        resource's own PUT will fail its own validation rather than silently "succeed"."""
+        props = rec.get("properties") or {}
+        template = props.get("template") or {}
+        resources = template.get("resources")
+        if not isinstance(resources, list) or not resources:
+            return [], []
+        values = {k: v.get("defaultValue") for k, v in (template.get("parameters") or {}).items()}
+        for k, v in (props.get("parameters") or {}).items():
+            values[k] = v.get("value", v) if isinstance(v, dict) else v
+        variables = template.get("variables") or {}
+        provisioned, errors = [], []
+        for entry in resources:
+            entry = _resolve_template_expr(entry, values, variables)
+            rtype, rname = entry.get("type"), entry.get("name")
+            if not rtype or not rname:
+                errors.append({"error": "a template resource is missing type/name"})
+                continue
+            path = (f"/subscriptions/{sub}/resourceGroups/{rg}/providers/{rtype}/{rname}" if rg is not None
+                   else f"/subscriptions/{sub}/providers/{rtype}/{rname}")
+            body = {k: v for k, v in entry.items() if k not in ("type", "name", "apiVersion", "dependsOn", "condition", "comments")}
+            resp = self.handle("PUT", path, {"api-version": entry.get("apiVersion")} if entry.get("apiVersion") else {}, body)
+            if resp["status"] >= 400:
+                errors.append({"resource": f"{rtype}/{rname}", "status": resp["status"], "error": resp["body"]})
+            else:
+                provisioned.append({"id": resp["body"].get("id", path), "resourceType": rtype, "resourceName": rname})
+        return provisioned, errors
+
+    def _deployment_action(self, action, name, rid, sub, rg):
+        rec = self.state.get(rid.lower())
+        if not rec:
+            return _err(404, "DeploymentNotFound", f"Deployment '{name}' could not be found.")
+        if action == "cancel":
+            # Every simulated deployment completes synchronously (see the generic PUT branch),
+            # so by the time a Cancel call can reach it, it is already in a terminal state —
+            # the same conflict a real deployment that finished before Cancel arrived returns.
+            state_now = (rec.get("properties") or {}).get("provisioningState", "Succeeded")
+            return _err(409, "DeploymentNotCancellable",
+                        f"Deployment '{name}' cannot be cancelled: it is already in the terminal "
+                        f"state '{state_now}'.")
+        # redeploy: re-run the SAME stored template/parameters against current state.
+        provisioned, errors = self._execute_deployment(sub, rg, rec)
+        rec["properties"]["outputResources"] = provisioned
+        if errors:
+            rec["properties"]["provisioningState"] = "Failed"
+            rec["properties"]["error"] = {"code": "DeploymentFailed", "details": errors}
+        else:
+            rec["properties"]["provisioningState"] = "Succeeded"
+            rec["properties"].pop("error", None)
+        rec["properties"]["timestamp"] = _now()
+        self._record_activity(rid, "Microsoft.Resources/deployments/redeploy/action", sub)
+        return _ok(_view(rec))
 
     def _diagnostic_settings(self, method, sub, rg, namespace, chain, marker, payload):
         # Replay the SAME type/name alternation the main dispatcher uses (see `_arm` above)
@@ -828,6 +1215,11 @@ class AzureArm:
     def _cost_billingbenefits(self, method, sub, rg, chain, payload, query):
         r = cost_engine.dispatch_billingbenefits(self.state, method, sub, chain, payload, query, base=self._base)
         return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
+    def _cost_capacity(self, method, sub, rg, chain, payload, query):
+        r = cost_engine.dispatch_capacity(self.state, method, sub, chain, payload, query, base=self._base)
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
     def _web(self, method, sub, rg, chain, payload, query):
         r = web_engine.dispatch(self.state, method, sub, rg, chain, [], payload, query)
         resp = {"status": r["status"], "headers": {}, "body": r["body"]}
@@ -1014,9 +1406,11 @@ class AzureArm:
                 rule_name = f"{'defaultSecurityRules' if rule.implied else 'securityRules'}/{name}"
         return _ok({"access": "Allow" if ok else "Deny", "ruleName": rule_name})
 
-    def _arm_action(self, action, type_chain, resource_name, parent_rid="", payload=None):
+    def _arm_action(self, action, type_chain, resource_name, parent_rid="", payload=None, sub=None, rg=None):
         ns = type_chain[0].lower() if type_chain else ""
         typ = type_chain[1].lower() if len(type_chain) > 1 else ""
+        if ns == "microsoft.resources" and typ == "deployments" and action in ("cancel", "redeploy"):
+            return self._deployment_action(action, resource_name, parent_rid, sub, rg)
         if ns == "microsoft.containerregistry" and typ == "registries" and action in ("listcredentials", "regeneratecredential"):
             rec = self.state.get(parent_rid.lower()) if parent_rid else None
             if not rec:
@@ -1038,6 +1432,8 @@ class AzureArm:
         if ns == "microsoft.documentdb" and typ == "databaseaccounts" and action in (
                 "listkeys", "listreadonlykeys", "listconnectionstrings", "regeneratekey"):
             return self._cosmos_keys_action(action, resource_name, parent_rid, payload or {})
+        if ns == "microsoft.documentdb" and typ == "databaseaccounts" and action == "failoverprioritychange":
+            return self._cosmos_failover_action(resource_name, parent_rid, payload or {})
         if action in ("start", "poweroff", "restart", "deallocate"):
             if ns != "microsoft.compute" or typ != "virtualmachines":
                 return _err(400, "ActionNotSupported",
@@ -1095,6 +1491,47 @@ class AzureArm:
         keys[field] = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes).decode()
         return _ok({"status": "Succeeded"})
 
+    def _cosmos_failover_action(self, account_name, parent_rid, payload):
+        """Microsoft.DocumentDB/databaseAccounts/{name}/failoverPriorityChange — the real
+        action behind the Replicate data globally blade's Manual Failover button. ENFORCED for
+        real: it reassigns which configured region is the write region (failoverPriority 0) and
+        updates location/writeLocations/readLocations to match — Vyomi still has one logical
+        region underneath, so the promoted region doesn't get its own separate data-plane copy
+        (azure.cosmos.replicate_data_globally)."""
+        rec = self.state.get(parent_rid.lower()) if parent_rid else None
+        if not rec:
+            return _err(404, "ResourceNotFound", f"Database account '{account_name}' not found.")
+        policies = payload.get("failoverPolicies")
+        if not isinstance(policies, list) or not policies:
+            return _err(400, "BadRequest", "failoverPolicies is required.")
+        locations = rec.get("properties", {}).get("locations") or []
+        by_name = {l.get("locationName"): dict(l) for l in locations}
+        if not by_name:
+            return _err(400, "BadRequest", "This account has no configured regions to fail over between.")
+        seen = set()
+        for p in policies:
+            name, prio = p.get("locationName"), p.get("failoverPriority")
+            if name not in by_name:
+                return _err(400, "BadRequest", f"Location '{name}' is not configured on this account.")
+            if not isinstance(prio, int) or prio < 0:
+                return _err(400, "BadRequest", "failoverPriority must be a non-negative integer.")
+            by_name[name]["failoverPriority"] = prio
+            seen.add(name)
+        if seen != set(by_name.keys()):
+            return _err(400, "BadRequest", "failoverPolicies must list every region configured on the account.")
+        prios = sorted(l["failoverPriority"] for l in by_name.values())
+        if prios != list(range(len(prios))):
+            return _err(400, "BadRequest",
+                        "failoverPriority values must be a 0-based, gap-free sequence with exactly one region at priority 0.")
+        new_locations = sorted(by_name.values(), key=lambda l: l["failoverPriority"])
+        rec["properties"]["locations"] = new_locations
+        primary = new_locations[0]["locationName"]
+        rec["location"] = primary
+        rec["properties"]["writeLocations"] = [{"locationName": primary, "failoverPriority": 0}]
+        rec["properties"]["readLocations"] = [{"locationName": l["locationName"], "failoverPriority": l["failoverPriority"]} for l in new_locations]
+        _record_activity(account_name, "Failover", f"Microsoft.DocumentDB/databaseAccounts '{account_name}' promoted '{primary}' to the write region")
+        return _ok(None, status=202)
+
     def _aks_action(self, action, cluster_name, parent_rid, payload):
         """POST actions on Microsoft.ContainerService/managedClusters/{name}/<action> — start/stop
         (metadata-only power state, same convention as VM start/poweroff), runCommand (the AKS
@@ -1111,6 +1548,9 @@ class AzureArm:
             return _ok({"status": "Succeeded", "action": action, "powerState": props["powerState"],
                         "note": "metadata-only (no node VMs backing this cluster in-browser); logical state updated"})
         if action == "runcommand":
+            if props.get("powerState", {}).get("code") == "Stopped":
+                return _err(409, "ClusterNotRunning",
+                            "The cluster is stopped. Start the cluster before running a command against it.")
             command = (payload or {}).get("command", "")
             return _ok({"id": str(uuid.uuid4()), "provisioningState": "Succeeded",
                         "exitCode": 0, "startedAt": _now(), "finishedAt": _now(),
@@ -1177,7 +1617,6 @@ class AzureArm:
             return _err(404, "ResourceGroupNotFound", f"Resource group '{rg}' could not be found.")
 
         if method in ("PUT", "PATCH"):
-            existed = key in self.state
             prior = self.state.get(key)
             # A PUT replaces the tag set exactly (like any generic catalog resource — see
             # AzureArm._upsert); a PATCH on an existing group merges it instead.
@@ -1193,21 +1632,24 @@ class AzureArm:
             rec["id"], rec["name"], rec["type"] = rid, rg, "Microsoft.Resources/resourceGroups"
             rec["properties"] = {"provisioningState": "Succeeded"}
             self.state[key] = rec
-            _record_activity(rg, "Update" if (existed or implicit) else "Create", f"Microsoft.Resources/resourceGroups '{rg}'")
+            self._record_activity(rid, "Microsoft.Resources/resourceGroups/write", sub)
             return _ok(_view(rec), status=200)
 
         if method == "DELETE":
             existed = self.state.pop(key, None) is not None
             # Deleting a resource group cascades to every resource it contains (real ARM
-            # behaviour) — including that group's own locks, extension resources, …
+            # behaviour) — including that group's own locks, extension resources, … but NOT
+            # Activity log rows ("/__event__/" keys): real Azure keeps a deleted group's
+            # history in the subscription-wide feed, it doesn't erase it.
             removed_any = False
             for k in [k for k, r in self.state.items()
-                      if (r.get("_sub") == sub and (r.get("_rg") or "") == rg) or k.startswith(key + "/providers/")]:
+                      if "/__event__/" not in k
+                      and ((r.get("_sub") == sub and (r.get("_rg") or "") == rg) or k.startswith(key + "/providers/"))]:
                 del self.state[k]
                 removed_any = True
             if not (existed or removed_any or implicit):
                 return _err(404, "ResourceGroupNotFound", f"Resource group '{rg}' could not be found.")
-            _record_activity(rg, "Delete", f"Microsoft.Resources/resourceGroups '{rg}'")
+            self._record_activity(rid, "Microsoft.Resources/resourceGroups/delete", sub)
             return _ok(None, status=200)
 
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")

@@ -25,31 +25,31 @@
   "title": "SQL query (SELECT) over the Cosmos data plane",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Covers a pragmatic SELECT subset (projection, a single WHERE comparison/IN predicate, ORDER BY); joins, subqueries, aggregate/system functions and stored procedures are not implemented."
+   "Covers a pragmatic SELECT subset: projection (incl. SELECT VALUE), TOP n, WHERE combining comparisons/IN/CONTAINS/STARTSWITH/ENDSWITH with a single logical operator throughout (AND-only or OR-only — mixed or parenthesized boolean expressions are not parsed), ORDER BY one field, OFFSET/LIMIT, and a top-level COUNT/VALUE COUNT aggregate; joins, subqueries, GROUP BY, other aggregate/system functions and stored procedures are not implemented."
   ],
   "tests": ["tests/conformance/test_azure_cosmos_core.py"]
  },
  "azure.cosmos.default_consistency": {
   "title": "Default consistency level",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "properties.consistencyPolicy.defaultConsistencyLevel round-trips through ARM, but every data-plane read in Vyomi is already strongly consistent regardless of the configured level."
+   "properties.consistencyPolicy is ENFORCED at the ARM contract level (defaultConsistencyLevel must be one of the 5 real values; BoundedStaleness requires maxStalenessPrefix in [10, 2147483647] and maxIntervalInSeconds in [5, 86400], same range Azure validates) — but every data-plane read in Vyomi is already strongly consistent, regardless of the configured level."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.cosmos.replicate_data_globally": {
   "title": "Replicate data globally (region list, failover)",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "properties.locations round-trips through ARM, but Vyomi has one logical region: added regions are not separately provisioned, and Manual/Service-Managed Failover do not move the data plane anywhere."
+   "Add region and Manual Failover are ENFORCED for real: properties.locations is validated (unique region names, a 0-based gap-free failoverPriority sequence) and failoverPriorityChange really reassigns which region is failoverPriority 0. Vyomi still has one logical region underneath, so an added region never gets its own separately provisioned data-plane copy, and Service-Managed (automatic) Failover is an honest 'Not simulated' gap — Vyomi never triggers a failover on its own."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.cosmos.backup_restore": {
   "title": "Backup & Restore policy",
-  "level": { "nano": "config_only", "offline": "config_only" },
+  "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "properties.backupPolicy round-trips through ARM exactly as configured at create time, but Vyomi never takes or restores a backup."
+   "properties.backupPolicy is ENFORCED at the ARM contract level (backupPolicy.type, the Periodic interval/retention/redundancy ranges, the Continuous tier enum, and Azure's one-way Continuous-to-Periodic migration block all match the real API), but Vyomi never actually takes or restores a backup."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
@@ -71,7 +71,7 @@
   "title": "Activity log",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Only console/SDK-triggered ARM mutations made since the simulation booted are recorded (no historical backfill); severity/category filtering and the timespan picker are not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
+   "Only console/SDK-triggered ARM mutations made since the simulation booted are recorded (no historical backfill). The timespan picker is ENFORCED (narrowing it to e.g. 'Last hour' really drops older events via eventTimestamp ge on the query), but severity/category filtering is not modelled, and `caller` is a fixed placeholder identity rather than the real signed-in principal."
   ],
   "api": ["ActivityLogs_List"],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
@@ -80,7 +80,7 @@
   "title": "Access control (IAM): role assignments and built-in role definitions over ARM",
   "level": { "nano": "limited", "offline": "limited" },
   "limitations": [
-   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions), but the generic ARM list is subscription-wide (not scoped to this one account), and 'Check access' / 'My access' evaluation is not modelled — Vyomi never denies a console action based on a role assignment."
+   "Role assignments and role definitions are real ARM resources (Microsoft.Authorization/roleAssignments, roleDefinitions). The Role assignments list is now ENFORCED scoped to this account (plus its subscription/resource-group ancestors, matching real Azure's inherited-access view) instead of the whole subscription; Roles stays subscription-wide, which matches real Azure (built-in role definitions are listed tenant-wide too). 'Check access' / 'My access' evaluation is still not modelled — Vyomi never denies a console action based on a role assignment."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  }
