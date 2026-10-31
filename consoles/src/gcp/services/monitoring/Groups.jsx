@@ -1,6 +1,7 @@
-/* Groups — real Groups API (create/list/delete, parent/child nesting). Membership is an
- * honest gap: Vyomi stores the filter string but never evaluates it against resources
- * (there are no live resource inventories to group); see gcp.monitoring.groups. */
+/* Groups — real Groups API (create/list/delete, parent/child nesting). Membership is
+ * evaluated for real against the monitored-resource instances this project's own time
+ * series have reported (see group_members in the core): the Instances/Resources columns
+ * reflect actual matches, not a static stub. */
 import { useState } from "react";
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Menu, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
@@ -10,7 +11,6 @@ import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { PageHeader } from "../../kit/common.jsx";
-import { CapabilityBadge } from "../../kit/Capability.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
 
@@ -63,7 +63,13 @@ function RowMenu({ group, onDeleted }) {
 export default function Groups() {
   const project = useProject();
   const [createOpen, setCreateOpen] = useState(false);
-  const { data = [], loading, error, reload } = useAsync(() => api.listGroups(), [project]);
+  const { data = [], loading, error, reload } = useAsync(async () => {
+    const groups = await api.listGroups();
+    return Promise.all(groups.map(async (g) => {
+      const members = (await api.groupMembers(g.name.split("/").pop())).members || [];
+      return { ...g, resourceCount: members.length, instanceCount: members.filter((m) => m.type === "gce_instance").length };
+    }));
+  }, [project]);
 
   return (
     <>
@@ -78,8 +84,8 @@ export default function Groups() {
         filterPlaceholder="Filter"
         columns={[
           { id: "name", header: "Name", sortField: "displayName", cell: (g) => g.displayName },
-          { id: "instances", header: <>Instances<CapabilityBadge id="gcp.monitoring.groups" /></>, cell: () => "—" },
-          { id: "resources", header: "Resources", cell: () => "—" },
+          { id: "instances", header: "Instances", cell: (g) => g.instanceCount },
+          { id: "resources", header: "Resources", cell: (g) => g.resourceCount },
           { id: "actions", header: "", cell: (g) => <RowMenu group={g} onDeleted={reload} /> },
         ]}
         empty={<Typography variant="body2" color="text.secondary">No groups to display</Typography>}
