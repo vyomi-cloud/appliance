@@ -105,6 +105,29 @@ check("create private link scope → 201, access modes honored", r["status"] == 
 check("bad access mode → 400", cp(st, "PUT", ["privateLinkScopes", "pls2"],
       {"properties": {"accessModeSettings": {"queryAccessMode": "Nope"}}})["status"] == 400)
 
+# scoped resources (Azure Monitor Resources tab) — a real child resource, validated against
+# the shared ARM store rather than a stored-but-inert config.
+WS1 = "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/ws1"
+st[WS1.lower()] = {"id": WS1, "name": "ws1", "type": "Microsoft.OperationalInsights/workspaces",
+                    "_type": "microsoft.operationalinsights/workspaces"}
+r = cp(st, "PUT", ["privateLinkScopes", "pls1", "scopedResources", "ws1res"], {"properties": {"linkedResourceId": WS1}})
+check("create scoped resource → 201, linked to a real workspace", r["status"] == 201
+      and r["body"]["properties"]["linkedResourceId"] == WS1
+      and r["body"]["type"] == "Microsoft.Insights/privateLinkScopes/scopedResources", r["body"])
+check("scoped resource needs a linkedResourceId → 400",
+      cp(st, "PUT", ["privateLinkScopes", "pls1", "scopedResources", "bad"], {"properties": {}})["status"] == 400)
+check("scoped resource to an unknown resource → 400", cp(st, "PUT", ["privateLinkScopes", "pls1", "scopedResources", "bad2"],
+      {"properties": {"linkedResourceId": WS1 + "nope"}})["status"] == 400)
+check("list scoped resources", [x["name"] for x in cp(st, "GET", ["privateLinkScopes", "pls1", "scopedResources"])["body"]["value"]] == ["ws1res"])
+check("get scoped resource", cp(st, "GET", ["privateLinkScopes", "pls1", "scopedResources", "ws1res"])["body"]["properties"]["linkedResourceId"] == WS1)
+check("get missing scoped resource → 404", cp(st, "GET", ["privateLinkScopes", "pls1", "scopedResources", "none"])["status"] == 404)
+r = cp(st, "DELETE", ["privateLinkScopes", "pls1", "scopedResources", "ws1res"])
+check("delete scoped resource → 200 then 204", r["status"] == 200
+      and cp(st, "DELETE", ["privateLinkScopes", "pls1", "scopedResources", "ws1res"])["status"] == 204)
+cp(st, "PUT", ["privateLinkScopes", "pls1", "scopedResources", "ws1res"], {"properties": {"linkedResourceId": WS1}})
+check("deleting the scope cascades to its scoped resources", cp(st, "DELETE", ["privateLinkScopes", "pls1"])["status"] == 200
+      and cp(st, "GET", ["privateLinkScopes", "pls1", "scopedResources", "ws1res"])["status"] == 404)
+
 # diagnostic settings (ARM extension resource, scoped to any resource's own id) exercised
 # directly against the module functions — AzureArm._diagnostic_settings covers the wiring.
 VM2 = "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Compute/virtualMachines/vm2"

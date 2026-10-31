@@ -23,6 +23,7 @@ import DataCollectionEndpoints from "./DataCollectionEndpoints.jsx";
 import CreateDataCollectionEndpoint from "./CreateDataCollectionEndpoint.jsx";
 import PrivateLinkScopes from "./PrivateLinkScopes.jsx";
 import CreatePrivateLinkScope from "./CreatePrivateLinkScope.jsx";
+import PrivateLinkScopeResources from "./PrivateLinkScopeResources.jsx";
 import DiagnosticSettings from "./DiagnosticSettings.jsx";
 import DiagnosticSettingsResource from "./DiagnosticSettingsResource.jsx";
 import { RESOURCE_TYPES } from "./api.js";
@@ -72,6 +73,7 @@ export default {
     { pattern: "/monitor/createdatacollectionendpoint", component: CreateDataCollectionEndpoint, crumbs: () => crumb("Create data collection endpoint", "createdatacollectionendpoint") },
     { pattern: "/monitor/privatelinkscopes", component: PrivateLinkScopes, crumbs: () => crumb("Private Link Scopes", "privatelinkscopes") },
     { pattern: "/monitor/createprivatelinkscope", component: CreatePrivateLinkScope, crumbs: () => crumb("Create Azure Monitor Private Link Scope", "createprivatelinkscope") },
+    { pattern: "/monitor/privatelinkscoperesources", component: PrivateLinkScopeResources, crumbs: () => crumb("Azure Monitor Resources", "privatelinkscopes") },
     { pattern: "/monitor/diagnosticsettings", component: DiagnosticSettings, crumbs: () => crumb("Diagnostic settings", "diagnosticsettings") },
     { pattern: "/monitor/diagnosticsettingsresource", component: DiagnosticSettingsResource, crumbs: () => crumb("Diagnostic settings", "diagnosticsettings") },
     ...INSIGHTS_RESOURCE_PAGES.map(([id, label, provider, type, createHref, withFilters]) => ({
