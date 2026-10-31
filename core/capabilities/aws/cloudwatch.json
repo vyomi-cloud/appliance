@@ -19,7 +19,7 @@
   },
   "limitations": [
    "Static threshold alarms and anomaly-detection-band alarms (see aws.cloudwatch.anomaly-detection) are both evaluated live.",
-   "SNS and Lambda alarm actions really fire (see aws.cloudwatch.alarms.actions.lambda); Auto Scaling and EC2 actions are not offered — see aws.cloudwatch.alarms.actions.compute."
+   "SNS, Lambda (aws.cloudwatch.alarms.actions.lambda) and EC2 (aws.cloudwatch.alarms.actions.ec2) alarm actions really fire; Auto Scaling actions are not offered — see aws.cloudwatch.alarms.actions.compute."
   ],
   "tests": [
    "tests/conformance/test_cloudwatch_core.py"
@@ -48,13 +48,28 @@
   ]
  },
  "aws.cloudwatch.alarms.actions.compute": {
-  "title": "Auto Scaling / EC2 alarm actions",
+  "title": "Auto Scaling alarm action",
   "level": {
    "nano": "not_simulated",
    "offline": "not_simulated"
   },
   "limitations": [
-   "Auto Scaling and EC2 alarm actions are not offered — Vyomi has no Auto Scaling group or EC2 instance lifecycle to act on. SNS (aws.cloudwatch.alarms.metric) and Lambda (aws.cloudwatch.alarms.actions.lambda) actions are real."
+   "Auto Scaling alarm actions are not offered — Vyomi has no Auto Scaling group to act on. EC2 alarm actions are real — see aws.cloudwatch.alarms.actions.ec2."
+  ]
+ },
+ "aws.cloudwatch.alarms.actions.ec2": {
+  "title": "EC2 alarm action",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Stop/Terminate/Reboot really change the state of the instance named by the alarm's own InstanceId dimension, through the same EC2 instance lifecycle (vpc_core.py) the EC2 console uses.",
+   "Recover isn't offered — AWS's underlying hardware-recovery automation has no equivalent in Vyomi.",
+   "If the alarm's metric carries no InstanceId dimension, the action is recorded as failed, the same as a real misconfigured EC2 alarm action."
+  ],
+  "tests": [
+   "tests/conformance/test_cloudwatch_core.py"
   ]
  },
  "aws.cloudwatch.alarms.actions.lambda": {
@@ -237,7 +252,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Only 4 managed data identifiers are recognized (EmailAddress, CreditCardNumber, Ssn-US, AwsSecretKey) — AWS's full managed identifier catalog (100+, with locale variants) is not offered.",
+   "8 managed data identifiers are recognized (EmailAddress, CreditCardNumber, Ssn-US, AwsSecretKey, AwsAccessKey, PhoneNumber-US, IpAddress, Url) — AWS's full managed identifier catalog (100+, with locale variants) is not offered.",
    "Masking is enforced at ingestion (PutLogEvents permanently replaces the match with asterisks, as AWS does); Audit-only findings are counted on the log group but not forwarded to a findings destination (CloudTrail/Security Hub/S3)."
   ],
   "tests": [

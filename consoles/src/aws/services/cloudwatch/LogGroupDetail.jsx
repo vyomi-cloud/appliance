@@ -26,7 +26,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import * as api from "./api.js";
 
-const DATA_IDENTIFIERS = ["EmailAddress", "CreditCardNumber", "Ssn-US", "AwsSecretKey"];
+const DATA_IDENTIFIERS = ["EmailAddress", "CreditCardNumber", "Ssn-US", "AwsSecretKey", "AwsAccessKey", "PhoneNumber-US", "IpAddress", "Url"];
 const dataIdentifierArn = (id) => `arn:aws:dataprotection::aws:data-identifier/${id}`;
 
 const TAG_I18N = {
