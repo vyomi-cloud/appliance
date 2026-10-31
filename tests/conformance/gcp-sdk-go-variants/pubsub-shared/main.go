@@ -20,7 +20,7 @@ func env(k, d string) string {
 }
 
 func main() {
-	project := env("PROJECT", "gcp-dev")
+	project := env("PROJECT", "vyomi-project")
 	ctx := context.Background()
 	c, err := pubsub.NewClient(ctx, project)
 	if err != nil {

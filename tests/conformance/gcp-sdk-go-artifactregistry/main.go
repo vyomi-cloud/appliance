@@ -37,7 +37,7 @@ func main() {
 	}
 	project := os.Getenv("PROJECT")
 	if project == "" {
-		project = "gcp-dev"
+		project = "vyomi-project"
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()

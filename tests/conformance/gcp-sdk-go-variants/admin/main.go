@@ -2,7 +2,7 @@
 // GCP services: Compute Engine, Cloud SQL Admin, Cloud Functions, IAM. Proves the
 // official Google REST clients can list resources from the simulator with an
 // endpoint override + no credentials. ENDPOINT default http://127.0.0.1:9000,
-// PROJECT default gcp-dev.
+// PROJECT default vyomi-project.
 package main
 
 import (
@@ -41,7 +41,7 @@ func chk(name string, ok bool, detail string) {
 
 func main() {
 	endpoint := env("ENDPOINT", "http://127.0.0.1:9000")
-	project := env("PROJECT", "gcp-dev")
+	project := env("PROJECT", "vyomi-project")
 	zone := "us-central1-a"
 	location := "us-central1"
 	ctx := context.Background()
