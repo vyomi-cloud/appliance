@@ -11,6 +11,8 @@ const NSG_ARM = armType("Microsoft.Network", "networkSecurityGroups", "2023-11-0
 const NIC_ARM = armType("Microsoft.Network", "networkInterfaces", "2023-11-01");
 const ROUTE_TABLE_ARM = armType("Microsoft.Network", "routeTables", "2023-11-01");
 const NAT_GATEWAY_ARM = armType("Microsoft.Network", "natGateways", "2023-11-01");
+const VM_ARM = armType("Microsoft.Compute", "virtualMachines", "2023-09-01");
+const NW_ARM = armType("Microsoft.Network", "networkWatchers", "2023-11-01");
 const CHILD_API_VERSION = "2023-11-01";
 
 const shape = (v) => ({ ...v, resourceGroup: parseId(v.id).resourceGroup });
@@ -107,6 +109,28 @@ export const listConnectedDevices = async (rg, name) => {
   const nics = await NIC_ARM.list();
   return nics.filter((n) => (n.properties?.ipConfigurations || []).some((c) => (c.properties?.subnet?.id || "").toLowerCase().startsWith(prefix)));
 };
+
+// ── Network Watcher: IP flow verify / Next hop (Microsoft.Network/networkWatchers/{nw}/
+// ipFlowVerify|nextHop, answered by the shared netsim evaluator — core/azure_arm_core.py
+// _network_watcher). Reached from this vnet's "Diagnose and solve problems" blade, same as
+// the real portal; the tool itself is a subscription/region-wide Network Watcher action, not
+// scoped to this vnet, so it lists every VM in the subscription like the real picker does. ──
+const NETWORK_WATCHER_RG = "NetworkWatcherRG";
+const networkWatcherName = (location) => `NetworkWatcher_${String(location || "eastus").toLowerCase()}`;
+
+export const listVmsForDiagnostics = async () => (await VM_ARM.list()).map(shape);
+export const listNics = async () => (await NIC_ARM.list()).map(shape);
+
+/** Auto-provisions the regional network watcher the first time a location is diagnosed —
+ *  the same "Enable Network Watcher" step the real portal does silently on first use. */
+async function ensureNetworkWatcher(location) {
+  const name = networkWatcherName(location);
+  try { await NW_ARM.get(NETWORK_WATCHER_RG, name); }
+  catch { await NW_ARM.put(NETWORK_WATCHER_RG, name, { location }); }
+  return name;
+}
+export const ipFlowVerify = async (location, body) => NW_ARM.action(NETWORK_WATCHER_RG, await ensureNetworkWatcher(location), "ipFlowVerify", body);
+export const nextHop = async (location, body) => NW_ARM.action(NETWORK_WATCHER_RG, await ensureNetworkWatcher(location), "nextHop", body);
 
 // ── create-vnet form model → ARM body ───────────────────────────────────────────────────
 export function toArmBody(f) {

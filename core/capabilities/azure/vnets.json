@@ -84,11 +84,19 @@
   ]
  },
  "azure.vnets.tools": {
-  "title": "Diagnose and solve problems, Resource visualizer, Connection troubleshoot, Tasks, Support + Troubleshooting",
+  "title": "Diagnose and solve problems (remaining tiles), Resource visualizer, Connection troubleshoot, Tasks, Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
-   "These console tools require live network topology / traffic simulation Vyomi doesn't model."
+   "Resource visualizer, Connection troubleshoot, Tasks and Support + Troubleshooting are not built, and Diagnose and solve problems' other diagnostic tiles remain an honest gap. Its IP flow verify and Next hop tiles ARE built — see azure.vnets.network_watcher."
   ]
+ },
+ "azure.vnets.network_watcher": {
+  "title": "Diagnose and solve problems: IP flow verify, Next hop (Network Watcher)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [
+   "IP flow verify and Next hop answer from the shared netsim evaluator (core/netsim) — the same engine behind AWS Reachability Analyzer and GCP Connectivity Tests — scoped to a virtual machine's network interface in this virtual network's subnets. Vyomi auto-provisions the regional NetworkWatcher_<location> resource the first time either tool runs in a location, same as the real portal's 'Enable Network Watcher' behaviour. There is no standalone Network Watcher service console yet, only these two diagnostic tools reached from the NSG and Virtual network blades."
+  ],
+  "tests": ["tests/conformance/test_azure_netsim_core.py"]
  },
  "azure.vnets.topology": {
   "title": "Topology (subnets, their connected devices, and peered virtual networks)",

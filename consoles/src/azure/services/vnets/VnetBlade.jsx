@@ -23,6 +23,7 @@ import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { SubnetsPanel, PeeringsPanel, ServiceEndpointsPanel, ConnectedDevicesPanel, TopologyPanel } from "./Networking.jsx";
+import NetworkWatcherTools from "./NetworkWatcher.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -50,7 +51,7 @@ export const MENU = [
 ];
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 const GAP_CAP = {
-  diagnose: "azure.vnets.tools", resourcevisualizer: "azure.vnets.tools", connectiontroubleshoot: "azure.vnets.tools",
+  resourcevisualizer: "azure.vnets.tools", connectiontroubleshoot: "azure.vnets.tools",
   tasks: "azure.vnets.tools", support: "azure.vnets.tools",
   alerts: "azure.vnets.monitoring", metrics: "azure.vnets.monitoring", diagnosticsettings: "azure.vnets.monitoring", logs: "azure.vnets.monitoring",
   bastion: "azure.vnets.network_appliances", ddosprotection: "azure.vnets.network_appliances", firewall: "azure.vnets.network_appliances",
@@ -85,6 +86,7 @@ export default function VnetBlade({ params }) {
       activitylog: () => <ActivityLog a={a} />,
       exporttemplate: () => <ExportTemplate a={a} />,
       topology: () => <TopologyPanel a={a} />,
+      diagnose: () => <Diagnose />,
     }[panel];
     body = P ? P() : (
       <CapabilityContainer id={GAP_CAP[panel] || "azure.vnets.tools"} title={`${name} | ${LABEL[panel] || panel}`} />
@@ -153,6 +155,20 @@ function Overview({ a, reload, self }) {
           notify.success(`Virtual network '${a.name}' was deleted.`, "Delete succeeded");
           navigate("vnets");
         }} />
+    </>
+  );
+}
+
+// ── Diagnose and solve problems: the Network Watcher tiles (IP flow verify, Next hop) are
+// real; its other diagnostic tiles stay an honest gap (azure.vnets.tools). ────────────────
+function Diagnose() {
+  return (
+    <>
+      <div className="vy-panel-title">Diagnose and solve problems</div>
+      <NetworkWatcherTools />
+      <div style={{ marginTop: 16 }}>
+        <NotSimulatedContainer title="Other diagnostic tools" feature="Resource visualizer, Connection troubleshoot, Tasks, Support + Troubleshooting and the remaining Diagnose and solve problems tiles" />
+      </div>
     </>
   );
 }

@@ -61,6 +61,11 @@ const NSGROLE = `00000000-0000-4000-a000-${String(n).padStart(12, "0")}`;  // ro
 const NSGPRINCIPAL = `vynsgprincipal${n}`;  // principal of the NSG-scoped role assignment above
 const NSGDIAG = `vynsgdiag${n}`;   // diagnostic setting created through the NSG's own UI tab
 const NSGNIC = `vynsgnic${n}`;     // network interface (no NSG yet) created over the wire, associated through the UI
+const FLOWVNET = `vyflowvnet${n}`;  // vnet+subnet (NSG-attached) created over the wire for Network Watcher diagnostics
+const FLOWNIC = `vyflownic${n}`;   // NIC in that subnet, created over the wire
+const FLOWVM = `vyflowvm${n}`;     // VM pointed at that NIC — the target IP flow verify/Next hop diagnose
+const DENYRULE = `deny-smoke-${n}`;  // inbound Deny rule the Diagnose and solve problems IP flow verify check must name
+const VNETVM = `vysmokevnetvm${n}`;  // VM pointed at the vnet's own NIC, for the vnet's Diagnose and solve problems Next hop check
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok, detail }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`); };
 let page;
@@ -1451,6 +1456,47 @@ try {
     (JSON.parse(nsgNicAfter.text).properties?.networkSecurityGroup?.id || "").toLowerCase() === nsgId.toLowerCase(), nsgNicAfter.text);
   await shot("26c-nsg-associate");
 
+  // ── Diagnose and solve problems: Network Watcher's IP flow verify answers a real Deny,
+  // naming the deciding security rule (azure.nsgs.network_watcher) — a vnet/subnet/NIC/VM
+  // created over the wire so the subnet carries this NSG, then a Deny rule added through the
+  // Inbound security rules UI, then checked through the Diagnose blade ─────────────────────
+  const flowVnetPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${FLOWVNET}`, {
+    location: "eastus", properties: { addressSpace: { addressPrefixes: ["10.91.0.0/16"] },
+      subnets: [{ name: "default", properties: { addressPrefix: "10.91.1.0/24", networkSecurityGroup: { id: nsgId } } }] },
+  });
+  check("ARM PUT vnet with this NSG attached to its subnet, over wire", flowVnetPut.status === 200 || flowVnetPut.status === 201, `HTTP ${flowVnetPut.status}`);
+  const flowNicPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/networkInterfaces/${FLOWNIC}`, {
+    location: "eastus", properties: { ipConfigurations: [{ name: "ipconfig1", properties: {
+      subnet: { id: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${FLOWVNET}/subnets/default` } } }] },
+  });
+  check("ARM PUT network interface in the NSG-attached subnet, over wire", flowNicPut.status === 200 || flowNicPut.status === 201, `HTTP ${flowNicPut.status}`);
+  const flowVmPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${FLOWVM}`,
+    { location: "eastus", properties: { networkProfile: { networkInterfaces: [{ id: JSON.parse(flowNicPut.text).id }] } } });
+  check("ARM PUT virtual machine for Network Watcher diagnostics, over wire", flowVmPut.status === 200 || flowVmPut.status === 201, `HTTP ${flowVmPut.status}`);
+
+  await openPanel("Inbound security rules");
+  await page.getByRole("toolbar", { name: "Inbound security rules commands" }).getByRole("button", { name: "Add" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(DENYRULE);
+  await page.getByLabel("Priority", { exact: true }).fill("140");
+  await page.getByLabel("Destination port ranges", { exact: true }).fill("4321");
+  await page.getByRole("dialog").getByRole("radio", { name: "TCP" }).check();
+  await page.getByRole("dialog").getByRole("radio", { name: "Deny" }).check();
+  await page.getByRole("dialog").getByRole("button", { name: "Add" }).click();
+  await page.getByRole("cell", { name: DENYRULE, exact: true }).waitFor({ timeout: 10000 });
+
+  await openPanel("Diagnose and solve problems");
+  await page.getByRole("button", { name: "IP flow verify", exact: true }).click();
+  await page.getByLabel("Virtual machine", { exact: true }).selectOption({ label: FLOWVM });
+  await page.getByLabel("Local port", { exact: true }).fill("4321");
+  await page.getByLabel("Remote IP address", { exact: true }).fill("10.91.1.50");
+  await page.getByLabel("Remote port", { exact: true }).fill("50000");
+  await page.getByRole("dialog").getByRole("button", { name: "Check", exact: true }).click();
+  await page.getByText(`Security rule: securityRules/${DENYRULE}`).waitFor({ timeout: 10000 });
+  check("UI IP flow verify (Diagnose and solve problems) → real Deny naming this NSG's deny rule",
+    await page.getByText("Access: Deny").isVisible());
+  await shot("26d-nsg-diagnose-ipflowverify");
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+
   // ── NSG created over the wire → visible in the UI (CLI → UI), then deleted in the UI ──
   const nsgPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/networkSecurityGroups/${NSG2}`, { location: "eastus" });
   check("ARM PUT network security group over wire", nsgPut.status === 200 || nsgPut.status === 201, `HTTP ${nsgPut.status}`);
@@ -1719,6 +1765,22 @@ try {
   const vnetLockGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/providers/Microsoft.Authorization/locks/${VNETLOCK}`);
   check("UI create lock on virtual network → visible over native ARM", vnetLockGet.status === 200, `HTTP ${vnetLockGet.status}`);
   await shot("32-vnet-locks");
+
+  // ── Diagnose and solve problems: Network Watcher's Next hop answers from this vnet's own
+  // real route topology (azure.vnets.network_watcher) — the NIC already in this vnet's subnet
+  // (created above for Connected devices) gets a VM, then Next hop to the internet is checked ──
+  const vnetVmPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VNETVM}`,
+    { location: "eastus", properties: { networkProfile: { networkInterfaces: [{ id: JSON.parse(nicPut.text).id }] } } });
+  check("ARM PUT virtual machine for Network Watcher diagnostics, over wire", vnetVmPut.status === 200 || vnetVmPut.status === 201, `HTTP ${vnetVmPut.status}`);
+  await openPanel("Diagnose and solve problems");
+  await page.getByRole("button", { name: "Next hop", exact: true }).click();
+  await page.getByLabel("Virtual machine", { exact: true }).selectOption({ label: VNETVM });
+  await page.getByLabel("Destination IP address", { exact: true }).fill("8.8.8.8");
+  await page.getByRole("dialog").getByRole("button", { name: "Next hop", exact: true }).click();
+  await page.getByText("Next hop type: Internet").waitFor({ timeout: 10000 });
+  check("UI Next hop (Diagnose and solve problems) → answers from this vnet's real route topology", true);
+  await shot("32b-vnet-diagnose-nexthop");
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
 
   // ── Virtual network created over the wire → visible in the UI (CLI → UI), then deleted in the UI ──
   const vnetPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET2}`, { location: "eastus" });
