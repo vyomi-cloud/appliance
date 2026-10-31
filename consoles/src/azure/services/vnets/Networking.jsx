@@ -9,7 +9,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
-import { NotSimulatedContainer } from "../../kit/common.jsx";
+import { Loading, NotSimulatedContainer } from "../../kit/common.jsx";
 import { parseId } from "../../kit/arm.js";
 import * as api from "./api.js";
 
@@ -29,6 +29,8 @@ export function SubnetsPanel({ a }) {
   const notify = useNotify();
   const { data, loading, error, reload } = useAsync(() => api.listSubnets(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
   const nsgs = useAsync(() => api.listNsgs(), []);
+  const routeTables = useAsync(() => api.listRouteTables(), []);
+  const natGateways = useAsync(() => api.listNatGateways(), []);
   const [add, setAdd] = useState(null); // { gateway: bool } | null
   const [manage, setManage] = useState(false);
   const rows = data || [];
@@ -56,10 +58,10 @@ export function SubnetsPanel({ a }) {
           { key: "available", label: "Available IPs", value: (r) => availableIps(r.properties?.addressPrefix) },
           { key: "delegated", label: "Delegated to", value: (r) => r.properties?.delegations?.[0]?.properties?.serviceName || "--" },
           { key: "nsg", label: "Security group", value: (r) => (r.properties?.networkSecurityGroup ? r.properties.networkSecurityGroup.id.split("/").pop() : "--") },
-          { key: "rt", label: "Route table", value: () => "--" },
+          { key: "rt", label: "Route table", value: (r) => (r.properties?.routeTable ? r.properties.routeTable.id.split("/").pop() : "--") },
         ]}
       />
-      {add && <AddSubnetDialog a={a} existing={rows} nsgs={nsgs.data || []} gateway={add.gateway} onClose={() => setAdd(null)}
+      {add && <AddSubnetDialog a={a} existing={rows} nsgs={nsgs.data || []} routeTables={routeTables.data || []} natGateways={natGateways.data || []} gateway={add.gateway} onClose={() => setAdd(null)}
         onCreate={async (subnetName, body) => { await api.putSubnet(a.resourceGroup, a.name, subnetName, body); reload(); }} />}
       <Dialog open={manage} onOpenChange={(_, d) => !d.open && setManage(false)}>
         <DialogSurface aria-label="Manage users">
@@ -79,7 +81,7 @@ function availableIps(prefix) {
   return Math.max(0, 2 ** (32 - bits) - 5); // Azure reserves 5 addresses per subnet
 }
 
-function AddSubnetDialog({ a, existing, nsgs, gateway, onClose, onCreate }) {
+function AddSubnetDialog({ a, existing, nsgs, routeTables, natGateways, gateway, onClose, onCreate }) {
   const notify = useNotify();
   const prefixes = a.properties?.addressSpace?.addressPrefixes || ["10.0.0.0/16"];
   const [purpose, setPurpose] = useState(gateway ? "Virtual Network Gateway" : "Default");
@@ -90,6 +92,8 @@ function AddSubnetDialog({ a, existing, nsgs, gateway, onClose, onCreate }) {
   const [size, setSize] = useState(SIZES[0]);
   const [privateSubnet, setPrivateSubnet] = useState(false);
   const [nsgId, setNsgId] = useState("");
+  const [routeTableId, setRouteTableId] = useState("");
+  const [natGatewayId, setNatGatewayId] = useState("");
   const [busy, setBusy] = useState(false);
   const reserved = PURPOSES[purpose];
   const effectiveName = reserved || name;
@@ -108,6 +112,8 @@ function AddSubnetDialog({ a, existing, nsgs, gateway, onClose, onCreate }) {
           ...(includeIpv4 ? { addressPrefix: computedRange } : {}),
           defaultOutboundAccess: !privateSubnet,
           ...(nsgId ? { networkSecurityGroup: { id: nsgId } } : {}),
+          ...(routeTableId ? { routeTable: { id: routeTableId } } : {}),
+          ...(natGatewayId ? { natGateway: { id: natGatewayId } } : {}),
         },
       });
       onClose();
@@ -144,14 +150,24 @@ function AddSubnetDialog({ a, existing, nsgs, gateway, onClose, onCreate }) {
                 <Checkbox label="Enable private subnet (no default outbound access)" checked={privateSubnet} onChange={(_, d) => setPrivateSubnet(!!d.checked)} />
               </section>
               <section className="vy-section"><h3>Security</h3>
-                <NotSimulatedContainer title="NAT gateway" feature="NAT gateway" note="Microsoft.Network/natGateways is not modelled; nothing exists to associate." />
+                <Field label="NAT gateway">
+                  <Select value={natGatewayId} onChange={(_, d) => setNatGatewayId(d.value)} aria-label="NAT gateway">
+                    <option value="">None</option>
+                    {natGateways.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </Select>
+                </Field>
                 <Field label="Network security group">
                   <Select value={nsgId} onChange={(_, d) => setNsgId(d.value)} aria-label="Network security group">
                     <option value="">None</option>
                     {nsgs.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
                   </Select>
                 </Field>
-                <NotSimulatedContainer title="Route table" feature="Route table" note="Microsoft.Network/routeTables is not modelled; nothing exists to associate." />
+                <Field label="Route table">
+                  <Select value={routeTableId} onChange={(_, d) => setRouteTableId(d.value)} aria-label="Route table">
+                    <option value="">None</option>
+                    {routeTables.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </Select>
+                </Field>
               </section>
               <NotSimulatedContainer title="Service Endpoints" feature="Services" note="Configure service endpoints from the virtual network's Service endpoints page instead." />
               <NotSimulatedContainer title="Subnet Delegation" feature="Delegate subnet to a service" note="Per-service subnet delegation is not modelled." />
@@ -351,6 +367,65 @@ export function ConnectedDevicesPanel({ a }) {
           { key: "subnet", label: "Subnet", value: (r) => parseId(r.properties?.ipConfigurations?.[0]?.properties?.subnet?.id || "").name || "--" },
         ]}
       />
+    </CapabilityContainer>
+  );
+}
+
+// ── Topology — a structured read-back of this vnet's own real state (subnets, their
+// connected devices, and peered virtual networks); same ARM reads the Subnets/Connected
+// devices/Peerings panels use, just rolled up in one place. Honest gap: Azure's Topology is
+// an interactive canvas diagram; Vyomi renders the same data as a list. ───────────────────
+export function TopologyPanel({ a }) {
+  const subnets = useAsync(() => api.listSubnets(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const devices = useAsync(() => api.listConnectedDevices(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const peerings = useAsync(() => api.listPeerings(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
+  const loading = subnets.loading || devices.loading || peerings.loading;
+  const subnetRows = subnets.data || [];
+  const deviceRows = devices.data || [];
+  const peeringRows = peerings.data || [];
+  const devicesIn = (subnetId) => deviceRows.filter((d) => (d.properties?.ipConfigurations || [])
+    .some((c) => c.properties?.subnet?.id === subnetId));
+  return (
+    <CapabilityContainer id="azure.vnets.topology" title={`${a.name} | Topology`}>
+      {loading ? <Loading /> : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <section className="vy-section">
+            <h3>{a.name}</h3>
+            <div className="vy-muted">{(a.properties?.addressSpace?.addressPrefixes || []).join(", ") || "No address space"}</div>
+          </section>
+          <section className="vy-section"><h3>Subnets ({subnetRows.length})</h3>
+            <table className="vy-grid">
+              <thead><tr><th>Subnet</th><th>Address range</th><th>Connected devices</th><th>Security group</th><th>Route table</th><th>NAT gateway</th></tr></thead>
+              <tbody>
+                {subnetRows.length ? subnetRows.map((s) => (
+                  <tr key={s.id}>
+                    <td>{s.name}</td>
+                    <td>{s.properties?.addressPrefix || "--"}</td>
+                    <td>{devicesIn(s.id).map((d) => d.name).join(", ") || "--"}</td>
+                    <td>{s.properties?.networkSecurityGroup ? s.properties.networkSecurityGroup.id.split("/").pop() : "--"}</td>
+                    <td>{s.properties?.routeTable ? s.properties.routeTable.id.split("/").pop() : "--"}</td>
+                    <td>{s.properties?.natGateway ? s.properties.natGateway.id.split("/").pop() : "--"}</td>
+                  </tr>
+                )) : <tr><td colSpan={6} className="vy-muted">No subnets</td></tr>}
+              </tbody>
+            </table>
+          </section>
+          <section className="vy-section"><h3>Peered virtual networks ({peeringRows.length})</h3>
+            <table className="vy-grid">
+              <thead><tr><th>Peering</th><th>Remote virtual network</th><th>Peering state</th></tr></thead>
+              <tbody>
+                {peeringRows.length ? peeringRows.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.name}</td>
+                    <td>{parseId(p.properties?.remoteVirtualNetwork?.id || "").name || "--"}</td>
+                    <td>{p.properties?.peeringState || "--"}</td>
+                  </tr>
+                )) : <tr><td colSpan={3} className="vy-muted">No peerings</td></tr>}
+              </tbody>
+            </table>
+          </section>
+        </div>
+      )}
     </CapabilityContainer>
   );
 }

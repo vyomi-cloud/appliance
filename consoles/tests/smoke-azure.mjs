@@ -1558,16 +1558,41 @@ try {
   check("UI create virtual network → default subnet visible over native ARM (nested child resource)", defaultSubnetGet.status === 200, `HTTP ${defaultSubnetGet.status}`);
   await shot("29-vnet-overview");
 
-  // ── Subnet added in the UI → visible as a native ARM nested child resource ────────────
+  // ── Route table + NAT gateway created over the wire (own ARM resource types, no dedicated
+  // console yet) → real options in the Add subnet dialog's NAT gateway / Route table pickers ──
+  const RT = `vysmokert${n}`;
+  const NATGW = `vysmokenat${n}`;
+  const rtPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/routeTables/${RT}`, { location: "eastus" });
+  check("ARM PUT route table over wire", rtPut.status === 200 || rtPut.status === 201, `HTTP ${rtPut.status}`);
+  const natPut = await arm("PUT", `/resourceGroups/${RG}/providers/Microsoft.Network/natGateways/${NATGW}`, { location: "eastus" });
+  check("ARM PUT NAT gateway over wire", natPut.status === 200 || natPut.status === 201, `HTTP ${natPut.status}`);
+
+  // ── Subnet added in the UI, with real NAT gateway / Route table associations → visible as
+  // a native ARM nested child resource, both associations intact ─────────────────────────
   await openPanel("Subnets");
   await page.getByRole("toolbar", { name: "Command bar" }).getByRole("button", { name: "Subnet", exact: true }).click();
   await page.getByLabel("Name", { exact: true }).fill(SUBNET);
   await page.getByLabel("Starting address", { exact: true }).fill("10.0.5.0");
+  await page.getByLabel("NAT gateway", { exact: true }).selectOption({ label: NATGW });
+  await page.getByLabel("Route table", { exact: true }).selectOption({ label: RT });
   await page.getByRole("dialog").getByRole("button", { name: "Add" }).click();
   await page.getByRole("cell", { name: SUBNET, exact: true }).waitFor({ timeout: 10000 });
   const subnetGet = await arm("GET", `/resourceGroups/${RG}/providers/Microsoft.Network/virtualNetworks/${VNET}/subnets/${SUBNET}`);
   check("UI add subnet → visible over native ARM (nested child resource)", subnetGet.status === 200, `HTTP ${subnetGet.status}`);
+  const subnetProps = JSON.parse(subnetGet.text || "{}").properties || {};
+  check("UI subnet NAT gateway picker → real association over native ARM",
+    (subnetProps.natGateway?.id || "").endsWith(`/natGateways/${NATGW}`), JSON.stringify(subnetProps.natGateway));
+  check("UI subnet Route table picker → real association over native ARM",
+    (subnetProps.routeTable?.id || "").endsWith(`/routeTables/${RT}`), JSON.stringify(subnetProps.routeTable));
+  await page.getByRole("cell", { name: RT, exact: true }).waitFor({ timeout: 10000 });
+  check("Subnets grid Route table column shows the real association", true);
   await shot("30-vnet-subnets");
+
+  // ── Topology: real subnets/peerings/connected-devices read-back, not an honest gap ───────
+  await openPanel("Topology");
+  await page.getByRole("cell", { name: SUBNET, exact: true }).or(page.getByText(SUBNET, { exact: true })).first().waitFor({ timeout: 10000 });
+  check("Topology shows this virtual network's own subnet", true);
+  await shot("30c-vnet-topology");
 
   // ── Network interface created over the wire, attached to the subnet → shown in the UI's
   // Connected devices list (CLI → UI direction; a subscription-wide scan filtered by

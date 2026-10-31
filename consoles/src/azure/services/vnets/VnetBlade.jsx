@@ -1,6 +1,7 @@
 /* Virtual network resource blade: left resource menu + panels. Overview, Tags, Address
- * space, DNS servers, Subnets, Peerings, Service endpoints, Locks, Activity log, Properties
- * and Export template are backed by real ARM calls; Access control (IAM) and the remaining
+ * space, DNS servers, Subnets (incl. NAT gateway / route table association), Peerings,
+ * Service endpoints, Locks, Activity log, Topology, Properties and Export template (ARM,
+ * Bicep, Terraform) are backed by real ARM calls; Access control (IAM) and the remaining
  * menu items are honest CapabilityContainer gaps (core/capabilities/azure/vnets.json is the
  * single source of truth for which). */
 import { useEffect, useState } from "react";
@@ -21,7 +22,7 @@ import { Essentials, ErrorBar, Glyph, KV, Loading, NotSimulatedContainer, fmtDat
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
-import { SubnetsPanel, PeeringsPanel, ServiceEndpointsPanel, ConnectedDevicesPanel } from "./Networking.jsx";
+import { SubnetsPanel, PeeringsPanel, ServiceEndpointsPanel, ConnectedDevicesPanel, TopologyPanel } from "./Networking.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -50,7 +51,7 @@ export const MENU = [
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 const GAP_CAP = {
   diagnose: "azure.vnets.tools", resourcevisualizer: "azure.vnets.tools", connectiontroubleshoot: "azure.vnets.tools",
-  topology: "azure.vnets.tools", tasks: "azure.vnets.tools", support: "azure.vnets.tools",
+  tasks: "azure.vnets.tools", support: "azure.vnets.tools",
   alerts: "azure.vnets.monitoring", metrics: "azure.vnets.monitoring", diagnosticsettings: "azure.vnets.monitoring", logs: "azure.vnets.monitoring",
   bastion: "azure.vnets.network_appliances", ddosprotection: "azure.vnets.network_appliances", firewall: "azure.vnets.network_appliances",
   defender: "azure.vnets.network_appliances", networkmanager: "azure.vnets.network_appliances", privateendpoints: "azure.vnets.network_appliances",
@@ -83,6 +84,7 @@ export default function VnetBlade({ params }) {
       locks: () => <Locks a={a} />,
       activitylog: () => <ActivityLog a={a} />,
       exporttemplate: () => <ExportTemplate a={a} />,
+      topology: () => <TopologyPanel a={a} />,
     }[panel];
     body = P ? P() : (
       <CapabilityContainer id={GAP_CAP[panel] || "azure.vnets.tools"} title={`${name} | ${LABEL[panel] || panel}`} />
@@ -124,7 +126,7 @@ function Overview({ a, reload, self }) {
         <Tab value="tutorials">Tutorials</Tab>
       </TabList>
       <div style={{ marginTop: 12 }}>
-        {tab === "topology" && <NotSimulatedContainer feature="A visual topology diagram of this virtual network's resources" />}
+        {tab === "topology" && <TopologyPanel a={a} />}
         {tab === "properties" && <Properties a={a} />}
         {tab === "capabilities" && <NotSimulatedContainer feature="The capabilities overview" />}
         {tab === "recommendations" && <NotSimulatedContainer feature="Advisor recommendations" />}
@@ -466,7 +468,42 @@ function ActivityLog({ a }) {
   );
 }
 
-// ── Export template ────────────────────────────────────────────────────────────────────
+// ── Export template — all three tabs are generated client-side from this resource's live
+// ARM state (same source, three serializations); no linked/nested templates or deployment
+// history, same honest scope as every other service in this lens. ────────────────────────
+const bicepSymbol = (name) => name.replace(/[^a-zA-Z0-9]/g, "_").replace(/^(\d)/, "_$1");
+
+function toBicep(a, params) {
+  const prefixes = a.properties?.addressSpace?.addressPrefixes || [];
+  const lines = [];
+  if (params) lines.push(`param vnetName string = '${a.name}'`, "");
+  lines.push(`resource ${bicepSymbol(a.name)} 'Microsoft.Network/virtualNetworks@${api.ARM.apiVersion}' = {`);
+  lines.push(`  name: ${params ? "vnetName" : `'${a.name}'`}`);
+  lines.push(`  location: '${a.location}'`);
+  lines.push(`  properties: {`);
+  lines.push(`    addressSpace: {`);
+  lines.push(`      addressPrefixes: [`);
+  prefixes.forEach((p) => lines.push(`        '${p}'`));
+  lines.push(`      ]`);
+  lines.push(`    }`);
+  lines.push(`  }`);
+  lines.push(`}`);
+  return lines.join("\n");
+}
+
+function toTerraform(a, params) {
+  const prefixes = a.properties?.addressSpace?.addressPrefixes || [];
+  const lines = [];
+  if (params) lines.push(`variable "vnet_name" {`, `  default = "${a.name}"`, `}`, "");
+  lines.push(`resource "azurerm_virtual_network" "${bicepSymbol(a.name)}" {`);
+  lines.push(`  name                = ${params ? "var.vnet_name" : `"${a.name}"`}`);
+  lines.push(`  location            = "${a.location}"`);
+  lines.push(`  resource_group_name = "${a.resourceGroup}"`);
+  lines.push(`  address_space       = [${prefixes.map((p) => `"${p}"`).join(", ")}]`);
+  lines.push(`}`);
+  return lines.join("\n");
+}
+
 function ExportTemplate({ a }) {
   const [tab, setTab] = useState("arm");
   const [params, setParams] = useState(true);
@@ -476,11 +513,12 @@ function ExportTemplate({ a }) {
     ...(params ? { parameters: { vnetName: { type: "string", defaultValue: a.name } } } : {}),
     resources: [{ type: "Microsoft.Network/virtualNetworks", apiVersion: api.ARM.apiVersion, name: params ? "[parameters('vnetName')]" : a.name, location: a.location, properties: a.properties }],
   };
-  const text = JSON.stringify(template, null, 2);
+  const byTab = { arm: [JSON.stringify(template, null, 2), "json"], bicep: [toBicep(a, params), "bicep"], terraform: [toTerraform(a, params), "tf"] };
+  const [text, ext] = byTab[tab];
   const download = () => {
     const el = document.createElement("a");
-    el.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    el.download = `${a.name}.json`;
+    el.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    el.download = `${a.name}.${ext}`;
     document.body.appendChild(el); el.click(); el.remove();
   };
   return (
@@ -499,8 +537,7 @@ function ExportTemplate({ a }) {
       </TabList>
       <section className="vy-section" style={{ marginTop: 12 }}><h3>Template</h3>
         <label><input type="checkbox" checked={params} onChange={(e) => setParams(e.target.checked)} /> Include parameters</label>
-        {tab === "arm" && <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
-        {tab !== "arm" && <CapabilityContainer id="azure.vnets.export_template" title={`${tab === "bicep" ? "Bicep" : "Terraform"} template export`} />}
+        <Textarea readOnly value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />
       </section>
     </>
   );

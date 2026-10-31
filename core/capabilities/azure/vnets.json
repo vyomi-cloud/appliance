@@ -24,7 +24,7 @@
   "title": "Subnets (Microsoft.Network/virtualNetworks/subnets)",
   "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "Name, address range, the private-subnet (defaultOutboundAccess) flag, NSG, route table and NAT gateway associations are real and drive behaviour (system routes incl. None for RFC1918 outside the vnet, UDRs, NAT/default outbound egress). NIC private IPs are allocated from the subnet (.0-.3 and the last address reserved). Subnet delegation is not modelled. The console's NAT gateway / Route table pickers still show the earlier honest-gap message until they are rebuilt.",
+   "Name, address range, the private-subnet (defaultOutboundAccess) flag, NSG, route table and NAT gateway associations are real and drive behaviour (system routes incl. None for RFC1918 outside the vnet, UDRs, NAT/default outbound egress). The console's Add subnet dialog's NAT gateway and Route table pickers select from real Microsoft.Network/natGateways and routeTables (created over ARM/CLI; this lens has no dedicated console for either yet, same as NSGs' earlier state). NIC private IPs are allocated from the subnet (.0-.3 and the last address reserved). Subnet delegation is not modelled.",
    "Offline, the rules are enforced on REAL packets (one Docker bridge per subnet + an nftables table per space, core/netsim/enforce.py) only when VYOMI_NETSIM_ENFORCE=1|auto and the instance runs on the Docker compute backend; with enforcement off (the default) or on LXD/Multipass runtimes they are evaluated, not enforced."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py", "tests/conformance/test_azure_netsim_core.py", "tests/netsim/test_azure.py"]
@@ -70,9 +70,9 @@
  },
  "azure.vnets.export_template": {
   "title": "Export template",
-  "level": { "nano": "limited", "offline": "limited" },
+  "level": { "nano": "full", "offline": "full" },
   "limitations": [
-   "Only the ARM Template tab is generated from the live resource; Bicep and Terraform export are not modelled."
+   "The ARM Template, Bicep and Terraform tabs are all generated client-side from this resource's live ARM state; linked/nested templates and deployment history are not modelled."
   ],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
@@ -84,11 +84,19 @@
   ]
  },
  "azure.vnets.tools": {
-  "title": "Diagnose and solve problems, Resource visualizer, Connection troubleshoot, Topology, Tasks, Support + Troubleshooting",
+  "title": "Diagnose and solve problems, Resource visualizer, Connection troubleshoot, Tasks, Support + Troubleshooting",
   "level": { "nano": "not_simulated", "offline": "not_simulated" },
   "limitations": [
    "These console tools require live network topology / traffic simulation Vyomi doesn't model."
   ]
+ },
+ "azure.vnets.topology": {
+  "title": "Topology (subnets, their connected devices, and peered virtual networks)",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "The data is real — the same ARM reads the Subnets, Connected devices and Peerings panels use (subnet address ranges, NSG/route table/NAT gateway associations, attached network interfaces, peering state) — but it is rendered as a structured list rather than Azure's interactive canvas diagram."
+  ],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
  },
  "azure.vnets.monitoring": {
   "title": "Alerts, Metrics, Diagnostic settings, Logs",
