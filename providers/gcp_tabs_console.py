@@ -361,7 +361,9 @@ def _cloudsql(op: str, name: str, body: dict):
 def _project() -> str:
     try:
         space = _ctx().PLATFORM.get_active_space() or {}
-        return str(space.get("active_account") or "cloudlearn")
+        # The project *id* the console and `/api/gcp/*` store resources under
+        # (active_account is the project number).
+        return str(_server()._gcp_project_name(space.get("active_account") or "cloudlearn"))
     except Exception:
         return "cloudlearn"
 

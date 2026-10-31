@@ -545,6 +545,14 @@
       "timeout": 300
     },
     {
+      "id": "offline-api-gcp-pubsub-tabs-project",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_pubsub_tabs_project_api.py",
+      "timeout": 180
+    },
+    {
       "id": "offline-api-gcp-pubsub-savings",
       "target": "offline",
       "cloud": "gcp",
