@@ -102,6 +102,12 @@ export const listTables = (server, db) =>
 export const listViews = (server, db) =>
   runQuery(server, db, "SELECT name FROM sqlite_master WHERE type='view' ORDER BY name");
 
+// ── Performance recommendations (core/azure_sql_core.py, real EXPLAIN QUERY PLAN) ──────
+export const listRecommendations = async (server, db) =>
+  (await sqlWire("GET", `/servers/${encodeURIComponent(server)}/databases/${encodeURIComponent(db)}/recommendations`, {})).value || [];
+export const applyRecommendation = (server, db, recId) =>
+  sqlWire("POST", `/servers/${encodeURIComponent(server)}/databases/${encodeURIComponent(db)}/recommendations/${encodeURIComponent(recId)}/apply`, {});
+
 const SAMPLE_SCRIPT = [
   "CREATE TABLE Customer (CustomerID INTEGER PRIMARY KEY, FirstName TEXT, LastName TEXT, CompanyName TEXT, EmailAddress TEXT)",
   "CREATE TABLE Product (ProductID INTEGER PRIMARY KEY, Name TEXT, ProductCategory TEXT, ListPrice REAL)",

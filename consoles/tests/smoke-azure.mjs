@@ -74,8 +74,9 @@ const browser = await pw.chromium.launch();
 page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
-// Native 404s (e.g. a deleted resource's GET) are expected answers, not page errors.
-page.on("console", (m) => m.type() === "error" && !/status of 404/.test(m.text()) && errors.push(m.text()));
+// Native 404s (e.g. a deleted resource's GET) and 403s (e.g. a query against a server with
+// public network access disabled) are expected answers, not page errors.
+page.on("console", (m) => m.type() === "error" && !/status of (404|403)/.test(m.text()) && errors.push(m.text()));
 const shot = (name) => page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
 const openPanel = async (label) => { await page.getByRole("navigation", { name: "Resource menu" }).getByRole("link", { name: label, exact: true }).click(); await page.waitForTimeout(500); };
 
@@ -1053,6 +1054,39 @@ try {
   let qRows = [];
   try { qRows = JSON.parse(q.text).rows; } catch {}
   check("UI query editor INSERT → readable over the azure-sql data-plane wire", q.status === 200 && qRows?.[0]?.[0] === "smoke", `HTTP ${q.status}`);
+
+  // ── Performance recommendations: real CREATE_INDEX suggestion from the query log ───────
+  for (let i = 0; i < 4; i++) {
+    await page.getByLabel("SQL query", { exact: true }).fill("SELECT name FROM t WHERE name = 'smoke';");
+    await page.getByRole("button", { name: "Run" }).click();
+    await page.waitForTimeout(300);
+  }
+  await openPanel("Performance recommendations");
+  await page.getByText("Create index on t(name)").waitFor({ timeout: 10000 });
+  await shot("26b-sql-performance-recommendations");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await page.getByText("No recommendations right now", { exact: false }).waitFor({ timeout: 10000 });
+  const idxCheck = await wire(`/azure-sql/servers/${SRV}/databases/${DB}/query`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sql: "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='t'" }) });
+  let idxRows = [];
+  try { idxRows = JSON.parse(idxCheck.text).rows; } catch {}
+  check("UI apply performance recommendation → real CREATE INDEX executed on the azure-sql data plane", idxRows.length === 1, `rows=${JSON.stringify(idxRows)}`);
+
+  // ── Networking: disabling public network access blocks the query data plane ────────────
+  await page.goto(UI + `#/sql/servers/${RG}/${SRV}/networking`);
+  await page.getByRole("radio", { name: "Disable" }).check();
+  await page.getByRole("toolbar", { name: "Networking commands" }).getByRole("button", { name: "Save" }).click();
+  await page.waitForTimeout(500);
+  const blockedQuery = await wire(`/azure-sql/servers/${SRV}/databases/${DB}/query`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sql: "SELECT 1" }) });
+  check("UI disable public network access → query data plane now rejects connections", blockedQuery.status === 403, `HTTP ${blockedQuery.status}`);
+  await shot("26c-sql-networking-disabled");
+  await page.getByRole("radio", { name: "Selected networks" }).check();
+  await page.getByRole("toolbar", { name: "Networking commands" }).getByRole("button", { name: "Save" }).click();
+  await page.waitForTimeout(500);
+  const allowedQuery = await wire(`/azure-sql/servers/${SRV}/databases/${DB}/query`,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sql: "SELECT 1" }) });
+  check("UI re-enable public network access → query data plane allows connections again", allowedQuery.status === 200, `HTTP ${allowedQuery.status}`);
 
   // ── Firewall rule added on the server blade → visible over native ARM ──────────────────
   await page.goto(UI + `#/sql/servers/${RG}/${SRV}/networking`);
