@@ -741,6 +741,13 @@ class AzureArm:
         if diag_marker is not None:
             return self._diagnostic_settings(method, sub, rg, namespace, chain, diag_marker, payload)
 
+        # Microsoft.Insights/metrics: a real ARM extension resource scoped to ANY other
+        # resource's own id (same shape as diagnosticSettings above) — v4 WAVE 5b, see
+        # monitor_engine.get_storage_metrics / find_metrics_marker.
+        metrics_marker = monitor_engine.find_metrics_marker(chain)
+        if metrics_marker is not None:
+            return self._metrics(method, sub, rg, namespace, chain, metrics_marker, query)
+
         # Microsoft.Authorization/roleAssignments: a real ARM extension resource that can be
         # READ scoped to ANY other resource's own id (chain re-enters "providers", same shape
         # as locks/diagnostic settings above) — real Azure's IAM blade lists assignments at that
@@ -888,6 +895,12 @@ class AzureArm:
             if blocked:
                 return blocked
             blocked = self._aks_namespace_block(type_chain, names, payload, sub, rg)
+            if blocked:
+                return blocked
+            blocked = self._storage_encryption_block(type_chain, names, payload, sub, rg)
+            if blocked:
+                return blocked
+            blocked = self._storage_hns_block(type_chain, names, payload, sub, rg)
             if blocked:
                 return blocked
             blocked = self._cosmos_validate_block(type_chain, names, payload, sub, rg)
@@ -1074,6 +1087,68 @@ class AzureArm:
             if (cluster or {}).get("properties", {}).get("powerState", {}).get("code") == "Stopped":
                 return _err(409, "ClusterNotRunning",
                             "The cluster is stopped. Start the cluster before creating or deleting namespaces.")
+        return None
+
+    _VAULT_URI_RE = re.compile(r"^https?://([a-z0-9-]+)\.vault\.azure\.net/?$", re.I)
+
+    def _storage_encryption_block(self, type_chain, names, payload, sub, rg):
+        # v4 WAVE 5b (azure.storage.encryption): real Azure rejects a customer-managed-key
+        # selection that doesn't actually name a Key Vault key — Vyomi now ENFORCES the
+        # structural shape (keyvaulturi + keyname required) and that the vault URI resolves
+        # to a REAL Key Vault in this subscription, instead of round-tripping whatever
+        # encryption.keySource/keyvaultproperties the caller sends. The named KEY's own
+        # existence/enabled state inside that vault is still not checked (core/azure_arm_core.py
+        # has no reference to the Key Vault keys data-plane store) — an honest, narrower gap.
+        if type_chain[0].lower() != "microsoft.storage" or type_chain[1].lower() != "storageaccounts" \
+                or len(type_chain) != 2:
+            return None
+        props = (payload or {}).get("properties") or {}
+        enc = props.get("encryption")
+        if not isinstance(enc, dict) or enc.get("keySource") != "Microsoft.Keyvault":
+            return None
+        kv = enc.get("keyvaultproperties") or {}
+        uri, key_name = kv.get("keyvaulturi"), kv.get("keyname")
+        if not uri or not key_name:
+            return _err(400, "BadRequest",
+                        "encryption.keyvaultproperties.keyvaulturi and .keyname are required "
+                        "when encryption.keySource is 'Microsoft.Keyvault'.")
+        m = self._VAULT_URI_RE.match(uri)
+        vault_exists = bool(m) and any(
+            r.get("_type", "").lower() == "microsoft.keyvault/vaults"
+            and r.get("id", "").lower().endswith(f"/vaults/{m.group(1).lower()}")
+            for r in self.state.values())
+        if not vault_exists:
+            return _err(400, "BadRequest",
+                        f"The Key Vault referenced by encryption.keyvaultproperties.keyvaulturi "
+                        f"('{uri}') does not exist in this subscription.")
+        return None
+
+    def _storage_hns_block(self, type_chain, names, payload, sub, rg):
+        # v4 WAVE 5b (azure.storage.datalakegen2upgrade): the Data Lake Gen2 upgrade flips
+        # isHnsEnabled false -> true on an EXISTING account — a one-way migration real Azure
+        # only allows from a general-purpose v2 (or Premium block blob) account. Vyomi now
+        # ENFORCES both the eligibility and the one-way-ness instead of round-tripping
+        # whatever isHnsEnabled the caller sends.
+        if type_chain[0].lower() != "microsoft.storage" or type_chain[1].lower() != "storageaccounts" \
+                or len(type_chain) != 2:
+            return None
+        props = (payload or {}).get("properties") or {}
+        if "isHnsEnabled" not in props:
+            return None
+        existing = self.state.get(_canonical_id(sub, rg, type_chain, names).lower())
+        was = bool((existing or {}).get("properties", {}).get("isHnsEnabled"))
+        now = bool(props["isHnsEnabled"])
+        if was == now:
+            return None
+        if was and not now:
+            return _err(400, "BadRequest",
+                        "Hierarchical namespace cannot be disabled once enabled (Data Lake "
+                        "Gen2 upgrade is one-way).")
+        kind = (payload or {}).get("kind") or (existing or {}).get("kind")
+        if existing is not None and kind not in ("StorageV2", "BlockBlobStorage"):
+            return _err(400, "BadRequest",
+                        "Hierarchical namespace (Data Lake Gen2) requires a general-purpose v2 "
+                        "or premium block blob storage account.")
         return None
 
     def _cosmos_validate_block(self, type_chain, names, payload, sub, rg):
@@ -1348,6 +1423,24 @@ class AzureArm:
                     _record_activity(activity_name, "Delete diagnostic setting", name)
             else:
                 return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+        return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
+
+    def _metrics(self, method, sub, rg, namespace, chain, marker, query):
+        # v4 WAVE 5b — Microsoft.Insights/metrics, read-only (see monitor_engine.get_storage_metrics).
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "Metrics supports GET only.")
+        stc, snames = [namespace], []
+        for n, token in enumerate(chain[:marker]):
+            (stc if n % 2 == 0 else snames).append(token)
+        scope_rid = _canonical_id(sub, rg, stc, snames)
+        rec = self.state.get(scope_rid.lower())
+        if rec is None:
+            return _err(404, "ResourceNotFound", f"Resource '{scope_rid}' not found.")
+        if rec.get("_type", "").lower() != "microsoft.storage/storageaccounts" or self.blob_store is None:
+            # Genuinely not modelled for any other resource type yet (see azure_monitor_core
+            # docstring) — an empty, valid series, not an error.
+            return _ok({"cost": 0, "timespan": query.get("timespan", ""), "interval": "PT1H", "value": []})
+        r = monitor_engine.get_storage_metrics(self.blob_store, snames[-1].lower(), query)
         return {"status": r["status"], "headers": dict(r["headers"]), "body": r["body"]}
 
     def _dns(self, method, sub, rg, chain, payload, query):

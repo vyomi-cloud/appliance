@@ -956,8 +956,13 @@ try {
   await shot("28d-apim-scale-tier");
 
   // ── Diagnostic setting created over the wire → visible in the UI (CLI → UI direction) ──
+  // The destination storage account must really exist (core/azure_monitor_core.py now
+  // validates it, v4 WAVE 5b), so create it for real first.
+  const apimDiagSa = `apimsmokesa${n}`;
+  await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${apimDiagSa}?api-version=2023-01-01`,
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ location: "eastus" }) });
   const apimDiagRes = await wire(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}/providers/Microsoft.Insights/diagnosticSettings/${APIMDIAG}?api-version=2021-05-01-preview`,
-    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties: { storageAccountId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/apimsmokesa`, logs: [{ categoryGroup: "allLogs", enabled: true }] } }) });
+    { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ properties: { storageAccountId: `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Storage/storageAccounts/${apimDiagSa}`, logs: [{ categoryGroup: "allLogs", enabled: true }] } }) });
   check("ARM PUT diagnostic setting over wire", apimDiagRes.status === 200 || apimDiagRes.status === 201, `HTTP ${apimDiagRes.status}`);
   await openPanel("Diagnostic settings");
   await page.getByText(APIMDIAG, { exact: true }).waitFor({ timeout: 10000 });

@@ -47,6 +47,11 @@ import re
 import uuid
 from datetime import datetime, timezone
 
+try:
+    from core import azure_blob_core as blob_engine
+except ImportError:  # pragma: no cover - Pyodide flat layout
+    import azure_blob_core as blob_engine  # type: ignore
+
 NAMESPACE = "Microsoft.Insights"
 API_VERSION = "2018-03-01"                    # primary catalog type (metricAlerts)
 DEFAULT_LOCATION = "global"
@@ -663,6 +668,12 @@ def upsert_diagnostic_setting(state, scope_rid, name, payload):
         props = _diag_props((payload or {}).get("properties") or {}, rec["properties"] if rec else None)
     except _E as e:
         return _err(e.status, e.code, e.message)
+    # v4 WAVE 5b — a storageAccountId destination must name a real resource (real ARM
+    # validates the destination exists too); workspaceId/eventHub destinations are left
+    # unchecked since no Log Analytics/Event Hub core exists here to validate against.
+    dest = props.get("storageAccountId")
+    if dest and dest.lower() not in state:
+        return _err(400, "BadRequest", f"The destination storage account '{dest}' does not exist.")
     rec = {"id": rid, "name": name, "type": _DIAG_TYPE, "properties": props,
            "_type": _DIAG_TYPE.lower(), "_diag_scope": scope_rid.lower()}
     state[key] = rec
@@ -672,6 +683,55 @@ def upsert_diagnostic_setting(state, scope_rid, name, payload):
 def remove_diagnostic_setting(state, scope_rid, name):
     rec = state.pop(f"{_diag_base(scope_rid)}/{name}".lower(), None)
     return _ok(None, 200 if rec is not None else 204)
+
+
+# ═══════════════════════════ metrics (ARM extension resource, READ-ONLY) ═════════
+# Microsoft.Insights/metrics is scoped to ANY other resource's own id, the exact real-Azure
+# wire shape (GET {resourceId}/providers/Microsoft.Insights/metrics?metricnames=...) — same
+# marker pattern as diagnostic settings, wired by core/azure_arm_core.AzureArm._metrics.
+# v4 WAVE 5b: for a Microsoft.Storage/storageAccounts scope, values are REAL numbers derived
+# from core/azure_blob_core.py's own request counters/state (never synthetic/random) — see
+# that module's `account_metrics`. Every other resource type still returns an empty series
+# (genuinely not modelled — no metric-emission pipeline exists for them yet).
+METRICS_API_VERSION = "2018-01-01"
+STORAGE_METRIC_UNITS = {
+    "UsedCapacity": "Bytes", "BlobCount": "Count", "ContainerCount": "Count",
+    "Transactions": "Count", "Ingress": "Bytes", "Egress": "Bytes",
+}
+_STORAGE_METRIC_FIELD = {
+    "UsedCapacity": "usedCapacity", "BlobCount": "blobCount", "ContainerCount": "containerCount",
+    "Transactions": "transactions", "Ingress": "ingress", "Egress": "egress",
+}
+
+
+def find_metrics_marker(chain):
+    """Index of the ['providers','Microsoft.Insights','metrics'] marker in `chain`, or None —
+    same shape find_diagnostic_marker handles for diagnosticSettings."""
+    for i in range(len(chain) - 2):
+        if (chain[i].lower() == "providers" and chain[i + 1].lower() == "microsoft.insights"
+                and chain[i + 2].lower() == "metrics"):
+            return i
+    return None
+
+
+def get_storage_metrics(blob_store, acct: str, query: dict) -> dict:
+    """`blob_store`: core/azure_blob_core.AzureBlobStore. `acct`: the storage account's
+    (lower-cased) name. A single current-value data point per requested metric, not a
+    persisted historical time series — this simulator doesn't keep metric history."""
+    names = [n for n in (query.get("metricnames") or "").split(",") if n] or list(STORAGE_METRIC_UNITS)
+    stats = blob_engine.account_metrics(blob_store, acct)
+    now = _now()
+    value = []
+    for n in names:
+        field = _STORAGE_METRIC_FIELD.get(n)
+        if field is None:
+            continue
+        value.append({
+            "id": f"providers/Microsoft.Insights/metrics/{n}", "type": "Microsoft.Insights/metrics",
+            "name": {"value": n, "localizedValue": n}, "unit": STORAGE_METRIC_UNITS[n],
+            "timeseries": [{"metadatavalues": [], "data": [{"timeStamp": now, "total": stats[field]}]}],
+        })
+    return _ok({"cost": 0, "timespan": query.get("timespan", ""), "interval": "PT1H", "value": value})
 
 
 # ═══════════════════════════ CRUD ════════════════════════════════════════════════
