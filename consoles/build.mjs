@@ -39,8 +39,7 @@ const html = (cloud, title, nano = false) => `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title>
 <meta name="vyomi-substrate" content="${nano ? "nano" : "offline"}">
-<link rel="stylesheet" href="./main.css?v=${assetVersion}">
-${nano ? NANO_HEAD : ""}</head>
+${existsSync(join(HERE, "..", "static", "v4", cloud, "main.css")) ? `<link rel="stylesheet" href="./main.css?v=${assetVersion}">\n` : ""}${nano ? NANO_HEAD : ""}</head>
 <body>
 ${nano ? NANO_BODY : ""}<div id="root"></div>
 <script type="module" src="./main.js?v=${assetVersion}"></script>
