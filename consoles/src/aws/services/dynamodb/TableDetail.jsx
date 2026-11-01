@@ -7,7 +7,9 @@ import Button from "@cloudscape-design/components/button";
 import Modal from "@cloudscape-design/components/modal";
 import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
+import Textarea from "@cloudscape-design/components/textarea";
 import RadioGroup from "@cloudscape-design/components/radio-group";
+import Select from "@cloudscape-design/components/select";
 import Toggle from "@cloudscape-design/components/toggle";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -18,6 +20,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { follow, href } from "../../../common/router.js";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { attrType, capacity, keyOf, statusOf, tableClass } from "./Tables.jsx";
 import { getLayoutSettings, TABLE_TAB_ID } from "./prefs.js";
 import * as api from "./api.js";
@@ -42,18 +45,11 @@ export default function TableDetail({ params, query }) {
             <Indexes d={d} />
             <LocalIndexes d={d} />
           </SpaceBetween> },
-        { id: "monitor", label: "Monitor", content: <SpaceBetween size="l">
-            <NotSimulatedContainer title="CloudWatch alarms" feature="DynamoDB CloudWatch alarms" />
-            <NotSimulatedContainer title="CloudWatch metrics" feature="DynamoDB CloudWatch metrics" />
-          </SpaceBetween> },
-        { id: "global-tables", label: "Global tables", content: <NotSimulatedContainer title="Replicas" feature="Global tables (multi-Region replicas)" /> },
+        { id: "monitor", label: "Monitor", content: <MonitorTab d={d} /> },
+        { id: "global-tables", label: "Global tables", content: <GlobalTablesTab d={d} reload={t.reload} /> },
         { id: "backups", label: "Backups", content: <Backups name={name} /> },
-        { id: "exports", label: "Exports and streams", content: <SpaceBetween size="l">
-            <NotSimulatedContainer title="Amazon Kinesis data stream details" feature="DynamoDB Kinesis data streaming" />
-            <KeyValue title="DynamoDB stream details" columns={2} items={[["Stream status", d.StreamSpecification?.StreamEnabled ? "On" : "Off"], ["View type", d.StreamSpecification?.StreamViewType]]} />
-            <NotSimulatedContainer title="Trigger" feature="DynamoDB stream triggers (Lambda)" />
-          </SpaceBetween> },
-        { id: "permissions", label: "Permissions", content: <NotSimulatedContainer title="Resource-based policy for table" /> },
+        { id: "exports", label: "Exports and streams", content: <ExportsAndStreamsTab d={d} reload={t.reload} /> },
+        { id: "permissions", label: "Permissions", content: <PermissionsTab d={d} /> },
         { id: "settings", label: "Additional settings", content: <Settings d={d} reload={t.reload} /> },
       ]} />
     </ContentLayout>
@@ -160,6 +156,280 @@ function LocalIndexes({ d }) {
         { id: "ic", header: "Item count", cell: (i) => i.ItemCount ?? 0 },
       ]}
       empty={<Box textAlign="center" color="inherit"><b>No local secondary indexes</b><Box variant="p" color="inherit">Local secondary indexes must be created when the table is created.</Box></Box>} />
+  );
+}
+
+const MONITOR_METRICS = [
+  { metric: "ConsumedReadCapacityUnits", label: "Consumed read capacity units", statistic: "Sum" },
+  { metric: "ConsumedWriteCapacityUnits", label: "Consumed write capacity units", statistic: "Sum" },
+];
+
+function MetricTable({ name, metric, label, statistic }) {
+  const m = useAsync(() => api.getTableMetric(name, metric, { statistic }), [name, metric]);
+  const points = m.data || [];
+  return (
+    <Table variant="embedded" items={[...points].reverse().slice(0, 10)}
+      header={<Header variant="h3" counter={`(${points.length})`}>{label}</Header>}
+      columnDefinitions={[
+        { id: "t", header: "Timestamp", cell: (p) => new Date(p.Timestamp * 1000).toLocaleString() },
+        { id: "v", header: statistic, cell: (p) => p[statistic] },
+      ]}
+      empty={<Box textAlign="center" color="inherit">No datapoints yet — read/write this table to generate real activity.</Box>} />
+  );
+}
+
+function CreateAlarmModal({ name, visible, onDismiss, onDone }) {
+  const notify = useNotify();
+  const [metricName, setMetricName] = useState(MONITOR_METRICS[0].metric);
+  const [threshold, setThreshold] = useState("100");
+  const [evaluationPeriods, setEvaluationPeriods] = useState("3");
+  const [snsArn, setSnsArn] = useState("");
+  const [busy, setBusy] = useState(false);
+  const create = async () => {
+    setBusy(true);
+    try {
+      const alarmName = `${name}-${metricName}`;
+      await api.putTableAlarm(name, {
+        alarmName, metricName, statistic: "Sum", comparison: "GreaterThanOrEqualToThreshold",
+        threshold: Number(threshold), evaluationPeriods: Math.max(1, Number(evaluationPeriods) || 1), snsArn,
+      });
+      notify.success(`Alarm ${alarmName} was created.`);
+      onDone(); onDismiss();
+    } finally { setBusy(false); }
+  };
+  return (
+    <Modal visible={visible} onDismiss={onDismiss} header="Create alarm"
+      footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+        <Button variant="link" onClick={onDismiss}>Cancel</Button>
+        <Button variant="primary" loading={busy} onClick={create}>Create alarm</Button>
+      </SpaceBetween></Box>}>
+      <SpaceBetween size="l">
+        <FormField label="Metric">
+          <Select selectedOption={{ label: MONITOR_METRICS.find((m) => m.metric === metricName)?.label, value: metricName }} ariaLabel="Metric"
+            onChange={({ detail }) => setMetricName(detail.selectedOption.value)}
+            options={MONITOR_METRICS.map((m) => ({ label: m.label, value: m.metric }))} />
+        </FormField>
+        <FormField label="Threshold" description="Alarm when the metric's sum is >= this value for the evaluation periods below.">
+          <Input type="number" value={threshold} onChange={({ detail }) => setThreshold(detail.value)} ariaLabel="Threshold" />
+        </FormField>
+        <FormField label="Evaluation periods (1 minute each)">
+          <Input type="number" value={evaluationPeriods} onChange={({ detail }) => setEvaluationPeriods(detail.value)} ariaLabel="Evaluation periods" />
+        </FormField>
+        <FormField label="SNS topic ARN - optional" description="Vyomi really publishes to this topic when the alarm transitions, through the same SNS engine the console's SNS pages use.">
+          <Input value={snsArn} onChange={({ detail }) => setSnsArn(detail.value)} placeholder="arn:aws:sns:us-east-1:123456789012:my-topic" ariaLabel="SNS topic ARN" />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+function MonitorTab({ d }) {
+  const name = d.TableName;
+  const alarms = useAsync(() => api.describeTableAlarms(name, MONITOR_METRICS.map((m) => m.metric)), [name]);
+  const [open, setOpen] = useState(false);
+  return (
+    <SpaceBetween size="l">
+      <CapabilityContainer id="dynamodb.monitor" title="CloudWatch alarms" actions={<Button onClick={() => setOpen(true)}>Create alarm</Button>}>
+        <Table variant="embedded" items={alarms.data || []}
+          columnDefinitions={[
+            { id: "name", header: "Name", cell: (a) => a.AlarmName },
+            { id: "state", header: "State", cell: (a) => a.StateValue },
+            { id: "cond", header: "Conditions", cell: (a) => `${a.MetricName} >= ${a.Threshold}` },
+          ]}
+          empty={<Box textAlign="center" color="inherit">No alarms configured for this table's metrics.</Box>} />
+      </CapabilityContainer>
+      <CapabilityContainer id="dynamodb.monitor" title="CloudWatch metrics">
+        <SpaceBetween size="l">
+          {MONITOR_METRICS.map((m) => <MetricTable key={m.metric} name={name} metric={m.metric} label={m.label} statistic={m.statistic} />)}
+        </SpaceBetween>
+      </CapabilityContainer>
+      <CreateAlarmModal name={name} visible={open} onDismiss={() => setOpen(false)} onDone={alarms.reload} />
+    </SpaceBetween>
+  );
+}
+
+function CreateReplicaModal({ name, visible, onDismiss, onDone }) {
+  const notify = useNotify();
+  const [region, setRegion] = useState("eu-west-1");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try { await api.createReplica(name, region); notify.success(`Creating replica in ${region}.`); onDone(); onDismiss(); }
+    catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Modal visible={visible} onDismiss={onDismiss} header="Create replica"
+      footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs"><Button variant="link" onClick={onDismiss}>Cancel</Button><Button variant="primary" loading={busy} onClick={submit}>Create replica</Button></SpaceBetween></Box>}>
+      <SpaceBetween size="l">
+        {error && <ErrorAlert error={error} />}
+        <FormField label="Region" description="Vyomi really backfills and then keeps mirroring this table's writes into the replica (it has no regional endpoint of its own to query — see the Monitor tab's capability note).">
+          <Input value={region} onChange={({ detail }) => setRegion(detail.value)} ariaLabel="Region" />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+function GlobalTablesTab({ d, reload }) {
+  const notify = useNotify();
+  const name = d.TableName;
+  const rows = d.Replicas || [];
+  const [sel, setSel] = useState([]);
+  const [createModal, setCreateModal] = useState(false);
+  const capacityMode = (r) => (r.ReplicaProvisionedReadCapacityAutoScalingSettings ? "On-demand" : "Provisioned");
+  return (
+    <CapabilityContainer id="dynamodb.global-tables" title="Replicas" counter={`(${rows.length})`} actions={
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button disabled={!sel.length} onClick={async () => {
+          for (const r of sel) await api.deleteReplica(name, r.RegionName);
+          notify.success(`${sel.length} replica(s) deleted.`); setSel([]); reload();
+        }}>Delete replica</Button>
+        <Button variant="primary" onClick={() => setCreateModal(true)}>Create replica</Button>
+      </SpaceBetween>
+    }>
+      <Table variant="embedded" items={rows} trackBy="RegionName" selectionType="single" selectedItems={sel}
+        onSelectionChange={({ detail }) => setSel(detail.selectedItems)}
+        columnDefinitions={[
+          { id: "region", header: "Region", cell: (r) => r.RegionName },
+          { id: "status", header: "Status", cell: (r) => r.ReplicaStatus },
+          { id: "rcap", header: "Read capacity mode", cell: capacityMode },
+          { id: "wcap", header: "Write capacity mode", cell: capacityMode },
+        ]}
+        empty={<Box textAlign="center" color="inherit"><b>No replicas</b><Box variant="p" color="inherit">This table is not replicated to other Regions.</Box></Box>} />
+      <CreateReplicaModal name={name} visible={createModal} onDismiss={() => setCreateModal(false)} onDone={reload} />
+    </CapabilityContainer>
+  );
+}
+
+function StreamModal({ name, enabled, viewType, visible, onDismiss, onDone }) {
+  const notify = useNotify();
+  const [on, setOn] = useState(enabled);
+  const [vt, setVt] = useState(viewType || "NEW_AND_OLD_IMAGES");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try {
+      await api.updateTable({ TableName: name, StreamSpecification: on ? { StreamEnabled: true, StreamViewType: vt } : { StreamEnabled: false } });
+      notify.success(`DynamoDB stream turned ${on ? "on" : "off"}.`); onDone(); onDismiss();
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Modal visible={visible} onDismiss={onDismiss} header="Manage stream"
+      footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs"><Button variant="link" onClick={onDismiss}>Cancel</Button><Button variant="primary" loading={busy} onClick={submit}>Save changes</Button></SpaceBetween></Box>}>
+      <SpaceBetween size="l">
+        {error && <ErrorAlert error={error} />}
+        <Toggle checked={on} onChange={({ detail }) => setOn(detail.checked)}>Turn on DynamoDB stream</Toggle>
+        <FormField label="View type">
+          <Select disabled={!on} selectedOption={{ label: vt, value: vt }} ariaLabel="View type"
+            onChange={({ detail }) => setVt(detail.selectedOption.value)}
+            options={["KEYS_ONLY", "NEW_IMAGE", "OLD_IMAGE", "NEW_AND_OLD_IMAGES"].map((v) => ({ label: v, value: v }))} />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+function KinesisModal({ name, dest, visible, onDismiss, onDone }) {
+  const notify = useNotify();
+  const [streamArn, setStreamArn] = useState(dest?.StreamArn || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try {
+      if (dest) await api.disableKinesisStreamingDestination(name, dest.StreamArn);
+      else await api.enableKinesisStreamingDestination(name, streamArn);
+      notify.success(dest ? "Kinesis streaming turned off." : "Kinesis streaming turned on."); onDone(); onDismiss();
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Modal visible={visible} onDismiss={onDismiss} header={dest ? "Turn off Kinesis streaming" : "Turn on Kinesis streaming"}
+      footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs"><Button variant="link" onClick={onDismiss}>Cancel</Button><Button variant="primary" loading={busy} onClick={submit}>{dest ? "Turn off" : "Turn on"}</Button></SpaceBetween></Box>}>
+      <SpaceBetween size="l">
+        {error && <ErrorAlert error={error} />}
+        {dest ? <Box variant="p">Stop publishing this table's changes to <code>{dest.StreamArn}</code>?</Box> : (
+          <FormField label="Kinesis data stream ARN" description="Must name a real stream in the Kinesis console — Vyomi checks it exists.">
+            <Input value={streamArn} onChange={({ detail }) => setStreamArn(detail.value)} ariaLabel="Kinesis data stream ARN"
+              placeholder="arn:aws:kinesis:us-east-1:123456789012:stream/my-stream" />
+          </FormField>
+        )}
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+function ExportsAndStreamsTab({ d, reload }) {
+  const name = d.TableName;
+  const kd = useAsync(() => api.describeKinesisStreamingDestination(name), [name]);
+  const [kinesisModal, setKinesisModal] = useState(false);
+  const [streamModal, setStreamModal] = useState(false);
+  const dest = (kd.data || [])[0];
+  const stream = d.StreamSpecification;
+  return (
+    <SpaceBetween size="l">
+      <CapabilityContainer id="dynamodb.kinesis" title="Amazon Kinesis data stream details"
+        actions={<Button onClick={() => setKinesisModal(true)}>{dest ? "Turn off" : "Turn on"}</Button>}>
+        {dest ? <KeyValue columns={2} items={[["Destination status", dest.DestinationStatus], ["Stream ARN", dest.StreamArn]]} />
+          : <Box textAlign="center" color="inherit">Kinesis data streaming is turned off for this table.</Box>}
+      </CapabilityContainer>
+      <CapabilityContainer id="dynamodb.streams" title="DynamoDB stream details"
+        actions={<Button onClick={() => setStreamModal(true)}>{stream?.StreamEnabled ? "Turn off" : "Turn on"}</Button>}>
+        <KeyValue columns={2} items={[["Stream status", stream?.StreamEnabled ? "On" : "Off"], ["View type", stream?.StreamViewType || "-"],
+          ["Latest stream ARN", d.LatestStreamArn || "-"]]} />
+      </CapabilityContainer>
+      <NotSimulatedContainer title="Trigger" feature="DynamoDB stream triggers (Lambda)" />
+      <KinesisModal name={name} dest={dest} visible={kinesisModal} onDismiss={() => setKinesisModal(false)} onDone={() => { reload(); kd.reload(); }} />
+      <StreamModal name={name} enabled={!!stream?.StreamEnabled} viewType={stream?.StreamViewType} visible={streamModal} onDismiss={() => setStreamModal(false)} onDone={reload} />
+    </SpaceBetween>
+  );
+}
+
+function PolicyModal({ arn, policy, visible, onDismiss, onDone }) {
+  const notify = useNotify();
+  const [text, setText] = useState(policy?.Policy || JSON.stringify({ Version: "2012-10-17", Statement: [] }, null, 2));
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try {
+      await api.putResourcePolicy(arn, text, policy?.RevisionId, confirm);
+      notify.success("Resource-based policy saved."); onDone(); onDismiss();
+    } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  return (
+    <Modal visible={visible} onDismiss={onDismiss} header="Edit resource-based policy" size="large"
+      footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs"><Button variant="link" onClick={onDismiss}>Cancel</Button><Button variant="primary" loading={busy} onClick={submit}>Save policy</Button></SpaceBetween></Box>}>
+      <SpaceBetween size="l">
+        {error && <ErrorAlert error={error} />}
+        <FormField label="Policy document">
+          <Textarea value={text} onChange={({ detail }) => setText(detail.value)} rows={12} ariaLabel="Policy document" />
+        </FormField>
+        <Toggle checked={confirm} onChange={({ detail }) => setConfirm(detail.checked)}>Confirm this policy even if it grants public access (ConfirmRemoveSelfResourceAccess)</Toggle>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+function PermissionsTab({ d }) {
+  const notify = useNotify();
+  const arn = d.TableArn;
+  const policy = useAsync(() => api.getResourcePolicy(arn), [arn]);
+  const [editModal, setEditModal] = useState(false);
+  return (
+    <CapabilityContainer id="dynamodb.resource-policy" title="Resource-based policy for table" actions={
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button onClick={() => setEditModal(true)}>{policy.data ? "Edit" : "Create table policy"}</Button>
+        {policy.data && <Button onClick={async () => { await api.deleteResourcePolicy(arn, policy.data.RevisionId); notify.success("Policy deleted."); policy.reload(); }}>Delete</Button>}
+      </SpaceBetween>
+    }>
+      {policy.loading ? <Spinner /> : policy.data
+        ? <FormField label="Policy" stretch><Textarea value={JSON.stringify(JSON.parse(policy.data.Policy), null, 2)} readOnly rows={10} ariaLabel="Policy" /></FormField>
+        : <Box textAlign="center" color="inherit">This table does not have a resource-based policy.</Box>}
+      <PolicyModal arn={arn} policy={policy.data} visible={editModal} onDismiss={() => setEditModal(false)} onDone={policy.reload} />
+    </CapabilityContainer>
   );
 }
 

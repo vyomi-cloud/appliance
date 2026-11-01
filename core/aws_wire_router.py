@@ -482,6 +482,8 @@ class AwsWireRouter:
         self.vpc = s.get("vpc") or s.get("vpc_net") or _types.SimpleNamespace()   # EC2/VPC network model
         self.vpc.cw_store = self.cw   # real StatusCheckFailed metrics (ec2.instances.monitoring / .alarms-metrics)
         self.cw.vpc_store = self.vpc  # real EC2 alarm actions (aws.cloudwatch.alarms.actions.ec2)
+        self.ddb.cw_store = self.cw            # real per-op CloudWatch metrics (aws.dynamodb.monitor)
+        self.ddb.kinesis_store = self.kinesis  # real Kinesis Data Streams destination (aws.dynamodb.kinesis)
         self.logs = s.get("logs") or logs.LogsStore()         # CloudWatch Logs
         self.logs.lam_store, self.logs.kinesis_store = self.lam, self.kinesis   # real subscription-filter delivery
         self.cw.logs_store = self.logs            # real log-based Contributor Insights rules

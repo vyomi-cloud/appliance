@@ -160,15 +160,17 @@
  "dynamodb.streams": {
   "title": "DynamoDB stream details",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "DynamoDB Streams is a separate change-data-capture API (shard iterators, GetRecords, trim-horizon, Lambda event-source mapping) that Vyomi's single-process store does not model."
+   "CreateTable/UpdateTable StreamSpecification opens a real change-data-capture log per table: every PutItem/UpdateItem/DeleteItem (including through BatchWriteItem/TransactWriteItems) appends a real stream record with the correct eventName (INSERT/MODIFY/REMOVE) and NewImage/OldImage per StreamViewType; ListStreams/DescribeStream/GetShardIterator/GetRecords read it back with real sequence numbers and TRIM_HORIZON/LATEST/AT_SEQUENCE_NUMBER/AFTER_SEQUENCE_NUMBER semantics.",
+   "A stream always has exactly one shard that never splits or closes while the stream is enabled (real DynamoDB Streams shards split/close as a table scales); up to 1000 records are retained per generation instead of the real ~24-hour window.",
+   "Lambda event-source-mapping triggers on the stream are not modeled (see the Permissions/Exports tab's separate, still-honest Trigger panel)."
   ],
-  "probe": {
-   "ddb_unknown": "DescribeStream"
-  }
+  "tests": [
+   "tests/conformance/test_dynamodb_streams_core.py"
+  ]
  },
  "dynamodb.exports": {
   "title": "Exports to S3",
@@ -188,60 +190,71 @@
  "dynamodb.imports": {
   "title": "Imports from S3",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "ImportTable requires parsing multiple external file formats (CSV, DynamoDB JSON, Amazon Ion; optionally GZIP/ZSTD-compressed) from arbitrary S3 content, which Vyomi does not implement; only the export direction (ExportTableToPointInTime) is built."
+   "ImportTable reads real bytes from the S3 store and really creates and populates a new table: CSV and DYNAMODB_JSON (the exact newline-delimited shape ExportTableToPointInTime writes, so export+import is a genuine round trip) with NONE or GZIP compression.",
+   "Amazon Ion input and ZSTD compression are rejected with ValidationException — Ion parsing and a ZSTD codec are not vendored.",
+   "CSV columns are typed from TableCreationParameters.AttributeDefinitions when the column is a key attribute; every other column is imported as a String, where real DynamoDB applies its CSV type-inference rules."
   ],
-  "probe": {
-   "ddb_unknown": "ImportTable"
-  }
+  "tests": [
+   "tests/conformance/test_dynamodb_import_core.py"
+  ]
  },
  "dynamodb.kinesis": {
   "title": "Amazon Kinesis data stream details",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Kinesis Data Streams for DynamoDB (change-data-capture into a Kinesis stream) is a separate streaming product Vyomi does not run."
+   "EnableKinesisStreamingDestination requires the named stream to really exist in Vyomi's own Kinesis core (core/kinesis_core.py) and rejects it with ResourceNotFoundException otherwise; once enabled, every item write/delete publishes a real change-data-capture record into that stream (readable back with GetRecords) — not stored config.",
+   "Only one Kinesis destination per table is modeled; real DynamoDB allows up to two. UpdateKinesisStreamingDestination (changing precision after the fact) is not implemented — disable and re-enable instead."
   ],
-  "probe": {
-   "ddb_unknown": "DescribeKinesisStreamingDestination"
-  }
+  "tests": [
+   "tests/conformance/test_dynamodb_kinesis_destination_core.py"
+  ]
  },
  "dynamodb.resource-policy": {
   "title": "Resource-based policy",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Resource-based policies need the full cross-account IAM policy-evaluation engine (condition keys, principal matching) that Vyomi's single-tenant simulator does not implement."
+   "PutResourcePolicy validates the document (valid JSON, at least one Allow/Deny statement with a Principal), tracks a real RevisionId for optimistic concurrency (ExpectedRevisionId is enforced on Put and Delete), and rejects a policy granting '*' access unless ConfirmRemoveSelfResourceAccess=true — the same guard real PutResourcePolicy applies. What is not modeled is runtime access evaluation: Vyomi has one implicit caller identity, so the policy content never actually denies or allows a specific request the way cross-account IAM evaluation would."
   ],
-  "probe": {
-   "ddb_unknown": "GetResourcePolicy"
-  }
+  "tests": [
+   "tests/conformance/test_dynamodb_resource_policy_core.py"
+  ]
  },
  "dynamodb.monitor": {
   "title": "CloudWatch metrics and alarms",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "CloudWatch is a separate monitoring product (its own metric pipeline and alarm-evaluation engine) that Vyomi does not run for any service."
+   "Every PutItem/GetItem/UpdateItem/DeleteItem/Query/Scan/BatchGetItem/BatchWriteItem/TransactWriteItems/TransactGetItems call pushes a real AWS/DynamoDB ConsumedRead-/ConsumedWriteCapacityUnits and SuccessfulRequestLatency datapoint (derived from the actual request, never synthetic) into the shared CloudWatch core, on both the TableName and the TableName+Operation dimension sets — the same engine core/vpc_core.py's EC2 status-check metrics use. Alarms set on these metrics evaluate and fire for real.",
+   "Consumed capacity is approximated as 1 unit per item/key per call (no item-size rounding, no distinction between eventually- and strongly-consistent reads) and latency reflects simulator processing time, not real network/service time. ThrottledRequests, SystemErrors and UserErrors are not published (Vyomi never throttles and item-level validation errors fail the call before any metric would be recorded)."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_monitor_core.py"
   ]
  },
  "dynamodb.global-tables": {
   "title": "Global tables",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "Vyomi simulates a single region."
+   "UpdateTable(ReplicaUpdates) really backfills a new replica with the table's current items and then mirrors every subsequent write/delete into it synchronously (same pattern as core/s3_object_core.py's S3 Cross-Region Replication); DeleteTable is genuinely rejected while replicas exist, exactly like real DynamoDB's 'replication group must be empty' guard.",
+   "Vyomi simulates one AWS region, so a replica has no regional endpoint of its own to query — unlike real cross-region replication (where each replica is reachable and eventually consistent), Vyomi's replica data is only inspectable through the primary table's own Global Tables tab, and replication is synchronous rather than eventually consistent. Per-replica read/write capacity is not independently configurable; it always mirrors the primary table's capacity mode."
+  ],
+  "tests": [
+   "tests/conformance/test_dynamodb_global_tables_core.py"
   ]
  }
 }

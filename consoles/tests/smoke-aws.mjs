@@ -305,6 +305,24 @@ try {
   check("DynamoDB local secondary index → shown on table detail Indexes tab", true);
   await shot("12b-ddb-lsi");
 
+  // DynamoDB Streams (DEPTH wave 5b): turn the stream on through the UI, then verify the
+  // write it makes over the wire really lands in GetRecords (UI → wire direction).
+  await page.goto(UI + `#/dynamodb/tables/${T}`);
+  await page.getByRole("tab", { name: "Exports and streams" }).click();
+  await page.getByRole("button", { name: "Turn on" }).nth(1).click();
+  await page.getByRole("checkbox", { name: "Turn on DynamoDB stream" }).check();
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.getByText("On").first().waitFor({ timeout: 10000 });
+  check("DynamoDB stream turned on (UI) → table detail shows Stream status On", true);
+  await shot("12c-ddb-stream-on");
+  await ddb("PutItem", { TableName: T, Item: { pk: { S: "stream-smoke" }, total: { N: "9" } } });
+  const streamed = await ddb("DescribeTable", { TableName: T });
+  const streamArn = streamed.Table?.LatestStreamArn;
+  const it = await ddb("GetShardIterator", { StreamArn: streamArn, ShardId: "shardId-00000000000000000000-0000000000000000000", ShardIteratorType: "TRIM_HORIZON" });
+  const recs = await ddb("GetRecords", { ShardIterator: it.ShardIterator });
+  check("DynamoDB stream enabled over the UI → real CDC record readable over native wire",
+        (recs.Records || []).some((r) => r.dynamodb?.Keys?.pk?.S === "stream-smoke"), JSON.stringify(recs).slice(0, 300));
+
   // KMS: create a customer managed key through the wizard (UI → CLI direction)
   const K = `v4smoke-key-${Date.now() % 100000}`;
   await page.goto(UI + "#/kms/create-key");

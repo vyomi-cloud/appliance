@@ -40,11 +40,20 @@
   },
   "imports-from-s3": {
     "route": "#/dynamodb/imports",
-    "honest_page": true
+    "fixtures": [
+      "ddb-table"
+    ],
+    "live": "live-import"
   },
   "import-from-s3": {
     "route": "#/dynamodb/imports/create",
-    "honest_page": true
+    "fixtures": [
+      "ddb-table"
+    ],
+    "expand": [
+      "role=button[name=\"Next\"]",
+      "role=button[name=\"Next\"]"
+    ]
   },
   "settings": {
     "route": "#/dynamodb/settings"
