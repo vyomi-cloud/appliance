@@ -230,6 +230,15 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   table.gc tr:hover td{background:var(--blue-bg)}
   table.gc tr.selected td{background:var(--blue-tint)}
   table.gc td.chk,table.gc th.chk{width:42px;padding-right:0}
+  /* Standard on/off switch (Private Google Access, Flow logs) */
+  .vy-sw{position:relative;display:inline-block;width:36px;height:20px;vertical-align:middle;cursor:pointer}
+  .vy-sw input{opacity:0;width:0;height:0;position:absolute}
+  .vy-sw .vy-sw-t{position:absolute;inset:0;background:#bdc1c6;border-radius:20px;transition:background .15s}
+  .vy-sw .vy-sw-t::before{content:"";position:absolute;width:16px;height:16px;left:2px;top:2px;background:#fff;border-radius:50%;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .15s}
+  .vy-sw input:checked + .vy-sw-t{background:var(--blue)}
+  .vy-sw input:checked + .vy-sw-t::before{transform:translateX(16px)}
+  .vy-sw input:disabled + .vy-sw-t{opacity:.6}
+  .vy-sw input:focus-visible + .vy-sw-t{outline:2px solid var(--blue);outline-offset:2px}
   table.gc td a.id{color:var(--blue);font-weight:500}
   table.gc td a.id:hover{text-decoration:underline}
   .empty{padding:60px 16px;text-align:center;color:var(--sub);font-size:13px}
@@ -2197,22 +2206,48 @@ function kvCardOf(title, pairs){
   card.append(g);
   return card;
 }
-function tableOf(cols, rows, actions){
+// A standard on/off switch (not a button). onChange(checked) runs when the user flips it.
+function toggleEl(on, onChange){
+  const lab = el("label",{class:"vy-sw"});
+  const inp = el("input",{type:"checkbox"}); inp.checked = !!on;
+  inp.addEventListener("change", async () => { inp.disabled = true; try { await onChange(inp.checked); } finally { inp.disabled = false; } });
+  lab.append(inp, el("span",{class:"vy-sw-t"}));
+  return lab;
+}
+// opts.select = {can(row)->bool, onChange()}: a leading checkbox column; opts.ctx is handed to cell renderers.
+function tableOf(cols, rows, actions, opts){
+  opts = opts || {};
   const t = el("table",{class:"gc"});
-  const hr = el("tr",{}, ...cols.map(c => el("th",{}, c[1])));
+  const sel = opts.select;
+  const hr = el("tr",{});
+  const boxes = [];
+  if (sel) {
+    const all = el("input",{type:"checkbox", title:"Select all"});
+    all.addEventListener("change", () => { boxes.forEach(b => { if (!b.disabled) b.checked = all.checked; }); sel.onChange(); });
+    hr.append(el("th",{class:"chk"}, all));
+  }
+  cols.forEach(c => hr.append(el("th",{}, c[1])));
   if (actions && actions.length) hr.append(el("th",{}, "Actions"));
   t.append(hr);
-  rows.forEach(row => {
-    const tr = el("tr",{}, ...cols.map(c => {
-      const v = c[2] ? c[2](row) : getPath(row, c[0]);
-      return el("td",{}, v instanceof Node ? v : fmtVal(v));
-    }));
+  rows.forEach((row, i) => {
+    const tr = el("tr",{});
+    if (sel) {
+      const b = el("input",{type:"checkbox"}); b.disabled = !sel.can(row); b._row = row;
+      if (b.disabled) b.title = "This item can't be deleted";
+      b.addEventListener("change", () => sel.onChange());
+      boxes.push(b); tr.append(el("td",{class:"chk"}, b));
+    }
+    cols.forEach(c => {
+      const v = c[2] ? c[2](row, opts.ctx || {}) : getPath(row, c[0]);
+      tr.append(el("td",{}, v instanceof Node ? v : fmtVal(v)));
+    });
     if (actions && actions.length) tr.append(el("td",{style:"white-space:nowrap"},
       ...actions.filter(a => !a.when || a.when(row)).map(a =>
         el("button",{class:"btn" + (a.danger ? " danger" : ""), style:"margin-right:6px", onclick:()=>a.run(row)},
           icon(a.icon || "edit"), a.label))));
     t.append(tr);
   });
+  t.selectedRows = () => boxes.filter(b => b.checked && !b.disabled).map(b => b._row);
   return t;
 }
 function emptyOf(iconName, text, hint){
@@ -2306,6 +2341,17 @@ async function childList(host, opts){
     wrap.innerHTML = "";
     const bar = el("div",{style:"display:flex;gap:8px;margin-bottom:12px;align-items:center"});
     if (opts.create) bar.append(el("button",{class:"btn primary", onclick:()=>{ formOpen = !formOpen; load(); }}, icon(opts.create.icon || "add"), opts.create.label));
+    let tbl = null;
+    const bd = opts.bulkDelete;
+    const delBtn = bd ? el("button",{class:"btn danger", disabled:true, onclick: async () => {
+      const rows = tbl ? tbl.selectedRows() : []; if (!rows.length) return;
+      if (!confirm(bd.confirm(rows))) return;
+      let failed = 0;
+      for (const row of rows) { const rr = await bd.run(row); if (rr && !rr.ok) { failed++; toast("Delete failed: " + errMsg(rr), "err"); } }
+      if (failed < rows.length) toast((rows.length - failed) + " " + ((rows.length - failed) === 1 ? (opts.noun || "item") : (opts.nouns || "items")) + " deleted");
+      load();
+    }}, icon("delete"), bd.label || "Delete") : null;
+    if (delBtn) bar.append(delBtn);
     (opts.actions || []).forEach(a => bar.append(el("button",{class:"btn", onclick: async ()=>{
       const rr = await a.run(); if (rr && !rr.ok) toast(a.label + " failed: " + errMsg(rr), "err"); else { toast(a.label + " done"); load(); }
     }}, icon(a.icon || "bolt"), a.label)));
@@ -2318,11 +2364,14 @@ async function childList(host, opts){
       else toast("Failed: " + errMsg(rr), "err");
     }, ()=>{ formOpen = false; load(); }));
     if (!items.length) { wrap.append(emptyOf(opts.emptyIcon || "inbox", opts.empty || "Nothing here yet.")); return; }
-    wrap.append(tableOf(opts.columns, items, (opts.rowActions || []).map(a => ({...a, run: async row => {
+    tbl = tableOf(opts.columns, items, (opts.rowActions || []).map(a => ({...a, run: async row => {
       if (a.confirm && !confirm(a.confirm(row))) return;
       const rr = await a.run(row);
       if (rr && !rr.ok) toast(a.label + " failed: " + errMsg(rr), "err"); else { toast(a.label + " done"); load(); }
-    }}))));
+    }})), {ctx: {reload: load},
+      select: bd ? {can: bd.can || (() => true), onChange: () => { const n = tbl.selectedRows().length; delBtn.disabled = !n;
+        delBtn.lastChild.textContent = (bd.label || "Delete") + (n ? " (" + n + ")" : ""); }} : null});
+    wrap.append(tbl);
     if (opts.after) opts.after(wrap, items);
   }
   await load();
@@ -2987,15 +3036,18 @@ GT.vpcsubnets = async function(host, svc, item){
     empty: name + " is a custom-mode network with no subnets yet — add one per region you deploy to.",
     columns: [["name", "Name"], ["region", "Region"], ["ipCidrRange", "Internal IP ranges"], ["gatewayAddress", "Gateway"],
               ["secondaryIpRanges", "Secondary ranges", s => (s.secondaryIpRanges || []).map(r => r.rangeName + " " + r.ipCidrRange).join(", ") || "No secondary ranges"],
-              ["privateIpGoogleAccess", "Private Google Access", s => s.privateIpGoogleAccess ? "On" : "Off"],
+              ["privateIpGoogleAccess", "Private Google Access", (s, ctx) => toggleEl(s.privateIpGoogleAccess, async on => {
+                const r = await subPost(svc, "setPrivateGoogleAccess", name, {name: s.name, region: s.region, enabled: on});
+                if (r && !r.ok) toast("Private Google Access failed: " + errMsg(r), "err"); else toast("Private Google Access " + (on ? "on" : "off") + " for " + s.name);
+                ctx.reload();
+              })],
               ["mode", "Created by", s => s.autoCreated ? "Auto mode" : "Custom"]],
     create: {label: "Add subnet", submit: "Add", done: "Subnet added",
       fields: [{name: "name", label: "Name", placeholder: name + "-subnet"}, {name: "region", label: "Region", type: "select", value: REGION, options: GCP_REGIONS},
                {name: "ipCidrRange", label: "IPv4 range", placeholder: "10.10.0.0/24"},
                {name: "privateIpGoogleAccess", label: "Private Google Access", type: "checkbox"}],
       run: v => subPost(svc, "createSubnet", name, {name: v.name.trim(), region: v.region, ipCidrRange: v.ipCidrRange.trim(), privateIpGoogleAccess: v.privateIpGoogleAccess})},
-    rowActions: [{label: "Toggle Private Google Access", icon: "toggle_on", run: s => subPost(svc, "setPrivateGoogleAccess", name, {name: s.name, region: s.region, enabled: !s.privateIpGoogleAccess})},
-                 {label: "Delete", icon: "delete", danger: true, when: s => !s.autoCreated, confirm: s => "Delete subnet " + s.name + " (" + s.region + ")?",
+    rowActions: [{label: "Delete", icon: "delete", danger: true, when: s => !s.autoCreated, confirm: s => "Delete subnet " + s.name + " (" + s.region + ")?",
                   run: s => subPost(svc, "deleteSubnet", name, {name: s.name, region: s.region})}],
   });
 };
@@ -3041,8 +3093,9 @@ GT.vpcroutes = async function(host, svc, item){
                {name: "nextHop", label: "Next hop IP / instance", placeholder: "10.128.0.5", width: 140},
                {name: "priority", label: "Priority", type: "number", value: 1000, width: 90}],
       run: v => subPost(svc, "createRoute", name, {...v, name: v.name.trim(), priority: Number(v.priority)})},
-    rowActions: [{label: "Delete", icon: "delete", danger: true, when: r => r.type !== "Subnet route" && r.type !== "Peering subnet route",
-      confirm: r => "Delete route " + r.name + "?", run: r => subPost(svc, "deleteRoute", name, {name: r.name})}],
+    bulkDelete: {label: "Delete", can: r => r.type !== "Subnet route" && r.type !== "Peering subnet route",
+      confirm: rows => rows.length === 1 ? "Delete route " + rows[0].name + "?" : "Delete " + rows.length + " routes?",
+      run: r => subPost(svc, "deleteRoute", name, {name: r.name})},
   });
 };
 GT.vpcpeerings = async function(host, svc, item){
@@ -3068,12 +3121,15 @@ GT.vpcflowlogs = async function(host, svc, item){
   await childList(host, {
     load: () => subGet(svc, "listFlowLogs", name), noun: "subnet", nouns: "subnets", emptyIcon: "subject",
     empty: name + " has no subnets to log flows for.",
-    columns: [["name", "Subnet"], ["region", "Region"], ["ipCidrRange", "Range"], ["enable", "Flow logs", s => s.enable ? "On" : "Off"],
+    columns: [["name", "Subnet"], ["region", "Region"], ["ipCidrRange", "Range"], ["enable", "Flow logs", (s, ctx) => toggleEl(s.enable, async on => {
+                const r = await subPost(svc, "setFlowLogs", name, on
+                  ? {name: s.name, region: s.region, enable: true, aggregationInterval: "INTERVAL_5_SEC", flowSampling: 0.5, metadata: "INCLUDE_ALL_METADATA"}
+                  : {name: s.name, region: s.region, enable: false});
+                if (r && !r.ok) toast("Flow logs failed: " + errMsg(r), "err"); else toast("Flow logs " + (on ? "on" : "off") + " for " + s.name);
+                ctx.reload();
+              })],
               ["aggregationInterval", "Aggregation interval", s => s.enable ? s.aggregationInterval : "Not logging"],
               ["flowSampling", "Sample rate", s => s.enable ? Math.round(s.flowSampling * 100) + "%" : "Not logging"]],
-    rowActions: [{label: "Turn on", icon: "toggle_on", when: s => !s.enable,
-                  run: s => subPost(svc, "setFlowLogs", name, {name: s.name, region: s.region, enable: true, aggregationInterval: "INTERVAL_5_SEC", flowSampling: 0.5, metadata: "INCLUDE_ALL_METADATA"})},
-                 {label: "Turn off", icon: "toggle_off", when: s => s.enable, run: s => subPost(svc, "setFlowLogs", name, {name: s.name, region: s.region, enable: false})}],
   });
 };
 
