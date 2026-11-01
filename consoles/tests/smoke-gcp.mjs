@@ -1385,6 +1385,19 @@ try {
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete service via UI → gone over native wire", (await wire(`/v2/projects/vyomi-project/locations/us-central1/services/${RUNSVC}`)).status === 404);
 
+  // Nano: the browser stops idle service workers while the tab keeps running. A restarted worker
+  // has lost its in-memory readiness, and must recover instead of leaving requests hanging forever.
+  if (process.env.NANO) {
+    const sw = await page.context().newCDPSession(page);
+    await sw.send("ServiceWorker.enable");
+    await sw.send("ServiceWorker.stopAllWorkers");
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => { location.hash = "#/memorystore"; });
+    await page.getByRole("button", { name: "Refresh" }).first().click();
+    await page.waitForFunction(() => !document.querySelector("main [role=progressbar]"), null, { timeout: 20000 });
+    check("service worker restarted under a live tab → requests still answer", (await wire("/v1/projects/vyomi-project/locations/-/instances")).status === 200);
+  }
+
   // Not-simulated gaps carry the conformance attribute
   await page.goto(UI + "#/storage/object-enrichments");
   await page.locator("[data-vyomi-not-simulated]").first().waitFor({ timeout: 5000 });

@@ -342,6 +342,8 @@ import builtins; builtins._disp = _disp; builtins._adisp = _adisp
 
   // Bridge: SW -> page dispatch -> SW
   navigator.serviceWorker.addEventListener("message", async (ev) => {
+    // A restarted service worker has forgotten who is ready; this page still is.
+    if (ev.data && ev.data.type === "vyomi-ready-ping") { ev.source && ev.source.postMessage({ type: "pyodide-ready" }); return; }
     if (!ev.data || ev.data.type !== "vyomi-dispatch") return;
     const port = ev.ports[0];
     try {
