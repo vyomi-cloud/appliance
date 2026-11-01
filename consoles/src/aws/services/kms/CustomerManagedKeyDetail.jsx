@@ -1,7 +1,7 @@
 /* Customer managed key detail — General configuration + 5 tabs, all wired to real
- * TrentService calls. Key administrators/users/other-accounts are an IAM-principal
- * picker Vyomi doesn't model (core/capabilities/aws/kms.json: kms.key-administrators);
- * the key policy JSON itself, right below it, is real and editable. */
+ * TrentService calls. The Key policy tab's visual editor (Key administrators / Key users /
+ * Other AWS accounts) picks real IAM users and roles and rewrites the key policy document
+ * through the same PutKeyPolicy call the raw JSON editor uses — see policy.js. */
 import { useState } from "react";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -13,6 +13,7 @@ import ContentLayout from "@cloudscape-design/components/content-layout";
 import Tabs from "@cloudscape-design/components/tabs";
 import Table from "@cloudscape-design/components/table";
 import Modal from "@cloudscape-design/components/modal";
+import Checkbox from "@cloudscape-design/components/checkbox";
 import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import Textarea from "@cloudscape-design/components/textarea";
@@ -24,15 +25,13 @@ import TagEditor from "@cloudscape-design/components/tag-editor";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
-import { ErrorAlert, fmtDate, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
-import { CapabilityContainer, capability, saveNotice } from "../../kit/Capability.jsx";
+import { ErrorAlert, fmtDate, KeyValue } from "../../kit/common.jsx";
+import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
+import { PrincipalTable, OtherAccountsTable, useIamPrincipals } from "./PrincipalPicker.jsx";
+import { accountIdFromArn, adminDeleteAllowedFromPolicy, buildKeyPolicy, externalAccountIdsFromPolicy, extraStatementsFromPolicy, principalArnsFromPolicy, ADMIN_SID, USER_SID } from "./policy.js";
 import * as api from "./api.js";
 
 const statusType = (s) => (s === "Enabled" ? "success" : s === "PendingDeletion" ? "warning" : "stopped");
-
-// kms.key-administrators (not_simulated) note + the exact field names this gap panel
-// must cover on this tab, so the visual-policy-editor pickers score as a declared gap.
-const adminGapNote = () => `${capability("kms.key-administrators")?.limitations?.join(" ") || ""} Allow key administrators to delete this key.`;
 
 function ScheduleModal({ keyId, visible, onDismiss, onDone }) {
   const notify = useNotify();
@@ -53,17 +52,46 @@ function ScheduleModal({ keyId, visible, onDismiss, onDone }) {
   );
 }
 
-function KeyPolicySection({ keyId }) {
+function KeyPolicySection({ keyId, accountId }) {
   const notify = useNotify();
   const p = useAsync(() => api.getKeyPolicy(keyId), [keyId]);
+  const principalsState = useIamPrincipals();
   const [edit, setEdit] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+
+  const adminArns = p.data ? principalArnsFromPolicy(p.data, ADMIN_SID) : [];
+  const allowAdminDelete = p.data ? adminDeleteAllowedFromPolicy(p.data) : true;
+  const userArns = p.data ? principalArnsFromPolicy(p.data, USER_SID) : [];
+  const otherAccountIds = p.data ? externalAccountIdsFromPolicy(p.data) : [];
+
+  const apply = async (patch) => {
+    setBusy(true);
+    try {
+      const policy = buildKeyPolicy({ accountId, extraStatements: extraStatementsFromPolicy(p.data), adminArns, allowAdminDelete, userArns, otherAccountIds, ...patch });
+      await api.putKeyPolicy(keyId, policy);
+      notify.success(`Key policy updated.${saveNotice("kms.key-administrators")}`);
+      p.reload();
+    } catch (e) { notify.error(e); } finally { setBusy(false); }
+  };
+
   return (
     <CapabilityContainer id="kms.key.policy" title="Key policy" actions={<Button onClick={() => { setErr(null); setEdit(p.data || ""); }}>Edit</Button>}>
       <SpaceBetween size="l">
-        <NotSimulatedContainer title="Key administrators and key users" note={adminGapNote()} />
-        {p.loading ? <Spinner /> : <Box variant="code"><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{p.data}</pre></Box>}
+        {p.loading ? <Spinner /> : (
+          <>
+            <PrincipalTable title="Key administrators" arns={adminArns} principals={principalsState.principals}
+              onChange={(arns) => apply({ adminArns: arns })} />
+            <Checkbox checked={allowAdminDelete} disabled={busy} onChange={({ detail }) => apply({ allowAdminDelete: detail.checked })}>
+              Allow key administrators to delete this key
+            </Checkbox>
+            <PrincipalTable title="Key users" arns={userArns} principals={principalsState.principals}
+              onChange={(arns) => apply({ userArns: arns })} />
+            <OtherAccountsTable accountIds={otherAccountIds} addLabel="Add other AWS accounts"
+              onChange={(ids) => apply({ otherAccountIds: ids })} />
+            <Box variant="code"><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{p.data}</pre></Box>
+          </>
+        )}
       </SpaceBetween>
       <Modal visible={edit !== null} onDismiss={() => setEdit(null)} size="large" header="Edit key policy"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
@@ -228,7 +256,7 @@ export default function CustomerManagedKeyDetail({ params }) {
           ["Regionality", "Single-Region key"],
         ]} />
         <Tabs tabs={[
-          { id: "policy", label: "Key policy", content: <KeyPolicySection keyId={keyId} /> },
+          { id: "policy", label: "Key policy", content: <KeyPolicySection keyId={keyId} accountId={accountIdFromArn(md.Arn)} /> },
           { id: "crypto", label: "Cryptographic configuration", content: (
             <Container header={<Header variant="h2">Cryptographic configuration</Header>}>
               <KeyValue columns={4} items={[["Key Type", api.keyType(md)], ["Origin", md.Origin], ["Key Spec", md.KeySpec], ["Key Usage", md.KeyUsage]]} />

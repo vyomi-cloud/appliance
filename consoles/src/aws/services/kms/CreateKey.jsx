@@ -1,7 +1,8 @@
-/* Create key — 6-step wizard matching the native console. Steps 1-2 (type/usage/spec,
- * alias/description/tags) and the policy editor in step 5 are real; the IAM-principal
- * pickers in steps 3-4 are the one declared gap (core/capabilities/aws/kms.json:
- * kms.key-administrators) — the SAME gap as the key detail page's Key policy tab. */
+/* Create key — 6-step wizard matching the native console. Steps 3-4 (key administrators /
+ * key users / other AWS accounts) select real IAM users and roles; every selection rebuilds
+ * the step-5 key policy JSON the same way CustomerManagedKeyDetail's Key policy tab does
+ * (policy.js) — the one declared gap used to be this picker (core/capabilities/aws/kms.json:
+ * kms.key-administrators), now full. */
 import { useState } from "react";
 import Wizard from "@cloudscape-design/components/wizard";
 import Container from "@cloudscape-design/components/container";
@@ -19,14 +20,13 @@ import TagEditor from "@cloudscape-design/components/tag-editor";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
-import { CapabilityContainer, capability } from "../../kit/Capability.jsx";
+import { capability } from "../../kit/Capability.jsx";
+import { PrincipalTable, OtherAccountsTable, useIamPrincipals } from "./PrincipalPicker.jsx";
+import { DEFAULT_ACCOUNT_ID, buildKeyPolicy } from "./policy.js";
 import * as api from "./api.js";
 
 const ASYMMETRIC_SPECS = ["RSA_2048", "RSA_3072", "RSA_4096", "ECC_NIST_P256", "ECC_NIST_P384", "ECC_NIST_P521", "ECC_SECG_P256K1", "ML_DSA_44", "ML_DSA_65", "ML_DSA_87"];
 const HMAC_SPECS = ["HMAC_224", "HMAC_256", "HMAC_384", "HMAC_512"];
-const DEFAULT_POLICY = (accountId) => JSON.stringify({ Version: "2012-10-17", Id: "key-default-1", Statement: [
-  { Sid: "Enable IAM User Permissions", Effect: "Allow", Principal: { AWS: `arn:aws:iam::${accountId}:root` }, Action: "kms:*", Resource: "*" },
-] }, null, 2);
 
 function ConfigureKeyStep({ s, set }) {
   const specOptions = (s.keyType === "Asymmetric" ? ASYMMETRIC_SPECS : s.keyUsageSym === "Generate and verify MAC" ? HMAC_SPECS : null);
@@ -95,22 +95,33 @@ function LabelsStep({ s, set, aliasErr }) {
   );
 }
 
-function AdminPermissionsStep({ s, set }) {
+function AdminPermissionsStep({ s, setPrincipals, principals }) {
   return (
     <SpaceBetween size="l">
-      <CapabilityContainer id="kms.key-administrators" title="Key administrators" />
+      <Container header={<Header variant="h2">Key administrators</Header>}>
+        <PrincipalTable title="Key administrators" arns={s.adminArns} principals={principals}
+          onChange={(arns) => setPrincipals({ adminArns: arns })} />
+      </Container>
       <Container header={<Header variant="h2">Key deletion</Header>}>
-        <Checkbox checked disabled>Allow key administrators to delete this key</Checkbox>
+        <Checkbox checked={s.allowAdminDelete} onChange={({ detail }) => setPrincipals({ allowAdminDelete: detail.checked })}>
+          Allow key administrators to delete this key
+        </Checkbox>
       </Container>
     </SpaceBetween>
   );
 }
 
-function UsagePermissionsStep() {
+function UsagePermissionsStep({ s, setPrincipals, principals }) {
   return (
     <SpaceBetween size="l">
-      <CapabilityContainer id="kms.key-administrators" title="This account" />
-      <CapabilityContainer id="kms.key-administrators" title="Other AWS accounts" />
+      <Container header={<Header variant="h2">This account</Header>}>
+        <PrincipalTable title="Key users" arns={s.userArns} principals={principals}
+          onChange={(arns) => setPrincipals({ userArns: arns })} />
+      </Container>
+      <Container header={<Header variant="h2">Other AWS accounts</Header>}>
+        <OtherAccountsTable accountIds={s.otherAccountIds} addLabel="Add another AWS account"
+          onChange={(ids) => setPrincipals({ otherAccountIds: ids })} />
+      </Container>
     </SpaceBetween>
   );
 }
@@ -119,7 +130,7 @@ function PolicyStep({ s, set }) {
   return (
     <Container header={<Header variant="h2">Key policy</Header>}>
       <FormField label="Key policy" description="JSON policy editor — stored and returned exactly as written; Vyomi doesn't evaluate it.">
-        <Textarea rows={16} value={s.policy} onChange={({ detail }) => set({ policy: detail.value })} spellcheck={false} />
+        <Textarea rows={16} value={s.policy} onChange={({ detail }) => set({ policy: detail.value, policyDirty: true })} spellcheck={false} />
       </FormField>
     </Container>
   );
@@ -160,12 +171,22 @@ export default function CreateKey() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [touched, setTouched] = useState(false);
+  const principalsState = useIamPrincipals();
   const [s, setS] = useState({
     keyType: "Symmetric", keyUsageSym: "Encrypt and decrypt", keyUsageAsym: "Encrypt and decrypt",
     keySpec: "", origin: "KMS", regionality: "SINGLE",
-    alias: "", description: "", tags: [], policy: DEFAULT_POLICY("123456789012"),
+    alias: "", description: "", tags: [],
+    adminArns: [], allowAdminDelete: true, userArns: [], otherAccountIds: [], policyDirty: false,
+    policy: buildKeyPolicy({ accountId: DEFAULT_ACCOUNT_ID }),
   });
   const set = (patch) => setS((prev) => ({ ...prev, ...patch }));
+  // Admin/user/other-account pickers regenerate the policy JSON, unless the user has
+  // already hand-edited it on the "Edit key policy" step — then they're in control.
+  const setPrincipals = (patch) => setS((prev) => {
+    const next = { ...prev, ...patch };
+    if (!next.policyDirty) next.policy = buildKeyPolicy({ accountId: DEFAULT_ACCOUNT_ID, adminArns: next.adminArns, allowAdminDelete: next.allowAdminDelete, userArns: next.userArns, otherAccountIds: next.otherAccountIds });
+    return next;
+  });
   const aliasErr = touched && (!s.alias || /^aws\//.test(s.alias)) ? "Alias is required and cannot begin with aws/." : null;
 
   const finish = async () => {
@@ -191,8 +212,8 @@ export default function CreateKey() {
   const steps = [
     { title: "Configure key", content: <ConfigureKeyStep s={s} set={set} /> },
     { title: "Add labels", content: <LabelsStep s={s} set={set} aliasErr={aliasErr} /> },
-    { title: "Define key administrative permissions", content: <AdminPermissionsStep s={s} set={set} /> },
-    { title: "Define key usage permissions", content: <UsagePermissionsStep /> },
+    { title: "Define key administrative permissions", content: <AdminPermissionsStep s={s} setPrincipals={setPrincipals} principals={principalsState.principals} /> },
+    { title: "Define key usage permissions", content: <UsagePermissionsStep s={s} setPrincipals={setPrincipals} principals={principalsState.principals} /> },
     { title: "Edit key policy", content: <PolicyStep s={s} set={set} /> },
     { title: "Review", content: <ReviewStep s={s} goto={setIdx} /> },
   ];

@@ -112,11 +112,12 @@
  "kms.key-administrators": {
   "title": "Key administrators / key users / other AWS accounts pickers",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "full",
+   "offline": "full"
   },
-  "limitations": [
-   "The visual policy editor's IAM-principal pickers (key administrators, key users, other AWS accounts) aren't modeled; edit the key policy JSON directly in the Key policy tab, which is real."
+  "limitations": [],
+  "tests": [
+   "tests/conformance/test_kms_console_v4_core.py"
   ]
  },
  "kms.custom-key-stores": {

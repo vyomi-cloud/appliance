@@ -1,7 +1,11 @@
 /* KMS over the native JSON wire (X-Amz-Target TrentService.*). */
-import { awsJson } from "../../../common/wire.js";
+import { asList, awsJson, awsQuery } from "../../../common/wire.js";
 
 const call = (op, body) => awsJson("kms", `TrentService.${op}`, body, { version: "1.1" });
+
+/** This account's IAM users/roles, for the key policy visual editor's principal pickers. */
+export const listIamUsers = async () => asList((await awsQuery("iam", "ListUsers", {})).ListUsersResponse.ListUsersResult.Users?.User);
+export const listIamRoles = async () => asList((await awsQuery("iam", "ListRoles", {})).ListRolesResponse.ListRolesResult.Roles?.Role);
 
 export const createKey = (input) => call("CreateKey", input).then((r) => r.KeyMetadata);
 export const describeKey = (keyId) => call("DescribeKey", { KeyId: keyId }).then((r) => r.KeyMetadata);
