@@ -104,6 +104,64 @@ def registry():
     jcall("DELETE", p + "/" + rid)
 
 
+def _arm(rg_type, name, props=None, ns="Microsoft.KeyVault", ver="2023-07-01"):
+    jcall("POST", "/api/spaces/space-azure-default/switch")      # ARM + /azure-data serve the active Azure space
+    sub, rg = "00000000-0000-0000-0000-cloudlearn01", f"pc-rg-{SFX}"
+    http("PUT", f"{BASE}/subscriptions/{sub}/resourceGroups/{rg}?api-version=2021-04-01", {"location": "eastus"})
+    s, r = jcall("PUT", f"/subscriptions/{sub}/resourceGroups/{rg}/providers/{ns}/{rg_type}/{name}?api-version={ver}",
+                 {"location": "eastus", "properties": props or {}})
+    return s, r
+
+
+def azure_keyvault():
+    name = f"pckv{SFX}"
+    s, r = _arm("vaults", name, {"tenantId": "00000000-0000-0000-0000-000000000000", "sku": {"family": "A", "name": "standard"}})
+    uri = (r.get("properties") or {}).get("vaultUri", "")
+    check(s in (200, 201), "create Key Vault", f"{s}")
+    check(uri.startswith(BASE), "vaultUri is on the simulator origin, not a fake azure hostname", uri)
+    if not uri.startswith("http"):
+        return
+    st, _, _ = http("PUT", uri.rstrip("/") + "/secrets/s1", {"value": "topsecret"})
+    st2, body, _ = http("GET", uri.rstrip("/") + "/secrets/s1")
+    check(st in (200, 201) and st2 == 200 and b"topsecret" in body, "set+get a secret through the shown vaultUri", f"{st} {st2} {body[:80]}")
+
+
+def azure_eventgrid():
+    name = f"pceg{SFX}"
+    s, r = _arm("topics", name, {}, "Microsoft.EventGrid", "2024-06-01-preview")
+    ep = (r.get("properties") or {}).get("endpoint", "")
+    check(s in (200, 201) and bool(ep), "create Event Grid topic shows an endpoint", f"{s} {ep}")
+    if not ep.startswith("http"):
+        return
+    st, body, _ = http("POST", ep, [{"id": "1", "subject": "s", "eventType": "t", "eventTime": "2026-01-01T00:00:00Z", "data": {}, "dataVersion": "1"}])
+    check(st == 200, "publish an event to the shown endpoint", f"{st} {body[:80]}")
+
+
+def azure_servicebus():
+    name = f"pcsb{SFX}"
+    s, r = _arm("namespaces", name, {}, "Microsoft.ServiceBus", "2022-10-01-preview")
+    ep = (r.get("properties") or {}).get("serviceBusEndpoint", "")
+    check(ep.startswith(BASE), "serviceBusEndpoint is the origin the client reached (not hard-coded :9000)", ep)
+    if not ep.startswith("http"):
+        return
+    st, body, _ = http("POST", ep.rstrip("/") + "/q1/messages", {"body": "hi"})
+    check(st < 300, "send a message under the shown endpoint", f"{st} {body[:80]}")
+
+
+def azure_sql():
+    name = f"pcsql{SFX}"
+    s, r = _arm("servers", name, {"administratorLogin": "sqladmin", "administratorLoginPassword": "P@ssw0rd123!"}, "Microsoft.Sql", "2023-05-01-preview")
+    p = r.get("properties") or {}
+    fq = p.get("fullyQualifiedDomainName", "")
+    if not fq.startswith("http"):
+        check(False, "fullyQualifiedDomainName shown", str(p)[:200])
+        return
+    st, body, hd = http("GET", fq)
+    check(st == 200 and b"NoSuchBucket" not in body, "fullyQualifiedDomainName answers (not an S3 NoSuchBucket page)", f"{fq} -> {st} {body[:80]}")
+    acc = p.get("vyomiAccess") or {}
+    check("no TDS" in json.dumps(acc) or "HTTP" in json.dumps(acc), "properties say the real access path (HTTP only, no TDS)", str(acc)[:200])
+
+
 if __name__ == "__main__":
     globals()[WHAT]()
     sys.exit(1 if fails else 0)

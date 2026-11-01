@@ -353,6 +353,8 @@ def _register_eventbridge_rest(app: FastAPI) -> None:
 # Azure Event Grid — REST under /azure-data/eventgrid/{topic}/...
 # ============================================================================
 def _register_azure(app: FastAPI) -> None:
+    # The topic `endpoint` ARM shows ends in /api/events (that is what the SDK posts to); /events is the short form.
+    @app.post("/azure-data/eventgrid/{topic}/api/events")
     @app.post("/azure-data/eventgrid/{topic}/events")
     async def az_eventgrid_publish(topic: str, request: Request):
         body = await request.json()
