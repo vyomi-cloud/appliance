@@ -151,3 +151,10 @@ store or wire surface you add:
    `BASE=http://127.0.0.1:8791 UI_PATH=/v4/<cloud>/ node consoles/tests/smoke-<cloud>.mjs`.
    If something can't work offline, claim `offline: not_simulated` with the concrete reason —
    never claim a level only the router delivers.
+
+## No unregistered "Not simulated" boxes (hard rule)
+Never render a bare `<NotSimulatedContainer>` / `<NotSimulated*>`: it has no capability id, so the
+registry, the coverage numbers and the gate can't see the gap (523 such boxes existed on
+2026-11-01, many of them stale — the feature was already real). Build the panel live, or wrap it
+in `<CapabilityContainer id="…">` with a `core/capabilities/<cloud>/<svc>.json` entry at
+`not_simulated` and the concrete reason. The gate fails a PR that adds a bare box to its service.

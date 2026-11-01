@@ -183,6 +183,15 @@ jobs:
           # skeleton built from spec labels (empty cells, "Not simulated" input stubs).
           if grep -rnE 'placeholder="Not simulated|cell: \(\) => ""|FieldStub' consoles/src/${{ steps.tg.outputs.cloud }}/services/${{ steps.tg.outputs.service }}/; then
             echo "::error::static skeleton UI found (see above)"; echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          # No unregistered gaps: a bare <NotSimulated*> box has no capability id, so it is invisible to
+          # the registry + coverage numbers (523 of them were found 2026-11-01). Never add new ones —
+          # build the feature, or use <CapabilityContainer id=…> backed by a core/capabilities entry.
+          svcdir=consoles/src/${{ steps.tg.outputs.cloud }}/services/${{ steps.tg.outputs.service }}
+          now=$(grep -rhoE '<NotSimulated[A-Za-z]*' $svcdir 2>/dev/null | wc -l)
+          before=$(git archive origin/${{ env.BASE_BRANCH }} $svcdir 2>/dev/null | tar -xO 2>/dev/null | grep -oE '<NotSimulated[A-Za-z]*' | wc -l)
+          echo "bare NotSimulated boxes in $svcdir: before=$before now=$now"
+          if [ "$now" -gt "$before" ]; then
+            echo "::error::new unregistered NotSimulated box(es) — use CapabilityContainer + a capability entry"; echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           git rm -q --cached --ignore-unmatch agent-summary.txt ui-out-before -r 2>/dev/null || true
           (cd consoles && node build.mjs)
           python3 consoles/dev_server.py -q --port 8790 & for i in $(seq 60); do curl -sf localhost:8790/_wire/ >/dev/null && break; sleep 1; done
