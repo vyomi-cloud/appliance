@@ -1677,7 +1677,23 @@
       "target": "offline",
       "cloud": "aws",
       "kind": "api",
-      "cmd": "python3 tests/conformance/post_create/probes/aws/ec2_ssh.py {ENDPOINT}",
+      "cmd": "python3 tests/conformance/post_create/probes/vm_ssh.py aws {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-gcp-gce-ssh",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/vm_ssh.py gcp {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-vm-ssh",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/vm_ssh.py azure {ENDPOINT}",
       "timeout": 300
     },
     {

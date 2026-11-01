@@ -7753,6 +7753,9 @@ def _docker_backed(instance: dict) -> bool:
     (vs LXD/Multipass). Docker containers are named vyomi-i-<id>."""
     if str(instance.get("console_backend") or "") == "docker-exec":
         return True
+    _rt = (instance.get("properties") or {}).get("runtime") if isinstance(instance.get("properties"), dict) else None
+    if isinstance(_rt, dict) and _rt.get("backend") == "docker":   # Azure ARM VM record
+        return True
     cn = str(instance.get("container_name") or instance.get("container_id") or "")
     return cn.startswith("vyomi-i-")
 
@@ -8563,6 +8566,35 @@ def provision_azure_vm_runtime(record: dict) -> None:
     instance_id = f"az-{digest}-{safe_name[:24]}"
 
     host_os = _resolved_host_os()
+    _compute_env = (os.environ.get("VYOMI_COMPUTE_BACKEND") or os.environ.get("CLOUDLEARN_COMPUTE_BACKEND") or "").strip().lower()
+    if _compute_env == "docker" and _docker_available():
+        # CloudLite+: same sibling-Docker-container backend as EC2/GCE (was missing
+        # for Azure: the VM was metadata-only with nothing to SSH into).
+        d_instance = {"instance_id": instance_id, "provider": "azure", "name": raw_name,
+                      "instance_type": str((props.get("hardwareProfile") or {}).get("vmSize") or "")
+                      if isinstance(props.get("hardwareProfile"), dict) else "",
+                      "runtime_backend": "docker"}
+        try:
+            _start_docker_instance(d_instance)
+        except Exception as exc:
+            runtime["status"] = "launch_failed"
+            runtime["backend"] = "docker"
+            runtime["error"] = str(getattr(exc, "detail", exc))[:200]
+            return
+        runtime["status"] = "provisioned"
+        runtime["backend"] = "docker"
+        runtime["containerName"] = d_instance["container_name"]
+        runtime["containerId"] = d_instance.get("container_id", "")
+        runtime["containerStatus"] = d_instance.get("container_status", "")
+        runtime["state"] = d_instance.get("state", "")
+        runtime["instanceId"] = instance_id
+        runtime["sshHostPort"] = d_instance.get("ssh_host_port")
+        if d_instance.get("private_ip"):
+            nics = props.setdefault("networkProfile", {}).setdefault("networkInterfaces", [])
+            if isinstance(nics, list) and not nics:
+                nics.append({"id": f"runtime/{d_instance['container_name']}",
+                             "properties": {"privateIPAddress": d_instance["private_ip"]}})
+        return
     if host_os in {"darwin", "windows"} and _runtime_available("multipass"):
         backend = "multipass"
     elif _lxd_available():
@@ -8570,7 +8602,7 @@ def provision_azure_vm_runtime(record: dict) -> None:
     else:
         runtime["status"] = "simulated"
         runtime["backend"] = "simulated"
-        runtime["note"] = "No LXD/multipass runtime available on host — Azure VM is metadata-only here."
+        runtime["note"] = "No LXD/multipass/Docker runtime available on host — Azure VM is metadata-only here."
         return
 
     workspace = _instance_workspace(instance_id)
@@ -8647,7 +8679,10 @@ def deprovision_azure_vm_runtime(record: dict) -> None:
         backend = runtime.get("backend") if isinstance(runtime, dict) else None
         if not container:
             return
-        if backend == "lxd" and _lxd_available():
+        if backend == "docker":
+            _terminate_docker_instance({"instance_id": runtime.get("instanceId") or str(container)[len("vyomi-i-"):],
+                                        "container_name": container, "ssh_host_port": runtime.get("sshHostPort")})
+        elif backend == "lxd" and _lxd_available():
             try:
                 _lxd_run_checked(["stop", container, "--force"], timeout=60)
             except Exception:
@@ -14255,7 +14290,9 @@ def api_gcp_compute_delete_instance(project: str, zone: str, instance: str):
     if not instance:
         raise HTTPException(404, detail="NoSuchInstance")
     backend = str(instance.get("runtime_backend") or "").strip().lower()
-    if backend == "multipass":
+    if backend == "docker" or (not backend and _docker_backed(instance)):
+        _terminate_docker_instance(instance)   # remove the sibling container (was leaked)
+    elif backend == "multipass":
         _terminate_multipass_instance(instance)
     elif backend == "lxd":
         _terminate_lxd_instance(instance)
@@ -23345,8 +23382,21 @@ def _find_instance_across_spaces(provider: str, instance_id: str) -> tuple[Optio
                     continue
                 if "virtualmachines" not in str(rec.get("_type", "")).lower():
                     continue
-                if rec.get("name") == iid or str(rid).rstrip("/").endswith("/" + iid):
+                _rt = (rec.get("properties") or {}).get("runtime") or {}
+                if (rec.get("name") == iid or str(rid).rstrip("/").endswith("/" + iid)
+                        or (isinstance(_rt, dict) and _rt.get("instanceId") == iid)):
                     return rec, space
+    if provider == "gcp":
+        # The GCE REST/gcloud/console paths resolve instances through the active
+        # space's compute bucket by id OR name; the scan above only matched the
+        # id key of spaces' persisted service_states, so connect-info 404'd for a
+        # VM that exists. Use the same resolver the instance GET uses.
+        try:
+            found = _gcp_compute_find_instance("", "", iid)
+        except Exception:
+            found = None
+        if isinstance(found, dict):
+            return found, {}
     return None, None
 
 
@@ -23363,8 +23413,11 @@ def _connect_info_response(provider: str, instance_id: str) -> dict:
         _rt = (inst.get("properties") or {}).get("runtime") or {}
         _cn = str(_rt.get("containerName") or "")
         _iid = _cn[len("cloudlearn-"):] if _cn.startswith("cloudlearn-") else (inst.get("name") or instance_id)
+        if _rt.get("backend") == "docker" and _cn:
+            _iid = _rt.get("instanceId") or _cn[len("vyomi-i-"):]
         inst = {
             **inst,
+            "ssh_host_port": _rt.get("sshHostPort"),
             "instance_id": _iid,
             "container_name": _cn,
             "container_id": _rt.get("containerId") or _cn,

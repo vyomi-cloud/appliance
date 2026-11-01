@@ -1885,7 +1885,19 @@ GT.gceconnect = async function(host, svc, item){
   c.append(el("div",{style:mono}, "gcloud compute ssh " + name + " --zone=" + zone + " --project=" + PROJECT));
   c.append(el("div",{class:"k", style:"font-size:11.5px;color:var(--sub);margin-top:10px"}, "Serial console"));
   c.append(el("div",{style:mono}, "gcloud compute connect-to-serial-port " + name + " --zone=" + zone + " --project=" + PROJECT));
-  if (ext) { c.append(el("div",{class:"k", style:"font-size:11.5px;color:var(--sub);margin-top:10px"}, "Plain SSH")); c.append(el("div",{style:mono}, "ssh -i ~/.ssh/google_compute_engine $USER@" + ext)); }
+  // SSH from THIS machine: the appliance publishes the VM's sshd on a host port and serves the
+  // key, so show the commands that really work (the external IP here is just the appliance
+  // host, so `ssh $USER@<natIP>` would hit port 22 on the user's own machine).
+  let ci = null;
+  try { const r = await fetch(ORIGIN + "/api/gcp/compute/instances/" + encodeURIComponent(name) + "/connect-info"); if (r.ok) ci = await r.json(); } catch(_){}
+  if (ci && ci.ok && ci.ssh) {
+    c.append(el("div",{class:"k", style:"font-size:11.5px;color:var(--sub);margin-top:10px"}, "SSH from this machine — 1) fetch the key"));
+    if (ci.ssh.key_fetch_command) c.append(el("div",{style:mono}, ci.ssh.key_fetch_command));
+    c.append(el("div",{class:"k", style:"font-size:11.5px;color:var(--sub);margin-top:10px"}, "2) connect"));
+    c.append(el("div",{style:mono}, ci.ssh.command));
+  } else if (ext && !/^(localhost|127\.0\.0\.1)$/.test(ext)) {
+    c.append(el("div",{class:"k", style:"font-size:11.5px;color:var(--sub);margin-top:10px"}, "Plain SSH")); c.append(el("div",{style:mono}, "ssh -i ~/.ssh/google_compute_engine $USER@" + ext));
+  }
   host.append(c);
   if (gceStatus(it) !== "RUNNING") host.append(el("div",{style:"font-size:12px;color:var(--sub)"}, "Start the instance to connect — SSH needs a RUNNING VM."));
 };

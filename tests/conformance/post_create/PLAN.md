@@ -53,10 +53,10 @@ EVERY conformance cycle (`conformance-hourly.yml`, restarted back-to-back by `co
 - Probes clean up after themselves (delete what they created) so repeated cycles do not leak containers or disk.
 
 ## Phases
-1. **EC2 SSH (offline, AWS)** - DONE 2026-11-02 (probe `probes/aws/ec2_ssh.py`, suite `offline-post-create-aws-ec2-ssh`; failed on v3.0.38 with `ssh ... ubuntu@172.18.0.x`, passes with the server.py fix; Nano twin `wasm/ui-tests/validate-aws-post-create-ec2.mjs` written and registered `pending` - fails today: connect-info 409 NoRuntime, /exec 501). Was: known failing today. Fix: console shows a host-reachable command
+1. **EC2 SSH (offline, AWS)** - DONE 2026-11-02 (probe `probes/vm_ssh.py`, suite `offline-post-create-aws-ec2-ssh`; failed on v3.0.38 with `ssh ... ubuntu@172.18.0.x`, passes with the server.py fix; Nano twin `wasm/ui-tests/validate-aws-post-create-ec2.mjs` written and registered `pending` - fails today: connect-info 409 NoRuntime, /exec 501). Was: known failing today. Fix: console shows a host-reachable command
    (`127.0.0.1:<ssh_host_port>`), a way to get the key, and key-pair public keys injected at launch. Probe + suite.
 2. **S3 put/get, RDS connect/CRUD, Lambda invoke (offline, AWS)**.
-3. **Same slice on GCP and Azure** (GCE SSH, GCS, Cloud SQL, Blob, Azure SQL, VM).
+3. **Same slice on GCP and Azure.** VM SSH DONE 2026-11-02 (`vm_ssh.py gcp|azure`, suites `offline-post-create-gcp-gce-ssh` / `-azure-vm-ssh`). Found + fixed: GCE connect-info 404, GCE Connect tab showing `ssh $USER@localhost`, GCE delete leaking the container, Azure ARM VMs having no runtime at all (now Docker-backed). Nano twins for GCE/Azure still to write (pending). Still open here: GCS, Cloud SQL, Blob, Azure SQL.
 4. **Nano twin, built alongside each offline probe (not after):** the same probe against the Nano endpoint for everything Nano runs (S3, DynamoDB, KMS, Secrets, SQS/SNS, RDS->PGlite). Compute/Lambda probes are written now and stay PENDING until the in-browser runtime lands; that dependency is a tracked backlog item, not a skip.
 5. Remaining services; make "has a probe or a justified N/A" a hard gate for the nightly report.
 
