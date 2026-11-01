@@ -1,10 +1,8 @@
-/* API Management service resource blade: left resource menu + panels. Overview, Activity
- * log, Access control (IAM) (service-scoped, see capabilities.json), Tags, APIs, Products,
- * Subscriptions, Named values, Backends, API Tags, Policy fragments, Diagnostic settings,
- * Scale out and up, Pricing tier, Properties, Locks and Export template (ARM Template tab)
- * are backed by native ARM calls; everything else in the menu — Diagnose and solve problems,
- * Events, Developer portal, the rest of Monitoring, the rest of Deployment + infrastructure,
- * Security, Automation tasks, Help — is an honest NotSimulated panel. */
+/* API Management service resource blade: left resource menu + panels. Everything in the menu
+ * is backed by a native ARM call EXCEPT Diagnose and solve problems, Events, Tasks and
+ * Support + Troubleshooting (azure.apim.tools — Azure's own multi-tenant diagnostics/support
+ * backends) and Managed identities / user-assigned (not catalogued in Vyomi, same as every
+ * other service) — those render an honest NotSimulated panel via CAP_FOR. */
 import { useEffect, useState } from "react";
 import {
   Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link,
@@ -30,6 +28,14 @@ import Backends from "./Backends.jsx";
 import ApiTags from "./ApiTags.jsx";
 import PolicyFragments from "./PolicyFragments.jsx";
 import DiagnosticSettings from "./DiagnosticSettings.jsx";
+import Workspaces from "./Workspaces.jsx";
+import CredentialManager from "./CredentialManager.jsx";
+import McpServers from "./McpServers.jsx";
+import Certificates from "./Certificates.jsx";
+import SelfHostedGateways from "./SelfHostedGateways.jsx";
+import * as DeveloperPortal from "./DeveloperPortal.jsx";
+import * as Deployment from "./Deployment.jsx";
+import * as Monitoring from "./Monitoring.jsx";
 import * as api from "./api.js";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 
@@ -66,19 +72,14 @@ export const MENU = [
 ];
 export const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
 
-// Every blade item with no real backing maps to a capability id (core/capabilities/azure/
-// apim.json) — CapabilityContainer renders the honest NotSimulated panel from there, never
-// a hand-written disclaimer.
+// The remaining blade items with no real backing map to a capability id (core/capabilities/
+// azure/apim.json) — CapabilityContainer renders the honest NotSimulated panel from there,
+// never a hand-written disclaimer. Managed identities (user-assigned) is the one genuine gap
+// left inside an otherwise-real group (azure.apim.deployment) — Microsoft.ManagedIdentity/
+// userAssignedIdentities isn't catalogued in Vyomi, consistent with every other service.
 const CAP_FOR = {
   diagnose: "azure.apim.tools", events: "azure.apim.tools", tasks: "azure.apim.tools", support: "azure.apim.tools",
-  mcpservers: "azure.apim.tools", workspaces: "azure.apim.tools", credentialmanager: "azure.apim.tools",
-  portaloverview: "azure.apim.developerportal", portalsettings: "azure.apim.developerportal", users: "azure.apim.developerportal",
-  groups: "azure.apim.developerportal", identities: "azure.apim.developerportal", delegation: "azure.apim.developerportal",
-  appinsights: "azure.apim.monitoring", alerts: "azure.apim.monitoring", metrics: "azure.apim.monitoring",
-  logs: "azure.apim.monitoring", analytics: "azure.apim.monitoring",
-  network: "azure.apim.deployment", customdomains: "azure.apim.deployment", locations: "azure.apim.deployment",
   managedidentities: "azure.apim.deployment",
-  certificates: "azure.apim.deployment", gateways: "azure.apim.deployment", selfhostedgateways: "azure.apim.deployment",
 };
 
 export default function ApimBlade({ params, query }) {
@@ -113,6 +114,26 @@ export default function ApimBlade({ params, query }) {
       locks: () => <Locks a={a} />,
       exporttemplate: () => <ExportTemplate a={a} />,
       protocolsciphers: () => <ProtocolsCiphers a={a} reload={reload} />,
+      mcpservers: () => <McpServers rg={rg} svc={name} />,
+      workspaces: () => <Workspaces rg={rg} svc={name} />,
+      credentialmanager: () => <CredentialManager rg={rg} svc={name} />,
+      portaloverview: () => <DeveloperPortal.PortalOverview rg={rg} svc={name} self={self} />,
+      portalsettings: () => <DeveloperPortal.PortalSettings rg={rg} svc={name} />,
+      users: () => <DeveloperPortal.Users rg={rg} svc={name} />,
+      groups: () => <DeveloperPortal.Groups rg={rg} svc={name} />,
+      identities: () => <DeveloperPortal.Identities rg={rg} svc={name} />,
+      delegation: () => <DeveloperPortal.Delegation rg={rg} svc={name} />,
+      appinsights: () => <Monitoring.ApplicationInsights rg={rg} svc={name} />,
+      alerts: () => <Monitoring.Alerts a={a} />,
+      metrics: () => <Monitoring.Metrics a={a} />,
+      logs: () => <Monitoring.Logs a={a} />,
+      analytics: () => <Monitoring.Analytics a={a} />,
+      network: () => <Deployment.Network a={a} reload={reload} />,
+      customdomains: () => <Deployment.CustomDomains a={a} reload={reload} />,
+      locations: () => <Deployment.Locations a={a} reload={reload} />,
+      gateways: () => <Deployment.Gateways a={a} />,
+      certificates: () => <Certificates rg={rg} svc={name} />,
+      selfhostedgateways: () => <SelfHostedGateways rg={rg} svc={name} />,
     }[panel];
     body = P ? P() : (
       <CapabilityContainer id={CAP_FOR[panel] || "azure.apim.tools"} title={`${name} | ${LABEL[panel] || panel}`} />

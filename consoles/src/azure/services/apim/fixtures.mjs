@@ -79,4 +79,73 @@ export default {
       } } });
     return uniq;
   },
+
+  // Developer portal: Users/Groups are real ARM sub-resources (azure.apim.developerportal).
+  "live-user": async (wire, uniq) => {
+    await ensureService(wire);
+    await wire("PUT", subPath(SVC, "users", uniq), { svc: null, body: { properties: { email: `${uniq}@example.com`, firstName: "Live", lastName: "User", state: "active" } } });
+    return uniq;
+  },
+
+  "live-group": async (wire, uniq) => {
+    await ensureService(wire);
+    await wire("PUT", subPath(SVC, "groups", uniq), { svc: null, body: { properties: { displayName: uniq, type: "custom" } } });
+    return uniq;
+  },
+
+  // Tools: Workspaces and Credential manager (azure.apim.workspaces, azure.apim.credentialmanager).
+  "live-workspace": async (wire, uniq) => {
+    await ensureService(wire);
+    await wire("PUT", subPath(SVC, "workspaces", uniq), { svc: null, body: { properties: { displayName: uniq } } });
+    return uniq;
+  },
+
+  "live-authprovider": async (wire, uniq) => {
+    await ensureService(wire);
+    await wire("PUT", subPath(SVC, "authorizationProviders", uniq), { svc: null,
+      body: { properties: { identityProvider: "generic", oauth2: { grantType: "AuthorizationCode", clientId: "uic", clientSecret: "uic" } } } });
+    return uniq;
+  },
+
+  // MCP Servers: a real API with apiType "mcp" (azure.apim.mcpservers).
+  "live-mcpapi": async (wire, uniq) => {
+    await ensureService(wire);
+    await wire("PUT", subPath(SVC, "apis", uniq), { svc: null, body: { properties: { displayName: uniq, apiType: "mcp", path: uniq, protocols: ["https"] } } });
+    return uniq;
+  },
+
+  // Deployment + infrastructure: Certificates and Self-hosted gateways (azure.apim.deployment).
+  "live-certificate": async (wire, uniq) => {
+    await ensureService(wire);
+    await wire("PUT", subPath(SVC, "certificates", uniq), { svc: null, body: { properties: { subject: `CN=${uniq}`, thumbprint: "AABBCCDDEEFF00112233445566778899AABBCCDD", expirationDate: "2030-01-01T00:00:00Z" } } });
+    return uniq;
+  },
+
+  "live-gateway": async (wire, uniq) => {
+    await ensureService(wire);
+    await wire("PUT", subPath(SVC, "gateways", uniq), { svc: null, body: { properties: { description: uniq, locationData: { name: "eastus" } } } });
+    return uniq;
+  },
+
+  // Monitoring: Application Insights (loggers) and Alerts (metricAlerts scoped to the
+  // service's own resource id) — azure.apim.monitoring.appinsights / .alerts.
+  "live-logger": async (wire, uniq) => {
+    await ensureService(wire);
+    await wire("PUT", subPath(SVC, "loggers", uniq), { svc: null,
+      body: { properties: { loggerType: "applicationInsights", credentials: { instrumentationKey: "00000000-0000-0000-0000-000000000000" } } } });
+    return uniq;
+  },
+
+  "live-alert": async (wire, uniq) => {
+    await ensureService(wire);
+    await wire("PUT", `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/metricAlerts/${uniq}?api-version=2018-03-01`,
+      { svc: null, body: { location: "global", properties: {
+        description: uniq, severity: 3, enabled: true, scopes: [servicePath(SVC).split("?")[0]],
+        evaluationFrequency: "PT1M", windowSize: "PT5M",
+        criteria: { "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria", allOf: [
+          { criterionType: "StaticThresholdCriterion", name: "Crit1", metricName: "Capacity", operator: "GreaterThan", threshold: 80, timeAggregation: "Average" },
+        ] },
+      } } });
+    return uniq;
+  },
 };

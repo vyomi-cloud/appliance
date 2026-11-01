@@ -21,6 +21,7 @@ const TYPE_META = {
   websocket: { label: "WebSocket", title: "Create a WebSocket API", urlLabel: "WebSocket URL", scheme: false, protocols: () => ["wss"] },
   graphql: { label: "GraphQL", title: "Create a GraphQL API", urlLabel: "GraphQL API endpoint", scheme: false, protocols: () => ["https"] },
   grpc: { label: "gRPC", title: "Create a gRPC API", urlLabel: "gRPC server URL", scheme: false, protocols: () => ["grpc"] },
+  mcp: { label: "MCP Server", title: "Create an MCP server", urlLabel: "MCP server URL", scheme: false, protocols: () => ["https"] },
 };
 
 export default function CreateHttpApi({ params }) {

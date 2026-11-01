@@ -138,9 +138,14 @@ async function checkService(browser, svc) {
     }
     // Detail routes may embed the live resource: "#/s3/object/uic-bucket?key={live}".
     const route = liveText ? m.route.replaceAll("{live}", encodeURIComponent(liveText)) : m.route;
-    // Spec placeholders like {resource-name} resolve to this page's fixture resource —
-    // the freshly created live resource wins over a static var, since that's what actually renders.
-    const vars = { ...m.vars, ...(liveText ? { "resource-name": liveText } : {}) };
+    // Spec placeholders like {resource-name} resolve to this page's fixture resource — the
+    // freshly created live resource wins over a static var ONLY when the page has no static
+    // resource-name of its own (e.g. a brand-new top-level resource's own detail page, created
+    // BY the live check). When a page already names its fixed parent resource (a list/detail
+    // page whose title is "{resource-name} | <tab>" but whose live check creates a CHILD item
+    // shown as a grid row, not in the title — apim-users, s3 bucket-detail, …), keep the
+    // static name so the title element still matches what's actually rendered.
+    const vars = { ...m.vars, ...(liveText && m.vars?.["resource-name"] === undefined ? { "resource-name": liveText } : {}) };
     const els = elements(sp).map((e) => ({ ...e, text: e.text.replace(/\{([\w-]+)\}/g, (x, k) => vars[k] ?? x) }));
     rec.total = els.length;
     await page.goto(`${UI}${cloud}/${route}`, { waitUntil: "networkidle" }).catch(() => {});

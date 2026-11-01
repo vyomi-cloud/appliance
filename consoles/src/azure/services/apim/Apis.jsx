@@ -3,8 +3,8 @@
  * an Azure resource, and restricting an API to specific gateways, are honest gaps — + the
  * APIs grid (real ARM sub-resource of the service). */
 import { useState } from "react";
-import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Input, ToolbarButton } from "@fluentui/react-components";
-import { Add20Regular, ArrowClockwise20Regular, Delete20Regular } from "@fluentui/react-icons";
+import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Select, ToolbarButton } from "@fluentui/react-components";
+import { Add20Regular, ArrowClockwise20Regular, Delete20Regular, PlugConnected20Regular } from "@fluentui/react-icons";
 import { useNotify } from "../../../common/notify.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { ErrorBar, Loading, NotSimulated } from "../../kit/common.jsx";
@@ -20,8 +20,10 @@ const REAL_TYPES = { HTTP: "http", WebSocket: "websocket", GraphQL: "graphql", g
 export default function Apis({ rg, svc, self }) {
   const notify = useNotify();
   const { data, loading, error, reload } = useAsync(() => api.Apis.list(rg, svc), [rg, svc]);
+  const subs = useAsync(() => api.Subscriptions.list(rg, svc), [rg, svc]);
   const [filter, setFilter] = useState("");
   const [gap, setGap] = useState(null);
+  const [test, setTest] = useState(null);
   const f = filter.trim().toLowerCase();
   const rows = (data || []).filter((r) => !f || r.name.toLowerCase().includes(f) || (r.properties?.displayName || "").toLowerCase().includes(f));
   return (
@@ -54,11 +56,14 @@ export default function Apis({ rg, svc, self }) {
                 <td>{r.properties?.apiType || "http"}</td>
                 <td>{r.properties?.apiRevision || "1"}</td>
                 <td>{r.properties?.path}</td>
-                <td><Button appearance="subtle" size="small" icon={<Delete20Regular />} aria-label={`Delete ${r.name}`} onClick={async () => {
-                  await api.Apis.remove(rg, svc, r.name);
-                  notify.success(`API '${r.name}' was deleted.`, "Delete succeeded");
-                  reload();
-                }} /></td>
+                <td>
+                  <Button appearance="subtle" size="small" icon={<PlugConnected20Regular />} aria-label={`Test ${r.name}`} onClick={() => setTest(r)} />
+                  <Button appearance="subtle" size="small" icon={<Delete20Regular />} aria-label={`Delete ${r.name}`} onClick={async () => {
+                    await api.Apis.remove(rg, svc, r.name);
+                    notify.success(`API '${r.name}' was deleted.`, "Delete succeeded");
+                    reload();
+                  }} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -75,6 +80,55 @@ export default function Apis({ rg, svc, self }) {
           </DialogBody>
         </DialogSurface>
       </Dialog>
+      <TestConnectionDialog api={test} onClose={() => setTest(null)} rg={rg} svc={svc} subscriptions={subs.data || []} />
     </>
+  );
+}
+
+// Replays the gateway's real client-TLS and subscription-key admission checks (see
+// core/azure_arm_core.AzureArm._apim_test_connect) — so toggling Protocols + ciphers
+// (azure.apim.service.protocols) has a genuine, observable effect here.
+function TestConnectionDialog({ api: a, onClose, rg, svc, subscriptions }) {
+  const [protocol, setProtocol] = useState("tls12");
+  const [subscriptionKey, setSubscriptionKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const go = async () => {
+    setBusy(true); setResult(null);
+    try {
+      const r = await api.testConnect(rg, svc, a.name, { protocol, subscriptionKey });
+      setResult({ ok: true, message: `${r.message} (subscription: ${r.subscriptionId})` });
+    } catch (e) { setResult({ ok: false, message: e.message }); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={!!a} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Test connection">
+        <DialogBody>
+          <DialogTitle>Test connection{a ? ` — ${a.name}` : ""}</DialogTitle>
+          <DialogContent>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Field label="Client TLS protocol">
+                <Select value={protocol} onChange={(_, d) => { setProtocol(d.value); setResult(null); }} aria-label="Client TLS protocol">
+                  {api.CLIENT_PROTOCOLS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                </Select>
+              </Field>
+              <Field label="Subscription key">
+                <Select value={subscriptionKey} onChange={(_, d) => { setSubscriptionKey(d.value); setResult(null); }} aria-label="Subscription key">
+                  <option value="">(none)</option>
+                  {subscriptions.map((s) => <option key={s.name} value={s.properties?.primaryKey}>{s.properties?.displayName || s.name}</option>)}
+                </Select>
+              </Field>
+              {result && <ErrorBar error={result.ok ? null : { message: result.message }} />}
+              {result?.ok && <p style={{ fontSize: 13, color: "var(--colorPaletteGreenForeground1)" }}>{result.message}</p>}
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={busy} onClick={go}>Send</Button>
+            <Button onClick={onClose}>Close</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
 }

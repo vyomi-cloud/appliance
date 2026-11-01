@@ -51,6 +51,58 @@ export const Backends = subResource("backends");
 export const ApiTags = subResource("tags");
 export const PolicyFragments = subResource("policyFragments");
 
+// ── Test connection (service/apis/{id}/testConnect — Vyomi-only action, see
+// core/azure_arm_core.AzureArm._apim_test_connect): replays the gateway's real client-TLS and
+// subscription-key admission checks without ever making a live call (azure.apim.service.protocols,
+// azure.apim.subscriptions.crud). ───────────────────────────────────────────────────────
+export const testConnect = (rg, svc, apiId, body) =>
+  restJson("POST", `${Apis.path(rg, svc, apiId)}/testConnect`, { query: { "api-version": ARM.apiVersion }, body });
+export const CLIENT_PROTOCOLS = [["tls12", "TLS 1.2+ (always accepted)"], ["tls10", "TLS 1.0"], ["tls11", "TLS 1.1"], ["ssl30", "SSL 3.0"]];
+
+// ── Developer portal: Users, Groups, Identity providers — real ARM sub-resources of the
+// service (Microsoft.ApiManagement/service/{users,groups,identityProviders}). Delegation is
+// the one real portalsettings singleton Vyomi models (a PUT/GET on a fixed resource name). ──
+export const PortalUsers = subResource("users");
+export const PortalGroups = subResource("groups");
+export const IdentityProviders = subResource("identityProviders");
+function portalSetting(kind) {
+  const path = (rg, svc) => `${ARM.path(rg, svc)}/portalsettings/${kind}`;
+  return {
+    get: (rg, svc) => restJson("GET", path(rg, svc), { query: { "api-version": ARM.apiVersion } }).catch(() => null),
+    put: (rg, svc, body) => restJson("PUT", path(rg, svc), { query: { "api-version": ARM.apiVersion }, body }),
+  };
+}
+export const Delegation = portalSetting("delegation");
+export const SignIn = portalSetting("signin");
+export const SignUp = portalSetting("signup");
+
+// ── Deployment + infrastructure: Certificates and Self-hosted gateways are real ARM
+// sub-resources; Network/Custom domains/Locations are real top-level service properties
+// written through the SAME updateService PATCH the create wizard and Scale/Pricing tier use. ──
+export const Certificates = subResource("certificates");
+export const Gateways = subResource("gateways");
+
+// ── Tools: Workspaces and Credential manager (authorization providers) are real ARM
+// sub-resources. ─────────────────────────────────────────────────────────────────────────
+export const Workspaces = subResource("workspaces");
+export const AuthorizationProviders = subResource("authorizationProviders");
+
+// ── Monitoring: Application Insights is a real "logger" sub-resource (service/loggers);
+// Alerts are real Microsoft.Insights/metricAlerts scoped to this service's resource id. ────
+export const Loggers = subResource("loggers");
+const METRICALERT_API = "2018-03-01";
+export const listResourceAlerts = async (rg, svc) => {
+  const scope = ARM.path(rg, svc).toLowerCase();
+  const all = (await restJson("GET", `/subscriptions/${getSubscription()}/providers/Microsoft.Insights/metricAlerts`, { query: { "api-version": METRICALERT_API } })).value || [];
+  return all.filter((a) => (a.properties?.scopes || []).some((s) => s.toLowerCase() === scope));
+};
+export const putResourceAlert = (rg, name, body) =>
+  restJson("PUT", `/subscriptions/${getSubscription()}/resourceGroups/${rg}/providers/Microsoft.Insights/metricAlerts/${encodeURIComponent(name)}`,
+    { query: { "api-version": METRICALERT_API }, body });
+export const deleteResourceAlert = (rg, name) =>
+  restJson("DELETE", `/subscriptions/${getSubscription()}/resourceGroups/${rg}/providers/Microsoft.Insights/metricAlerts/${encodeURIComponent(name)}`,
+    { query: { "api-version": METRICALERT_API } });
+
 // Product ↔ API association (`.../products/{productId}/apis/{apiId}`, empty-body PUT — the
 // real ARM shape azure-mgmt-apimanagement / az apim product api add use).
 const paQuery = { "api-version": ARM.apiVersion };
