@@ -5,7 +5,9 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from core import gcp_compute_instances_core as vmcore  # noqa: E402
 from core import gcp_monitoring_core as mon  # noqa: E402
+from core import object_store  # noqa: E402
 
 PASS = FAIL = 0
 
@@ -429,6 +431,100 @@ def main():
     check("an active snooze suppresses a new incident from opening", s == 200 and len(b.get("incidents", [])) == 0, b)
     s, b = call(st, "GET", "/incidents/nope")
     check("get unknown incident → 404", s == 404, b)
+
+    # ── uptime probing: a real reachability engine, not a never-evaluated stub ──────────
+    vm_store = vmcore.ComputeStore()
+    st.compute_vm_store = vm_store
+    vmcore.insert_instance(vm_store, "p1", "us-central1-a", {
+        "name": "web-1", "machineType": "e2-medium",
+        "disks": [{"boot": True, "initializeParams": {"diskSizeGb": 10}}]})
+    s, url_check = call(st, "POST", "/uptimeCheckConfigs", {
+        "displayName": "homepage2", "monitoredResource": {"type": "uptime_url", "labels": {"host": "example.com"}},
+        "httpCheck": {"path": "/"}, "period": "60s", "timeout": "10s", "selectedRegions": ["EUROPE", "ASIA_PACIFIC"]})
+    s, vm_check = call(st, "POST", "/uptimeCheckConfigs", {
+        "displayName": "vm-check", "monitoredResource": {"type": "gce_instance", "labels": {"zone": "us-central1-a", "instance_id": "web-1"}},
+        "httpCheck": {"path": "/"}, "period": "60s", "timeout": "10s"})
+    mon.run_uptime_probes(st, "p1")
+    url_id, vm_id = url_check["name"].rsplit("/", 1)[-1], vm_check["name"].rsplit("/", 1)[-1]
+    win_start = iso(datetime.now(timezone.utc) - timedelta(minutes=5))
+
+    def win_end():
+        return iso(datetime.now(timezone.utc) + timedelta(seconds=1))
+    s, b = call(st, "GET", "/timeSeries", query={
+        "filter": 'metric.type = "monitoring.googleapis.com/uptime_check/check_passed" AND metric.labels.check_id = "%s"' % url_id,
+        "interval.startTime": win_start, "interval.endTime": win_end()})
+    url_series = b.get("timeSeries", [])
+    check("uptime_url check (no egress) probes as failing in every selected region", len(url_series) == 2
+          and all(ts["points"][0]["value"]["boolValue"] is False for ts in url_series)
+          and {ts["metric"]["labels"]["checked_region"] for ts in url_series} == {"EUROPE", "ASIA_PACIFIC"}, b)
+    s, b = call(st, "GET", "/timeSeries", query={
+        "filter": 'metric.type = "monitoring.googleapis.com/uptime_check/check_passed" AND metric.labels.check_id = "%s"' % vm_id,
+        "interval.startTime": win_start, "interval.endTime": win_end()})
+    check("uptime check on a RUNNING instance probes as passing", b["timeSeries"][0]["points"][0]["value"]["boolValue"] is True, b)
+    vmcore.set_instance_status(vm_store, "p1", "us-central1-a", "web-1", "stop")
+    mon.run_uptime_probes(st, "p1")
+    s, b = call(st, "GET", "/timeSeries", query={
+        "filter": 'metric.type = "monitoring.googleapis.com/uptime_check/check_passed" AND metric.labels.check_id = "%s"' % vm_id,
+        "interval.startTime": win_start, "interval.endTime": win_end()})
+    check("stopping the instance flips the check to failing", b["timeSeries"][0]["points"][0]["value"]["boolValue"] is False, b)
+    call(st, "DELETE", "/uptimeCheckConfigs/" + url_id)
+    call(st, "DELETE", "/uptimeCheckConfigs/" + vm_id)
+
+    # ── Ops Agent: real VM metadata (enable-osconfig=TRUE), not a fabricated check-in ───
+    vmcore.insert_instance(vm_store, "p1", "us-central1-a", {
+        "name": "agent-vm", "machineType": "e2-medium", "metadata": {"items": [{"key": "enable-osconfig", "value": "TRUE"}]},
+        "disks": [{"boot": True, "initializeParams": {"diskSizeGb": 10}}]})
+    vmcore.insert_instance(vm_store, "p1", "us-central1-a", {
+        "name": "bare-vm", "machineType": "e2-medium",
+        "disks": [{"boot": True, "initializeParams": {"diskSizeGb": 10}}]})
+    agents = mon.ops_agent_instances(st, "p1")
+    check("only the VM with enable-osconfig=TRUE metadata counts as having Ops Agent",
+          [i["name"] for i in agents] == ["agent-vm"], [i["name"] for i in agents])
+    mon.sync_ops_agent_metrics(st, "p1")
+    s, b = call(st, "GET", "/timeSeries", query={
+        "filter": 'metric.type = "agent.googleapis.com/agent/uptime"', "interval.startTime": win_start, "interval.endTime": win_end()})
+    check("Ops Agent heartbeat metric written for the opted-in VM only", len(b["timeSeries"]) == 1, b)
+
+    # ── Cost Explorer: real spend derived from actual resource inventory ───────────────
+    gcs_store = object_store.InMemoryObjectStore()
+    st.gcs_store = gcs_store
+    gcs_store.objects["vy-cost-bucket"] = {"obj.bin": {"versions": [{"size": 5 * 1024 ** 3, "is_delete_marker": False}]}}
+    by_service = mon.billing_cost_by_service(st, "p1")
+    check("Cost Explorer prices real Compute Engine inventory", by_service.get("Compute Engine", 0) > 0, by_service)
+    check("Cost Explorer prices real Cloud Storage bytes stored", by_service.get("Cloud Storage", 0) > 0, by_service)
+    mon.sync_billing_metrics(st, "p1")
+    s, b = call(st, "GET", "/timeSeries", query={
+        "filter": 'metric.type = "billing.googleapis.com/billing/total_cost"', "interval.startTime": win_start, "interval.endTime": win_end()})
+    check("billing total_cost metric written per service", {ts["metric"]["labels"]["service"] for ts in b["timeSeries"]}
+          >= {"Compute Engine", "Cloud Storage"}, b)
+
+    # ── Metrics Scope: real cross-project aggregation (Metrics Scopes API v1) ──────────
+    r = mon.dispatch(st, "GET", "/v1/locations/global/metricsScopes/p1", {}, {}, b"")
+    body = json.loads(r.body)
+    check("get metrics scope defaults to just itself", r.status == 200 and [p["name"].rsplit("/", 1)[-1] for p in body["monitoredProjects"]] == ["p1"], body)
+    r = mon.dispatch(st, "POST", "/v1/locations/global/metricsScopes/p1/projects", {}, {},
+                     json.dumps({"name": "locations/global/metricsScopes/p1/projects/p2"}).encode())
+    check("add monitored project", r.status == 200, r.body)
+    r = mon.dispatch(st, "POST", "/v1/locations/global/metricsScopes/p1/projects", {}, {},
+                     json.dumps({"name": "locations/global/metricsScopes/p1/projects/p2"}).encode())
+    check("adding the same monitored project twice → 409", r.status == 409, r.body)
+    r = mon.dispatch(st, "POST", "/v3/projects/p2/timeSeries", {}, {}, json.dumps({"timeSeries": [{
+        "metric": {"type": "custom.googleapis.com/app/latency", "labels": {"route": "/p2"}},
+        "resource": {"type": "global", "labels": {"project_id": "p2"}},
+        "points": [{"interval": {"endTime": iso(datetime.now(timezone.utc))}, "value": {"doubleValue": 7.0}}]}]}).encode())
+    check("write time series into project p2", r.status == 200, r.body)
+    r = mon.dispatch(st, "GET", "/v3/projects/p1/timeSeries", {
+        "filter": 'metric.type = "custom.googleapis.com/app/latency" AND metric.labels.route = "/p2"',
+        "interval.startTime": win_start, "interval.endTime": win_end()}, {}, b"")
+    body = json.loads(r.body)
+    check("metrics scope makes another project's time series visible from the scoping project",
+          len(body.get("timeSeries", [])) == 1 and body["timeSeries"][0]["resource"]["labels"]["project_id"] == "p2", body)
+    r = mon.dispatch(st, "DELETE", "/v1/locations/global/metricsScopes/p1/projects/p2", {}, {}, b"")
+    check("remove monitored project", r.status == 200, r.body)
+    r = mon.dispatch(st, "GET", "/v3/projects/p1/timeSeries", {
+        "filter": 'metric.type = "custom.googleapis.com/app/latency" AND metric.labels.route = "/p2"',
+        "interval.startTime": win_start, "interval.endTime": win_end()}, {}, b"")
+    check("after removal, the other project's series is gone again", json.loads(r.body) == {}, r.body)
 
     print(f"\n{PASS} passed, {FAIL} failed")
     sys.exit(1 if FAIL else 0)

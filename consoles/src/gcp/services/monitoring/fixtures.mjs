@@ -16,6 +16,17 @@ export default {
     } });
     return name;
   },
+  // Real Ops Agent signal: a Compute Engine instance with the same metadata flag
+  // (enable-osconfig=TRUE) OS Config uses to manage an Ops Agent policy — the Overview
+  // "VMs with Ops Agent" panel (gcp.monitoring.ops-agent) must then count it.
+  "mon-ops-agent-vm": async (wire, uniq) => {
+    const name = `vy-opsagent-${uniq}`;
+    await wire("POST", `/compute/v1/projects/${PROJECT}/zones/us-central1-a/instances`, { svc: null, body: {
+      name, machineType: "e2-medium", metadata: { items: [{ key: "enable-osconfig", value: "TRUE" }] },
+      disks: [{ boot: true, initializeParams: { diskSizeGb: 10, sourceImage: "projects/debian-cloud/global/images/family/debian-12" } }],
+    } });
+    return name;
+  },
   "mon-synthetic": async (wire, uniq) => {
     const name = `vy-synthetic-${uniq}`;
     await wire("POST", `/v3/projects/${PROJECT}/uptimeCheckConfigs`, { svc: null, body: {

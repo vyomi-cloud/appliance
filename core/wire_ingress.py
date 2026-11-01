@@ -847,7 +847,13 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
     from core.gcp_iamcredentials_core import shared_store as _gcp_iamc_store
     from core.gcp_redis_core import shared_store as _gcp_redis_store
     from core.gcp_monitoring_core import shared_store as _gcp_mon_store
-    _ns = {"apigwv2": _apigwv2_store(), "sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_redis": _gcp_redis_store(), "gcp_mon": _gcp_mon_store(),
+    _gcp_mon = _gcp_mon_store()
+    # Overview "VMs with Ops Agent", uptime checks targeting a GCE instance, and Cost Explorer's
+    # Cloud Storage line item all read another C0 store's REAL state — wire them to the SAME
+    # durable stores appliance_router() serves, not a fresh in-memory default local to this router.
+    _gcp_mon.compute_vm_store = _aps.gcp_compute_vm_store()
+    _gcp_mon.gcs_store = _aps.gcs_store()
+    _ns = {"apigwv2": _apigwv2_store(), "sfn": _sfn_store(), "gcp_sched": _gcp_sched_store(), "gcp_gke": _gcp_gke_store(), "gcp_iamc": _gcp_iamc_store(), "gcp_redis": _gcp_redis_store(), "gcp_mon": _gcp_mon,
            # GCP custom roles / Workload Identity (gcp_iam), Org Policy v2 (gcp_rm), Azure RBAC
            # (iam) and Azure SQL (rds): durable space slots, not the router's in-memory defaults
            **_aps.net_new_core_stores()}

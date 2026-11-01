@@ -504,6 +504,8 @@ class AwsWireRouter:
         self.gcp_logging.mon_store = self.gcp_mon   # Logs Storage "Create usage alert" mirrors live byte/entry counts into Monitoring
         self.gcp_compute = s.get("gcp_compute") or gcp_compute.ComputeStore()   # VPC: networks, subnets, firewalls, routes, addresses
         self.gcp_compute_vm = s.get("gcp_compute_vm") or gcp_compute_vm.ComputeStore()   # Compute Engine VMs, disks, images, templates
+        self.gcp_mon.compute_vm_store = self.gcp_compute_vm   # Overview "VMs with Ops Agent" + uptime checks targeting a GCE instance read real Compute Engine state
+        self.gcp_mon.gcs_store = self.gcs   # Cost Explorer's Cloud Storage line item prices real bucket bytes stored
         self.gcp_rm = s.get("gcp_rm") or gcp_rm.ResourceManagerStore()   # Resource Manager (project, tags, contacts, org policies)
         self.gcp_pam = s.get("gcp_pam") or gcp_pam.PamStore()   # Privileged Access Manager entitlements
         self.gcp_run = s.get("gcp_run") or gcp_run.RunStore()   # Cloud Run (backs /functions, which the real console folds into it)

@@ -24,6 +24,7 @@ the Java / .NET REST clients send `$alt=json;enum-encoding=int` and get integers
 from __future__ import annotations
 
 import base64
+import calendar
 import json
 import math
 import random
@@ -55,6 +56,7 @@ class MonitoringStore:
         self.services: dict = {}                # full name -> Service
         self.slos: dict = {}                    # full name -> ServiceLevelObjective (nested under a service)
         self.incidents: dict = {}               # full name -> Incident (see evaluate_incidents)
+        self.metrics_scopes: dict = {}          # scoping project id -> {"createTime", "monitoredProjects": [project_id,...]}
 
 
 _SHARED: MonitoringStore | None = None
@@ -363,6 +365,21 @@ BUILTIN_METRICS = {m["type"]: m for m in [
     _md("logging.googleapis.com/log_entry_count", "GAUGE", "INT64", "1",
         "Live month-to-date count of log entries ingested into this project, mirrored from "
         "Cloud Logging's own entries.", [], "Log entries ingested", ["global"]),
+    _md("monitoring.googleapis.com/uptime_check/check_passed", "GAUGE", "BOOL", "1",
+        "Whether an uptime check passed from a given checked region, fed by Vyomi's own probe "
+        "engine (see run_uptime_probes) instead of a real dispatched network probe.",
+        [{"key": "check_id", "valueType": "STRING"}, {"key": "checked_region", "valueType": "STRING"}],
+        "Uptime check passed", ["uptime_url"]),
+    _md("agent.googleapis.com/agent/uptime", "GAUGE", "DOUBLE", "1",
+        "Ops Agent heartbeat, fed from the Compute Engine instance's own metadata (enable-osconfig=TRUE, "
+        "the real flag OS Config uses to manage an Ops Agent policy on a VM) instead of a real agent "
+        "process reporting in.", [], "Ops Agent heartbeat", ["gce_instance"]),
+    _md("billing.googleapis.com/billing/total_cost", "GAUGE", "DOUBLE", "{USD}",
+        "Live month-to-date cost Vyomi computes from this project's actual resource inventory (real "
+        "on-demand pricing x real uptime/usage), mirrored into Cloud Monitoring the same way real Cloud "
+        "Billing budget alerts expose spend as a Monitoring metric — not Cloud Billing's own BigQuery "
+        "export, which Vyomi doesn't simulate.", [{"key": "service", "valueType": "STRING"}],
+        "Billing total cost", ["global"]),
 ]}
 
 MONITORED_RESOURCES = {r["type"]: r for r in [
@@ -1459,7 +1476,7 @@ def write_time_series(store, project, payload):
     return {}
 
 
-def record_system_point(store, project, metric_type, resource, value, end_iso, unit=""):
+def record_system_point(store, project, metric_type, resource, value, end_iso, unit="", metric_labels=None):
     """Internal point writer for a Vyomi SYSTEM metric (one of BUILTIN_METRICS) fed by
     another core in-process — e.g. Cloud Logging's live byte/entry counters. Unlike
     `write_time_series`, never reaches the external REST API (callers are other cores, not
@@ -1469,7 +1486,7 @@ def record_system_point(store, project, metric_type, resource, value, end_iso, u
     desc = BUILTIN_METRICS.get(metric_type)
     if desc is None:
         return
-    metric = {"type": metric_type, "labels": {}}
+    metric = {"type": metric_type, "labels": dict(metric_labels or {})}
     key = _series_key(project, metric, resource)
     prev = store.time_series.get(key)
     if prev and prev["points"] and end_iso <= prev["points"][-1]["interval"]["endTime"]:
@@ -1484,6 +1501,199 @@ def record_system_point(store, project, metric_type, resource, value, end_iso, u
     rec["points"].append({"interval": {"endTime": end_iso}, "value": {vk: val}})
     if len(rec["points"]) > MAX_POINTS_PER_SERIES:
         del rec["points"][: len(rec["points"]) - MAX_POINTS_PER_SERIES]
+
+
+# ── uptime probing: a real (non-dispatched) reachability engine ────────────
+# Vyomi has no outbound network access (see "Nothing leaves the simulator" in AGENT-UI.md) so
+# an uptime check can never actually reach an arbitrary external host. Rather than leaving the
+# result permanently unevaluated, every check is probed against the ONE thing Vyomi can tell is
+# really up or down: a Compute Engine instance it models. A check whose target is a `gce_instance`
+# reflects that instance's real status; every other target (the `uptime_url` host:path the create
+# wizard always builds) deterministically fails closed, consistent with the no-egress rule — not
+# randomly, and not silently never-evaluated.
+def _instance_reachable(store, project, labels):
+    vm_store = getattr(store, "compute_vm_store", None)
+    zone, iid = (labels or {}).get("zone"), (labels or {}).get("instance_id")
+    if vm_store is None or not zone or not iid:
+        return False
+    inst = vm_store.instances.get("projects/%s/zones/%s/instances/%s" % (project, zone, iid))
+    return bool(inst) and inst.get("status") == "RUNNING"
+
+
+def check_reachable(store, project, check):
+    mr = check.get("monitoredResource") or {}
+    if mr.get("type") == "gce_instance":
+        return _instance_reachable(store, project, mr.get("labels"))
+    return False   # uptime_url (or any other target): no real network path out of the simulator
+
+
+def _uptime_check_regions(check):
+    return check.get("selectedRegions") or [r for r, _, _ in UPTIME_IPS]
+
+
+def run_uptime_probes(store, project, now=None):
+    """Probe every uptime check config in `project` and record a real
+    monitoring.googleapis.com/uptime_check/check_passed point per selected (or default) region —
+    the same metric the console's own alert-policy wizard already filters on. Idempotent within
+    the same second (record_system_point drops non-newer points), cheap enough to call on every
+    read, like evaluate_incidents."""
+    now = now or _now_dt()
+    end_iso = _ts(now)
+    prefix = "projects/%s/uptimeCheckConfigs/" % project
+    for name, check in store.uptime_checks.items():
+        if not name.startswith(prefix):
+            continue
+        check_id = name.rsplit("/", 1)[-1]
+        passed = check_reachable(store, project, check)
+        host = ((check.get("monitoredResource") or {}).get("labels") or {}).get("host", "")
+        resource = {"type": "uptime_url", "labels": {"project_id": project, "host": host}}
+        for region in _uptime_check_regions(check):
+            record_system_point(store, project, "monitoring.googleapis.com/uptime_check/check_passed", resource,
+                                 passed, end_iso, unit="1", metric_labels={"check_id": check_id, "checked_region": region})
+
+
+# ── Ops Agent: real VM metadata, not a fabricated check-in ──────────────────
+# The real "VMs with Ops Agent" panel counts instances actually reporting the agent's own
+# agent.googleapis.com/agent/uptime heartbeat metric. Vyomi has no agent process to run inside a
+# simulated VM, so the heartbeat is derived instead from the SAME real, inspectable signal OS
+# Config uses to decide whether a VM is managed by an Ops Agent policy: metadata key
+# `enable-osconfig=TRUE` (gcloud compute instances create --metadata=enable-osconfig=TRUE). A VM
+# the operator never opted in for is correctly never counted.
+def _instance_has_ops_agent(inst):
+    items = (inst.get("metadata") or {}).get("items") or []
+    return inst.get("status") == "RUNNING" and any(
+        str(i.get("key")) == "enable-osconfig" and str(i.get("value") or "").strip().upper() == "TRUE" for i in items)
+
+
+def ops_agent_instances(store, project):
+    vm_store = getattr(store, "compute_vm_store", None)
+    if vm_store is None:
+        return []
+    prefix = "projects/%s/zones/" % project
+    out = [inst for name, inst in vm_store.instances.items() if name.startswith(prefix) and _instance_has_ops_agent(inst)]
+    return sorted(out, key=lambda i: i["name"])
+
+
+def sync_ops_agent_metrics(store, project, now=None):
+    now = now or _now_dt()
+    end_iso = _ts(now)
+    for inst in ops_agent_instances(store, project):
+        resource = {"type": "gce_instance", "labels": {"project_id": project, "instance_id": str(inst.get("id") or inst["name"]),
+                                                        "zone": inst.get("_zone") or ""}}
+        record_system_point(store, project, "agent.googleapis.com/agent/uptime", resource, 1.0, end_iso, unit="1")
+
+
+# ── Cost Explorer: real spend, derived from actual resource inventory ───────
+# Real Cost Explorer reads from a Cloud Billing BigQuery export Vyomi doesn't run. Real GCP DOES
+# expose project spend as a Cloud Monitoring metric (billing.googleapis.com/billing/total_cost,
+# the same series a Billing Budget alert evaluates) — so that's the native-wire path this
+# appliance uses too, computed for real from the project's actual resource inventory (on-demand
+# pricing x real uptime/storage, same engine core/cost_model.py gives Azure Cost Management)
+# instead of reading a billing export this appliance never generates.
+def _mtd_fraction(now):
+    days_in_month = calendar.monthrange(now.year, now.month)[1]
+    return now.day / days_in_month
+
+
+def _billing_cost_rows(store, project):
+    from core import cost_model
+    rows = []
+    vm_store = getattr(store, "compute_vm_store", None)
+    if vm_store is not None:
+        prefix = "projects/%s/zones/" % project
+        for name, inst in vm_store.instances.items():
+            if not name.startswith(prefix) or inst.get("status") != "RUNNING":
+                continue
+            mt = (inst.get("machineType") or "").rsplit("/", 1)[-1]
+            cost = cost_model.estimate_resource_cost("gcp", "compute", "instance", mt)
+            rows.append(("Compute Engine", cost["monthly_usd"]))
+    gcs_store = getattr(store, "gcs_store", None)
+    if gcs_store is not None:
+        rate_per_gb = cost_model.STORAGE_USAGE_RATES.get("gcp.storage", (0.02, 0.0))[0]
+        for bucket, objs in gcs_store.objects.items():
+            total_bytes = 0
+            for entry in objs.values():
+                versions = entry.get("versions") or []
+                if versions and not versions[0].get("is_delete_marker"):
+                    total_bytes += versions[0].get("size") or 0
+            if total_bytes:
+                rows.append(("Cloud Storage", round(total_bytes / (1024 ** 3) * rate_per_gb, 6)))
+    return rows
+
+
+def billing_cost_by_service(store, project, now=None):
+    """-> {service: month-to-date USD}, the real inventory-derived number the Cost Explorer page
+    and billing.googleapis.com/billing/total_cost both show."""
+    now = now or _now_dt()
+    frac = _mtd_fraction(now)
+    by_service = {}
+    for service, monthly in _billing_cost_rows(store, project):
+        by_service[service] = by_service.get(service, 0.0) + monthly * frac
+    return {k: round(v, 6) for k, v in by_service.items()}
+
+
+def sync_billing_metrics(store, project, now=None):
+    now = now or _now_dt()
+    end_iso = _ts(now)
+    resource = {"type": "global", "labels": {"project_id": project}}
+    by_service = billing_cost_by_service(store, project, now)
+    for service, cost in (by_service or {"none": 0.0}).items():
+        record_system_point(store, project, "billing.googleapis.com/billing/total_cost", resource, cost, end_iso,
+                             unit="{USD}", metric_labels={"service": service})
+
+
+def _sync_derived_metrics(store, project, now=None):
+    """Every lazily-evaluated real signal Monitoring mirrors in from other cores — called on
+    every read path that could show it (like evaluate_incidents), so it's never stale."""
+    now = now or _now_dt()
+    run_uptime_probes(store, project, now)
+    sync_ops_agent_metrics(store, project, now)
+    sync_billing_metrics(store, project, now)
+
+
+# ── Metrics Scope: real cross-project aggregation (Metrics Scopes API, v1) ──
+# A metrics scope lets a Monitoring workspace see time series written by OTHER projects — real
+# GCP's `locations/global/metricsScopes/{scopingProject}` resource and its `monitoredProjects`
+# sub-collection. Vyomi's cores already key every resource by an arbitrary project id in one
+# shared store, so this is modeled for real: once a project is added to another's scope,
+# `list_time_series` (Metrics Explorer, dashboards, Cost Explorer, the Ops Agent / uptime panels
+# above) genuinely includes that project's series. Alert policies stay single-project, like the
+# real product — a policy only ever evaluates its own project's data.
+def _scope_name(pid):
+    return "locations/global/metricsScopes/%s" % pid
+
+
+def get_metrics_scope(store, pid):
+    sc = store.metrics_scopes.get(pid) or {}
+    created = sc.get("createTime") or _now()
+    monitored = list(dict.fromkeys([pid] + list(sc.get("monitoredProjects") or [])))
+    return {"name": _scope_name(pid), "createTime": created,
+            "monitoredProjects": [{"name": "%s/projects/%s" % (_scope_name(pid), mp), "createTime": created}
+                                  for mp in monitored]}
+
+
+def scope_projects(store, pid):
+    sc = store.metrics_scopes.get(pid) or {}
+    return {pid} | set(sc.get("monitoredProjects") or [])
+
+
+def add_monitored_project(store, pid, monitored_id):
+    if not monitored_id:
+        raise _bad("Field monitored_project.name is required.")
+    if monitored_id == pid:
+        raise _bad("Project %s is already in its own metrics scope." % pid)
+    sc = store.metrics_scopes.setdefault(pid, {"createTime": _now(), "monitoredProjects": []})
+    if monitored_id in sc["monitoredProjects"]:
+        raise _E(409, "ALREADY_EXISTS", "Project %s is already monitored by metrics scope %s." % (monitored_id, pid))
+    sc["monitoredProjects"].append(monitored_id)
+    return {"name": "%s/projects/%s" % (_scope_name(pid), monitored_id), "createTime": sc["createTime"]}
+
+
+def remove_monitored_project(store, pid, monitored_id):
+    sc = store.metrics_scopes.get(pid)
+    if not sc or monitored_id not in (sc.get("monitoredProjects") or []):
+        raise _E(404, "NOT_FOUND", "Project %s is not monitored by metrics scope %s." % (monitored_id, pid))
+    sc["monitoredProjects"].remove(monitored_id)
 
 
 def _ts_getter(s, lhs):
@@ -1542,6 +1752,7 @@ def _val(x, count=False):
 
 
 def list_time_series(store, project, query):
+    _sync_derived_metrics(store, project)
     filt = query.get("filter")
     if not filt:
         raise _bad("Field filter is required.")
@@ -1576,9 +1787,10 @@ def list_time_series(store, project, query):
     if reducer != "REDUCE_NONE" and aligner == "ALIGN_NONE":
         raise _bad("Field aggregation.per_series_aligner is required when cross_series_reducer is set.")
     group_by = [g for g in (query.get("aggregation.groupByFields") or "").split(",") if g]
+    scoped = scope_projects(store, project)
     selected = []
     for key, s in sorted(store.time_series.items()):
-        if not key.startswith(project + "|") or not pred(s):
+        if key.split("|", 1)[0] not in scoped or not pred(s):
             continue
         pts = [p for p in s["points"] if start <= parse_ts(p["interval"]["endTime"]) <= end]
         selected.append((s, pts))
@@ -1838,6 +2050,7 @@ def evaluate_incidents(store, project, now=None):
     stored time series exactly as `_condition_breach_map` sees them right now. Idempotent and
     cheap enough (bounded by MAX_POLICIES) to call on every incidents read."""
     now = now or _now_dt()
+    _sync_derived_metrics(store, project, now)
     prefix = "projects/%s/" % project
     for name, p in list(store.alert_policies.items()):
         if not name.startswith(prefix):
@@ -2068,6 +2281,8 @@ def _dispatch(store, method, path, query, headers, body):
                 if coll == "dashboards":
                     return _dashboards(store, method, project, rest, payload, query)
                 return _snoozes(store, method, project, rest, payload, query)
+            if len(segs) >= 3 and segs[0] == "locations" and segs[1] == "global" and segs[2] == "metricsScopes":
+                return _metrics_scopes(store, method, segs[3:], payload)
         except _E as e:
             return _err(e.status, e.gcp_status, e.message)
         return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
@@ -2221,11 +2436,25 @@ def _groups(store, method, project, rest, payload, query):
     raise _E(404, "NOT_FOUND", "Unknown group path.")
 
 
+def _metrics_scopes(store, method, rest, payload):
+    if len(rest) == 1 and method == "GET":
+        return _json(200, get_metrics_scope(store, rest[0]))
+    if len(rest) == 2 and rest[1] == "projects" and method == "POST":
+        name = str((payload or {}).get("name") or "")
+        monitored_id = name.rsplit("/", 1)[-1]
+        return _json(200, add_monitored_project(store, rest[0], monitored_id))
+    if len(rest) == 3 and rest[1] == "projects" and method == "DELETE":
+        remove_monitored_project(store, rest[0], rest[2])
+        return _json(200, {})
+    raise _E(404, "NOT_FOUND", "Unknown metrics scope path.")
+
+
 def _uptime(store, method, project, rest, payload, query):
     if not rest:
         if method == "POST":
             return _json(200, _copy(create_uptime(store, project, payload)))
         if method == "GET":
+            run_uptime_probes(store, project)
             prefix = "projects/%s/uptimeCheckConfigs/" % project
             items = [_copy(u) for n, u in sorted(store.uptime_checks.items()) if n.startswith(prefix)]
             return _json(200, _paginate(items, query, "uptimeCheckConfigs", {"totalSize": len(items)}))
