@@ -529,6 +529,11 @@ class AzureArm:
                 resp["headers"].update({"Azure-AsyncOperation": url, "Location": url, "Retry-After": "0"})
             return resp
         if method == "DELETE":
+            if "/networksecuritygroups/" in key and key.rsplit("/", 2)[-2] == "networksecuritygroups" and self.state.get(key) is not None:
+                ref = key + '"'   # a subnet or NIC referencing it by id
+                if any(k != key and ref in json.dumps(r).lower() for k, r in self.state.items() if isinstance(r, dict)):
+                    return _err(400, "InUseNetworkSecurityGroupCannotBeDeleted",
+                                f"Network security group {key.rsplit('/', 1)[-1]} cannot be deleted because it is in use.")
             rec = self.state.pop(key, None)
             ext_engine.on_delete(self.state, rec)
             return _ok(None, status=200 if rec is not None else 204)

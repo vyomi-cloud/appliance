@@ -511,11 +511,23 @@ def dispatch(store: ObjectStore, method: str, path: str,
                 if not store.bucket_exists(bucket):
                     return _err(404, "notFound", "The specified bucket does not exist.")
                 prefix = query.get("prefix", "")
-                items = [_object_view(bucket, k, v) for k, v in sorted(objs.items())
-                         if k.startswith(prefix)]
+                delimiter = query.get("delimiter", "")
+                items, prefixes = [], []
+                for k, v in sorted(objs.items()):
+                    if not k.startswith(prefix):
+                        continue
+                    cut = k.find(delimiter, len(prefix)) if delimiter else -1
+                    if cut >= 0:                    # rolled up into a "folder"
+                        p = k[:cut + len(delimiter)]
+                        if p not in prefixes:
+                            prefixes.append(p)
+                    else:
+                        items.append(_object_view(bucket, k, v))
                 out = {"kind": "storage#objects"}
                 if items:
                     out["items"] = items
+                if prefixes:
+                    out["prefixes"] = prefixes
                 return _json(200, out)
             return _err(400, "invalid", f"Unsupported method {method} on objects")
 

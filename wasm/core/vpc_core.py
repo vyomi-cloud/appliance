@@ -30,6 +30,7 @@ gateways and full NACL return-path/ephemeral evaluation slot in behind the same 
 from __future__ import annotations
 
 import ipaddress
+import re
 import uuid
 from dataclasses import dataclass, field
 from xml.sax.saxutils import escape as _xml_escape
@@ -143,6 +144,8 @@ def _create_vpc(store, params):
     _model(store)["route_tables"][rt_id] = {"id": rt_id, "vpc_id": vpc_id, "main": True,
                                             "routes": [{"dest": cidr, "target": "local"}],
                                             "subnets": []}
+    _create_security_group(store, {"VpcId": vpc_id, "GroupName": "default",   # every VPC gets one
+                                   "GroupDescription": "default VPC security group"})
     return _envelope("CreateVpc", f"<vpc><vpcId>{vpc_id}</vpcId><cidrBlock>{cidr}</cidrBlock>"
                                   f"<state>available</state></vpc>")
 
@@ -172,7 +175,8 @@ def _create_security_group(store, params):
         raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
     sg_id = _rid("sg")
     # default: deny all ingress, allow all egress (AWS SG defaults)
-    m["sgs"][sg_id] = {"id": sg_id, "vpc_id": vpc_id, "ingress": [],
+    m["sgs"][sg_id] = {"id": sg_id, "vpc_id": vpc_id, "name": str(params.get("GroupName", sg_id)),
+                       "description": str(params.get("GroupDescription", "")), "ingress": [],
                        "egress": [{"protocol": "-1", "from_port": None, "to_port": None,
                                    "cidrs": ["0.0.0.0/0"], "sgs": []}]}
     return _envelope("CreateSecurityGroup", f"<groupId>{sg_id}</groupId>")
@@ -271,6 +275,37 @@ def _associate_network_acl(store, params):
 
 def _ok(action: str) -> VpcResponse:
     return _envelope(action, "<return>true</return>")
+
+
+def _xml(v) -> str:
+    return str(v).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _describe_security_groups(store, params):
+    """DescribeSecurityGroups: GroupId.N, GroupName.N and the group-id / group-name / vpc-id filters."""
+    m = _model(store)
+    ids = {v for k, v in params.items() if k.startswith("GroupId.")}
+    names = {v for k, v in params.items() if k.startswith("GroupName.")}
+    filters = {}
+    for k, v in params.items():
+        f = re.match(r"Filter\.(\d+)\.Name$", k)
+        if f:
+            filters[v] = {params[x] for x in params if x.startswith(f"Filter.{f.group(1)}.Value.")}
+    missing = ids - set(m["sgs"])
+    if missing:
+        raise VpcError("InvalidGroup.NotFound", f"The security group '{sorted(missing)[0]}' does not exist")
+    items = ""
+    for g in m["sgs"].values():
+        name = g.get("name") or g["id"]
+        if (ids and g["id"] not in ids) or (names and name not in names) \
+                or ("group-id" in filters and g["id"] not in filters["group-id"]) \
+                or ("group-name" in filters and name not in filters["group-name"]) \
+                or ("vpc-id" in filters and g.get("vpc_id") not in filters["vpc-id"]):
+            continue
+        items += (f"<item><ownerId>123456789012</ownerId><groupId>{g['id']}</groupId><groupName>{_xml(name)}</groupName>"
+                  f"<groupDescription>{_xml(g.get('description', ''))}</groupDescription><vpcId>{g.get('vpc_id', '')}</vpcId>"
+                  "<ipPermissions/><ipPermissionsEgress/></item>")
+    return _envelope("DescribeSecurityGroups", f"<securityGroupInfo>{items}</securityGroupInfo>")
 
 
 def _delete_vpc(store, params):
@@ -513,6 +548,7 @@ _OPS = {
     "CreateNetworkAclEntry": _create_network_acl_entry,
     "AssociateNetworkAcl": _associate_network_acl,
     "AnalyzeReachability": _analyze_reachability_action,
+    "DescribeSecurityGroups": _describe_security_groups,
     "DeleteVpc": _delete_vpc, "DeleteSubnet": _delete_subnet,
     "DeleteSecurityGroup": _delete_security_group,
     "DetachInternetGateway": _detach_internet_gateway,

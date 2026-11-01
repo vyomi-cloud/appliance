@@ -3,7 +3,7 @@
 # (real gcloud, endpoint override only). ENDPOINT (default http://127.0.0.1:9000).
 set -u
 BASE="${ENDPOINT:-http://127.0.0.1:9000}"
-PROJECT=$(curl -s "$BASE/api/gcp/catalog" | python3 -c "import json,sys;print(json.load(sys.stdin)['project'])") || exit 1
+PROJECT=$(curl -s "$BASE/v1/projects" | python3 -c "import json,sys;print(json.load(sys.stdin)['projects'][0]['projectId'])") || exit 1
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1 CLOUDSDK_AUTH_DISABLE_CREDENTIALS=true CLOUDSDK_CORE_PROJECT="$PROJECT"
 export CLOUDSDK_API_ENDPOINT_OVERRIDES_CLOUDSCHEDULER="$BASE/" CLOUDSDK_API_ENDPOINT_OVERRIDES_PUBSUB="$BASE/"
 T="sp-$(date +%s)"; fail=0
