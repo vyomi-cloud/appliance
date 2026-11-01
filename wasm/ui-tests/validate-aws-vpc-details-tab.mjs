@@ -26,6 +26,7 @@ try {
   }, [name, cidr]);
   await page.evaluate(([sel]) => [...document.querySelectorAll(sel)].find((e) => /\bvpc\b/i.test(e.innerText.trim()))?.click(), [RAIL_SEL]);
   await sleep(2000);
+  await page.locator("#main tr", { hasText: name }).locator("a.id").first().waitFor({ timeout: 60000 });
   await page.locator("#main tr", { hasText: name }).locator("a.id").first().click();
   await sleep(2000);
   const ov = await tabText("Overview");

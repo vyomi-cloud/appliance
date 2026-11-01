@@ -344,7 +344,7 @@ const SECTIONS = {
     check("eventbridge Targets: target added in the tab persists", tg.includes(":" + name), tg);
     await tab("Event pattern");
     await page.locator("#main [data-testid=eb-test]").click();
-    await sleep(1200);
+    await page.waitForFunction(() => /matched|did not match|error/i.test(document.querySelector("#main [data-testid=eb-test-result]")?.innerText || ""), null, { timeout: 15000 }).catch(() => {});
     const res = await page.locator("#main [data-testid=eb-test-result]").innerText().catch(() => "");
     check("eventbridge Event pattern: TestEventPattern result for the rule's own pattern", /matched the event pattern/.test(res), res);
     const det = await tab("Rule details");
@@ -363,7 +363,8 @@ const SECTIONS = {
     await page.locator("#main [data-testid=apigw-deploy]").click();
     await sleep(1500);
     await tab("Models");
-    const dep = await tab("Deployments");
+    let dep = await tab("Deployments");
+    for (let i = 0; i < 5 && !/rtstage/.test(dep); i++) { await sleep(2000); dep = await tab("Deployments"); }
     check("apigateway Deployments: deployment made in the tab is listed", /rtstage/.test(dep), dep);
     await tab("Settings");
     await page.locator("#main [data-testid=apigw-settings-save]").click();
