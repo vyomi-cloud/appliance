@@ -167,7 +167,11 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   /* ============================================================
      CONTENT (page headers, panels, tables)
      ============================================================ */
-  .wrap{padding:20px 24px;max-width:1600px}
+  /* The whole feature area (breadcrumb, title, actions, content) is ONE white rounded bordered card;
+     the panels and tables inside it carry no border of their own. */
+  .wrap,.wizard-page{background:#fff;border:1px solid var(--line);border-radius:12px;margin:16px 24px;padding:20px 24px;max-width:1600px}
+  .wrap .card,.wrap .table-wrap,.wrap .kv-card,.wrap .col-card,.wizard-page .card,.wizard-page .kv-card,.wizard-page .col-card{border:none}
+  .wizard-page .summary-card{border:none;background:var(--bg)}
   .page-head{display:flex;align-items:center;gap:14px;margin-bottom:18px}
   .page-head h1{font-size:24px;font-weight:400;font-family:'Google Sans',sans-serif;flex:1}
   .page-head h1 .count{color:var(--sub);font-weight:400;margin-left:6px;font-size:18px}
@@ -256,7 +260,6 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .kv-grid .v{font-size:13.5px;color:var(--ink);word-break:break-all}
 
   /* Wizard — single-page collapsible sections + right summary card */
-  .wizard-page{padding:20px 24px;max-width:1500px}
   .wizard-grid{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
   .wizard-main{display:flex;flex-direction:column;gap:14px}
   .col-card{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -1224,14 +1227,14 @@ async function renderDetail(main){
         if (r.ok || [200,202,204].includes(r.status)) { toast(name+" deleted"); navigate({view:"list", item:null}); }
         else toast("Delete failed ("+r.status+")", "err");
       }}, icon("delete"), "Delete"))));
-  main.append(top);
+  const dwrap = el("div",{class:"wrap"}); main.append(dwrap); dwrap.append(top);
 
   // Two-pane layout
   const layout = el("div",{class:"sub-layout"});
   const nav = el("aside",{class:"sub-nav"});
   const content = el("section",{class:"sub-content"});
   layout.append(nav, content);
-  main.append(layout);
+  dwrap.append(layout);
 
   // Build nav from subBlades
   const flat = [];
