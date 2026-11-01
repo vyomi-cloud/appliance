@@ -424,7 +424,7 @@ async function route(method, path, body, query) {
   //     its HTTP envelope (status + Azure-AsyncOperation/Location headers + body)
   //     is returned verbatim (see the __http handling in the fetch listener).
   if (path.startsWith("/subscriptions/") || path === "/subscriptions" || path === "/tenants" || path.startsWith("/api/azure/operations/")) {
-    return { tuple: ["azure", "_arm", method, { path, query: query || {}, body: body || null }] };
+    return { tuple: ["azure", "_arm", method, { path, query: query || {}, body: body || null, origin: self.location.origin + BASE }] };
   }
 
   // ── v2.9.0 Azure net-new data planes → real cores (dataplane_adapter) ──

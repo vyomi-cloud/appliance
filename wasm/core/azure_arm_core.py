@@ -256,6 +256,22 @@ def _merge(base: dict, overlay: dict) -> dict:
     return out
 
 
+# What each service SHOWS in Nano: the URL (under the Nano origin) that really answers in the
+# service worker, or an explicit limitation. __BASE__ = the Nano origin the page runs under.
+_NANO_SHOWN = {
+    "microsoft.keyvault/vaults": {"properties.vaultUri": "__BASE__/azure-data/keyvault/__NAME__/"},
+    "microsoft.servicebus/namespaces": {"properties.serviceBusEndpoint": "__BASE__/api/servicebus/topics"},
+    "microsoft.eventgrid/topics": {"properties.vyomiAccess": {
+        "endpoint": "Not available in this build: event publishing needs the offline appliance (no HTTP topic endpoint in the browser)."}},
+    "microsoft.sql/servers": {
+        "properties.fullyQualifiedDomainName": "__BASE__/api/azuresql/servers",
+        "properties.vyomiAccess": {
+            "protocol": "In-browser HTTP data plane only (no TDS wire protocol, no port 1433)",
+            "listServers": "GET __BASE__/api/azuresql/servers",
+            "query": "POST __BASE__/api/azuresql/query"}},
+}
+
+
 def _expand_tokens(obj, name: str, base: str):
     if isinstance(obj, str):
         return (obj.replace("__UUID__", str(uuid.uuid4()))
@@ -662,6 +678,13 @@ class AzureArm:
         for path_expr, suffix in endpoints.items():
             if _get_path(rec, path_expr) in (None, ""):
                 _set_path(rec, path_expr, base + suffix.replace("__NAME__", name))
+        if is_top:      # URLs that work in Nano's own access path (never a fake Azure hostname)
+            pub = getattr(self, "_public_base", None)
+            if pub is None:
+                pub = base
+            forced = _NANO_SHOWN.get(full_type.lower())
+            for path_expr, val in (forced or {}).items():
+                _set_path(rec, path_expr, _expand_tokens(val, name, pub))
 
         self.state[key] = rec
         return _ok(_view(rec), status=200 if existed else 201)
