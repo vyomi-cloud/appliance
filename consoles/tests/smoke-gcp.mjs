@@ -1728,6 +1728,56 @@ try {
   check("delete instance via UI → gone over native wire",
     (await wire(`/v1/projects/vyomi-project/locations/us-central1/instances/${MS}`)).status === 404);
 
+  // Resource Manager: "Manage resources" — create a project through the New Project form,
+  // confirm it over the native Resource Manager v3 wire (projects.search), rename it via the
+  // list's row menu, then prove the reverse direction (a project created over the wire shows
+  // up in the UI list) before deleting it and confirming it drops out of projects.search.
+  const RP = `v4-gcp-rm-smoke-${Date.now() % 100000}`;
+  await page.goto(UI + "#/resource-manager/create");
+  await page.getByLabel("Project name").fill("v4 gcp rm smoke");
+  await page.getByLabel("Project ID").fill(RP);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: "Manage resources" }).waitFor({ timeout: 10000 });
+  const rpSearch = await wjson(`/v3/projects:search?query=${RP}`);
+  check("create project via UI → visible over native wire (projects.search)", (rpSearch.projects || []).some((p) => p.projectId === RP));
+  await page.getByRole("cell", { name: RP, exact: true }).waitFor({ timeout: 10000 });
+  check("new project shown in Manage resources list", true);
+  await shot("27-resource-manager-created");
+
+  await page.getByRole("button", { name: `Actions for ${RP}` }).click();
+  await page.getByRole("menuitem", { name: "Rename" }).click();
+  await page.getByLabel("Project name").fill("v4 gcp rm renamed");
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await page.getByText("v4 gcp rm renamed").waitFor({ timeout: 10000 });
+  const rpRenamed = await wjson(`/v3/projects:search?query=${RP}`);
+  check("rename project via UI → native wire shows new displayName", rpRenamed.projects?.[0]?.displayName === "v4 gcp rm renamed");
+
+  // Move is an honest gap: there is no folder/organization to move a project into.
+  await page.getByRole("button", { name: `Actions for ${RP}` }).click();
+  await page.getByRole("menuitem", { name: "Move" }).click();
+  await page.getByText("Not simulated in Vyomi").waitFor({ timeout: 10000 });
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+  check("move project → honest Not simulated panel, no silent success", true);
+
+  // Reverse direction: a project created over the wire shows up in the UI without a reload.
+  const RP2 = `v4-gcp-rm-wire-${Date.now() % 100000}`;
+  await wire("/v3/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ projectId: RP2, displayName: RP2 }) });
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await page.getByRole("cell", { name: RP2, exact: true }).first().waitFor({ timeout: 10000 });
+  check("project created over native wire → shown in Manage resources list", true);
+
+  // Bulk delete via the list's checkboxes → gone from projects.search.
+  await page.getByRole("checkbox", { name: `Select ${RP}` }).check();
+  await page.getByRole("checkbox", { name: `Select ${RP2}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill("DELETE");
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
+  const rpAfter = await wjson(`/v3/projects:search?query=v4-gcp-rm-`);
+  check("bulk delete via UI → gone over native wire (projects.search)",
+    !(rpAfter.projects || []).some((p) => p.projectId === RP || p.projectId === RP2), JSON.stringify(rpAfter));
+  await shot("28-resource-manager-deleted");
+
   // Dark mode
   await page.goto(UI + "#/storage/browser");
   await page.getByRole("button", { name: "More options" }).click();          // ⋮ menu, as in the native top bar

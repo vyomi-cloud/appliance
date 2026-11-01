@@ -1,0 +1,36 @@
+{
+ "$doc": "Vyomi capability registry — GCP Resource Manager (the 'Manage resources' page). See aws/s3.json for the contract. GCP/Azure claims have no AWS-wire probe — they are proven by 'tests' (conformance files run against the in-process router).",
+ "gcp.resource-manager.projects-list": {
+  "title": "Projects list (search/list)",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
+ },
+ "gcp.resource-manager.create-project": {
+  "title": "Create project",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
+ },
+ "gcp.resource-manager.rename-project": {
+  "title": "Rename project",
+  "level": { "nano": "full", "offline": "full" },
+  "limitations": [],
+  "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
+ },
+ "gcp.resource-manager.delete-project": {
+  "title": "Delete project",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": [
+   "Vyomi deletes the project immediately. Real GCP soft-deletes a project for a 30-day recovery window (with an Undelete action) before it is purged for good; Vyomi has no recoverable-deleted-project state to restore from."
+  ],
+  "tests": ["tests/conformance/test_gcp_resourcemanager_core.py"]
+ },
+ "gcp.resource-manager.move-project": {
+  "title": "Move project (change parent folder/organization)",
+  "level": { "nano": "not_simulated", "offline": "not_simulated" },
+  "limitations": [
+   "Vyomi's GCP lens is project-scoped: it models no organizations or folders, so there is no resource hierarchy to move a project into."
+  ]
+ }
+}
