@@ -646,7 +646,12 @@ def _canonical_id(sub: str, rg: str | None, type_chain: list[str], names: list[s
 
 def _view(rec: dict) -> dict:
     # Return a copy without the internal bookkeeping keys.
-    return {k: v for k, v in rec.items() if not k.startswith("_")}
+    out = {k: v for k, v in rec.items() if not k.startswith("_")}
+    props = out.get("properties")
+    if isinstance(props, dict) and "administratorLoginPassword" in props:
+        # Real Azure never returns the SQL admin password; it stays stored for the data plane.
+        out["properties"] = {k: v for k, v in props.items() if k != "administratorLoginPassword"}
+    return out
 
 
 # Map ARM resource type → CloudSim bundle key for non-compute services.
@@ -747,6 +752,8 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             if method == "GET":
                 return JSONResponse({"value": _arm.list_resource_groups(_state)})
             return _error(405, "MethodNotAllowed", "Use PUT /resourcegroups/{name}.")
+        if method == "DELETE":
+            _cascade_rg_delete_runtime(rest_segs[1])
         code, body = _arm.resource_group_item(_state, method, rest_segs[1], await _safe_json(request))
         return JSONResponse(status_code=code, content=body)
 
@@ -1410,6 +1417,23 @@ def _provision_on_create(full_type: str, rec: dict | None, base: str) -> None:
         _dp.on_create(full_type, rec, base)
     except Exception:
         pass
+
+
+def _cascade_rg_delete_runtime(rg: str) -> None:
+    """Resource-group DELETE removes every child from ARM state; also tear down the
+    runtime / data-plane state each child owns (VM containers, Key Vault secrets,
+    managed SQL engines) exactly as a per-resource DELETE does. Best-effort."""
+    try:
+        kids = [r for r in list(_state.values())
+                if isinstance(r, dict) and (r.get("_rg") or "").lower() == rg.lower()
+                and r.get("type") != "Microsoft.Resources/resourceGroups"]
+    except Exception:
+        return
+    for rec in kids:
+        try:
+            _deprovision_on_delete(str(rec.get("type") or ""), rec)
+        except Exception:
+            pass
 
 
 def _deprovision_on_delete(full_type: str, rec: dict | None) -> None:

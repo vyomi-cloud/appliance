@@ -320,6 +320,25 @@ class _NanoBlobHook:
         return r.body if getattr(r, "status", 404) == 200 else None
 
 
+def _arm_child_deleted(full_type: str, rec: dict, state: dict) -> None:
+    """A resource left ARM state (DELETE or resource-group cascade). Nano's Key Vault
+    data plane is ONE store shared by all vaults (the SW route carries no vault name),
+    so once the LAST vault is gone nothing may stay readable: purge secrets + keys."""
+    if full_type.lower() != "microsoft.keyvault/vaults":
+        return
+    if any(isinstance(r, dict) and str(r.get("type", "")).lower() == "microsoft.keyvault/vaults"
+           for r in state.values()):
+        return
+    from core import nano_registry
+    reg = nano_registry.get()
+    sec, keys = reg["az_kvsec"], reg["az_kvkeys"]
+    for n in list(sec.names()):
+        sec.drop_secret(n)
+    sec.persist()
+    for k in list(keys.key_ids()):
+        keys.drop_key(k)
+
+
 def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
     """Native Azure Resource Manager control plane. Unlike the generic
     catalog CRUD (which rides /api/{cloud}/{service} paths), the Azure console
@@ -347,6 +366,8 @@ def _arm_dispatch(backends: Backends, method: str, params: dict) -> dict:
         arm.on_event = _arm_event
     if getattr(arm, "blob_hook", None) is None:
         arm.blob_hook = _NanoBlobHook()
+    if getattr(arm, "on_child_delete", None) is None:
+        arm.on_child_delete = _arm_child_deleted
     resp = arm.handle(method, params.get("path", ""),
                       params.get("query") or {}, params.get("body"))
     return {"ok": resp["status"] < 400, "__http": resp}

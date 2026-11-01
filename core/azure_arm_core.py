@@ -300,7 +300,12 @@ def _canonical_id(sub: str, rg, type_chain, names) -> str:
 
 
 def _view(rec: dict) -> dict:
-    return {k: v for k, v in rec.items() if not k.startswith("_")}
+    out = {k: v for k, v in rec.items() if not k.startswith("_")}
+    props = out.get("properties")
+    if isinstance(props, dict) and "administratorLoginPassword" in props:
+        # Real Azure never returns the SQL admin password; it stays stored for the data plane.
+        out["properties"] = {k: v for k, v in props.items() if k != "administratorLoginPassword"}
+    return out
 
 
 def _rg_from_id(rid: str):
@@ -400,7 +405,14 @@ class AzureArm:
                 if method == "GET":
                     return _ok({"value": list_resource_groups(self.state)})
                 return _err(405, "MethodNotAllowed", "Use PUT /resourcegroups/{name}.")
+            kids = []
+            if method == "DELETE":
+                kids = [r for r in list(self.state.values()) if isinstance(r, dict)
+                        and (r.get("_rg") or "").lower() == rest_segs[1].lower()
+                        and r.get("type") != "Microsoft.Resources/resourceGroups"]
             code, body = resource_group_item(self.state, method, rest_segs[1], payload)
+            for _r in kids:   # after removal, so "last vault gone" checks see the final state
+                self._child_deleted(_r)
             return {"status": code, "headers": {}, "body": body}
         if len(rest_segs) == 3 and rest_segs[0].lower() == "resourcegroups" \
                 and rest_segs[2].lower() == "resources" and method == "GET":
@@ -534,8 +546,21 @@ class AzureArm:
                                 f"Network security group {key.rsplit('/', 1)[-1]} cannot be deleted because it is in use.")
             rec = self.state.pop(key, None)
             ext_engine.on_delete(self.state, rec)
+            if rec is not None:
+                self._child_deleted(rec)
             return _ok(None, status=200 if rec is not None else 204)
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+    def _child_deleted(self, rec):
+        """Tell the host a resource left ARM state (single DELETE or resource-group
+        cascade) so it can drop the data-plane state the resource owned (Nano wires
+        ``on_child_delete`` to purge Key Vault secrets/keys). Never breaks a delete."""
+        cb = getattr(self, "on_child_delete", None)
+        if cb is not None:
+            try:
+                cb(str(rec.get("type") or ""), rec, self.state)
+            except Exception:
+                pass
 
     def _event(self, method, scope, typ, name):
         """Activity-log hook for every successful write: ``scope`` is the resource

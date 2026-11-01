@@ -287,6 +287,13 @@ def on_delete(full_type: str, rec: dict) -> None:
         except Exception:
             pass
         return
+    if ft == "microsoft.keyvault/vaults":
+        try:
+            from core import vault_routes as _vr
+            _vr.purge_azure_vault(_sid(), rec.get("name") or "")
+        except Exception:
+            pass
+        return
     if ft == "microsoft.sql/servers/databases":
         try:
             from core import gcp_sql_engine as eng

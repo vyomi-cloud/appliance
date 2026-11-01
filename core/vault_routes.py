@@ -1095,6 +1095,21 @@ def _azkv_index_remove(space: str, vault: str, kind: str, name: str) -> None:
     vc.kv_put("azure", space, f"__idx__{vault}__{kind}", json.dumps(names))
 
 
+def purge_azure_vault(space: str, vault: str) -> None:
+    """Destroy every secret/key the data plane holds for `vault` (called when the
+    vault, or its resource group, is deleted so nothing stays readable)."""
+    if not vault:
+        return
+    for name in _azkv_index_get(space, vault, "secrets"):
+        vc.kv_delete("azure", space, f"{vault}__{name}")
+    for name in _azkv_index_get(space, vault, "keys"):
+        for suf in ("__rsapriv", "__attrs", ""):
+            vc.kv_delete("azure", space, f"{vault}__{name}{suf}")
+    for kind in ("secrets", "keys"):
+        vc.kv_delete("azure", space, f"__idx__{vault}__{kind}")
+    vc.kv_delete("azure", space, f"__kvcerts__{vault}")
+
+
 def _azkv_b64url(b: bytes) -> str:
     return base64.urlsafe_b64encode(b).decode().rstrip("=")
 
