@@ -243,21 +243,20 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   .detail-top .meta{font-size:12px;color:var(--sub);margin-top:4px}
   .detail-actions{display:flex;gap:6px}
 
-  .sub-layout{display:flex;gap:16px;min-height:560px;background:#fff;margin-top:4px}
-  .sub-nav{width:240px;background:#fff;padding:8px 0;overflow-y:auto}
+  .sub-layout{display:flex;min-height:560px;background:#fff;border-top:1px solid var(--line)}
+  .sub-nav{width:240px;border-right:1px solid var(--line);background:#fff;padding:8px 0;overflow-y:auto}
   .sub-nav .group{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--sub);padding:14px 18px 4px;font-weight:500}
   .sub-nav a.nav-item{display:flex;align-items:center;gap:10px;padding:9px 20px;color:var(--ink);font-size:13px;cursor:pointer;text-decoration:none;border-left:3px solid transparent}
   .sub-nav a.nav-item:hover{background:var(--blue-bg)}
   .sub-nav a.nav-item.active{background:var(--blue-l);color:var(--blue);border-left-color:var(--blue);font-weight:500}
   .sub-nav a.nav-item .ic{font-size:17px;color:var(--sub);width:17px}
   .sub-nav a.nav-item.active .ic{color:var(--blue)}
-  /* Each tab's pane is ONE rounded bordered section; what sits inside it is not boxed again. */
-  .sub-content{flex:1;padding:20px 24px;overflow-y:auto;min-width:0;border:1px solid var(--line);border-radius:8px;align-self:flex-start;min-height:360px;box-sizing:border-box}
-  .sub-content .card,.sub-content .kv-card,.sub-content .col-card{border:none;padding-left:0;padding-right:0}
+  .sub-content{flex:1;padding:20px 24px;overflow-y:auto;min-width:0}
 
   .sub-h{font-size:18px;font-weight:500;font-family:'Google Sans',sans-serif;margin:0 0 12px;color:var(--ink)}
   /* Tab bodies (bucket Objects/Lifecycle/Permissions/Labels/Activity, ...): lists and empty states are
      rounded bordered panels like the rest of the sections. */
+  .sub-content .empty{border:1px solid var(--line);border-radius:8px;background:#fff}
   .sub-content table.gc{border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:8px}
   .sub-content table.gc tr:first-child th:first-child{border-top-left-radius:7px}
   .sub-content table.gc tr:first-child th:last-child{border-top-right-radius:7px}
