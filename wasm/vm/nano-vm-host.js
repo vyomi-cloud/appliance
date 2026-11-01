@@ -230,17 +230,112 @@
                    where: "this browser tab (in-browser VM)", tunnel: ext },
         note: `This instance is a real Linux VM running inside your browser (v86, 32-bit x86, ${it.mem_mb} MB RAM). ` +
               `vyomi-tunnel forwards ${"127.0.0.1"}:${port} on this machine to its SSH port, so the command works from your terminal while this Nano tab is open. ` +
-              `Egress from the VM is limited (plain HTTP via the browser; no HTTPS git clone / apt).`,
+              `No general internet egress from the VM yet (only CORS-enabled plain-HTTP URLs, fetched by the browser): git clone / apk / pip from the internet do not work.`,
       };
     }
     return http(400, { detail: "unknown op " + op });
+  }
+
+  // ── Connect tab (all three consoles) ──────────────────────────────────────
+  // What it shows is exactly what works: the in-browser VM's state, the ssh command
+  // through vyomi-tunnel (or why it's not available yet) and a browser terminal that
+  // runs commands in the VM over the console's exec endpoint.
+  const PATHS = {
+    aws:   (r) => ({ ci: `/api/aws/ec2/instances/${r}/connect-info`, exec: `/api/aws/ec2/instances/${r}/exec` }),
+    gcp:   (r) => ({ ci: `/api/gcp/compute/instances/${r}/connect-info`, exec: `/api/console/gce/instances/${r}/exec` }),
+    azure: (r) => ({ ci: `/api/azure/vm/${r}/connect-info`, exec: `/api/console/azurevm/instances/${r}/exec` }),
+  };
+  function h(tag, attrs, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (k === "style") e.style.cssText = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+    }
+    for (const c of kids.flat()) if (c != null) e.append(c.nodeType ? c : document.createTextNode(String(c)));
+    return e;
+  }
+  const S = {
+    box: "border:1px solid var(--line,#d5dbdb);border-radius:8px;padding:14px 16px;margin:0 0 14px;background:var(--card,transparent)",
+    title: "font-weight:600;margin:0 0 8px",
+    sub: "font-size:12px;color:var(--sub,#5f6b7a);margin:6px 0",
+    pre: "font-family:ui-monospace,Menlo,monospace;font-size:12.5px;white-space:pre-wrap;word-break:break-all;background:var(--codebg,#f4f4f4);color:inherit;border-radius:6px;padding:8px 10px;margin:4px 0;flex:1",
+    btn: "font:inherit;font-size:12px;padding:4px 10px;border:1px solid var(--line,#aab7b8);border-radius:6px;background:transparent;color:inherit;cursor:pointer;white-space:nowrap",
+    warn: "border-left:4px solid #e07b00",
+    ok: "border-left:4px solid #1d8102",
+  };
+  function cmdRow(cmd) {
+    const b = h("button", { style: S.btn, onclick: async () => { try { await navigator.clipboard.writeText(cmd); b.textContent = "Copied"; } catch (_) { b.textContent = "Copy failed"; } setTimeout(() => (b.textContent = "Copy"), 1200); } }, "Copy");
+    return h("div", { style: "display:flex;gap:8px;align-items:flex-start" }, h("pre", { style: S.pre, "data-nano-cmd": "1" }, cmd), b);
+  }
+  function renderConnect(host, cloud, ref) {
+    const wrap = h("div", { class: "nano-vm-connect", "data-cloud": cloud, "data-ref": ref });
+    host.append(wrap);
+    const P = PATHS[cloud](encodeURIComponent(ref));
+    const userHint = { aws: "ec2-user (Amazon Linux AMIs) or ubuntu (Ubuntu AMIs)", gcp: "the user from your ssh-keys metadata (default gcpuser)", azure: "the VM's adminUsername (default azureuser)" }[cloud];
+    async function paint() {
+      wrap.innerHTML = "";
+      wrap.append(h("div", { style: S.box },
+        h("div", { style: S.title }, "In-browser VM"),
+        h("div", { style: S.sub }, "In Vyomi Nano this instance is a real Linux VM running inside this browser tab (v86, 32-bit x86, Alpine Linux). " +
+          "The cloud's image is not booted: the OS is Alpine, the login user follows the cloud (" + userHint + ").")));
+      let r, j = null;
+      try { r = await fetch(P.ci); j = await r.json(); } catch (e) { r = { status: 0 }; }
+      const d = (j && j.detail) || {};
+      if (!r.status || r.status !== 200 || !j || !j.ok) {
+        const err = d.error || (j && j.reason) || "unavailable";
+        const box = h("div", { style: S.box + ";" + S.warn },
+          h("div", { style: S.title }, err === "NoRuntime" ? "In-browser VMs are off" : err === "TunnelRequired" ? "SSH needs vyomi-tunnel" : "VM not ready"),
+          h("div", { style: S.sub }, d.hint || String(err)));
+        if (err === "NoRuntime") {
+          box.append(h("button", { style: S.btn, onclick: () => { try { localStorage.setItem("nano_vm_compute", "1"); } catch (_) {} location.reload(); } }, "Turn on in-browser VMs and reload"));
+        } else if (err === "TunnelRequired") {
+          box.append(cmdRow("brew install vyomi-cloud/tap/vyomi-tunnel && vyomi-tunnel"));
+        }
+        if (err !== "NoRuntime") box.append(h("button", { style: S.btn + ";margin-top:6px", onclick: paint }, "Refresh"));
+        wrap.append(box);
+        if (err === "InstanceNotReady") setTimeout(() => { if (wrap.isConnected) paint(); }, 3000);
+        if (err !== "TunnelRequired") return;
+      } else {
+        const s = j.ssh || {}, rt = j.runtime || {};
+        wrap.append(h("div", { style: S.box + ";" + S.ok },
+          h("div", { style: S.title }, "SSH from your terminal"),
+          h("div", { style: S.sub }, `vyomi-tunnel forwards 127.0.0.1:${s.port} on this machine to the VM's SSH port, while this Nano tab is open.`),
+          h("div", { style: S.sub }, "1. Download the key (one key per browser profile, valid for every Nano VM)"),
+          h("div", {}, h("a", { href: s.key_download_url, download: s.key_local_filename, style: S.btn + ";display:inline-block;text-decoration:none" }, "Download " + s.key_local_filename)),
+          h("div", { style: S.sub }, "2. Move it into place"), cmdRow(s.key_setup_command || ""),
+          h("div", { style: S.sub }, "3. Connect"), cmdRow(s.command || ""),
+          h("div", { style: S.sub }, `Logs you in as ${s.user} on ${rt.os || "the VM"}, ${rt.mem_mb || "?"} MB RAM.`)));
+      }
+      // Browser terminal: one command at a time over the exec endpoint (no tunnel needed).
+      const out = h("pre", { style: S.pre + ";min-height:80px;max-height:320px;overflow:auto", "data-nano-term": "1" }, "");
+      const inp = h("input", { type: "text", placeholder: "uname -a", style: "flex:1;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;padding:6px 8px;border:1px solid var(--line,#aab7b8);border-radius:6px;background:transparent;color:inherit", "data-nano-term-input": "1" });
+      const run = async () => {
+        const cmd = inp.value.trim(); if (!cmd) return;
+        inp.value = ""; out.textContent += "$ " + cmd + "\n";
+        try {
+          const rr = await fetch(P.exec, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ command: cmd }) });
+          const jj = await rr.json();
+          out.textContent += rr.ok ? (jj.stdout || "") + (jj.exit_code ? `[exit ${jj.exit_code}]\n` : "") : `[${rr.status}] ${JSON.stringify(jj.detail || jj)}\n`;
+        } catch (e) { out.textContent += "[error] " + e.message + "\n"; }
+        if (!/\n$/.test(out.textContent)) out.textContent += "\n";
+        out.scrollTop = out.scrollHeight;
+      };
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") run(); });
+      wrap.append(h("div", { style: S.box },
+        h("div", { style: S.title }, "Browser terminal"),
+        h("div", { style: S.sub }, "Runs each command in the VM as the login user (non-interactive; use SSH for a full shell)."),
+        out, h("div", { style: "display:flex;gap:8px" }, inp, h("button", { style: S.btn, onclick: run, "data-nano-term-run": "1" }, "Run"))));
+      wrap.append(h("div", { style: S.sub }, "Limits: 32-bit x86 only; RAM is the VM's disk (Stop saves it, Terminate discards it); " +
+        "a background tab runs the VM several times slower; no general internet egress (only plain-HTTP URLs that allow CORS, fetched by the browser), so git clone / apk / pip from the internet do not work yet."));
+    }
+    paint();
+    return wrap;
   }
 
   function onSerial(fn) { serialSubs.add(fn); return () => serialSubs.delete(fn); }
   function serialSend(cloud, ref, data) { const it = readReg()[vmId(cloud, ref)]; if (it) attach(it.id).port.postMessage({ type: "serial-in", data }); }
 
   window.NanoVM = {
-    enabled, kick, resume, handle, onSerial, serialSend, accountKey, vmId,
+    enabled, kick, resume, handle, onSerial, serialSend, accountKey, vmId, renderConnect,
     registry: readReg,
     status: (cloud, ref) => call(vmId(cloud, ref), { type: "status" }, 10000),
     init(o) { listDesired = o.listDesired; annotateFn = o.annotate || null; if (enabled()) { resume(); reconcile(); setInterval(reconcile, 5000); } },

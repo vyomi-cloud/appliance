@@ -104,6 +104,24 @@ export async function probeVm(nano, cfg, check) {
     check("console exec runs in the instance VM", ex.status === 200 && (ex.body.stdout || "").includes("vyomi") && (ex.body.stdout || "").includes(cfg.user),
           `status ${ex.status} ${JSON.stringify(ex.body).slice(0, 160)}`);
 
+    // The console's Connect UI shows the same working command, and its browser terminal runs in the VM.
+    if (cfg.openConnect) {
+      const { page } = nano;
+      let shown = [], term = "";
+      try {
+        await cfg.openConnect(page);
+        await page.waitForFunction(() => document.querySelectorAll(".nano-vm-connect [data-nano-cmd]").length >= 2, null, { timeout: 30000 });
+        shown = await page.evaluate(() => [...document.querySelectorAll(".nano-vm-connect [data-nano-cmd]")].map((e) => e.textContent.trim()));
+        await page.locator(".nano-vm-connect [data-nano-term-input]").first().fill("whoami; uname -m");
+        await page.locator(".nano-vm-connect [data-nano-term-run]").first().click();
+        await page.waitForFunction((u) => (document.querySelector(".nano-vm-connect [data-nano-term]") || {}).textContent?.includes(u), cfg.user, { timeout: 20000 });
+        term = await page.evaluate(() => document.querySelector(".nano-vm-connect [data-nano-term]").textContent);
+        if (process.env.VM_SHOT) await page.screenshot({ path: `${process.env.VM_SHOT}/connect-${cfg.cloud}.png`, fullPage: false });
+      } catch (e) { term = term || String(e).split("\n")[0]; }
+      check("Connect tab shows the working ssh command", shown.includes(cmd), JSON.stringify(shown).slice(0, 240));
+      check("Connect tab's browser terminal runs in the VM", term.includes(cfg.user) && term.includes("i686"), term.slice(-160));
+    }
+
     // Stop → no ssh; Start → same disk (the file survives).
     const port = Number(sshi.port);
     await cfg.stop();

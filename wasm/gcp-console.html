@@ -2488,6 +2488,13 @@ GT.gceconnect = async function(host, svc, item){
   const nic = (it.networkInterfaces || [])[0] || {};
   const ext = ((nic.accessConfigs || [])[0] || {}).natIP;
   const mono = "font-family:monospace;font-size:12.5px;word-break:break-all";
+  // Nano: the instance is an in-browser VM. `gcloud compute ssh` cannot reach it, so
+  // the VM host renders what really works (ssh through vyomi-tunnel + browser terminal).
+  if (window.NanoVM && window.NanoVM.renderConnect) {
+    host.append(kvCardOf("", [["Status", gceStatus(it)], ["Zone", zone], ["Internal IP", nic.networkIP || "Pending"]]));
+    window.NanoVM.renderConnect(host, "gcp", name);
+    return;
+  }
   host.append(kvCardOf("", [["Status", gceStatus(it)], ["Zone", zone], ["Internal IP", nic.networkIP || "Pending"],
     ["External IP", ext || "None (internal only)"]]));
   const c = el("div",{class:"kv-card"});

@@ -4,6 +4,7 @@
  * as EC2: connect-info -> key -> REAL ssh through vyomi-tunnel -> commands -> exec -> stop/start ->
  * delete. Needs RELAY_HTTP = a vyomi-tunnel >= 1.1.0. */
 import { openNano, probeVm, reporter } from "./vm-ssh-lib.mjs";
+import { sleep } from "./lib.mjs";
 const { check, finish } = reporter();
 let nano;
 try {
@@ -21,6 +22,14 @@ try {
     stop: () => call("POST", `${coll}/${name}/stop`),
     start: () => call("POST", `${coll}/${name}/start`),
     del: () => call("DELETE", `${coll}/${name}`),
+    openConnect: async (page) => {   // Compute Engine -> the instance -> Connect
+      await page.goto(nano.base + "/gcp-console.html"); await page.waitForSelector("a.res-l", { timeout: 120000 });
+      await page.locator("a.res-l", { hasText: "Compute Engine" }).first().click();
+      await sleep(2000);
+      await page.locator("#main a.id", { hasText: name }).first().click({ timeout: 15000 });
+      await sleep(1500);
+      await page.locator("a.nav-item", { hasText: /^\s*\S*\s*Connect\s*$/ }).first().click();
+    },
   }, check);
 } catch (e) { check("probe ran without error", false, String(e && e.stack || e).split("\n").slice(0, 3).join(" ")); }
 if (nano) await nano.close();

@@ -3110,6 +3110,12 @@ function renderMeasuredMetrics(host, service, resource){
 
 // EC2-specific tabs
 SUB_RENDERERS.connect = function(svc, full, host){
+  // Nano: the instance is an in-browser VM; the VM host renders what really works
+  // (ssh through vyomi-tunnel + a browser terminal, or why it is not available).
+  if (window.NanoVM && window.NanoVM.renderConnect) {
+    window.NanoVM.renderConnect(host, "aws", full.instance_id || full.InstanceId || full.id || "");
+    return;
+  }
   host.append(el("div",{class:"alert info"}, icon("terminal"),
     el("div",{}, "Connect to your instance via SSH (real key + port forward) or via the LXD shell fallback.")));
   // SSH client instructions from the instance itself (public DNS, the AMI's login user, key pair).

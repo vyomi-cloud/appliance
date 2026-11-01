@@ -31,6 +31,13 @@ try {
       stop: () => call("POST", `/api/ec2/instances/${id}/stop`),
       start: () => call("POST", `/api/ec2/instances/${id}/start`),
       del: () => call("POST", `/api/ec2/instances/${id}/terminate`),
+      openConnect: async (page) => {   // EC2 list -> the instance -> Connect tab
+        await page.locator("#rail >> text=EC2").first().click();
+        await sleep(1500);
+        await page.locator("#main tr", { hasText: id }).first().locator("a.id").first().click({ timeout: 15000 });
+        await sleep(1500);
+        await page.locator(".top-tabs button", { hasText: /^\s*Connect\s*$/ }).first().click();
+      },
     }, check);
   }
 } catch (e) { check("probe ran without error", false, String(e && e.stack || e).split("\n").slice(0, 3).join(" ")); }
