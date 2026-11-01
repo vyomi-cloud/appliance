@@ -68,6 +68,8 @@ export const AZURE_ICONS = {
   loganalytics: `<rect x="3" y="3.5" width="13" height="17" rx="1.6" fill="${A}"/>${line("M5.6 7.4h7.8M5.6 10.6h7.8M5.6 13.8h4.6", L, 1.3)}<circle cx="16.3" cy="16.3" r="3.6" fill="${C}" stroke="${W}" stroke-width="1.1"/><path d="M18.9 18.9l2.4 2.4" stroke="${W}" stroke-width="1.8" stroke-linecap="round"/>`,
   // App Configuration: a stack of three toggle switches (key-values / feature flags)
   appconfiguration: `<rect x="3" y="3" width="18" height="18" rx="2.4" fill="${A}"/><rect x="6" y="6.8" width="12" height="3.2" rx="1.6" fill="${L}"/><circle cx="14.4" cy="8.4" r="2" fill="${A}"/><rect x="6" y="10.9" width="12" height="3.2" rx="1.6" fill="${M}"/><circle cx="9.6" cy="12.5" r="2" fill="${A}"/><rect x="6" y="15" width="12" height="3.2" rx="1.6" fill="${L}"/><circle cx="14.4" cy="16.6" r="2" fill="${A}"/>`,
+  // Container Apps: a cluster of replica tiles at different scale
+  containerapps: `<rect x="2.5" y="4" width="19" height="16" rx="2.2" fill="${A}"/><rect x="5" y="6.6" width="5.6" height="5.6" rx="1" fill="${L}"/><rect x="11.4" y="6.6" width="5.6" height="5.6" rx="1" fill="${M}"/><rect x="5" y="13" width="5.6" height="4" rx="1" fill="${M}" fill-opacity=".6"/><rect x="11.4" y="13" width="5.6" height="4" rx="1" fill="${L}" fill-opacity=".6"/>`,
 };
 
 const FALLBACK = `<rect x="3" y="3" width="18" height="18" rx="2.4" fill="${A}"/><rect x="6.5" y="6.5" width="4.5" height="4.5" rx=".8" fill="${L}"/><rect x="13" y="6.5" width="4.5" height="4.5" rx=".8" fill="${M}"/><rect x="6.5" y="13" width="4.5" height="4.5" rx=".8" fill="${M}"/><rect x="13" y="13" width="4.5" height="4.5" rx=".8" fill="${L}"/>`;
