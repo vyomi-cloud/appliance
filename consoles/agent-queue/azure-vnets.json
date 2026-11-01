@@ -2,37 +2,99 @@
  "cloud": "azure",
  "service": "vnets",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "azure.vnets.tools",
-   "title": "Diagnose and solve problems (remaining tiles), Resource visualizer, Tasks, Support + Troubleshooting",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Resource visualizer, Tasks and Support + Troubleshooting are not built, and Diagnose and solve problems' other diagnostic tiles remain an honest gap. Its IP flow verify, Next hop and Connection troubleshoot tiles ARE built \u2014 see azure.vnets.network_watcher."
+   "where": "consoles/src/azure/services/vnets/VirtualNetworks.jsx:48",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Open query (Azure Resource Graph) and Assign tags from the command bar\""
   },
   {
-   "id": "azure.vnets.monitoring",
-   "title": "Alerts, Metrics, Diagnostic settings, Logs",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Azure Monitor alert rules/diagnostic settings/metrics for virtual networks are not modelled.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/vnets/VnetBlade.jsx:139",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"The capabilities overview\""
   },
   {
-   "id": "azure.vnets.ip_address_management",
-   "title": "IP address pools (Allocate using IP address pools) and advertised address prefixes (BGP)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Azure IPAM pool allocation and custom BGP route advertisement are advanced features Vyomi doesn't model."
+   "where": "consoles/src/azure/services/vnets/VnetBlade.jsx:140",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Advisor recommendations\""
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/VnetBlade.jsx:141",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Tutorials\""
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/VnetBlade.jsx:179",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Other diagnostic tools\" feature=\"The remaining Diagnose and solve problems tiles\" note=\"Azure's AI-driven troubleshooting recommendations (VPN/ExpressRoute/DNS diagnostics) run against Microsoft's own analytics backend, not a deterministic local ARM read \u2014 outside what a local simulator can m"
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/VnetBlade.jsx:219",
+   "component": "NotSimulated",
+   "props": "feature=\"Per-identity 'my access' resolution\" note=\"Vyomi has no signed-in identity to resolve \u2014 use Check access with a principal id instead.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/VnetBlade.jsx:271",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Deny assignments\" feature=\"Deny assignments\""
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/VnetBlade.jsx:272",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Classic administrators\" feature=\"Classic administrators\""
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/VnetBlade.jsx:462",
+   "component": "NotSimulatedContainer",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `Locks scoped to the ${(gap || \"\").toLowerCase()}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/VnetBlade.jsx:526",
+   "component": "NotSimulatedContainer",
+   "props": "feature={gap || \"\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/VnetBlade.jsx:905",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Filing a Microsoft support ticket\" note=\"Creating a real support case needs Microsoft's own support ticketing service \u2014 outside anything a local simulator can model.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/Networking.jsx:69",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Managing users (a role-assignment shortcut) for this subnet\""
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/Networking.jsx:172",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Service Endpoints\" feature=\"Services\" note=\"Configure service endpoints from the virtual network's Service endpoints page instead.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/Networking.jsx:173",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Subnet Delegation\" feature=\"Delegate subnet to a service\" note=\"Per-service subnet delegation is not modelled.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/CreateVirtualNetwork.jsx:108",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Azure Bastion\" feature=\"Enable Azure Bastion\" note=\"Deploying a Bastion host (Microsoft.Network/bastionHosts) is not modelled.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/CreateVirtualNetwork.jsx:109",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Azure Firewall\" feature=\"Enable Azure Firewall\" note=\"Deploying an Azure Firewall (Microsoft.Network/azureFirewalls) is not modelled.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/CreateVirtualNetwork.jsx:110",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Azure DDoS Network Protection\" feature=\"Enable Azure DDoS Network Protection\" note=\"Attaching a DDoS protection plan (Microsoft.Network/ddosProtectionPlans) is not modelled.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vnets/CreateVirtualNetwork.jsx:196",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Advertised address prefixes\" feature=\"Advertised address prefixes\" note=\"Custom BGP route advertisement only affects routing once this vnet peers with a real ExpressRoute circuit's carrier-network routers \u2014 hardware outside any local simulator \u2014 so Vyomi stores no advertised gateway prefixes."
   }
  ]
 }

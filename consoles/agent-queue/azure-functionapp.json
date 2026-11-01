@@ -2,19 +2,94 @@
  "cloud": "azure",
  "service": "functionapp",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "azure.functionapp.diagnostics",
-   "title": "Diagnose and solve problems, Events, Log stream, Resource visualizer, App files, Deployment Center, Authentication, Application Insights, Identity, Custom domains, Certificates, Networking, Service Connector, Advanced Tools, Extensions, API Management, CORS, Alerts, Metrics, Logs, Advisor recommendations, Health check, Diagnostic settings, Tasks, Resource health, New support request",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "These panels need a managed diagnostics/telemetry/identity backend Vyomi does not run; each renders only its title and an honest not-simulated note.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/functionapp/FunctionDetail.jsx:57",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Function input/output bindings editor (Integration)\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/FunctionDetail.jsx:58",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"The invocation history list (Invocations)\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/FunctionDetail.jsx:59",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Live log streaming for a single function (Logs)\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/FunctionDetail.jsx:60",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Per-function metrics charts (Metrics)\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/FunctionAppBlade.jsx:136",
+   "component": "NotSimulated",
+   "props": "feature={`The ${LABEL[id] || id} panel`}"
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/FunctionAppBlade.jsx:210",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Function app monitoring (execution count, errors, duration charts)\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/FunctionAppBlade.jsx:211",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"The Logs tab\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/FunctionAppBlade.jsx:212",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"The capabilities overview\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/FunctionAppBlade.jsx:213",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Notifications\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/FunctionAppBlade.jsx:214",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Advisor recommendations\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/FunctionAppBlade.jsx:707",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"ARM-to-Bicep decompilation\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/FunctionAppBlade.jsx:708",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"ARM-to-Terraform export\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/FunctionAppBlade.jsx:754",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"User assigned managed identities\" note=\"Vyomi has no User Assigned Identity resource of its own to attach here.\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/CreateFunctionApp.jsx:118",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Azure OpenAI resource\" feature=\"Provisioning an Azure OpenAI resource and wiring its connection string\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/CreateFunctionApp.jsx:128",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Virtual network integration\" feature=\"Regional VNet integration for Function Apps\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/CreateFunctionApp.jsx:164",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"GitHub Actions\" feature=\"Continuous deployment via GitHub Actions\""
+  },
+  {
+   "where": "consoles/src/azure/services/functionapp/CreateFunctionApp.jsx:175",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Microsoft Entra authentication\" feature=\"Easy Auth (App Service Authentication) sign-in providers\""
   }
  ]
 }

@@ -2,73 +2,30 @@
  "cloud": "gcp",
  "service": "networking",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "gcp.networking.private-service-connection",
-   "title": "Private service connection",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Allocating ranges for Google-managed services and the private-services-access connection to them is not modeled."
+   "where": "consoles/src/gcp/services/networking/CreateFirewallRule.jsx:140",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Specified service account targets\" note=\"Target by tag instead; service-account-scoped targeting isn't modeled.\""
   },
   {
-   "id": "gcp.networking.network-firewall-policies",
-   "title": "Network firewall policies (hierarchical / regional policy resources)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi models the classic per-network VPC firewall rule, not the newer Network Firewall Policy resource (its own rule evaluation order and org/folder attachment)."
+   "where": "consoles/src/gcp/services/networking/CreateRoute.jsx:90",
+   "component": "NotSimulated",
+   "props": "compact feature={nextHop} note=\"Vyomi models next hops as the default internet gateway or a raw IP address; VM instances, VPN tunnels and load balancer forwarding rules aren't resources here.\""
   },
   {
-   "id": "gcp.networking.vpc-flow-logs",
-   "title": "VPC Flow Logs (Subnets / VLAN attachments / Cloud VPN tunnels)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "No VPC Flow Logs export. Offline with netsim enforcement on, real per-flow counters exist and core/netsim/flowlogs.py renders GCP flow records from them, but nothing writes them to Cloud Logging yet.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/gcp/services/networking/VpcNetworks.jsx:123",
+   "component": "NotSimulated",
+   "props": "feature=\"Project-wide flow log management\" note=\"Flow logs are configured per subnet (Create subnet / subnet details). A centralized log-router view across all subnets isn't modeled.\""
   },
   {
-   "id": "gcp.networking.internal-ranges",
-   "title": "Internal ranges",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "The Internal Range Allocator (planning/reserving CIDR blocks across an org before they're assigned to subnets) is not modeled."
-  },
-  {
-   "id": "gcp.networking.shared-vpc",
-   "title": "Shared VPC (host/service project attachment)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi's Compute core is single-project; cross-project host/service VPC sharing and its IAM delegation are not modeled."
-  },
-  {
-   "id": "gcp.networking.serverless-vpc-access",
-   "title": "Serverless VPC Access connectors",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Connectors bridge serverless products (Cloud Run/Functions) into a VPC; Vyomi does not run a serverless data plane that would use one."
-  },
-  {
-   "id": "gcp.networking.packet-mirroring",
-   "title": "Packet mirroring",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Mirroring clones live packets to a collector; Vyomi has no data plane producing real packets to mirror."
+   "where": "consoles/src/gcp/services/networking/index.jsx:34",
+   "component": "NotSimulatedContainer",
+   "props": "title={title} feature={`VPC ${title}`}"
   }
- ]
+ ],
+ "continue_from": "v4/ui-gcp-networking-41263898111"
 }

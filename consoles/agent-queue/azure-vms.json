@@ -2,46 +2,84 @@
  "cloud": "azure",
  "service": "vms",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "azure.vms.identity",
-   "title": "Identity (system-assigned managed identity)",
-   "now": {
-    "offline": "config_only",
-    "nano": "config_only"
-   },
-   "current_reason": "The identity.type flag round-trips through ARM exactly as configured, but Vyomi never issues a managed-identity token or honours it on any other resource's access checks."
+   "where": "consoles/src/azure/services/vms/VirtualMachines.jsx:63",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Switch to classic, Reservations, Open query (Azure Resource Graph), Assign tags, Start, Restart, Stop, Services and Maintenance from this list's command bar \u2014 open a virtual machine to start, restart or stop it\""
   },
   {
-   "id": "azure.vms.run_command",
-   "title": "Run command",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Guest command execution requires a live VM agent; virtual machines are metadata-only in Vyomi (no runtime backing them in-browser), so scripts are never actually run."
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:146",
+   "component": "NotSimulatedContainer",
+   "props": "title={`${name} | ${LABEL[panel] || panel}`} feature={LABEL[panel] || panel} note={NOT_SIMULATED_REASON[panel]}"
   },
   {
-   "id": "azure.vms.monitoring",
-   "title": "Insights, Alerts, Metrics, Diagnostic settings, Logs, Connection monitor, Workbooks",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Azure Monitor metrics/alerts/diagnostic settings and Network Watcher connection monitor for virtual machines are not modelled.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:252",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : gap === \"JSON View\" ? \"Viewing the raw ARM JSON for this resource\" : gap || \"\"} note={gap === \"Hibernate\" || gap === \"Capture\" ? capability(\"azure.vms.power\")?.limitations?.join(\" \") : undefined}"
   },
   {
-   "id": "azure.vms.tools",
-   "title": "Diagnose and solve problems, Resource visualizer, Bastion, Load balancing, Application security groups, Network manager, Extensions + applications, Operating system, Configuration, Advisor recommendations, Availability + scaling, Microsoft Defender for Cloud, Backup, Disaster recovery, Updates, Inventory, Change tracking, Tasks, Resource health, Boot diagnostics, Performance diagnostics, Reset password, Redeploy + reapply, Serial console, Support + Troubleshooting",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "These console tools need a live guest agent, hypervisor telemetry or resource types this lens does not model."
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:377",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Deny assignments\" feature=\"Deny assignments\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:378",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Classic administrators\" feature=\"Classic administrators\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:383",
+   "component": "NotSimulated",
+   "props": "feature=\"Per-identity role-assignment resolution for this resource\" note={`The virtual machine's resource id is ${a.id}.`}"
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:498",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `Locks scoped to the ${(gap || \"\").toLowerCase()}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:564",
+   "component": "NotSimulated",
+   "props": "feature={gap || \"\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:692",
+   "component": "NotSimulated",
+   "props": "feature=\"Picking an existing standalone managed disk to attach\" note=\"This lens does not build a standalone Disks console to pick an existing disk from \u2014 data disks are created and attached in one step instead.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:771",
+   "component": "NotSimulated",
+   "props": "feature=\"User-assigned managed identities\" note=\"This lens does not model standalone Microsoft.ManagedIdentity/userAssignedIdentities resources to attach.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:841",
+   "component": "NotSimulated",
+   "props": "feature=\"Azure Bastion\" note=\"This lens does not model a Bastion resource.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:845",
+   "component": "NotSimulated",
+   "props": "feature=\"Opening a real SSH session\" note={cap?.limitations?.join(\" \")}"
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:973",
+   "component": "NotSimulated",
+   "props": "feature=\"Application security groups\" note=\"This lens does not model Microsoft.Network/applicationSecurityGroups.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:974",
+   "component": "NotSimulated",
+   "props": "feature=\"Load balancing\" note=\"This lens does not model Microsoft.Network/loadBalancers.\""
+  },
+  {
+   "where": "consoles/src/azure/services/vms/VmBlade.jsx:1602",
+   "component": "NotSimulated",
+   "props": "feature=\"Metrics charts (metric definitions and time-series values)\" note=\"The scope/resource picker above is real; there is no metric time-series store anywhere in Vyomi to chart from.\""
   }
  ]
 }

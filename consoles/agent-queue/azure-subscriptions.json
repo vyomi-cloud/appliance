@@ -2,27 +2,64 @@
  "cloud": "azure",
  "service": "subscriptions",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "azure.subscriptions.usage_quotas",
-   "title": "Usage + quotas",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Per-resource-type, per-location compute/network quota (Microsoft.Compute usages) is not modeled \u2014 Vyomi has no fixed quantity caps to report against."
+   "where": "consoles/src/azure/services/subscriptions/SubscriptionBlade.jsx:184",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Top free services by usage\""
   },
   {
-   "id": "azure.subscriptions.menu_gaps",
-   "title": "Diagnose and solve problems, Security, Events, Advisor recommendations, Invoices, Partner information, Programmatic deployment, Billing properties, Preview features, Policies, Management certificates, My permissions, Deployment stacks, Support + Troubleshooting",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "These subscription blade menu items are billing-account, Microsoft Defender, Azure Policy, Microsoft Entra or classic Service Management features with no Vyomi backend."
+   "where": "consoles/src/azure/services/subscriptions/SubscriptionBlade.jsx:191",
+   "component": "NotSimulated",
+   "props": "feature={{ \"Cancel subscription\": \"Cancelling the subscription \u2014 every other Vyomi Azure service's fixtures depend on this one simulated subscription existing\", \"Change directory\": \"Multi-tenant directories (Microsoft Entra ID)\", Feedback: \"Sending product feedback\", }[gap] || gap}"
+  },
+  {
+   "where": "consoles/src/azure/services/subscriptions/SubscriptionBlade.jsx:397",
+   "component": "NotSimulated",
+   "props": "feature={dlg === \"columns\" ? \"Customizing the role-assignments grid's columns\" : \"Sending product feedback\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/subscriptions/SubscriptionBlade.jsx:512",
+   "component": "NotSimulated",
+   "props": "feature={gap || \"\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/subscriptions/SubscriptionBlade.jsx:632",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Open query\" ? \"Azure Resource Graph Explorer\" : \"Assigning tags across a multi-selection\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/subscriptions/SubscriptionBlade.jsx:677",
+   "component": "NotSimulated",
+   "props": "feature={{ Create: \"Creating a new resource from the Marketplace\", \"Manage view\": \"Saving a custom browse-grid layout\", \"Open query\": \"Azure Resource Graph Explorer\", \"Assign tags\": \"Assigning tags across a multi-selection\", }[gap] || gap}"
+  },
+  {
+   "where": "consoles/src/azure/services/subscriptions/SubscriptionBlade.jsx:771",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Cancel\" ? \"Cancelling an in-progress deployment\" : \"Redeploying a past deployment\"} note=\"Every simulated deployment completes synchronously, so there is nothing in-flight to cancel or re-run.\""
+  },
+  {
+   "where": "consoles/src/azure/services/subscriptions/SubscriptionBlade.jsx:820",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : \"Locks scoped to a resource group (viewing another scope's lock list)\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/subscriptions/SubscriptionBlade.jsx:1076",
+   "component": "NotSimulated",
+   "props": "feature=\"Requesting a quota increase\" note=\"Raising a real Azure quota goes through Microsoft support approval outside Vyomi; Vyomi's modeled default limits are fixed.\""
+  },
+  {
+   "where": "consoles/src/azure/services/subscriptions/Subscriptions.jsx:59",
+   "component": "NotSimulated",
+   "props": "feature={GAPS[gap] || gap}"
+  },
+  {
+   "where": "consoles/src/azure/services/subscriptions/CreateSubscription.jsx:82",
+   "component": "NotSimulated",
+   "props": "feature=\"Adding another subscription owner (multi-identity IAM)\""
   }
  ]
 }

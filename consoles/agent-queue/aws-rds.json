@@ -2,38 +2,59 @@
  "cloud": "aws",
  "service": "rds",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "rds.monitoring",
-   "title": "CloudWatch metrics on the DB instance detail page",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi does not emit CPUUtilization/DatabaseConnections/IOPS metrics for RDS instances, so the Monitoring tab has nothing real to chart.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/aws/services/rds/CreateDatabase.jsx:297",
+   "component": "NotSimulated",
+   "props": "feature=\"RDS Proxy at create time\" note=\"Create the proxy separately from Databases \u2192 Proxies.\""
   },
   {
-   "id": "rds.logs",
-   "title": "DB log files",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "The sqlite3 / PGlite data plane does not produce real engine log files (error log, slow query log) for Vyomi to list or tail.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/aws/services/rds/CreateDatabase.jsx:334",
+   "component": "NotSimulated",
+   "props": "feature=\"IAM role association\" note=\"IAM roles for RDS features (S3 import/export) aren't modeled by Vyomi.\""
   },
   {
-   "id": "rds.replication",
-   "title": "Read replicas, Multi-AZ failover, connected compute resources, security group rules",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi does not model a second physical replica, EC2 instances, or VPC security group rule evaluation for RDS; MultiAZ/compute-resource fields are stored and returned but have no runtime effect."
+   "where": "consoles/src/aws/services/rds/CreateDatabase.jsx:355",
+   "component": "NotSimulated",
+   "props": "feature=\"Database Insights metrics\" note=\"Vyomi does not emit RDS CloudWatch metrics; this setting is stored but has nothing to chart.\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/DatabaseDetail.jsx:63",
+   "component": "NotSimulated",
+   "props": "feature=\"CPUUtilization, FreeStorageSpace, FreeableMemory\" note=\"Vyomi has no virtualized compute, disk or memory allocation behind a DB instance to measure, so these are shown as unavailable rather than invented. DatabaseConnections, ReadIOPS and WriteIOPS above are real \u2014 pushed to CloudWatch as t"
+  },
+  {
+   "where": "consoles/src/aws/services/rds/DatabaseDetail.jsx:421",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"CloudWatch alarms\" feature=\"RDS CloudWatch alarms\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/DatabaseDetail.jsx:476",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Data migrations\" feature=\"AWS DMS data migrations\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/Peripheral.jsx:52",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Capacity reservations\" feature=\"RDS capacity reservations\" note=\"Capacity reservations are a capacity-market/billing construct; Vyomi has no billing system to reserve capacity against.\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/Peripheral.jsx:59",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Create capacity reservation\" feature=\"RDS capacity reservations\" note=\"Capacity reservations are a capacity-market/billing construct; Vyomi has no billing system to reserve capacity against.\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/Peripheral.jsx:89",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Create zero-ETL integration\" feature=\"RDS zero-ETL integrations\" note=\"A zero-ETL integration requires a real cross-service pipeline into Redshift that Vyomi does not run.\""
+  },
+  {
+   "where": "consoles/src/aws/services/rds/Peripheral.jsx:213",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Restore from S3\" feature=\"Restoring a MySQL backup from Amazon S3\" note=\"This path imports a MySQL backup file from an S3 bucket outside Vyomi; it isn't modeled.\""
   }
  ]
 }

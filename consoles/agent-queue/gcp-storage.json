@@ -2,101 +2,50 @@
  "cloud": "gcp",
  "service": "storage",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "gcp.storage.static-website",
-   "title": "Static website configuration (main page suffix / 404 page)",
-   "now": {
-    "offline": "config_only",
-    "nano": "config_only"
-   },
-   "current_reason": "The website config round-trips through buckets.patch exactly as a client sets it, but Vyomi does not run the separate public per-bucket static-website HTTP host (storage.googleapis.com website serving) \u2014 the suffix object and 404 page are never actually served."
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:102",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Tags (optional)\" note=\"GCP resource tags (tagKeys/tagValues bindings) are a separate Resource Manager product Vyomi doesn't integrate with.\""
   },
   {
-   "id": "gcp.storage.requester-pays",
-   "title": "Requester Pays billing",
-   "now": {
-    "offline": "config_only",
-    "nano": "config_only"
-   },
-   "current_reason": "The billing.requesterPays flag round-trips through buckets.patch exactly as a client sets it, but Vyomi has no billing account or distinct \"requester\" identity separate from the bucket owner to charge \u2014 access is never actually billed to a requester."
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:120",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Add turbo replication\" note=\"Offered for dual-region buckets; Vyomi always uses default replication (RPO DEFAULT).\""
   },
   {
-   "id": "gcp.storage.versioning",
-   "title": "Object versioning (noncurrent object versions)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi's GCS core keeps only the latest generation of an object; it has no store for noncurrent versions, so turning on versioning cannot preserve, list or restore older generations."
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:130",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Autoclass\" note=\"Vyomi keeps objects in the bucket's default class; storage classes don't change pricing or retrieval here.\""
   },
   {
-   "id": "gcp.storage.soft-delete",
-   "title": "Soft delete policy (for data recovery)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Soft delete restores a deleted/overwritten object from its prior generation within a retention window; it depends on the same noncurrent-version history Vyomi does not keep (see gcp.storage.versioning), so a deleted object cannot be recovered."
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:132",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Enable hierarchical namespace on this bucket\" note=\"Vyomi models every bucket as a flat namespace; it has no HNS mode with atomic folder rename/delete.\""
   },
   {
-   "id": "gcp.storage.hierarchical-namespace",
-   "title": "Hierarchical namespace (HNS buckets with true folders)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi's GCS core models every bucket as a flat key-value namespace (folders are zero-byte \"name/\" placeholder objects); it has no HNS bucket mode with atomic folder rename/delete and folder-level IAM."
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:154",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Soft delete policy (For data recovery)\" note=\"Retention duration defaults to 7 days, but recovering a deleted/overwritten object needs the noncurrent-version history Vyomi doesn't keep.\""
   },
   {
-   "id": "gcp.storage.tags",
-   "title": "Resource tags (GCP-wide tag bindings, distinct from labels)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Tags are bindings against Resource Manager's separate Tags API (tagKeys/tagValues); Vyomi's GCS core has no integration with that service, so tags can't be attached to a bucket."
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:155",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Object versioning (For version control)\""
   },
   {
-   "id": "gcp.storage.security-insights",
-   "title": "Security insights (bucket column) and Advisor recommendations",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Both are produced by IAM Recommender / Security Command Center analysis and usage-pattern ML over real production traffic; Vyomi runs no such analysis, so it has no findings or recommendations to show.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/gcp/services/storage/CreateBucket.jsx:175",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Data encryption with Cloud KMS keys (CMEK)\" note=\"Vyomi always encrypts new objects with a Google-managed key; it does not delegate envelope encryption to Cloud KMS.\""
   },
   {
-   "id": "gcp.storage.observability",
-   "title": "Monitoring (Cloud Monitoring charts: request/error rates, bandwidth)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi does not meter per-request traffic over time, so it has no time-series data to chart for request counts, error rates or bandwidth \u2014 including the Time range selector and the \"Filter by: All locations\" control, which have nothing to filter.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
-  },
-  {
-   "id": "gcp.storage.inventory-reports",
-   "title": "Inventory reports (per-bucket Storage Insights object inventory, CSV/Parquet to a destination bucket)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Inventory reports are a separate Storage Insights sub-product (distinct from gcp.storage.insights-datasets' project-level dataset configs); Vyomi has no report generator to run on a schedule and write CSV/Parquet output to a destination bucket."
-  },
-  {
-   "id": "gcp.storage.object-enrichments",
-   "title": "Object enrichments (Smart Storage \u2014 Document AI classification/extraction on upload)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Enrichments run Document AI (and other Vertex AI pipelines) against newly uploaded objects; Vyomi has no ML inference engine to classify or extract from object content."
+   "where": "consoles/src/gcp/services/storage/BucketDetail.jsx:172",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Object version history and per-object customer-managed encryption keys\" note=\"Object holds and object retention are real \u2014 see the object's Protection section.\""
   }
- ]
+ ],
+ "continue_from": "v4/ui-gcp-storage-41263898111"
 }

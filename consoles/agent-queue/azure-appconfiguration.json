@@ -1,7 +1,70 @@
 {
  "cloud": "azure",
  "service": "appconfiguration",
- "phase": "base",
- "goal": "Azure App Configuration console (stores browse/create, Configuration explorer key-values + labels, feature manager, replicas) on the EXISTING core/azure_appconfiguration_core.py.",
- "note": "WAVE 7 (orchestrator): native console for a service whose backend ALREADY EXISTS. Azure App Configuration console (stores browse/create, Configuration explorer key-values + labels, feature manager, replicas) on the EXISTING core/azure_appconfiguration_core.py.\n\nHouse rules: native look per consoles/AGENT-UI.md; real backend only (no static data); capability registry core/capabilities/<cloud>/<service>.json with honest levels; works on Nano (wasm cores) AND offline (route the native paths offline, durable state via core/appliance_stores._CoreSlotStore); UI<->wire smoke round trips; run gate + smoke + conformance in the FOREGROUND before your final message; commit source."
+ "phase": "depth",
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "attempt": 2,
+ "targets": [
+  {
+   "where": "consoles/src/azure/services/appconfiguration/ConfigStoreBlade.jsx:100",
+   "component": "NotSimulated",
+   "props": "feature={NS_NOTES[panel] || `The ${LABEL[panel] || panel} panel`}"
+  },
+  {
+   "where": "consoles/src/azure/services/appconfiguration/ConfigStoreBlade.jsx:209",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : gap}"
+  },
+  {
+   "where": "consoles/src/azure/services/appconfiguration/ConfigStoreBlade.jsx:245",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Role assignments scoped to this configuration store (Microsoft.Authorization/roleAssignments is simulated at subscription scope only)\""
+  },
+  {
+   "where": "consoles/src/azure/services/appconfiguration/ConfigStoreBlade.jsx:251",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"The built-in and custom role catalog\""
+  },
+  {
+   "where": "consoles/src/azure/services/appconfiguration/ConfigStoreBlade.jsx:257",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Deny assignments\""
+  },
+  {
+   "where": "consoles/src/azure/services/appconfiguration/ConfigStoreBlade.jsx:260",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Classic administrators\" feature=\"Classic administrators (co-administrators)\""
+  },
+  {
+   "where": "consoles/src/azure/services/appconfiguration/ConfigStoreBlade.jsx:265",
+   "component": "NotSimulated",
+   "props": "feature=\"Per-identity role-assignment resolution for this resource\" note={`The store's resource id is ${a.id}.`}"
+  },
+  {
+   "where": "consoles/src/azure/services/appconfiguration/ConfigStoreBlade.jsx:362",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Export and Import of key-values (file, App Service, another configuration store)\""
+  },
+  {
+   "where": "consoles/src/azure/services/appconfiguration/ConfigStoreBlade.jsx:448",
+   "component": "NotSimulated",
+   "props": "feature=\"Editing a locked key-value\" note=\"Unlock it first \u2014 real App Configuration refuses writes to a locked key the same way.\""
+  },
+  {
+   "where": "consoles/src/azure/services/appconfiguration/ConfigStoreBlade.jsx:829",
+   "component": "NotSimulatedContainer",
+   "props": "feature={`${tab === \"bicep\" ? \"Bicep\" : \"Terraform\"} template export`}"
+  },
+  {
+   "where": "consoles/src/azure/services/appconfiguration/CreateStore.jsx:90",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Private endpoint\" feature=\"Private endpoint connections for a configuration store\""
+  },
+  {
+   "where": "consoles/src/azure/services/appconfiguration/Stores.jsx:49",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Manage deleted configuration stores, Open query (Azure Resource Graph) and Assign tags from the command bar\""
+  }
+ ]
 }

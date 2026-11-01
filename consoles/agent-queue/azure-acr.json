@@ -2,45 +2,64 @@
  "cloud": "azure",
  "service": "acr",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "azure.acr.registry.listactions",
-   "title": "\"Manage view\", \"Open query\" (Azure Resource Graph) and \"Assign tags\" on the registries list",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Azure Resource Graph, saved views and bulk tag assignment across resources are not modeled."
+   "where": "consoles/src/azure/services/acr/RegistryBlade.jsx:80",
+   "component": "NotSimulatedContainer",
+   "props": "title={`${name} | Insights`} feature=\"Insights\""
   },
   {
-   "id": "azure.acr.overview_tabs",
-   "title": "Overview Monitoring, Capabilities and Recommendations tabs",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Pull/push throughput charts, the capabilities summary and Advisor recommendations are not modeled."
+   "where": "consoles/src/azure/services/acr/RegistryBlade.jsx:81",
+   "component": "NotSimulatedContainer",
+   "props": "title={`${name} | Alerts`} feature=\"Alerts\""
   },
   {
-   "id": "azure.acr.create_fields",
-   "title": "Domain name label scope and Role assignment permissions mode (create wizard)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "These 2025 ARM additions are collected in the wizard for fidelity but stored on neither ARM nor the registry record \u2014 Vyomi has no DNS label or ABAC-repository-permission layer to apply them to."
+   "where": "consoles/src/azure/services/acr/RegistryBlade.jsx:82",
+   "component": "NotSimulatedContainer",
+   "props": "title={`${name} | Metrics`} feature=\"Metrics\""
   },
   {
-   "id": "azure.acr.tools",
-   "title": "Quick start, Events, Encryption, Identity, Networking, Geo-replications, Tasks, Cache, Connected registries, Tokens, Scope maps, Retention (Preview), and Support + Troubleshooting",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "These portal blade menu items (push/pull quick-start snippets, CMK encryption, managed identity, private networking, geo-replication, ACR Tasks, cache rules, connected registries, repository-scoped tokens/scope maps, retention policy, and the support tools) are not modeled."
+   "where": "consoles/src/azure/services/acr/RegistryBlade.jsx:83",
+   "component": "NotSimulatedContainer",
+   "props": "title={`${name} | Logs`} feature=\"Logs\""
+  },
+  {
+   "where": "consoles/src/azure/services/acr/RegistryBlade.jsx:178",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : gap === \"Import image\" ? \"Importing an image from another registry or source\" : \"Moving a resource to another resource group/subscription\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/acr/RegistryBlade.jsx:317",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Deny assignments\" feature=\"Deny assignments\""
+  },
+  {
+   "where": "consoles/src/azure/services/acr/RegistryBlade.jsx:318",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Classic administrators\" feature=\"Classic administrators\""
+  },
+  {
+   "where": "consoles/src/azure/services/acr/RegistryBlade.jsx:323",
+   "component": "NotSimulated",
+   "props": "feature=\"Per-identity role-assignment resolution for this resource\" note={`The registry's resource id is ${a.id}.`}"
+  },
+  {
+   "where": "consoles/src/azure/services/acr/RegistryBlade.jsx:467",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `Locks scoped to the ${(gap || \"\").toLowerCase()}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/acr/RegistryBlade.jsx:759",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `Activity log: ${gap}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/acr/RegistryBlade.jsx:973",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"User assigned managed identities\" note=\"Vyomi has no User Assigned Identity resource of its own to attach here.\""
   }
  ]
 }

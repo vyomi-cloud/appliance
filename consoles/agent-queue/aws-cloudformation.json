@@ -2,18 +2,79 @@
  "cloud": "aws",
  "service": "cloudformation",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "aws.cloudformation.hooks",
-   "title": "Hooks (overview, invocation summary, hooks list)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "CloudFormation Hooks are out of Vyomi's scope."
+   "where": "consoles/src/aws/services/cloudformation/CreateStack.jsx:45",
+   "component": "NotSimulated",
+   "props": "feature=\"Launching into Template studio from the wizard\" note='Open Template studio directly from the nav, build your template, then come back here and choose \"Upload a template file\" to paste it in.'"
+  },
+  {
+   "where": "consoles/src/aws/services/cloudformation/CreateStack.jsx:67",
+   "component": "NotSimulated",
+   "props": "feature=\"Sync from Git\" note=\"Syncing a template from a Git repository isn't modeled by Vyomi \u2014 use an S3 URL or upload a file instead.\""
+  },
+  {
+   "where": "consoles/src/aws/services/cloudformation/StackDetail.jsx:49",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Stack policy\" note=\"Stack policies (protecting resources from accidental updates) are stored on CreateStack's StackPolicyBody but not enforced by Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/cloudformation/StackDetail.jsx:50",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Rollback configuration\" note=\"CloudWatch alarm-triggered rollback monitoring isn't modeled; rollback on provisioning failure still works.\""
+  },
+  {
+   "where": "consoles/src/aws/services/cloudformation/StackDetail.jsx:51",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Notification options\" note=\"SNS notification ARNs for stack events are stored but Vyomi doesn't publish to them.\""
+  },
+  {
+   "where": "consoles/src/aws/services/cloudformation/StackDetail.jsx:225",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Git sync\" note=\"Syncing a stack to a Git repository isn't modeled by Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/cloudformation/StackSets.jsx:87",
+   "component": "NotSimulated",
+   "props": "feature=\"Trusted access with AWS Organizations\" note=\"Service-managed permissions and multi-account/Region stack-instance deployment aren't modeled by Vyomi \u2014 a StackSet's own template is real, but it never deploys instances.\""
+  },
+  {
+   "where": "consoles/src/aws/services/cloudformation/ActivatedExtensions.jsx:81",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Modules\" feature=\"CloudFormation modules\""
+  },
+  {
+   "where": "consoles/src/aws/services/cloudformation/ActivatedExtensions.jsx:107",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Configuration\" feature=\"Extension configuration\" note=\"Logging role / execution role configuration applies to private and third-party extensions, which Vyomi doesn't model.\""
+  },
+  {
+   "where": "consoles/src/aws/services/cloudformation/HonestPages.jsx:20",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Registry: Public extensions\" feature=\"Public extensions registry\" note=\"Columns: Type name, Publisher, Description, Last updated. Actions: Activate.\""
+  },
+  {
+   "where": "consoles/src/aws/services/cloudformation/HonestPages.jsx:22",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Filter\" note=\"Extension type: Resource types, Modules, Hooks. Publisher: AWS, Third party.\""
+  },
+  {
+   "where": "consoles/src/aws/services/cloudformation/HonestPages.jsx:30",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Publisher registration\" feature=\"Publisher registration\" note=\"Status: This account is not registered as a publisher.\""
+  },
+  {
+   "where": "consoles/src/aws/services/cloudformation/HonestPages.jsx:38",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Filters\" feature=\"CloudFormation Spotlight\" note=\"Filter by: All tags. Sort by: Sort by newest. Show editor's choice only. Show bookmarks only.\""
+  },
+  {
+   "where": "consoles/src/aws/services/cloudformation/TemplateStudio.jsx:72",
+   "component": "NotSimulated",
+   "props": "feature=\"Canvas\" note=\"The drag-and-drop visual resource graph isn't modeled by Vyomi \u2014 use the text editor.\""
   }
  ]
 }

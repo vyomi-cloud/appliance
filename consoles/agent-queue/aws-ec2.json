@@ -1,7 +1,7 @@
 {
  "cloud": "aws",
  "service": "ec2",
- "goal": "GAP SWEEP (EC2, held until the wave-7 Load Balancing PR merged \u2014 it has). Build every listed target on a REAL backend on Nano + offline: EC2 Auto Scaling (groups, launch templates, scaling policies incl. target tracking + step, scheduled actions, lifecycle hooks, instance refresh; real instances via the vpc_core lifecycle; console pages under EC2 > Auto Scaling; OFFLINE route + durable store), EC2 Instance Connect / Session-style connect on the existing SSH/compute backend where possible, Data Lifecycle Manager (real scheduled snapshot policies), security-group sharing (RAM-style within the simulated org), Load Balancing monitoring (real AWS/ApplicationELB metrics via cloudwatch_core.ingest_internal_metric from actual LB traffic/health), trust stores (real CA bundle validation for mTLS listeners), target-group attributes enforced. 'Out of scope' is not an acceptable reason; nothing leaves the simulator. Update capabilities, tests, smoke.",
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
  "must_build": [
   "Instances list/detail (Details, Status and alarms, Monitoring, Security, Networking, Storage, Tags), Launch instance wizard (name/tags, AMI, instance type, key pair, network settings, storage, advanced) \u2014 RunInstances real; start/stop/reboot/terminate real",
   "Security groups (+ inbound/outbound rule editors), Key pairs (create/import/delete), Volumes (create/attach/detach), AMIs, Snapshots, Elastic IPs, Network interfaces",
@@ -13,87 +13,74 @@
   "Sections via <CapabilityContainer>; editable settings round-trip through native calls with saveNotice()",
   "Never edit .github/ (reverted before push)"
  ],
- "attempt": 6,
- "note": "WAVE 5b gap sweep \u2014 EC2 (orchestrator, approved by the user: finish all the gaps).",
+ "attempt": 2,
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
  "phase": "depth",
- "depth_targets": [
+ "targets": [
   {
-   "id": "ec2.instances.connect",
-   "title": "Connect (SSH / RDP / EC2 Instance Connect / Session Manager)",
-   "now": {
-    "nano": "not_simulated",
-    "offline": "not_simulated"
-   },
-   "current_reason": "Vyomi instances aren't real virtual machines with a reachable network stack, so there is nothing to SSH, RDP or Session-Manager into."
+   "where": "consoles/src/aws/services/ec2/InstanceDetail.jsx:197",
+   "component": "NotSimulated",
+   "props": "feature=\"CPU and network metrics\" note=\"CPU utilization (%), Network in (bytes), Network out (bytes), Network packets in (count), Network packets out (count), CPU credit usage (count), CPU credit balance (count) aren't collected \u2014 Vyomi has no CloudWatch metrics pipeline for EC2 beyond the real stat"
   },
   {
-   "id": "ec2.lifecycle-manager",
-   "title": "Amazon Data Lifecycle Manager (automated snapshot/AMI policies)",
-   "now": {
-    "nano": "not_simulated",
-    "offline": "not_simulated"
-   },
-   "current_reason": "Scheduled lifecycle policies aren't modeled; create snapshots and AMIs directly instead."
+   "where": "consoles/src/aws/services/ec2/Dashboard.jsx:45",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Service health\" feature=\"AWS Health Dashboard\" note=\"Region-wide service health events aren't modeled by Vyomi.\""
   },
   {
-   "id": "ec2.security-groups.sharing",
-   "title": "Security group sharing (AWS RAM) and VPC associations",
-   "now": {
-    "nano": "not_simulated",
-    "offline": "not_simulated"
-   },
-   "current_reason": "Cross-account sharing via AWS Resource Access Manager isn't modeled; every security group stays scoped to this account and its one default VPC."
+   "where": "consoles/src/aws/services/ec2/Dashboard.jsx:49",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Zones\" feature=\"Local Zones / Wavelength Zones enablement\""
   },
   {
-   "id": "ec2.settings.other",
-   "title": "Allowed AMIs, Managed resources, EC2 Serial Console, Auto Scaling group defaults, Zones",
-   "now": {
-    "nano": "not_simulated",
-    "offline": "not_simulated"
-   },
-   "current_reason": "These account-wide EC2 settings aren't modeled; they have no effect in Vyomi."
+   "where": "consoles/src/aws/services/ec2/Dashboard.jsx:50",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Instance alarms\" feature=\"CloudWatch alarms\" note=\"No custom alarms are modeled by Vyomi.\""
   },
   {
-   "id": "ec2.target-groups.attributes",
-   "title": "Target group attributes",
-   "now": {
-    "nano": "config_only",
-    "offline": "config_only"
-   },
-   "current_reason": "Stickiness, slow start, deregistration delay and the load-balancing algorithm are stored and returned exactly as set, but there's no real data plane behind them to change traffic distribution."
+   "where": "consoles/src/aws/services/ec2/Dashboard.jsx:53",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"EC2 cost\" feature=\"AWS Cost Explorer\" note=\"Cost and usage data isn't modeled by Vyomi.\""
   },
   {
-   "id": "ec2.load-balancing.monitoring",
-   "title": "CloudWatch metrics for load balancers and target groups",
-   "now": {
-    "nano": "not_simulated",
-    "offline": "not_simulated"
-   },
-   "current_reason": "RequestCount, HealthyHostCount, TargetResponseTime and the rest of the ELB CloudWatch metrics aren't published \u2014 Vyomi's ELBv2 engine is control-plane only."
+   "where": "consoles/src/aws/services/ec2/Volumes.jsx:44",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Fault tolerance for all volumes in this Region\" feature=\"Data Lifecycle Manager / backup fault-tolerance rollup\""
   },
   {
-   "id": "ec2.trust-stores",
-   "title": "Trust stores (mutual TLS)",
-   "now": {
-    "nano": "not_simulated",
-    "offline": "not_simulated"
-   },
-   "current_reason": "Trust store management for ALB mutual TLS isn't part of the EC2 console surface Vyomi simulates."
+   "where": "consoles/src/aws/services/ec2/Volumes.jsx:135",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"CloudWatch metrics\""
   },
   {
-   "id": "ec2.auto-scaling",
-   "title": "Auto Scaling groups",
-   "now": {
-    "nano": "not_simulated",
-    "offline": "not_simulated"
-   },
-   "current_reason": "Auto Scaling isn't modeled; launch and manage instances directly."
+   "where": "consoles/src/aws/services/ec2/Volumes.jsx:207",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Create volume from an instance\" feature=\"Snapshotting an instance from this form\" note=\"Use Create snapshot from the Snapshots page instead.\""
   },
   {
-   "id": "aws.cloudwatch.alarms.actions.compute",
-   "title": "Auto Scaling (offline parity)",
-   "current_reason": "Offline does NOT route the native autoscaling API at all (routes/aws_s3.py / server.py aws_query_root have no \"autoscaling\" branch) and the router uses an in-memory AutoScalingStore \u2014 make it a durable space-scoped appliance store and route it, so the capability is true offline."
+   "where": "consoles/src/aws/services/ec2/LaunchInstance.jsx:224",
+   "component": "NotSimulated",
+   "props": "feature={purchasing} note=\"Vyomi launches a regular on-demand instance regardless of the purchasing option chosen.\""
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/Instances.jsx:36",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"All instances\" feature=\"Instance alarm states / service health / EC2 health events\" note=\"Account-wide health rollups above the table aren't modeled by Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/HonestPages.jsx:13",
+   "component": "NotSimulatedContainer",
+   "props": "title={title} feature={feature}"
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/ElasticIps.jsx:119",
+   "component": "NotSimulated",
+   "props": "feature={pool} note=\"Vyomi only backs allocation from Amazon's own pool of IPv4 addresses.\""
+  },
+  {
+   "where": "consoles/src/aws/services/ec2/Snapshots.jsx:121",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Snapshot an instance\" feature=\"Multi-volume snapshot sets from an instance\" note=\"Create a snapshot of each of the instance's volumes individually instead.\""
   }
- ],
- "continue_from": ""
+ ]
 }

@@ -2,136 +2,29 @@
  "cloud": "aws",
  "service": "vpc",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "aws.vpc.dhcp-option-sets",
-   "title": "DHCP option sets (create, describe, delete, associate)",
-   "now": {
-    "offline": "config_only",
-    "nano": "config_only"
-   },
-   "current_reason": "Vyomi stores and returns DHCP configuration exactly as set, but has no real DHCP server \u2014 subnets don't actually receive these options over a simulated network stack."
+   "where": "consoles/src/aws/services/vpc/Vpcs.jsx:105",
+   "component": "NotSimulated",
+   "props": "feature={gap.feature}"
   },
   {
-   "id": "aws.vpc.integrations",
-   "title": "VPC console third-party integrations (e.g. Transit Gateway Network Manager tiles)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "No third-party integrations are modeled."
+   "where": "consoles/src/aws/services/vpc/GapButton.jsx:4",
+   "component": "NotSimulatedContainer",
+   "props": ""
   },
   {
-   "id": "aws.vpc.create-vpc-and-more",
-   "title": "\"VPC and more\" wizard (auto-generated subnets/route tables/NAT gateways/endpoints)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Use \"VPC only\" and then create subnets, route tables, and NAT gateways individually \u2014 the guided multi-resource wizard isn't modeled, including its Name tag auto-generation, Number of Availability Zones (AZs), Number of public subnets, Number of private subnets, NAT gateways ($), VPC endpoints, and DNS options fields."
+   "where": "consoles/src/aws/services/vpc/GapButton.jsx:17",
+   "component": "NotSimulated",
+   "props": "feature={feature || text} note={note}"
   },
   {
-   "id": "aws.vpc.resource-sharing",
-   "title": "Subnet sharing (AWS RAM)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Cross-account resource sharing via AWS Resource Access Manager isn't modeled."
-  },
-  {
-   "id": "aws.vpc.edge-associations",
-   "title": "Route table edge associations (Outposts / Local Gateway)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Edge associations to Outposts or Local Gateways aren't modeled."
-  },
-  {
-   "id": "aws.vpc.network-access-analyzer",
-   "title": "Network Access Analyzer (scopes, findings)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "A separate analysis engine from Reachability Analyzer: it evaluates a whole network's configuration against access scopes (e.g. \"internet-accessible resources\") and reports findings, rather than one source/destination path \u2014 not modeled; see aws.vpc.reachability-analyzer for the single-path analyzer Vyomi does run."
-  },
-  {
-   "id": "aws.vpc.security-group-sharing",
-   "title": "Security group sharing (AWS RAM), VPC associations, related resources",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Cross-account sharing via AWS Resource Access Manager isn't modeled; every security group stays scoped to this account."
-  },
-  {
-   "id": "aws.vpc.nat-gateway-monitoring",
-   "title": "NAT gateway CloudWatch monitoring",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "No CloudWatch metrics pipeline backs NAT gateways.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
-  },
-  {
-   "id": "aws.vpc.console-settings",
-   "title": "VPC console preferences",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Console display preferences aren't modeled; they have no effect in Vyomi."
-  },
-  {
-   "id": "aws.vpc.privatelink",
-   "title": "PrivateLink (VPC endpoints, endpoint services)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "AWS PrivateLink is a separate, large AWS service surfaced under the VPC nav \u2014 not in scope for vpc_core.py's VPC/subnet/route-table/SG/NACL network-simulation model."
-  },
-  {
-   "id": "aws.vpc.lattice",
-   "title": "VPC Lattice (service networks, services, resource configurations/gateways, target groups, domain verifications)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Amazon VPC Lattice is a separate AWS service surfaced under the VPC nav \u2014 not simulated."
-  },
-  {
-   "id": "aws.vpc.network-firewall",
-   "title": "AWS Network Firewall (firewalls, policies, rule groups, TLS inspection, resource groups, endpoint/container associations)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "AWS Network Firewall is a separate AWS service surfaced under the VPC nav \u2014 not simulated."
-  },
-  {
-   "id": "aws.vpc.verified-access",
-   "title": "AWS Verified Access (instances, trust providers, groups, endpoints)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "AWS Verified Access is a separate AWS service surfaced under the VPC nav \u2014 not simulated."
-  },
-  {
-   "id": "aws.vpc.traffic-mirroring",
-   "title": "Traffic Mirroring (mirror sessions, targets, filters)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Traffic Mirroring has no packet-level data plane to mirror in Vyomi."
+   "where": "consoles/src/aws/services/vpc/ElasticIps.jsx:111",
+   "component": "NotSimulated",
+   "props": "feature={pool} note=\"Vyomi only backs allocation from Amazon's own pool of IPv4 addresses.\""
   }
  ]
 }

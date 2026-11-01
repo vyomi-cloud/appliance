@@ -2,73 +2,24 @@
  "cloud": "azure",
  "service": "eventgrid",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "azure.eventgrid.topics.listactions",
-   "title": "\"Open query\" (Azure Resource Graph Explorer) on the Topics list",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Azure Resource Graph is a separate, cross-resource-type query service (its own Kusto-based engine spanning every resource in a subscription) and is not modeled."
+   "where": "consoles/src/azure/services/eventgrid/TopicBlade.jsx:486",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Deny assignments\" feature=\"Deny assignments\""
   },
   {
-   "id": "azure.eventgrid.topic.listactions",
-   "title": "Secondary toolbar actions on a topic's Activity log and Locks panels (Edit columns, Export, Insights, Feedback, pin/reset filters)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Column customization, log export/insights and portal feedback are not modeled."
+   "where": "consoles/src/azure/services/eventgrid/TopicBlade.jsx:492",
+   "component": "NotSimulated",
+   "props": "feature={`${gap} evaluation`}"
   },
   {
-   "id": "azure.eventgrid.eventsubscriptions.crud",
-   "title": "Event subscriptions on a topic \u2014 create, list, get, update, delete (destination, filters)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "full"
-   },
-   "current_reason": "The appliance (offline substrate) does not yet implement the Microsoft.EventGrid/eventSubscriptions extension resource; only Nano and the dev server do."
-  },
-  {
-   "id": "azure.eventgrid.eventsubscriptions.deliveryconfig",
-   "title": "Dead-lettering and retry policy (max delivery attempts, event TTL, expiration time)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "limited"
-   },
-   "current_reason": "Expiration time IS enforced: an event subscription past its expirationTimeUtc is swept (auto-deleted, same as real Event Grid) before any GET/list sees it. Max delivery attempts and event time-to-live round-trip (PUT/GET) but are never enforced, because there is no delivery runtime to retry against \u2014 see azure.eventgrid.eventsubscriptions.delivery."
-  },
-  {
-   "id": "azure.eventgrid.eventsubscriptions.delivery",
-   "title": "Event delivery (filter matching, pushing to the destination endpoint, retries, dead-lettering)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi stores topics and event subscriptions and returns them over the native ARM wire, but there is no publish/delivery runtime: no event is ever matched against a subscription's filters, pushed to its destination, retried, or dead-lettered."
-  },
-  {
-   "id": "azure.eventgrid.topic.monitoring",
-   "title": "Alerts, metrics, diagnostic settings and logs on a topic",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Metrics charts, alert rules, diagnostic-setting log routing and Log Analytics queries are not modeled.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
-  },
-  {
-   "id": "azure.eventgrid.topic.tools",
-   "title": "Diagnose and solve problems, Tasks, and Support + Troubleshooting",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "These portal troubleshooting and support tools are not modeled."
+   "where": "consoles/src/azure/services/eventgrid/TopicBlade.jsx:534",
+   "component": "NotSimulatedContainer",
+   "props": "feature={`${tab === \"bicep\" ? \"Bicep\" : \"Terraform\"} template export`}"
   }
  ]
 }

@@ -2,28 +2,119 @@
  "cloud": "gcp",
  "service": "compute",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "gcp.compute.instances.data_plane",
-   "title": "Guest OS access (SSH, serial console, screenshot, OS info)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "No guest OS boots behind an instance, so there is nothing to SSH into, no serial console output, no screenshot preview and no OS Info (guest attributes)."
+   "where": "consoles/src/gcp/services/compute/GapPages.jsx:34",
+   "component": "NotSimulatedContainer",
+   "props": "title={title} feature={feature || `Compute Engine ${title}`}"
   },
   {
-   "id": "gcp.compute.observability",
-   "title": "Observability, recommendations and VM Manager",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi's monitoring/logging core only charts metrics explicitly written to it \u2014 there's no request-metering engine tying a VM's real CPU/disk/network state to time series, so the Monitoring/Logging tabs would have nothing real to plot (the same boundary as gcp.storage.observability). Recommender suggestions are AI-generated insights Vyomi does not generate. VM Manager (Patch, OS policies, VM Extens",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/gcp/services/compute/Images.jsx:125",
+   "component": "NotSimulated",
+   "props": "feature=\"Image import history\" note=\"Importing VM images from external sources isn't modeled.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/Images.jsx:128",
+   "component": "NotSimulated",
+   "props": "feature=\"Image export history\" note=\"Exporting images isn't modeled.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/InstanceDetail.jsx:55",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Recommender & VM Manager\" note=\"Recommender suggestions and VM Manager (Patch, OS policies, VM Extension Manager) aren't modeled in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/CreateDisk.jsx:89",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Regional disks\" note=\"Only single-zone disks are modeled; a single-zone disk will be created instead.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/CreateDisk.jsx:116",
+   "component": "NotSimulated",
+   "props": "compact feature={`Create disk from ${sourceType}`} note=\"Sourcing a disk from an image, snapshot or another disk isn't modeled; a blank disk will be created instead.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/CreateDisk.jsx:133",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Enable snapshot schedule\" note=\"Automatic recurring snapshots aren't modeled; create snapshots manually from the Snapshots page.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/CreateDisk.jsx:144",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Customer-managed encryption\" note=\"Only Google-managed encryption is modeled; the disk will be created with Google-managed encryption.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/Overview.jsx:36",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Google Cloud incidents\" feature=\"Google Cloud incidents\" note=\"Vyomi is a simulator with no real Google Cloud status feed to report.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/VmInstances.jsx:96",
+   "component": "NotSimulated",
+   "props": "compact feature=\"SSH\" note=\"No guest OS runs behind this instance.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/VmInstances.jsx:130",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Recommender & VM Manager\" note=\"Recommender suggestions and VM Manager (Patch, OS policies, VM Extension Manager) aren't modeled in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/VmInstances.jsx:135",
+   "component": "NotSimulated",
+   "props": "feature=\"Instance schedules\" note=\"Scheduled start/stop policies aren't modeled.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/VmInstances.jsx:170",
+   "component": "NotSimulated",
+   "props": "feature=\"Import VM\" note=\"Migrating a VM image from another environment isn't modeled.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/CreateInstance.jsx:196",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Additional storage and VM backups\" note=\"Attaching extra disks and VM-level backup plans at create time aren't modeled; create and attach a disk afterwards from the Disks page.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/CreateInstance.jsx:201",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Back up your data\" note=\"Choose a backup policy after creation isn't modeled; snapshots are available from the Snapshots page.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/CreateInstance.jsx:210",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Allow Load Balancer Health Checks\" note=\"No load balancer or firewall rules are modeled.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/CreateInstance.jsx:224",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Add a network interface\" note=\"Only a single default network interface is modeled.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/CreateInstance.jsx:231",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Install Ops Agent for Monitoring and Logging\" note=\"Metrics/logging agent installation isn't modeled.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/CreateInstance.jsx:251",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Set access for each API\" note=\"Per-API OAuth scope selection isn't modeled; full access is granted instead.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/Snapshots.jsx:125",
+   "component": "NotSimulated",
+   "props": "feature=\"Snapshot schedules\" note=\"Recurring automated snapshot policies aren't modeled.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/Snapshots.jsx:128",
+   "component": "NotSimulated",
+   "props": "feature=\"Instant snapshots\" note=\"Instant snapshots aren't modeled.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/compute/Snapshots.jsx:139",
+   "component": "NotSimulated",
+   "props": "feature=\"Snapshot schedules\" note=\"Recurring automated snapshot policies aren't modeled.\""
   }
  ]
 }

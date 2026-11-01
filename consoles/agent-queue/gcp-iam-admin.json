@@ -2,101 +2,59 @@
  "cloud": "gcp",
  "service": "iam-admin",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "gcp.iam-admin.service-account-metrics-logs",
-   "title": "Service account Metrics tab",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Per-service-account request metrics aren't modeled; Vyomi has no telemetry pipeline backing this view.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/gcp/services/iam-admin/OrgPolicies.jsx:45",
+   "component": "NotSimulated",
+   "props": "feature=\"Simulating a constraint change against existing resources\""
   },
   {
-   "id": "gcp.iam-admin.pam-settings",
-   "title": "PAM Settings",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Notification channels and default approval settings aren't modeled."
+   "where": "consoles/src/gcp/services/iam-admin/OrgPolicies.jsx:46",
+   "component": "NotSimulated",
+   "props": "feature=\"Constraint simulation history\""
   },
   {
-   "id": "gcp.iam-admin.workforce-identity-federation",
-   "title": "Workforce Identity Federation",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "This feature requires an organization; Vyomi's GCP lens is project-scoped."
+   "where": "consoles/src/gcp/services/iam-admin/PolicyAnalyzer.jsx:36",
+   "component": "NotSimulated",
+   "props": "feature=\"Custom Cloud Asset Inventory queries (full query language)\" compact"
   },
   {
-   "id": "gcp.iam-admin.groups",
-   "title": "Groups",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "This feature requires an organization; Vyomi's GCP lens is project-scoped."
+   "where": "consoles/src/gcp/services/iam-admin/Iam.jsx:198",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Simulation history\" feature=\"Deny-policy simulation\""
   },
   {
-   "id": "gcp.iam-admin.principal-access-boundary",
-   "title": "Principal Access Boundary",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "This feature requires an organization; Vyomi's GCP lens is project-scoped."
+   "where": "consoles/src/gcp/services/iam-admin/AuditLogs.jsx:55",
+   "component": "NotSimulated",
+   "props": "feature=\"Default audit log configuration applied to future services\""
   },
   {
-   "id": "gcp.iam-admin.managed-workload-identities",
-   "title": "Managed Workload Identities",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Managed Workload Identities auto-issues and rotates short-lived workload certificates (SPIFFE/mTLS trust domains) outside the key-file model; Vyomi doesn't run a certificate authority or credential-issuance pipeline to back that."
+   "where": "consoles/src/gcp/services/iam-admin/WorkforceIdentity.jsx:31",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Connecting an external OIDC/SAML workforce identity provider\""
   },
   {
-   "id": "gcp.iam-admin.asset-inventory",
-   "title": "Asset Inventory",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Cloud Asset Inventory's resource/IAM/org-policy search index isn't modeled."
+   "where": "consoles/src/gcp/services/iam-admin/Settings.jsx:26",
+   "component": "NotSimulated",
+   "props": "feature=\"Moving a project to a different resource hierarchy\""
   },
   {
-   "id": "gcp.iam-admin.security-insights",
-   "title": "Security Insights",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "IAM lint/insight analysis isn't modeled.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/gcp/services/iam-admin/Settings.jsx:27",
+   "component": "NotSimulated",
+   "props": "feature=\"Shutting down (deleting) a project\""
   },
   {
-   "id": "gcp.iam-admin.identity-organization",
-   "title": "Identity & Organization",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "This feature requires an organization; Vyomi's GCP lens is project-scoped."
+   "where": "consoles/src/gcp/services/iam-admin/WorkloadIdentity.jsx:23",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Connecting an external OIDC/SAML identity provider\""
   },
   {
-   "id": "gcp.iam-admin.identity-aware-proxy",
-   "title": "Identity-Aware Proxy",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "IAP's per-resource access proxy isn't modeled."
+   "where": "consoles/src/gcp/services/iam-admin/WorkloadIdentity.jsx:26",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Attribute mapping and condition configuration for an external provider\""
   }
  ]
 }

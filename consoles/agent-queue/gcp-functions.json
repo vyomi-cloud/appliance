@@ -2,37 +2,64 @@
  "cloud": "gcp",
  "service": "functions",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "gcp.functions.services.continuous_deployment",
-   "title": "Continuously deploy from a repository (Cloud Build / GitHub)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi has no Cloud Build or source-repository integration."
+   "where": "consoles/src/gcp/services/functions/ServiceDetail.jsx:299",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Revision tags\" note=\"Vyomi serves traffic by percentage split only; named revision tags aren't modelled.\""
   },
   {
-   "id": "gcp.functions.services.triggers",
-   "title": "Event triggers (Eventarc) and Cloud Build source deploys",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi has no Eventarc or Cloud Build backend; only HTTP-style services are modelled."
+   "where": "consoles/src/gcp/services/functions/ServiceDetail.jsx:355",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Source\" feature=\"Function entry point, Runtime, Source files\" note=\"This service was deployed from a container image, not an inline function source \u2014 there is no source to edit.\""
   },
   {
-   "id": "gcp.functions.services.observability",
-   "title": "Observability (request metrics, container instance count, logs)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi does not meter real request traffic against deployed services, so there is no metrics or log data to show.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/gcp/services/functions/CreateService.jsx:150",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Custom URLs\" note=\"Vyomi has no custom-domain or load-balancer integration for Cloud Run services.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/functions/CreateService.jsx:183",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Customize autoscaling factors\" note=\"Target CPU / concurrency utilization isn't modelled; Vyomi scales strictly between the min and max instance counts.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/functions/CreateService.jsx:219",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Ephemeral disk\""
+  },
+  {
+   "where": "consoles/src/gcp/services/functions/CreateService.jsx:220",
+   "component": "NotSimulated",
+   "props": "compact feature=\"GPU\""
+  },
+  {
+   "where": "consoles/src/gcp/services/functions/CreateService.jsx:221",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Health checks\""
+  },
+  {
+   "where": "consoles/src/gcp/services/functions/CreateService.jsx:235",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Volumes\""
+  },
+  {
+   "where": "consoles/src/gcp/services/functions/CreateService.jsx:247",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Cloud SQL connections\""
+  },
+  {
+   "where": "consoles/src/gcp/services/functions/CreateService.jsx:252",
+   "component": "NotSimulated",
+   "props": "feature=\"Use HTTP/2 end-to-end, Session affinity, Connect to a VPC for outbound traffic, Join a Service Mesh.\" note=\"Vyomi has no VPC, service-mesh or HTTP/2 data plane to model these against.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/functions/CreateService.jsx:260",
+   "component": "NotSimulated",
+   "props": "feature=\"Verify container deployment with Binary Authorization, Encryption (Google-managed encryption key / Cloud KMS key)\""
   }
  ]
 }

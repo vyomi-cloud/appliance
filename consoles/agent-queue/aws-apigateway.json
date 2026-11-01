@@ -2,18 +2,19 @@
  "cloud": "aws",
  "service": "apigateway",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "apigateway.developer-portals",
-   "title": "Developer portals and portal products",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "The API Gateway developer portal is a separate hosted product Vyomi does not implement; declared in the nav for completeness only."
+   "where": "consoles/src/aws/services/apigateway/Stages.jsx:104",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Canary\" note=\"Canary release deployments (splitting traffic between two deployments on one stage) aren't modeled by Vyomi.\""
+  },
+  {
+   "where": "consoles/src/aws/services/apigateway/OutOfScope.jsx:19",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"AgentCore targets\" feature=\"Bedrock AgentCore gateway targets\" note=\"Vyomi does not implement Bedrock AgentCore. The Target, AgentCore gateway, Status, Description, Last synchronized and Date created columns, the Create new AgentCore gateway and Add AgentCore target actions, and the How to en"
   }
  ]
 }

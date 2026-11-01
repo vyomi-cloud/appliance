@@ -2,28 +2,69 @@
  "cloud": "azure",
  "service": "entra",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "azure.entra.sign_in_logs",
-   "title": "Sign-in logs",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi has no interactive sign-in flow to generate telemetry from; the page honestly shows no sign-ins rather than sample data.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/entra/Dashboards.jsx:191",
+   "component": "NotSimulated",
+   "props": "feature=\"BitLocker keys\" note=\"BitLocker recovery key escrow needs real disk encryption on real hardware, which Vyomi's software simulator cannot provide.\""
   },
   {
-   "id": "azure.entra.devices",
-   "title": "Devices (MDM/Intune-registered device inventory)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Device registration (MDM/WIP/BitLocker) is a distinct subsystem Vyomi does not model; no devices are ever listed."
+   "where": "consoles/src/azure/services/entra/SignInLogs.jsx:47",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Export Data Settings, Troubleshoot, Columns, Got feedback?\" note=\"Export Data Settings. Troubleshoot. Columns. Got feedback? Not simulated in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/azure/services/entra/SignInLogs.jsx:84",
+   "component": "NotSimulated",
+   "props": "feature=\"User sign-ins (interactive)\" note=\"Vyomi has no interactive browser sign-in flow to generate this telemetry from.\""
+  },
+  {
+   "where": "consoles/src/azure/services/entra/SignInLogs.jsx:85",
+   "component": "NotSimulated",
+   "props": "feature=\"User sign-ins (non-interactive)\" note=\"Vyomi has no silent token-refresh flow (no browser session) to generate this telemetry from.\""
+  },
+  {
+   "where": "consoles/src/azure/services/entra/SignInLogs.jsx:86",
+   "component": "NotSimulated",
+   "props": "feature=\"Managed identity sign-ins\" note=\"Vyomi does not simulate the Azure Instance Metadata Service (IMDS) a managed identity calls to get a token.\""
+  },
+  {
+   "where": "consoles/src/azure/services/entra/Users.jsx:53",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"More commands\" feature=\"Edit, Bulk operations, Per-user MFA, Got feedback?\" note=\"Edit (inline bulk edit). Bulk operations (CSV-driven create/update/delete). Per-user MFA. Got feedback? These are not simulated in Vyomi; edit a single user from its own page, and see Audit logs for a real recor"
+  },
+  {
+   "where": "consoles/src/azure/services/entra/AuditLogs.jsx:48",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"More commands\" feature=\"Export Data Settings, Got feedback?\" note=\"Export Data Settings. Got feedback? are not simulated in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/azure/services/entra/Groups.jsx:49",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"More commands\" feature=\"Got feedback?\" note=\"Got feedback? is not simulated in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/azure/services/entra/AdminUnits.jsx:51",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"More commands\" feature=\"Preview features, Got feedback?\" note=\"Preview features. Got feedback? are not simulated in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/azure/services/entra/CustomDomains.jsx:52",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"More commands\" feature=\"Diagnose and solve problems, Columns, Got feedback?\" note=\"Diagnose and solve problems. Columns. Got feedback? are not simulated in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/azure/services/entra/EnterpriseApps.jsx:44",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"More commands\" feature=\"Download (Export), Preview info, Columns, Preview features, Got feedback?\" note=\"Download (Export). Preview info. Columns. Preview features. Got feedback? Not simulated in Vyomi.\""
+  },
+  {
+   "where": "consoles/src/azure/services/entra/Roles.jsx:60",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"More commands\" feature=\"Delete custom role, Preview features, Got feedback?\" note=\"Delete custom role is available from the grid's Delete command (select a custom role first \u2014 built-in roles can't be removed). Preview features. Got feedback? are not simulated in Vyomi.\""
   }
  ]
 }

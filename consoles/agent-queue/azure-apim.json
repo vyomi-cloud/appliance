@@ -2,55 +2,69 @@
  "cloud": "azure",
  "service": "apim",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "azure.apim.service.protocols",
-   "title": "Protocol settings / Protocols + ciphers (properties.customProperties)",
-   "now": {
-    "offline": "config_only",
-    "nano": "config_only"
-   },
-   "current_reason": "TLS/SSL protocol and cipher flags round-trip through ARM exactly as configured, but Vyomi's gateway never negotiates TLS, so disabling a protocol here has no effect on anything."
+   "where": "consoles/src/azure/services/apim/CreateHttpApi.jsx:85",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Gateways\" feature=\"Restricting a new API to specific self-hosted gateways\" note=\"New APIs are always reachable on the managed gateway.\""
   },
   {
-   "id": "azure.apim.developerportal",
-   "title": "Developer portal (overview, settings, Users, Groups, Identities, Delegation)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "The developer portal CMS, its user/group/identity-provider directory, and delegation are not modeled."
+   "where": "consoles/src/azure/services/apim/CreateApiManagementService.jsx:105",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Monitor + secure\" feature=\"Wiring a new service to Log Analytics, Application Insights or Defender for APIs\" note=\"These checkboxes provision separate monitoring/security resources in real Azure; Vyomi does not model that cross-resource wiring.\""
   },
   {
-   "id": "azure.apim.monitoring",
-   "title": "Application Insights, Alerts, Metrics, Logs, Analytics",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Metrics charts, alert rules, Log Analytics queries and API analytics are not modeled.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/apim/CreateApiManagementService.jsx:119",
+   "component": "NotSimulatedContainer",
+   "props": "feature={`Deploying into a ${f.vnet.toLowerCase()}`}"
   },
   {
-   "id": "azure.apim.deployment",
-   "title": "Network, Custom domains, Locations, Managed identities (user-assigned), Certificates, Gateways, Self-hosted gateways",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Multi-region deployment, VNet/custom-domain/certificate configuration, and managed/self-hosted gateways are not modeled."
+   "where": "consoles/src/azure/services/apim/ApiManagementServices.jsx:62",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Open query\" ? \"Azure Resource Graph queries\" : \"Bulk-assigning tags from the browse grid\"}"
   },
   {
-   "id": "azure.apim.tools",
-   "title": "Diagnose and solve problems, Events, MCP Servers, Workspaces, Credential manager, Tasks, Support + Troubleshooting",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "These portal troubleshooting, catalog and support tools are not modeled."
+   "where": "consoles/src/azure/services/apim/Apis.jsx:78",
+   "component": "NotSimulated",
+   "props": "feature={`Creating an API from ${gap}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:201",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"API Management monitoring (capacity, requests, latency charts)\""
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:202",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"The capacity gauge\""
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:216",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : \"Restoring a soft-deleted API Management service\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:310",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Deny assignments\" feature=\"Deny assignments\""
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:314",
+   "component": "NotSimulated",
+   "props": "feature={`${gap} evaluation`}"
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:414",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `Locks scoped to the ${(gap || \"\").toLowerCase()}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/apim/ApimBlade.jsx:514",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `The ${gap} action`}"
   }
  ]
 }

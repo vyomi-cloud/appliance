@@ -2,36 +2,129 @@
  "cloud": "azure",
  "service": "appservices",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "azure.appservices.webapp.deploymentcenter",
-   "title": "Deployment Center (CI/CD source, FTPS credentials)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "No source-control integration, build pipeline or FTPS deployment credentials."
+   "where": "consoles/src/azure/services/appservices/AppServices.jsx:160",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Azure Resource Graph query editor\""
   },
   {
-   "id": "azure.appservices.webapp.devtools",
-   "title": "Development Tools (Clone App, Console, Advanced Tools, App Service Editor, Extensions)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "No Kudu/SCM console, in-browser editor or site extension gallery."
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:112",
+   "component": "NotSimulatedContainer",
+   "props": "feature={LABEL[panel] || panel} note={RICH_NOTES[panel]}"
   },
   {
-   "id": "azure.appservices.webapp.automation",
-   "title": "Automation (Tasks, Export template)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "No Automation Tasks or ARM/Bicep/Terraform template export for the Web App."
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:195",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"App Service monitoring (requests, response time, errors)\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:196",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"The resource's Logs (Log Analytics queries)\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:197",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"The capabilities overview\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:198",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Notifications\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:199",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Advisor recommendations\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:268",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Activity log filters and export\" note={(\"Filters (Management Group, Subscription, Event severity, Timespan, Resource group, Resource, Add Filter) and the \" + \"Edit columns / Export Activity Logs / Download as CSV / Insights / Feedback / Pin current filters / Reset filters actions are \" + \"n"
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:341",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Deny assignments\" feature=\"Deny assignments\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:344",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Classic administrators\" feature=\"Classic administrators\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:579",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Default documents\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:580",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Path mappings\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:581",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Error pages (preview)\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:724",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Autoscale (rule-based/schedule-based scaling)\" note=\"Vyomi does not run multiple instances or enforce the configured count; it is stored and returned exactly as set.\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:866",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Live log streaming\" note={\"Vyomi stores App Service log settings; there is no running workload to tail a live stream from.\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:974",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"ARM-to-Bicep decompilation\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:975",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"ARM-to-Terraform export\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/WebAppBlade.jsx:1022",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"User assigned managed identities\" note=\"Vyomi has no User Assigned Identity resource of its own to attach here.\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/CreateWebApp.jsx:87",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Secure unique default hostname on.\" feature=\"Secure unique default hostname on.\" note={\"Vyomi always uses the exact name you choose; there is no name-collision suffix to secure.\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/CreateWebApp.jsx:140",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Database\" feature=\"Create a Database\" note={\"Provisioning a linked database from the Web App wizard is not modelled; create one directly in the SQL/Cosmos DB lens instead.\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/CreateWebApp.jsx:168",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"GitHub Actions details\" feature=\"GitHub account, Organization, Repository, Branch\" note={\"Vyomi records that continuous deployment is enabled on the site; it cannot authorize a GitHub account or run a build pipeline.\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/CreateWebApp.jsx:187",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Enable network injection\" feature=\"Enable network injection\" note=\"VNet integration for the App Service plan is not modelled.\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/CreateWebApp.jsx:201",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Application Insights\" feature=\"Application Insights\" note=\"Creating/linking an Application Insights resource (and its Region) is not modelled.\""
+  },
+  {
+   "where": "consoles/src/azure/services/appservices/CreateWebApp.jsx:203",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Enable Microsoft Defender for App Service\""
   }
  ]
 }

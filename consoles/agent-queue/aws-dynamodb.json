@@ -3,37 +3,48 @@
  "service": "dynamodb",
  "phase": "depth",
  "attempt": 2,
- "goal": "DynamoDB alarms + DAX. (1) ALARMS/MONITOR: dynamodb_core publishes the real AWS/DynamoDB metrics through cloudwatch_core.ingest_internal_metric (ConsumedRead/WriteCapacityUnits, ProvisionedRead/WriteCapacityUnits, ThrottledRequests, Read/WriteThrottleEvents, UserErrors, SystemErrors, SuccessfulRequestLatency, ReturnedItemCount; ItemCount/TableSizeBytes) on every operation, on Nano and offline (same CloudWatch store the CloudWatch console reads). Compute consumed capacity the AWS way (4 KB read units, eventually consistent = half, 1 KB write units, transactions x2) and return ConsumedCapacity when ReturnConsumedCapacity is set. ENFORCE provisioned throughput with a per-table/GSI token bucket (burst = 300 s of capacity) \u2192 real ProvisionedThroughputExceededException; on-demand never throttles. Table Monitor tab = real GetMetricData charts; Alarms tab lists alarms on the table and 'Create alarm' pre-fills TableName dims; actions go to simulator SNS. (2) DAX: new core/dax_core.py (AmazonDAXV3 JSON protocol): CreateCluster/DescribeClusters/UpdateCluster/DeleteCluster/IncreaseReplicationFactor/DecreaseReplicationFactor/RebootNode, subnet groups, parameter groups (record-ttl-millis, query-ttl-millis), DescribeEvents, tags; real cluster/node endpoints. PLUS a real cache engine: item cache + query cache in front of the DynamoDB store, read-through and write-through, TTLs from the parameter group, strongly-consistent reads bypass the cache, LRU by node size; AWS/DAX metrics (ItemCacheHits/Misses, QueryCacheHits/Misses, ...). Expose the cache data plane through the console/test hooks; the DAX binary wire protocol comes later (wave 6 tunnel TCP relay) \u2014 say so honestly in the capability (Nano/offline 'limited' for SDK data-plane access until then). Wire the existing DAX console pages (clusters, subnet groups, parameter groups, events) to the live core; add capability entries aws.dynamodb.dax.* (there are none today), tests in tests/conformance, smoke round-trips.",
- "note": "FOLLOW-UP approved by the user 2026-11-01: DynamoDB CloudWatch alarms + DAX clusters on real backends. Resume from the gap-sweep branch (continue_from) and keep its work.",
- "depth_targets": [
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "dynamodb.monitor",
-   "target": "full"
+   "where": "consoles/src/aws/services/dynamodb/CreateTable.jsx:199",
+   "component": "NotSimulated",
+   "props": "feature=\"Maximum table throughput\" note=\"On-demand throughput caps aren't enforced by Vyomi.\""
   },
   {
-   "id": "dynamodb.alarms",
-   "target": "full"
+   "where": "consoles/src/aws/services/dynamodb/CreateTable.jsx:213",
+   "component": "NotSimulated",
+   "props": "feature=\"Auto scaling\" note=\"Application Auto Scaling for provisioned capacity isn't modeled by Vyomi; set fixed units above.\""
   },
   {
-   "id": "dynamodb.dax.clusters",
-   "target": "full"
+   "where": "consoles/src/aws/services/dynamodb/CreateTable.jsx:220",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Warm throughput\" note=\"Computed warm-throughput values aren't modeled by Vyomi.\""
   },
   {
-   "id": "dynamodb.dax.subnet-groups",
-   "target": "full"
+   "where": "consoles/src/aws/services/dynamodb/index.jsx:22",
+   "component": "NotSimulatedContainer",
+   "props": "title={title}"
   },
   {
-   "id": "dynamodb.dax.parameter-groups",
-   "target": "full"
+   "where": "consoles/src/aws/services/dynamodb/TableDetail.jsx:392",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Trigger\" feature=\"DynamoDB stream triggers (Lambda)\""
   },
   {
-   "id": "dynamodb.dax.events",
-   "target": "full"
+   "where": "consoles/src/aws/services/dynamodb/TableDetail.jsx:495",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Point-in-time recovery (PITR)\""
   },
   {
-   "id": "dynamodb.dax.cache",
-   "target": "limited until the wave-6 DAX wire protocol"
+   "where": "consoles/src/aws/services/dynamodb/TableDetail.jsx:573",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Time to Live (TTL)\""
+  },
+  {
+   "where": "consoles/src/aws/services/dynamodb/TableDetail.jsx:578",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Tags\""
   }
- ],
- "continue_from": "v4/ui-aws-dynamodb-41263898111"
+ ]
 }

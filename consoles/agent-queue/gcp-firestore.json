@@ -2,47 +2,24 @@
  "cloud": "gcp",
  "service": "firestore",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "gcp.firestore.vector-indexes",
-   "title": "Vector indexes (for vector-similarity search)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi has no vector field type or similarity search engine, so vector indexes cannot be created or used."
+   "where": "consoles/src/gcp/services/firestore/CreateDatabase.jsx:101",
+   "component": "NotSimulated",
+   "props": "compact feature=\"MongoDB compatibility wire protocol\" note=\"Vyomi creates the database in Native mode; the Firestore MongoDB-compatible wire protocol isn't simulated.\""
   },
   {
-   "id": "gcp.firestore.security-rules",
-   "title": "Security rules editor",
-   "now": {
-    "offline": "config_only",
-    "nano": "config_only"
-   },
-   "current_reason": "Vyomi stores and returns the rules source exactly as written through its own getSecurityRules/updateSecurityRules endpoints (real Firestore security rules are managed by the separate Firebase Rules API), but it never evaluates the rules against a request \u2014 every document read/write Vyomi allows is unconditional. Real Firestore only evaluates rules against end-user client-SDK requests \u2014 the Admin S"
+   "where": "consoles/src/gcp/services/firestore/CreateDatabase.jsx:124",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Customer-managed encryption keys (CMEK)\" note=\"Vyomi always uses Google-managed encryption; there is no customer-key picker.\""
   },
   {
-   "id": "gcp.firestore.insights",
-   "title": "Insights (query and index usage recommendations)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi collects no query-performance telemetry, so it has nothing to generate index or query insights from.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
-  },
-  {
-   "id": "gcp.firestore.key-visualizer",
-   "title": "Key Visualizer",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Key Visualizer renders a heatmap of real production key-access load; Vyomi records no per-key traffic histograms to visualize.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/gcp/services/firestore/CreateDatabase.jsx:133",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Security rules enforcement\" note=\"Vyomi stores the chosen rules and shows them on the Security rules page, but never evaluates them against a request.\""
   }
  ]
 }

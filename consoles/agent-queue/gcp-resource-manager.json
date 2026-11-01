@@ -1,7 +1,20 @@
 {
  "cloud": "gcp",
  "service": "resource-manager",
- "phase": "base",
- "goal": "IAM & Admin > Manage resources page set (projects/folders tree, create/move/delete project, labels, tags) on the EXISTING core/gcp_resourcemanager_core.py.",
- "note": "WAVE 7 (orchestrator): native console for a service whose backend ALREADY EXISTS. IAM & Admin > Manage resources page set (projects/folders tree, create/move/delete project, labels, tags) on the EXISTING core/gcp_resourcemanager_core.py.\n\nHouse rules: native look per consoles/AGENT-UI.md; real backend only (no static data); capability registry core/capabilities/<cloud>/<service>.json with honest levels; works on Nano (wasm cores) AND offline (route the native paths offline, durable state via core/appliance_stores._CoreSlotStore); UI<->wire smoke round trips; run gate + smoke + conformance in the FOREGROUND before your final message; commit source."
+ "phase": "depth",
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "attempt": 2,
+ "targets": [
+  {
+   "where": "consoles/src/gcp/services/resource-manager/CreateProject.jsx:53",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Browsing for a parent organization or folder\" note=\"Vyomi's GCP lens is project-scoped; it models no organizations or folders, so every project is created with no parent.\""
+  },
+  {
+   "where": "consoles/src/gcp/services/resource-manager/ManageResources.jsx:78",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Moving a project to a different resource hierarchy\" note=\"Vyomi's GCP lens is project-scoped; it models no organizations or folders to move a project into.\""
+  }
+ ]
 }

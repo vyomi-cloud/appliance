@@ -2,18 +2,59 @@
  "cloud": "azure",
  "service": "nsgs",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "azure.nsgs.tools",
-   "title": "Diagnose and solve problems (remaining tiles), Tasks, Support + Troubleshooting",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Tasks and Support + Troubleshooting are not built, and Diagnose and solve problems' other diagnostic tiles (VM connectivity issue, Network configuration diagnostics, \u2026) remain an honest gap \u2014 Tasks is a cross-resource Azure Resource Graph/tagging feature and Support + Troubleshooting opens a Microsoft support request, neither specific to network security groups. Its IP flow verify and Next hop til"
+   "where": "consoles/src/azure/services/nsgs/NsgBlade.jsx:78",
+   "component": "NotSimulatedContainer",
+   "props": "title={`${name} | Alerts`} feature=\"Alerts\""
+  },
+  {
+   "where": "consoles/src/azure/services/nsgs/NsgBlade.jsx:79",
+   "component": "NotSimulatedContainer",
+   "props": "title={`${name} | Logs`} feature=\"Logs\""
+  },
+  {
+   "where": "consoles/src/azure/services/nsgs/NsgBlade.jsx:80",
+   "component": "NotSimulatedContainer",
+   "props": "title={`${name} | NSG flow logs`} feature=\"NSG flow logs\""
+  },
+  {
+   "where": "consoles/src/azure/services/nsgs/NsgBlade.jsx:267",
+   "component": "NotSimulated",
+   "props": "feature=\"Per-identity 'my access' resolution\" note=\"Vyomi has no signed-in identity to resolve \u2014 use Check access with a principal id instead.\""
+  },
+  {
+   "where": "consoles/src/azure/services/nsgs/NsgBlade.jsx:319",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Deny assignments\" feature=\"Deny assignments\""
+  },
+  {
+   "where": "consoles/src/azure/services/nsgs/NsgBlade.jsx:320",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Classic administrators\" feature=\"Classic administrators\""
+  },
+  {
+   "where": "consoles/src/azure/services/nsgs/NsgBlade.jsx:464",
+   "component": "NotSimulated",
+   "props": "feature=\"Sending product feedback\""
+  },
+  {
+   "where": "consoles/src/azure/services/nsgs/NsgBlade.jsx:698",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `Locks scoped to the ${(gap || \"\").toLowerCase()}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/nsgs/NsgBlade.jsx:823",
+   "component": "NotSimulated",
+   "props": "feature={gap || \"\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/nsgs/NetworkSecurityGroups.jsx:48",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Open query (Azure Resource Graph) and Assign tags from the command bar\""
   }
  ]
 }

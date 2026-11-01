@@ -2,27 +2,109 @@
  "cloud": "azure",
  "service": "keyvaults",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "azure.keyvaults.access_configuration",
-   "title": "Access configuration (RBAC vs vault access policy, resource access flags)",
-   "now": {
-    "offline": "config_only",
-    "nano": "config_only"
-   },
-   "current_reason": "enableRbacAuthorization and the resource-access flags are stored and returned exactly as written, but Vyomi does not enforce them. The console now tags every Keys/Secrets/Certificates call with the vault it's showing (x-vyomi-vault, the same signal azure.keyvaults.networking enforces against) \u2014 the remaining gap isn't 'which vault' but 'which caller': Vyomi has no signed-in-identity/session-princi"
+   "where": "consoles/src/azure/services/keyvaults/CreateKeyVault.jsx:133",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Private endpoint\" feature=\"Private endpoint connections for a key vault\""
   },
   {
-   "id": "azure.keyvaults.access_policies",
-   "title": "Vault access policies (properties.accessPolicies)",
-   "now": {
-    "offline": "config_only",
-    "nano": "config_only"
-   },
-   "current_reason": "Access policy entries round-trip through ARM exactly as written, but Vyomi never evaluates them \u2014 every data-plane key/secret call succeeds regardless of the configured permissions. Same root cause as azure.keyvaults.access_configuration: evaluating a policy needs a caller identity to check it against, and Vyomi has no signed-in-identity/session-principal concept behind a data-plane call anywhere "
+   "where": "consoles/src/azure/services/keyvaults/KeyVaults.jsx:49",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Manage deleted vaults, Open query (Azure Resource Graph) and Assign tags from the command bar\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:87",
+   "component": "NotSimulated",
+   "props": "feature={NS_NOTES[panel] || `The ${LABEL[panel] || panel} panel`}"
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:147",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Key vault monitoring (requests, latency and saturation charts)\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:149",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"The capabilities overview\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:150",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Advisor recommendations\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:151",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Tutorials\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:247",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Deny assignments\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:250",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Classic administrators\" feature=\"Classic administrators (co-administrators)\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:454",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Restore Backup and Manage deleted keys\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:498",
+   "component": "NotSimulated",
+   "props": "feature=\"Activation/expiration dates and tags on a new key\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:543",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Restore Backup, View sample code and Manage deleted secrets\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:744",
+   "component": "NotSimulated",
+   "props": "feature={gap || \"\"}"
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:811",
+   "component": "NotSimulated",
+   "props": "feature=\"Content type, lifetime action and advanced policy configuration on a new certificate\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:869",
+   "component": "NotSimulated",
+   "props": "feature=\"VM/ARM-template/Disk-Encryption secret retrieval from this vault\" note=\"Vyomi doesn't model those services' own Key Vault integration, so these three flags round-trip through ARM but have nothing to gate.\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:913",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Private endpoint connections\" feature=\"Private endpoint connections for key vaults\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:978",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `Locks scoped to the ${(gap || \"\").toLowerCase()}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:1069",
+   "component": "NotSimulated",
+   "props": "feature=\"Severity/category filtering\" note=\"Every recorded event is Informational/Administrative, so there is nothing for that filter to narrow; only mutations made since the simulation booted are recorded (no historical backfill).\""
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:1089",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : gap}"
+  },
+  {
+   "where": "consoles/src/azure/services/keyvaults/KeyVaultBlade.jsx:1132",
+   "component": "NotSimulatedContainer",
+   "props": "feature={`${tab === \"bicep\" ? \"Bicep\" : \"Terraform\"} template export`}"
   }
  ]
 }

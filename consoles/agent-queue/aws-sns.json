@@ -2,18 +2,39 @@
  "cloud": "aws",
  "service": "sns",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "sns.topic.delivery-policy",
-   "title": "Delivery policy (HTTP/S retry policy)",
-   "now": {
-    "offline": "config_only",
-    "nano": "config_only"
-   },
-   "current_reason": "The per-topic/per-subscription HTTP/S retry policy (healthyRetryPolicy) round-trips through SetTopicAttributes/SetSubscriptionAttributes/GetTopicAttributes exactly as set, but Vyomi never actually retries a push delivery against it \u2014 see sns.publish.other-protocols for what Vyomi does deliver."
+   "where": "consoles/src/aws/services/sns/CreateTopic.jsx:154",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Maximum message size\" note=\"Amazon SNS doesn't let you configure a topic's maximum message size \u2014 it's fixed at 256 KiB.\""
+  },
+  {
+   "where": "consoles/src/aws/services/sns/TextMessagingSms.jsx:41",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Delivery statistics (UTC)\" feature=\"SMS delivery statistics\" note=\"Vyomi has no real carrier to deliver SMS through, so delivery-rate statistics aren't modeled.\""
+  },
+  {
+   "where": "consoles/src/aws/services/sns/TextMessagingSms.jsx:44",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Delivery statistics by country\" feature=\"SMS delivery statistics by country\""
+  },
+  {
+   "where": "consoles/src/aws/services/sns/TextMessagingSms.jsx:170",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Verification code delivery\" feature=\"SMS OTP delivery\" note=\"Vyomi can't send a real text; it has no carrier to reach the phone with the code.\""
+  },
+  {
+   "where": "consoles/src/aws/services/sns/PublishMessage.jsx:75",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Time to Live (TTL) - optional\" note=\"Amazon SNS's native Publish API has no message TTL parameter for topic deliveries.\""
+  },
+  {
+   "where": "consoles/src/aws/services/sns/TopicDetail.jsx:65",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Integrations\" feature=\"SNS console service integrations (CloudWatch, EventBridge Pipes, \u2026)\""
   }
  ]
 }

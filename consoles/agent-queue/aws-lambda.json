@@ -2,18 +2,34 @@
  "cloud": "aws",
  "service": "lambda",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "lambda.code-signing",
-   "title": "Code signing (deploy-time enforcement)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "A code signing configuration's AllowedPublishers / validation policy is stored and returned for real (see lambda.code-signing-configs), but Vyomi never checks a deployment's signature against it \u2014 UpdateFunctionCode always succeeds regardless of signing policy."
+   "where": "consoles/src/aws/services/lambda/FunctionDetail.jsx:439",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"RDS databases\" feature=\"Lambda RDS database connectivity helper\""
+  },
+  {
+   "where": "consoles/src/aws/services/lambda/FunctionDetail.jsx:527",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"State machines\" feature=\"Step Functions state machines using this function as a task\""
+  },
+  {
+   "where": "consoles/src/aws/services/lambda/Dashboard.jsx:35",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Set up your agent to build with Lambda\" feature=\"Lambda's AI coding-agent onboarding (MCP server + agent prompt)\""
+  },
+  {
+   "where": "consoles/src/aws/services/lambda/CreateApplication.jsx:69",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"CI/CD pipeline application\" feature=\"Lambda application CI/CD pipelines\" note=\"A CI/CD pipeline application wires a CodePipeline/CodeBuild/CodeDeploy pipeline around a stack \u2014 Vyomi has no CI/CD pipeline core. Use the Serverless application tab.\""
+  },
+  {
+   "where": "consoles/src/aws/services/lambda/CreateApplication.jsx:71",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Build with Infrastructure Composer\" feature=\"AWS Infrastructure Composer\" note=\"Infrastructure Composer is a visual drag-and-drop canvas for authoring a SAM template \u2014 Vyomi has no visual template designer. Use the Serverless application tab.\""
   }
  ]
 }

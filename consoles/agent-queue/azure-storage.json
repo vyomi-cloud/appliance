@@ -2,214 +2,234 @@
  "cloud": "azure",
  "service": "storage",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "azure.storage.redundancy",
-   "title": "Redundancy (replication SKU)",
-   "now": {
-    "offline": "config_only",
-    "nano": "config_only"
-   },
-   "current_reason": "The SKU name round-trips through ARM; Vyomi stores data once, locally \u2014 there is no secondary region, no geo-replication and no customer-managed failover to enforce against."
+   "where": "consoles/src/azure/services/storage/StorageAccounts.jsx:66",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Restore\" ? \"Restoring a deleted storage account\" : gap === \"Open query\" ? \"Resource Graph queries\" : \"Bulk tag assignment\"}"
   },
   {
-   "id": "azure.storage.encryption",
-   "title": "Encryption (key source)",
-   "now": {
-    "offline": "config_only",
-    "nano": "config_only"
-   },
-   "current_reason": "The encryption.keySource flag round-trips through ARM for display only; every account is encrypted the same way underneath. Customer-managed keys, encryption scopes and infrastructure (double) encryption are not simulated."
+   "where": "consoles/src/azure/services/storage/CreateStorageAccount.jsx:134",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Access protocols\" feature=\"Enable SFTP and Enable network file system v3 access\""
   },
   {
-   "id": "azure.storage.dataprotection",
-   "title": "Data protection (soft delete, point-in-time restore, versioning, change feed) over the blobServices/default ARM sub-resource",
-   "now": {
-    "offline": "config_only",
-    "nano": "config_only"
-   },
-   "current_reason": "deleteRetentionPolicy, containerDeleteRetentionPolicy, restorePolicy, isVersioningEnabled and changeFeed round-trip through ARM exactly as configured, but core/azure_blob_core.py does not enforce any of them: deleted blobs/containers are not recoverable, there are no blob versions, and there is no change feed to read. Operational backup, permanent-delete and file-share soft delete are not simulate"
+   "where": "consoles/src/azure/services/storage/CreateStorageAccount.jsx:147",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Azure Files\" feature=\"Enable large file shares\""
   },
   {
-   "id": "azure.storage.diagnose",
-   "title": "Diagnose and solve problems",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "A guided troubleshooting wizard backed by Azure's own telemetry and knowledge base \u2014 there is no equivalent diagnostic corpus in Vyomi.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/storage/CreateStorageAccount.jsx:170",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Virtual networks\" feature=\"Virtual network and IP address rules for storage accounts\""
   },
   {
-   "id": "azure.storage.iam",
-   "title": "Access control (IAM) scoped to a storage account",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi's RBAC simulation (core/azure_iam_core.py) is not wired to a per-resource scope check from this console; role assignments, deny assignments and the 'Check access' simulator are not rendered here."
+   "where": "consoles/src/azure/services/storage/CreateStorageAccount.jsx:171",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Private endpoint\" feature=\"Private endpoints for storage accounts\""
   },
   {
-   "id": "azure.storage.datamigration",
-   "title": "Data migration (AzCopy / Data Box / migration tooling)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "A separate migration toolchain and, for Data Box, physical hardware shipped by Microsoft \u2014 outside what a local simulator can run."
+   "where": "consoles/src/azure/services/storage/CreateStorageAccount.jsx:185",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Recovery\" feature=\"Enable point-in-time restore for containers, Enable soft delete for blobs, Days to retain deleted blobs, Enable soft delete for containers, Days to retain deleted containers, Enable permanent delete for soft deleted items, Enable soft delete for file shares and Days to reta"
   },
   {
-   "id": "azure.storage.events",
-   "title": "Events (Event Grid subscriptions on storage events)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Storage-account-sourced Event Grid event subscriptions are not wired from this console; core/azure_eventgrid_core.py models Event Grid topics, not storage-account system events."
+   "where": "consoles/src/azure/services/storage/CreateStorageAccount.jsx:188",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Tracking\" feature=\"Enable versioning for blobs and Enable blob change feed\""
   },
   {
-   "id": "azure.storage.storagemover",
-   "title": "Storage Mover",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "A separate Azure product (Microsoft.StorageMover) for migrating file shares from on-premises servers \u2014 not modelled by any Vyomi core."
+   "where": "consoles/src/azure/services/storage/CreateStorageAccount.jsx:189",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Access control\" feature=\"Enable version-level immutability support\""
   },
   {
-   "id": "azure.storage.fileshares",
-   "title": "File shares (Azure Files)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Azure Files is a distinct SMB/NFS data plane (account.file.core.windows.net) with no core in this repo yet \u2014 not yet implemented."
+   "where": "consoles/src/azure/services/storage/CreateStorageAccount.jsx:202",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Customer-managed keys (CMK)\" feature=\"Enable support for customer-managed keys for storage encryption\""
   },
   {
-   "id": "azure.storage.frontdoorcdn",
-   "title": "Front Door and CDN",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "A separate edge/CDN product fronting the storage endpoint \u2014 outside a local simulator's network topology."
+   "where": "consoles/src/azure/services/storage/CreateStorageAccount.jsx:203",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Infrastructure encryption\" feature=\"Enable infrastructure encryption (double encryption)\""
   },
   {
-   "id": "azure.storage.objectreplication",
-   "title": "Object replication",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Requires a second storage account and cross-account async replication; Vyomi stores each account's blobs independently with nothing to replicate between them."
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:115",
+   "component": "NotSimulatedContainer",
+   "props": "title={`${a.name} | ${LABEL[panel] || panel}`} feature={NS_NOTES[panel] || `The ${LABEL[panel] || panel} panel`}"
   },
   {
-   "id": "azure.storage.inventory",
-   "title": "Blob inventory",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "A scheduled background job that writes an inventory report blob \u2014 Vyomi has no job scheduler wired to the Blob core."
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:173",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Storage account monitoring (requests, egress, latency charts)\""
   },
   {
-   "id": "azure.storage.azureaisearch",
-   "title": "Azure AI Search (index this storage account)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "A separate Azure product (search indexing + a query engine) \u2014 not modelled by any Vyomi core."
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:174",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"The capabilities overview\""
   },
   {
-   "id": "azure.storage.datalakegen2upgrade",
-   "title": "Data Lake Gen2 upgrade",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "A one-way, backend-run upgrade of the account's namespace flag plus a full-container metadata rewrite \u2014 there is no equivalent background migration job in Vyomi."
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:175",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Advisor recommendations\""
   },
   {
-   "id": "azure.storage.advisor",
-   "title": "Advisor recommendations",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Azure Advisor's recommendations come from analysing real usage telemetry and cost data across Microsoft's fleet \u2014 there is no equivalent analytics pipeline in Vyomi."
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:176",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Tutorials\""
   },
   {
-   "id": "azure.storage.insights",
-   "title": "Insights (storage account metrics dashboards)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Azure Monitor metrics (capacity, transactions, latency) are not emitted by core/azure_blob_core.py or core/azure_queue_core.py.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:177",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Tools + SDKs\""
   },
   {
-   "id": "azure.storage.alerts",
-   "title": "Alerts",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Alert rules fire against Azure Monitor metrics the storage data planes do not emit.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:314",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Give feedback\" ? \"Sending product feedback\" : gap}"
   },
   {
-   "id": "azure.storage.metrics",
-   "title": "Metrics",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Azure Monitor metrics (capacity, transactions, latency, availability) are not emitted by the storage data planes.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:355",
+   "component": "NotSimulated",
+   "props": "feature=\"Encryption scope and Enable version-level immutability support for new containers\""
   },
   {
-   "id": "azure.storage.workbooks",
-   "title": "Workbooks",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Workbooks visualize Azure Monitor log/metric queries the storage data planes do not emit.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:491",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Advanced\" feature=\"Authentication type, Blob type, Block size, Access tier, Upload to folder, Blob index tags and Encryption scope\" note=\"Files upload as block blobs.\""
   },
   {
-   "id": "azure.storage.diagnostics",
-   "title": "Diagnostic settings",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Diagnostic settings forward platform logs/metrics to a Log Analytics workspace or Event Hub \u2014 the storage data planes do not emit platform logs to forward.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:538",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Rotate key\" feature=\"Key rotation and key expiry reminders\""
   },
   {
-   "id": "azure.storage.logs",
-   "title": "Logs (Log Analytics queries over storage diagnostics)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Depends on diagnostic settings forwarding to a Log Analytics workspace, which is not simulated (see azure.storage.diagnostics).",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:612",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Large file shares\" feature=\"Azure Files large file shares\""
   },
   {
-   "id": "azure.storage.tasks",
-   "title": "Tasks (Azure Automation runbooks)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Azure Automation runbook execution is a separate product with its own worker fleet \u2014 not modelled by any Vyomi core."
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:641",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"File service\" feature=\"Azure Files (file shares) endpoints\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:642",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Other services\" feature=\"Data Lake Storage Gen2 endpoints in the v4 portal lens\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:666",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Geo-replication\" feature=\"Geo-replication lag, the secondary region's own storage and customer-managed failover\" note=\"Vyomi stores data once, locally \u2014 only the read-only secondary ENDPOINT above is real.\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:689",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Virtual networks\" feature=\"Virtual network rules for storage accounts\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:690",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Firewall\" feature=\"Address range IP firewall rules for storage accounts\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:691",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Resource instances\" feature=\"Resource instances (trusted Azure resource access by resource ID)\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:692",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Exceptions\" feature=\"Allow Azure services on the trusted services list to access this storage account\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:694",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Private endpoint connections\" feature=\"Private endpoints for storage accounts\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:698",
+   "component": "NotSimulated",
+   "props": "feature=\"Publish route-specific endpoints for Microsoft network routing and Internet routing\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:700",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Custom domain\" feature=\"Custom domain mapping \u2014 Domain name and Use indirect CNAME validation for storage accounts\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:746",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Infrastructure encryption\" feature=\"Infrastructure (double) encryption and encryption scopes\" note=\"The named key's own existence/enabled state inside the vault is not checked \u2014 only that the vault itself exists.\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:889",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"My access\" feature=\"View my access\" note=\"There is no real signed-in principal in Vyomi to view the access of \u2014 use Check access with any principal ID instead.\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:1026",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Classic administrators\" feature=\"Classic administrators\" note=\"A legacy (pre-RBAC) co-administrator model Azure itself is retiring \u2014 not modelled.\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:1166",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"File service\" feature=\"CORS rules for the File service\" note=\"Azure Files has no core in this repo yet \u2014 see Lifecycle/CORS limitations.\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:1167",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Queue service\" feature=\"CORS rules for the Queue service\" note=\"core/azure_queue_core.py does not serve Set/Get Queue Service Properties.\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:1168",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Table service\" feature=\"CORS rules for the Table service\" note=\"core/azure_table_core.py does not serve Set/Get Table Service Properties.\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:1307",
+   "component": "NotSimulated",
+   "props": "feature={gap}"
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:1465",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `Locks scoped to the ${(gap || \"\").toLowerCase()}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:1534",
+   "component": "NotSimulated",
+   "props": "feature=\"Severity/category filtering and the Timespan picker\" note=\"This list always shows everything recorded since the simulation booted.\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:1554",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : gap}"
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:1595",
+   "component": "NotSimulated",
+   "props": "feature=\"Sending product feedback\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:1742",
+   "component": "NotSimulated",
+   "props": "feature=\"Sending product feedback\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:1965",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Metadata rewrite\" feature=\"The full-container metadata rewrite a real upgrade job performs\" note=\"Vyomi's blob core has no directory/path metadata to rewrite \u2014 containers stay flat either way.\""
+  },
+  {
+   "where": "consoles/src/azure/services/storage/StorageAccountBlade.jsx:1993",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Availability / latency\" feature=\"Availability and SuccessE2ELatency metrics\" note=\"Vyomi always serves successfully with no transient failures to measure.\""
   }
  ]
 }

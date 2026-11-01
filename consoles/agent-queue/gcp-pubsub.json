@@ -2,46 +2,25 @@
  "cloud": "gcp",
  "service": "pubsub",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "gcp.pubsub.subscriptions.bigquery-gcs-delivery",
-   "title": "Write to BigQuery / write to Cloud Storage delivery",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "BigQuery and Cloud Storage aren't Vyomi products yet, so there is nowhere for this delivery type to write. Choose Pull or Push instead."
+   "where": "consoles/src/gcp/services/pubsub/CreateTopic.jsx:88",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Enable ingestion\" note=\"Ingestion from AWS, Azure, Kafka and database CDC sources isn't modeled in Vyomi.\""
   },
   {
-   "id": "gcp.pubsub.topics.ingestion",
-   "title": "Topic ingestion from external sources (AWS/Azure/Kafka/CDC)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi has no connectors to AWS, Azure, Kafka or database CDC sources, so a topic can't be configured to ingest from them."
+   "where": "consoles/src/gcp/services/pubsub/CreateTopic.jsx:98",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Enable message transforms\" note=\"JavaScript transform pipelines on publish aren't modeled in Vyomi.\""
   },
   {
-   "id": "gcp.pubsub.topics.message-transforms",
-   "title": "Message transforms (JavaScript UDFs on publish)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi does not run a JavaScript transform pipeline on published messages."
-  },
-  {
-   "id": "gcp.pubsub.metrics",
-   "title": "Topic / subscription metrics and monitoring charts",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Vyomi does not collect the time-series metrics (throughput, backlog, oldest unacked age) the console's Metrics tab charts.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/gcp/services/pubsub/CreateSubscription.jsx:115",
+   "component": "NotSimulated",
+   "props": "compact feature=\"Write to BigQuery / Write to Cloud Storage delivery\" note=\"BigQuery and Cloud Storage aren't Vyomi products yet.\""
   }
- ]
+ ],
+ "continue_from": "v4/ui-gcp-pubsub-41263898111"
 }

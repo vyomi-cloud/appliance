@@ -1,7 +1,75 @@
 {
  "cloud": "azure",
  "service": "cognitiveservices",
- "phase": "base",
- "goal": "Azure AI services (Cognitive Services) console \u2014 accounts browse/create, keys and endpoint, model deployments \u2014 on the EXISTING core/azure_cognitiveservices_core.py; inference itself honest unless a local model backend exists.",
- "note": "WAVE 7 (orchestrator): native console for a service whose backend ALREADY EXISTS. Azure AI services (Cognitive Services) console \u2014 accounts browse/create, keys and endpoint, model deployments \u2014 on the EXISTING core/azure_cognitiveservices_core.py; inference itself honest unless a local model backend exists.\n\nHouse rules: native look per consoles/AGENT-UI.md; real backend only (no static data); capability registry core/capabilities/<cloud>/<service>.json with honest levels; works on Nano (wasm cores) AND offline (route the native paths offline, durable state via core/appliance_stores._CoreSlotStore); UI<->wire smoke round trips; run gate + smoke + conformance in the FOREGROUND before your final message; commit source."
+ "phase": "depth",
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "attempt": 2,
+ "targets": [
+  {
+   "where": "consoles/src/azure/services/cognitiveservices/CognitiveServicesAccountBlade.jsx:78",
+   "component": "NotSimulated",
+   "props": "feature={NS_NOTES[panel] || `The ${LABEL[panel] || panel} panel`}"
+  },
+  {
+   "where": "consoles/src/azure/services/cognitiveservices/CognitiveServicesAccountBlade.jsx:161",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Role assignments scoped to this resource (Microsoft.Authorization/roleAssignments is simulated at subscription scope only)\""
+  },
+  {
+   "where": "consoles/src/azure/services/cognitiveservices/CognitiveServicesAccountBlade.jsx:164",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"The built-in and custom role catalog\""
+  },
+  {
+   "where": "consoles/src/azure/services/cognitiveservices/CognitiveServicesAccountBlade.jsx:165",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Deny assignments\""
+  },
+  {
+   "where": "consoles/src/azure/services/cognitiveservices/CognitiveServicesAccountBlade.jsx:166",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Classic administrators\" feature=\"Classic administrators (co-administrators)\""
+  },
+  {
+   "where": "consoles/src/azure/services/cognitiveservices/CognitiveServicesAccountBlade.jsx:171",
+   "component": "NotSimulated",
+   "props": "feature=\"Per-identity role-assignment resolution for this resource\" note={`The account's resource id is ${a.id}.`}"
+  },
+  {
+   "where": "consoles/src/azure/services/cognitiveservices/CognitiveServicesAccountBlade.jsx:295",
+   "component": "NotSimulated",
+   "props": "feature=\"Model deployments\" note={`Deployments are only supported on Azure OpenAI and Azure AI services accounts, not '${a.kind}'.`}"
+  },
+  {
+   "where": "consoles/src/azure/services/cognitiveservices/CognitiveServicesAccountBlade.jsx:444",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Private endpoint connections\" feature=\"Private endpoint connections for Azure AI services accounts\""
+  },
+  {
+   "where": "consoles/src/azure/services/cognitiveservices/CognitiveServicesAccountBlade.jsx:471",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"User assigned managed identity\" feature=\"Attaching a user-assigned managed identity (Microsoft.ManagedIdentity/userAssignedIdentities is not catalogued in Vyomi)\""
+  },
+  {
+   "where": "consoles/src/azure/services/cognitiveservices/CognitiveServicesAccountBlade.jsx:530",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : `Locks scoped to the ${(gap || \"\").toLowerCase()}`}"
+  },
+  {
+   "where": "consoles/src/azure/services/cognitiveservices/CognitiveServicesAccountBlade.jsx:628",
+   "component": "NotSimulated",
+   "props": "feature={gap === \"Feedback\" ? \"Sending product feedback\" : gap}"
+  },
+  {
+   "where": "consoles/src/azure/services/cognitiveservices/CognitiveServicesAccountBlade.jsx:671",
+   "component": "NotSimulatedContainer",
+   "props": "feature={`${tab === \"bicep\" ? \"Bicep\" : \"Terraform\"} template export`}"
+  },
+  {
+   "where": "consoles/src/azure/services/cognitiveservices/CognitiveServicesAccounts.jsx:50",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Manage view, Open query (Azure Resource Graph) and Assign tags from the command bar\""
+  }
+ ]
 }

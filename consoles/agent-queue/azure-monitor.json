@@ -2,99 +2,49 @@
  "cloud": "azure",
  "service": "monitor",
  "phase": "depth",
- "attempt": 1,
- "goal": "GAP SWEEP (wave 5b): every listed depth_target is currently not_simulated/config_only in the shipped console. Build each one on a REAL backend (Nano + offline) and lift its capability level to full or limited. 'Out of Vyomi's scope', 'separate product', 'single-account' or 'not modeled' are NOT acceptable reasons: model it in the shared core (Python core/*_core.py, vendored to wasm), wire it through the native wire, enforce behaviour (not stored config), and make the console section live. Only leave a target not_simulated if it needs something physically impossible in a local simulator (real external hardware, real money, a real third-party service) \u2014 and then write that concrete reason. config_only targets must become enforced (the setting changes observable behaviour). Update core/capabilities, tests/conformance, ui-spec mapping and smoke where relevant.",
- "note": "WAVE 5b gap sweep (orchestrator). Approved by the user: finish all the gaps with real backends.",
- "depth_targets": [
+ "attempt": 2,
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "targets": [
   {
-   "id": "azure.monitor.metrics_charts",
-   "title": "Metrics charts (metric definitions and time-series values)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Metric definitions and metric values are not modelled \u2014 there is no time-series store to chart. Not simulated: Scope, Metric Namespace, Metric, Aggregation, Add metric, Add filter, Apply splitting, Line chart, Drill into Logs, New alert rule, Save to dashboard.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/monitor/InsightsHub.jsx:46",
+   "component": "NotSimulated",
+   "props": "feature=\"Feedback\""
   },
   {
-   "id": "azure.monitor.observability_agents",
-   "title": "Observability agents (preview)",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Agent-based collector management is out of scope for a simulator.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/monitor/Metrics.jsx:168",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Not simulated in Vyomi\" note=\"Add filter, Apply splitting, Save to dashboard \u2014 Vyomi has no metric dimensions and no custom-dashboard resource to save a chart into.\""
   },
   {
-   "id": "azure.monitor.issues",
-   "title": "Issues",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Cross-signal issue correlation is not modelled.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/monitor/ActivityLog.jsx:53",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Quick Insights\" note=\"Additional command-bar actions not simulated in Vyomi: Activity, Edit columns, Export Activity Logs (continuous export), Insights, Feedback, Pin current filters, Reset filters.\""
   },
   {
-   "id": "azure.monitor.health_models",
-   "title": "Health models",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Health model authoring and evaluation is not modelled.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/monitor/LogAnalyticsWorkspaces.jsx:50",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Workbooks\" note=\"Customize is not simulated either.\""
   },
   {
-   "id": "azure.monitor.service_health",
-   "title": "Service health",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "There is no Azure service-health incident feed to mirror; every simulated service is always healthy.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/monitor/ChangeAnalysis.jsx:33",
+   "component": "NotSimulated",
+   "props": "feature=\"Open query, Group by none\""
   },
   {
-   "id": "azure.monitor.containers_insights",
-   "title": "Container insights",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "AKS/ACI are not modelled by any Vyomi core, so there is no container inventory to show.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/monitor/DataCollectionRules.jsx:45",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Resources\" note=\"Resource-to-rule associations aren't modelled; counts of Resources collecting / Not collecting aren't available.\""
   },
   {
-   "id": "azure.monitor.redis_insights",
-   "title": "Azure Cache for Redis insights",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Azure Cache for Redis is not modelled by any Vyomi core.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/monitor/DataCollectionRules.jsx:52",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Not simulated in Vyomi\" note=\"Use preview, Feedback.\""
   },
   {
-   "id": "azure.monitor.data_explorer_insights",
-   "title": "Azure Data Explorer Clusters insights",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Azure Data Explorer is not modelled by any Vyomi core.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
-  },
-  {
-   "id": "azure.monitor.pipelines",
-   "title": "Azure Monitor pipelines",
-   "now": {
-    "offline": "not_simulated",
-    "nano": "not_simulated"
-   },
-   "current_reason": "Azure Monitor pipelines (on-premises collector fleet management) are out of scope for a simulator.",
-   "hint": "telemetry: emit real metrics/logs from the simulated engine (wave-6 Prometheus/OTel are the offline sinks once landed; until then derive real series from actual API activity in the core) \u2014 never synthetic random data"
+   "where": "consoles/src/azure/services/monitor/Alerts.jsx:61",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Additional alert tools\" note=\"Not simulated in Vyomi: View as timeline (preview), Alert processing rules, Prometheus rule groups, Change user response.\""
   }
  ]
 }

@@ -1,7 +1,55 @@
 {
  "cloud": "azure",
  "service": "containerapps",
- "phase": "base",
- "goal": "Azure Container Apps console (environments + apps browse/create wizard/blade: revisions, ingress, scale, secrets, jobs) on the EXISTING core/azure_app_core.py.",
- "note": "WAVE 7 (orchestrator): native console for a service whose backend ALREADY EXISTS. Azure Container Apps console (environments + apps browse/create wizard/blade: revisions, ingress, scale, secrets, jobs) on the EXISTING core/azure_app_core.py.\n\nHouse rules: native look per consoles/AGENT-UI.md; real backend only (no static data); capability registry core/capabilities/<cloud>/<service>.json with honest levels; works on Nano (wasm cores) AND offline (route the native paths offline, durable state via core/appliance_stores._CoreSlotStore); UI<->wire smoke round trips; run gate + smoke + conformance in the FOREGROUND before your final message; commit source."
+ "phase": "depth",
+ "goal": "STATIC-PANEL SWEEP (wave 5c). Every listed `targets` entry is a hard-coded <NotSimulated*> box in this service's console with NO capability id \u2014 it is invisible to the capability registry and to the coverage numbers, and many are STALE (the feature is real now). For EACH one: (1) if the backend already supports it (check core/*_core.py + core/capabilities), replace the static box with the real, live UI; (2) otherwise BUILD it on a real backend (Nano + offline; follow the Offline + Nano parity checklist in consoles/AGENT-UI.md) and render it live; (3) only if it is genuinely impossible locally (real money/hardware/third-party service) replace it with <CapabilityContainer id=\"...\"> backed by a core/capabilities entry at level not_simulated with the concrete reason. When done, this service's directory must contain ZERO bare <NotSimulatedContainer>/<NotSimulated*> usages \u2014 the gate now fails on any. Metrics/monitoring panels show real series derived from actual activity (cloudwatch_core.ingest_internal_metric / the cloud's metrics core), never random data. Nothing leaves the simulator. Update capabilities, tests/conformance, smoke.",
+ "note": "WAVE 5c static-panel sweep (orchestrator). User: unimplemented panels (e.g. VPC Service Health / Settings / Additional information / AWS Network Manager) must be real.",
+ "attempt": 2,
+ "targets": [
+  {
+   "where": "consoles/src/azure/services/containerapps/CreateEnvironment.jsx:85",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Custom virtual network\" feature=\"Custom virtual network integration\" note=\"Vyomi always provisions the environment's own virtual network; bringing an existing VNet/subnet is not simulated.\""
+  },
+  {
+   "where": "consoles/src/azure/services/containerapps/EnvironmentBlade.jsx:294",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Custom VNet integration\" feature=\"Bringing an existing virtual network/subnet\" note=\"Vyomi always provisions the environment's own virtual network; private endpoints and NAT gateway integration are not simulated.\""
+  },
+  {
+   "where": "consoles/src/azure/services/containerapps/Shared.jsx:51",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"Activity log filters and export\" note=\"Filters (Management Group, Subscription, Event severity, Timespan, Resource group, Resource, Add Filter) and the Edit columns / Export Activity Logs / Download as CSV / Insights / Feedback / Pin current filters / Reset filters actions are not simulated"
+  },
+  {
+   "where": "consoles/src/azure/services/containerapps/Shared.jsx:105",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Deny assignments\" feature=\"Deny assignments\""
+  },
+  {
+   "where": "consoles/src/azure/services/containerapps/Shared.jsx:106",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Classic administrators\" feature=\"Classic administrators\""
+  },
+  {
+   "where": "consoles/src/azure/services/containerapps/Shared.jsx:266",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"ARM-to-Bicep decompilation\""
+  },
+  {
+   "where": "consoles/src/azure/services/containerapps/Shared.jsx:267",
+   "component": "NotSimulatedContainer",
+   "props": "feature=\"ARM-to-Terraform export\""
+  },
+  {
+   "where": "consoles/src/azure/services/containerapps/ContainerAppBlade.jsx:518",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"Identity providers\" feature=\"Identity provider configuration (Microsoft Entra ID, Google, Facebook, GitHub, Apple, X, OpenID Connect)\" note=\"Vyomi stores the platform enabled flag and the unauthenticated action for real (az containerapp auth update); it does not run a real login redirect or v"
+  },
+  {
+   "where": "consoles/src/azure/services/containerapps/ContainerAppBlade.jsx:554",
+   "component": "NotSimulatedContainer",
+   "props": "title=\"User assigned managed identities\" feature=\"User assigned managed identities\""
+  }
+ ]
 }
