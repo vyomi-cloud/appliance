@@ -263,6 +263,8 @@ def _db_snapshot_xml(snap: dict) -> str:
     return "".join([
         "<DBSnapshot>",
         _el("DBSnapshotIdentifier", snap["db_snapshot_identifier"]),
+        _el("DBSnapshotArn", snap.get("db_snapshot_arn")
+            or f"arn:aws:rds:us-east-1:123456789012:snapshot:{snap['db_snapshot_identifier']}"),
         _el("DBInstanceIdentifier", snap.get("db_instance_identifier", "")),
         _el("Status", snap.get("status", "available")),
         _el("Engine", snap.get("engine", "postgres")),
@@ -712,6 +714,7 @@ def _make_snapshot(store: SqlStore, db: dict, snap_id: str, snapshot_type: str =
         "allocated_storage": db.get("allocated_storage", 20),
         "snapshot_type": snapshot_type,
         "created": _now(),
+        "db_snapshot_arn": _snapshot_arn(store, snap_id),
     }
     if data:
         snap["data"] = data
