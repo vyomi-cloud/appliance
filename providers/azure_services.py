@@ -1103,7 +1103,15 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         blocked = _core_lock_block(rid, full_type, for_delete=False)   # ReadOnly locks (same types as the core)
         if blocked is not None:
             return blocked
+        _new_vault = full_type.lower() == "microsoft.keyvault/vaults" and key not in _state
         resp = _upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
+        if _new_vault and key in _state:   # the creator gets data-plane access, as on the core engine + Nano
+            from core.azure_arm_core import grant_vault_creator
+            grant_vault_creator(_state, _state[key], rid, sub, rg)
+            import json as _json
+            _body = _json.loads(resp.body)
+            _body.setdefault("properties", {})["accessPolicies"] = _state[key]["properties"].get("accessPolicies", [])
+            resp = JSONResponse(status_code=resp.status_code, content=_body)
         # Data-plane provisioning hooks (real Postgres for SQL, etc.).
         _provision_on_create(full_type, _state.get(key), base)
         if lro:

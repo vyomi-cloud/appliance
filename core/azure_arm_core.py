@@ -443,6 +443,30 @@ def _check_data_access(state: dict | None, sub: str, scope_rid: str, principal_i
     return False
 
 
+def grant_vault_creator(state: dict, rec: dict, rid: str, sub: str, rg: str | None) -> None:
+    """A new vault's creator gets full data-plane access, like `az keyvault create`: a Key Vault
+    Administrator role assignment in RBAC mode, an access-policy entry otherwise. Shared by this
+    engine and the offline ARM catalog path (providers/azure_services)."""
+    props = rec.setdefault("properties", {})
+    if props.get("enableRbacAuthorization"):
+        ra_name = str(uuid.uuid4())
+        ra_rid = f"{rid}/providers/Microsoft.Authorization/roleAssignments/{ra_name}"
+        state[ra_rid.lower()] = {
+            "id": ra_rid, "name": ra_name, "type": "Microsoft.Authorization/roleAssignments",
+            "_type": "microsoft.authorization/roleassignments", "_sub": sub, "_rg": rg,
+            "properties": {"principalId": CALLER_PRINCIPAL_ID, "roleName": "Key Vault Administrator",
+                          "principalType": "User", "scope": rid},
+        }
+    else:
+        props["accessPolicies"] = [{
+            "tenantId": props.get("tenantId", "00000000-0000-0000-0000-000000000000"),
+            "objectId": CALLER_PRINCIPAL_ID,
+            "permissions": {"keys": ["Get", "List", "Create", "Delete"],
+                           "secrets": ["Get", "List", "Create", "Delete"],
+                           "certificates": ["Get", "List", "Create", "Delete"]},
+        }]
+
+
 def keyvault_access_denied(state: dict | None, vault: str, resource: str, bucket: str) -> bool:
     """True when this vault's access model (azure.keyvaults.access_configuration's RBAC-vs-
     access-policy switch, azure.keyvaults.access_policies' entries) would reject a data-plane
@@ -1451,24 +1475,7 @@ class AzureArm:
                 # ARM/Bicep deploy, which doesn't), self-grant the one simulated signed-in
                 # principal full access at creation time.
                 rec = self.state[key]
-                props = rec.setdefault("properties", {})
-                if props.get("enableRbacAuthorization"):
-                    ra_name = str(uuid.uuid4())
-                    ra_rid = f"{rid}/providers/Microsoft.Authorization/roleAssignments/{ra_name}"
-                    self.state[ra_rid.lower()] = {
-                        "id": ra_rid, "name": ra_name, "type": "Microsoft.Authorization/roleAssignments",
-                        "_type": "microsoft.authorization/roleassignments", "_sub": sub, "_rg": rg,
-                        "properties": {"principalId": CALLER_PRINCIPAL_ID, "roleName": "Key Vault Administrator",
-                                      "principalType": "User", "scope": rid},
-                    }
-                else:
-                    props["accessPolicies"] = [{
-                        "tenantId": props.get("tenantId", "00000000-0000-0000-0000-000000000000"),
-                        "objectId": CALLER_PRINCIPAL_ID,
-                        "permissions": {"keys": ["Get", "List", "Create", "Delete"],
-                                       "secrets": ["Get", "List", "Create", "Delete"],
-                                       "certificates": ["Get", "List", "Create", "Delete"]},
-                    }]
+                grant_vault_creator(self.state, rec, rid, sub, rg)
                 resp["body"] = _view(rec)
             if full_type.lower() == "microsoft.resources/deploymentstacks":
                 # Same bounded template evaluator as a plain deployment — but a stack also

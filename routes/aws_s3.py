@@ -1199,9 +1199,21 @@ def _register_unified_s3(app: FastAPI) -> None:
             # DLM (/policies), EventBridge Pipes (/v1/pipes), API Gateway v1 account-level paths
             # (/apikeys, /usageplans, …): REST paths with no S3 meaning, told apart by SigV4 scope.
             return await _wi.serve(_wi.new_services_router() or _wi.appliance_router(), request)
+        path = request.scope.get("path") or request.url.path
+        if path.lstrip("/").split("/", 1)[0] in ("v1", "v1beta1", "v2", "v3"):
+            # A GCP REST family with no dedicated offline route: these catch-alls are registered
+            # LAST, so nothing else claimed it. If the shared router knows the path, serve it there
+            # (Nano's behaviour) over the same durable stores, instead of a bogus S3 NoSuchBucket.
+            from core.aws_wire_router import _gcp_service
+            if _gcp_service(path):
+                from core import app_context as _ctx
+                _tok = _ctx.REQUEST_PROVIDER.set("gcp")
+                try:
+                    return await _wi.serve(_wi.new_services_router() or _wi.appliance_router(), request, path=path)
+                finally:
+                    _ctx.REQUEST_PROVIDER.reset(_tok)
         if _is_reserved_bucket(bucket):
             raise HTTPException(status_code=404, detail="Not found")
-        path = request.scope.get("path") or request.url.path
         if request.method == "POST" and _wi.is_unified("rds"):
             from core import rds_data_core as _rdc
             if _rdc.is_data_api_path(path):   # RDS Data API (/Execute, /BeginTransaction, …) — never a bucket
