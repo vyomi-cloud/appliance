@@ -9,6 +9,14 @@ async function ensureNetwork(wire, name = "uic-network") {
   return name;
 }
 
+async function ensureSubnet(wire, name = "uic-subnet") {
+  await ensureNetwork(wire);
+  await wire("POST", `${base}/regions/us-central1/subnetworks`, {
+    svc: null, body: { name, network: "uic-network", ipCidrRange: "10.90.0.0/24" },
+  }).catch(() => {});
+  return name;
+}
+
 const ctBase = `/v1/projects/${PROJECT}/locations/global/connectivityTests`;
 
 async function ensureConnectivityTest(wire, tid = "uic-ct") {
@@ -67,6 +75,37 @@ export default {
   "live-connectivity-test-detail": async (wire, uniq) => {
     await ensureConnectivityTest(wire);
     await wire("PATCH", `${ctBase}/uic-ct`, { svc: null, body: { description: uniq } });
+    return uniq;
+  },
+
+  "live-internal-range": async (wire, uniq) => {
+    await ensureNetwork(wire);
+    await wire("POST", `/v1/projects/${PROJECT}/locations/global/internalRanges?internalRangeId=${uniq}`, {
+      svc: null, body: { name: uniq, network: "uic-network", prefixLength: 24, targetCidrRange: ["10.70.0.0/16"] },
+    });
+    return uniq;
+  },
+
+  "live-connector": async (wire, uniq) => {
+    await ensureNetwork(wire);
+    await wire("POST", `/v1/projects/${PROJECT}/locations/us-central1/connectors?connectorId=${uniq}`, {
+      svc: null, body: { name: uniq, network: "uic-network", ipCidrRange: "10.71.0.0/28" },
+    });
+    return uniq;
+  },
+
+  "live-packet-mirroring": async (wire, uniq) => {
+    await ensureSubnet(wire);
+    await wire("POST", `${base}/regions/us-central1/packetMirrorings`, {
+      svc: null, body: { name: uniq, network: { name: "uic-network" }, mirroredResources: { subnetworks: [{ name: "uic-subnet" }] },
+        collectorIlb: { name: "uic-collector" } },
+    });
+    return uniq;
+  },
+
+  "live-shared-vpc": async (wire, uniq) => {
+    await wire("POST", `${base}/enableXpnHost`, { svc: null, body: {} }).catch(() => {});
+    await wire("POST", `${base}/enableXpnResource`, { svc: null, body: { xpnResource: { id: uniq, type: "PROJECT" } } });
     return uniq;
   },
 };

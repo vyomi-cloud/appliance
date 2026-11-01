@@ -36,13 +36,17 @@ export default function VpcNetworkDetail({ params }) {
   const [peerSel, setPeerSel] = useState([]);
   const [peerOpen, setPeerOpen] = useState(false);
   const [peerDraft, setPeerDraft] = useState({ name: "", peerNetwork: "", exchange: true });
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const [rangeDraft, setRangeDraft] = useState({ name: "", prefixLength: "16" });
+  const [rangeSel, setRangeSel] = useState([]);
   const { data, loading, error, reload } = useAsync(async () => {
-    const [network, allSubnets, firewalls, routes, addresses, networks] = await Promise.all([
+    const [network, allSubnets, firewalls, routes, addresses, networks, pscRanges, pscConnections] = await Promise.all([
       api.getNetwork(name), api.listAllSubnets(), api.listFirewalls(), api.listRoutes(), api.listAllAddresses(), api.listNetworks(),
+      api.listPeeringRanges(name), api.listPscConnections(name).catch(() => []),
     ]);
     return { network, subnets: api.subnetsOf(allSubnets, name), firewalls: firewalls.filter((f) => f.network.endsWith(`/networks/${name}`)),
       routes: routes.filter((r) => r.network.endsWith(`/networks/${name}`)), addresses: addresses.filter((a) => a.addressType === "INTERNAL"),
-      peerCandidates: networks.filter((n) => n.name !== name) };
+      peerCandidates: networks.filter((n) => n.name !== name), pscRanges, pscConnections };
   }, [name]);
   const net = data?.network;
 
@@ -215,7 +219,70 @@ export default function VpcNetworkDetail({ params }) {
           />
         </CapabilityContainer>
       )}
-      {tab === "psc" && <CapabilityContainer id="gcp.networking.private-service-connection" title="Private service connection" />}
+      {tab === "psc" && (
+        <Stack spacing={2}>
+          <CapabilityContainer id="gcp.networking.private-service-connection" title="Allocated IP ranges for services"
+            description="Internal IP ranges reserved for Google-managed services to peer with over Private Service Connection."
+            actions={<>
+              <Button startIcon={<AddIcon />} onClick={() => setRangeOpen(true)}>Allocate IP range</Button>
+              <Button startIcon={<DeleteIcon />} disabled={!rangeSel.length} onClick={async () => {
+                try {
+                  for (const rname of rangeSel) await api.deleteAddress("global", rname);
+                  notify.success(`Deleted ${rangeSel.length} range(s)`);
+                  setRangeSel([]); reload();
+                } catch (e) { notify.error(e); }
+              }}>Delete</Button>
+            </>}
+          >
+            <ResourceTable
+              resourceName="allocated ranges"
+              items={data?.pscRanges || []}
+              rowKey={(r) => r.name}
+              loading={loading}
+              selectable
+              selected={rangeSel}
+              onSelectedChange={setRangeSel}
+              filterPlaceholder="Filter"
+              columns={[
+                { id: "name", header: "Name", cell: (r) => r.name },
+                { id: "range", header: "IP range", cell: (r) => `${r.address}/${r.prefixLength}` },
+                { id: "status", header: "Status", cell: () => "Reserved" },
+              ]}
+            />
+          </CapabilityContainer>
+
+          <Section title="Private connections to services"
+            actions={<>
+              <Button startIcon={<AddIcon />} disabled={!(data?.pscRanges?.length) || !!(data?.pscConnections?.length)}
+                onClick={async () => {
+                  try {
+                    await api.createPscConnection(name, data.pscRanges.map((r) => r.name));
+                    notify.success("Created connection to servicenetworking.googleapis.com");
+                    reload();
+                  } catch (e) { notify.error(e); }
+                }}
+              >Create connection</Button>
+              <Button color="error" disabled={!(data?.pscConnections?.length)} onClick={async () => {
+                try { await api.deletePscConnection(name); notify.success("Deleted connection"); reload(); }
+                catch (e) { notify.error(e); }
+              }}>Delete connection</Button>
+            </>}
+          >
+            <ResourceTable
+              resourceName="connections"
+              items={data?.pscConnections || []}
+              rowKey={(c) => c.service}
+              loading={loading}
+              filterPlaceholder="Filter"
+              columns={[
+                { id: "service", header: "Service", cell: (c) => c.service },
+                { id: "ranges", header: "Allocated ranges", cell: (c) => (c.reservedPeeringRanges || []).join(", ") },
+                { id: "status", header: "Status", cell: (c) => c.state },
+              ]}
+            />
+          </Section>
+        </Stack>
+      )}
 
       <DeleteDialog open={del} onClose={() => setDel(false)} title="Delete VPC network?" confirmText={name}
         warning="Deleting a network fails while it still has subnets, firewall rules or routes attached — remove those first."
@@ -301,6 +368,35 @@ export default function VpcNetworkDetail({ params }) {
         <DialogActions>
           <Button onClick={() => setPeerOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={createPeering}>Create</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={rangeOpen} onClose={() => setRangeOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Allocate an IP range</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ mt: 1 }}>
+            <TextField label="Name" required value={rangeDraft.name} onChange={(e) => setRangeDraft({ ...rangeDraft, name: e.target.value.trim() })} />
+            <FormControl required>
+              <InputLabel id="r-prefix">Prefix length</InputLabel>
+              <Select labelId="r-prefix" label="Prefix length" value={rangeDraft.prefixLength} onChange={(e) => setRangeDraft({ ...rangeDraft, prefixLength: e.target.value })}>
+                {["16", "20", "24"].map((p) => <MenuItem key={p} value={p}>/{p}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRangeOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={async () => {
+            const err = api.validName(rangeDraft.name, "Name");
+            if (err) { notify.error({ message: err }); return; }
+            try {
+              await api.reservePeeringRange({ name: rangeDraft.name, network: name, prefixLength: Number(rangeDraft.prefixLength) });
+              notify.success(`Allocated range "${rangeDraft.name}"`);
+              setRangeOpen(false);
+              setRangeDraft({ name: "", prefixLength: "16" });
+              reload();
+            } catch (e) { notify.error(e); }
+          }}>Allocate</Button>
         </DialogActions>
       </Dialog>
     </>

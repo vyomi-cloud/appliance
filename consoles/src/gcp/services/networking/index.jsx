@@ -23,6 +23,10 @@ import VpcFlowLogs from "./VpcFlowLogs.jsx";
 import ConnectivityTests from "./ConnectivityTests.jsx";
 import CreateConnectivityTest from "./CreateConnectivityTest.jsx";
 import ConnectivityTestDetail from "./ConnectivityTestDetail.jsx";
+import InternalRanges from "./InternalRanges.jsx";
+import SharedVpc from "./SharedVpc.jsx";
+import ServerlessVpcAccess from "./ServerlessVpcAccess.jsx";
+import PacketMirroring from "./PacketMirroring.jsx";
 import NetworkCheckIcon from "@mui/icons-material/esm/NetworkCheckOutlined.js";
 import { NotSimulatedContainer } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
@@ -36,13 +40,11 @@ const ns = (title, capId) => function NotSimulatedPage() {
   );
 };
 
+// Still-honest gaps: no backend can reasonably model these (real BGP/RPKI for BYOIP, real
+// on-prem circuits for hybrid connectivity to on-premises/other clouds).
 const GAPS = [
-  ["internal-ranges", "Internal ranges", ContentCopyIcon, "gcp.networking.internal-ranges"],
   ["bring-your-own-ip", "Bring your own IP", VpnLockIcon, "gcp.networking.byoip"],
   ["vpc-connectivity", "VPC connectivity", HubIcon, "gcp.networking.hybrid-connectivity"],
-  ["shared-vpc", "Shared VPC", ShareIcon, "gcp.networking.shared-vpc"],
-  ["serverless-vpc-access", "Serverless VPC access", CloudQueueIcon, "gcp.networking.serverless-vpc-access"],
-  ["packet-mirroring", "Packet mirroring", ArticleIcon, "gcp.networking.packet-mirroring"],
 ];
 const gap = (id) => GAPS.find((g) => g[0] === id);
 const link = (id) => { const [p, t, icon] = gap(id); return { text: t, href: `#/networking/${p}`, icon }; };
@@ -51,14 +53,14 @@ export default {
   nav: [
     { text: "VPC networks", href: "#/networking/networks/list", icon: LanOutlinedIcon, match: ["#/networking/networks/add", "#/networking/networks/details"] },
     { text: "IP addresses", href: "#/networking/addresses/list", icon: PublicOutlinedIcon, match: ["#/networking/addresses/add"] },
-    link("internal-ranges"),
+    { text: "Internal ranges", href: "#/networking/internal-ranges", icon: ContentCopyIcon },
     link("bring-your-own-ip"),
     { text: "Firewall", href: "#/networking/firewall", icon: SecurityIcon, match: ["#/networking/firewall/add"] },
     { text: "Routes", href: "#/networking/routes/list", icon: AltRouteIcon, match: ["#/networking/routes/add"] },
     link("vpc-connectivity"),
-    link("shared-vpc"),
-    link("serverless-vpc-access"),
-    link("packet-mirroring"),
+    { text: "Shared VPC", href: "#/networking/shared-vpc", icon: ShareIcon },
+    { text: "Serverless VPC access", href: "#/networking/serverless-vpc-access", icon: CloudQueueIcon },
+    { text: "Packet mirroring", href: "#/networking/packet-mirroring", icon: ArticleIcon },
     { text: "VPC Flow Logs", href: "#/networking/vpc-flow-logs", icon: SettingsEthernetIcon },
     { text: "Connectivity Tests", href: "#/networking/connectivity-tests/list", icon: NetworkCheckIcon, match: ["#/networking/connectivity-tests/add", "#/networking/connectivity-tests/details"] },
   ],
@@ -73,6 +75,10 @@ export default {
     { pattern: "/networking/addresses/add", component: ReserveAddress },
     { pattern: "/networking/routes/list", component: Routes },
     { pattern: "/networking/routes/add", component: CreateRoute },
+    { pattern: "/networking/internal-ranges", component: InternalRanges },
+    { pattern: "/networking/shared-vpc", component: SharedVpc },
+    { pattern: "/networking/serverless-vpc-access", component: ServerlessVpcAccess },
+    { pattern: "/networking/packet-mirroring", component: PacketMirroring },
     { pattern: "/networking/vpc-flow-logs", component: VpcFlowLogs },
     { pattern: "/networking/connectivity-tests/list", component: ConnectivityTests },
     { pattern: "/networking/connectivity-tests/add", component: CreateConnectivityTest },

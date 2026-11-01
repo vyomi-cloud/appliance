@@ -63,6 +63,12 @@ class ComputeStore:
         self.addresses: dict = {}      # "project/scope/name" -> address resource (scope = region or "global")
         self.routers: dict = {}        # "project/region/name" -> Cloud Router (+ Cloud NAT configs)
         self.connectivity_tests: dict = {}   # "project/name" -> Network Intelligence Center connectivity test
+        self.internal_ranges: dict = {}   # "project/location/name" -> networkconnectivity Internal Range
+        self.vpc_connectors: dict = {}    # "project/region/name" -> vpcaccess Serverless VPC Access connector
+        self.psc_connections: dict = {}   # "project/network" -> servicenetworking Connection (Private Service Connection)
+        self.xpn: dict = {}               # project -> {"host": bool, "service_projects": [project,...]}
+        self.firewall_policies: dict = {}  # "project/region/name" -> regional network firewall policy (+rules/associations)
+        self.packet_mirrorings: dict = {}  # "project/region/name" -> Packet Mirroring policy
         self.seq: dict = {"op": 0, "ip": 0}
 
 
@@ -654,7 +660,58 @@ def _address_view(rec: dict) -> dict:
     if rec.get("users"):
         out["users"] = rec["users"]
         out["status"] = "IN_USE"
+    if rec.get("purpose"):
+        out["purpose"] = rec["purpose"]
+    if rec.get("network"):
+        out["network"] = _self_link("global", project, f"networks/{rec['network']}")
+    if rec.get("prefixLength") is not None:
+        out["prefixLength"] = rec["prefixLength"]
     return out
+
+
+def _addr_space_used(store: ComputeStore, project: str, network: str) -> list:
+    """Every CIDR already claimed on `network`: subnets + other VPC_PEERING reservations —
+    what a new Private Service Connection range or internal range must not overlap."""
+    out = []
+    for s in store.subnetworks.values():
+        if s["project"] == project and s["networkName"] == network:
+            out.append(s["ipCidrRange"])
+    for a in store.addresses.values():
+        if a["project"] == project and a.get("purpose") == "VPC_PEERING" and a.get("network") == network:
+            out.append(f"{a['address']}/{a.get('prefixLength', 32)}")
+    for r in _bucket(store, "internal_ranges").values():
+        if r["project"] == project and r["network"] == network:
+            out.append(r["ipCidrRange"])
+    return out
+
+
+def _cidr_overlaps_any(cidr: str, others: list) -> bool:
+    try:
+        net = ipaddress.ip_network(cidr, strict=False)
+    except ValueError:
+        return False
+    for o in others:
+        try:
+            if net.overlaps(ipaddress.ip_network(o, strict=False)):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _allocate_cidr(target_ranges: list, prefix_len: int, used: list) -> str | None:
+    for t in target_ranges:
+        try:
+            base = ipaddress.ip_network(t, strict=False)
+        except ValueError:
+            continue
+        if prefix_len < base.prefixlen:
+            continue
+        for cand in base.subnets(new_prefix=prefix_len):
+            c = str(cand)
+            if not _cidr_overlaps_any(c, used):
+                return c
+    return None
 
 
 def _insert_address(store: ComputeStore, project: str, scope: str, body: dict) -> ComputeResponse:
@@ -667,15 +724,40 @@ def _insert_address(store: ComputeStore, project: str, scope: str, body: dict) -
         return _err(409, "ALREADY_EXISTS", f"The resource '{name}' already exists")
     addr_type = body.get("addressType", "EXTERNAL")
     ip_version = body.get("ipVersion", "IPV4")
+    purpose = body.get("purpose")
+    net_name = None
+    address = body.get("address")
+    if purpose == "VPC_PEERING":
+        # Private Service Connection: a reserved internal block for Google-managed services,
+        # real-allocated so it can't collide with this network's own subnets or other reservations.
+        net_name = _resolve_network_name(project, body.get("network"))
+        if _net_key(project, net_name) not in store.networks:
+            return _err(400, "INVALID_ARGUMENT", f"Invalid value for field 'resource.network': network '{net_name}' not found")
+        used = _addr_space_used(store, project, net_name)
+        prefix_len = int(body.get("prefixLength") or 16)
+        if address:
+            cidr = f"{address}/{prefix_len}"
+            if _cidr_overlaps_any(cidr, used):
+                return _err(400, "INVALID_ARGUMENT", f"Range {cidr} overlaps an existing subnet or reserved range on network {net_name}")
+        else:
+            cidr = _allocate_cidr(["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"], prefix_len, used)
+            if not cidr:
+                return _err(400, "RESOURCE_EXHAUSTED", "No free internal range of the requested size")
+            address = str(ipaddress.ip_network(cidr, strict=False).network_address)
     store.seq["ip"] += 1
     rec = {
         "id": str(50_000 + store.seq["ip"]), "project": project, "scope": scope, "name": name,
         "description": str(body.get("description", "")),
-        "address": str(body.get("address") or _gen_ip(store, addr_type == "INTERNAL")),
+        "address": str(address or _gen_ip(store, addr_type == "INTERNAL")),
         "addressType": addr_type, "ipVersion": ip_version,
         "networkTier": body.get("networkTier", DEFAULT_NETWORK_TIER),
         "status": "RESERVED", "users": [], "creationTimestamp": _ts(),
     }
+    if purpose:
+        rec["purpose"] = purpose
+    if net_name:
+        rec["network"] = net_name
+        rec["prefixLength"] = int(body.get("prefixLength") or 16)
     store.addresses[_addr_key(project, scope, name)] = rec
     scope_kind = "global" if scope == "global" else "regional"
     tail = f"addresses/{name}" if scope == "global" else f"{scope}/addresses/{name}"
@@ -946,6 +1028,555 @@ def _connectivity_tests(store, vm_store, method, project, segs, query, payload) 
     return _err(405, "METHOD_NOT_ALLOWED", "Method not allowed")
 
 
+# ── Internal ranges (networkconnectivity.googleapis.com v1 internalRanges) ──────────────────
+def _ir_key(project, location, name):
+    return f"{project}/{location}/{name}"
+
+
+def _ir_view(rec: dict) -> dict:
+    project, location = rec["project"], rec["location"]
+    return {
+        "name": f"projects/{project}/locations/{location}/internalRanges/{rec['name']}",
+        "description": rec.get("description", ""),
+        "ipCidrRange": rec["ipCidrRange"],
+        "network": _self_link("global", project, f"networks/{rec['network']}"),
+        "usage": rec.get("usage", "FOR_VPC"),
+        "peering": rec.get("peering", "FOR_SELF"),
+        "prefixLength": ipaddress.ip_network(rec["ipCidrRange"], strict=False).prefixlen,
+        "targetCidrRange": rec.get("targetCidrRange") or [],
+        "overlaps": rec.get("overlaps") or [],
+        "createTime": rec["createTime"], "updateTime": rec["createTime"],
+    }
+
+
+def _nc_lro(project: str, type_name: str, response: dict) -> dict:
+    """google.longrunning.Operation, completed synchronously (networkconnectivity / vpcaccess /
+    servicenetworking all use LRO-shaped create/delete — unlike Compute Engine's own Operation)."""
+    return {"name": f"projects/{project}/locations/global/operations/operation-{uuid.uuid4().hex[:12]}",
+            "done": True, "metadata": {}, "response": {"@type": f"type.googleapis.com/{type_name}", **response}}
+
+
+def _internal_ranges(store: ComputeStore, method: str, project: str, location: str, segs: list, payload: dict, query: dict) -> ComputeResponse:
+    irs = _bucket(store, "internal_ranges")
+    if not segs:
+        if method == "GET":
+            items = [_ir_view(r) for k, r in sorted(irs.items()) if k.startswith(f"{project}/{location}/")]
+            return _json(200, {"internalRanges": items} if items else {})
+        if method == "POST":
+            name = _tail(str((query or {}).get("internalRangeId") or payload.get("name") or "")).strip()
+            try:
+                _check_name(name, "Internal range name")
+            except _E as e:
+                return _err(e.status, e.gcp_status, e.message)
+            key = _ir_key(project, location, name)
+            if key in irs:
+                return _err(409, "ALREADY_EXISTS", f"Internal range {name} already exists")
+            net_name = _resolve_network_name(project, payload.get("network"))
+            if _net_key(project, net_name) not in store.networks:
+                return _err(400, "INVALID_ARGUMENT", f"network '{net_name}' not found")
+            used = _addr_space_used(store, project, net_name)
+            cidr = str(payload.get("ipCidrRange") or "").strip()
+            if not cidr:
+                targets = payload.get("targetCidrRange") or ["10.0.0.0/8"]
+                plen = int(payload.get("prefixLength") or 24)
+                cidr = _allocate_cidr(targets, plen, used)
+                if not cidr:
+                    return _err(400, "RESOURCE_EXHAUSTED", "No free CIDR block of the requested size in the target range(s)")
+            else:
+                try:
+                    ipaddress.ip_network(cidr, strict=False)
+                except ValueError:
+                    return _err(400, "INVALID_ARGUMENT", f"Invalid ipCidrRange: {cidr}")
+                if not (payload.get("overlaps") or []) and _cidr_overlaps_any(cidr, used):
+                    return _err(400, "INVALID_ARGUMENT", f"ipCidrRange {cidr} overlaps an existing subnet or internal range on network {net_name}")
+            irs[key] = {"project": project, "location": location, "name": name,
+                        "description": str(payload.get("description", "")), "ipCidrRange": cidr, "network": net_name,
+                        "usage": payload.get("usage") or "FOR_VPC", "peering": payload.get("peering") or "FOR_SELF",
+                        "targetCidrRange": payload.get("targetCidrRange") or [], "overlaps": payload.get("overlaps") or [],
+                        "createTime": _ts()}
+            return _json(200, _nc_lro(project, "networkconnectivity.v1.InternalRange", _ir_view(irs[key])))
+        return _err(405, "METHOD_NOT_ALLOWED", "Method not allowed")
+    name = segs[0]
+    key = _ir_key(project, location, name)
+    rec = irs.get(key)
+    if rec is None:
+        return _not_found(f"Internal range {name} not found")
+    if method == "GET":
+        return _json(200, _ir_view(rec))
+    if method == "DELETE":
+        del irs[key]
+        return _json(200, _nc_lro(project, "google.protobuf.Empty", {}))
+    return _err(405, "METHOD_NOT_ALLOWED", "Method not allowed")
+
+
+# ── Serverless VPC Access connectors (vpcaccess.googleapis.com v1 connectors) ───────────────
+_CONNECTOR_STATES = {"READY"}
+
+
+def _vpcc_key(project, region, name):
+    return f"{project}/{region}/{name}"
+
+
+def _vpcc_view(rec: dict) -> dict:
+    project, region = rec["project"], rec["region"]
+    out = {
+        "name": f"projects/{project}/locations/{region}/connectors/{rec['name']}",
+        "network": rec["network"], "ipCidrRange": rec.get("ipCidrRange", ""),
+        "minThroughput": rec.get("minThroughput", 200), "maxThroughput": rec.get("maxThroughput", 300),
+        "machineType": rec.get("machineType", "e2-micro"), "state": "READY",
+        "connectedProjects": [project],
+    }
+    if rec.get("subnetName"):
+        out["subnet"] = {"name": rec["subnetName"]}
+    return out
+
+
+def _connectors(store: ComputeStore, method: str, project: str, region: str, segs: list, payload: dict, query: dict) -> ComputeResponse:
+    conns = _bucket(store, "vpc_connectors")
+    if not segs:
+        if method == "GET":
+            items = [_vpcc_view(r) for k, r in sorted(conns.items()) if k.startswith(f"{project}/{region}/")]
+            return _json(200, {"connectors": items} if items else {})
+        if method == "POST":
+            name = str((query or {}).get("connectorId") or payload.get("name") or "").strip()
+            try:
+                _check_name(name, "Connector name")
+            except _E as e:
+                return _err(e.status, e.gcp_status, e.message)
+            key = _vpcc_key(project, region, name)
+            if key in conns:
+                return _err(409, "ALREADY_EXISTS", f"Connector {name} already exists")
+            net_name = _resolve_network_name(project, payload.get("network"))
+            subnet = payload.get("subnet") or {}
+            cidr = str(payload.get("ipCidrRange") or "").strip()
+            if subnet.get("name"):
+                sub_region = subnet.get("region") or region
+                srec = store.subnetworks.get(_sub_key(project, sub_region, subnet["name"]))
+                if not srec:
+                    return _err(400, "INVALID_ARGUMENT", f"Subnet '{subnet['name']}' not found")
+                net_name = srec["networkName"]
+            else:
+                if _net_key(project, net_name) not in store.networks:
+                    return _err(400, "INVALID_ARGUMENT", f"network '{net_name}' not found")
+                if not cidr:
+                    return _err(400, "INVALID_ARGUMENT", "Either ipCidrRange or subnet is required")
+                try:
+                    cidr_net = ipaddress.ip_network(cidr, strict=False)
+                except ValueError:
+                    return _err(400, "INVALID_ARGUMENT", f"Invalid ipCidrRange: {cidr}")
+                if cidr_net.prefixlen != 28:
+                    return _err(400, "INVALID_ARGUMENT", "ipCidrRange must be a /28")
+                used = _addr_space_used(store, project, net_name)
+                if _cidr_overlaps_any(cidr, used):
+                    return _err(400, "INVALID_ARGUMENT", f"ipCidrRange {cidr} overlaps an existing subnet or reservation on network {net_name}")
+            min_t, max_t = int(payload.get("minThroughput", 200)), int(payload.get("maxThroughput", 300))
+            if not (200 <= min_t <= max_t <= 1000):
+                return _err(400, "INVALID_ARGUMENT", "minThroughput/maxThroughput must satisfy 200 <= min <= max <= 1000")
+            conns[key] = {"project": project, "region": region, "name": name, "network": payload.get("network") or net_name,
+                         "ipCidrRange": cidr, "subnetName": subnet.get("name", ""),
+                         "minThroughput": min_t, "maxThroughput": max_t,
+                         "machineType": payload.get("machineType") or "e2-micro"}
+            return _json(200, _nc_lro(project, "vpcaccess.v1.Connector", _vpcc_view(conns[key])))
+        return _err(405, "METHOD_NOT_ALLOWED", "Method not allowed")
+    name = segs[0]
+    key = _vpcc_key(project, region, name)
+    rec = conns.get(key)
+    if rec is None:
+        return _not_found(f"Connector {name} not found")
+    if method == "GET":
+        return _json(200, _vpcc_view(rec))
+    if method == "DELETE":
+        del conns[key]
+        return _json(200, _nc_lro(project, "google.protobuf.Empty", {}))
+    return _err(405, "METHOD_NOT_ALLOWED", "Method not allowed")
+
+
+# ── Private Service Connection (servicenetworking.googleapis.com v1 services.connections) ───
+def _psc_view(rec: dict) -> dict:
+    return {"network": _self_link("global", rec["project"], f"networks/{rec['network']}"),
+            "service": "servicenetworking.googleapis.com", "reservedPeeringRanges": list(rec["reservedPeeringRanges"]),
+            "peering": "servicenetworking-googleapis-com", "state": "ACTIVE" if rec.get("active", True) else "INACTIVE"}
+
+
+def _psc_connections(store: ComputeStore, method: str, project_hint: str, segs: list, payload: dict, query: dict) -> ComputeResponse:
+    conns = _bucket(store, "psc_connections")
+    if not segs:
+        if method == "GET":
+            net = str((query or {}).get("network") or "")
+            net_name = _tail(net)
+            proj = net.split("/")[1] if net.startswith("projects/") else project_hint
+            rec = conns.get(f"{proj}/{net_name}")
+            return _json(200, {"connections": [_psc_view(rec)]} if rec else {})
+        if method == "POST":
+            net_link = str(payload.get("network") or "")
+            if not net_link:
+                return _err(400, "INVALID_ARGUMENT", "network is required")
+            proj = net_link.split("/")[1] if net_link.startswith("projects/") else project_hint
+            net_name = _tail(net_link)
+            if _net_key(proj, net_name) not in store.networks:
+                return _err(400, "INVALID_ARGUMENT", f"network '{net_name}' not found")
+            ranges = payload.get("reservedPeeringRanges") or []
+            if not ranges:
+                return _err(400, "INVALID_ARGUMENT", "reservedPeeringRanges is required")
+            for rname in ranges:
+                arec = store.addresses.get(_addr_key(proj, "global", rname))
+                if not arec or arec.get("purpose") != "VPC_PEERING":
+                    return _err(400, "INVALID_ARGUMENT", f"Reserved range '{rname}' is not a VPC_PEERING address on this project")
+                if arec.get("network") != net_name:
+                    return _err(400, "INVALID_ARGUMENT", f"Reserved range '{rname}' does not belong to network '{net_name}'")
+            key = f"{proj}/{net_name}"
+            if key in conns:
+                return _err(409, "ALREADY_EXISTS", f"A connection already exists for network '{net_name}'")
+            conns[key] = {"project": proj, "network": net_name, "reservedPeeringRanges": list(ranges), "active": True}
+            return _json(200, _nc_lro(proj, "servicenetworking.v1.Connection", _psc_view(conns[key])))
+        return _err(405, "METHOD_NOT_ALLOWED", "Method not allowed")
+    # .../connections/servicenetworking.googleapis.com[:deleteConnection|:patch via PATCH]
+    tail, verb = segs[0], ""
+    if ":" in tail:
+        tail, verb = tail.split(":", 1)
+    net_name = str((query or {}).get("network") or payload.get("network") or "")
+    net_name = _tail(net_name)
+    key = next((k for k in conns if k.endswith(f"/{net_name}")), None) if net_name else None
+    if key is None:   # fall back: only one connection in a single-project simulator sweep
+        key = next(iter(conns), None)
+    rec = conns.get(key) if key else None
+    if rec is None:
+        return _not_found("Private Service Connection not found")
+    if verb == "deleteConnection" and method == "POST":
+        del conns[key]
+        return _json(200, _nc_lro(rec["project"], "google.protobuf.Empty", {}))
+    if method == "PATCH":
+        if "reservedPeeringRanges" in payload:
+            rec["reservedPeeringRanges"] = list(payload["reservedPeeringRanges"])
+        return _json(200, _nc_lro(rec["project"], "servicenetworking.v1.Connection", _psc_view(rec)))
+    return _err(405, "METHOD_NOT_ALLOWED", "Method not allowed")
+
+
+# ── Shared VPC / XPN (compute.googleapis.com v1 projects.*) ─────────────────────────────────
+def _xpn_rec(store: ComputeStore, project: str) -> dict:
+    xpn = _bucket(store, "xpn")
+    return xpn.setdefault(project, {"host": False, "service_projects": []})
+
+
+def _xpn_host_of(store: ComputeStore, project: str) -> str | None:
+    xpn = _bucket(store, "xpn")
+    for host, rec in xpn.items():
+        if project in rec.get("service_projects", []):
+            return host
+    return None
+
+
+def _xpn_resource(ref: dict) -> str:
+    return str((ref or {}).get("id") or "")
+
+
+def _usable_subnet_view(rec: dict) -> dict:
+    return {"subnetwork": _self_link("regions", rec["project"], f"{rec['region']}/subnetworks/{rec['name']}"),
+            "network": _self_link("global", rec["project"], f"networks/{rec['networkName']}"),
+            "ipCidrRange": rec["ipCidrRange"]}
+
+
+def _xpn_action(store: ComputeStore, method: str, project: str, action: str, payload: dict, query: dict) -> ComputeResponse:
+    if action == "enableXpnHost" and method == "POST":
+        if _xpn_host_of(store, project):
+            return _err(400, "FAILED_PRECONDITION", f"Project {project} is already a service project of another host")
+        _xpn_rec(store, project)["host"] = True
+        return _json(200, _operation(project, "global", None, "enableXpnHost", _self_link("global", project, ""), store))
+    if action == "disableXpnHost" and method == "POST":
+        rec = _xpn_rec(store, project)
+        if rec["service_projects"]:
+            return _err(400, "FAILED_PRECONDITION",
+                        f"Project {project} cannot be disabled, it has existing xpn resources attached: {rec['service_projects']}")
+        rec["host"] = False
+        return _json(200, _operation(project, "global", None, "disableXpnHost", _self_link("global", project, ""), store))
+    if action == "enableXpnResource" and method == "POST":
+        host = _xpn_rec(store, project)
+        if not host["host"]:
+            return _err(400, "FAILED_PRECONDITION", f"Project {project} is not set up as a shared VPC host")
+        svc_project = _xpn_resource(payload.get("xpnResource"))
+        if not svc_project:
+            return _err(400, "INVALID_ARGUMENT", "xpnResource.id is required")
+        existing = _xpn_host_of(store, svc_project)
+        if existing and existing != project:
+            return _err(400, "FAILED_PRECONDITION", f"Project {svc_project} is already attached to host {existing}")
+        if _xpn_rec(store, svc_project)["host"]:
+            return _err(400, "FAILED_PRECONDITION", f"Project {svc_project} is itself a shared VPC host and cannot be a service project")
+        if svc_project not in host["service_projects"]:
+            host["service_projects"].append(svc_project)
+        return _json(200, _operation(project, "global", None, "enableXpnResource", _self_link("global", project, ""), store))
+    if action == "disableXpnResource" and method == "POST":
+        host = _xpn_rec(store, project)
+        svc_project = _xpn_resource(payload.get("xpnResource"))
+        host["service_projects"] = [p for p in host["service_projects"] if p != svc_project]
+        return _json(200, _operation(project, "global", None, "disableXpnResource", _self_link("global", project, ""), store))
+    if action == "listXpnHosts" and method == "POST":
+        xpn = _bucket(store, "xpn")
+        items = [{"name": p, "kind": "compute#project"} for p, rec in sorted(xpn.items()) if rec.get("host")]
+        return _json(200, {"kind": "compute#xpnHostList", **({"items": items} if items else {})})
+    if action == "getXpnResources" and method == "GET":
+        rec = _xpn_rec(store, project)
+        items = [{"id": p, "type": "PROJECT"} for p in rec["service_projects"]]
+        return _json(200, {"kind": "compute#projectsGetXpnResources", **({"resources": items} if items else {})})
+    return _not_found(f"Unknown shared VPC action: {action}")
+
+
+def _usable_subnetworks(store: ComputeStore, project: str) -> ComputeResponse:
+    """`aggregated/usableSubnetworks` — a service project's own subnets PLUS its shared VPC
+    host's subnets (real cross-project sharing, not just bookkeeping flags)."""
+    projects = {project}
+    host = _xpn_host_of(store, project)
+    if host:
+        projects.add(host)
+    items = [_usable_subnet_view(r) for k, r in sorted(store.subnetworks.items()) if r["project"] in projects]
+    return _json(200, {"kind": "compute#usableSubnetworksAggregatedList", **({"items": items} if items else {})})
+
+
+# ── Network firewall policies (regional, compute.googleapis.com v1 firewallPolicies) ────────
+def _nfp_key(project, region, name):
+    return f"{project}/{region}/{name}"
+
+
+def _nfp_rule_view(r: dict) -> dict:
+    return {"priority": r["priority"], "action": r["action"], "direction": r.get("direction", "INGRESS"),
+            "disabled": r.get("disabled", False), "description": r.get("description", ""),
+            "match": r.get("match") or {}}
+
+
+def _nfp_view(rec: dict) -> dict:
+    project, region = rec["project"], rec["region"]
+    return {
+        "name": rec["name"], "description": rec.get("description", ""),
+        "selfLink": _self_link("regions", project, f"{region}/firewallPolicies/{rec['name']}"),
+        "ruleTupleCount": len(rec["rules"]),
+        "rules": [_nfp_rule_view(r) for r in sorted(rec["rules"], key=lambda r: r["priority"])],
+        "associations": [{"name": a["name"], "attachmentTarget": a["network"]} for a in rec["associations"]],
+        "creationTimestamp": rec["creationTimestamp"],
+    }
+
+
+def _firewall_policies(store: ComputeStore, method: str, project: str, region: str, segs: list, payload: dict, query: dict) -> ComputeResponse:
+    pols = _bucket(store, "firewall_policies")
+    if not segs:
+        if method == "GET":
+            items = [_nfp_view(r) for k, r in sorted(pols.items()) if k.startswith(f"{project}/{region}/")]
+            return _json(200, {"kind": "compute#firewallPolicyList", **({"items": items} if items else {})})
+        if method == "POST":
+            name = str(payload.get("name") or "").strip()
+            try:
+                _check_name(name, "Firewall policy name")
+            except _E as e:
+                return _err(e.status, e.gcp_status, e.message)
+            key = _nfp_key(project, region, name)
+            if key in pols:
+                return _err(409, "ALREADY_EXISTS", f"Firewall policy {name} already exists")
+            pols[key] = {"project": project, "region": region, "name": name,
+                        "description": str(payload.get("description", "")), "rules": [], "associations": [],
+                        "creationTimestamp": _ts()}
+            return _json(200, _operation(project, "regional", region, "insert",
+                                         _self_link("regions", project, f"{region}/firewallPolicies/{name}"), store))
+        return _err(405, "METHOD_NOT_ALLOWED", "Method not allowed")
+    name, verb = segs[0], ""
+    if ":" in name:
+        name, verb = name.split(":", 1)
+    elif len(segs) > 1:
+        verb = segs[1]
+    key = _nfp_key(project, region, name)
+    rec = pols.get(key)
+    if rec is None:
+        return _not_found(f"Firewall policy {name} not found")
+    link = _self_link("regions", project, f"{region}/firewallPolicies/{name}")
+    if not verb:
+        if method == "GET":
+            return _json(200, _nfp_view(rec))
+        if method == "DELETE":
+            del pols[key]
+            return _json(200, _operation(project, "regional", region, "delete", link, store))
+        return _err(405, "METHOD_NOT_ALLOWED", "Method not allowed")
+    if verb == "addRule" and method == "POST":
+        r = payload.get("firewallPolicyRule") or payload
+        priority = r.get("priority")
+        if priority is None or r.get("action") not in ("allow", "deny", "goto_next"):
+            return _err(400, "INVALID_ARGUMENT", "priority and action (allow|deny|goto_next) are required")
+        if any(x["priority"] == priority for x in rec["rules"]):
+            return _err(409, "ALREADY_EXISTS", f"A rule at priority {priority} already exists")
+        rec["rules"].append({"priority": int(priority), "action": r["action"], "direction": r.get("direction", "INGRESS"),
+                             "disabled": bool(r.get("disabled", False)), "description": str(r.get("description", "")),
+                             "match": r.get("match") or {}})
+        return _json(200, _operation(project, "regional", region, "addRule", link, store))
+    if verb == "removeRule" and method == "POST":
+        priority = (query or {}).get("priority") if query else None
+        priority = int(priority) if priority is not None else payload.get("priority")
+        before = len(rec["rules"])
+        rec["rules"] = [r for r in rec["rules"] if r["priority"] != priority]
+        if len(rec["rules"]) == before:
+            return _not_found(f"No rule at priority {priority}")
+        return _json(200, _operation(project, "regional", region, "removeRule", link, store))
+    if verb == "addAssociation" and method == "POST":
+        assoc = payload.get("association") or {}
+        aname = str(assoc.get("name") or "").strip() or "default"
+        target = assoc.get("attachmentTarget") or ""
+        net_name = _resolve_network_name(project, target)
+        if _net_key(project, net_name) not in store.networks:
+            return _err(400, "INVALID_ARGUMENT", f"network '{net_name}' not found")
+        if any(a["name"] == aname for a in rec["associations"]):
+            return _err(409, "ALREADY_EXISTS", f"Association {aname} already exists")
+        rec["associations"].append({"name": aname, "network": net_name})
+        return _json(200, _operation(project, "regional", region, "addAssociation", link, store))
+    if verb == "removeAssociation" and method == "POST":
+        aname = (query or {}).get("name") if query else None
+        aname = aname or payload.get("name")
+        before = len(rec["associations"])
+        rec["associations"] = [a for a in rec["associations"] if a["name"] != aname]
+        if len(rec["associations"]) == before:
+            return _not_found(f"No association {aname}")
+        return _json(200, _operation(project, "regional", region, "removeAssociation", link, store))
+    return _not_found(f"Unknown firewall policy action: {verb}")
+
+
+# ── Packet mirroring (compute.googleapis.com v1 regions/*/packetMirrorings) ─────────────────
+def _pm_key(project, region, name):
+    return f"{project}/{region}/{name}"
+
+
+def _pm_view(rec: dict) -> dict:
+    project, region = rec["project"], rec["region"]
+    return {
+        "name": rec["name"], "description": rec.get("description", ""), "region": _self_link("regions", project, region),
+        "network": {"url": _self_link("global", project, f"networks/{rec['network']}")},
+        "collectorIlb": {"url": rec["collectorIlb"]}, "mirroredResources": rec["mirroredResources"],
+        "filter": rec.get("filter") or {}, "enable": rec.get("enable", "TRUE"),
+        "priority": rec.get("priority", 1000), "creationTimestamp": rec["creationTimestamp"],
+        "selfLink": _self_link("regions", project, f"{region}/packetMirrorings/{rec['name']}"),
+    }
+
+
+def _packet_mirrorings(store: ComputeStore, method: str, project: str, region: str, segs: list, payload: dict) -> ComputeResponse:
+    pms = _bucket(store, "packet_mirrorings")
+    if not segs:
+        if method == "GET":
+            items = [_pm_view(r) for k, r in sorted(pms.items()) if k.startswith(f"{project}/{region}/")]
+            return _json(200, {"kind": "compute#packetMirroringList", **({"items": items} if items else {})})
+        if method == "POST":
+            name = str(payload.get("name") or "").strip()
+            try:
+                _check_name(name, "Packet mirroring policy name")
+            except _E as e:
+                return _err(e.status, e.gcp_status, e.message)
+            key = _pm_key(project, region, name)
+            if key in pms:
+                return _err(409, "ALREADY_EXISTS", f"Packet mirroring policy {name} already exists")
+            net_ref = (payload.get("network") or {}).get("url") or (payload.get("network") or {}).get("name") or ""
+            net_name = _resolve_network_name(project, net_ref)
+            if _net_key(project, net_name) not in store.networks:
+                return _err(400, "INVALID_ARGUMENT", f"network '{net_name}' not found")
+            mirrored = payload.get("mirroredResources") or {}
+            subnets = mirrored.get("subnetworks") or []
+            tags = mirrored.get("tags") or []
+            instances = mirrored.get("instances") or []
+            if not subnets and not tags and not instances:
+                return _err(400, "INVALID_ARGUMENT", "mirroredResources must specify at least one of subnetworks, instances or tags")
+            for s in subnets:
+                sname = _tail(s.get("url") or s.get("name") or "")
+                if not any(r["name"] == sname and r["networkName"] == net_name
+                           for r in store.subnetworks.values() if r["project"] == project):
+                    return _err(400, "INVALID_ARGUMENT", f"Mirrored subnetwork '{sname}' not found on network {net_name}")
+            collector = (payload.get("collectorIlb") or {}).get("url") or (payload.get("collectorIlb") or {}).get("name") or ""
+            if not collector:
+                return _err(400, "INVALID_ARGUMENT", "collectorIlb is required (an internal forwarding rule to receive mirrored traffic)")
+            pms[key] = {"project": project, "region": region, "name": name, "description": str(payload.get("description", "")),
+                       "network": net_name, "collectorIlb": collector, "mirroredResources": mirrored,
+                       "filter": payload.get("filter") or {"IPProtocols": [], "cidrRanges": ["0.0.0.0/0"], "direction": "BOTH"},
+                       "enable": payload.get("enable", "TRUE"), "priority": int(payload.get("priority", 1000)),
+                       "creationTimestamp": _ts()}
+            return _json(200, _operation(project, "regional", region, "insert",
+                                         _self_link("regions", project, f"{region}/packetMirrorings/{name}"), store))
+        return _err(405, "METHOD_NOT_ALLOWED", "Method not allowed")
+    name = segs[0]
+    key = _pm_key(project, region, name)
+    rec = pms.get(key)
+    if rec is None:
+        return _not_found(f"Packet mirroring policy {name} not found")
+    link = _self_link("regions", project, f"{region}/packetMirrorings/{name}")
+    if method == "GET":
+        return _json(200, _pm_view(rec))
+    if method == "DELETE":
+        del pms[key]
+        return _json(200, _operation(project, "regional", region, "delete", link, store))
+    if method in ("PATCH", "PUT"):
+        if "enable" in payload:
+            rec["enable"] = payload["enable"]
+        if "filter" in payload:
+            rec["filter"] = payload["filter"]
+        return _json(200, _operation(project, "regional", region, "patch", link, store))
+    return _err(405, "METHOD_NOT_ALLOWED", "Method not allowed")
+
+
+def gcp_flow_log_records(store: ComputeStore, project: str, accepted: list, rejected: list, topo) -> list:
+    """GCP VPC Flow Logs (compute.googleapis.com%2Fvpc_flows) for the subnets that actually
+    have flow logs ON — real per-packet counters in, real per-subnet config gating out, same
+    contract as mirrored_packet_log_entries. ACCEPT flows only, like real VPC Flow Logs
+    (denials are Firewall Rules Logging, a separate — not yet modelled — log)."""
+    try:
+        from core.netsim.flowlogs import FlowLogCollector
+    except ImportError:                                  # pragma: no cover - flat layout
+        from netsim.flowlogs import FlowLogCollector     # type: ignore
+    col = FlowLogCollector(topo)
+    col.ingest(accepted, rejected)
+    out = []
+    for rec in col.gcp_records():
+        for side in ("src_instance", "dest_instance"):
+            inst = rec.get(side)
+            if not inst:
+                continue
+            iface = next((i for i in topo.interfaces.values() if i.instance == inst.get("vm_name")), None)
+            if iface is None:
+                continue
+            srec = store.subnetworks.get(iface.subnet)
+            if srec and srec["project"] == project and srec.get("flowLogs"):
+                out.append(rec)
+                break
+    return out
+
+
+def mirrored_packet_log_entries(store: ComputeStore, project: str, accepted: list, topo) -> list:
+    """Real per-packet events (from the netsim enforcer's flow counters, see core/netsim/
+    flowlogs.py) that match an ENABLED packet mirroring policy's filter + mirrored resources —
+    rendered as structured records a Cloud Logging sink on the collector can show. Offline-only
+    (needs real packets); returns [] with no policies or no traffic, never synthesizes data."""
+    out = []
+    pms = _bucket(store, "packet_mirrorings")
+    policies = [r for r in pms.values() if r["project"] == project and r.get("enable", "TRUE") == "TRUE"]
+    if not policies:
+        return out
+    for f in accepted:
+        iface = topo.iface_by_ip(f["src"]) or topo.iface_by_ip(f["dst"])
+        if iface is None:
+            continue
+        subnet_name = topo.subnet_of(iface).name if iface.subnet in topo.subnets else ""
+        for pol in policies:
+            mr = pol["mirroredResources"]
+            subnet_match = any(_tail(s.get("url") or s.get("name") or "") == subnet_name for s in mr.get("subnetworks") or [])
+            tag_match = any(t in iface.tags for t in mr.get("tags") or [])
+            inst_match = any(_tail(i.get("url") or i.get("name") or "") == iface.instance for i in mr.get("instances") or [])
+            if not (subnet_match or tag_match or inst_match):
+                continue
+            cidrs = pol["filter"].get("cidrRanges") or ["0.0.0.0/0"]
+            if not any(ip_in_cidr(f["src"], c) or ip_in_cidr(f["dst"], c) for c in cidrs):
+                continue
+            out.append({"mirroringPolicy": pol["name"], "collectorIlb": pol["collectorIlb"],
+                        "connection": {"src_ip": f["src"], "dest_ip": f["dst"], "src_port": f["sport"],
+                                       "dest_port": f["dport"], "protocol": f["proto"]},
+                        "packets": f["packets"], "bytes": f["bytes"], "timestamp": _ts()})
+    return out
+
+
+def ip_in_cidr(ip: str, cidr: str) -> bool:
+    try:
+        return ipaddress.ip_address(ip) in ipaddress.ip_network(cidr, strict=False)
+    except ValueError:
+        return False
+
+
 # ── native-wire dispatcher (REST path + method → operation) ─────────────────
 def dispatch(store: ComputeStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
@@ -968,11 +1599,6 @@ def _dispatch(store: ComputeStore, method: str, path: str,
             break
     segs = [s for s in p.strip("/").split("/") if s != ""]
 
-    if len(segs) < 3 or segs[0] != "projects":
-        return _not_found(f"Unknown path: {path}")
-    project = segs[1]
-    scope = segs[2]   # "global" | "regions" | "zones" | "aggregated"
-
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}
     except Exception:
@@ -980,10 +1606,31 @@ def _dispatch(store: ComputeStore, method: str, path: str,
     if not isinstance(payload, dict):
         payload = {}
 
+    # ── services/servicenetworking.googleapis.com/connections (Private Service Connection) ──
+    # no /projects/ segment: the project comes from the `network` link in the body/query.
+    if segs[:2] == ["services", "servicenetworking.googleapis.com"]:
+        try:
+            return _psc_connections(store, method, "", segs[3:], payload, query or {})
+        except _E as e:
+            return _err(e.status, e.gcp_status, e.message)
+
+    if len(segs) < 3 or segs[0] != "projects":
+        return _not_found(f"Unknown path: {path}")
+    project = segs[1]
+    scope = segs[2]   # "global" | "regions" | "zones" | "aggregated" | "locations" | <xpn verb>
+
     try:
-        # ── locations/global/connectivityTests (networkmanagement v1) ─────
+        # ── locations/{loc}/connectivityTests | internalRanges | connectors ───────────────
         if scope == "locations" and len(segs) >= 5 and segs[4].split(":")[0] == "connectivityTests":
             return _connectivity_tests(store, vm_store, method, project, segs, query, payload)
+        if scope == "locations" and len(segs) >= 4 and segs[4] == "internalRanges":
+            return _internal_ranges(store, method, project, segs[3], segs[5:], payload, query or {})
+        if scope == "locations" and len(segs) >= 4 and segs[4] == "connectors":
+            return _connectors(store, method, project, segs[3], segs[5:], payload, query or {})
+        # ── projects/{p}:<xpn verb> — shared VPC host/service project lifecycle ────────────
+        if len(segs) == 3 and scope in ("enableXpnHost", "disableXpnHost", "enableXpnResource",
+                                        "disableXpnResource", "listXpnHosts", "getXpnResources"):
+            return _xpn_action(store, method, project, scope, payload, query or {})
         # ── global/* ──────────────────────────────────────────────────────
         if scope == "global":
             if len(segs) < 4:
@@ -1090,6 +1737,10 @@ def _dispatch(store: ComputeStore, method: str, path: str,
                         return _json(200, {"kind": "compute#routerList", **({"items": items} if items else {})})
                 elif len(segs) == 6:
                     return _router_crud(store, method, project, region, segs[5], payload)
+            elif kind == "firewallPolicies":
+                return _firewall_policies(store, method, project, region, segs[5:], payload, query or {})
+            elif kind == "packetMirrorings":
+                return _packet_mirrorings(store, method, project, region, segs[5:], payload)
             elif kind == "operations" and len(segs) == 6:
                 return _get_operation(project, "regions/" + region, segs[5])
             return _not_found(f"Unknown path: {path}")
@@ -1100,6 +1751,8 @@ def _dispatch(store: ComputeStore, method: str, path: str,
                 return _aggregated_subnets(store, project)
             if segs[3] == "addresses" and method == "GET":
                 return _aggregated_addresses(store, project)
+            if segs[3] == "usableSubnetworks" and method == "GET":
+                return _usable_subnetworks(store, project)
             if segs[3] == "routers" and method == "GET":
                 by_region = {}
                 for k, r in sorted(_bucket(store, "routers").items()):

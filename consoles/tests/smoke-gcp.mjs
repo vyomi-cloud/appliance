@@ -430,7 +430,8 @@ try {
   const fws = await wjson("/compute/v1/projects/vyomi-project/global/firewalls");
   check("create firewall rule via UI → visible over native wire (firewalls.list)", (fws.items || []).some((f) => f.name === FW));
   await page.getByRole("checkbox", { name: `Select ${FW}` }).check();
-  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  // .first(): the page now also has a "Delete" action on the Network firewall policies panel below.
+  await page.getByRole("button", { name: "Delete", exact: true }).first().click();
   await page.getByLabel("Confirm deletion").fill(FW);
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
@@ -471,6 +472,45 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("heading", { name: "VPC networks" }).waitFor({ timeout: 10000 });
   check("delete VPC network via UI → gone over native wire", (await wire(`/compute/v1/projects/vyomi-project/global/networks/${NET}`)).status === 404);
+
+  // Internal ranges (networkconnectivity v1): reserve via the UI → visible over native wire,
+  // then delete via the UI.
+  const NET3 = `v4-gcp-net3-${Date.now() % 100000}`;
+  await wire("/compute/v1/projects/vyomi-project/global/networks", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: NET3, autoCreateSubnetworks: false }),
+  });
+  const IR = `v4-gcp-ir-${Date.now() % 100000}`;
+  await page.goto(UI + "#/networking/internal-ranges");
+  await page.getByRole("button", { name: "Create internal range" }).click();
+  await page.getByLabel("Name").fill(IR);
+  await page.getByRole("combobox", { name: "Network" }).click();
+  await page.getByRole("option", { name: NET3 }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("cell", { name: IR, exact: true }).waitFor({ timeout: 10000 });
+  const irs = await wjson("/v1/projects/vyomi-project/locations/global/internalRanges");
+  check("reserve internal range via UI → visible over native wire (internalRanges.list)",
+    (irs.internalRanges || []).some((r) => r.name.endsWith(`/${IR}`) && r.network.endsWith(`/networks/${NET3}`)));
+  await page.getByRole("checkbox", { name: `Select ${IR}` }).check();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByLabel("Confirm deletion").fill(IR);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("cell", { name: IR, exact: true }).waitFor({ state: "detached", timeout: 10000 });
+  const irsAfter = await wjson("/v1/projects/vyomi-project/locations/global/internalRanges");
+  check("delete internal range via UI → gone over native wire", !(irsAfter.internalRanges || []).some((r) => r.name.endsWith(`/${IR}`)));
+  await wire(`/compute/v1/projects/vyomi-project/global/networks/${NET3}`, { method: "DELETE" });
+
+  // Shared VPC (XPN): set up this project as a host and attach a service project via the UI.
+  const SVC_PROJ = `v4-gcp-svc-${Date.now() % 100000}`;
+  await page.goto(UI + "#/networking/shared-vpc");
+  await page.getByRole("button", { name: "Set up this project as a host" }).click();
+  await page.getByRole("button", { name: "Attach service project" }).click();
+  await page.getByLabel("Service project ID").fill(SVC_PROJ);
+  await page.getByRole("dialog").getByRole("button", { name: "Attach" }).click();
+  await page.getByRole("cell", { name: SVC_PROJ, exact: true }).waitFor({ timeout: 10000 });
+  const xpn = await wjson("/compute/v1/projects/vyomi-project/getXpnResources");
+  check("attach service project via UI → visible over native wire (getXpnResources)",
+    (xpn.resources || []).some((r) => r.id === SVC_PROJ));
 
   // Connectivity Tests (Network Intelligence Center): create via the UI → visible over
   // native wire (connectivityTests.get), result rendered; then rerun and delete.
