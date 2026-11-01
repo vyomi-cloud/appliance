@@ -1,7 +1,8 @@
-/* Declared gaps: Hooks, the public-extensions registry + publisher workflow, and
- * Spotlight editorial content are out of Vyomi's scope (core/capabilities/aws/
- * cloudformation.json: aws.cloudformation.hooks, .registry.public-extensions-publisher,
- * .spotlight). These render the REAL page shape (title, tabs, columns, sections, fields)
+/* Declared gaps: the public-extensions registry + publisher workflow, and Spotlight
+ * editorial content are out of Vyomi's scope (core/capabilities/aws/cloudformation.json:
+ * .registry.public-extensions-publisher, .spotlight). Hooks overview/invocation
+ * summary/hooks list are real now — see HooksOverview.jsx, InvocationSummary.jsx,
+ * Hooks.jsx. These render the REAL page shape (title, tabs, columns, sections, fields)
  * so every element a user would look for is visibly and specifically declared "Not
  * simulated in Vyomi" — not just a generic placeholder — per consoles/AGENT-UI.md. */
 import Header from "@cloudscape-design/components/header";
@@ -11,35 +12,6 @@ import { NotSimulatedContainer } from "../../kit/common.jsx";
 
 function GapPage({ title, children }) {
   return <ContentLayout header={<Header variant="h1">{title}</Header>}><SpaceBetween size="l">{children}</SpaceBetween></ContentLayout>;
-}
-
-export function HooksOverview() {
-  return (
-    <GapPage title="Hooks overview">
-      <NotSimulatedContainer title="Get started" feature="CloudFormation Hooks" />
-      <NotSimulatedContainer title="Use cases" />
-      <NotSimulatedContainer title="Benefits and features" />
-    </GapPage>
-  );
-}
-
-export function InvocationSummary() {
-  return (
-    <GapPage title="Invocation summary">
-      <NotSimulatedContainer title="Invocation summary" feature="CloudFormation Hooks"
-        note="Columns: Invocation ID, Target, Mode, Invocation time, Result message. Actions: Create a Hook. Empty state: No Hook invocations in this Region." />
-    </GapPage>
-  );
-}
-
-export function Hooks() {
-  return (
-    <GapPage title="Hooks">
-      <NotSimulatedContainer title="Hooks" feature="CloudFormation Hooks"
-        note="Columns: Name, Type, Mode, Targets, Hook status, Last updated, Description. Actions: Delete, Create a Hook." />
-      <NotSimulatedContainer title="How it works" />
-    </GapPage>
-  );
 }
 
 export function PublicExtensions() {

@@ -143,14 +143,17 @@
   ]
  },
  "aws.cloudformation.hooks": {
-  "title": "Hooks (overview, invocation summary, hooks list)",
+  "title": "Hooks (register, configure, invoke on stack operations, invocation history)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "CloudFormation Hooks are out of Vyomi's scope."
-  ]
+   "A hook's policy is a single built-in check — required tag keys that must be present on every stack it targets — not arbitrary custom hook handler code (which would run a third-party Lambda or script in a real account).",
+   "ListHookResults returns every invocation in the account when no TargetId is given; real AWS scopes results to one stack or change set at a time."
+  ],
+  "api": ["RegisterType", "DescribeTypeRegistration", "SetTypeConfiguration", "DeregisterType", "ListTypes", "DescribeType", "ListHookResults"],
+  "tests": ["tests/conformance/test_cloudformation_core.py"]
  },
  "aws.cloudformation.iac-generator": {
   "title": "IaC generator (scan an account's existing resources into a template)",

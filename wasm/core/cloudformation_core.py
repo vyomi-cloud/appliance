@@ -90,6 +90,8 @@ class CloudFormationStore:
         self.drift_detections: dict[str, dict] = {}
         self.resource_scans: dict[str, dict] = {}
         self.generated_templates: dict[str, dict] = {}
+        self.hooks: dict[str, dict] = {}           # TypeName -> hook record (registry Type=HOOK)
+        self.hook_invocations: list[dict] = []     # most-recent-first, across every targeted stack
         self.account_id = account_id
 
     def persist(self) -> None:
@@ -1186,11 +1188,13 @@ def _create_stack(store, params, stores):
     on_failure = _p(params, "OnFailure", "ROLLBACK")
     disable_rollback = _bool(params.get("DisableRollback"))
     supplied = _param_pairs(params)
+    tags = _tag_pairs(params)
+    _run_hooks(store, "CREATE", name, tags)
     stack_uid = uuid.uuid4().hex
     stack_id = _stack_arn(name, stack_uid)
     stack = _new_stack_record(stack_id, name, stack_uid)
     stack["description"] = str(template.get("Description", ""))[:1024]
-    stack["tags"] = _tag_pairs(params)
+    stack["tags"] = tags
     stack["capabilities"] = sorted(capabilities)
     stack["on_failure"] = on_failure
     stack["disable_rollback"] = disable_rollback
@@ -1240,6 +1244,7 @@ def _update_stack(store, params, stores):
     capabilities = set(_members(params, "Capabilities")) or set(stack.get("capabilities", []))
     _check_capabilities(template.get("Resources") or {}, capabilities)
     new_tags = _tag_pairs(params)
+    _run_hooks(store, "UPDATE", name, new_tags or stack.get("tags", {}))
     stack["status"] = "UPDATE_IN_PROGRESS"
     _emit_event(stack, name, "UPDATE_IN_PROGRESS", "User Initiated")
     try:
@@ -1293,6 +1298,7 @@ def _delete_stack(store, params, stores):
         return _envelope("DeleteStack")
     if stack.get("termination_protection"):
         raise CfnError("ValidationError", f"Stack [{name}] cannot be deleted while TerminationProtection is enabled", 400)
+    _run_hooks(store, "DELETE", name, stack.get("tags", {}))
     stack["status"] = "DELETE_IN_PROGRESS"
     _emit_event(stack, stack["stack_name"], "DELETE_IN_PROGRESS", "User Initiated")
     failures = []
@@ -1869,6 +1875,164 @@ def _execute_stack_refactor(store, params, stores):
     return _envelope("ExecuteStackRefactor")
 
 
+# ── hooks (registry Type=HOOK): a private hook enforces one built-in policy — required
+# tag keys on every stack it targets — checked right before CREATE/UPDATE/DELETE actually
+# runs (PRE_PROVISION), the same point a real hook's handler would fire. Arbitrary custom
+# hook handler code (a third-party Lambda/script) isn't modeled — see
+# core/capabilities/aws/cloudformation.json: aws.cloudformation.hooks.
+_TARGET_OPERATIONS = {"CREATE", "UPDATE", "DELETE"}
+
+
+def _hook_type_arn(type_name: str) -> str:
+    return f"arn:aws:cloudformation:{REGION}:{DEFAULT_ACCOUNT_ID}:type/hook/{type_name.replace('::', '-')}"
+
+
+def _require_hook(store, type_name: str) -> dict:
+    h = store.hooks.get(type_name)
+    if not h:
+        raise CfnError("TypeNotFoundException", f"Hook type {type_name} not found", 404)
+    return h
+
+
+def _register_type(store, params, stores):
+    type_kind = _p(params, "Type", "RESOURCE")
+    if type_kind != "HOOK":
+        raise CfnError("ValidationError",
+                        "Vyomi's CloudFormation simulation only supports registering Type=HOOK through RegisterType.", 400)
+    type_name = _p(params, "TypeName")
+    if not type_name or "::" not in type_name:
+        raise CfnError("ValidationError", "TypeName must be of the form Organization::Service::HookName.", 400)
+    now = _now_iso()
+    existing = store.hooks.get(type_name) or {}
+    token = f"reg-{uuid.uuid4().hex}"
+    store.hooks[type_name] = {
+        "type_name": type_name,
+        "description": existing.get("description", ""),
+        "failure_mode": existing.get("failure_mode", "WARN"),
+        "target_operations": existing.get("target_operations", []),
+        "target_stacks": existing.get("target_stacks", "ALL"),
+        "required_tags": existing.get("required_tags", []),
+        "enabled": existing.get("enabled", False),
+        "created_time": existing.get("created_time", now),
+        "last_updated_time": now,
+        "_registration_token": token,
+    }
+    store.persist()
+    return _envelope("RegisterType", _el("RegistrationToken", token))
+
+
+def _describe_type_registration(store, params, stores):
+    token = _p(params, "RegistrationToken")
+    for h in store.hooks.values():
+        if h.get("_registration_token") == token:
+            body = (_el("ProgressStatus", "COMPLETE") + _el("Description", "Registration complete") +
+                    _el("TypeArn", _hook_type_arn(h["type_name"])) +
+                    _el("TypeVersionArn", _hook_type_arn(h["type_name"]) + "/00000001"))
+            return _envelope("DescribeTypeRegistration", body)
+    raise CfnError("CFNRegistryException", f"Registration token {token} not found", 400)
+
+
+def _parse_hook_configuration(raw: str) -> dict:
+    try:
+        cfg = json.loads(raw or "{}")
+    except (json.JSONDecodeError, TypeError):
+        raise CfnError("ValidationError", "Configuration must be valid JSON.", 400)
+    return (cfg.get("CloudFormationConfiguration") or {}).get("HookConfiguration") or {}
+
+
+def _set_type_configuration(store, params, stores):
+    type_name = _p(params, "TypeName")
+    h = _require_hook(store, type_name)
+    hook_cfg = _parse_hook_configuration(_p(params, "Configuration"))
+    failure_mode = hook_cfg.get("FailureMode", h["failure_mode"])
+    if failure_mode not in ("FAIL", "WARN"):
+        raise CfnError("ValidationError", "FailureMode must be FAIL or WARN.", 400)
+    h["failure_mode"] = failure_mode
+    if "TargetOperations" in hook_cfg:
+        ops = hook_cfg["TargetOperations"] or []
+        bad = set(ops) - _TARGET_OPERATIONS
+        if bad:
+            raise CfnError("ValidationError", f"Unsupported TargetOperations: {', '.join(sorted(bad))}", 400)
+        h["target_operations"] = list(ops)
+    if "TargetStacks" in hook_cfg:
+        ts = hook_cfg["TargetStacks"]
+        h["target_stacks"] = "ALL" if ts == "ALL" else list(ts or [])
+    if "Description" in hook_cfg:
+        h["description"] = hook_cfg["Description"]
+    props = hook_cfg.get("Properties") or {}
+    if "RequiredTagKeys" in props:
+        h["required_tags"] = [t.strip() for t in str(props["RequiredTagKeys"]).split(",") if t.strip()]
+    h["enabled"] = _bool(props["Enabled"]) if "Enabled" in props else True
+    h["last_updated_time"] = _now_iso()
+    store.persist()
+    return _envelope("SetTypeConfiguration", _el("ConfigurationArn", _hook_type_arn(type_name) + "/configuration"))
+
+
+def _deregister_type(store, params, stores):
+    type_kind = _p(params, "Type", "RESOURCE")
+    type_name = _p(params, "TypeName")
+    if type_kind != "HOOK":
+        raise CfnError("ValidationError",
+                        "Vyomi's CloudFormation simulation only supports deregistering Type=HOOK.", 400)
+    if store.hooks.pop(type_name, None) is None:
+        raise CfnError("TypeNotFoundException", f"Hook type {type_name} not found", 404)
+    store.persist()
+    return _envelope("DeregisterType")
+
+
+def _hook_summary_xml(h: dict) -> str:
+    ops_xml = "".join(_el("member", o) for o in h["target_operations"])
+    target_stacks = "ALL" if h["target_stacks"] == "ALL" else ",".join(h["target_stacks"])
+    return ("<member>" + _el("Type", "HOOK") + _el("TypeName", h["type_name"]) +
+            _el("Description", h["description"]) + _el("FailureMode", h["failure_mode"]) +
+            f"<TargetOperations>{ops_xml}</TargetOperations>" + _el("TargetStacks", target_stacks) +
+            _el("RequiredTagKeys", ",".join(h["required_tags"])) +
+            _el("IsActivated", "true" if h["enabled"] else "false") +
+            _el("LastUpdated", h["last_updated_time"]) + _el("TimeCreated", h["created_time"]) +
+            _el("TypeArn", _hook_type_arn(h["type_name"])) + "</member>")
+
+
+def _list_hook_results(store, params, stores):
+    target_id = _p(params, "TargetId")
+    invocations = store.hook_invocations
+    if target_id:
+        invocations = [i for i in invocations if i["TargetId"] == target_id]
+    body = "<HookResultSummaries>" + "".join(
+        "<member>" + _el("InvocationId", i["HookInvocationId"]) + _el("HookTypeName", i["HookTypeName"]) +
+        _el("HookTypeVersionId", i["HookTypeVersionId"]) + _el("HookStatus", i["HookStatus"]) +
+        _el("HookStatusReason", i["HookStatusReason"]) + _el("HookInvocationPoint", i["InvocationPoint"]) +
+        _el("HookFailureMode", i["HookFailureMode"]) + _el("TargetType", i["TargetType"]) +
+        _el("TargetId", i["TargetId"]) + _el("InvocationTime", i["InvocationTime"]) + "</member>"
+        for i in invocations) + "</HookResultSummaries>"
+    return _envelope("ListHookResults", body)
+
+
+def _run_hooks(store, operation: str, stack_name: str, tags: dict) -> None:
+    """Run every enabled hook targeting `operation`/`stack_name`, recording an invocation
+    for each. A FAIL-mode hook whose required tags are missing raises, blocking the
+    CREATE/UPDATE/DELETE before it does anything — the same PRE_PROVISION semantics a real
+    hook's handler would enforce."""
+    for h in store.hooks.values():
+        if not h["enabled"] or operation not in h["target_operations"]:
+            continue
+        if h["target_stacks"] != "ALL" and stack_name not in h["target_stacks"]:
+            continue
+        missing = [k for k in h["required_tags"] if k not in tags]
+        if missing:
+            status, reason = "HOOK_COMPLETE_FAILED", f"Missing required tag(s): {', '.join(missing)}"
+        else:
+            status, reason = "HOOK_COMPLETE_SUCCEEDED", "All required tags present."
+        store.hook_invocations.insert(0, {
+            "HookInvocationId": f"hi-{uuid.uuid4().hex[:16]}", "HookTypeName": h["type_name"],
+            "HookTypeVersionId": "00000001", "HookStatus": status, "HookStatusReason": reason,
+            "InvocationPoint": "PRE_PROVISION", "HookFailureMode": h["failure_mode"],
+            "TargetType": "STACK", "TargetId": stack_name, "InvocationTime": _now_iso(),
+        })
+        if missing and h["failure_mode"] == "FAIL":
+            raise CfnError("HookFailureException",
+                            f"The following hook(s) failed: [{h['type_name']}] {reason}", 400)
+
+
 # ── registry (extensions: the resource types this engine actually provisions) ──
 _TYPE_DESCRIPTIONS = {
     "AWS::S3::Bucket": "An Amazon S3 bucket, provisioned through Vyomi's S3 engine.",
@@ -1889,6 +2053,10 @@ def _type_arn(type_name: str) -> str:
 def _list_types(store, params, stores):
     visibility = _p(params, "Visibility", "PUBLIC")
     type_filter = _p(params, "Type", "RESOURCE")
+    if type_filter == "HOOK":
+        body = "<TypeSummaries>" + "".join(
+            _hook_summary_xml(h) for h in sorted(store.hooks.values(), key=lambda h: h["type_name"])) + "</TypeSummaries>"
+        return _envelope("ListTypes", body)
     if type_filter != "RESOURCE" or visibility != "PUBLIC":
         return _envelope("ListTypes", "<TypeSummaries></TypeSummaries>")
     body = "<TypeSummaries>" + "".join(
@@ -1901,6 +2069,26 @@ def _list_types(store, params, stores):
 
 def _describe_type(store, params, stores):
     type_name = _p(params, "TypeName")
+    type_kind = _p(params, "Type", "RESOURCE")
+    if type_kind == "HOOK" or type_name in store.hooks:
+        h = _require_hook(store, type_name)
+        schema = json.dumps({
+            "typeName": h["type_name"], "description": h["description"],
+            "properties": {"RequiredTagKeys": {"type": "string",
+                           "description": "Comma-separated tag keys required on every targeted stack."}},
+            "handlers": {"preCreate": {}, "preUpdate": {}, "preDelete": {}},
+        })
+        ops_xml = "".join(_el("member", o) for o in h["target_operations"])
+        body = (_el("Arn", _hook_type_arn(type_name)) + _el("Type", "HOOK") + _el("TypeName", type_name) +
+                _el("DefaultVersionId", "00000001") + _el("IsDefaultVersion", "true") +
+                _el("Description", h["description"]) + _el("Schema", schema) +
+                _el("FailureMode", h["failure_mode"]) + f"<TargetOperations>{ops_xml}</TargetOperations>" +
+                _el("TargetStacks", "ALL" if h["target_stacks"] == "ALL" else ",".join(h["target_stacks"])) +
+                _el("RequiredTagKeys", ",".join(h["required_tags"])) +
+                _el("ProvisioningType", "NOT_PROVISIONABLE") + _el("DeprecatedStatus", "LIVE") +
+                _el("Visibility", "PRIVATE") + _el("LastUpdated", h["last_updated_time"]) +
+                _el("TimeCreated", h["created_time"]) + _el("IsActivated", "true" if h["enabled"] else "false"))
+        return _envelope("DescribeType", body)
     if type_name not in RESOURCE_TYPES:
         raise CfnError("TypeNotFoundException", f"Type {type_name} not found", 404)
     name_prop = RESOURCE_TYPES[type_name].get("name_prop")
@@ -2177,6 +2365,9 @@ _ACTIONS = {
     "CreateStackRefactor": _create_stack_refactor, "DescribeStackRefactor": _describe_stack_refactor,
     "ExecuteStackRefactor": _execute_stack_refactor,
     "ListTypes": _list_types, "DescribeType": _describe_type,
+    "RegisterType": _register_type, "DescribeTypeRegistration": _describe_type_registration,
+    "SetTypeConfiguration": _set_type_configuration, "DeregisterType": _deregister_type,
+    "ListHookResults": _list_hook_results,
     "StartResourceScan": _start_resource_scan, "DescribeResourceScan": _describe_resource_scan,
     "ListResourceScans": _list_resource_scans, "ListResourceScanResources": _list_resource_scan_resources,
     "CreateGeneratedTemplate": _create_generated_template, "DescribeGeneratedTemplate": _describe_generated_template,

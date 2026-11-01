@@ -984,6 +984,41 @@ try {
         genTplXml.includes(ROLE4) && genTplXml.includes("AWS::IAM::Role"), genTplXml.slice(0, 300));
   await shot("23-cloudformation-iac-generator");
 
+  // CloudFormation Hooks: a hook created through the UI wizard really enforces a
+  // required-tag policy on CreateStack over the native wire (UI → CLI direction), and
+  // the resulting invocation history (both the blocked attempt and the passing one) shows
+  // up back in the UI (CLI → UI direction).
+  const HOOK = `V4Smoke::Policy::RequireOwner${Date.now() % 100000}`;
+  const HOOKSTACK = `v4-smoke-hookstack-${Date.now() % 100000}`;
+  await page.goto(UI + "#/cloudformation/hooks/list");
+  await page.getByRole("button", { name: "Create a Hook" }).click();
+  const hookDialog = page.getByRole("dialog");
+  await hookDialog.getByLabel("Hook name", { exact: true }).fill(HOOK);
+  await hookDialog.getByRole("radio", { name: "Specific stacks" }).check();
+  await hookDialog.getByLabel("Stack names", { exact: true }).fill(HOOKSTACK);
+  await hookDialog.getByLabel("Required tag keys", { exact: true }).fill("Owner");
+  await hookDialog.getByRole("button", { name: "Create hook", exact: true }).click();
+  await page.getByText(`Hook "${HOOK}" created.`).waitFor({ timeout: 10000 });
+  await page.getByText(HOOK).first().waitFor({ timeout: 10000 });
+  check("CloudFormation Create a Hook (UI wizard) → visible in Hooks list", true);
+  await shot("24-cloudformation-hooks");
+
+  const hookQueueTpl = JSON.stringify({ Resources: { Q: { Type: "AWS::SQS::Queue", Properties: {} } } });
+  const blockedXml = await cfn("CreateStack", { StackName: HOOKSTACK, TemplateBody: hookQueueTpl });
+  check("CloudFormation hook (UI-created) blocks CreateStack missing the required tag, over native wire",
+        blockedXml.includes("HookFailureException"), blockedXml.slice(0, 200));
+  const okXml = await cfn("CreateStack", { StackName: HOOKSTACK, TemplateBody: hookQueueTpl,
+    "Tags.member.1.Key": "Owner", "Tags.member.1.Value": "team-a" });
+  check("CloudFormation hook lets CreateStack through once the required tag is present",
+        okXml.includes("<StackId>"), okXml.slice(0, 200));
+
+  await page.goto(UI + "#/cloudformation/hooks/invocations");
+  await page.getByPlaceholder("Find invocations").fill(HOOKSTACK);
+  await page.getByText("Missing required tag(s): Owner").first().waitFor({ timeout: 10000 });
+  await page.getByText("All required tags present.").first().waitFor({ timeout: 10000 });
+  check("CloudFormation hook invocations from native-wire CreateStack calls → shown in Invocation summary", true);
+  await shot("25-cloudformation-invocation-summary");
+
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));
   await page.reload();

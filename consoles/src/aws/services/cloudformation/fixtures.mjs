@@ -15,6 +15,18 @@ async function ensureStack(wire, name) {
   await wire("POST", "/", Q("CreateStack", { StackName: name, TemplateBody: queueTemplate() })).catch(() => {});
 }
 
+async function ensureHook(wire, typeName, { failureMode = "WARN", targetOperations = ["CREATE"], targetStacks = "ALL", requiredTags = [] } = {}) {
+  await wire("POST", "/", Q("RegisterType", { Type: "HOOK", TypeName: typeName }));
+  const configuration = JSON.stringify({
+    CloudFormationConfiguration: { HookConfiguration: {
+      FailureMode: failureMode, TargetOperations: targetOperations,
+      TargetStacks: targetStacks === "ALL" ? "ALL" : targetStacks,
+      Properties: { RequiredTagKeys: requiredTags.join(","), Enabled: "true" },
+    } },
+  });
+  await wire("POST", "/", Q("SetTypeConfiguration", { TypeName: typeName, Configuration: configuration }));
+}
+
 export default {
   "cfn-stack": async (wire) => { await ensureStack(wire, "uic-stack"); return "uic-stack"; },
   "live-stack": async (wire, uniq) => { await ensureStack(wire, uniq); return uniq; },
@@ -81,5 +93,23 @@ export default {
     const id = /<StackRefactorId>(.*?)<\/StackRefactorId>/.exec(created)?.[1];
     if (id) await wire("POST", "/", Q("ExecuteStackRefactor", { StackRefactorId: id }));
     return uniq;
+  },
+
+  "cfn-hook": async (wire) => { await ensureHook(wire, "Vyomi::Fixture::UicHook"); return "Vyomi::Fixture::UicHook"; },
+  "live-hook": async (wire, uniq) => { const name = `Vyomi::Fixture::${uniq}`; await ensureHook(wire, name); return name; },
+
+  // A hook scoped to one specific stack generates a real PRE_PROVISION invocation when
+  // that stack is created, so the Invocation summary page shows a non-empty, real row.
+  "cfn-hook-invocation": async (wire) => {
+    const stack = "uic-hook-invocation-stack";
+    await ensureHook(wire, "Vyomi::Fixture::UicInvocationHook", { targetStacks: [stack] });
+    await ensureStack(wire, stack);
+    return stack;
+  },
+  "live-hook-invocation": async (wire, uniq) => {
+    const stack = `${uniq}-stack`;
+    await ensureHook(wire, `Vyomi::Fixture::${uniq}`, { targetStacks: [stack] });
+    await ensureStack(wire, stack);
+    return stack;
   },
 };

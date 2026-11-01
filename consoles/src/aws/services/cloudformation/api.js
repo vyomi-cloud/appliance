@@ -207,3 +207,53 @@ export async function listTypes() {
 export async function describeType(typeName) {
   return result(await call("DescribeType", { TypeName: typeName }), "DescribeType");
 }
+
+// ── hooks (registry Type=HOOK): registered + configured with a required-tag policy,
+// enforced for real on CreateStack/UpdateStack/DeleteStack (core/cloudformation_core.py
+// _run_hooks). ────────────────────────────────────────────────────────────────
+function hookTypeSummary(m) {
+  return {
+    TypeName: m.TypeName,
+    Description: m.Description || "",
+    FailureMode: m.FailureMode || "WARN",
+    TargetOperations: asList(m.TargetOperations?.member),
+    TargetStacks: m.TargetStacks === "ALL" ? "ALL" : (m.TargetStacks ? m.TargetStacks.split(",").filter(Boolean) : []),
+    RequiredTagKeys: m.RequiredTagKeys ? m.RequiredTagKeys.split(",").filter(Boolean) : [],
+    Enabled: m.IsActivated === "true",
+    LastUpdated: m.LastUpdated,
+    TimeCreated: m.TimeCreated,
+    TypeArn: m.TypeArn,
+  };
+}
+export async function listHooks() {
+  const r = result(await call("ListTypes", { Visibility: "PRIVATE", Type: "HOOK" }), "ListTypes");
+  return asList(r.TypeSummaries?.member).map(hookTypeSummary);
+}
+export async function describeHook(typeName) {
+  const r = result(await call("DescribeType", { Type: "HOOK", TypeName: typeName }), "DescribeType");
+  return hookTypeSummary(r);
+}
+function hookConfiguration({ failureMode, targetOperations = [], targetStacks, requiredTagKeys = [], enabled = true }) {
+  return JSON.stringify({
+    CloudFormationConfiguration: {
+      HookConfiguration: {
+        FailureMode: failureMode,
+        TargetOperations: targetOperations,
+        TargetStacks: targetStacks === "ALL" ? "ALL" : targetStacks,
+        Properties: { RequiredTagKeys: requiredTagKeys.join(","), Enabled: enabled ? "true" : "false" },
+      },
+    },
+  });
+}
+export async function createHook(hook) {
+  await call("RegisterType", { Type: "HOOK", TypeName: hook.typeName });
+  await call("SetTypeConfiguration", { TypeName: hook.typeName, Configuration: hookConfiguration(hook) });
+}
+export const setHookEnabled = (hook, enabled) => call("SetTypeConfiguration", { TypeName: hook.TypeName, Configuration: hookConfiguration({
+  failureMode: hook.FailureMode, targetOperations: hook.TargetOperations, targetStacks: hook.TargetStacks, requiredTagKeys: hook.RequiredTagKeys, enabled,
+}) });
+export const deleteHook = (typeName) => call("DeregisterType", { Type: "HOOK", TypeName: typeName });
+export async function listHookResults(targetId) {
+  const r = result(await call("ListHookResults", targetId ? { TargetId: targetId } : {}), "ListHookResults");
+  return asList(r.HookResultSummaries?.member);
+}
