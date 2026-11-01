@@ -1992,6 +1992,14 @@
       "kind": "api",
       "cmd": "python3 tests/conformance/post_create/probes/azure_container_app.py {ENDPOINT}",
       "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-loganalytics",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/azure_loganalytics.py {ENDPOINT}",
+      "timeout": 300
     }
   ]
 }

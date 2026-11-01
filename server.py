@@ -23793,6 +23793,13 @@ try:
 except Exception as _e:   # never let this break appliance boot
     print(f"[azure-appconfig] routes skipped: {_e}")
 
+# Azure Log Analytics data plane (/azure-data/loganalytics/...: ingest + KQL subset); ARM control plane is in azure_services.
+try:
+    from providers import azure_loganalytics_routes as _azure_la_routes
+    _azure_la_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure-loganalytics] routes skipped: {_e}")
+
 # Azure DNS resolution (/azure-data/dns/query); the ARM control plane (dnsZones) is in azure_services.
 try:
     from providers import azure_dns_routes as _azure_dns_routes

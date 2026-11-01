@@ -370,7 +370,7 @@ class AzureArm:
             return _err(404, "NotFound", f"Not an ARM path: {path}")
         rest = path[i + len("/subscriptions/"):].split("?", 1)[0]
         self._evented = False
-        resp = self._arm(method, rest, query, body if isinstance(body, dict) else {})
+        resp = self._arm(method, rest, query, body if isinstance(body, dict) else ({"_array": body} if isinstance(body, list) else {}))
         if method != "GET" and resp.get("status", 500) < 300 and not self._evented:
             scope, typ, name = _event_target(rest)
             if scope:
