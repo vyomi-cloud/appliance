@@ -109,6 +109,19 @@ try {
   await page.getByRole("cell", { name: "Latest version" }).waitFor({ timeout: 10000 });
   await shot("04b-s3-object-detail");
   check("S3 object detail shows real HeadObject + ListObjectVersions data", true);
+
+  // Object Tags: Edit in the UI -> visible over the native ?tagging wire
+  await page.getByRole("tab", { name: "Properties" }).click();
+  const tagsEdit = page.getByRole("heading", { name: /^Tags/ }).first().locator('xpath=ancestor::*[.//button[normalize-space()="Edit"]][1]').getByRole("button", { name: "Edit" }).first();
+  await tagsEdit.waitFor({ timeout: 10000 });
+  await tagsEdit.click();
+  await page.getByRole("button", { name: "Add new tag" }).click();
+  await page.getByPlaceholder("Enter key").first().fill("env");
+  await page.getByPlaceholder("Enter value").first().fill("smoke");
+  await page.getByRole("dialog").getByRole("button", { name: "Save changes" }).click();
+  await page.getByRole("cell", { name: "smoke", exact: true }).waitFor({ timeout: 10000 });
+  const objTags = await wire(`/${B}/hello.txt?tagging`);
+  check("UI edit object tags -> visible over native ?tagging", objTags.includes("<Key>env</Key>") && objTags.includes("<Value>smoke</Value>"), objTags.slice(0, 160));
   await page.goBack();
 
   // W1 Permissions tab: every edit must land in the backend (native GET) and carry its badge.

@@ -24,6 +24,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import TagsContainer from "./TagsContainer.jsx";
 
 export default function ObjectDetail({ params, query }) {
   const bucket = params.bucket;
@@ -70,6 +71,7 @@ export default function ObjectDetail({ params, query }) {
 function Properties({ bucket, objectKey, head, region, url }) {
   const d = head.data;
   const lock = useAsync(() => api.getObjectLock(bucket), [bucket]);
+  const tags = useAsync(() => api.getObjectTags(bucket, objectKey), [bucket, objectKey]);
   return (
     <SpaceBetween size="l">
       <KeyValue title="Object overview" items={[
@@ -93,7 +95,7 @@ function Properties({ bucket, objectKey, head, region, url }) {
         </SpaceBetween>
       </CapabilityContainer>
       <NotSimulatedContainer title="Additional checksums" />
-      <NotSimulatedContainer title="Tags" />
+      <TagsContainer state={tags} save={(t) => api.putObjectTags(bucket, objectKey, t)} limit={10} />
       <Table
         variant="container"
         header={<Header variant="h2" counter={`(${Object.keys(d?.metadata || {}).length})`}>Metadata</Header>}

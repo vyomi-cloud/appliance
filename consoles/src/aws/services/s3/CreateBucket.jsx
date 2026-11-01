@@ -14,6 +14,7 @@ import Button from "@cloudscape-design/components/button";
 import Box from "@cloudscape-design/components/box";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import TagEditor from "@cloudscape-design/components/tag-editor";
+import { TAG_I18N } from "../../kit/tagI18n.js";
 import Alert from "@cloudscape-design/components/alert";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import Modal from "@cloudscape-design/components/modal";
@@ -171,7 +172,7 @@ export default function CreateBucket() {
             </Container>
 
             <Container header={<Header variant="h2" counter={`(${tags.filter((t) => !t.markedForRemoval).length})`} description="You can use bucket tags to track storage costs and organize buckets.">Tags - optional</Header>}>
-              <TagEditor tags={tags} onChange={({ detail }) => setTags(detail.tags)} i18nStrings={{ keyHeader: "Key", valueHeader: "Value", addButton: "Add new tag", removeButton: "Remove", undoButton: "Undo", undoPrompt: "This tag will be removed upon saving changes", loading: "Loading tags", keyPlaceholder: "Enter key", valuePlaceholder: "Enter value", emptyTags: "No tags associated with the resource.", tooManyKeysSuggestion: "You have more keys than can be displayed", tooManyValuesSuggestion: "You have more values than can be displayed", keysSuggestionLoading: "Loading tag keys", keysSuggestionError: "Tag keys could not be retrieved", valuesSuggestionLoading: "Loading tag values", valuesSuggestionError: "Tag values could not be retrieved", emptyKeyError: "You must specify a tag key", maxKeyCharLengthError: "The maximum number of characters you can use in a tag key is 128.", maxValueCharLengthError: "The maximum number of characters you can use in a tag value is 256.", duplicateKeyError: "You must specify a unique tag key.", invalidKeyError: "Invalid key.", invalidValueError: "Invalid value.", awsPrefixError: "Cannot start with aws:", tagLimit: (a) => `You can add up to ${a} more tags.`, tagLimitReached: () => "You have reached the limit of 50 tags.", tagLimitExceeded: () => "You have exceeded the limit of 50 tags." }} />
+              <TagEditor tags={tags} onChange={({ detail }) => setTags(detail.tags)} i18nStrings={TAG_I18N} />
             </Container>
 
             <Container header={<Header variant="h2" description="Server-side encryption is automatically applied to new objects stored in this bucket.">Default encryption</Header>}>

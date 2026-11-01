@@ -119,6 +119,17 @@ export const putTags = (b, tags) => tags.length
   ? s3("PUT", `/${b}`, { query: { tagging: "" }, body: xml(`<Tagging ${NS}><TagSet>${tags.map((t) => `<Tag><Key>${esc(t.key)}</Key><Value>${esc(t.value)}</Value></Tag>`).join("")}</TagSet></Tagging>`) })
   : s3("DELETE", `/${b}`, { query: { tagging: "" } });
 
+// Object tags (GET/PUT/DELETE /{bucket}/{key}?tagging)
+export async function getObjectTags(b, key) {
+  try {
+    const r = await s3("GET", `/${b}/${enc(key)}`, { query: { tagging: "" } });
+    return { tags: asList(r.Tagging?.TagSet?.Tag).map((t) => ({ key: t.Key, value: t.Value || "" })) };
+  } catch (e) { return { error: e }; }
+}
+export const putObjectTags = (b, key, tags) => tags.length
+  ? s3("PUT", `/${b}/${enc(key)}`, { query: { tagging: "" }, body: xml(`<Tagging ${NS}><TagSet>${tags.map((t) => `<Tag><Key>${esc(t.key)}</Key><Value>${esc(t.value)}</Value></Tag>`).join("")}</TagSet></Tagging>`) })
+  : s3("DELETE", `/${b}/${enc(key)}`, { query: { tagging: "" } });
+
 export async function getEncryption(b) {
   const r = await sub(b, "encryption");
   if (!r.value) return r;

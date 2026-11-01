@@ -20,6 +20,7 @@ import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue, NotSimulated, NotSimulatedContainer } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import TagsContainer from "./TagsContainer.jsx";
 import Permissions from "./Permissions.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
 import { WIRE_BASE } from "../../../common/wire.js";
@@ -136,12 +137,7 @@ function Properties({ bucket }) {
           actions={<Button onClick={async () => { try { await api.putVersioning(bucket, d.status !== "Enabled"); notify.success("Successfully edited Bucket Versioning."); ver.reload(); } catch (e) { notify.error(e); } }}>{d.status === "Enabled" ? "Suspend" : "Enable"}</Button>}
           items={[["Bucket Versioning", d.status]]} />
       )} />
-      <SubSetting title="Tags" state={tags} render={(d) => (
-        <Container header={<Header variant="h2" counter={`(${d.tags.length})`}>Tags</Header>}>
-          <Table variant="embedded" items={d.tags} columnDefinitions={[{ id: "k", header: "Key", cell: (t) => t.key }, { id: "v", header: "Value", cell: (t) => t.value || "-" }]}
-            empty={<Box textAlign="center" color="inherit"><b>No tags</b><Box variant="p" color="inherit">There are no tags associated with this resource.</Box></Box>} />
-        </Container>
-      )} />
+      <TagsContainer state={tags} save={(t) => api.putTags(bucket, t)} />
       <Encryption bucket={bucket} state={enc} />
       <IntelligentTieringSection bucket={bucket} />
       <LoggingSection bucket={bucket} />
