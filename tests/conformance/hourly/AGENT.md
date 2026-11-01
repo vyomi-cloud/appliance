@@ -127,6 +127,12 @@ in the prompt and in `$SLICE`). Each has its own appliance stack and relay.
    failure there is a product bug on one side, so fix the console or the API, never the test.
    When it is green, extend it: add the next service to `SERVICES` (and its SDK calls to
    `sdk_side.py`), then GCP and Azure.
+   Also `offline-ui-console-home` (`tests/conformance/home/`): the crawler never opens a
+   console's Home page, so this checks it for AWS, GCP and Azure: the Cost savings card's
+   headline and service rows must equal the API's `active_space.cost_savings`, the card must not
+   sit on its empty state or `$0.00` while the API has savings, the Connect card must render,
+   the two cards must share a row height, and Home must raise no page errors or 5xx. The Nano
+   twin does not exist yet: build it on `wasm/ui-tests/lib.mjs` (`bootConsole`) with the same checks.
 7. **New features** (`new_features.json` → `new`): a new SDK operation with
    `tested: false` gets a Java or Go test (official SDK, endpoint changed only); a
    new service/tab/action is crawled live — fix whatever the crawl finds and add a

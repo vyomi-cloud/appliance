@@ -1673,6 +1673,14 @@
       "timeout": 600
     },
     {
+      "id": "offline-ui-console-home",
+      "target": "offline",
+      "cloud": "all",
+      "kind": "ui",
+      "cmd": "rc=0; for c in aws gcp azure; do VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/home/home_setup.py $c && VYOMI_BASE_URL={ENDPOINT} node tests/conformance/home/home_cards.mjs $c || rc=1; done; exit $rc",
+      "timeout": 600
+    },
+    {
       "id": "offline-ui-gcp-artifactregistry",
       "target": "offline",
       "cloud": "gcp",
