@@ -45,7 +45,7 @@ export const MENU = [
   { group: "Help", items: [{ id: "effectivesecurityrules", label: "Effective security rules" }, { id: "support", label: "Support + Troubleshooting" }] },
 ];
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
-const GAP_CAP = { tasks: "azure.nsgs.tools", support: "azure.nsgs.tools" };
+const GAP_CAP = { support: "azure.nsgs.tools" };
 
 export default function NsgBlade({ params }) {
   const { rg, name } = params;
@@ -73,6 +73,7 @@ export default function NsgBlade({ params }) {
       exporttemplate: () => <ExportTemplate a={a} />,
       diagnosticsettings: () => <DiagnosticSettings a={a} />,
       diagnose: () => <Diagnose />,
+      tasks: () => <Tasks a={a} reload={reload} />,
       effectivesecurityrules: () => <EffectiveSecurityRules a={a} />,
       alerts: () => <NotSimulatedContainer title={`${name} | Alerts`} feature="Alerts" />,
       logs: () => <NotSimulatedContainer title={`${name} | Logs`} feature="Logs" />,
@@ -99,7 +100,7 @@ function Overview({ a, reload, self }) {
   const sub = useSubscription();
   const [del, setDel] = useState(false);
   const rules = useAsync(() => api.listSecurityRules(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
-  const tags = Object.entries(a.tags || {});
+  const tags = api.visibleTags(a.tags);
   const custom = rules.data || [];
   return (
     <>
@@ -134,17 +135,99 @@ function Overview({ a, reload, self }) {
   );
 }
 
-// ── Diagnose and solve problems: the Network Watcher tiles (IP flow verify, Next hop) are
-// real; its other diagnostic tiles stay an honest gap (azure.nsgs.tools). ─────────────────
+// ── Diagnose and solve problems: all four Network Watcher tiles (IP flow verify, Next hop,
+// VM connectivity issue, Network configuration diagnostics) are real — azure.nsgs.network_watcher.
 function Diagnose() {
   return (
     <>
       <div className="vy-panel-title">Diagnose and solve problems</div>
       <NetworkWatcherTools />
-      <div style={{ marginTop: 16 }}>
-        <NotSimulatedContainer title="Other diagnostic tools" feature="Tasks, Support + Troubleshooting and the remaining Diagnose and solve problems tiles" />
-      </div>
     </>
+  );
+}
+
+// ── Tasks (Preview): a per-resource checklist stored as real tags on this NSG — see
+// core/capabilities/azure/nsgs.json azure.nsgs.tasks and api.js's TASK_TAG_PREFIX. ─────────
+const TASK_STATUSES = ["To Do", "Doing", "Done"];
+function Tasks({ a, reload }) {
+  const notify = useNotify();
+  const [edit, setEdit] = useState(null);
+  const [del, setDel] = useState(null);
+  // The parent blade fetches the NSG (and its tags) once when first opened and otherwise only
+  // refetches on an explicit reload — force one on mount so a task added since then (by
+  // another tool, or just switching away and back to this panel) shows up.
+  useEffect(() => { reload(); }, []);
+  const tasks = api.listTasks(a);
+  return (
+    <>
+      <div className="vy-panel-title">Tasks</div>
+      <p style={{ fontSize: 13 }}>Track ad hoc work items against this network security group.</p>
+      <div className="vy-cmdbar" role="toolbar" aria-label="Tasks commands">
+        <ToolbarButton icon={<Add20Regular />} onClick={() => setEdit({ title: "", status: "To Do", description: "" })}>Create</ToolbarButton>
+        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>
+      </div>
+      <Table size="small" aria-label="Tasks" className="vy-grid">
+        <TableHeader><TableRow>
+          <TableHeaderCell>Title</TableHeaderCell><TableHeaderCell>Status</TableHeaderCell><TableHeaderCell>Description</TableHeaderCell><TableHeaderCell style={{ width: 48 }} />
+        </TableRow></TableHeader>
+        <TableBody>
+          {tasks.map((t) => (
+            <TableRow key={t.id}>
+              <TableCell><Link onClick={() => setEdit(t)}>{t.title}</Link></TableCell>
+              <TableCell>{t.status}</TableCell>
+              <TableCell>{t.description || "--"}</TableCell>
+              <TableCell><Button appearance="subtle" size="small" icon={<Delete20Regular />} aria-label={`Delete ${t.title}`} onClick={() => setDel(t)} /></TableCell>
+            </TableRow>
+          ))}
+          {!tasks.length && <TableRow><TableCell colSpan={4} className="vy-muted">No tasks to display</TableCell></TableRow>}
+        </TableBody>
+      </Table>
+      <TaskDialog open={!!edit} task={edit} onClose={() => setEdit(null)}
+        onSave={async (task) => {
+          await api.saveTask(a, task.id || crypto.randomUUID(), { title: task.title, status: task.status, description: task.description });
+          notify.success(`Task '${task.title}' was saved.`, "Task saved");
+          reload();
+        }} />
+      <DeleteDialog open={!!del} onClose={() => setDel(null)} resourceType="task" names={del ? [del.title] : []}
+        onConfirm={async () => {
+          await api.deleteTask(a, del.id);
+          notify.success(`Task '${del.title}' was deleted.`, "Delete succeeded");
+          reload();
+        }} />
+    </>
+  );
+}
+
+function TaskDialog({ open, task, onClose, onSave }) {
+  const init = () => task || { title: "", status: "To Do", description: "" };
+  const [f, setF] = useState(init);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (open) setF(init()); }, [open, task]);
+  const valid = f.title.trim().length > 0 && f.title.length <= 100;
+  const go = async () => {
+    setBusy(true);
+    try { await onSave(f); onClose(); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label={task?.id ? "Edit task" : "New task"}>
+        <DialogBody>
+          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>{task?.id ? "Edit task" : "New task"}</DialogTitle>
+          <DialogContent>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 420 }}>
+              <Field label="Title" required><Input value={f.title} maxLength={100} onChange={(_, d) => setF({ ...f, title: d.value })} aria-label="Title" /></Field>
+              <Field label="Status"><Select value={f.status} onChange={(_, d) => setF({ ...f, status: d.value })} aria-label="Status">{TASK_STATUSES.map((s) => <option key={s}>{s}</option>)}</Select></Field>
+              <Field label="Description"><Textarea value={f.description} maxLength={200} onChange={(_, d) => setF({ ...f, description: d.value })} aria-label="Description" /></Field>
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={!valid || busy} onClick={go}>Save</Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
   );
 }
 
@@ -265,16 +348,19 @@ export function TagRows({ tags, onChange, resource }) {
 
 function Tags({ a, reload }) {
   const notify = useNotify();
-  const init = () => [...Object.entries(a.tags || {}).map(([name, value]) => ({ name, value })), { name: "", value: "" }];
+  const init = () => [...api.visibleTags(a.tags).map(([name, value]) => ({ name, value })), { name: "", value: "" }];
   const [rows, setRows] = useState(init);
   const [busy, setBusy] = useState(false);
   useEffect(() => setRows(init()), [a]);
   const apply = async () => {
     setBusy(true);
     try {
-      // ARM PUT replaces the resource's tag set exactly (a PATCH would merge and keep removed keys).
+      // ARM PUT replaces the resource's tag set exactly (a PATCH would merge and keep removed
+      // keys) — fold the hidden Tasks tags (api.TASK_TAG_PREFIX) back in so editing Tags here
+      // never wipes this NSG's Tasks list.
       const { id, name, type, resourceGroup, ...rest } = a;
-      await api.createNsg(a.resourceGroup, a.name, { ...rest, tags: Object.fromEntries(rows.filter((t) => t.name).map((t) => [t.name, t.value])) });
+      const tags = { ...api.taskTags(a.tags), ...Object.fromEntries(rows.filter((t) => t.name).map((t) => [t.name, t.value])) };
+      await api.createNsg(a.resourceGroup, a.name, { ...rest, tags });
       notify.success(`Tags on '${a.name}' were updated.`, "Tags saved");
       reload();
     } catch (e) { notify.error(e, "Saving tags failed"); }
