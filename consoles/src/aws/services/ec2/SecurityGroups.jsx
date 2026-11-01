@@ -261,7 +261,7 @@ export function RuleEditor({ group, direction, onDone, onCancel }) {
   return (
     <SpaceBetween size="l">
       <Table
-        variant="embedded"
+        variant="container"
         items={rows}
         header={<Header variant="h3">{direction === "ingress" ? "Inbound rules" : "Outbound rules"}</Header>}
         columnDefinitions={[

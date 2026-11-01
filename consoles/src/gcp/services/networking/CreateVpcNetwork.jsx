@@ -2,7 +2,7 @@
  * real setting becomes a native networks.insert + subnetworks.insert / firewalls.insert
  * call; settings Vyomi doesn't model are declared gaps, not controls. */
 import { useState } from "react";
-import {
+import { Paper,
   Box, Button, Checkbox, Divider, FormControl, FormControlLabel, FormHelperText, IconButton, InputLabel, MenuItem,
   Radio, RadioGroup, Select, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography,
 } from "@mui/material";
@@ -189,7 +189,7 @@ export default function CreateVpcNetwork() {
 
       <Step n={3} title="Firewall rules">
         <Typography variant="body2" color="text.secondary">IPv4 firewall rules — select the default rules to create alongside this network.</Typography>
-        <TableContainer sx={{ maxWidth: 880 }}>
+        <TableContainer component={Paper} variant="outlined" sx={{ maxWidth: 880, borderRadius: 2 }}>
           <Table size="small">
             <TableHead>
               <TableRow>

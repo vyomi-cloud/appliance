@@ -246,7 +246,7 @@ export default function Home() {
   return (
     <Box>
       <Stack direction="row" alignItems="flex-end" sx={{ borderBottom: 1, borderColor: "divider", mb: 2 }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ flex: 1 }}>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ flex: 1, borderBottom: 0, "&&": { mx: 0, px: 0 } }}>
           <Tab label="Dashboard" /><Tab label="Activity" /><Tab label="Recommendations" />
         </Tabs>
         {tab === 0 && <Button variant="outlined" startIcon={<EditIcon />} onClick={() => setCustomize([...hidden])} sx={{ mb: 1 }}>Customize</Button>}

@@ -2,7 +2,7 @@
  * policies) from metricDescriptors.list; billing/usage figures are an honest gap (no
  * billing pipeline) and "Excluded Metrics" has no public API to back it. */
 import { useState } from "react";
-import { Button, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tab, Tabs, TextField, Typography } from "@mui/material";
+import { Button, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, Tab, Tabs, TextField, Typography } from "@mui/material";
 import { useAsync } from "../../../common/useAsync.js";
 import { PageHeader } from "../../kit/common.jsx";
 import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
@@ -34,6 +34,7 @@ export default function MetricsManagement() {
               inputProps={{ "aria-label": "Filter" }} sx={{ maxWidth: 320 }} />
             <Button size="small" disabled>Exclude metric</Button>
           </Stack>
+          <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden" }}>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -68,6 +69,7 @@ export default function MetricsManagement() {
               )) : <TableRow><TableCell colSpan={11}><Typography variant="body2" color="text.secondary">No rows to display</Typography></TableCell></TableRow>}
             </TableBody>
           </Table>
+          </Paper>
         </Stack>
       )}
     </>

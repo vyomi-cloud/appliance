@@ -13,7 +13,7 @@ import AddIcon from "@mui/icons-material/esm/Add.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
-import { ErrorAlert, PageHeader, Section } from "../../kit/common.jsx";
+import { ErrorAlert, PageHeader, Section, SECTION_TABLE_BLEED } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
 
@@ -206,7 +206,7 @@ export default function CreateAlertPolicy() {
             <Box><Typography variant="body2" color="text.secondary">Severity</Typography><Typography>{severity}</Typography></Box>
             <Box>
               <Typography variant="body2" sx={{ mb: 0.5 }}>Notification channels</Typography>
-              <Table size="small">
+              <Table size="small" sx={SECTION_TABLE_BLEED}>
                 <TableHead><TableRow><TableCell>Display name</TableCell><TableCell>Type</TableCell></TableRow></TableHead>
                 <TableBody>
                   {useChannel && channelIds.length ? channelIds.map((id) => { const c = channels.find((x) => x.name === id); return <TableRow key={id}><TableCell>{api.channelLabel(c || {})}</TableCell><TableCell>{c?.type}</TableCell></TableRow>; })

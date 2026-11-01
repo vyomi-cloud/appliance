@@ -36,6 +36,17 @@ export function makeTheme(mode = "light") {
         defaultProps: { disableElevation: true },
         styleOverrides: { root: { borderRadius: 20, paddingLeft: 16, paddingRight: 16, minHeight: 36 }, text: { paddingLeft: 12, paddingRight: 12 } },
       },
+      // Every tab strip gets a full divider. Page-level strips run edge to edge of the content card,
+      // like PageHeader's divider (mx -3 past the page's 24px padding); strips inside a Paper
+      // (Section, Dialog) keep to their box. Active-tab indicator sits on this line.
+      MuiTabs: {
+        styleOverrides: {
+          root: {
+            borderBottom: `1px solid ${dark ? "#444746" : "#e1e3e1"}`,
+            "&:not(.MuiPaper-root *)": { marginLeft: -24, marginRight: -24, paddingLeft: 24, paddingRight: 24 },
+          },
+        },
+      },
       MuiTab: { styleOverrides: { root: { textTransform: "none", fontSize: 14, fontWeight: 500, minHeight: 48, minWidth: 0, paddingLeft: 16, paddingRight: 16 } } },
       MuiTableCell: {
         styleOverrides: {

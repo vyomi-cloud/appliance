@@ -30,6 +30,13 @@ export function NotSimulatedContainer({ title, feature, note, description }) {
 }
 
 /** Bordered content section with a title row, like the console's cards/sections. */
+/** sx for a table wrapper nested inside a Section: its row lines reach the card's edges. */
+export const SECTION_TABLE_BLEED = {
+  mx: -2.5, width: "calc(100% + 40px)", maxWidth: "none",
+  "& th:first-of-type, & td:first-of-type": { pl: 2.5 },
+  "& th:last-of-type, & td:last-of-type": { pr: 2.5 },
+};
+
 export function Section({ title, description, actions, children, className, dataNs, noPad }) {
   return (
     <Paper variant="outlined" className={className} {...(dataNs ? { "data-vyomi-not-simulated": dataNs, "data-vyomi-gap-box": "" } : {})}
@@ -41,7 +48,13 @@ export function Section({ title, description, actions, children, className, data
         </Stack>
       )}
       {description && <Typography variant="body2" color="text.secondary" sx={{ px: 2.5, pb: 1.5 }}>{description}</Typography>}
-      <Box sx={noPad ? {} : { px: 2.5, pb: 2.5 }}>{children}</Box>
+      <Box sx={noPad ? {} : {
+        px: 2.5, pb: 2.5,
+        // A table's row lines run edge to edge of the card; its text still lines up with the title.
+        "& > .MuiTableContainer-root, & > .MuiTable-root": { mx: -2.5, width: "calc(100% + 40px)", maxWidth: "none" },
+        "& > .MuiTableContainer-root th:first-of-type, & > .MuiTableContainer-root td:first-of-type, & > .MuiTable-root th:first-of-type, & > .MuiTable-root td:first-of-type": { pl: 2.5 },
+        "& > .MuiTableContainer-root th:last-of-type, & > .MuiTableContainer-root td:last-of-type, & > .MuiTable-root th:last-of-type, & > .MuiTable-root td:last-of-type": { pr: 2.5 },
+      }}>{children}</Box>
     </Paper>
   );
 }
