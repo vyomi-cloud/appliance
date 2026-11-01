@@ -37,7 +37,7 @@
    "Differential parity vs DynamoDB Local (tests/parity/ddb_differential.py, report in tests/parity/reports/): 149 of 152 hand-written cases (658 of 661 responses) and 400 of 400 random 30-operation sequences match; the 3 deviating cases are the TTL and CreateTable leniencies documented in this file.",
    "Scan returns items in key order, not DynamoDB's storage-hash order, so Scan page boundaries and Segment membership differ (the union of all pages/segments is identical).",
    "The 1 MB page limit is not applied to Query/Scan, and BatchGetItem/BatchWriteItem never return Unprocessed keys/items.",
-   "ConsumedCapacity (ReturnConsumedCapacity TOTAL/INDEXES) and provisioned-throughput throttling are real — see dynamodb.monitor.",
+   "ConsumedCapacity (ReturnConsumedCapacity TOTAL/INDEXES) and provisioned-throughput throttling are real \u2014 see dynamodb.monitor.",
    "TransactWriteItems ClientRequestToken idempotency is not tracked.",
    "Maximum nesting depth (32) of maps/lists is not enforced."
   ],
@@ -100,7 +100,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Provisioned capacity is recorded but not enforced \u2014 Vyomi never throttles requests."
+   "Provisioned capacity is ENFORCED: a per-table/GSI token bucket refilled at the provisioned rate with up to 300 seconds of burst (AWS's documented burst window) returns a real ProvisionedThroughputExceededException and publishes Read/WriteThrottleEvents + ThrottledRequests to CloudWatch; on-demand tables never throttle. Adaptive capacity and per-partition limits aren't modelled (the whole table is one bucket)."
   ],
   "tests": [
    "tests/conformance/test_dynamodb_table_ops_core.py"
@@ -180,7 +180,7 @@
   },
   "limitations": [
    "Only ExportFormat=DYNAMODB_JSON and ExportType=FULL_EXPORT are implemented (Amazon Ion and incremental exports are rejected with ValidationException).",
-   "The export always reflects the table's current data — Vyomi keeps no change history, so a point-in-time export is really a full export (same limitation as RestoreTableToPointInTime).",
+   "The export always reflects the table's current data \u2014 Vyomi keeps no change history, so a point-in-time export is really a full export (same limitation as RestoreTableToPointInTime).",
    "Encryption key type is stored on the job record but has no effect; data is written to S3 in plain bytes."
   ],
   "tests": [
@@ -195,7 +195,7 @@
   },
   "limitations": [
    "ImportTable reads real bytes from the S3 store and really creates and populates a new table: CSV and DYNAMODB_JSON (the exact newline-delimited shape ExportTableToPointInTime writes, so export+import is a genuine round trip) with NONE or GZIP compression.",
-   "Amazon Ion input and ZSTD compression are rejected with ValidationException — Ion parsing and a ZSTD codec are not vendored.",
+   "Amazon Ion input and ZSTD compression are rejected with ValidationException \u2014 Ion parsing and a ZSTD codec are not vendored.",
    "CSV columns are typed from TableCreationParameters.AttributeDefinitions when the column is a key attribute; every other column is imported as a String, where real DynamoDB applies its CSV type-inference rules."
   ],
   "tests": [
@@ -209,8 +209,8 @@
    "offline": "limited"
   },
   "limitations": [
-   "EnableKinesisStreamingDestination requires the named stream to really exist in Vyomi's own Kinesis core (core/kinesis_core.py) and rejects it with ResourceNotFoundException otherwise; once enabled, every item write/delete publishes a real change-data-capture record into that stream (readable back with GetRecords) — not stored config.",
-   "Only one Kinesis destination per table is modeled; real DynamoDB allows up to two. UpdateKinesisStreamingDestination (changing precision after the fact) is not implemented — disable and re-enable instead."
+   "EnableKinesisStreamingDestination requires the named stream to really exist in Vyomi's own Kinesis core (core/kinesis_core.py) and rejects it with ResourceNotFoundException otherwise; once enabled, every item write/delete publishes a real change-data-capture record into that stream (readable back with GetRecords) \u2014 not stored config.",
+   "Only one Kinesis destination per table is modeled; real DynamoDB allows up to two. UpdateKinesisStreamingDestination (changing precision after the fact) is not implemented \u2014 disable and re-enable instead."
   ],
   "tests": [
    "tests/conformance/test_dynamodb_kinesis_destination_core.py"
@@ -223,7 +223,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "PutResourcePolicy validates the document (valid JSON, at least one Allow/Deny statement with a Principal), tracks a real RevisionId for optimistic concurrency (ExpectedRevisionId is enforced on Put and Delete), and rejects a policy granting '*' access unless ConfirmRemoveSelfResourceAccess=true — the same guard real PutResourcePolicy applies. What is not modeled is runtime access evaluation: Vyomi has one implicit caller identity, so the policy content never actually denies or allows a specific request the way cross-account IAM evaluation would."
+   "PutResourcePolicy validates the document (valid JSON, at least one Allow/Deny statement with a Principal), tracks a real RevisionId for optimistic concurrency (ExpectedRevisionId is enforced on Put and Delete), and rejects a policy granting '*' access unless ConfirmRemoveSelfResourceAccess=true \u2014 the same guard real PutResourcePolicy applies. What is not modeled is runtime access evaluation: Vyomi has one implicit caller identity, so the policy content never actually denies or allows a specific request the way cross-account IAM evaluation would."
   ],
   "tests": [
    "tests/conformance/test_dynamodb_resource_policy_core.py"
@@ -236,9 +236,9 @@
    "offline": "limited"
   },
   "limitations": [
-   "Every PutItem/GetItem/UpdateItem/DeleteItem/Query/Scan/BatchGetItem/BatchWriteItem/TransactWriteItems/TransactGetItems call pushes real AWS/DynamoDB ConsumedRead-/ConsumedWriteCapacityUnits, SuccessfulRequestLatency, ReturnedItemCount, ItemCount and TableSizeBytes datapoints (derived from the actual request, never synthetic) into the shared CloudWatch core, on both the TableName and the TableName+Operation dimension sets — the same engine core/vpc_core.py's EC2 status-check metrics use. Alarms set on these metrics evaluate and fire for real; 'Create alarm' pre-fills the TableName dimension and alarm actions publish to the simulator's own SNS.",
+   "Every PutItem/GetItem/UpdateItem/DeleteItem/Query/Scan/BatchGetItem/BatchWriteItem/TransactWriteItems/TransactGetItems call pushes real AWS/DynamoDB ConsumedRead-/ConsumedWriteCapacityUnits, SuccessfulRequestLatency, ReturnedItemCount, ItemCount and TableSizeBytes datapoints (derived from the actual request, never synthetic) into the shared CloudWatch core, on both the TableName and the TableName+Operation dimension sets \u2014 the same engine core/vpc_core.py's EC2 status-check metrics use. Alarms set on these metrics evaluate and fire for real; 'Create alarm' pre-fills the TableName dimension and alarm actions publish to the simulator's own SNS.",
    "Consumed capacity is computed the AWS way: 1 RCU per 4 KB (eventually-consistent reads cost half), 1 WCU per 1 KB, transactions at 2x; ReturnConsumedCapacity TOTAL/INDEXES is honoured. Provisioned tables enforce it with a real per-table/GSI token bucket (burst = 300s of capacity) and raise ProvisionedThroughputExceededException, pushing ThrottledRequests/Read-/WriteThrottleEvents; on-demand tables never throttle. Every failed call pushes UserErrors (4xx) or SystemErrors (5xx).",
-   "GSI write capacity is approximated as the base item's WCU charged to every GSI it projects onto (no separate per-index item-size accounting), and Query/Scan RCU is billed once for the whole page rather than per evaluated item — both close enough for the Monitor tab and throttling to be real, not AWS-exact to the unit. Latency reflects simulator processing time, not real network/service time."
+   "GSI write capacity is approximated as the base item's WCU charged to every GSI it projects onto (no separate per-index item-size accounting), and Query/Scan RCU is billed once for the whole page rather than per evaluated item \u2014 both close enough for the Monitor tab and throttling to be real, not AWS-exact to the unit. Latency reflects simulator processing time, not real network/service time."
   ],
   "tests": [
    "tests/conformance/test_dynamodb_monitor_core.py",
@@ -253,7 +253,7 @@
   },
   "limitations": [
    "UpdateTable(ReplicaUpdates) really backfills a new replica with the table's current items and then mirrors every subsequent write/delete into it synchronously (same pattern as core/s3_object_core.py's S3 Cross-Region Replication); DeleteTable is genuinely rejected while replicas exist, exactly like real DynamoDB's 'replication group must be empty' guard.",
-   "Vyomi simulates one AWS region, so a replica has no regional endpoint of its own to query — unlike real cross-region replication (where each replica is reachable and eventually consistent), Vyomi's replica data is only inspectable through the primary table's own Global Tables tab, and replication is synchronous rather than eventually consistent. Per-replica read/write capacity is not independently configurable; it always mirrors the primary table's capacity mode."
+   "Vyomi simulates one AWS region, so a replica has no regional endpoint of its own to query \u2014 unlike real cross-region replication (where each replica is reachable and eventually consistent), Vyomi's replica data is only inspectable through the primary table's own Global Tables tab, and replication is synchronous rather than eventually consistent. Per-replica read/write capacity is not independently configurable; it always mirrors the primary table's capacity mode."
   ],
   "tests": [
    "tests/conformance/test_dynamodb_global_tables_core.py"
@@ -312,7 +312,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "The cache engine itself is real: read-through/write-through in front of the DynamoDB store (core/nosql_store.py) with record-ttl-millis/query-ttl-millis TTLs from the cluster's parameter group, LRU eviction sized by node type, and strongly-consistent reads genuinely bypassing the cache — proven in tests/conformance/test_dax_core.py by mutating the underlying table directly and showing a cache hit serves the stale value while ConsistentRead doesn't.",
+   "The cache engine itself is real: read-through/write-through in front of the DynamoDB store (core/nosql_store.py) with record-ttl-millis/query-ttl-millis TTLs from the cluster's parameter group, LRU eviction sized by node type, and strongly-consistent reads genuinely bypassing the cache \u2014 proven in tests/conformance/test_dax_core.py by mutating the underlying table directly and showing a cache hit serves the stale value while ConsistentRead doesn't.",
    "DAX's real client speaks a binary protocol over a persistent TCP connection to the cluster's discovery endpoint; that wire isn't exposed yet (planned: a wave-6 tunnel TCP relay), so the cache engine is reachable only through these conformance hooks (get_item/put_item/delete_item/query/put_query_result), not from an unmodified DAX SDK pointed at the simulated endpoint."
   ],
   "tests": [

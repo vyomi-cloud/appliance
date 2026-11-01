@@ -91,6 +91,11 @@ function CapacityModal({ d, visible, onDismiss, onDone }) {
 }
 
 function Overview({ d, reload }) {
+  const tableAlarms = useAsync(() => api.describeDynamoDbAlarms(d.TableName), [d.TableName]);
+  const inAlarm = (tableAlarms.data || []).filter((a) => a.StateValue === "ALARM").length;
+  const alarmsSummary = tableAlarms.data == null ? "-"
+    : inAlarm ? `${inAlarm} active alarm${inAlarm === 1 ? "" : "s"}`
+    : tableAlarms.data.length ? `No active alarms (${tableAlarms.data.length} configured)` : "No active alarms";
   const notify = useNotify();
   const pitr = useAsync(() => api.describeBackups(d.TableName), [d.TableName]);
   const [capModal, setCapModal] = useState(false);
@@ -115,7 +120,7 @@ function Overview({ d, reload }) {
       } columns={4} items={[
         ["Partition key", pk && `${pk} (${attrType(d, pk)})`], ["Sort key", sk ? `${sk} (${attrType(d, sk)})` : "-"],
         ["Capacity mode", capacity(d)], ["Table status", statusOf(d.TableStatus)],
-        ["Alarms", "No active alarms"], ["Point-in-time recovery (PITR)", pitr.data === null ? "-" : (pitrOn ? "On" : "Off")],
+        ["Alarms", alarmsSummary], ["Point-in-time recovery (PITR)", pitr.data === null ? "-" : (pitrOn ? "On" : "Off")],
         ["Item count", d.ItemCount ?? 0], ["Table size", `${d.TableSizeBytes ?? 0} bytes`],
         ["Amazon Resource Name (ARN)", d.TableArn], ["Creation date", fmtDate(d.CreationDateTime)], ["Deletion protection", d.DeletionProtectionEnabled ? "On" : "Off"],
         ["Table class", tableClass(d)],
@@ -162,6 +167,11 @@ function LocalIndexes({ d }) {
 const MONITOR_METRICS = [
   { metric: "ConsumedReadCapacityUnits", label: "Consumed read capacity units", statistic: "Sum" },
   { metric: "ConsumedWriteCapacityUnits", label: "Consumed write capacity units", statistic: "Sum" },
+  { metric: "ReadThrottleEvents", label: "Read throttled events", statistic: "Sum" },
+  { metric: "WriteThrottleEvents", label: "Write throttled events", statistic: "Sum" },
+  { metric: "ThrottledRequests", label: "Throttled requests", statistic: "Sum" },
+  { metric: "UserErrors", label: "User errors", statistic: "Sum" },
+  { metric: "SystemErrors", label: "System errors", statistic: "Sum" },
 ];
 
 function MetricTable({ name, metric, label, statistic }) {
@@ -225,7 +235,7 @@ function CreateAlarmModal({ name, visible, onDismiss, onDone }) {
 
 function MonitorTab({ d }) {
   const name = d.TableName;
-  const alarms = useAsync(() => api.describeTableAlarms(name, MONITOR_METRICS.map((m) => m.metric)), [name]);
+  const alarms = useAsync(() => api.describeDynamoDbAlarms(name), [name]);
   const [open, setOpen] = useState(false);
   return (
     <SpaceBetween size="l">

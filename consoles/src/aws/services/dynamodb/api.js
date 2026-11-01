@@ -87,6 +87,19 @@ export const putTableAlarm = (tableName, { alarmName, metricName, statistic, com
     Threshold: threshold, ComparisonOperator: comparison, AlarmActions: snsArn ? [snsArn] : [],
   });
 export const deleteTableAlarms = (names) => CW("DeleteAlarms", { AlarmNames: names });
+// Every CloudWatch alarm on an AWS/DynamoDB metric (the Dashboard's Alarms panel), optionally
+// narrowed to one table's TableName dimension (the table Overview + Monitor tab).
+export const describeDynamoDbAlarms = async (tableName) => {
+  const all = [];
+  let token;
+  do {
+    const r = await CW("DescribeAlarms", { AlarmTypes: ["MetricAlarm"], MaxRecords: 100, ...(token ? { NextToken: token } : {}) });
+    all.push(...(r.MetricAlarms || []));
+    token = r.NextToken;
+  } while (token);
+  return all.filter((a) => a.Namespace === "AWS/DynamoDB"
+    && (!tableName || (a.Dimensions || []).some((x) => x.Name === "TableName" && x.Value === tableName)));
+};
 
 // ── DAX (AmazonDAXV3 JSON protocol — native wire, control plane) ─────────
 const dax = (op, body = {}) => awsJson("dax", `AmazonDAXV3.${op}`, body, { version: "1.1" });

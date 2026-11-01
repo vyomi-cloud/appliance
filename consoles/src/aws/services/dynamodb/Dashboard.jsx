@@ -9,12 +9,22 @@ import Box from "@cloudscape-design/components/box";
 import Grid from "@cloudscape-design/components/grid";
 import { useAsync } from "../../../common/useAsync.js";
 import { follow, href } from "../../../common/router.js";
-import { NotSimulatedContainer } from "../../kit/common.jsx";
+import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import { statusOf } from "./Tables.jsx";
 import { getFavoriteTables } from "./prefs.js";
 import * as api from "./api.js";
 
+const ALARM_STATE = {
+  ALARM: <StatusIndicator type="error">In alarm</StatusIndicator>,
+  OK: <StatusIndicator type="success">OK</StatusIndicator>,
+  INSUFFICIENT_DATA: <StatusIndicator type="pending">Insufficient data</StatusIndicator>,
+};
+const tableOf = (a) => ((a.Dimensions || []).find((x) => x.Name === "TableName") || {}).Value;
+
 export default function Dashboard() {
+  const alarms = useAsync(() => api.describeDynamoDbAlarms(), []);
+  const clusters = useAsync(() => api.describeDaxClusters(), []);
+  const inAlarm = (alarms.data || []).filter((a) => a.StateValue === "ALARM").length;
   const favorites = useAsync(async () => {
     const names = getFavoriteTables();
     return Promise.all(names.map((n) => api.describeTable(n).catch(() => null))).then((rows) => rows.filter(Boolean));
@@ -24,7 +34,24 @@ export default function Dashboard() {
     <ContentLayout header={<Header variant="h1">Dashboard</Header>}>
       <SpaceBetween size="l">
         <Grid gridDefinition={[{ colspan: 6 }, { colspan: 6 }]}>
-          <NotSimulatedContainer title="Alarms" feature="CloudWatch alarms" note="No custom alarms are modeled by Vyomi." />
+          <Table
+            variant="container"
+            items={alarms.data || []}
+            loading={alarms.loading}
+            loadingText="Loading alarms"
+            header={<Header variant="h2" counter={alarms.data ? `(${inAlarm} in alarm / ${alarms.data.length})` : undefined}
+              actions={<Button href="#/cloudwatch/alarms" onFollow={follow}>View in CloudWatch</Button>}>Alarms</Header>}
+            columnDefinitions={[
+              { id: "name", header: "Name", cell: (a) => <Link href={`#/cloudwatch/alarms/${encodeURIComponent(a.AlarmName)}`} onFollow={follow}>{a.AlarmName}</Link> },
+              { id: "state", header: "State", cell: (a) => ALARM_STATE[a.StateValue] || a.StateValue },
+              { id: "table", header: "Table", cell: (a) => tableOf(a) ? <Link href={href("dynamodb", "tables", tableOf(a))} onFollow={follow}>{tableOf(a)}</Link> : "-" },
+              { id: "metric", header: "Metric", cell: (a) => a.MetricName },
+            ]}
+            empty={<Box textAlign="center" color="inherit">
+              <b>No alarms</b>
+              <Box variant="p" color="inherit">Create one from a table's Monitor tab.</Box>
+            </Box>}
+          />
           <Container header={<Header variant="h2">Create resources</Header>}>
             <SpaceBetween direction="horizontal" size="xs">
               <Button variant="primary" href={href("dynamodb", "create-table")} onFollow={follow}>Create table</Button>
@@ -49,7 +76,21 @@ export default function Dashboard() {
           </Box>}
         />
 
-        <NotSimulatedContainer title="DAX clusters" feature="DynamoDB Accelerator (DAX)" />
+        <Table
+          variant="container"
+          items={clusters.data || []}
+          loading={clusters.loading}
+          loadingText="Loading DAX clusters"
+          header={<Header variant="h2" counter={`(${(clusters.data || []).length})`}
+            actions={<Button href={href("dynamodb", "dax", "clusters")} onFollow={follow}>View all clusters</Button>}>DAX clusters</Header>}
+          columnDefinitions={[
+            { id: "name", header: "Cluster name", cell: (c) => c.ClusterName },
+            { id: "status", header: "Status", cell: (c) => c.Status },
+            { id: "nodes", header: "Nodes", cell: (c) => c.TotalNodes ?? (c.Nodes || []).length },
+            { id: "type", header: "Node type", cell: (c) => c.NodeType },
+          ]}
+          empty={<Box textAlign="center" color="inherit"><b>No DAX clusters</b></Box>}
+        />
 
         <Container header={<Header variant="h2">What's new</Header>}>
           <SpaceBetween size="s">
