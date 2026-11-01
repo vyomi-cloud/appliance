@@ -60,8 +60,12 @@ const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).
 // The portal's Essentials "Offer"/"Offer ID" are looked up from subscriptionPolicies.quotaId
 // through this same static catalog in real Azure — not a separate field on the subscription.
 const OFFERS = { "PayAsYouGo_2014-09-01": { offer: "Pay-As-You-Go", offerId: "MS-AZR-0003P" } };
-// Every other menu item with no dedicated panel below: one of two registry-driven gaps.
-const GAP_CAP = { usagequotas: "azure.subscriptions.usage_quotas" };
+// Every other menu item with no dedicated panel below: the remaining honest not_simulated gaps.
+const GAP_CAP = {
+  managementcertificates: "azure.subscriptions.management_certificates",
+  partnerinformation: "azure.subscriptions.partner_information",
+  support: "azure.subscriptions.support_troubleshooting",
+};
 
 export default function SubscriptionBlade({ params }) {
   const { id } = params;
@@ -89,6 +93,18 @@ export default function SubscriptionBlade({ params }) {
       resourceproviders: () => <ResourceProviders id={id} />,
       deployments: () => <Deployments id={id} />,
       resourcelocks: () => <Locks id={id} />,
+      security: () => <Security id={id} />,
+      diagnose: () => <Diagnostics id={id} />,
+      events: () => <Events id={id} />,
+      advisorrecommendations: () => <Advisor id={id} />,
+      invoices: () => <Invoices id={id} />,
+      previewfeatures: () => <PreviewFeatures id={id} />,
+      usagequotas: () => <UsageQuotas id={id} name={name} />,
+      policies: () => <Policies id={id} />,
+      mypermissions: () => <MyPermissions id={id} />,
+      deploymentstacks: () => <DeploymentStacks id={id} />,
+      programmaticdeployment: () => <ProgrammaticDeployment id={id} />,
+      billingproperties: () => <BillingProperties id={id} />,
     }[panel];
     body = P ? P() : <CapabilityContainer id={GAP_CAP[panel] || "azure.subscriptions.menu_gaps"} title={`${name} | ${LABEL[panel] || panel}`} />;
   }
@@ -850,5 +866,469 @@ function AddLockDialog({ open, onClose, onCreate }) {
         </DialogBody>
       </DialogSurface>
     </Dialog>
+  );
+}
+
+// ── Security (Microsoft.Security — Defender for Cloud secure score + recommendations, the
+// SAME real rule engine as the dedicated Defender console, reused at the subscription scope) ──
+function Security({ id }) {
+  const score = useAsync(() => api.getSecureScore(id), [id]);
+  const assessments = useAsync(() => api.listAssessments(id), [id]);
+  const rows = assessments.data || [];
+  const pct = score.data?.properties?.score?.percentage;
+  return (
+    <CapabilityContainer id="azure.subscriptions.security" title="Security"
+      actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={() => { score.reload(); assessments.reload(); }}>Refresh</ToolbarButton>}>
+      <ErrorBar error={score.error || assessments.error} />
+      <div className="vy-kv"><span>Secure score</span><span>{score.loading ? "Loading..." : pct != null ? `${Math.round(pct * 100)}%` : "--"}</span></div>
+      <section className="vy-form-section"><h3>Recommendations</h3>
+        <table className="vy-grid">
+          <thead><tr><th>Severity</th><th>Recommendation</th><th>Status</th><th>Resource</th></tr></thead>
+          <tbody>
+            {assessments.loading ? <tr><td colSpan={4}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((a) => (
+              <tr key={a.id}>
+                <td>{a.properties?.metadata?.severity || "--"}</td>
+                <td>{a.properties?.displayName}</td>
+                <td>{a.properties?.status?.code}</td>
+                <td>{(a.properties?.resourceDetails?.Id || "").split("/").pop()}</td>
+              </tr>
+            )) : <tr><td colSpan={4} className="vy-muted">No recommendations — every evaluated resource is healthy.</td></tr>}
+          </tbody>
+        </table>
+      </section>
+    </CapabilityContainer>
+  );
+}
+
+// ── Diagnose and solve problems: concrete, live checks over this subscription's own real
+// state (Activity log failures, no resource lock, quota near its limit) — not a fabricated
+// catalog of guides. ─────────────────────────────────────────────────────────────────────
+function Diagnostics({ id }) {
+  const self = `#/subscriptions/${encodeURIComponent(id)}`;
+  const locks = useAsync(() => api.listLocks(id), [id]);
+  const activity = useAsync(() => api.listActivityLog(id), [id]);
+  const compute = useAsync(() => api.listComputeUsages(id), [id]);
+  const network = useAsync(() => api.listNetworkUsages(id), [id]);
+  const loading = locks.loading || activity.loading || compute.loading || network.loading;
+  const problems = [];
+  for (const r of activity.data || []) {
+    const status = r.status?.value || r.status?.localizedValue;
+    if (status === "Failed")
+      problems.push({ title: `Operation failed: ${r.operationName?.localizedValue || r.operationName?.value}`, href: `${self}/activitylog`, label: "Open Activity log" });
+  }
+  for (const u of [...(compute.data || []), ...(network.data || [])]) {
+    if (u.limit && u.currentValue / u.limit >= 0.8)
+      problems.push({ title: `${u.name?.localizedValue} usage is at ${Math.round(100 * u.currentValue / u.limit)}% of its quota`, href: `${self}/usagequotas`, label: "Open Usage + quotas" });
+  }
+  if (!(locks.data || []).length)
+    problems.push({ title: "This subscription has no resource lock — it can be deleted or modified without a confirmation step", href: `${self}/resourcelocks`, label: "Open Resource locks" });
+  return (
+    <CapabilityContainer id="azure.subscriptions.diagnostics" title="Diagnose and solve problems">
+      <p style={{ fontSize: 13 }}>Vyomi checks this subscription's own real state for common problems and links to the page that explains and fixes each one.</p>
+      {loading ? <Loading /> : problems.length ? (
+        <ul>{problems.map((p, i) => <li key={i}>{p.title} — <Link href={p.href}>{p.label}</Link></li>)}</ul>
+      ) : <InfoBar intent="success">No problems detected in this subscription.</InfoBar>}
+    </CapabilityContainer>
+  );
+}
+
+// ── Events: the same real, subscription-wide Activity log feed Activity log itself uses —
+// Vyomi has no platform outages to show as separate Service Health events. ────────────────
+function Events({ id }) {
+  const { data, loading, error, reload } = useAsync(() => api.listActivityLog(id), [id]);
+  const rows = data || [];
+  return (
+    <CapabilityContainer id="azure.subscriptions.events" title="Events"
+      actions={<ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton>}>
+      <ErrorBar error={error} />
+      <table className="vy-grid">
+        <thead><tr><th>Operation</th><th>Status</th><th>Time</th></tr></thead>
+        <tbody>
+          {loading ? <tr><td colSpan={3}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
+            <tr key={r.id}>
+              <td>{r.operationName?.localizedValue || r.operationName?.value}</td>
+              <td>{r.status?.localizedValue || r.status?.value}</td>
+              <td>{fmtDate(r.eventTimestamp)}</td>
+            </tr>
+          )) : <tr><td colSpan={3} className="vy-muted">No events to display</td></tr>}
+        </tbody>
+      </table>
+    </CapabilityContainer>
+  );
+}
+
+// ── Advisor recommendations: real findings over data Vyomi actually has — Security mirrors
+// Defender's own Unhealthy assessments, Cost flags spend with no budget, Reliability flags a
+// subscription with no resource lock. No Performance category (no utilization metrics exist). ──
+function Advisor({ id }) {
+  const assessments = useAsync(() => api.listAssessments(id), [id]);
+  const budgets = useAsync(() => api.listBudgets(id), [id]);
+  const cost = useAsync(() => api.costQuery(id, { type: "ActualCost", timeframe: "MonthToDate", dataset: { aggregation: { totalCost: { name: "Cost", function: "Sum" } } } }), [id]);
+  const locks = useAsync(() => api.listLocks(id), [id]);
+  const loading = assessments.loading || budgets.loading || cost.loading || locks.loading;
+  const recs = [];
+  for (const a of assessments.data || []) {
+    if (a.properties?.status?.code === "Unhealthy")
+      recs.push({ category: "Security", title: a.properties?.displayName, detail: a.properties?.status?.description || "" });
+  }
+  const spend = cost.data?.properties?.rows?.[0]?.[0] || 0;
+  if (spend > 0 && !(budgets.data || []).length)
+    recs.push({ category: "Cost", title: "Create a budget", detail: `This subscription has ${DOLLAR(spend)} of month-to-date spend and no budget configured.` });
+  if (!(locks.data || []).length)
+    recs.push({ category: "Reliability", title: "Add a resource lock", detail: "This subscription has no resource lock, so it can be accidentally deleted or modified." });
+  return (
+    <CapabilityContainer id="azure.subscriptions.advisor_recommendations" title="Advisor recommendations">
+      {loading ? <Loading /> : recs.length ? (
+        <table className="vy-grid">
+          <thead><tr><th>Category</th><th>Recommendation</th><th>Description</th></tr></thead>
+          <tbody>{recs.map((r, i) => <tr key={i}><td>{r.category}</td><td>{r.title}</td><td>{r.detail}</td></tr>)}</tbody>
+        </table>
+      ) : <InfoBar intent="success">No recommendations — this subscription follows Vyomi's modeled best practices.</InfoBar>}
+    </CapabilityContainer>
+  );
+}
+
+// ── Invoices (Microsoft.Billing/invoices) — derived from the real cost engine ──────────────
+function Invoices({ id }) {
+  const { data, loading, error, reload } = useAsync(() => api.listInvoices(id), [id]);
+  const rows = data || [];
+  return (
+    <>
+      <div className="vy-panel-title">Invoices <CapabilityBadge id="azure.subscriptions.invoices" /></div>
+      <BrowseGrid
+        resourceName="invoice" rowKey={(r) => r.name}
+        items={rows} loading={loading} error={error} onRefresh={reload}
+        csvName="invoices.csv"
+        emptyAction={<span className="vy-muted">No invoices yet.</span>}
+        columns={[
+          { key: "period", label: "Billing period", value: (r) => r.properties?.invoicePeriodStartDate },
+          { key: "status", label: "Status", value: (r) => r.properties?.status },
+          { key: "amount", label: "Amount due", value: (r) => DOLLAR(r.properties?.amountDue?.value) },
+        ]}
+      />
+    </>
+  );
+}
+
+// ── Preview features (Microsoft.Features/providers/{ns}/features) — register/unregister
+// persists exactly like real ARM. ───────────────────────────────────────────────────────
+function PreviewFeatures({ id }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listPreviewFeatures(id), [id]);
+  const rows = data || [];
+  return (
+    <>
+      <div className="vy-panel-title">Preview features <CapabilityBadge id="azure.subscriptions.preview_features" /></div>
+      <BrowseGrid
+        resourceName="feature" rowKey={(r) => r.name} filterPlaceholder="Filter by name"
+        items={rows} loading={loading} error={error} onRefresh={reload}
+        csvName="preview-features.csv"
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "state", label: "State", render: (r) => (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span>{r.properties?.state}</span>
+              {r.properties?.state === "Registered" ? (
+                <Button size="small" onClick={async () => { await api.unregisterPreviewFeature(id, r.name); notify.success(`'${r.name}' was unregistered.`, "Unregister succeeded"); reload(); }}>Unregister</Button>
+              ) : (
+                <Button size="small" onClick={async () => { await api.registerPreviewFeature(id, r.name); notify.success(`'${r.name}' was registered.`, "Register succeeded"); reload(); }}>Register</Button>
+              )}
+            </div>
+          ), value: (r) => r.properties?.state },
+        ]}
+      />
+    </>
+  );
+}
+
+// ── Usage + quotas (Microsoft.Compute|Network/locations/{location}/usages) — live counts,
+// enforced at create time (core/azure_arm_core.py's AzureArm._quota_block). ────────────────
+function UsageQuotas({ id, name }) {
+  const [gap, setGap] = useState(false);
+  const compute = useAsync(() => api.listComputeUsages(id), [id]);
+  const network = useAsync(() => api.listNetworkUsages(id), [id]);
+  const loading = compute.loading || network.loading;
+  const rows = [...(compute.data || []), ...(network.data || [])];
+  return (
+    <>
+      <div className="vy-panel-title">Usage + quotas <CapabilityBadge id="azure.subscriptions.usage_quotas" /></div>
+      <BrowseGrid
+        resourceName="quota" rowKey={(r) => r.name.value} filterPlaceholder="Search"
+        items={rows} loading={loading} error={compute.error || network.error}
+        onRefresh={() => { compute.reload(); network.reload(); }}
+        extraCommands={<ToolbarButton onClick={() => setGap(true)}>Request increase</ToolbarButton>}
+        csvName="usage-quotas.csv"
+        columns={[
+          { key: "name", label: "Quota name", value: (r) => r.name.localizedValue },
+          { key: "region", label: "Region", value: () => locationLabel("eastus") },
+          { key: "subscription", label: "Subscription", value: () => name },
+          { key: "usage", label: "Current Usage", render: (r) => (
+            <span>{r.currentValue} / {r.limit}{r.resources?.length ? ` (${r.resources.join(", ")})` : ""}</span>
+          ), value: (r) => `${r.currentValue} / ${r.limit}` },
+          { key: "adjustable", label: "Adjustable", value: () => "Yes" },
+        ]}
+      />
+      <Dialog open={gap} onOpenChange={(_, d) => !d.open && setGap(false)}>
+        <DialogSurface aria-label="Request increase">
+          <DialogBody>
+            <DialogTitle>Request increase</DialogTitle>
+            <DialogContent>
+              <NotSimulated feature="Requesting a quota increase" note="Raising a real Azure quota goes through Microsoft support approval outside Vyomi; Vyomi's modeled default limits are fixed." />
+            </DialogContent>
+            <DialogActions><Button onClick={() => setGap(false)}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </>
+  );
+}
+
+// ── Policies (Microsoft.Authorization/policyDefinitions|policyAssignments) — assignments are
+// real ARM resources; the one built-in Vyomi enforces (Allowed locations, real GUID) is
+// genuinely evaluated, both at create time and on this page's Compliance tab. ─────────────
+function Policies({ id }) {
+  const notify = useNotify();
+  const [tab, setTab] = useState("assignments");
+  const [add, setAdd] = useState(false);
+  const assignments = useAsync(() => api.listPolicyAssignments(id), [id]);
+  const compliance = useAsync(() => api.policyComplianceStates(id), [id]);
+  const rows = assignments.data || [];
+  return (
+    <>
+      <div className="vy-panel-title">Policies <CapabilityBadge id="azure.subscriptions.policies" /></div>
+      <TabList selectedValue={tab} onTabSelect={(_, d) => { setTab(d.value); if (d.value === "compliance") compliance.reload(); }} aria-label="Policies tabs">
+        <Tab value="assignments">Assignments</Tab>
+        <Tab value="compliance">Compliance</Tab>
+      </TabList>
+      {tab === "assignments" && (
+        <BrowseGrid
+          resourceName="assignment" rowKey={(r) => r.name}
+          items={rows} loading={assignments.loading} error={assignments.error} onRefresh={assignments.reload}
+          onCreate={() => setAdd(true)}
+          onDelete={async (sel) => {
+            for (const r of sel) await api.deletePolicyAssignment(id, r.name);
+            notify.success(`Deleted ${sel.length} assignment${sel.length === 1 ? "" : "s"}.`, "Delete succeeded");
+            assignments.reload();
+          }}
+          csvName="policy-assignments.csv"
+          emptyAction={<span className="vy-muted">No policy assignments.</span>}
+          columns={[
+            { key: "name", label: "Assignment name" },
+            { key: "definition", label: "Policy", value: (r) => r.properties?.displayName || r.properties?.policyDefinitionId?.split("/").pop() },
+            { key: "locations", label: "Allowed locations", value: (r) => (r.properties?.parameters?.listOfAllowedLocations?.value || []).join(", ") || "--" },
+          ]}
+        />
+      )}
+      {tab === "compliance" && (
+        <>
+          <ErrorBar error={compliance.error} />
+          <table className="vy-grid">
+            <thead><tr><th>Resource</th><th>Policy assignment</th><th>Compliance state</th></tr></thead>
+            <tbody>
+              {compliance.loading ? <tr><td colSpan={3}><Spinner size="tiny" /></td></tr> : (compliance.data || []).length ? (compliance.data || []).map((r, i) => (
+                <tr key={i}><td>{r.resourceId?.split("/").pop()}</td><td>{r.policyAssignmentId?.split("/").pop()}</td><td>{r.complianceState}</td></tr>
+              )) : <tr><td colSpan={3} className="vy-muted">No policy assignments to evaluate.</td></tr>}
+            </tbody>
+          </table>
+        </>
+      )}
+      <AddPolicyAssignmentDialog open={add} onClose={() => setAdd(false)}
+        onCreate={async (name, locations) => {
+          await api.putPolicyAssignment(id, name, {
+            properties: { displayName: "Allowed locations", policyDefinitionId: api.ALLOWED_LOCATIONS_POLICY_ID,
+                         parameters: { listOfAllowedLocations: { value: locations } } },
+          });
+          assignments.reload();
+        }} />
+    </>
+  );
+}
+
+function AddPolicyAssignmentDialog({ open, onClose, onCreate }) {
+  const notify = useNotify();
+  const [name, setName] = useState("");
+  const [locations, setLocations] = useState("eastus");
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try {
+      await onCreate(name, locations.split(",").map((s) => s.trim()).filter(Boolean));
+      notify.success(`Policy '${name}' was assigned.`, "Assign policy");
+      setName(""); setLocations("eastus"); onClose();
+    } catch (e) { notify.error(e, "Failed to assign policy"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
+      <DialogSurface aria-label="Assign policy">
+        <DialogBody>
+          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Assign policy</DialogTitle>
+          <DialogContent>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <Field label="Policy definition" hint="Vyomi evaluates and enforces exactly one built-in policy: Allowed locations.">
+                <Input value="Allowed locations" readOnly aria-label="Policy definition" />
+              </Field>
+              <Field label="Assignment name" required><Input value={name} onChange={(_, d) => setName(d.value)} aria-label="Assignment name" /></Field>
+              <Field label="Allowed locations" required hint="Comma-separated location names, e.g. eastus, westus">
+                <Input value={locations} onChange={(_, d) => setLocations(d.value)} aria-label="Allowed locations" />
+              </Field>
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="primary" disabled={!name.trim() || !locations.trim() || busy} onClick={go}>Assign</Button>
+            <Button onClick={onClose}>Cancel</Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  );
+}
+
+// ── My permissions (Microsoft.Authorization/permissions) — derived live from the same role
+// catalog/assignments checkAccess uses. ────────────────────────────────────────────────────
+function MyPermissions({ id }) {
+  const { data, loading, error } = useAsync(() => api.myPermissions(id), [id]);
+  const perm = (data || [])[0];
+  return (
+    <CapabilityContainer id="azure.subscriptions.my_permissions" title="My permissions">
+      <p style={{ fontSize: 13 }}>The actions {CURRENT_USER} can perform on this subscription.</p>
+      <ErrorBar error={error} />
+      {loading ? <Loading /> : (
+        <>
+          <section className="vy-form-section"><h3>Actions</h3>
+            <ul>{(perm?.actions || []).map((a) => <li key={a}><code>{a}</code></li>)}</ul>
+          </section>
+          {perm?.notActions?.length > 0 && (
+            <section className="vy-form-section"><h3>Not actions</h3>
+              <ul>{perm.notActions.map((a) => <li key={a}><code>{a}</code></li>)}</ul>
+            </section>
+          )}
+        </>
+      )}
+    </CapabilityContainer>
+  );
+}
+
+// ── Deployment stacks (Microsoft.Resources/deploymentStacks) — deleting a stack really
+// cascade-deletes every resource it manages (unless actionOnUnmanage is "detach"). ────────
+function DeploymentStacks({ id }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listDeploymentStacks(id), [id]);
+  const [view, setView] = useState(null);
+  const rows = data || [];
+  return (
+    <>
+      <div className="vy-panel-title">Deployment stacks <CapabilityBadge id="azure.subscriptions.deployment_stacks" /></div>
+      <BrowseGrid
+        resourceName="deployment stack" rowKey={(r) => r.name}
+        items={rows} loading={loading} error={error} onRefresh={reload}
+        onDelete={async (sel) => {
+          for (const r of sel) await api.deleteDeploymentStack(id, r.name);
+          notify.success(`Deleted ${sel.length} stack${sel.length === 1 ? "" : "s"} and the resources it managed.`, "Delete succeeded");
+          reload();
+        }}
+        csvName="deployment-stacks.csv"
+        emptyAction={<span className="vy-muted">No deployment stacks found.</span>}
+        columns={[
+          { key: "name", label: "Name" },
+          { key: "status", label: "Status", value: (r) => r.properties?.provisioningState || "--" },
+          { key: "resources", label: "Managed resources", value: (r) => (r.properties?.resources || []).length },
+          { key: "action", label: "Action on unmanage", value: (r) => r.properties?.actionOnUnmanage?.resources || "delete" },
+          { key: "view", label: "", render: (r) => <Link as="button" onClick={() => setView(r)}>View managed resources</Link> },
+        ]}
+      />
+      <Dialog open={!!view} onOpenChange={(_, d) => !d.open && setView(null)}>
+        <DialogSurface aria-label="Managed resources">
+          <DialogBody>
+            <DialogTitle>{view?.name}</DialogTitle>
+            <DialogContent>
+              <ul>{(view?.properties?.resources || []).map((r) => <li key={r.id}>{r.resourceType}/{r.resourceName}</li>)}</ul>
+            </DialogContent>
+            <DialogActions><Button onClick={() => setView(null)}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </>
+  );
+}
+
+// ── Programmatic deployment: generates a real service principal with a real Contributor
+// roleAssignment (observable in Access control (IAM), enforced by checkAccess). ───────────
+function ProgrammaticDeployment({ id }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.listDeploymentCredentials(id), [id]);
+  const [created, setCreated] = useState(null);
+  const rows = data || [];
+  const generate = async () => {
+    const rec = await api.createDeploymentCredential(id);
+    setCreated(rec);
+    notify.success(`Deployment credential '${rec.name}' was created.`, "Credential created");
+    reload();
+  };
+  return (
+    <CapabilityContainer id="azure.subscriptions.programmatic_deployment" title="Programmatic deployment"
+      actions={<ToolbarButton icon={<Add20Regular />} onClick={generate}>Generate deployment credential</ToolbarButton>}>
+      <p style={{ fontSize: 13 }}>Generate a service principal with Contributor access to this subscription, for CI/CD or SDK/CLI automation.</p>
+      <ErrorBar error={error} />
+      <table className="vy-grid">
+        <thead><tr><th>Name</th><th>App ID</th><th>Created</th><th /></tr></thead>
+        <tbody>
+          {loading ? <tr><td colSpan={4}><Spinner size="tiny" /></td></tr> : rows.length ? rows.map((r) => (
+            <tr key={r.name}>
+              <td>{r.name}</td><td>{r.appId}</td><td>{fmtDate(r.createdAt)}</td>
+              <td>
+                <Button size="small" icon={<Delete20Regular />} onClick={async () => {
+                  await api.deleteDeploymentCredential(id, r.name);
+                  notify.success(`Credential '${r.name}' was revoked.`, "Revoke succeeded");
+                  reload();
+                }}>Revoke</Button>
+              </td>
+            </tr>
+          )) : <tr><td colSpan={4} className="vy-muted">No deployment credentials yet.</td></tr>}
+        </tbody>
+      </table>
+      <Dialog open={!!created} onOpenChange={(_, d) => !d.open && setCreated(null)}>
+        <DialogSurface aria-label="Deployment credential created">
+          <DialogBody>
+            <DialogTitle>Deployment credential created</DialogTitle>
+            <DialogContent>
+              <p style={{ fontSize: 13 }}>Copy the client secret now — Vyomi won't show it again.</p>
+              <div className="vy-kv"><span>App ID</span><span>{created?.appId}</span></div>
+              <div className="vy-kv"><span>Client secret</span><span style={{ fontFamily: "monospace" }}>{created?.secret}</span></div>
+              <div className="vy-kv"><span>Tenant ID</span><span>{created?.tenantId}</span></div>
+            </DialogContent>
+            <DialogActions><Button onClick={() => setCreated(null)}>Close</Button></DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </CapabilityContainer>
+  );
+}
+
+// ── Billing properties (Microsoft.Billing/billingProperties, subscription-scoped in Vyomi) ──
+function BillingProperties({ id }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.getBillingProperties(id), [id]);
+  const [admin, setAdmin] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (data) setAdmin(data.accountAdmin || ""); }, [data?.accountAdmin]);
+  const save = async () => {
+    setBusy(true);
+    try { await api.patchBillingProperties(id, { accountAdmin: admin }); notify.success("Billing properties were updated.", "Save succeeded"); reload(); }
+    catch (e) { notify.error(e, "Save failed"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <CapabilityContainer id="azure.subscriptions.billing_properties" title="Billing properties">
+      <ErrorBar error={error} />
+      {loading ? <Loading /> : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 420 }}>
+          <div className="vy-kv"><span>Currency</span><span>{data?.currency}</span></div>
+          <div className="vy-kv"><span>Channel</span><span>{data?.channel}</span></div>
+          <Field label="Account admin"><Input value={admin} onChange={(_, d) => setAdmin(d.value)} aria-label="Account admin" /></Field>
+          <div><Button appearance="primary" disabled={busy || !admin.trim()} onClick={save}>Save</Button></div>
+        </div>
+      )}
+    </CapabilityContainer>
   );
 }

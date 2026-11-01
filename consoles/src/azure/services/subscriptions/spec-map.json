@@ -125,7 +125,7 @@
     "vars": {
       "resource-name": "CloudLearn Subscription"
     },
-    "honest_page": true
+    "live": "live-usage"
   },
   "subscription-policies": {
     "route": "#/subscriptions/00000000-0000-0000-0000-cloudlearn01/policies",
