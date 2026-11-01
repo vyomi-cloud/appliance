@@ -11,7 +11,7 @@ gcp  : Eventarc storage-finalized trigger -> function fired with a CloudEvent af
 azure: Event Grid webhook subscription called with the published event.
 Uses the official SDK where installed (boto3), REST otherwise. One [PASS]/[FAIL] line per check, exit 1 on any failure.
 """
-import base64, http.server, io, json, os, sys, threading, time, urllib.request, urllib.error, zipfile
+import base64, http.server as hs, io, json, os, sys, threading, time, urllib.request, urllib.error, uuid, zipfile
 
 CLOUD = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in ("aws", "gcp", "azure") else "aws"
 BASE = (sys.argv[-1] if sys.argv[-1].startswith("http") else os.environ.get("VYOMI_ENDPOINT", "http://localhost:9000")).rstrip("/")
@@ -200,6 +200,71 @@ STORAGE = "google.cloud.storage.object.v1.finalized"
 PUBSUB = "google.cloud.pubsub.topic.v1.messagePublished"
 
 
+SUBID = "00000000-0000-0000-0000-cloudlearn01"
+
+
+def azure():
+    tag = f"pc{int(time.time()) % 100000}"
+    rg, topic, app = f"{tag}-rg", f"{tag}-topic", f"{tag}-app"
+    arm = f"/subscriptions/{SUBID}/resourceGroups/{rg}/providers"
+    got, lock = [], threading.Lock()
+
+    class H(hs.BaseHTTPRequestHandler):
+        def do_POST(self):
+            n = int(self.headers.get("content-length") or 0)
+            with lock:
+                got.append((self.headers.get("content-type"), self.headers.get("aeg-event-type"), json.loads(self.rfile.read(n) or b"null")))
+            self.send_response(200); self.end_headers()
+        def log_message(self, *a): pass
+    srv = hs.ThreadingHTTPServer(("0.0.0.0", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    hook = f"http://{os.environ.get('VYOMI_HOOK_HOST', 'host.docker.internal')}:{srv.server_port}/hook"   # host as seen from the appliance container
+    try:
+        http("PUT", f"/subscriptions/{SUBID}/resourcegroups/{rg}?api-version=2021-04-01", {"location": "eastus"})
+        st, t = http("PUT", f"{arm}/Microsoft.EventGrid/topics/{topic}?api-version=2024-06-01-preview", {"location": "eastus", "properties": {}})
+        endpoint = (t.get("properties") or {}).get("endpoint", "")
+        for name, schema in (("sub-eg", "EventGridSchema"), ("sub-ce", "CloudEventSchemaV1_0")):
+            http("PUT", f"{arm}/Microsoft.EventGrid/topics/{topic}/providers/Microsoft.EventGrid/eventSubscriptions/{name}?api-version=2024-06-01-preview",
+                 {"properties": {"destination": {"endpointType": "WebHook", "properties": {"endpointUrl": hook}}, "eventDeliverySchema": schema,
+                                 "filter": {"includedEventTypes": ["App.Thing.Created"], "subjectBeginsWith": "/things/"}}})
+        ev = lambda t_, subj: [{"id": uuid.uuid4().hex, "eventType": t_, "subject": subj, "eventTime": "2026-01-01T00:00:00Z", "data": {"k": 1}, "dataVersion": "1.0"}]
+        s1, _ = http("POST", endpoint, ev("App.Thing.Created", "/things/1"), {"aeg-sas-key": "x"})
+        check(s1 == 200, "Event Grid: publishing to the endpoint shown on the topic works (no /api 404)", (endpoint, s1))
+        http("POST", endpoint, ev("Other.Type", "/things/2"))
+        http("POST", endpoint, ev("App.Thing.Created", "/other/3"))
+        until(lambda: len(got) >= 2, 20)
+        time.sleep(1.5)
+        eg = [g for g in got if g[1] == "Notification"]
+        ce = [g for g in got if "cloudevents" in (g[0] or "")]
+        check(len(got) == 2 and len(eg) == 1 and len(ce) == 1, "Event Grid: webhook subscriptions called once each; filters drop the non-matching events", [(g[0], g[1]) for g in got])
+        check(bool(eg) and eg[0][2][0].get("eventType") == "App.Thing.Created" and eg[0][2][0].get("data") == {"k": 1},
+              "Event Grid: EventGridSchema payload delivered", eg[:1])
+        check(bool(ce) and ce[0][2][0].get("type") == "App.Thing.Created" and ce[0][2][0].get("specversion") == "1.0",
+              "Event Grid: CloudEvents payload delivered for a CloudEvents-schema subscription", ce[:1])
+
+        # ---- item 7: function app runs uploaded code; data plane works whatever space is active ----
+        http("PUT", f"{arm}/Microsoft.Web/sites/{app}?api-version=2023-12-01", {"location": "eastus", "kind": "functionapp", "properties": {}})
+        s2, b2 = http("POST", f"/azure-data/functions/{app}/hello", {"n": 1})
+        check(s2 == 404 and "no code is deployed" in json.dumps(b2), "Function app: no code -> clear 404, not a canned FALLBACK success", (s2, b2))
+        z = io.BytesIO()
+        with zipfile.ZipFile(z, "w") as zf:
+            zf.writestr("function_app.py", "import azure.functions as func\nimport json\napp = func.FunctionApp()\n\n"
+                        "@app.route(route='hello', auth_level=func.AuthLevel.ANONYMOUS)\n"
+                        "def hello(req: func.HttpRequest) -> func.HttpResponse:\n"
+                        "    b = req.get_json() if req.method == 'POST' else {}\n"
+                        "    return func.HttpResponse(json.dumps({'got': b, 'who': req.params.get('who')}), status_code=201, mimetype='application/json')\n")
+        s3, _ = http("POST", f"/azure-data/functions/{app}/api/zipdeploy", z.getvalue(), {"content-type": "application/zip"})
+        check(s3 == 200, "Function app: zip deploy accepted", s3)
+        s4, b4 = http("POST", f"/azure-data/functions/{app}/api/hello?who=me", {"n": 7})
+        check(s4 == 201 and b4 == {"got": {"n": 7}, "who": "me"}, "Function app: uploaded code runs; handler's HttpResponse is the HTTP response", (s4, b4))
+    finally:
+        srv.shutdown()
+        try:
+            http("DELETE", f"/subscriptions/{SUBID}/resourcegroups/{rg}?api-version=2021-04-01")
+        except Exception:
+            pass
+
+
 if __name__ == "__main__":
-    {"aws": aws, "gcp": gcp}.get(CLOUD, lambda: check(False, f"{CLOUD} not implemented"))()
+    {"aws": aws, "gcp": gcp, "azure": azure}.get(CLOUD, lambda: check(False, f"{CLOUD} not implemented"))()
     sys.exit(1 if fails else 0)

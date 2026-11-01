@@ -365,26 +365,19 @@ def _register_eventbridge_rest(app: FastAPI) -> None:
 # ============================================================================
 def _register_azure(app: FastAPI) -> None:
     @app.post("/azure-data/eventgrid/{topic}/events")
+    @app.post("/azure-data/eventgrid/{topic}/api/events")   # the endpoint ARM shows on the topic (properties.endpoint)
     async def az_eventgrid_publish(topic: str, request: Request):
+        from core import azure_eventgrid_delivery as egd
         body = await request.json()
-        events = body if isinstance(body, list) else [body]
+        events = egd.normalize_published(body, request.headers.get("content-type", ""), topic)
         published = 0
-        for ev in events:
-            subject = f"azure.eventgrid.{topic}"
-            payload = {
-                "id": ev.get("id") or uuid.uuid4().hex,
-                "topic": ev.get("topic", topic),
-                "subject": ev.get("subject", ""),
-                "eventType": ev.get("eventType", "Default"),
-                "eventTime": ev.get("eventTime") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "data": ev.get("data", {}),
-                "dataVersion": ev.get("dataVersion", "1.0"),
-                "metadataVersion": "1",
-            }
-            if nc.publish(subject, payload):
+        for payload in events:
+            if nc.publish(f"azure.eventgrid.{topic}", payload):
                 published += 1
+        # Deliver to the topic's event subscriptions (webhook / storage queue / function).
+        delivered = egd.deliver(topic, events)
         # Real Event Grid returns 200 with no body on success.
-        return JSONResponse({"published": published, "count": len(events)}, status_code=200)
+        return JSONResponse({"published": published, "count": len(events), "subscriptions": delivered}, status_code=200)
 
 
 # ============================================================================

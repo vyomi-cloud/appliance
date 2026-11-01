@@ -1673,6 +1673,30 @@
       "timeout": 600
     },
     {
+      "id": "offline-post-create-aws-event-delivery",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/event_delivery.py aws {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-gcp-event-delivery",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/event_delivery.py gcp {ENDPOINT}",
+      "timeout": 300
+    },
+    {
+      "id": "offline-post-create-azure-event-delivery",
+      "target": "offline",
+      "cloud": "azure",
+      "kind": "api",
+      "cmd": "python3 tests/conformance/post_create/probes/event_delivery.py azure {ENDPOINT}",
+      "timeout": 300
+    },
+    {
       "id": "offline-post-create-aws-ec2-ssh",
       "target": "offline",
       "cloud": "aws",

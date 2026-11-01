@@ -144,6 +144,48 @@ class _Abort(Exception):
         super().__init__(description or str(code)); self.code = code; self.description = description
 '''
 
+_AZ_FUNCTIONS_SHIM = '''
+import json as _json
+class AuthLevel:
+    ANONYMOUS = "anonymous"; FUNCTION = "function"; ADMIN = "admin"
+class HttpRequest:
+    def __init__(self, method, url, headers=None, params=None, route_params=None, body=b""):
+        self.method = method; self.url = url; self.headers = headers or {}
+        self.params = params or {}; self.route_params = route_params or {}; self._body = body or b""
+    def get_body(self):
+        return self._body
+    def get_json(self):
+        try:
+            return _json.loads(self._body.decode("utf-8"))
+        except Exception:
+            raise ValueError("req_body is not JSON serializable")
+class HttpResponse:
+    def __init__(self, body=None, *, status_code=200, headers=None, mimetype=None, charset="utf-8"):
+        if isinstance(body, str): body = body.encode(charset)
+        self._body = body or b""
+        self.status_code = int(status_code); self.headers = dict(headers or {})
+        if mimetype: self.headers["Content-Type"] = mimetype
+        elif "Content-Type" not in self.headers and "content-type" not in self.headers:
+            self.headers["Content-Type"] = "text/plain; charset=utf-8"
+    def get_body(self): return self._body
+    data = property(lambda s: s._body)
+class FunctionApp:
+    def __init__(self, http_auth_level=None):
+        self.fns = {}
+    def _reg(self, fn): self.fns[fn.__name__] = fn; return fn
+    def route(self, route=None, methods=None, auth_level=None, **kw):
+        def deco(fn):
+            fn._route = route or fn.__name__; return self._reg(fn)
+        return deco
+    def function_name(self, name=None, **kw):
+        def deco(fn): self.fns[name or fn.__name__] = fn; return fn
+        return deco
+    def __getattr__(self, n):   # timer_trigger / queue_trigger / ... decorators: register, return fn
+        def trig(*a, **k):
+            return lambda fn: self._reg(fn)
+        return trig
+'''
+
 _FF_SHIM = '''
 def http(fn):
     return fn
@@ -245,11 +287,21 @@ try:
     s = importlib.util.spec_from_file_location("user_function", p)
     mod = importlib.util.module_from_spec(s); s.loader.exec_module(mod)
     fn = getattr(mod, spec["entry"], None)
+    _app = getattr(mod, "app", None)
+    if fn is None and _app is not None and hasattr(_app, "fns"):
+        fn = _app.fns.get(spec["entry"]) or next((f for f in _app.fns.values() if getattr(f, "_route", None) == spec["entry"]), None) \
+            or (list(_app.fns.values())[0] if len(_app.fns) == 1 else None)
     if fn is None:
         raise SystemExit("Entry point %r not found in function source" % spec["entry"])
     if spec["mode"] == "http":
         try:
-            rv = fn(Request(spec["request"]))
+            _r = Request(spec["request"])
+            if spec.get("flavor") == "azure":
+                import azure.functions as _func
+                import urllib.parse as _up
+                _q = {k: v[0] for k, v in _up.parse_qs(spec["request"]["query"], keep_blank_values=True).items()}
+                _r = _func.HttpRequest(_r.method, spec["request"].get("url", ""), dict(_r.headers), _q, spec["request"].get("route_params") or {}, _r.data)
+            rv = fn(_r)
             status, headers, body = _norm(rv)
         except _flask._Abort as a:
             status, headers, body = a.code, {"Content-Type": "text/html; charset=utf-8"}, str(a.description or a.code).encode()
@@ -290,7 +342,11 @@ def _run_py_harness(code: str, spec: dict, timeout: int, env: dict | None, entry
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 with open(dest, "w") as fh:
                     fh.write(text)
-        os.makedirs(os.path.join(workdir, "_shim"))
+        os.makedirs(os.path.join(workdir, "_shim", "azure"))
+        with open(os.path.join(workdir, "_shim", "azure", "__init__.py"), "w") as fh:
+            fh.write("")
+        with open(os.path.join(workdir, "_shim", "azure", "functions.py"), "w") as fh:
+            fh.write(_AZ_FUNCTIONS_SHIM)
         with open(os.path.join(workdir, "_shim", "flask.py"), "w") as fh:
             fh.write(_FLASK_SHIM)
         with open(os.path.join(workdir, "_shim", "functions_framework.py"), "w") as fh:
@@ -315,7 +371,7 @@ def _run_py_harness(code: str, spec: dict, timeout: int, env: dict | None, entry
 
 
 def execute_http(code: str, entry_point: str, runtime: str, request: dict, timeout: int = 60,
-                 env: dict | None = None) -> dict:
+                 env: dict | None = None, flavor: str = "gcp") -> dict:
     """Invoke an HTTP function with a Flask-like request. `request`: {method, path, query, headers,
     body_b64, url, remote_addr}. Returns {ok, status, headers, body(bytes), logs[, error]}: the
     handler's own HTTP response, unwrapped. A crash is the platform's 500, like the real service."""
@@ -324,8 +380,8 @@ def execute_http(code: str, entry_point: str, runtime: str, request: dict, timeo
         return _http_result({"status": "ERROR", "error": "No function source uploaded — deploy code to enable execution."})
     if not runtime.startswith("python"):
         return _http_result({"status": "ERROR", "error": f"HTTP invocation of runtime {runtime!r} is not supported yet (python only)."})
-    return _http_result(_run_py_harness(code, {"mode": "http", "entry": entry_point or "hello_http", "request": request},
-                                        timeout, env))
+    return _http_result(_run_py_harness(code, {"mode": "http", "entry": entry_point or "hello_http", "request": request,
+                                               "flavor": flavor}, timeout, env))
 
 
 def execute_cloud_event(code: str, entry_point: str, runtime: str, event: dict, timeout: int = 60,
