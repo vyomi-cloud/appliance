@@ -2467,7 +2467,7 @@
       var items = document.querySelectorAll('#app-sidebar .side-item[data-view]');
       for (var i = 0; i < items.length; i++)
         items[i].classList.toggle('active', items[i].getAttribute('data-view') === view);
-      try { localStorage.setItem('vyomi.appview', view); } catch (_) {}
+      try { sessionStorage.setItem('vyomi.appview', view); } catch (_) {}
       // Keep the URL on the current view, so a refresh lands right back here (the
       // boot code below restores the hash first). replaceState adds no history entries.
       if (location.hash !== '#' + view) try { history.replaceState(history.state, '', location.pathname + location.search + '#' + view); } catch (_) {}
@@ -2541,7 +2541,7 @@
       if (APP_VIEWS[hv]) { showAppView(hv); return; }
       // "Home page" is now the Spaces view: an explicitly-chosen non-default view
       // still wins; otherwise (no preference or the old 'workspace' default) land on Spaces.
-      try { var v = localStorage.getItem('vyomi.appview'); showAppView(v && v !== 'workspace' && APP_VIEWS[v] ? v : 'spaces'); }
+      try { var v = sessionStorage.getItem('vyomi.appview'); showAppView(v && v !== 'workspace' && APP_VIEWS[v] ? v : 'spaces'); }
       catch (_) { showAppView('spaces'); }
     })();
 
