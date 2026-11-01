@@ -59,17 +59,21 @@
   },
   "gcp.sql.connections-security": {
     "title": "Connections: Security (SSL/TLS enforcement, client/server certificates)",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi has no certificate authority and does not negotiate TLS for simulated connections, so it cannot issue client certificates or enforce 'Require SSL/TLS'."
-    ]
+      "A server CA cert is generated for every instance and client certs are real sslCerts.insert/list/delete resources (the private key is returned once, at creation, and never stored again — same as the real API) — but Vyomi issues deterministic, realistic-shaped PEM blobs rather than real X.509/TLS material (no cryptography/OpenSSL dependency, so this loads under Pyodide).",
+      "'Require SSL/TLS' (sslMode) is ENFORCED on Cloud SQL Studio's query RPC — the one client connection Vyomi fully brokers end to end: ENCRYPTED_ONLY requires the caller to acknowledge an encrypted session and TRUSTED_CLIENT_CERTIFICATE_REQUIRED additionally requires a live client cert this instance issued, both checked on every query, not just stored. Vyomi never terminates TLS in front of the shared engine container (core/gcp_sql_engine.py) that a raw TCP client connects to directly, so sslMode has no effect on THAT path — the same boundary core/azure_sql_core.py's per-IP firewall rules accept."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
   },
   "gcp.sql.insights": {
     "title": "System insights, Query insights and Cloud SQL Studio",
-    "level": { "nano": "not_simulated", "offline": "not_simulated" },
+    "level": { "nano": "limited", "offline": "limited" },
     "limitations": [
-      "Vyomi collects no CPU/memory/query telemetry for Cloud SQL instances and has no in-console SQL editor backed by the native Admin API, so these dashboards cannot be rendered from real data."
-    ]
+      "Cloud SQL Studio runs real SQL against the instance's real engine (sqlite3 in Nano, a real Postgres/MySQL in Pro/Max — the SAME engine instances.export/import already drive) and surfaces the engine's own errors; System insights (storage used, active connections, query throughput/error series) and Query insights (recent + top queries with real durations) are derived entirely from that real activity and the real queryLog it writes — never synthetic data.",
+      "CPU and memory utilization are NOT surfaced: no virtualized compute resource backs a Vyomi instance, so there is no real OS process to sample — physically impossible for a local simulator to measure, not merely unmodelled."
+    ],
+    "tests": ["tests/conformance/test_gcp_cloudsql_core.py"]
   },
   "gcp.sql.export-import": {
     "title": "Export / import (instances.export, instances.import — SQL and CSV files in Cloud Storage)",

@@ -15106,6 +15106,7 @@ def _gcp_storage_policy_view(bucket: str, policy: dict[str, Any] | None = None) 
 
 
 def _gcp_sql_instance_record(project: str, payload: dict[str, Any]) -> dict:
+    from core import gcp_cloudsql_core as _csql
     name = str(payload.get("name") or payload.get("instance") or payload.get("instanceId") or "sql-instance")
     region = _gcp_location_name(payload.get("region") or payload.get("location") or "us-central1")
     now = _now()
@@ -15138,7 +15139,12 @@ def _gcp_sql_instance_record(project: str, payload: dict[str, Any]) -> dict:
         "labels": payload.get("labels", {}) if isinstance(payload.get("labels"), dict) else {},
         "settings": settings,
         "ipAddresses": payload.get("ipAddresses") or [{"type": "PRIMARY", "ipAddress": _public_ip()}],
-        "serverCaCert": {"cert": "", "commonName": name, "createTime": now, "expirationTime": ""},
+        # gcp.sql.connections-security: a real (deterministic, Pyodide-safe — see
+        # core/gcp_cloudsql_core.py:_ca_cert) server CA cert, generated once at creation
+        # so it stays stable across gets, the same as the Nano core.
+        "serverCaCert": _csql._ca_cert(project, name),
+        "sslCerts": {},
+        "queryLog": [],
         "createTime": now,
         "updateTime": now,
     }
@@ -17428,8 +17434,24 @@ def _gcp_storage_object_view(project: str, bucket: str, name: str, obj: dict) ->
 
 
 def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
+    from core import gcp_cloudsql_core as _csql
     name = str(instance.get("name") or "")
     region = str(instance.get("region") or "us-central1")
+    settings = instance.get("settings")
+    if not isinstance(settings, dict):
+        settings = {"tier": "db-f1-micro", "activationPolicy": "ALWAYS", "dataDiskType": "PD_SSD",
+                    "dataDiskSizeGb": "10", "availabilityType": "ZONAL", "pricingPlan": "PER_USE"}
+    ip_config = settings.get("ipConfiguration")
+    if not isinstance(ip_config, dict):
+        ip_config = {}
+    ip_config.setdefault("ipv4Enabled", True)
+    ip_config.setdefault("privateNetwork", "")
+    # gcp.sql.connections-security: sslMode drives requireSsl (legacy bool) the same
+    # way core/gcp_cloudsql_core.py derives it on Nano — one setting, two field names.
+    ssl_mode = ip_config.get("sslMode", "ALLOW_UNENCRYPTED_AND_ENCRYPTED")
+    ip_config["sslMode"] = ssl_mode
+    ip_config["requireSsl"] = ssl_mode != "ALLOW_UNENCRYPTED_AND_ENCRYPTED"
+    settings["ipConfiguration"] = ip_config
     return {
         "kind": "sql#instance",
         "id": str(instance.get("id") or _gcp_compute_numeric_id(f"{project}:{name}")),
@@ -17446,21 +17468,9 @@ def _gcp_sql_instance_view(project: str, instance: dict) -> dict:
         "selfLink": f"{_gcp_sql_root()}/projects/{project}/instances/{name}",
         "databaseInstalledVersion": instance.get("databaseInstalledVersion", ""),
         "maintenanceVersion": instance.get("maintenanceVersion", ""),
-        "settings": instance.get("settings", {
-            "tier": "db-f1-micro",
-            "activationPolicy": "ALWAYS",
-            "dataDiskType": "PD_SSD",
-            "dataDiskSizeGb": "10",
-            "availabilityType": "ZONAL",
-            "pricingPlan": "PER_USE",
-            "ipConfiguration": {
-                "ipv4Enabled": True,
-                "privateNetwork": "",
-                "requireSsl": False,
-            },
-        }),
+        "settings": settings,
         "ipAddresses": instance.get("ipAddresses", [{"type": "PRIMARY", "ipAddress": instance.get("ipAddress", _public_ip())}]),
-        "serverCaCert": instance.get("serverCaCert", {"cert": "", "commonName": name, "createTime": _now(), "expirationTime": ""}),
+        "serverCaCert": instance.get("serverCaCert") or _csql._ca_cert(project, name),
         "createTime": instance.get("createTime", _now()),
         "updateTime": instance.get("updateTime", _now()),
         # Real connection endpoint for the backing OSS engine (None when the

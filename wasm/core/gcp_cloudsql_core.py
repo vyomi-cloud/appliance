@@ -24,7 +24,9 @@ GCP errors use the Google JSON API shape `{"error":{"code","message","status"}}`
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -88,6 +90,47 @@ def _ip_addresses(ip_config: dict) -> list[dict]:
     return addrs
 
 
+# ── SSL/TLS (gcp.sql.connections-security): deterministic, realistic-shaped certs —
+# same approach gcp_redis_core._ca_cert uses — rather than a real X.509/TLS stack
+# (no cryptography/OpenSSL dependency, so this loads under Pyodide). The CA cert is
+# generated once at instance creation; client certs are generated on sslCerts.insert
+# and their private key is returned ONLY in that response, never stored or
+# retrievable again — matching the real API. ──────────────────────────────────────
+def _ca_cert(project: str, instance: str) -> dict:
+    now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+    return {"kind": "sql#sslCert", "certSerialNumber": "0",
+            "cert": ("-----BEGIN CERTIFICATE-----\n"
+                     + hashlib.sha256(f"ca-cert:{project}/{instance}".encode()).hexdigest()
+                     + "\n-----END CERTIFICATE-----"),
+            "commonName": f"C=US,O=Vyomi,CN=Vyomi Cloud SQL Server CA,dnQualifier={instance}",
+            "sha1Fingerprint": hashlib.sha1(f"ca:{project}/{instance}".encode()).hexdigest(),
+            "instance": instance, "createTime": now, "expirationTime": "2036-01-01T00:00:00.000Z"}
+
+
+def _client_cert(project: str, instance: str, common_name: str) -> dict:
+    serial = uuid.uuid4().hex[:16]
+    fingerprint = hashlib.sha1(f"client:{project}/{instance}/{common_name}/{serial}".encode()).hexdigest()
+    now = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+    return {"kind": "sql#sslCert", "certSerialNumber": serial,
+            "cert": ("-----BEGIN CERTIFICATE-----\n"
+                     + hashlib.sha256(f"client-cert:{serial}".encode()).hexdigest()
+                     + "\n-----END CERTIFICATE-----"),
+            "commonName": common_name, "sha1Fingerprint": fingerprint,
+            "instance": instance, "createTime": now, "expirationTime": "2036-01-01T00:00:00.000Z",
+            "_privateKey": ("-----BEGIN PRIVATE KEY-----\n"
+                           + hashlib.sha256(f"client-key:{serial}".encode()).hexdigest()
+                           + "\n-----END PRIVATE KEY-----")}
+
+
+def _ssl_cert_view(project: str, instance: str, c: dict) -> dict:
+    return {"kind": "sql#sslCert", "certSerialNumber": c["certSerialNumber"], "cert": c["cert"],
+            "commonName": c["commonName"], "sha1Fingerprint": c["sha1Fingerprint"],
+            "instance": instance, "project": project, "createTime": c["createTime"],
+            "expirationTime": c["expirationTime"],
+            "selfLink": (f"https://sqladmin.googleapis.com/sql/v1beta4/projects/{project}/instances/"
+                         f"{instance}/sslCerts/{c['sha1Fingerprint']}")}
+
+
 def _instance_view(rec: dict) -> dict:
     project = rec["project"]
     name = rec["name"]
@@ -126,6 +169,9 @@ def _instance_view(rec: dict) -> dict:
                 "ipv4Enabled": ip_config.get("ipv4Enabled", True),
                 "privateNetwork": ip_config.get("privateNetwork"),
                 "authorizedNetworks": ip_config.get("authorizedNetworks", []),
+                "sslMode": ip_config.get("sslMode", "ALLOW_UNENCRYPTED_AND_ENCRYPTED"),
+                "requireSsl": ip_config.get("sslMode", "ALLOW_UNENCRYPTED_AND_ENCRYPTED")
+                != "ALLOW_UNENCRYPTED_AND_ENCRYPTED",
             },
             "backupConfiguration": {
                 "kind": "sql#backupConfiguration",
@@ -135,6 +181,7 @@ def _instance_view(rec: dict) -> dict:
             },
         },
         "ipAddresses": _ip_addresses(ip_config),
+        "serverCaCert": rec.get("serverCaCert") or _ca_cert(project, name),
         "createTime": rec.get("createTime", ""),
         "etag": rec.get("etag", ""),
         "selfLink": (f"https://sqladmin.googleapis.com/sql/v1beta4/projects/"
@@ -238,6 +285,9 @@ def _insert_instance(store: SqlStore, project: str, body: dict) -> CloudSqlRespo
         "databases": {},  # name -> database metadata (control-plane view)
         "users": {},       # "name@host" -> user metadata
         "operations": [],  # most-recent-first
+        "serverCaCert": _ca_cert(project, name),
+        "sslCerts": {},     # sha1Fingerprint -> client cert metadata (no private key stored)
+        "queryLog": [],     # most-recent-first real executed-query log (gcp.sql.insights)
     }
     if master:
         rec["masterInstanceName"] = master
@@ -683,6 +733,195 @@ def _export_import(store: SqlStore, project: str, instance: str, body: dict, kin
     return _json(200, _operation_view(op, project, instance))
 
 
+# ── sslCerts sub-resource (gcp.sql.connections-security: client/server certs) ──────
+def _insert_ssl_cert(store: SqlStore, project: str, instance: str, body: dict) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    common_name = str(body.get("commonName", "")).strip()
+    if not common_name:
+        return _err(400, "INVALID_ARGUMENT", "commonName is required.")
+    cert = _client_cert(project, instance, common_name)
+    private_key = cert.pop("_privateKey")
+    rec.setdefault("sslCerts", {})[cert["sha1Fingerprint"]] = cert
+    op = _log_op(rec, "CREATE_SSL_CERT")
+    store.persist()
+    return _json(200, {"kind": "sql#sslCertsInsert", "operation": _operation_view(op, project, instance),
+                       "serverCaCert": rec.get("serverCaCert") or _ca_cert(project, instance),
+                       "clientCert": {"kind": "sql#sslCert",
+                                      "certInfo": _ssl_cert_view(project, instance, cert),
+                                      "certPrivateKey": private_key}})
+
+
+def _list_ssl_certs(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    certs = rec.get("sslCerts", {})
+    items = [_ssl_cert_view(project, instance, certs[k]) for k in sorted(certs)]
+    out: dict = {"kind": "sql#sslCertsList"}
+    if items:
+        out["items"] = items
+    return _json(200, out)
+
+
+def _get_ssl_cert(store: SqlStore, project: str, instance: str, fingerprint: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    c = rec.get("sslCerts", {}).get(fingerprint)
+    if not c:
+        return _not_found(f"The SSL cert does not exist. Fingerprint: {fingerprint}")
+    return _json(200, _ssl_cert_view(project, instance, c))
+
+
+def _delete_ssl_cert(store: SqlStore, project: str, instance: str, fingerprint: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    certs = rec.get("sslCerts", {})
+    if fingerprint not in certs:
+        return _not_found(f"The SSL cert does not exist. Fingerprint: {fingerprint}")
+    certs.pop(fingerprint, None)
+    op = _log_op(rec, "DELETE_SSL_CERT")
+    store.persist()
+    return _json(200, _operation_view(op, project, instance))
+
+
+# ── data-plane query RPC (gcp.sql.insights: Cloud SQL Studio) — NOT a real Admin
+# API method (Cloud SQL Studio isn't part of the public Admin REST surface either);
+# added the same way core/azure_sql_core.py adds its own `/query` data-plane RPC
+# next to the real ARM control plane. Runs against the SAME real engine
+# (store.execute_sql, sqlite3 in Nano / a real Postgres or MySQL in Pro/Max) that
+# instances.export/import already drive — never synthetic rows. ───────────────────
+def _normalize_sql(sql: str) -> str:
+    s = re.sub(r"'[^']*'", "?", sql.strip())
+    s = re.sub(r"\b\d+\b", "?", s)
+    return re.sub(r"\s+", " ", s)[:200]
+
+
+def _ssl_enforcement_error(rec: dict, body: dict) -> str | None:
+    """Cloud SQL Studio is the one client connection Vyomi fully brokers end to end, so
+    it's where 'Require SSL/TLS' (sslMode) gets real teeth: ENCRYPTED_ONLY requires the
+    caller to acknowledge an encrypted session; TRUSTED_CLIENT_CERTIFICATE_REQUIRED also
+    requires a live client cert this instance issued (sslCerts.insert). A raw TCP client
+    connecting directly to the shared engine container (gcp_sql_engine.py) is NOT in a
+    path Vyomi intercepts, so this setting has no effect there — see
+    core/capabilities/gcp/sql.json: gcp.sql.connections-security."""
+    mode = rec.get("settings", {}).get("ipConfiguration", {}).get("sslMode", "ALLOW_UNENCRYPTED_AND_ENCRYPTED")
+    if mode == "ALLOW_UNENCRYPTED_AND_ENCRYPTED":
+        return None
+    if not body.get("ssl"):
+        return ("SSL connection is required. This instance requires an encrypted connection "
+                "(Connections > Security > Require SSL/TLS).")
+    if mode == "TRUSTED_CLIENT_CERTIFICATE_REQUIRED":
+        fp = str(body.get("clientCertSha1Fingerprint") or "")
+        if not fp or fp not in rec.get("sslCerts", {}):
+            return ("This instance only accepts connections that present a trusted client "
+                     "certificate. Create one under Connections > Security and reconnect.")
+    return None
+
+
+def _log_query(rec: dict, sql: str, duration_ms: float, row_count: int, ok: bool, error: str | None) -> None:
+    log = rec.setdefault("queryLog", [])
+    log.insert(0, {"sql": sql, "normalized": _normalize_sql(sql), "durationMs": round(duration_ms, 2),
+                   "rowCount": row_count, "ok": ok, "error": error,
+                   "ts": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()), "epoch": time.time()})
+    del log[200:]
+
+
+def _run_query(store: SqlStore, project: str, instance: str, body: dict) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    ssl_err = _ssl_enforcement_error(rec, body)
+    if ssl_err:
+        return _err(400, "FAILED_PRECONDITION", ssl_err)
+    sql = str(body.get("sql") or "").strip()
+    if not sql:
+        return _err(400, "INVALID_ARGUMENT", "sql is required.")
+    from core import sql_store as sq
+    db_id = _key(project, instance)
+    t0 = time.time()
+    try:
+        res = store.execute_sql(db_id, sql, body.get("params"))
+        ok, error = True, None
+    except Exception as e:  # noqa: BLE001 — a bad statement fails the query, not the RPC
+        res, ok, error = {"columns": [], "rows": [], "rowcount": 0}, False, str(e)
+    duration_ms = (time.time() - t0) * 1000
+    _log_query(rec, sql, duration_ms, res.get("rowcount", 0), ok, error)
+    store.persist()
+    return _json(200, {"ok": ok, "columns": res.get("columns", []),
+                       "rows": [[sq.json_cell(v) for v in r] for r in res.get("rows", [])],
+                       "rowCount": res.get("rowcount", 0), "durationMs": round(duration_ms, 2),
+                       "error": error})
+
+
+def _list_queries(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    return _json(200, {"items": list(rec.get("queryLog", []))})
+
+
+def _list_tables(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    from core import sql_store as sq
+    db_id = _key(project, instance)
+    names: list[str] = []
+    try:
+        if sq.engine_dialect(store) == "sqlite":
+            res = store.execute_sql(db_id, "SELECT name FROM sqlite_master WHERE type='table' "
+                                            "AND name NOT LIKE 'sqlite_%' ORDER BY name")
+        else:
+            res = store.execute_sql(db_id, "SELECT table_name FROM information_schema.tables "
+                                            "WHERE table_schema = current_schema() ORDER BY table_name")
+        names = [r[0] for r in res.get("rows", [])]
+    except Exception:
+        pass
+    return _json(200, {"tables": names})
+
+
+# ── gcp.sql.insights: System insights — real storage/connection/throughput series
+# derived from actual activity (never synthetic). CPU/memory utilization is NOT
+# surfaced: no virtualized compute resource backs a Vyomi instance, so there is no
+# real OS process to sample — see core/capabilities/gcp/sql.json. ──────────────────
+def _storage_bytes(store: SqlStore, db_id: str) -> int:
+    from core import sql_store as sq
+    try:
+        if sq.engine_dialect(store) == "sqlite":
+            res = store.execute_sql(db_id, "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()")
+        else:
+            res = store.execute_sql(db_id, "SELECT pg_database_size(current_database())")
+        if res.get("rows"):
+            return int(res["rows"][0][0] or 0)
+    except Exception:
+        pass
+    return 0
+
+
+def _get_metrics(store: SqlStore, project: str, instance: str) -> CloudSqlResponse:
+    rec = _get_instance(store, project, instance)
+    if not rec:
+        return _not_found(f"The Cloud SQL instance does not exist. Instance: {instance}")
+    db_id = _key(project, instance)
+    now = time.time()
+    buckets = [0] * 12   # 12 x 5-minute buckets, oldest -> newest, covering the last hour
+    errors = 0
+    for entry in rec.get("queryLog", []):
+        age = now - entry.get("epoch", now)
+        if 0 <= age < 3600:
+            buckets[11 - int(age // 300)] += 1
+            if not entry.get("ok"):
+                errors += 1
+    return _json(200, {"storageBytes": _storage_bytes(store, db_id),
+                       "activeConnections": store.open_transaction_count(db_id),
+                       "queryCount1h": sum(buckets), "errorCount1h": errors,
+                       "series": buckets})
+
+
 # ── native-wire dispatcher (REST path + method → operation) ────────────────
 # Single routing point for the native Cloud SQL Admin REST API — what an
 # unmodified google-cloud-sql-admin / gcloud sql client speaks.
@@ -743,7 +982,7 @@ def dispatch(store: SqlStore, method: str, path: str,
     # Native Admin API RPCs are path segments: POST .../instances/{i}/restart|restoreBackup
     # (what gcloud / the client libraries send; the colon form is kept for older callers).
     if len(segs) == 5 and verb is None and method == "POST" and segs[4] in ("restart", "restoreBackup",
-                                                                            "export", "import"):
+                                                                            "export", "import", "query"):
         verb = segs[4]
         segs = segs[:4]
 
@@ -755,6 +994,8 @@ def dispatch(store: SqlStore, method: str, path: str,
             return _restore_backup(store, project, instance, payload)
         if verb in ("export", "import") and method == "POST":
             return _export_import(store, project, instance, payload, verb.upper(), gcs_store=gcs_store)
+        if verb == "query" and method == "POST":
+            return _run_query(store, project, instance, payload)
         if method == "GET":
             return _get_instance_resp(store, project, instance)
         if method == "PATCH":
@@ -812,5 +1053,33 @@ def dispatch(store: SqlStore, method: str, path: str,
             if method == "DELETE":
                 return _delete_backup(store, project, instance, backup_id)
             return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on backupRun")
+
+    # /projects/{p}/instances/{i}/sslCerts[/{fingerprint}]
+    if segs[4] == "sslCerts":
+        if len(segs) == 5:
+            if method == "POST":
+                return _insert_ssl_cert(store, project, instance, payload)
+            if method == "GET":
+                return _list_ssl_certs(store, project, instance)
+            return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on sslCerts")
+        if len(segs) == 6:
+            fingerprint = segs[5]
+            if method == "GET":
+                return _get_ssl_cert(store, project, instance, fingerprint)
+            if method == "DELETE":
+                return _delete_ssl_cert(store, project, instance, fingerprint)
+            return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on sslCert")
+
+    # /projects/{p}/instances/{i}/queries — Cloud SQL Studio's real query log (gcp.sql.insights)
+    if segs[4] == "queries" and len(segs) == 5 and method == "GET":
+        return _list_queries(store, project, instance)
+
+    # /projects/{p}/instances/{i}/tables — schema browser (gcp.sql.insights)
+    if segs[4] == "tables" and len(segs) == 5 and method == "GET":
+        return _list_tables(store, project, instance)
+
+    # /projects/{p}/instances/{i}/metrics — System insights (gcp.sql.insights)
+    if segs[4] == "metrics" and len(segs) == 5 and method == "GET":
+        return _get_metrics(store, project, instance)
 
     return _not_found(f"Unknown path: {path}")

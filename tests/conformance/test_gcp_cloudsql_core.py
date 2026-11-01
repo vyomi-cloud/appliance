@@ -284,6 +284,81 @@ def run() -> int:
     _check("privateNetwork set adds a PRIVATE ip", any(a["type"] == "PRIVATE" for a in netdb3["ipAddresses"]))
     _check("ipv4Enabled still False -> still no PRIMARY ip", not any(a["type"] == "PRIMARY" for a in netdb3["ipAddresses"]))
 
+    # 15. gcp.sql.connections-security: sslCerts CRUD + sslMode enforcement on the
+    # query RPC (the one connection Vyomi fully brokers — see module docstring).
+    csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
+                  json.dumps({"name": "secdb"}).encode())
+    secdb = _jbody(csql.dispatch(st, "GET", PROJ + "/secdb", {}, {}, b""))
+    _check("default sslMode allows unencrypted", secdb["settings"]["ipConfiguration"]["sslMode"] == "ALLOW_UNENCRYPTED_AND_ENCRYPTED")
+    _check("default requireSsl False", secdb["settings"]["ipConfiguration"]["requireSsl"] is False)
+    _check("serverCaCert present", secdb["serverCaCert"]["kind"] == "sql#sslCert")
+
+    q_open = csql.dispatch(st, "POST", PROJ + "/secdb/query", {}, {"content-type": "application/json"},
+                           json.dumps({"sql": "SELECT 1"}).encode())
+    _check("query allowed by default sslMode", q_open.status == 200 and _jbody(q_open)["ok"] is True)
+
+    csql.dispatch(st, "PATCH", PROJ + "/secdb", {}, {"content-type": "application/json"},
+                  json.dumps({"settings": {"ipConfiguration": {"sslMode": "TRUSTED_CLIENT_CERTIFICATE_REQUIRED"}}}).encode())
+    q_blocked = csql.dispatch(st, "POST", PROJ + "/secdb/query", {}, {"content-type": "application/json"},
+                              json.dumps({"sql": "SELECT 1"}).encode())
+    _check("query blocked without ssl when TRUSTED_CLIENT_CERTIFICATE_REQUIRED", q_blocked.status == 400
+           and _jbody(q_blocked)["error"]["status"] == "FAILED_PRECONDITION")
+    q_no_cert = csql.dispatch(st, "POST", PROJ + "/secdb/query", {}, {"content-type": "application/json"},
+                              json.dumps({"sql": "SELECT 1", "ssl": True}).encode())
+    _check("query blocked with ssl but no trusted cert", q_no_cert.status == 400)
+
+    cert_ins = csql.dispatch(st, "POST", PROJ + "/secdb/sslCerts", {}, {"content-type": "application/json"},
+                             json.dumps({"commonName": "app-client"}).encode())
+    _check("insert ssl cert 200", cert_ins.status == 200)
+    cert_body = _jbody(cert_ins)
+    _check("insert ssl cert returns private key", "BEGIN PRIVATE KEY" in cert_body["clientCert"]["certPrivateKey"])
+    fp = cert_body["clientCert"]["certInfo"]["sha1Fingerprint"]
+
+    certs_list = _jbody(csql.dispatch(st, "GET", PROJ + "/secdb/sslCerts", {}, {}, b""))
+    _check("list ssl certs has one", len(certs_list.get("items", [])) == 1)
+    _check("list ssl certs omits private key", "certPrivateKey" not in certs_list["items"][0])
+
+    q_with_cert = csql.dispatch(st, "POST", PROJ + "/secdb/query", {}, {"content-type": "application/json"},
+                                json.dumps({"sql": "SELECT 1", "ssl": True, "clientCertSha1Fingerprint": fp}).encode())
+    _check("query allowed with ssl + trusted cert", q_with_cert.status == 200 and _jbody(q_with_cert)["ok"] is True)
+
+    cert_del = csql.dispatch(st, "DELETE", PROJ + f"/secdb/sslCerts/{fp}", {}, {}, b"")
+    _check("delete ssl cert 200", cert_del.status == 200)
+    q_after_del = csql.dispatch(st, "POST", PROJ + "/secdb/query", {}, {"content-type": "application/json"},
+                                json.dumps({"sql": "SELECT 1", "ssl": True, "clientCertSha1Fingerprint": fp}).encode())
+    _check("query blocked again once cert is deleted", q_after_del.status == 400)
+
+    # 16. gcp.sql.insights: Cloud SQL Studio runs REAL SQL against the instance's real
+    # engine; queries/tables/metrics are derived from that real activity, not synthetic.
+    csql.dispatch(st, "POST", PROJ, {}, {"content-type": "application/json"},
+                  json.dumps({"name": "studiodb"}).encode())
+    csql.dispatch(st, "POST", PROJ + "/studiodb/query", {}, {"content-type": "application/json"},
+                  json.dumps({"sql": "CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT)"}).encode())
+    csql.dispatch(st, "POST", PROJ + "/studiodb/query", {}, {"content-type": "application/json"},
+                  json.dumps({"sql": "INSERT INTO widgets (name) VALUES ('sprocket')"}).encode())
+    sel = _jbody(csql.dispatch(st, "POST", PROJ + "/studiodb/query", {}, {"content-type": "application/json"},
+                               json.dumps({"sql": "SELECT name FROM widgets"}).encode()))
+    _check("studio select real row", sel["ok"] is True and sel["rows"] == [["sprocket"]])
+
+    bad = _jbody(csql.dispatch(st, "POST", PROJ + "/studiodb/query", {}, {"content-type": "application/json"},
+                               json.dumps({"sql": "SELECT * FROM ghost_table"}).encode()))
+    _check("studio surfaces a real engine error, not a silent success", bad["ok"] is False and bad["error"])
+
+    tables = _jbody(csql.dispatch(st, "GET", PROJ + "/studiodb/tables", {}, {}, b""))
+    _check("tables lists the real created table", "widgets" in tables["tables"])
+
+    queries = _jbody(csql.dispatch(st, "GET", PROJ + "/studiodb/queries", {}, {}, b""))
+    _check("queries log has every real statement run", len(queries["items"]) == 4)
+    _check("queries log newest first", "ghost_table" in queries["items"][0]["sql"])
+
+    metrics = _jbody(csql.dispatch(st, "GET", PROJ + "/studiodb/metrics", {}, {}, b""))
+    _check("metrics storageBytes is real and positive", metrics["storageBytes"] > 0)
+    _check("metrics queryCount1h counts the real queries just run", metrics["queryCount1h"] == 4)
+    _check("metrics errorCount1h counts the real failure", metrics["errorCount1h"] == 1)
+
+    metrics_missing = csql.dispatch(st, "GET", PROJ + "/ghost/metrics", {}, {}, b"")
+    _check("metrics on missing instance 404", metrics_missing.status == 404)
+
     print("\nRESULT: PASS — GCP Cloud SQL control-plane core conforms "
           "(native Cloud SQL Admin REST wire) on this substrate.")
     return 0

@@ -1524,6 +1524,44 @@ try {
   check("restore backup via UI → deleted database reappears over native wire", (restoredDbs.items || []).some((d) => d.name === SQLDB));
   await shot("15c-sql-restore");
 
+  // Cloud SQL Studio: run a REAL query via the UI → shows up in Query/System insights
+  // (gcp.sql.insights) — then flip Require SSL/TLS to trusted-cert-only and prove a
+  // query is genuinely rejected until a client cert exists (gcp.sql.connections-security).
+  const SQLTABLE = `smoke${Date.now() % 100000}`;
+  await page.goto(UI + `#/sql/instances/${SQLI}/studio`);
+  await page.getByLabel("SQL editor").fill(`CREATE TABLE ${SQLTABLE} (id INTEGER PRIMARY KEY)`);
+  await page.getByRole("button", { name: "Run" }).click();
+  await page.getByText("affected.").waitFor({ timeout: 10000 });
+  check("run query via Studio UI → real table created over native wire",
+    (await wjson(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}/tables`)).tables?.includes(SQLTABLE));
+  await page.goto(UI + `#/sql/instances/${SQLI}/query-insights`);
+  await page.getByText(SQLTABLE).first().waitFor({ timeout: 10000 });
+  check("query via Studio UI → shown in Query insights", true);
+  await shot("15d-sql-studio-query");
+
+  await page.goto(UI + `#/sql/instances/${SQLI}/connections?tab=security`);
+  await page.getByLabel("Require SSL/TLS").click();
+  await page.getByRole("option", { name: "Require trusted client certificates" }).click();
+  await page.getByText("Require SSL/TLS set to").waitFor({ timeout: 10000 });
+  await page.goto(UI + `#/sql/instances/${SQLI}/studio`);
+  await page.getByText("requires a trusted client certificate").waitFor({ timeout: 10000 });
+  check("Require trusted client cert via UI → Studio blocks queries until one exists", true);
+
+  await page.goto(UI + `#/sql/instances/${SQLI}/connections?tab=security`);
+  await page.getByRole("button", { name: "Create client certificate" }).click();
+  await page.getByLabel("Certificate name").fill("smoke-client");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("heading", { name: "Client certificate created" }).waitFor({ timeout: 10000 });
+  await page.getByRole("button", { name: "Done" }).click();
+  check("create client cert via UI → native sslCerts.list shows it",
+    (await wjson(`/sql/v1beta4/projects/vyomi-project/instances/${SQLI}/sslCerts`)).items?.some((c) => c.commonName === "smoke-client"));
+
+  await page.goto(UI + `#/sql/instances/${SQLI}/studio`);
+  await page.getByLabel("SQL editor").fill("SELECT 1");
+  await page.getByRole("button", { name: "Run" }).click();
+  await page.getByText("1 row(s)", { exact: false }).waitFor({ timeout: 10000 });
+  check("query via Studio UI → allowed once a trusted client cert exists", true);
+
   // A primary can't be deleted while it has live replicas (native restriction) —
   // delete the replica over the wire first, then the primary via the UI below.
   await wire(`/sql/v1beta4/projects/vyomi-project/instances/${SQLREP}`, { method: "DELETE" });

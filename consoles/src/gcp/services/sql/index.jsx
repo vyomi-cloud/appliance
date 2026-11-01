@@ -15,7 +15,9 @@ import CreateDatabase from "./CreateDatabase.jsx";
 import InstanceBackups from "./InstanceBackups.jsx";
 import Replicas from "./Replicas.jsx";
 import Operations from "./Operations.jsx";
-import { SystemInsights, QueryInsights, CloudSqlStudio } from "./GapPages.jsx";
+import SystemInsights from "./SystemInsights.jsx";
+import QueryInsights from "./QueryInsights.jsx";
+import CloudSqlStudio from "./CloudSqlStudio.jsx";
 
 export default {
   nav: [

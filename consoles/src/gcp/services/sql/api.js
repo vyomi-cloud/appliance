@@ -56,3 +56,22 @@ export const stateLabel = (s) => ({ RUNNABLE: "Runnable", STOPPED: "Stopped", PE
 export const publicIp = (i) => i.ipAddresses?.find((a) => a.type === "PRIMARY")?.ipAddress || "—";
 export const privateIp = (i) => i.ipAddresses?.find((a) => a.type === "PRIVATE")?.ipAddress || "—";
 export const diskGb = (i) => `${i.settings?.dataDiskSizeGb ?? "10"} GB`;
+
+// ── Connections > Security (gcp.sql.connections-security): sslMode + sslCerts ──────────
+export const SSL_MODES = [
+  ["ALLOW_UNENCRYPTED_AND_ENCRYPTED", "Allow unencrypted and encrypted connections"],
+  ["ENCRYPTED_ONLY", "Require encrypted connections only"],
+  ["TRUSTED_CLIENT_CERTIFICATE_REQUIRED", "Require trusted client certificates"],
+];
+export const sslModeLabel = (m) => SSL_MODES.find(([v]) => v === m)?.[1] || m;
+export const setSslMode = (instance, sslMode) => patchInstance(instance, { settings: { ipConfiguration: { sslMode } } });
+export const listSslCerts = async (instance) => (await restJson("GET", `${base()}/${e(instance)}/sslCerts`)).items || [];
+export const insertSslCert = (instance, commonName) => restJson("POST", `${base()}/${e(instance)}/sslCerts`, { body: { commonName } });
+export const deleteSslCert = (instance, fingerprint) => restJson("DELETE", `${base()}/${e(instance)}/sslCerts/${e(fingerprint)}`);
+
+// ── Cloud SQL Studio + insights (gcp.sql.insights) — a Vyomi-added data-plane RPC next
+// to the real Admin API, the same way core/azure_sql_core.py adds its own `/query` path. ──
+export const runQuery = (instance, sql, opts = {}) => restJson("POST", `${base()}/${e(instance)}/query`, { body: { sql, ...opts } });
+export const listTables = async (instance) => (await restJson("GET", `${base()}/${e(instance)}/tables`)).tables || [];
+export const listQueries = async (instance) => (await restJson("GET", `${base()}/${e(instance)}/queries`)).items || [];
+export const getMetrics = (instance) => restJson("GET", `${base()}/${e(instance)}/metrics`);
