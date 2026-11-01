@@ -1005,6 +1005,59 @@ try {
   await page.getByText("hello-kinesis").first().waitFor({ timeout: 10000 });
   check("Kinesis PutRecord over wire → shown in Data viewer (Get records)", true);
   await shot("25-kinesis-data-viewer");
+  // Step Functions: create a state machine through the UI (UI → CLI direction), then
+  // confirm it over the native wire.
+  const SM1 = `v4smoke-sm-${Date.now() % 100000}`;
+  await page.goto(UI + "#/states/create");
+  await page.getByLabel("Name", { exact: true }).fill(SM1);
+  await page.getByRole("button", { name: "Create state machine" }).last().click();
+  await page.getByRole("heading", { name: SM1, level: 1 }).waitFor({ timeout: 10000 });
+  const sm1List = await sfn("ListStateMachines", {});
+  check("Step Functions create state machine (UI) → visible over native wire", (sm1List.stateMachines || []).some((m) => m.name === SM1), JSON.stringify(sm1List.stateMachines?.slice(-1)));
+  await shot("24-states-create");
+
+  // A state machine created over the wire (CLI direction) shows up in the UI list.
+  const SM2 = `v4smoke-sm2-${Date.now() % 100000}`;
+  const sfnDef = JSON.stringify({ StartAt: "Pass", States: { Pass: { Type: "Pass", End: true } } });
+  await sfn("CreateStateMachine", { name: SM2, roleArn: "arn:aws:iam::000000000000:role/smoke", definition: sfnDef });
+  await page.goto(UI + "#/states/state-machines");
+  await page.getByPlaceholder("Search state machines").fill(SM2);
+  await page.getByText(SM2).first().waitFor({ timeout: 10000 });
+  check("Step Functions state machine created over wire → shown in State machines list", true);
+  await shot("25-states-list");
+
+  // Start an execution through the UI on that wire-created state machine, then confirm the
+  // Amazon States Language interpreter really ran it (not a stub) over the native wire.
+  const EXEC1 = `v4smoke-exec-${Date.now() % 100000}`;
+  await page.goto(UI + `#/states/state-machines/${SM2}`);
+  await page.getByRole("link", { name: "Start execution" }).first().click();
+  await page.getByLabel("Name", { exact: true }).fill(EXEC1);
+  await page.getByRole("button", { name: "Start execution" }).click();
+  await page.getByRole("heading", { name: EXEC1, level: 1 }).waitFor({ timeout: 10000 });
+  const execArn = `arn:aws:states:us-east-1:000000000000:execution:${SM2}:${EXEC1}`;
+  const execDesc = await sfn("DescribeExecution", { executionArn: execArn });
+  check("Step Functions start execution (UI) → interpreter really ran it (native wire SUCCEEDED)", execDesc.status === "SUCCEEDED", JSON.stringify(execDesc).slice(0, 200));
+  await shot("26-states-execution");
+
+  // Activities: create through the UI (UI → CLI direction), and a wire-created one shows
+  // up in the UI list (CLI → UI direction).
+  const ACT1 = `v4smoke-act-${Date.now() % 100000}`;
+  await page.goto(UI + "#/states/activities");
+  await page.getByRole("button", { name: "Create activity" }).click();
+  await page.getByLabel("Activity name", { exact: true }).fill(ACT1);
+  await page.getByRole("button", { name: "Create activity" }).last().click();
+  await page.getByText(`Created activity "${ACT1}".`).waitFor({ timeout: 10000 });
+  const actList = await sfn("ListActivities", {});
+  check("Step Functions create activity (UI) → visible over native wire", (actList.activities || []).some((a) => a.name === ACT1), JSON.stringify(actList.activities?.slice(-1)));
+  const ACT2 = `v4smoke-act2-${Date.now() % 100000}`;
+  await sfn("CreateActivity", { name: ACT2 });
+  // already on the Activities list (from the ACT1 check above); re-navigating to the
+  // identical hash wouldn't remount the page, so refresh explicitly to pick up the new activity.
+  await page.getByRole("button", { name: "Refresh" }).click();
+  await page.getByPlaceholder("Search activities").fill(ACT2);
+  await page.getByText(ACT2).first().waitFor({ timeout: 10000 });
+  check("Step Functions activity created over wire → shown in Activities list", true);
+  await shot("27-states-activities");
 
   // Dark mode
   await page.evaluate(() => localStorage.setItem("vyomi.v4.mode", "dark"));
