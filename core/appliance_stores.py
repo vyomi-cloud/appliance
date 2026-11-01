@@ -2791,6 +2791,7 @@ def rds_data_dir() -> str:
 class AppStateRdsStore(_FileRowsSqlStore):
     _BASE, _SLOT, _PROVIDER = _SqlMem, "rds_core", "aws"
     _EXTRA = ("_vyomi_adopted",)
+    cw_store = None   # runtime link set by the wire router (rds.monitoring metrics) — never persisted
 
     def _data_dir(self) -> str:
         return rds_data_dir()
