@@ -104,6 +104,26 @@ def _kms_key_metadata(key_id: str) -> dict | None:
     return _kms_keys.get(key_id)
 
 
+_KMS_BLOB_MAGIC = "vyomikms1|"
+
+
+def _kms_wrap_blob(key_name: str, vault_ct: str) -> str:
+    """base64( magic | key-name | vault ciphertext ): the blob names its own key (real KMS behaviour)."""
+    return base64.b64encode(f"{_KMS_BLOB_MAGIC}{key_name}|{vault_ct}".encode()).decode()
+
+
+def _kms_unwrap_blob(blob_b64: str) -> tuple[str, str]:
+    """-> (key_name or "", vault_ciphertext). Accepts the legacy base64("vault:v1:...") and raw forms."""
+    try:
+        raw = base64.b64decode(blob_b64, validate=False).decode()
+    except Exception:
+        return "", blob_b64
+    if raw.startswith(_KMS_BLOB_MAGIC):
+        _, name, ct = raw.split("|", 2)
+        return name, ct
+    return "", (raw if raw.startswith("vault:") else blob_b64)
+
+
 async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
     """Return the response dict for an AWS KMS X-Amz-Target, or None if not handled."""
     op = target.split(".", 1)[-1]  # "TrentService.Encrypt" → "Encrypt"
@@ -113,18 +133,28 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
     if op == "Encrypt":
         pt_b64 = body.get("Plaintext", "")
         ct = vc.transit_encrypt("aws", space, key_name, pt_b64) or ""
-        ct_wrapped = base64.b64encode(ct.encode()).decode()
-        return {"KeyId": key, "CiphertextBlob": ct_wrapped}
+        if not ct:
+            return {"__type": "KMSInternalException", "message": "Encryption backend unavailable."}
+        return {"KeyId": key, "CiphertextBlob": _kms_wrap_blob(key_name, ct)}
     if op == "Decrypt":
         ct_in = body.get("CiphertextBlob", "")
-        try:
-            ct = base64.b64decode(ct_in).decode()
-            if not ct.startswith("vault:"):
-                ct = ct_in
-        except Exception:
-            ct = ct_in
-        pt = vc.transit_decrypt("aws", space, key_name, ct) or ""
-        return {"KeyId": key, "Plaintext": pt}
+        blob_key, ct = _kms_unwrap_blob(ct_in)
+        # Real KMS recovers the key from the ciphertext blob; an explicit KeyId must agree with it.
+        if blob_key:
+            if body.get("KeyId") and _kms_resolve_key_name(body) != blob_key:
+                return {"__type": "IncorrectKeyException",
+                        "message": "The key supplied does not match the ciphertext's key."}
+            dec_key = blob_key
+        elif body.get("KeyId") or body.get("KeyArn") or body.get("KeyAlias"):
+            dec_key = key_name   # legacy blob without an embedded key id
+        else:
+            return {"__type": "InvalidCiphertextException", "message": ""}
+        pt = vc.transit_decrypt("aws", space, dec_key, ct)
+        if pt is None:
+            return {"__type": "InvalidCiphertextException", "message": ""}
+        stored = _kms_keys.get(dec_key)
+        arn = (stored or {}).get("Arn") or f"arn:aws:kms:us-east-1:000000000000:key/{dec_key}"
+        return {"KeyId": arn, "Plaintext": pt, "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"}
     if op in ("Encapsulate", "Decapsulate"):
         # ML-KEM, simulated: the shared secret is random and the ciphertext is that
         # secret sealed with the key's transit key, so Decapsulate recovers it.
@@ -161,7 +191,10 @@ async def _aws_kms_dispatch(target: str, body: dict, space: str) -> dict | None:
         r = vc.transit_generate_data_key("aws", space, key_name, key_spec=spec)
         if not r:
             return None
-        return {"KeyId": key, "Plaintext": r["Plaintext"], "CiphertextBlob": r["CiphertextBlob"]}
+        # CiphertextBlob is base64 binary on the AWS wire (boto3 decodes it); embed the key id so
+        # Decrypt works without KeyId, like real KMS.
+        return {"KeyId": key, "Plaintext": r["Plaintext"],
+                "CiphertextBlob": _kms_wrap_blob(key_name, r["CiphertextBlob"])}
     if op == "CreateKey":
         import uuid as _uuid
         key_id = body.get("KeyId") or _uuid.uuid4().hex
