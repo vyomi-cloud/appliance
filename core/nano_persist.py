@@ -37,6 +37,7 @@ STORE_ATTRS = [
     "compute", "vpc_net", "extras",   # Lambda/API Gateway + VPC models (private _lambda_functions etc., see _DURABLE_PRIVATE)
     "az_arm",   # Azure ARM control plane (core/azure_arm_core.AzureArm.state — Container Apps, VMs, …)
     "ssm",      # Systems Manager (core/ssm_core.SsmStore)
+    "asg",      # EC2 Auto Scaling (core/autoscaling_core.AutoScalingStore)
     "gcp_gke",    # Kubernetes Engine (core/gcp_container_core.ContainerStore)
     "gcp_mon",    # Cloud Monitoring (core/gcp_monitoring_core.MonitoringStore)
     "gcp_redis",  # Memorystore for Redis (core/gcp_redis_core.RedisStore)
