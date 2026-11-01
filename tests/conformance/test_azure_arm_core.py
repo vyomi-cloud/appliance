@@ -176,8 +176,10 @@ def run() -> int:
     arm.handle("PATCH", pstvm, {"api-version": AV},
                {"properties": {"autoShutdown": {"enabled": True, "time": past_pst, "timeZone": "(UTC-08:00) Pacific Time (US & Canada)"}}})
     r = arm.handle("GET", pstvm, {"api-version": AV})
+    # 5 minutes ago in PST is YESTERDAY during the first minutes of the PST day: nothing is due yet.
+    pst_wrapped = (local_pst_now - _dt.timedelta(minutes=5)).date() != local_pst_now.date()
     _check("auto-shutdown honors a non-UTC Azure-style timezone offset",
-           r["body"]["properties"]["powerState"] == "PowerState/stopped")
+           pst_wrapped or r["body"]["properties"]["powerState"] == "PowerState/stopped")
     disvm = _p(RG, "Microsoft.Compute", "virtualMachines", "disvm")
     arm.handle("PUT", disvm, {"api-version": AV}, {"location": "eastus", "properties": {"hardwareProfile": {"vmSize": "Standard_B1s"}}})
     arm.handle("POST", disvm + "/start", {"api-version": AV})
