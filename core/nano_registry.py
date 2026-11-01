@@ -36,6 +36,7 @@ from core.logs_core import LogsStore
 from core.elbv2_core import Elbv2Store
 from core.ssm_core import SsmStore
 from core.autoscaling_core import AutoScalingStore
+from core.dlm_core import DlmStore
 from core.stepfunctions_core import StepFunctionsStore
 from core.gcp_cloudscheduler_core import CloudSchedulerStore
 from core.gcp_iamcredentials_core import IamCredentialsStore
@@ -89,6 +90,7 @@ def get() -> dict:
             "elbv2": Elbv2Store(),             # ELBv2 load balancers / target groups / listeners (control plane)
             "ssm": SsmStore(),
             "asg": AutoScalingStore(),         # EC2 Auto Scaling groups + scaling policies (CloudWatch alarm actions)
+            "dlm": DlmStore(),                 # Data Lifecycle Manager policies (scheduled EBS snapshots)
             "sfn": StepFunctionsStore(),
             "cfn": CloudFormationStore(),   # CloudFormation (stacks, change sets, stack sets)
             # ── GCP ── (storage/firestore/kms/secretmanager/pubsub/iam/cloudsql)

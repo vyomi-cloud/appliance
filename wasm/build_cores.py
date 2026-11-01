@@ -73,6 +73,7 @@ CORES = [
     "autoscaling_core.py",                          # AWS: Auto Scaling groups (CloudWatch alarm actions)
     "elbv2_core.py",                                # AWS: Elastic Load Balancing v2 control plane — native Query wire + console REST
     "ram_core.py",                                  # AWS: Resource Access Manager (subnet/SG resource shares)
+    "dlm_core.py",                                   # AWS: Data Lifecycle Manager (scheduled EBS snapshot policies)
     "ssm_core.py",                                 # AWS: Systems Manager (Parameter Store, documents, Run Command, windows, baselines)
     "gcp_cloudscheduler_core.py",                  # expansion GCP: Cloud Scheduler (jobs, cron, pause/resume/run)
     "gcp_iamcredentials_core.py",                  # expansion GCP: IAM Service Account Credentials (access/ID tokens, signBlob, signJwt)

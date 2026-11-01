@@ -38,6 +38,7 @@ STORE_ATTRS = [
     "az_arm",   # Azure ARM control plane (core/azure_arm_core.AzureArm.state — Container Apps, VMs, …)
     "ssm",      # Systems Manager (core/ssm_core.SsmStore)
     "asg",      # EC2 Auto Scaling (core/autoscaling_core.AutoScalingStore)
+    "dlm",      # Data Lifecycle Manager (core/dlm_core.DlmStore)
     "gcp_gke",    # Kubernetes Engine (core/gcp_container_core.ContainerStore)
     "gcp_mon",    # Cloud Monitoring (core/gcp_monitoring_core.MonitoringStore)
     "gcp_redis",  # Memorystore for Redis (core/gcp_redis_core.RedisStore)
