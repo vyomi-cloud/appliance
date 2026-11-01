@@ -1,3 +1,15 @@
+### Upstream watch — 2026-11-01T16:27:24+00:00
+
+Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**4 change(s), 0 actionable.**
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
+- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-01T15:27:25+00:00
 
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
