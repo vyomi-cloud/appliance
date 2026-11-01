@@ -26,6 +26,13 @@
     '#vy-appbar .vy-notch a:hover{background:rgba(255,255,255,.08);color:#fff}' +
     '#vy-appbar .vy-notch a svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
     '#vy-appbar .vy-notch a.on{background:rgba(77,140,243,.18);color:#fff}' +
+    '#vy-modal{position:fixed;inset:0;z-index:200;background:rgba(10,12,24,.62);display:none;align-items:center;justify-content:center}' +
+    '#vy-modal.open{display:flex}' +
+    '#vy-modal .box{width:min(1100px,94vw);height:min(760px,90vh);background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.45);display:flex;flex-direction:column;overflow:hidden}' +
+    '#vy-modal .hd{display:flex;align-items:center;gap:8px;height:46px;padding:0 10px 0 18px;border-bottom:1px solid #e4e7ec;font:600 15px Inter,system-ui,sans-serif;color:#101828}' +
+    '#vy-modal .hd button{margin-left:auto;width:32px;height:32px;border:0;border-radius:50%;background:none;cursor:pointer;font-size:20px;color:#475467}' +
+    '#vy-modal .hd button:hover{background:#f2f4f7}' +
+    '#vy-modal iframe{flex:1;border:0;width:100%}' +
     '@media(max-width:900px){#vy-appbar .vy-notch a span{display:none}#vy-appbar .vy-cloud{display:none}}';
   function build() {
     if (document.getElementById('vy-appbar')) return;
@@ -36,6 +43,21 @@
     }).join('');
     bar.innerHTML = '<div class="vy-cloud">Cloud: <b>' + (NAMES[cloud] || cloud) + '</b></div><nav class="vy-notch" aria-label="Appliance">' + links + '</nav>';
     document.body.insertBefore(bar, document.body.firstChild);
+    var m = document.createElement('div'); m.id = 'vy-modal';
+    m.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="vy-modal-t"><div class="hd"><span id="vy-modal-t"></span><button type="button" aria-label="Close">\u2715</button></div><iframe title="Appliance"></iframe></div>';
+    document.body.appendChild(m);
+    var fr = m.querySelector('iframe');
+    function close() { m.classList.remove('open'); fr.removeAttribute('src'); }
+    m.addEventListener('click', function (e) { if (e.target === m) close(); });
+    m.querySelector('.hd button').addEventListener('click', close);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    bar.querySelector('.vy-notch').addEventListener('click', function (e) {
+      var a = e.target.closest('a[data-v]'); if (!a) return;
+      e.preventDefault();
+      m.querySelector('#vy-modal-t').textContent = a.title;
+      fr.src = '/clouds?embed=1#' + a.getAttribute('data-v');
+      m.classList.add('open');
+    });
   }
   if (document.body) build(); else document.addEventListener('DOMContentLoaded', build);
 })();

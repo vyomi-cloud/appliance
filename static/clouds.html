@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add("vy-embed");</script>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Workspaces — vyomi</title>
@@ -1289,6 +1290,11 @@
     .kc-frame-head h2 { color: #e4e4e7 !important; }
     /* Modals → dark surface (readable on the dark backdrop). */
     .modal, #modal-body, .cl-box { background: #0d1228 !important; color: #e4e4e7 !important; border: 1px solid rgba(255,255,255,0.10) !important; }
+
+    /* Embedded in a console's notch modal (?embed=1): just the view, no app chrome. */
+    html.vy-embed #app-topbar, html.vy-embed #app-sidebar, html.vy-embed .side-collapse, html.vy-embed #side-scrim,
+    html.vy-embed #update-banner, html.vy-embed #vyomi-readiness-mount, html.vy-embed #nano-foot { display: none !important; }
+    html.vy-embed #app-main { margin: 0 !important; border-radius: 0 !important; }
 </style>
   <style id="vy-light-theme">
     /* ═══════════ Light theme — the whole console page (Spaces, Health, Knowledge Center,
@@ -2467,10 +2473,10 @@
       var items = document.querySelectorAll('#app-sidebar .side-item[data-view]');
       for (var i = 0; i < items.length; i++)
         items[i].classList.toggle('active', items[i].getAttribute('data-view') === view);
-      try { sessionStorage.setItem('vyomi.appview', view); } catch (_) {}
+      if (!document.documentElement.classList.contains('vy-embed')) try { sessionStorage.setItem('vyomi.appview', view); } catch (_) {}
       // Keep the URL on the current view, so a refresh lands right back here (the
       // boot code below restores the hash first). replaceState adds no history entries.
-      if (location.hash !== '#' + view) try { history.replaceState(history.state, '', location.pathname + location.search + '#' + view); } catch (_) {}
+      if (!document.documentElement.classList.contains('vy-embed') && location.hash !== '#' + view) try { history.replaceState(history.state, '', location.pathname + location.search + '#' + view); } catch (_) {}
     }
     window.addEventListener('hashchange', function () {   // a #view link on the page itself
       var hv = (location.hash || '').replace('#', '');
@@ -3234,7 +3240,7 @@
       try {
         await fetch(`/api/spaces/${ spaceId }/switch`, { method: 'POST' });
       } catch (e) { /* swallow — opening console works without explicit switch */ }
-      window.location.href = PROVIDER_PATHS[provider] || '/ui';
+      (window.top || window).location.href = PROVIDER_PATHS[provider] || '/ui';
     }
 
     // ── Create Space modal ──────────────────────────────────────────
