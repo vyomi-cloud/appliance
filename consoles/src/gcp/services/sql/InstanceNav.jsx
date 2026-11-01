@@ -22,7 +22,7 @@ export default function InstanceNav({ name, active, actions }) {
         <Typography variant="h1" component="h1">{name}</Typography>
         {actions && <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>{actions}</Stack>}
       </Stack>
-      <Stack direction="row" spacing={2.5} sx={{ borderBottom: 1, borderColor: "divider", mb: 2.5, overflowX: "auto" }} aria-label="Instance sections">
+      <Stack direction="row" spacing={2.5} sx={{ borderBottom: 1, borderColor: "divider", mb: 2.5, mx: -3, px: 3, overflowX: "auto" }} aria-label="Instance sections">
         {SECTIONS.map(([id, label]) => (
           <Link key={id} href={instanceHref(name, id)} underline={active === id ? "always" : "hover"}
             sx={{ py: 1.25, whiteSpace: "nowrap", color: active === id ? "primary.main" : "text.primary", fontWeight: active === id ? 600 : 400,
