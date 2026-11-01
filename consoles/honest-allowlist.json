@@ -55,8 +55,6 @@
       "events"
     ],
     "cloudformation": [
-      "hooks",
-      "invocation-summary",
       "public-extensions"
     ],
     "vpc": [

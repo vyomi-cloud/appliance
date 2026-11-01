@@ -1,5 +1,5 @@
 {
-  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap, approved on consoles/honest-allowlist.json (hooks, invocation-summary, public-extensions). activated-extensions/extension-detail are approved as read-only REFERENCE pages (_reference) — real backend data (ListTypes/DescribeType), no create-a-resource liveness.",
+  "_doc": "ui-spec page id → v4 route. honest_page = the whole page is a declared 'Not simulated in Vyomi' gap, approved on consoles/honest-allowlist.json (public-extensions). Hooks overview/invocation-summary/hooks are real (registry Type=HOOK, enforced on CreateStack/UpdateStack/DeleteStack). activated-extensions/extension-detail are approved as read-only REFERENCE pages (_reference) — real backend data (ListTypes/DescribeType), no create-a-resource liveness.",
   "getting-started": {
     "route": "#/cloudformation"
   },
@@ -43,11 +43,13 @@
   },
   "invocation-summary": {
     "route": "#/cloudformation/hooks/invocations",
-    "honest_page": true
+    "fixtures": ["cfn-hook-invocation"],
+    "live": "live-hook-invocation"
   },
   "hooks": {
     "route": "#/cloudformation/hooks/list",
-    "honest_page": true
+    "fixtures": ["cfn-hook"],
+    "live": "live-hook"
   },
   "public-extensions": {
     "route": "#/cloudformation/registry/public-extensions",

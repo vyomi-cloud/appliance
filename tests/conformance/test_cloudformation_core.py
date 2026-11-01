@@ -267,6 +267,69 @@ def run():
     _check("DescribeType returns a schema", "<Schema>" in r.body and "typeName" in r.body)
     _check("DescribeType unknown type fails honestly", err(call("DescribeType", TypeName="AWS::EC2::Instance"), "TypeNotFoundException"))
 
+    # ── hooks: registered + configured (RegisterType/SetTypeConfiguration), then really
+    # enforced — PRE_PROVISION, required-tag policy, FAIL blocks the operation / WARN
+    # just records the failure and lets it through ──────────────────────────────
+    _check("RegisterType rejects Type=RESOURCE", err(call("RegisterType", Type="RESOURCE", TypeName="X::Y::Z"), "ValidationError"))
+    r = call("RegisterType", Type="HOOK", TypeName="VyomiConf::Policy::RequireOwnerTag")
+    _check("register hook 200", r.status == 200)
+    reg_token = _v(r.body, "RegistrationToken")
+    r = call("DescribeTypeRegistration", RegistrationToken=reg_token)
+    _check("hook registration complete", "<ProgressStatus>COMPLETE</ProgressStatus>" in r.body)
+    hook_cfg = json.dumps({"CloudFormationConfiguration": {"HookConfiguration": {
+        "FailureMode": "FAIL", "TargetOperations": ["CREATE", "UPDATE"], "TargetStacks": ["hook-guarded-stack"],
+        "Properties": {"RequiredTagKeys": "Owner"},
+    }}})
+    r = call("SetTypeConfiguration", TypeName="VyomiConf::Policy::RequireOwnerTag", Configuration=hook_cfg)
+    _check("set hook configuration 200", r.status == 200)
+    _check("SetTypeConfiguration on unknown hook fails honestly",
+           err(call("SetTypeConfiguration", TypeName="No::Such::Hook", Configuration=hook_cfg), "TypeNotFoundException"))
+
+    r = call("ListTypes", Type="HOOK")
+    _check("ListTypes(HOOK) lists the hook, enabled, FAIL mode", "<TypeName>VyomiConf::Policy::RequireOwnerTag</TypeName>" in r.body
+           and "<IsActivated>true</IsActivated>" in r.body and "<FailureMode>FAIL</FailureMode>" in r.body)
+    r = call("DescribeType", Type="HOOK", TypeName="VyomiConf::Policy::RequireOwnerTag")
+    _check("DescribeType(HOOK) shows the required tag policy", "<RequiredTagKeys>Owner</RequiredTagKeys>" in r.body)
+
+    queue_tpl = json.dumps({"Resources": {"Q": {"Type": "AWS::SQS::Queue", "Properties": {}}}})
+    r = call("CreateStack", StackName="hook-guarded-stack", TemplateBody=queue_tpl)
+    _check("FAIL-mode hook blocks CreateStack missing the required tag", err(r, "HookFailureException"))
+    _check("blocked stack was never created", err(call("DescribeStacks", StackName="hook-guarded-stack"), "ValidationError"))
+    r = call("ListHookResults")
+    _check("blocked invocation recorded as HOOK_COMPLETE_FAILED", "<HookStatus>HOOK_COMPLETE_FAILED</HookStatus>" in r.body
+           and "<TargetId>hook-guarded-stack</TargetId>" in r.body)
+
+    r = call("CreateStack", StackName="hook-guarded-stack", TemplateBody=queue_tpl,
+             **{"Tags.member.1.Key": "Owner", "Tags.member.1.Value": "team-a"})
+    _check("CreateStack with the required tag passes the hook and succeeds", r.status == 200)
+    r = call("ListHookResults", TargetId="hook-guarded-stack")
+    _check("passing invocation recorded as HOOK_COMPLETE_SUCCEEDED (most recent first)",
+           "<HookStatus>HOOK_COMPLETE_SUCCEEDED</HookStatus>" in r.body.split("<member>")[1])
+
+    r = call("UpdateStack", StackName="hook-guarded-stack", UsePreviousTemplate="true")
+    _check("UpdateStack keeping the existing Owner tag still passes the hook", r.status == 200)
+
+    # A second, WARN-mode hook targeting DELETE: the operation proceeds even though the
+    # required tag is missing — only the invocation is recorded as failed.
+    call("RegisterType", Type="HOOK", TypeName="VyomiConf::Policy::RequireCostCenterTag")
+    warn_cfg = json.dumps({"CloudFormationConfiguration": {"HookConfiguration": {
+        "FailureMode": "WARN", "TargetOperations": ["DELETE"], "TargetStacks": ["hook-guarded-stack"],
+        "Properties": {"RequiredTagKeys": "CostCenter"},
+    }}})
+    call("SetTypeConfiguration", TypeName="VyomiConf::Policy::RequireCostCenterTag", Configuration=warn_cfg)
+    r = call("DeleteStack", StackName="hook-guarded-stack")
+    _check("WARN-mode hook lets DeleteStack through", r.status == 200)
+    r = call("DescribeStacks", StackName="hook-guarded-stack")
+    _check("stack actually deleted despite the WARN hook failing", "<StackStatus>DELETE_COMPLETE</StackStatus>" in r.body)
+    r = call("ListHookResults", TargetId="hook-guarded-stack")
+    _check("WARN hook's failed invocation still recorded", "<HookStatusReason>Missing required tag(s): CostCenter</HookStatusReason>" in r.body)
+
+    r = call("DeregisterType", Type="HOOK", TypeName="VyomiConf::Policy::RequireOwnerTag")
+    _check("deregister hook 200", r.status == 200)
+    r = call("ListTypes", Type="HOOK")
+    _check("deregistered hook no longer listed", "RequireOwnerTag" not in r.body and "RequireCostCenterTag" in r.body)
+    _check("deregistering an unknown hook fails honestly", err(call("DeregisterType", Type="HOOK", TypeName="No::Such::Hook"), "TypeNotFoundException"))
+
     # ── stack refactors: CreateStackRefactor / ExecuteStackRefactor really move a
     # resource's runtime state between two existing stacks ──────────────────────
     call("CreateStack", StackName="refactor-src", TemplateBody=json.dumps({"Resources": {"Q": {"Type": "AWS::SQS::Queue", "Properties": {"QueueName": "cfn-conf-refactor-q"}}}}))

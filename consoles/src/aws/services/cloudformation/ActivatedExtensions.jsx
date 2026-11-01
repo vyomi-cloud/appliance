@@ -1,9 +1,9 @@
 /* Registry: Activated extensions — a REAL, honest catalog read over the native wire
  * (ListTypes/DescribeType in core/cloudformation_core.py): the exact resource types the
- * engine provisions. Modules and Hooks aren't modeled (aws.cloudformation.hooks;
- * CloudFormation modules aren't built either). Reviewed as a read-only REFERENCE page
- * (consoles/honest-allowlist.json _reference) — no "create a resource" liveness check,
- * since activated types come from the engine itself, not a resource a user creates. */
+ * engine provisions, plus the account's own registered hooks (Hooks.jsx). CloudFormation
+ * modules aren't built. Reviewed as a read-only REFERENCE page (consoles/honest-
+ * allowlist.json _reference) — no "create a resource" liveness check for resource types,
+ * since those come from the engine itself, not a resource a user creates. */
 import { useState } from "react";
 import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
 import Header from "@cloudscape-design/components/header";
@@ -51,6 +51,27 @@ function ResourceTypesTable() {
   );
 }
 
+function HooksTable() {
+  const { data = [], loading, error, reload } = useAsync(() => api.listHooks(), []);
+  return (
+    <ResourceTable
+      resourceName="Hooks"
+      items={data}
+      trackBy="TypeName"
+      loading={loading}
+      error={error}
+      onRefresh={reload}
+      filterPlaceholder="Filter hooks"
+      columns={[
+        { id: "n", header: "Type name", isRowHeader: true, cell: (h) => <Link href={href("cloudformation", "hooks", "list")} onFollow={follow}>{h.TypeName}</Link> },
+        { id: "s", header: "Hook status", cell: (h) => (h.Enabled ? "Enabled" : "Disabled") },
+        { id: "d", header: "Description", cell: (h) => h.Description || "-" },
+      ]}
+      empty={{ title: "No hooks registered", subtitle: "Register a hook from the Hooks page." }}
+    />
+  );
+}
+
 export default function ActivatedExtensions() {
   const [tab, setTab] = useState("resource-types");
   return (
@@ -58,7 +79,7 @@ export default function ActivatedExtensions() {
       <Tabs activeTabId={tab} onChange={({ detail }) => setTab(detail.activeTabId)} tabs={[
         { id: "resource-types", label: "Resource types", content: <ResourceTypesTable /> },
         { id: "modules", label: "Modules", content: <NotSimulatedContainer title="Modules" feature="CloudFormation modules" /> },
-        { id: "hooks", label: "Hooks", content: <NotSimulatedContainer title="Hooks" feature="CloudFormation Hooks" /> },
+        { id: "hooks", label: "Hooks", content: <HooksTable /> },
       ]} />
     </ContentLayout>
   );

@@ -912,8 +912,7 @@
         {
           "title": "Benefits and features"
         }
-      ],
-      "notes": "Out of Vyomi scope."
+      ]
     },
     {
       "id": "invocation-summary",
@@ -944,8 +943,7 @@
           "Invocation time",
           "Result message"
         ]
-      },
-      "notes": "Out of Vyomi scope."
+      }
     },
     {
       "id": "hooks",
@@ -986,8 +984,7 @@
         {
           "title": "How it works"
         }
-      ],
-      "notes": "Out of Vyomi scope."
+      ]
     },
     {
       "id": "public-extensions",

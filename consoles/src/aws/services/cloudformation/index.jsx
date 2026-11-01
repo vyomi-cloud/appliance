@@ -9,7 +9,10 @@ import Exports from "./Exports.jsx";
 import IacGenerator from "./IacGenerator.jsx";
 import TemplateStudio from "./TemplateStudio.jsx";
 import ActivatedExtensions, { ExtensionDetail } from "./ActivatedExtensions.jsx";
-import { HooksOverview, InvocationSummary, Hooks, PublicExtensions, Publisher, Spotlight } from "./HonestPages.jsx";
+import HooksOverview from "./HooksOverview.jsx";
+import InvocationSummary from "./InvocationSummary.jsx";
+import Hooks from "./Hooks.jsx";
+import { PublicExtensions, Publisher, Spotlight } from "./HonestPages.jsx";
 
 export default {
   nav: [
