@@ -47,6 +47,16 @@ export function makeTheme(mode = "light") {
           },
         },
       },
+      // Page-level horizontal rules run edge to edge of the content card, however narrow the form
+      // wrapper they sit in (create/config pages cap their width): <main>'s content width (100cqw) plus
+      // its 24px padding each side, from its left edge. Rules inside a Paper (Section, Dialog, Menu) keep to it.
+      MuiDivider: {
+        styleOverrides: {
+          root: {
+            "&:not(.MuiDivider-vertical):not(.MuiPaper-root *)": { width: "calc(100cqw + 48px)", maxWidth: "none", marginLeft: -24, marginRight: 0, alignSelf: "flex-start" },
+          },
+        },
+      },
       MuiTab: { styleOverrides: { root: { textTransform: "none", fontSize: 14, fontWeight: 500, minHeight: 48, minWidth: 0, paddingLeft: 16, paddingRight: 16 } } },
       MuiTableCell: {
         styleOverrides: {

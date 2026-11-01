@@ -88,7 +88,7 @@ export default function App() {
           onMode={() => setMode(mode === "dark" ? "light" : "dark")} />
         <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
           {nav && <ProductNav prod={prod} nav={nav} route={route} collapsed={navCollapsed} onToggle={() => setNavCollapsed((v) => !v)} />}
-          <Box component="main" sx={{ flex: 1, minWidth: 0, bgcolor: "background.paper", borderRadius: "16px 16px 0 0", mr: { xs: 0, sm: 2 }, ml: nav ? 0 : { xs: 0, sm: 2 }, px: 3, pt: 1, pb: 6 }}>
+          <Box component="main" sx={{ containerType: "inline-size", flex: 1, minWidth: 0, bgcolor: "background.paper", borderRadius: "16px 16px 0 0", mr: { xs: 0, sm: 2 }, ml: nav ? 0 : { xs: 0, sm: 2 }, px: 3, pt: 1, pb: 6 }}>
             {content}
           </Box>
         </Box>
