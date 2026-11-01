@@ -62,11 +62,22 @@
  "gcp.cloudscheduler.cron-jobs": {
   "title": "App Engine cron jobs (legacy cron.yaml)",
   "level": {
-   "nano": "not_simulated",
-   "offline": "not_simulated"
+   "nano": "limited",
+   "offline": "limited"
   },
   "limitations": [
-   "App Engine isn't modeled in Vyomi, so the legacy cron.yaml-based jobs the real console lists under this tab have no backend to read from."
+   "cron.yaml has no public create/list API of its own on real GCP either; Vyomi models a deploy the same way Google executes it under the hood — as a real Cloud Scheduler job with an appEngineHttpTarget, stored under a reserved 'appengine' location so it lists separately from ordinary Scheduler jobs.",
+   "Schedules use App Engine's groc syntax (not unix-cron): 'every N minutes|hours|days [synchronized]' and 'every <weekday[,weekday...]|day> HH:MM' are supported; other groc forms (e.g. ordinal weekday-of-month) are rejected with INVALID_ARGUMENT rather than silently accepted.",
+   "Vyomi doesn't model App Engine itself, so Run now records the attempt (lastAttemptTime/status stamped) rather than actually invoking an app instance — the same limitation that applies to any appEngineHttpTarget job (see gcp.cloudscheduler.jobs.targets)."
+  ],
+  "api": [
+   "jobs.create",
+   "jobs.get",
+   "jobs.list",
+   "jobs.run"
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_cloudscheduler_core.py"
   ]
  }
 }

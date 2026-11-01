@@ -1155,6 +1155,29 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached", timeout: 10000 });
   check("delete job via UI → gone over native wire", (await wire(`/v1/projects/vyomi-project/locations/us-central1/jobs/${J}`)).status === 404);
+
+  // Cloud Scheduler "Cron jobs" tab: legacy App Engine cron.yaml jobs. The real console has
+  // no create UI for these (they arrive via `gcloud app deploy cron.yaml`), so the fixture
+  // deploys one straight over the native wire, same as the real CLI would.
+  const CRON = `v4-gcp-cron-${Date.now() % 100000}`;
+  await wire(`/v1/projects/vyomi-project/locations/appengine/jobs`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: `projects/vyomi-project/locations/appengine/jobs/${CRON}`,
+      description: "smoke cron job",
+      schedule: "every 1 hours synchronized",
+      appEngineHttpTarget: { relativeUri: "/tasks/cleanup", httpMethod: "GET" },
+    }),
+  });
+  await page.goto(UI + "#/cloudscheduler/jobs?tab=cron");
+  await page.getByRole("cell", { name: "smoke cron job" }).waitFor({ timeout: 10000 });
+  check("cron.yaml job deployed over native wire → shown on Cron jobs tab", true);
+  await shot("14b-scheduler-cron-jobs");
+  await page.getByRole("button", { name: "Run now" }).click();
+  await page.waitForTimeout(500);
+  const cronAfterRun = await wjson(`/v1/projects/vyomi-project/locations/appengine/jobs/${CRON}`);
+  check("Run now via UI → jobs.get shows lastAttemptTime", !!cronAfterRun.lastAttemptTime);
+
   // Firestore: create database → start a collection via the UI → cross-check the native wire,
   // then the reverse (a document created over the wire shows up in the Studio UI).
   const FSDB = `smoke-fs-${Date.now() % 100000}`;

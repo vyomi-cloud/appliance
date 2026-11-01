@@ -16,6 +16,11 @@ export const LOCATIONS = [
 ];
 export const DEFAULT_REGION = "us-central1";
 
+// Legacy App Engine cron.yaml jobs (core/gcp_cloudscheduler_core.py APPENGINE_LOCATION):
+// real Job records too, stored under this reserved pseudo-location so they list separately
+// from ordinary Scheduler jobs — the console's "Cron jobs" tab.
+export const APPENGINE_LOCATION = "appengine";
+
 const base = (region) => `/v1/projects/${e(getProject())}/locations/${e(region)}/jobs`;
 
 export const jobName = (region, id) => `projects/${getProject()}/locations/${region}/jobs/${id}`;
@@ -47,6 +52,9 @@ export async function listAllJobs() {
   const lists = await Promise.all(LOCATIONS.map((r) => listRegion(r).catch(() => [])));
   return lists.flat();
 }
+
+/** Legacy cron.yaml jobs — the console's "Cron jobs" tab. */
+export const listLegacyCronJobs = () => listRegion(APPENGINE_LOCATION);
 
 // ── display helpers (the console derives these from the raw REST Job resource) ──────────
 export const targetKind = (job) => job.httpTarget ? "HTTP" : job.pubsubTarget ? "Pub/Sub" : job.appEngineHttpTarget ? "App Engine HTTP" : "—";
