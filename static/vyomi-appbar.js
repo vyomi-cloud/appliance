@@ -22,8 +22,8 @@
     '#vy-appbar + header{border-top:1px solid #dadce0}' +
     '#vy-appbar .vy-cloud{position:absolute;left:14px;top:10px;display:flex;align-items:center;gap:6px;font-size:12px;color:#667085}' +
     '#vy-appbar .vy-cloud b{color:#101828;font-weight:600}' +
-    '#vy-appbar .vy-notch{height:44px;padding:0 44px;display:flex;align-items:center;gap:2px;position:relative;isolation:isolate}' +   /* the dip:  \\____/ */
-    '#vy-appbar .vy-notch::before{content:"";position:absolute;inset:0;z-index:-1;background:#0f121c;clip-path:var(--vy-clip,polygon(0 0,100% 0,calc(100% - 30px) 100%,30px 100%))}' +
+    '#vy-appbar .vy-notch{height:44px;padding:0 18px;display:flex;align-items:center;gap:2px;position:relative;isolation:isolate}' +   /* the dip:  \\____/ */
+    '#vy-appbar .vy-notch::before{content:"";position:absolute;inset:0;z-index:-1;background:#0f121c;border-radius:0 0 16px 16px}' +
     '#vy-appbar .vy-notch .vy-sep{width:1px;height:20px;background:rgba(255,255,255,.18);margin:0 6px}' +
     '#vy-appbar #disk-widget-slot{position:relative !important;top:auto !important;right:auto !important;left:auto !important;z-index:5 !important;display:inline-block}' +
     '#vy-appbar #disk-widget-slot .disk-chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;font:400 12px Inter,system-ui,sans-serif;border:0 !important;border-radius:8px;background:transparent !important;color:#b4b8cc !important;box-shadow:none !important}' +
@@ -52,16 +52,6 @@
     }).join('');
     bar.innerHTML = '<nav class="vy-notch" aria-label="Appliance">' + links + '</nav>';
     document.body.insertBefore(bar, document.body.firstChild);
-    // Rounded drawer: a trapezoid whose two bottom corners are curves; rebuilt when the notch resizes.
-    var navEl = bar.querySelector('.vy-notch');
-    function shape() {
-      var w = navEl.offsetWidth, h = navEl.offsetHeight, s = 30, d = 16, L = Math.sqrt(s * s + h * h), f = function (n) { return n.toFixed(1); };
-      var rx = w - s, rs = d * s / L, rh = d * h / L;
-      navEl.style.setProperty('--vy-clip', "path('M0 0 L" + w + " 0 L" + f(rx + rs) + " " + f(h - rh) + " Q" + rx + " " + h + " " + f(rx - d) + " " + h +
-        " L" + f(s + d) + " " + h + " Q" + s + " " + h + " " + f(s - rs) + " " + f(h - rh) + " Z')");
-    }
-    if (window.ResizeObserver) new ResizeObserver(shape).observe(navEl);
-    shape();
     var disk = document.getElementById('disk-widget-slot');          // the disk-usage chip lives in the drawer too
     if (disk) { var nav = bar.querySelector('.vy-notch'); var sp = document.createElement('span'); sp.className = 'vy-sep'; nav.appendChild(sp); nav.appendChild(disk); }
     var m = document.createElement('div'); m.id = 'vy-modal';
