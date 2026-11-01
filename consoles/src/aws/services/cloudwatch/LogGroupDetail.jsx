@@ -374,6 +374,58 @@ function ContributorInsightsTab({ group }) {
   );
 }
 
+function AnomalyDetectionTab({ group, groupArn }) {
+  const notify = useNotify();
+  const t = useAsync(() => api.listLogAnomalyDetectors(groupArn), [groupArn]);
+  const [creating, setCreating] = useState(false);
+  const detector = (t.data || [])[0] || null;
+  const anomalies = useAsync(() => (detector ? api.listAnomalies({ anomalyDetectorArn: detector.anomalyDetectorArn }) : Promise.resolve([])), [detector?.anomalyDetectorArn]);
+
+  const create = async () => {
+    await api.createLogAnomalyDetector([groupArn], { detectorName: `${group}-detector` });
+    notify.success("Anomaly detector created. It trains on this group's next 20 log events.");
+    setCreating(false); t.reload();
+  };
+  const remove = async () => { await api.deleteLogAnomalyDetector(detector.anomalyDetectorArn); notify.success("Anomaly detector deleted."); t.reload(); };
+  const suppress = async (a) => { await api.updateAnomaly(a.anomalyId, a.state === "Suppressed" ? "NONE" : "LIMITED"); anomalies.reload(); };
+
+  return (
+    <CapabilityContainer id="aws.cloudwatch.logs.anomaly-detection" title="Anomaly detection"
+      actions={detector ? <Button onClick={remove}>Delete detector</Button> : <Button onClick={() => setCreating(true)}>Create anomaly detector</Button>}>
+      {!detector ? (
+        <Box color="text-body-secondary">No anomaly detector for this log group. Create one to have Vyomi really learn this group's log patterns and flag new ones.</Box>
+      ) : (
+        <SpaceBetween size="l">
+          <KeyValue columns={3} items={[
+            ["Status", detector.anomalyDetectorStatus], ["Evaluation frequency", detector.evaluationFrequency],
+            ["Anomalies found", anomalies.data?.length ?? 0],
+          ]} />
+          <Table
+            variant="embedded"
+            items={anomalies.data || []}
+            loading={anomalies.loading}
+            trackBy="anomalyId"
+            columnDefinitions={[
+              { id: "pattern", header: "Pattern", cell: (a) => a.patternString },
+              { id: "priority", header: "Priority", cell: (a) => a.priority },
+              { id: "state", header: "State", cell: (a) => a.state },
+              { id: "first", header: "First seen", cell: (a) => fmtDate(a.firstSeen) },
+              { id: "last", header: "Last seen", cell: (a) => fmtDate(a.lastSeen) },
+              { id: "action", header: "", cell: (a) => <Button variant="inline-link" onClick={() => suppress(a)}>{a.state === "Suppressed" ? "Unsuppress" : "Suppress"}</Button> },
+            ]}
+            empty={<Box textAlign="center" color="inherit">No anomalies detected yet.</Box>}
+          />
+        </SpaceBetween>
+      )}
+      <Modal visible={creating} onDismiss={() => setCreating(false)} header="Create anomaly detector"
+        footer={<Box float="right"><Button variant="primary" onClick={create}>Create anomaly detector</Button></Box>}>
+        Vyomi will train on this log group's next 20 ingested events, then really flag any later event whose
+        masked pattern wasn't part of that trained baseline.
+      </Modal>
+    </CapabilityContainer>
+  );
+}
+
 export default function LogGroupDetail({ params }) {
   const name = params.name;
   const notify = useNotify();
@@ -407,7 +459,7 @@ export default function LogGroupDetail({ params }) {
         <Tabs tabs={[
           { id: "streams", label: "Log streams", content: <StreamsTab group={name} /> },
           { id: "tags", label: "Tags", content: <TagsTab group={name} /> },
-          { id: "anomaly", label: "Anomaly detection", content: <CapabilityContainer id="aws.cloudwatch.logs.anomaly-detection" title="Anomaly detection" /> },
+          { id: "anomaly", label: "Anomaly detection", content: <AnomalyDetectionTab group={name} groupArn={g.arn} /> },
           { id: "metricfilters", label: "Metric filters", content: <MetricFiltersTab group={name} /> },
           { id: "subfilters", label: "Subscription filters", content: <SubscriptionFiltersTab group={name} /> },
           { id: "ci", label: "Contributor Insights", content: <ContributorInsightsTab group={name} /> },

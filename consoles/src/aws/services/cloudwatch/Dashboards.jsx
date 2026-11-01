@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
+import Container from "@cloudscape-design/components/container";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import Header from "@cloudscape-design/components/header";
 import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import Spinner from "@cloudscape-design/components/spinner";
 import Tabs from "@cloudscape-design/components/tabs";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
@@ -13,10 +16,61 @@ import { fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
+import { LineChart, toSeries } from "./common.jsx";
 import * as api from "./api.js";
 
 const FAV_KEY = "vyomi.cloudwatch.favoriteDashboards";
 const loadFavs = () => { try { return new Set(JSON.parse(localStorage.getItem(FAV_KEY)) || []); } catch { return new Set(); } };
+
+function AutomaticDashboardCard({ namespace, metrics }) {
+  const now = Math.floor(Date.now() / 1000);
+  const sample = metrics.slice(0, 6);
+  const t = useAsync(() => api.getMetricData(
+    sample.map((m, i) => ({ Id: `m${i}`, MetricStat: { Metric: { Namespace: m.Namespace, MetricName: m.MetricName, Dimensions: m.Dimensions || [] }, Period: 300, Stat: "Average" }, ReturnData: true })),
+    now - 3600, now,
+  ), [namespace, sample.length]);
+  return (
+    <Container header={<Header variant="h2" counter={`(${metrics.length} metric${metrics.length === 1 ? "" : "s"})`}>{namespace.replace(/^AWS\//, "")}</Header>}>
+      {t.loading ? <Box textAlign="center" padding="l"><Spinner /></Box> : (
+        <SpaceBetween size="l">
+          {(t.data || []).map((r, i) => (
+            <Box key={r.Id}>
+              <Header variant="h3">{sample[i].MetricName}{sample[i].Dimensions?.length ? ` — ${sample[i].Dimensions.map((d) => `${d.Name}=${d.Value}`).join(", ")}` : ""}</Header>
+              <LineChart series={toSeries(r)} />
+            </Box>
+          ))}
+        </SpaceBetween>
+      )}
+    </Container>
+  );
+}
+
+/** AWS auto-generates one dashboard per service FROM the real metrics that service's own
+ * activity already published — Vyomi derives the SAME thing from the real AWS/* namespaces
+ * ListMetrics already has data for (e.g. EC2's real StatusCheckFailed family), never a
+ * synthetic/random series. */
+function AutomaticDashboardsTab() {
+  const t = useAsync(() => api.listMetrics({}), []);
+  const namespaces = useMemo(() => {
+    const byNs = new Map();
+    for (const m of t.data || []) {
+      if (!m.Namespace.startsWith("AWS/")) continue;
+      if (!byNs.has(m.Namespace)) byNs.set(m.Namespace, []);
+      byNs.get(m.Namespace).push(m);
+    }
+    return [...byNs.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [t.data]);
+
+  if (t.loading) return <Box textAlign="center" padding="l"><Spinner /></Box>;
+  if (!namespaces.length) {
+    return <Box color="text-body-secondary" padding="l">Automatic dashboards appear once your AWS resources publish real activity metrics into an AWS/* namespace (e.g. an EC2 instance under monitoring).</Box>;
+  }
+  return (
+    <SpaceBetween size="l">
+      {namespaces.map(([ns, metrics]) => <AutomaticDashboardCard key={ns} namespace={ns} metrics={metrics} />)}
+    </SpaceBetween>
+  );
+}
 
 export default function Dashboards() {
   const notify = useNotify();
@@ -82,7 +136,7 @@ export default function Dashboards() {
             </SpaceBetween>
           ),
         },
-        { id: "automatic", label: "Automatic dashboards", content: <CapabilityContainer id="aws.cloudwatch.dashboards.automatic" title="Automatic dashboards" /> },
+        { id: "automatic", label: "Automatic dashboards", content: <CapabilityContainer id="aws.cloudwatch.dashboards.automatic" title="Automatic dashboards"><AutomaticDashboardsTab /></CapabilityContainer> },
       ]} />
     </ContentLayout>
   );

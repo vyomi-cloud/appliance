@@ -64,6 +64,8 @@ class LogsStore:
         self.resource_policies: dict[str, dict] = {}
         self.query_definitions: dict[str, dict] = {}
         self.queries: dict[str, dict] = {}
+        self.anomaly_detectors: dict[str, dict] = {}  # anomalyDetectorArn -> detector record
+        self.anomalies: dict[tuple, dict] = {}        # (detectorArn, pattern) -> anomaly record
         self._clock: float | None = None
         self.lam_store = None       # the shared Lambda function registry (set by the wire router) — real subscription-filter delivery
         self.kinesis_store = None   # the shared Kinesis stream store (set by the wire router) — real subscription-filter delivery
@@ -614,6 +616,7 @@ def _put_log_events(store, body):
     if rej:
         out["rejectedLogEventsInfo"] = rej
     _deliver_subscriptions(store, g, s, ok)
+    _evaluate_anomaly_detectors(store, g, ok)
     store.persist()
     return LogsResponse(body=out)
 
@@ -944,6 +947,60 @@ def _mine_pattern(msg: str) -> str:
     return _PATTERN_TOKEN_RE.sub("<*>", msg)
 
 
+# ── log anomaly detection (aws.cloudwatch.logs.anomaly-detection) ──────────────────────
+# A detector "trains" on the first _ANOMALY_BASELINE_EVENTS real log events a covered
+# group ingests, learning the set of message patterns (via the SAME _mine_pattern
+# tokenizer the Patterns tab uses) it has seen. Once trained, any NEW pattern a later
+# PutLogEvents introduces is a real anomaly: it is really absent from what the detector
+# has actually observed, not a canned/random finding.
+_ANOMALY_BASELINE_EVENTS = 20
+_ANOMALY_ID_RE = re.compile(r"[^A-Za-z0-9]+")
+
+
+def _anomaly_detector_matches(d: dict, group_arn: str) -> bool:
+    return not d["logGroupArnList"] or group_arn in d["logGroupArnList"]
+
+
+def _pattern_id(pattern: str) -> str:
+    import hashlib
+    return hashlib.sha1(pattern.encode()).hexdigest()[:16]
+
+
+def _record_anomaly(d: dict, group_arn: str, pattern: str, message: str, ts: int) -> None:
+    key = (d["anomalyDetectorArn"], pattern)
+    a = d["_store_anomalies"].get(key)
+    if a is None:
+        a = {"anomalyId": uuid.uuid4().hex, "anomalyDetectorArn": d["anomalyDetectorArn"],
+             "patternId": _pattern_id(pattern), "pattern": pattern, "logGroupArnList": [group_arn],
+             "firstSeen": ts, "lastSeen": ts, "sampleCount": 0, "active": True, "suppressed": False,
+             "priority": "HIGH" if re.search(r"error|exception|fail|fatal|panic", pattern, re.I) else "MEDIUM",
+             "logSamples": []}
+        d["_store_anomalies"][key] = a
+    a["lastSeen"] = max(a["lastSeen"], ts)
+    a["sampleCount"] += 1
+    if len(a["logSamples"]) < 3:
+        a["logSamples"].append(message)
+
+
+def _evaluate_anomaly_detectors(store, g: dict, events: list) -> None:
+    detectors = [d for d in store.anomaly_detectors.values()
+                 if d["state"] == "ACTIVE" and _anomaly_detector_matches(d, g["arn"])]
+    if not detectors or not events:
+        return
+    for d in detectors:
+        d["_store_anomalies"] = store.anomalies  # evaluate against the live store (persistence-safe)
+        baseline = d.setdefault("_baseline", set())
+        d.setdefault("_seenCount", 0)
+        for e in events:
+            pattern = _mine_pattern(e["message"])
+            if d["_seenCount"] < _ANOMALY_BASELINE_EVENTS:
+                baseline.add(pattern)
+                d["_seenCount"] += 1
+                continue
+            if pattern not in baseline:
+                _record_anomaly(d, g["arn"], pattern, e["message"], e["timestamp"])
+
+
 def _duration_secs(s: str) -> int:
     total = sum(int(n) * {"s": 1, "m": 60, "h": 3600}[u] for n, u in re.findall(r"(\d+)\s*([smh])", s, re.I))
     return total or 60
@@ -1069,6 +1126,113 @@ def _describe_queries(store, body):
     return LogsResponse(body={"queries": qs})
 
 
+def _create_log_anomaly_detector(store, body):
+    group_arns = [str(a) for a in (body.get("logGroupArnList") or [])]
+    if not group_arns:
+        raise _E("InvalidParameterException", "logGroupArnList must contain at least 1 log group ARN.")
+    detector_id = uuid.uuid4().hex
+    arn = f"arn:aws:logs:{store.region}:{store.account_id}:anomaly-detector:{detector_id}"
+    now = store.now_ms()
+    d = {
+        "anomalyDetectorArn": arn, "detectorName": str(body.get("detectorName") or ""),
+        "logGroupArnList": group_arns, "evaluationFrequency": str(body.get("evaluationFrequency") or "FIVE_MIN"),
+        "filterPattern": str(body.get("filterPattern") or ""),
+        "anomalyVisibilityTime": int(body.get("anomalyVisibilityTime") or 21),
+        "state": "ACTIVE", "creationTimeStamp": now, "lastModifiedTimeStamp": now,
+        "_baseline": set(), "_seenCount": 0,
+    }
+    store.anomaly_detectors[arn] = d
+    store.persist()
+    return LogsResponse(body={"anomalyDetectorArn": arn})
+
+
+def _detector_view(d: dict) -> dict:
+    return {"anomalyDetectorArn": d["anomalyDetectorArn"], "detectorName": d["detectorName"],
+            "logGroupArnList": d["logGroupArnList"], "evaluationFrequency": d["evaluationFrequency"],
+            "filterPattern": d["filterPattern"], "anomalyVisibilityTime": d["anomalyVisibilityTime"],
+            "anomalyDetectorStatus": d["state"], "creationTimeStamp": d["creationTimeStamp"],
+            "lastModifiedTimeStamp": d["lastModifiedTimeStamp"]}
+
+
+def _list_log_anomaly_detectors(store, body):
+    filt = body.get("filterLogGroupArn")
+    ds = [d for d in store.anomaly_detectors.values() if not filt or filt in d["logGroupArnList"]]
+    return LogsResponse(body={"anomalyDetectors": [_detector_view(d) for d in ds]})
+
+
+def _get_detector(store, arn):
+    d = store.anomaly_detectors.get(str(arn))
+    if d is None:
+        raise _E("ResourceNotFoundException", "The specified anomaly detector does not exist.")
+    return d
+
+
+def _get_log_anomaly_detector(store, body):
+    d = _get_detector(store, _req(body, "anomalyDetectorArn"))
+    return LogsResponse(body=_detector_view(d))
+
+
+def _update_log_anomaly_detector(store, body):
+    d = _get_detector(store, _req(body, "anomalyDetectorArn"))
+    if "enabled" in body:
+        d["state"] = "ACTIVE" if body["enabled"] else "PAUSED"
+    if body.get("evaluationFrequency"):
+        d["evaluationFrequency"] = str(body["evaluationFrequency"])
+    if body.get("anomalyVisibilityTime") is not None:
+        d["anomalyVisibilityTime"] = int(body["anomalyVisibilityTime"])
+    d["lastModifiedTimeStamp"] = store.now_ms()
+    store.persist()
+    return LogsResponse(body={})
+
+
+def _delete_log_anomaly_detector(store, body):
+    arn = str(_req(body, "anomalyDetectorArn"))
+    _get_detector(store, arn)
+    store.anomaly_detectors.pop(arn, None)
+    store.anomalies = {k: v for k, v in store.anomalies.items() if k[0] != arn}
+    store.persist()
+    return LogsResponse(body={})
+
+
+def _anomaly_view(a: dict) -> dict:
+    return {
+        "anomalyId": a["anomalyId"], "anomalyDetectorArn": a["anomalyDetectorArn"],
+        "patternId": a["patternId"], "patternString": a["pattern"],
+        "patternRegex": re.escape(a["pattern"]).replace(re.escape("<*>"), ".*"),
+        "logGroupArnList": a["logGroupArnList"], "firstSeen": a["firstSeen"], "lastSeen": a["lastSeen"],
+        "description": f"A new log pattern was detected: {a['pattern']}",
+        "active": a["active"], "state": "Suppressed" if a["suppressed"] else "Active",
+        "priority": a["priority"], "logSamples": [{"timestamp": a["lastSeen"], "message": m} for m in a["logSamples"]],
+    }
+
+
+def _list_anomalies(store, body):
+    det_arn = body.get("anomalyDetectorArn")
+    group_arns = body.get("logGroupArnList") or []
+    suppression_state = body.get("suppressionState")
+    items = [a for a in store.anomalies.values()
+             if (not det_arn or a["anomalyDetectorArn"] == det_arn)
+             and (not group_arns or any(ga in a["logGroupArnList"] for ga in group_arns))]
+    if suppression_state == "SUPPRESSED":
+        items = [a for a in items if a["suppressed"]]
+    elif suppression_state == "UNSUPPRESSED":
+        items = [a for a in items if not a["suppressed"]]
+    items.sort(key=lambda a: -a["lastSeen"])
+    return LogsResponse(body={"anomalies": [_anomaly_view(a) for a in items]})
+
+
+def _update_anomaly(store, body):
+    aid = str(_req(body, "anomalyId"))
+    rec = next((a for a in store.anomalies.values() if a["anomalyId"] == aid), None)
+    if rec is None:
+        raise _E("ResourceNotFoundException", "The specified anomaly does not exist.")
+    suppression_type = body.get("suppressionType")
+    if suppression_type:
+        rec["suppressed"] = suppression_type != "NONE"
+    store.persist()
+    return LogsResponse(body={})
+
+
 _OPS = {
     "CreateLogGroup": _create_log_group, "DeleteLogGroup": _delete_log_group,
     "DescribeLogGroups": _describe_log_groups, "PutRetentionPolicy": _put_retention_policy,
@@ -1099,6 +1263,12 @@ _OPS = {
     "StartQuery": _start_query, "GetQueryResults": _get_query_results,
     "StopQuery": _stop_query, "DescribeQueries": _describe_queries,
     "UpdateLogGroupDeletionProtection": _update_log_group_deletion_protection,
+    "CreateLogAnomalyDetector": _create_log_anomaly_detector,
+    "ListLogAnomalyDetectors": _list_log_anomaly_detectors,
+    "GetLogAnomalyDetector": _get_log_anomaly_detector,
+    "UpdateLogAnomalyDetector": _update_log_anomaly_detector,
+    "DeleteLogAnomalyDetector": _delete_log_anomaly_detector,
+    "ListAnomalies": _list_anomalies, "UpdateAnomaly": _update_anomaly,
 }
 OPERATIONS = sorted(_OPS)
 

@@ -214,7 +214,59 @@ def test_subscription_filter_really_delivers_to_lambda_and_kinesis():
     assert doc["logEvents"][0]["message"] == "hello" and doc["logGroup"] == "/sub"
 
 
+def test_log_anomaly_detector_really_flags_an_unseen_pattern():
+    s = lg.LogsStore()
+
+    def call(a, b=None):
+        return lg.dispatch(s, T + a, b or {})
+
+    call("CreateLogGroup", {"logGroupName": "/anom"})
+    call("CreateLogStream", {"logGroupName": "/anom", "logStreamName": "i-1"})
+    group_arn = call("DescribeLogGroups", {"logGroupNamePrefix": "/anom"}).body["logGroups"][0]["logGroupArn"]
+
+    r = call("CreateLogAnomalyDetector", {"logGroupArnList": [group_arn], "detectorName": "d1"})
+    assert r.status == 200 and r.body["anomalyDetectorArn"]
+    arn = r.body["anomalyDetectorArn"]
+    assert call("ListLogAnomalyDetectors", {}).body["anomalyDetectors"][0]["anomalyDetectorArn"] == arn
+    assert call("GetLogAnomalyDetector", {"anomalyDetectorArn": arn}).body["anomalyDetectorStatus"] == "ACTIVE"
+
+    now = s.now_ms()
+    # Train the detector on 20 steady, same-shaped events — no anomaly yet.
+    baseline = [{"timestamp": now + i, "message": f"request id={i} status=200"} for i in range(20)]
+    call("PutLogEvents", {"logGroupName": "/anom", "logStreamName": "i-1", "logEvents": baseline})
+    assert call("ListAnomalies", {"anomalyDetectorArn": arn}).body["anomalies"] == []
+
+    # A genuinely new pattern after training IS a real anomaly.
+    call("PutLogEvents", {"logGroupName": "/anom", "logStreamName": "i-1",
+                          "logEvents": [{"timestamp": now + 100, "message": "panic: nil pointer dereference at line 42"}]})
+    anomalies = call("ListAnomalies", {"anomalyDetectorArn": arn}).body["anomalies"]
+    assert len(anomalies) == 1 and anomalies[0]["priority"] == "HIGH" and "<*>" in anomalies[0]["patternString"]
+    aid = anomalies[0]["anomalyId"]
+
+    # A second occurrence of the SAME new pattern doesn't create a second anomaly —
+    # it accumulates on the one already raised.
+    call("PutLogEvents", {"logGroupName": "/anom", "logStreamName": "i-1",
+                          "logEvents": [{"timestamp": now + 101, "message": "panic: nil pointer dereference at line 7"}]})
+    anomalies2 = call("ListAnomalies", {"anomalyDetectorArn": arn}).body["anomalies"]
+    assert len(anomalies2) == 1 and anomalies2[0]["anomalyId"] == aid
+
+    # Repeating an already-trained, steady pattern never raises an anomaly.
+    call("PutLogEvents", {"logGroupName": "/anom", "logStreamName": "i-1",
+                          "logEvents": [{"timestamp": now + 102, "message": "request id=999 status=200"}]})
+    assert len(call("ListAnomalies", {"anomalyDetectorArn": arn}).body["anomalies"]) == 1
+
+    # Suppressing filters it out of the default (unsuppressed) view.
+    call("UpdateAnomaly", {"anomalyId": aid, "suppressionType": "LIMITED"})
+    assert call("ListAnomalies", {"anomalyDetectorArn": arn, "suppressionState": "UNSUPPRESSED"}).body["anomalies"] == []
+    assert len(call("ListAnomalies", {"anomalyDetectorArn": arn, "suppressionState": "SUPPRESSED"}).body["anomalies"]) == 1
+
+    call("DeleteLogAnomalyDetector", {"anomalyDetectorArn": arn})
+    assert call("ListLogAnomalyDetectors", {}).body["anomalyDetectors"] == []
+
+
 if __name__ == "__main__":
     run()
     test_subscription_filter_really_delivers_to_lambda_and_kinesis()
     print("  ok  subscription filter really delivers to lambda and kinesis")
+    test_log_anomaly_detector_really_flags_an_unseen_pattern()
+    print("  ok  log anomaly detector really flags an unseen pattern")
