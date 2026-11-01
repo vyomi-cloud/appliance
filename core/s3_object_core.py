@@ -22,7 +22,9 @@ S3 event (the appliance delivers notifications; Nano/tests no-op).
 from __future__ import annotations
 
 import copy
+import csv
 import hashlib
+import io
 import json
 import re
 import urllib.parse
@@ -416,6 +418,88 @@ def notification_xml(n: dict) -> str:
             f'{"".join(out)}{eb}</NotificationConfiguration>')
 
 
+def _notification_event_matches(rule: dict, event_name: str, key: str) -> bool:
+    """s3:TestEvent (sent once to every configured queue/topic/function on a non-empty
+    PutBucketNotificationConfiguration) bypasses the Event/Filter match, like real S3."""
+    if event_name == "s3:TestEvent":
+        return True
+    if not any(ev == event_name or (ev.endswith(":*") and event_name.startswith(ev[:-1]))
+               for ev in rule.get("events") or []):
+        return False
+    if rule.get("prefix") and not key.startswith(rule["prefix"]):
+        return False
+    if rule.get("suffix") and not key.endswith(rule["suffix"]):
+        return False
+    return True
+
+
+def _notification_payload(bucket: str, key: str, version: dict | None, event_name: str, source: str) -> dict:
+    return {"Records": [{
+        "eventVersion": "2.1", "eventSource": "aws:s3", "awsRegion": "us-east-1",
+        "eventTime": _now(), "eventName": event_name.replace("s3:", ""),
+        "userIdentity": {"principalId": "AWS:SIMULATOR"},
+        "requestParameters": {"sourceIPAddress": "127.0.0.1"},
+        "responseElements": {"x-amz-request-id": _req_id(), "x-amz-id-2": uuid.uuid4().hex},
+        "s3": {
+            "s3SchemaVersion": "1.0", "configurationId": source or "vyomi-s3-notification",
+            "bucket": {"name": bucket, "arn": f"arn:aws:s3:::{bucket}"},
+            "object": {"key": key, "size": int((version or {}).get("size", 0) or 0),
+                       "eTag": (version or {}).get("etag", ""),
+                       "versionId": (version or {}).get("version_id", "null"),
+                       "sequencer": uuid.uuid4().hex[:16]},
+        },
+    }]}
+
+
+def _deliver_notifications(store: ObjectStore, bucket: str, key: str, event_name: str,
+                            version: dict | None, source: str) -> None:
+    """Real delivery to the SQS queues / SNS topics / Lambda functions a bucket's
+    NotificationConfiguration names — the Nano/dev-server counterpart of the appliance's
+    own event delivery, reached through the sibling stores the wire router cross-wires onto
+    this one (msg_store / lam_store, same pattern as vpc.cw_store / logs.lam_store). A no-op
+    where those cross-refs aren't set, e.g. a bare store a unit test constructs directly —
+    and where the substrate overrides emit_event with its OWN delivery (the appliance's
+    AppStateObjectStore), so that store's existing path runs exactly once, not twice."""
+    if type(store).emit_event is not ObjectStore.emit_event:
+        return
+    msg = getattr(store, "msg_store", None)
+    lam = getattr(store, "lam_store", None)
+    if msg is None and lam is None:
+        return
+    notifications = bucket_notifications(store, bucket)
+    delivered = []
+    if lam is not None:
+        for rule in notifications.get("cloudFunctionConfigurations", []):
+            if rule.get("cloudFunction") and _notification_event_matches(rule, event_name, key):
+                try:
+                    from core import lambda_core as _lam_core
+                    if _lam_core.invoke_by_arn(lam, rule["cloudFunction"], _notification_payload(bucket, key, version, event_name, source)):
+                        delivered.append(rule.get("id", ""))
+                except Exception:
+                    pass
+    if msg is not None:
+        for rule in notifications.get("queueConfigurations", []):
+            if rule.get("queue") and _notification_event_matches(rule, event_name, key):
+                try:
+                    from core import sqs_core as _sqs_core
+                    q = msg.get_queue_by_arn(rule["queue"])
+                    if q:
+                        _sqs_core.enqueue(msg, q, json.dumps(_notification_payload(bucket, key, version, event_name, source), default=str))
+                        delivered.append(rule.get("id", ""))
+                except Exception:
+                    pass
+        for rule in notifications.get("topicConfigurations", []):
+            if rule.get("topic") and _notification_event_matches(rule, event_name, key):
+                try:
+                    from core import sns_core as _sns_core
+                    if _sns_core.publish_arn(msg, rule["topic"], json.dumps(_notification_payload(bucket, key, version, event_name, source), default=str)):
+                        delivered.append(rule.get("id", ""))
+                except Exception:
+                    pass
+    if delivered and msg is not None:
+        msg.persist()
+
+
 def _default_acl_xml() -> str:
     return (f'<?xml version="1.0" encoding="UTF-8"?><AccessControlPolicy xmlns="{S3_NS}">{_OWNER_XML}'
             '<AccessControlList><Grant><Grantee xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="CanonicalUser"><ID>simulator</ID>'
@@ -542,6 +626,29 @@ def _sse_headers(store: ObjectStore, bucket: str) -> dict:
     if enc["bucket_key"]:
         h["x-amz-server-side-encryption-bucket-key-enabled"] = "true"
     return h
+
+
+def _request_payer_block(store: ObjectStore, bucket: str, headers: dict) -> S3Response | None:
+    """Requester Pays (PutBucketRequestPayment Payer=Requester) rejects a data-retrieval
+    request that doesn't carry x-amz-request-payer:requester, exactly like real S3 — the
+    one part of Requester Pays actually visible on the wire (there is no billing system
+    behind it to attribute the transfer cost to, but the parameter requirement itself is
+    real and enforced the same way here)."""
+    meta = store.buckets.get(bucket) or {}
+    if meta.get("payer") != "Requester":
+        return None
+    h = {str(k).lower(): v for k, v in (headers or {}).items()}
+    if h.get("x-amz-request-payer", "").lower() == "requester":
+        return None
+    return _error_xml(
+        "AccessDenied",
+        "Bucket is a Requester Pays bucket and the request wasn't made with the "
+        "appropriate parameter (x-amz-request-payer:requester).", f"/{bucket}", 403)
+
+
+def _request_charged_header(headers: dict) -> dict:
+    h = {str(k).lower(): v for k, v in (headers or {}).items()}
+    return {"x-amz-request-charged": "requester"} if h.get("x-amz-request-payer", "").lower() == "requester" else {}
 
 
 def _cors_rules(store: ObjectStore, bucket: str) -> list:
@@ -809,6 +916,247 @@ def _apply_lifecycle_mpu(store: ObjectStore, bucket: str) -> None:
         store.persist()
 
 
+_IT_TIERS = ("ARCHIVE_ACCESS", "DEEP_ARCHIVE_ACCESS")   # document order = colder tiers later
+
+
+def _parse_it_rules(configs: dict) -> list:
+    """IntelligentTieringConfiguration documents (stored verbatim by the generic
+    id-keyed sub-resource handler) → {"prefix", "tierings": [{"access_tier","days"}]},
+    Disabled configs excluded, same shape style as _parse_lifecycle_rules."""
+    rules = []
+    for doc in (configs or {}).values():
+        try:
+            root = ET.fromstring(doc)
+        except ET.ParseError:
+            continue
+        if _child_text(root, "Status") != "Enabled":
+            continue
+        filt = _child(root, "Filter")
+        prefix = _child_text(filt, "Prefix") if filt is not None else ""
+        tierings = []
+        for t in _children(_child(root, "Tierings") or root, "Tiering"):
+            tier, days = _child_text(t, "AccessTier"), _child_text(t, "Days")
+            if tier in _IT_TIERS and days:
+                try:
+                    tierings.append({"access_tier": tier, "days": int(days)})
+                except ValueError:
+                    pass
+        if tierings:
+            rules.append({"prefix": prefix or "", "tierings": tierings})
+    return rules
+
+
+def _it_rules(store: ObjectStore, bucket: str) -> list:
+    meta = store.buckets.get(bucket) or {}
+    return _parse_it_rules(meta.get("it_configs") or {})
+
+
+def _apply_intelligent_tiering(store: ObjectStore, bucket: str) -> None:
+    """Archive-tier transitions for objects explicitly stored with StorageClass
+    INTELLIGENT_TIERING, lazily evaluated on head/get like lifecycle Transition — Days
+    elapsed uses the real wall-clock from the object's last-modified time, against the
+    Tierings a bucket's IntelligentTieringConfiguration(s) actually name (ARCHIVE_ACCESS /
+    DEEP_ARCHIVE_ACCESS). The automatic, config-free Frequent<->Infrequent Access tiering
+    every object gets after 30 days of no reads is NOT modeled (Vyomi doesn't track
+    per-object read recency); only the opt-in archive tiers a configuration names are."""
+    rules = _it_rules(store, bucket)
+    if not rules:
+        return
+    now = datetime.now(timezone.utc)
+    changed = False
+    for key, entry in store.bucket_objects(bucket).items():
+        if not isinstance(entry, dict) or not entry.get("versions"):
+            continue
+        cur = entry["versions"][0]
+        if cur.get("is_delete_marker") or cur.get("storage_class") != "INTELLIGENT_TIERING":
+            continue
+        try:
+            lm = datetime.fromisoformat(cur.get("last_modified", _now()).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        best = None
+        for rule in rules:
+            if not key.startswith(rule["prefix"]):
+                continue
+            for t in rule["tierings"]:
+                if now >= lm + timedelta(days=t["days"]):
+                    if best is None or _IT_TIERS.index(t["access_tier"]) > _IT_TIERS.index(best):
+                        best = t["access_tier"]
+        if cur.get("archive_tier") != best:
+            cur["archive_tier"] = best
+            changed = True
+    if changed:
+        store.persist()
+
+
+_INVENTORY_PERIOD = {"Daily": timedelta(days=1), "Weekly": timedelta(days=7)}
+
+
+def _parse_inventory_rules(configs: dict) -> list:
+    """InventoryConfiguration documents → {"id","dest_bucket","dest_prefix","format",
+    "frequency","included","prefix"}. Disabled configs (IsEnabled=false) and ones whose
+    Destination isn't a plain S3BucketDestination are excluded."""
+    rules = []
+    for cfg_id, doc in (configs or {}).items():
+        try:
+            root = ET.fromstring(doc)
+        except ET.ParseError:
+            continue
+        if _child_text(root, "IsEnabled").strip().lower() == "false":
+            continue
+        s3dest = _child(_child(root, "Destination"), "S3BucketDestination")
+        if s3dest is None:
+            continue
+        dest_arn = _child_text(s3dest, "Bucket")
+        dest_bucket = dest_arn.rsplit(":", 1)[-1] if dest_arn else ""
+        if not dest_bucket:
+            continue
+        filt = _child(root, "Filter")
+        rules.append({
+            "id": cfg_id, "dest_bucket": dest_bucket, "dest_prefix": _child_text(s3dest, "Prefix"),
+            "format": (_child_text(s3dest, "Format") or "CSV").upper(),
+            "frequency": _child_text(_child(root, "Schedule"), "Frequency") or "Daily",
+            "included": _child_text(root, "IncludedObjectVersions") or "Current",
+            "prefix": (_child_text(filt, "Prefix") if filt is not None else "") or "",
+        })
+    return rules
+
+
+def _generate_inventory_manifest(store: ObjectStore, bucket: str, rule: dict, now: datetime) -> None:
+    """Writes a REAL manifest into the destination bucket, listing the source bucket's
+    actual current contents (or every version, for IncludedObjectVersions=All) — exactly
+    what real S3's inventory report contains, minus the CSV being gzip-compressed and
+    minus ORC/Parquet encoding (Vyomi has no encoder for those; only Format=CSV actually
+    produces a data file — see s3.bucket.inventory's capability limitations)."""
+    ts = now.strftime("%Y-%m-%dT%H-%MZ")
+    base = f"{rule['dest_prefix']}{bucket}/{rule['id']}/{ts}/"
+    rows = []
+    for key, entry in sorted(store.bucket_objects(bucket).items()):
+        if not isinstance(entry, dict) or not entry.get("versions") or not key.startswith(rule["prefix"]):
+            continue
+        versions = entry["versions"] if rule["included"] == "All" else entry["versions"][:1]
+        for v in versions:
+            if v.get("is_delete_marker"):
+                continue
+            rows.append([bucket, key, v.get("version_id", "null"), str(v is entry["versions"][0]).lower(),
+                        str(v.get("size", 0)), v.get("last_modified", _now()),
+                        v.get("etag", "").strip('"'), v.get("storage_class", "STANDARD")])
+    schema = "Bucket, Key, VersionId, IsLatest, Size, LastModifiedDate, ETag, StorageClass"
+    files = []
+    if rule["format"] == "CSV":
+        buf = io.StringIO()
+        csv.writer(buf).writerows(rows)
+        data = buf.getvalue().encode()
+        data_key = f"{base}data/{uuid.uuid4().hex[:16]}.csv"
+        _write_object_version(store, rule["dest_bucket"], data_key,
+                              _make_version_record(data=data, content_type="text/csv", version_id="null"))
+        files.append({"key": data_key, "size": len(data), "MD5checksum": hashlib.md5(data).hexdigest()})
+    manifest = {
+        "sourceBucket": bucket, "destinationBucket": f"arn:aws:s3:::{rule['dest_bucket']}",
+        "version": "2016-11-30", "creationTimestamp": str(int(now.timestamp() * 1000)),
+        "fileFormat": rule["format"] if rule["format"] == "CSV" else f"{rule['format']} (not produced — see capability limitations)",
+        "fileSchema": schema, "files": files,
+    }
+    manifest_bytes = json.dumps(manifest, indent=2).encode()
+    _write_object_version(store, rule["dest_bucket"], f"{base}manifest.json",
+                          _make_version_record(data=manifest_bytes, content_type="application/json", version_id="null"))
+    checksum = hashlib.md5(manifest_bytes).hexdigest().encode()
+    _write_object_version(store, rule["dest_bucket"], f"{base}manifest.checksum",
+                          _make_version_record(data=checksum, content_type="text/plain", version_id="null"))
+
+
+def _apply_inventory(store: ObjectStore, bucket: str) -> None:
+    """Lazily evaluated (no background scheduler in this simulator): the first access
+    generates a manifest immediately; later ones regenerate only once the configuration's
+    real Schedule.Frequency (Daily/Weekly) has actually elapsed, same lazy-real-wall-clock
+    style as lifecycle/Intelligent-Tiering. Only reaches a destination bucket that exists
+    in this same appliance, like replication/logging."""
+    meta = store.buckets.get(bucket) or {}
+    rules = _parse_inventory_rules(meta.get("inv_configs") or {})
+    if not rules:
+        return
+    runs = meta.setdefault("inventory_runs", {})
+    now = datetime.now(timezone.utc)
+    ran = False
+    for rule in rules:
+        if not store.bucket_exists(rule["dest_bucket"]) or rule["dest_bucket"] == bucket:
+            continue
+        last = runs.get(rule["id"])
+        if last:
+            try:
+                if now < datetime.fromisoformat(last.replace("Z", "+00:00")) + _INVENTORY_PERIOD.get(rule["frequency"], timedelta(days=1)):
+                    continue
+            except ValueError:
+                pass
+        try:
+            _generate_inventory_manifest(store, bucket, rule, now)
+        except Exception:
+            continue   # manifest delivery is best-effort; never fail the read it rode in on
+        runs[rule["id"]] = now.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        ran = True
+    if ran:
+        store.persist()
+
+
+def _parse_metrics_rules(configs: dict) -> list:
+    """MetricsConfiguration documents (stored verbatim by the generic id-keyed
+    sub-resource handler) → {"id", "prefix"} — a request-metrics FILTER is active the
+    moment it exists (unlike IntelligentTiering/Lifecycle there is no Enabled/Disabled
+    toggle on the document itself)."""
+    rules = []
+    for cfg_id, doc in (configs or {}).items():
+        try:
+            root = ET.fromstring(doc)
+        except ET.ParseError:
+            continue
+        filt = _child(root, "Filter")
+        prefix = _child_text(filt, "Prefix") if filt is not None else ""
+        rules.append({"id": cfg_id, "prefix": prefix or ""})
+    return rules
+
+
+def _metrics_rules(store: ObjectStore, bucket: str) -> list:
+    meta = store.buckets.get(bucket) or {}
+    return _parse_metrics_rules(meta.get("metrics_configs") or {})
+
+
+_METHOD_METRIC = {"GET": "GetRequests", "HEAD": "HeadRequests", "PUT": "PutRequests",
+                  "DELETE": "DeleteRequests", "POST": "PostRequests", "LIST": "ListRequests"}
+
+
+def _record_request_metrics(store: ObjectStore, bucket: str, key: str, method: str, status: int,
+                             bytes_down: int = 0, bytes_up: int = 0) -> None:
+    """Real AWS/S3 CloudWatch request metrics, derived from this actual request — never
+    synthetic — for every bucket.metrics Filter whose prefix the key matches (an empty key,
+    for a bucket-level op like ListObjectsV2, only matches a filter with no prefix, same as
+    a real S3 EntireBucket-scoped filter). Reached through cw_store, the same cross-wired
+    sibling-store seam vpc_core/logs_core already use for their own real metrics."""
+    cw = getattr(store, "cw_store", None)
+    if cw is None:
+        return
+    rules = [r for r in _metrics_rules(store, bucket) if key.startswith(r["prefix"])]
+    if not rules:
+        return
+    try:
+        from core import cloudwatch_core as _cw_core
+    except ImportError:
+        return
+    metric = _METHOD_METRIC.get(method)
+    for r in rules:
+        dims = [{"Name": "BucketName", "Value": bucket}, {"Name": "FilterId", "Value": r["id"]}]
+        _cw_core.ingest_internal_metric(cw, "AWS/S3", "AllRequests", dims, 1.0, unit="Count")
+        if metric:
+            _cw_core.ingest_internal_metric(cw, "AWS/S3", metric, dims, 1.0, unit="Count")
+        if 400 <= status < 500:
+            _cw_core.ingest_internal_metric(cw, "AWS/S3", "4xxErrors", dims, 1.0, unit="Count")
+        elif status >= 500:
+            _cw_core.ingest_internal_metric(cw, "AWS/S3", "5xxErrors", dims, 1.0, unit="Count")
+        if bytes_down:
+            _cw_core.ingest_internal_metric(cw, "AWS/S3", "BytesDownloaded", dims, float(bytes_down), unit="Bytes")
+        if bytes_up:
+            _cw_core.ingest_internal_metric(cw, "AWS/S3", "BytesUploaded", dims, float(bytes_up), unit="Bytes")
+
+
 def _lock_block(obj: dict | None, headers: dict | None) -> S3Response | None:
     """Object Lock enforcement for a DELETE of a specific version — legal hold blocks
     unconditionally; retention blocks unless GOVERNANCE mode is explicitly bypassed."""
@@ -873,6 +1221,10 @@ def _emit(store: ObjectStore, bucket: str, key: str, event: str, entry: dict | N
     version = (entry or {}).get("versions", [None])[0] if isinstance(entry, dict) and entry.get("versions") else None
     try:
         store.emit_event(bucket, key, event, version, source)
+    except Exception:   # delivery is best-effort; never fail the data-plane write
+        pass
+    try:
+        _deliver_notifications(store, bucket, key, event, version, source)
     except Exception:   # delivery is best-effort; never fail the data-plane write
         pass
 
@@ -1025,6 +1377,7 @@ def put_object(store: ObjectStore, bucket: str, key: str, body: bytes, headers: 
     extra = {"ETag": version["etag"], "x-amz-version-id": entry.get("current_version_id", vid)}
     extra.update(_sse_headers(store, bucket))
     extra.update(_cors_response_headers(store, bucket, headers, "PUT"))
+    _record_request_metrics(store, bucket, key, "PUT", 200, bytes_up=len(data))
     return _done(store, _empty_response(200, extra))
 
 
@@ -1093,14 +1446,20 @@ def copy_object(store: ObjectStore, bucket: str, key: str, headers: dict) -> S3R
 def head_object(store: ObjectStore, bucket: str, key: str, query: dict, headers: dict) -> S3Response:
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}/{key}", 404)
+    blocked = _request_payer_block(store, bucket, headers)
+    if blocked:
+        return blocked
     _apply_lifecycle(store, bucket)
+    _apply_intelligent_tiering(store, bucket)
     entry = _ensure_object_entry(store, bucket, key, create=False)
     obj = _find_version(entry, (query or {}).get("versionId"))
     if obj and obj.get("is_delete_marker"):
         if (query or {}).get("versionId"):
             return _delete_marker_response(f"/{bucket}/{key}", obj.get("last_modified", _now()))
+        _record_request_metrics(store, bucket, key, "HEAD", 404)
         return _error_xml("NoSuchKey", "The specified key does not exist.", f"/{bucket}/{key}", 404)
     if not obj:
+        _record_request_metrics(store, bucket, key, "HEAD", 404)
         return _error_xml("NoSuchKey", "The specified key does not exist.", f"/{bucket}/{key}", 404)
     h = {"Content-Length": str(obj["size"]), "Content-Type": obj["content_type"],
          "ETag": obj["etag"], "Last-Modified": _iso_to_http_date(obj["last_modified"]),
@@ -1108,10 +1467,14 @@ def head_object(store: ObjectStore, bucket: str, key: str, query: dict, headers:
          "x-amz-version-id": obj.get("version_id", "null")}
     if obj.get("replication_status"):
         h["x-amz-replication-status"] = obj["replication_status"]
+    if obj.get("archive_tier"):
+        h["x-amz-archive-status"] = obj["archive_tier"]
     for k, v in obj.get("metadata", {}).items():
         h[f"x-amz-meta-{k}"] = v
     h.update(_sse_headers(store, bucket))
     h.update(_cors_response_headers(store, bucket, headers, "HEAD"))
+    h.update(_request_charged_header(headers))
+    _record_request_metrics(store, bucket, key, "HEAD", 200)
     return _empty_response(200, h)
 
 
@@ -1120,14 +1483,20 @@ def get_object(store: ObjectStore, bucket: str, key: str, query: dict, headers: 
     query = query or {}
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
+    blocked = _request_payer_block(store, bucket, headers)
+    if blocked:
+        return blocked
     _apply_lifecycle(store, bucket)
+    _apply_intelligent_tiering(store, bucket)
     entry = _ensure_object_entry(store, bucket, key, create=False)
     obj = _find_version(entry, query.get("versionId"))
     if obj and obj.get("is_delete_marker"):
         if query.get("versionId"):
             return _delete_marker_response(f"/{bucket}/{key}", obj.get("last_modified", _now()))
+        _record_request_metrics(store, bucket, key, "GET", 404)
         return _error_xml("NoSuchKey", "The specified key does not exist.", f"/{bucket}/{key}", 404)
     if not obj:
+        _record_request_metrics(store, bucket, key, "GET", 404)
         return _error_xml("NoSuchKey", "The specified key does not exist.", f"/{bucket}/{key}", 404)
     data = _version_bytes(store, bucket, key, obj)
     status = 200
@@ -1152,10 +1521,14 @@ def get_object(store: ObjectStore, bucket: str, key: str, query: dict, headers: 
         h["Content-Range"] = content_range
     if obj.get("replication_status"):
         h["x-amz-replication-status"] = obj["replication_status"]
+    if obj.get("archive_tier"):
+        h["x-amz-archive-status"] = obj["archive_tier"]
     for k, v in obj.get("metadata", {}).items():
         h[f"x-amz-meta-{k}"] = v
     h.update(_sse_headers(store, bucket))
     h.update(_cors_response_headers(store, bucket, headers, "GET"))
+    h.update(_request_charged_header(headers))
+    _record_request_metrics(store, bucket, key, "GET", status, bytes_down=len(data))
     return S3Response(status=status, headers=h, body=data, media_type=obj["content_type"])
 
 
@@ -1173,16 +1546,19 @@ def delete_object(store: ObjectStore, bucket: str, key: str, query: dict, header
             return _error_xml("NoSuchVersion", "The specified version does not exist.", f"/{bucket}/{key}", 404)
         _mirror_current(store, bucket, key)
         _emit(store, bucket, key, "s3:ObjectRemoved:Delete", None, "DeleteObject")
+        _record_request_metrics(store, bucket, key, "DELETE", 204)
         return _done(store, _empty_response(204, {"x-amz-version-id": vid}))
     status = store.versioning_status(bucket)
     if status == "Disabled":
         store.bucket_objects(bucket).pop(key, None)
         store.mirror_delete(bucket, key)
         _emit(store, bucket, key, "s3:ObjectRemoved:Delete", None, "DeleteObject")
+        _record_request_metrics(store, bucket, key, "DELETE", 204)
         return _done(store, _empty_response(204))
     entry = _insert_simple_delete_marker(store, bucket, key)
     vid = entry.get("current_version_id", "null") if isinstance(entry, dict) else "null"
     _emit(store, bucket, key, "s3:ObjectRemoved:DeleteMarkerCreated", entry, "DeleteObject")
+    _record_request_metrics(store, bucket, key, "DELETE", 204)
     return _done(store, _empty_response(204, {"x-amz-delete-marker": "true", "x-amz-version-id": vid}))
 
 
@@ -1240,6 +1616,7 @@ def list_objects_v2(store: ObjectStore, bucket: str, query: dict) -> S3Response:
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
     _apply_lifecycle(store, bucket)
+    _apply_inventory(store, bucket)
     prefix = query.get("prefix", "") or ""
     delimiter = query.get("delimiter", "") or ""
     token = query.get("continuation-token", "") or ""
@@ -1258,6 +1635,7 @@ def list_objects_v2(store: ObjectStore, bucket: str, query: dict) -> S3Response:
     for cp in cps:
         parts += ["<CommonPrefixes>", f"<Prefix>{_xml_escape(cp)}</Prefix>", "</CommonPrefixes>"]
     parts.append("</ListBucketResult>")
+    _record_request_metrics(store, bucket, "", "LIST", 200)
     return _xml_response("".join(parts))
 
 
@@ -1267,6 +1645,7 @@ def list_objects_v1(store: ObjectStore, bucket: str, query: dict) -> S3Response:
     if not store.bucket_exists(bucket):
         return _error_xml("NoSuchBucket", "The specified bucket does not exist.", f"/{bucket}", 404)
     _apply_lifecycle(store, bucket)
+    _apply_inventory(store, bucket)
     prefix = query.get("prefix", "") or ""
     delimiter = query.get("delimiter", "") or ""
     marker = query.get("marker", "") or ""
@@ -1282,6 +1661,7 @@ def list_objects_v1(store: ObjectStore, bucket: str, query: dict) -> S3Response:
     for cp in cps:
         parts += ["<CommonPrefixes>", f"<Prefix>{_xml_escape(cp)}</Prefix>", "</CommonPrefixes>"]
     parts.append("</ListBucketResult>")
+    _record_request_metrics(store, bucket, "", "LIST", 200)
     return _xml_response("".join(parts))
 
 
@@ -1579,10 +1959,7 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
             parsed["deliveries"] = bucket_notifications(store, bucket).get("deliveries", [])
             meta["notifications"] = parsed
             if (body or b"").strip():
-                try:
-                    store.emit_event(bucket, "", "s3:TestEvent", None, "PutBucketNotificationConfiguration")
-                except Exception:
-                    pass
+                _emit(store, bucket, "", "s3:TestEvent", None, "PutBucketNotificationConfiguration")
             return _done(store, _empty_response(200))
         if method == "DELETE":
             meta["notifications"] = default_notifications()
@@ -1636,6 +2013,8 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
         store_key, list_tag, not_found_code = _ID_KEYED_SUBRESOURCES[sub]
         configs = meta.setdefault(store_key, {})
         cfg_id = (query or {}).get("id")
+        if sub == "inventory" and method == "GET":
+            _apply_inventory(store, bucket)   # checking the config is also when a manifest is due
         if method == "GET":
             if cfg_id:
                 doc = configs.get(cfg_id)
@@ -1923,6 +2302,112 @@ def _delete_bucket(store: ObjectStore, bucket: str) -> S3Response:
     for uid in [u for u, up in _mpu(store).items() if up.get("bucket") == bucket]:
         _mpu(store).pop(uid, None)
     return _done(store, _empty_response(204))
+
+
+# ── Static website hosting — the bucket's OWN separate serving origin ───────────────────
+# Real S3 exposes this over a distinct, unsigned HTTP(S) origin
+# (bucket-name.s3-website-<region>.amazonaws.com), not the control+data API endpoint —
+# AwsWireRouter reaches it over its own unsigned path prefix (see service_of's
+# "/__s3_website__/" check), never through a signed S3 REST call.
+def _parse_website_config(doc: str | None) -> dict | None:
+    if not doc:
+        return None
+    try:
+        root = ET.fromstring(doc)
+    except ET.ParseError:
+        return None
+    redirect_all = _child(root, "RedirectAllRequestsTo")
+    rules = []
+    for rule in _children(_child(root, "RoutingRules"), "RoutingRule"):
+        cond = _child(rule, "Condition")
+        redir = _child(rule, "Redirect")
+        if redir is None:
+            continue
+        rules.append({
+            "key_prefix": _child_text(cond, "KeyPrefixEquals") if cond is not None else "",
+            "error_code": _child_text(cond, "HttpErrorCodeReturnedEquals") if cond is not None else "",
+            "host_name": _child_text(redir, "HostName"),
+            "protocol": _child_text(redir, "Protocol") or "http",
+            "replace_key_with": _child_text(redir, "ReplaceKeyWith"),
+            "replace_key_prefix_with": _child_text(redir, "ReplaceKeyPrefixWith"),
+            "http_code": _child_text(redir, "HttpRedirectCode") or "301",
+        })
+    return {
+        "index": _child_text(_child(root, "IndexDocument"), "Suffix") or "index.html",
+        "error_key": _child_text(_child(root, "ErrorDocument"), "Key"),
+        "redirect_all": ({"host_name": _child_text(redirect_all, "HostName"),
+                          "protocol": _child_text(redirect_all, "Protocol") or "http"}
+                        if redirect_all is not None else None),
+        "rules": rules,
+    }
+
+
+def _website_redirect_response(rule: dict, key: str) -> S3Response:
+    if rule.get("replace_key_with"):
+        new_key = rule["replace_key_with"]
+    elif rule.get("replace_key_prefix_with") is not None and rule.get("key_prefix"):
+        new_key = rule["replace_key_prefix_with"] + key[len(rule["key_prefix"]):]
+    else:
+        new_key = key
+    host = rule.get("host_name") or ""
+    location = f"{rule.get('protocol', 'http')}://{host}/{new_key}" if host else f"/{new_key}"
+    try:
+        status = int(rule.get("http_code") or 301)
+    except ValueError:
+        status = 301
+    return S3Response(status=status, headers={"Location": location}, body=b"", media_type="text/html")
+
+
+def _website_html_error(status: int, code: str, message: str) -> S3Response:
+    body = (f"<html><head><title>{status} {code}</title></head><body><h1>{status} {code}</h1>"
+            f"<ul><li>Code: {_xml_escape(code)}</li><li>Message: {_xml_escape(message)}</li></ul>"
+            f"</body></html>").encode()
+    return S3Response(status=status, headers={}, body=body, media_type="text/html")
+
+
+def website_dispatch(store: ObjectStore, method: str, bucket: str, key: str, headers: dict | None = None) -> S3Response:
+    """GET/HEAD against the bucket's static-website origin — REAL serving (index/error
+    documents, RedirectAllRequestsTo, RoutingRules), not just the stored configuration's
+    round-trip. Vyomi has no per-request identity model (same documented limitation as
+    s3.bucket.public-access-block), so this never checks whether the object is actually
+    publicly readable — it serves whatever the bucket's current content is."""
+    if not store.bucket_exists(bucket):
+        return _website_html_error(404, "NoSuchBucket", "The specified bucket does not exist.")
+    cfg = _parse_website_config((store.buckets.get(bucket) or {}).get("website"))
+    if cfg is None:
+        return _website_html_error(404, "NoSuchWebsiteConfiguration",
+                                   "The specified bucket does not have a website configuration")
+    if cfg["redirect_all"]:
+        return _website_redirect_response({**cfg["redirect_all"], "http_code": "301"}, key)
+
+    def fetch(k: str):
+        entry = store.bucket_objects(bucket).get(k)
+        if not isinstance(entry, dict) or not entry.get("versions"):
+            return None
+        cur = entry["versions"][0]
+        return None if cur.get("is_delete_marker") else cur
+
+    for rule in cfg["rules"]:
+        if not rule["error_code"] and key.startswith(rule["key_prefix"]):
+            return _website_redirect_response(rule, key)
+
+    lookup_key = key if key and not key.endswith("/") else key + cfg["index"]
+    obj = fetch(lookup_key)
+    if obj:
+        data = b"" if method == "HEAD" else _version_bytes(store, bucket, lookup_key, obj)
+        _record_request_metrics(store, bucket, lookup_key, "GET", 200, bytes_down=len(data))
+        return S3Response(status=200, headers={"ETag": obj["etag"], "Last-Modified": _iso_to_http_date(obj["last_modified"])},
+                          body=data, media_type=obj["content_type"])
+
+    for rule in cfg["rules"]:
+        if rule["error_code"] == "404" and key.startswith(rule["key_prefix"]):
+            return _website_redirect_response(rule, key)
+    if cfg["error_key"]:
+        err_obj = fetch(cfg["error_key"])
+        if err_obj:
+            data = b"" if method == "HEAD" else _version_bytes(store, bucket, cfg["error_key"], err_obj)
+            return S3Response(status=404, headers={}, body=data, media_type=err_obj["content_type"])
+    return _website_html_error(404, "NoSuchKey", "The specified key does not exist.")
 
 
 def dispatch(store: ObjectStore, method: str, path: str,
